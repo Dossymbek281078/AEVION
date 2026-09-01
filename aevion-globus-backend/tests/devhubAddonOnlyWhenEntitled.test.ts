@@ -35,9 +35,12 @@ describe("DevHub: надстройка только там, где выдача 
 
   test("цена надстройки есть только при признании подписки", () => {
     const sellable = typeof entry?.addonMonthly === "number" && entry.addonMonthly > 0;
-    if (!sellable) return;
+    // Утверждение выполняется ВСЕГДА: прежняя редакция при sellable=false
+    // выходила раньше и не делала НИ ОДНОГО утверждения — зелёный цвет
+    // означал «проверка не работала», а читался как «всё хорошо».
+    // Условие перенесено внутрь утверждения: sellable -> honoursPlan.
     expect(
-      honoursPlan,
+      !sellable || honoursPlan,
       "у DevHub есть цена надстройки на /pricing, но модуль не спрашивает " +
         "isModuleEntitled(): человек оплатит подписку с этой надстройкой и " +
         "останется на Free. Либо уберите цену, либо научите модуль читать план.",
@@ -45,9 +48,9 @@ describe("DevHub: надстройка только там, где выдача 
   });
 
   test("если модуль научился читать план — вернуть цену", () => {
-    if (!honoursPlan) return;
+    // Та же правка: раньше выходили раньше при honoursPlan=false.
     expect(
-      typeof entry?.addonMonthly === "number" && (entry.addonMonthly as number) > 0,
+      !honoursPlan || (typeof entry?.addonMonthly === "number" && (entry.addonMonthly as number) > 0),
       "DevHub теперь признаёт подписку платформы, но на /pricing у него нет " +
         "цены надстройки — покупатель не может выбрать его в калькуляторе. " +
         "Цена на /apps: $149/мес.",

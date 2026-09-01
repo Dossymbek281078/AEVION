@@ -1,6 +1,7 @@
 "use client";
 
 import AvatarDisplay from "./AvatarDisplay";
+import { activatable } from "@/lib/activatable";
 
 interface Persona {
   alias: string;
@@ -18,12 +19,23 @@ interface PersonaCardProps {
   compact?: boolean;
 }
 
+/**
+ * Карточка кликабельна — значит это орган управления. До 01.09.2026 это был
+ * div с onClick: мышью работал, Tab проходил мимо, и на витрине так было
+ * недостижимо два десятка карточек разом.
+ *
+ * Некликабельная карточка роли и фокуса НЕ получает: иначе читалка обещала бы
+ * действие, которого нет.
+ *
+ * onFocus/onBlur повторяют подсветку наведения: без них доступ есть, а
+ * ориентира нет — человек, идущий Tab-ом, не видит, на какой карточке стоит.
+ */
 export default function PersonaCard({ persona, onClick, compact = false }: PersonaCardProps) {
   const avatarSize = compact ? 48 : 72;
 
   return (
     <div
-      onClick={onClick}
+      {...(onClick ? activatable(onClick) : {})}
       style={{
         background: "linear-gradient(135deg, #1a0533 0%, #0f0720 100%)",
         border: "1px solid #4c1d95",
@@ -42,6 +54,16 @@ export default function PersonaCard({ persona, onClick, compact = false }: Perso
         }
       }}
       onMouseLeave={(e) => {
+        (e.currentTarget as HTMLElement).style.borderColor = "#4c1d95";
+        (e.currentTarget as HTMLElement).style.transform = "translateY(0)";
+      }}
+      onFocus={(e) => {
+        if (onClick) {
+          (e.currentTarget as HTMLElement).style.borderColor = "#7c3aed";
+          (e.currentTarget as HTMLElement).style.transform = "translateY(-2px)";
+        }
+      }}
+      onBlur={(e) => {
         (e.currentTarget as HTMLElement).style.borderColor = "#4c1d95";
         (e.currentTarget as HTMLElement).style.transform = "translateY(0)";
       }}

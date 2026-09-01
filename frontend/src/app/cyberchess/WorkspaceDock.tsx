@@ -29,10 +29,10 @@ const NOTES_STORAGE = "aevion_chess_dock_notes_v1";
 
 const SECTIONS: { id: Section; icon: string; label: string }[] = [
   { id: "chessy",  icon: "💰", label: "Chessy" },
-  { id: "daily",   icon: "🎯", label: "Daily" },
-  { id: "notes",   icon: "📝", label: "Notes" },
-  { id: "links",   icon: "🔗", label: "Links" },
-  { id: "hotkeys", icon: "⌨", label: "Hotkeys" },
+  { id: "daily",   icon: "🎯", label: "Задача дня" },
+  { id: "notes",   icon: "📝", label: "Заметки" },
+  { id: "links",   icon: "🔗", label: "Ссылки" },
+  { id: "hotkeys", icon: "⌨", label: "Клавиши" },
 ];
 
 export default function WorkspaceDock({ chessyBalance, onOpenDailyModal, onOpenChessyShop }: Props) {

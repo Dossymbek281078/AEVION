@@ -4217,7 +4217,7 @@ export default function CyberChessPage(){
       if(youWon){
         const nr=Math.min(3000,rat+10);sRat(nr);svR(nr);
         const ns={...sts,w:sts.w+1};sSts(ns);svS(ns);
-        setTimeout(()=>addChessy(12,"⛰ KotH — занял холм"),400);
+        setTimeout(()=>addChessy(12,"⛰ Царь горы — занял холм"),400);
       }else{
         const nr=Math.max(100,rat-8);sRat(nr);svR(nr);
         const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);
@@ -6081,7 +6081,7 @@ export default function CyberChessPage(){
           display:"flex",alignItems:"center",gap:SPACE[2],padding:"4px 12px 4px 4px",
           background:CC.surface1,border:`1px solid ${CC.border}`,borderRadius:RADIUS.full,
           boxShadow:SHADOW.sm
-        }} title={`Rating ${rat} · ${rk.t}`}>
+        }} title={`Рейтинг ${rat} · ${rk.t}`}>
           <div style={{
             width:28,height:28,borderRadius:"50%",
             background:CC.goldSoft,color:CC.gold,
@@ -6867,7 +6867,7 @@ export default function CyberChessPage(){
                 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:SPACE[2]}}>
                   <button onClick={()=>sShowVariants(true)} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${variant!=="standard"?"#3b82f6":CC.border}`,background:variant!=="standard"?"linear-gradient(135deg,#dbeafe,#bfdbfe)":CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>{variant!=="standard"?VARIANTS.find(v=>v.id===variant)?.emoji||"🎲":"🎲"}</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>12 Вариантов</span></div>
-                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>Fischer 960 · Atomic · KotH · Crazyhouse · Three-Check +6. Сейчас: <strong>{variant==="standard"?"Стандарт":VARIANTS.find(v=>v.id===variant)?.name}</strong></div>
+                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>Шахматы Фишера · Атомные · Царь горы · Крейзихаус · Три шаха +6. Сейчас: <strong>{variant==="standard"?"Стандарт":VARIANTS.find(v=>v.id===variant)?.name}</strong></div>
                   </button>
                   <button onClick={()=>{sHotseat(v=>!v);showToast(hotseat?"Режим «вдвоём» выключен":"Играете вдвоём за одной доской","info")}} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${hotseat?"#3b82f6":CC.border}`,background:hotseat?"linear-gradient(135deg,#dbeafe,#bfdbfe)":CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>👥</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>За одним экраном</span><span style={{marginLeft:"auto",fontSize:10,fontWeight:900,padding:"2px 7px",borderRadius:10,background:hotseat?"#3b82f6":"#e5e7eb",color:hotseat?"#fff":CC.textDim}}>{hotseat?"ON":"OFF"}</span></div>
@@ -7075,7 +7075,7 @@ export default function CyberChessPage(){
             const tiles:Array<{emoji:string;title:string;desc:string;cta:string;accent:string;onClick:()=>void}>=[
               {emoji:"♟",title:"Сыграй первую партию",desc:"Соперник любого уровня — от Новичка до полной силы движка. 5 секунд до старта.",cta:"Начать",accent:CC.brand,onClick:()=>{sSetup(true);sTab("play");try{window.scrollTo({top:0,behavior:"smooth"})}catch{}}},
               {emoji:"◆",title:"Реши задачу",desc:`Тактика на 1–5 ходов. ${pzSolvedCount>0?`Решено ${pzSolvedCount}`:pzTotal?`${pzTotal.toLocaleString("ru-RU")} ${ccPlural(pzTotal,"задача","задачи","задач")} в банке.`:"Полмиллиона задач в банке."}`,cta:"К задачам",accent:"#7c3aed",onClick:()=>{sTab("puzzles")}},
-              {emoji:"🎓",title:"Спроси тренера",desc:"AI-тренер разберёт партию, объяснит план, подскажет ход.",cta:"Открыть",accent:"#0891b2",onClick:()=>{sTab("coach")}},
+              {emoji:"🎓",title:"Спроси тренера",desc:"ИИ-тренер разберёт партию, объяснит план, подскажет ход.",cta:"Открыть",accent:"#0891b2",onClick:()=>{sTab("coach")}},
               {emoji:"📅",title:"Задача дня",desc:"Одна задача каждый день. Серия, таблица лидеров, награды.",cta:"Сегодня",accent:"#ea580c",onClick:()=>{try{window.location.href="/cyberchess/daily"}catch{}}},
             ];
             return <Card padding={SPACE[3]} elevation="sm">
@@ -7109,7 +7109,7 @@ export default function CyberChessPage(){
               {emoji:"🏆",title:"Турниры онлайн",desc:"Швейцарская · круговой · нокаут. Призовой фонд в Chessy.",cta:"К турнирам",accent:"#d97706",onClick:()=>{try{window.location.href="/cyberchess/tournaments"}catch{}}},
               {emoji:"📈",title:"CPI рейтинг",desc:"Составной рейтинг по 11 факторам — такого нет ни у lichess, ни у chess.com.",cta:"Открыть",accent:"#0891b2",onClick:()=>{try{window.location.href="/cyberchess/cpi/dashboard"}catch{}}},
               {emoji:"🪙",title:"Chessy Экономика",desc:"Аукцион, аренда коуча, подписки на стримеров — на нашей валюте.",cta:"Войти",accent:"#ca8a04",onClick:()=>{try{window.location.href="/cyberchess/economy"}catch{}}},
-              {emoji:"🎲",title:"12 вариантов",desc:"Atomic · Fischer960 · KotH · Crazyhouse · Knight Riders и др.",cta:"Выбрать",accent:"#7c3aed",onClick:()=>sShowVariants(true)},
+              {emoji:"🎲",title:"12 вариантов",desc:"Атомные · Шахматы Фишера · Царь горы · Крейзихаус · Только кони и др.",cta:"Выбрать",accent:"#7c3aed",onClick:()=>sShowVariants(true)},
             ];
             return <Card padding={SPACE[3]} elevation="sm">
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:SPACE[2],marginBottom:SPACE[3],flexWrap:"wrap"}}>
@@ -8660,7 +8660,7 @@ export default function CyberChessPage(){
                   if(text)sCoachRemark({kind:"position",title:"🧠 Разбор гроссмейстера",body:text,hint:"AI-тренер уровня 2600+ · на основе позиции и оценки движка"});
                   else sCoachRemark({kind:"position",title:"🧠 Разбор гроссмейстера",body:"Не удалось получить разбор — попробуй ещё раз.",hint:"Или используй 🔍 Объясни (движок+эвристика)"});
                 }catch{
-                  sCoachRemark({kind:"position",title:"🧠 GM-разбор недоступен",body:"AI-тренер сейчас не отвечает. Используй 🔍 Объясни, 📋 Найди план или 🎯 Тактика — они работают на движке.",hint:"GM-разбор требует связи с QCoreAI"});
+                  sCoachRemark({kind:"position",title:"🧠 GM-разбор недоступен",body:"ИИ-тренер сейчас не отвечает. Используй 🔍 Объясни, 📋 Найди план или 🎯 Тактика — они работают на движке.",hint:"GM-разбор требует связи с QCoreAI"});
                 }finally{gmBusyRef.current=false;}
               }}>🧠 GM-разбор</Btn>
               <Btn size="sm" variant="primary" onClick={()=>{
@@ -12285,7 +12285,7 @@ ${question.trim()}`;
         fontSize:13,fontWeight:700,maxWidth:340,
       }}>
       <span style={{fontSize:18,lineHeight:1}}>📺</span>
-      <span style={{flex:1}}>Включить стрим любимого стримера к {dailyVariantInfo?.variant?`варианту дня (${dailyVariantInfo.variant})`:"варианту дня"}?</span>
+      <span style={{flex:1}}>Включить стрим любимого стримера к {dailyVariantInfo?.variant?`варианту дня (${VARIANTS.find(v=>v.id===dailyVariantInfo.variant)?.name||dailyVariantInfo.variant})`:"варианту дня"}?</span>
       <button
         type="button"
         onClick={()=>{

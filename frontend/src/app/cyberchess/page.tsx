@@ -7332,7 +7332,7 @@ export default function CyberChessPage(){
           {([
             ...(isHumanGame?[]:[
               {icon:TAB_META.analysis.icon,label:TAB_META.analysis.label,hint:"Анализ позиции",accent:TAB_META.analysis.hue, act:()=>sTab("analysis")},
-              {icon:TAB_META.coach.icon,   label:TAB_META.coach.label,   hint:"AI-коуч",       accent:TAB_META.coach.hue,    act:()=>sTab("coach")},
+              {icon:TAB_META.coach.icon,   label:TAB_META.coach.label,   hint:"ИИ-коуч",       accent:TAB_META.coach.hue,    act:()=>sTab("coach")},
               {icon:TAB_META.puzzles.icon, label:TAB_META.puzzles.label, hint:"Случайная задача", accent:TAB_META.puzzles.hue,  act:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
             ]),
             {icon:spectatorPublish?"📡":"📡",label:spectatorPublish?"Live●":"Стрим",hint:spectatorPublish?"Стрим идёт":"Стрим для зрителей",accent:"#ef4444",act:()=>{if(!spectatorPublish)sObsStreamed(n=>n+1);sSpectatorPublish(v=>!v);}},
@@ -8062,7 +8062,7 @@ export default function CyberChessPage(){
                       </button>
                       <button onClick={async()=>{
                         try{
-                          const white=pCol==="w"?"You":lv.name;const black=pCol==="b"?"You":lv.name;
+                          const white=pCol==="w"?"Вы":lv.name;const black=pCol==="b"?"Вы":lv.name;
                           const result=over.includes("You win")?"1-0":over.includes("AI wins")?"0-1":"1/2-1/2";
                           const pgn=buildPGN(hist,{white,black,result},moveAnnotations);
                           const url=`${typeof window!=="undefined"?window.location.origin+window.location.pathname:""}?pgn=${encodeURIComponent(pgn)}`;
@@ -8577,8 +8577,8 @@ export default function CyberChessPage(){
             </button>}
               {over&&fenHist.length>2&&<>
                 <Btn size="sm" variant="secondary" icon={<Icon.Share width={12} height={12}/>} onClick={()=>{
-                  const white=hotseat?"Player 1":(pCol==="w"?"You":lv.name);
-                  const black=hotseat?"Player 2":(pCol==="b"?"You":lv.name);
+                  const white=hotseat?"Игрок 1":(pCol==="w"?"Вы":lv.name);
+                  const black=hotseat?"Игрок 2":(pCol==="b"?"Вы":lv.name);
                   const result=over?.includes("You win")?"1-0":over?.includes("AI wins")?"0-1":over?.includes("win")&&hotseat?"*":"1/2-1/2";
                   const pgn=buildPGN(hist,{white,black,result},moveAnnotations);
                   const url=`${typeof window!=="undefined"?window.location.origin+window.location.pathname:""}?pgn=${encodeURIComponent(pgn)}`;
@@ -8586,14 +8586,14 @@ export default function CyberChessPage(){
                   try{navigator.clipboard.writeText(share).then(()=>showToast("PGN + ссылка скопированы","success")).catch(()=>showToast("Не получилось — скопируй вручную","error"))}catch{showToast("Буфер обмена недоступен","error")}
                 }} style={{background:"#eff6ff",color:CC.info,borderColor:"#bfdbfe"}}>Скачать PGN</Btn>
                 <Btn size="sm" variant="secondary" onClick={()=>{
-                  const white=hotseat?"Player 1":(pCol==="w"?"You":lv.name);
-                  const black=hotseat?"Player 2":(pCol==="b"?"You":lv.name);
+                  const white=hotseat?"Игрок 1":(pCol==="w"?"Вы":lv.name);
+                  const black=hotseat?"Игрок 2":(pCol==="b"?"Вы":lv.name);
                   const result=over?.includes("You win")?"1-0":over?.includes("AI wins")?"0-1":"1/2-1/2";
                   sReelMeta({white,black,result});sShowReel(true);
                 }} style={{background:"linear-gradient(135deg,#fdf2f8,#fce7f3)",color:"#9d174d",borderColor:"#f9a8d4"}}>🎬 Авто-ролик</Btn>
                 <Btn size="sm" variant="secondary" onClick={()=>{
-                  const white=hotseat?"Player 1":(pCol==="w"?"You":lv.name);
-                  const black=hotseat?"Player 2":(pCol==="b"?"You":lv.name);
+                  const white=hotseat?"Игрок 1":(pCol==="w"?"Вы":lv.name);
+                  const black=hotseat?"Игрок 2":(pCol==="b"?"Вы":lv.name);
                   const isWin=!!(over?.includes("You win"));const isDraw=!!(over?.includes("Draw")||over?.includes("draw"));
                   const svg=generateShareSVG({fen:game.fen(),result:over||"",isWin,isDraw,white:{name:white,rating:rat},black:{name:black,rating:lv.elo},opening:currentOpening?.name,moves:hist.length,flip,accuracy:undefined,ratingDelta:isWin?Math.max(1,Math.min(50,Math.round((lv.elo-rat)*0.1+10))):undefined});
                   const blob=new Blob([svg],{type:"image/svg+xml"});
@@ -9340,7 +9340,7 @@ export default function CyberChessPage(){
             </div>
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
-                <span style={{fontSize:14,fontWeight:800,color:CC.text}}>{hotseat?"Игрок":"You"}</span>
+                <span style={{fontSize:14,fontWeight:800,color:CC.text}}>{hotseat?"Игрок":"Вы"}</span>
                 <Badge tone="gold" size="xs">{rat}</Badge>
                 <Badge tone="neutral" size="xs">{rk.i} {rk.t}</Badge>
               </div>
@@ -10807,14 +10807,14 @@ export default function CyberChessPage(){
             {/* Persistent AI-coach on/off chip — раньше состояние коуча нигде не отражалось,
                 нельзя было понять «включён ли он». Теперь видно и переключается одним кликом. */}
             {!editorMode&&<button onClick={()=>sCoachAIEnabled(v=>!v)} aria-pressed={coachAIEnabled}
-              title={coachAIEnabled?"AI-коуч включён — комментирует позицию. Нажми чтобы выключить.":"AI-коуч выключен — нажми чтобы включить."}
+              title={coachAIEnabled?"ИИ-коуч включён — комментирует позицию. Нажми чтобы выключить.":"ИИ-коуч выключен — нажми чтобы включить."}
               className="cc-focus-ring"
               style={{alignSelf:"flex-start",display:"inline-flex",alignItems:"center",gap:8,padding:"6px 12px",borderRadius:RADIUS.full,
                 border:`1px solid ${coachAIEnabled?CC.brand:CC.borderStrong}`,
                 background:coachAIEnabled?CC.brandSoft:CC.surface1,
                 color:coachAIEnabled?CC.brand:CC.textDim,fontSize:12,fontWeight:900,cursor:"pointer"}}>
               <span aria-hidden style={{fontSize:9}}>{coachAIEnabled?"🟢":"⚪"}</span>
-              <span>AI-коуч: {coachAIEnabled?"вкл":"выкл"}</span>
+              <span>ИИ-коуч: {coachAIEnabled?"вкл":"выкл"}</span>
             </button>}
             {/* ─── Best 3 games card — shown when user has ≥3 games and is in setup view ─── */}
             {setup&&savedGames.length>=3&&(()=>{
@@ -11090,7 +11090,7 @@ ${question.trim()}`;
                   </button>
                 </div>
                 <div style={{fontSize:10,color:"#64748b",lineHeight:1.4}}>
-                  💡 Coach видит текущий FEN, последние 10 ходов, eval Stockfish и твой рейтинг. Спрашивай про позицию, план, ошибки, дебют — будет конкретный ответ. Pro: Anthropic Claude Sonnet, ~3 секунды на ответ.
+                  💡 Тренер видит вашу позицию, последние ходы и оценку — спрашивайте про план, ошибку или дебют, ответ будет про эту партию, а не общими словами. Отвечает за несколько секунд.
                 </div>
               </div>;
             })()}
@@ -11291,7 +11291,7 @@ ${question.trim()}`;
                 <div style={{borderRadius:10,background:"linear-gradient(135deg,#ecfdf5,#f0fdf4)",border:"1px solid #a7f3d0",padding:"10px 12px"}}>
                   <div style={{fontSize:11,fontWeight:800,color:T.accent,letterSpacing:"0.06em",textTransform:"uppercase" as const,marginBottom:8}}>🎓 Как учимся</div>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:6}}>
-                    {modeBtn("🤖","Против AI","играй с ботом, тренер комментирует",()=>{
+                    {modeBtn("🤖","Против ИИ","играй с ботом, тренер комментирует",()=>{
                       sCoachAIEnabled(true);sEditorMode(false);
                       const cl=pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);pT.reset();aT.reset();
                       showToast("Новая игра против AI","success");
@@ -11667,8 +11667,8 @@ ${question.trim()}`;
         if(filtered.length===0){showToast("Нет партий для экспорта","error");return}
         const today=new Date().toISOString().slice(0,10);
         const blocks=filtered.map((g,i)=>{
-          const white=g.playerColor==="w"?"You":g.aiLevel;
-          const black=g.playerColor==="b"?"You":g.aiLevel;
+          const white=g.playerColor==="w"?"Вы":g.aiLevel;
+          const black=g.playerColor==="b"?"Вы":g.aiLevel;
           const result=isWinG(g)?(g.playerColor==="w"?"1-0":"0-1"):isLossG(g)?(g.playerColor==="w"?"0-1":"1-0"):"1/2-1/2";
           const date=new Date(g.date).toISOString().slice(0,10).replace(/-/g,".");
           return buildPGN(g.moves,{white,black,result,date,event:`AEVION CyberChess · ${g.category} · ${g.opening||""}`});
@@ -12624,7 +12624,7 @@ ${question.trim()}`;
         замер 21.08 при ширине 390 — пилюля на y=745, кнопка на y=710..784. */}
     {!streamerMode&&!showHelp&&vwPx>=900&&<button onClick={()=>sShowHelp(true)} title="Показать горячие клавиши"
       style={{
-        // bottom:64 (не 16) — пилюля AI-коуча уже сидит в правом нижнем углу;
+        // bottom:64 (не 16) — пилюля ИИ-коуча уже сидит в правом нижнем углу;
         // ставим кнопку помощи НАД ней, чтобы не было наложения. (Фикс наезда справа.)
         position:"fixed",bottom:64,right:16,zIndex:Z.sticky,
         display:"inline-flex",alignItems:"center",gap:6,
@@ -15011,7 +15011,7 @@ ${question.trim()}`;
               }}>📜 История</button>}
               <button onClick={async()=>{
                 try{
-                  const white=pCol==="w"?"You":lv.name;const black=pCol==="b"?"You":lv.name;
+                  const white=pCol==="w"?"Вы":lv.name;const black=pCol==="b"?"Вы":lv.name;
                   const result=over?.includes("You win")?"1-0":over?.includes("AI wins")?"0-1":"1/2-1/2";
                   const pgn=buildPGN(hist,{white,black,result},moveAnnotations);
                   const url=`${typeof window!=="undefined"?window.location.origin+window.location.pathname:""}?pgn=${encodeURIComponent(pgn)}`;

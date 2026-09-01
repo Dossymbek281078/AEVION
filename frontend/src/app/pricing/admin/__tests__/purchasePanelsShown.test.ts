@@ -8,8 +8,9 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { stripComments } from "../../../__tests__/helpers/sourceCode";
 
-const страница = readFileSync(join(process.cwd(), "src/app/pricing/admin/page.tsx"), "utf8");
+const страница = stripComments(readFileSync(join(process.cwd(), "src/app/pricing/admin/page.tsx"), "utf8"));
 const словарь = readFileSync(join(process.cwd(), "src/lib/i18n-data.ts"), "utf8");
 
 describe("панели покупок по каналам", () => {
@@ -93,7 +94,15 @@ describe("панели покупок по каналам", () => {
     // бы выручку «с последней выкатки» как всю историю — снаружи это
     // неотличимо от «продаж было мало». Признак прислало соседнее окно вместе
     // с ручкой; мы обязаны его ЧИТАТЬ, иначе он бесполезен.
+    // Строго `=== false`, а НЕ `!onVolume`: при отсутствии поля (старый сервер)
+    // и при onVolume=true панель обязана молчать. Замер соседнего окна на проде
+    // 01.09.2026: каталог НА ПОСТОЯННОМ ДИСКЕ, июльские записи живут в
+    // августовской сборке, onVolume=true. Мягкая проверка пугала бы на
+    // исправной системе, а сторож, кричащий на здоровое, перестают читать.
     expect(страница).toContain("storage?.onVolume === false");
+    expect(страница, "мягкая проверка напугала бы на исправной системе").not.toContain(
+      "!фактическая.storage?.onVolume",
+    );
     expect(страница, "не сказано, что история неполная").toContain("История неполная");
     // Требуем именно УСЛОВИЕ, а не слово: слово стоит и внутри подстановки, и
     // первая редакция пережила мутацию «убрать проверку даты» — второе

@@ -25,7 +25,15 @@ export default function AevionProjectsBanner({ onHide }: Props) {
   React.useEffect(() => {
     const prev = document.body.style.paddingRight;
     document.body.style.paddingRight = `${BANNER_W}px`;
-    return () => { document.body.style.paddingRight = prev; };
+    // Отступ у body двигает только поток. ЗАКРЕПЛЁННЫЕ соседи его не видят и
+    // ложатся поверх рейки — 01.09.2026 плашка стрима так накрыла «Купить»,
+    // цену и «Все тарифы →», то есть весь путь покупки на странице шахмат.
+    // Публикуем ширину, чтобы закреплённые элементы могли посторониться.
+    document.documentElement.style.setProperty("--aevion-projects-w", `${BANNER_W}px`);
+    return () => {
+      document.body.style.paddingRight = prev;
+      document.documentElement.style.removeProperty("--aevion-projects-w");
+    };
   }, []);
 
   return (

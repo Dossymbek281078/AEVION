@@ -12278,7 +12278,7 @@ ${question.trim()}`;
     {showPipSuggest&&!on&&!anyOnboardingModal&&vwPx>=900&&<div
       role="alert"
       style={{
-        position:"fixed",right:20,bottom:20,zIndex:7900,
+        position:"fixed",right:"calc(20px + var(--aevion-projects-w, 0px))",bottom:20,zIndex:7900,
         display:"flex",alignItems:"center",gap:10,
         padding:"10px 14px",borderRadius:999,
         background:"linear-gradient(135deg,#1e1b4b 0%,#581c87 100%)",color:"#fff",
@@ -12343,7 +12343,7 @@ ${question.trim()}`;
 
     {/* Coach SR reminders — surfaced as a single toast-card if any 1/3/7-day milestones are due */}
     {dueReminders.length>0&&<div style={{
-      position:"fixed",bottom:20,right:20,zIndex:9000,
+      position:"fixed",bottom:20,right:"calc(20px + var(--aevion-projects-w, 0px))",zIndex:9000,
       background:"linear-gradient(135deg,#7c3aed,#a78bfa)",color:"#fff",
       padding:"12px 16px",borderRadius:12,boxShadow:"0 6px 24px rgba(124,58,237,0.4)",
       maxWidth:340,fontSize:13,lineHeight:1.5,
@@ -12629,7 +12629,7 @@ ${question.trim()}`;
       style={{
         // bottom:64 (не 16) — пилюля ИИ-коуча уже сидит в правом нижнем углу;
         // ставим кнопку помощи НАД ней, чтобы не было наложения. (Фикс наезда справа.)
-        position:"fixed",bottom:64,right:16,zIndex:Z.sticky,
+        position:"fixed",bottom:64,right:"calc(16px + var(--aevion-projects-w, 0px))",zIndex:Z.sticky,
         display:"inline-flex",alignItems:"center",gap:6,
         padding:"6px 12px 6px 6px",
         background:CC.surface1,
@@ -15204,7 +15204,7 @@ ${question.trim()}`;
     />
     {/* Mirror Mode floating panel — only when mirror is actually active */}
     {on&&!setup&&tab==="play"&&mirrorActive&&(
-      <div style={{position:"fixed",bottom:56,right:16,zIndex:40}}>
+      <div style={{position:"fixed",bottom:56,right:"calc(16px + var(--aevion-projects-w, 0px))",zIndex:40}}>
         <MirrorModePanel
           profile={mirrorProfile}
           active={mirrorActive}
@@ -15215,7 +15215,7 @@ ${question.trim()}`;
       </div>
     )}
     {/* Host SpectatorChat — floating правый-низ когда стрим включён */}
-    {spectatorPublish&&spectatorGameIdRef.current&&<div style={{position:"fixed",right:16,bottom:16,width:320,maxHeight:"60vh",zIndex:90}}>
+    {spectatorPublish&&spectatorGameIdRef.current&&<div style={{position:"fixed",right:"calc(16px + var(--aevion-projects-w, 0px))",bottom:16,width:320,maxHeight:"60vh",zIndex:90}}>
       <SpectatorChat
         gameId={spectatorGameIdRef.current}
         isHost={true}

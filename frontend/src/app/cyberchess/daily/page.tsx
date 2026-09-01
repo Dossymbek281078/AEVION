@@ -24,7 +24,11 @@ type LeaderEntry = {
 
 type HintLevel = 0 | 1 | 2 | 3;
 
-// 30 mock puzzles. FEN is illustrative; full validation via chess.js.
+// Десять встроенных задач — РЕЗЕРВ на случай, когда банк не ответил:
+// показываются мгновенно, затем их заменяет настоящая задача дня.
+// Раньше здесь стояло «30 mock puzzles» при десяти — счёт в комментарии
+// стареет молча, а читатель верит ему, а не коду.
+// Легальность ходов проверена chess.js: 10 из 10 (01.09.2026).
 const POOL: Puzzle[] = [
   { fen: 'r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 1', sol: ['f3e5', 'c6e5', 'c4f7'], theme: 'Fork', rating: 1200 },
   { fen: 'r3k2r/ppp2ppp/2n1bn2/2bqp3/2B1P3/2NP1N2/PPPQ1PPP/R1B1K2R w KQkq - 0 1', sol: ['c3d5', 'f6d5', 'e4d5'], theme: 'Pin', rating: 1450 },

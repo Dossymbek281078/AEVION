@@ -1252,7 +1252,7 @@ function BranchStatsRow({ branch }: { branch: RepertoireBranch }) {
               fontWeight: 600,
             }}
           >
-            {source === "lichess" ? "LICHESS" : "MOCK (нет UCI)"}
+            {source === "lichess" ? "ДАННЫЕ LICHESS" : "ОБРАЗЕЦ, НЕ РЕАЛЬНАЯ СТАТИСТИКА"}
           </span>
         </div>
         <div style={{ display: "flex", gap: 3 }}>

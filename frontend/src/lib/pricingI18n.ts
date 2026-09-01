@@ -149,7 +149,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     /* Refund Policy */
     "refund.badge": "REFUND POLICY · ЧЁТКИЕ УСЛОВИЯ",
     "refund.title": "Политика возвратов AEVION",
-    "refund.subtitle": "Без юридического жаргона. Что возвращаем, когда, и как быстро. Если что-то непонятно — пишите billing@aevion.app.",
+    "refund.subtitle": "Без юридического жаргона. Что возвращаем, когда и как быстро. Если что-то неясно — напишите нам через форму связи.",
     "refund.tldr.title": "TL;DR — ОСНОВНОЕ",
     "refund.tldr.p1": "14 дней money-back на любой платный тариф — без вопросов.",
     "refund.tldr.p2": "При даунгрейде — кредит за неиспользованное автоматически на счёте.",
@@ -194,7 +194,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "refund.process.subtitle": "Стандартный процесс — обычно 5-10 рабочих дней. Без бумажных запросов.",
     "refund.process.day0": "ДЕНЬ 0",
     "refund.process.dayLabel": "ДНИ",
-    "refund.process.s1.title": "Запрос на billing@aevion.app",
+    "refund.process.s1.title": "Запрос через форму связи",
     "refund.process.s1.body": "Тема: «Refund request». В тексте — email аккаунта и причина (опционально). Автоответ с тикетом.",
     "refund.process.s2.title": "Подтверждение и расчёт",
     "refund.process.s2.body": "Customer Success подтверждает условия возврата (14 дней / прорейтинг / промо-условия) и выставляет сумму к возврату.",
@@ -206,6 +206,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "refund.contact.title": "Вопросы по возврату?",
     "refund.contact.subtitle": "Не нужно искать форму. Пишите напрямую — Customer Success отвечает в течение 1 рабочего дня.",
     "refund.contact.salesCta": "Связаться с продажами",
+    "refund.contact.formCta": "Оформить запрос через форму",
 
     "refund.lastUpdated": "Последнее обновление",
     "refund.linkTerms": "Terms of Service",
@@ -639,7 +640,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
 
     "refund.badge": "REFUND POLICY · CLEAR TERMS",
     "refund.title": "AEVION Refund Policy",
-    "refund.subtitle": "No legal jargon. What we refund, when, and how fast. If something's unclear — email billing@aevion.app.",
+    "refund.subtitle": "No legal jargon. What we refund, when, and how fast. If something's unclear — write to us via the contact form.",
     "refund.tldr.title": "TL;DR — KEY POINTS",
     "refund.tldr.p1": "14-day money-back on any paid tier — no questions asked.",
     "refund.tldr.p2": "On downgrade — credit for unused time auto-applied to your account.",
@@ -684,7 +685,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "refund.process.subtitle": "Standard process — usually 5-10 business days. No paper forms.",
     "refund.process.day0": "DAY 0",
     "refund.process.dayLabel": "DAYS",
-    "refund.process.s1.title": "Email billing@aevion.app",
+    "refund.process.s1.title": "Request via the contact form",
     "refund.process.s1.body": "Subject: «Refund request». In body — account email and optional reason. Auto-reply with ticket ID.",
     "refund.process.s2.title": "Confirmation and amount",
     "refund.process.s2.body": "Customer Success confirms terms (14-day / pro-rated / promo conditions) and quotes the refund amount.",
@@ -696,6 +697,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "refund.contact.title": "Refund questions?",
     "refund.contact.subtitle": "No need to find a form. Email directly — Customer Success replies within 1 business day.",
     "refund.contact.salesCta": "Contact sales",
+    "refund.contact.formCta": "Request via the contact form",
 
     "refund.lastUpdated": "Last updated",
     "refund.linkTerms": "Terms of Service",

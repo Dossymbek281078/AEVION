@@ -112,7 +112,7 @@ export default function CPIPreviewPage() {
         {/* Hero */}
         <div style={{ marginBottom: 32 }}>
           <div style={{ fontSize: 11, fontWeight: 800, color: C.purple, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>
-            v0.1 · DRAFT · 2026-05-12
+            v0.1 · ЧЕРНОВИК · 2026-05-12
           </div>
           <h1 style={{ fontSize: 32, fontWeight: 900, letterSpacing: "-0.025em", margin: "0 0 12px", lineHeight: 1.15 }}>
             AEVION CPI <span style={{ color: C.purple }}>Chess Performance Index</span>
@@ -274,7 +274,7 @@ CPI_new = clamp(CPI_old + ΔCPI, 0, 4000)`}</pre>
 
         {/* Roadmap */}
         <section style={{ marginBottom: 32 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>Roadmap</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, margin: "0 0 12px" }}>План развития</h2>
           <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: "14px 18px" }}>
             <ol style={{ margin: 0, paddingLeft: 22, fontSize: 13, color: C.dim, lineHeight: 1.8 }}>
               <li><strong style={{ color: C.green }}>F1</strong> — spec doc + preview page <em style={{ color: C.faint }}>(этот экран — текущая фаза ✓)</em></li>

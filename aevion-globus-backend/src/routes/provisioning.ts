@@ -648,6 +648,86 @@ function maskEmail(email: string): string {
 
 export const provisioningRouter = Router();
 
+/**
+ * GET /api/pricing/provisioning/subscriptions/by-channel?hours=720
+ *
+ * Сколько денег ФАКТИЧЕСКИ пришло по каждому каналу привлечения.
+ *
+ * ЗАЧЕМ. Панель выручки до сих пор считает сумму из АДРЕСА ВОЗВРАТА — нашу
+ * ожидаемую, а не списанную. Пока сверки не было, разница выглядела
+ * теоретической; 01.09.2026 выяснилось, что кассы не смотрели на сумму вовсе, и
+ * заплатить могли не столько, сколько обещала страница. Фактическая сумма
+ * теперь пишется в запись подписки, эта ручка её складывает.
+ *
+ * ФОРМА ОТВЕТА ЗАДАНА ЧИТАТЕЛЕМ — окном, которое строит панель. Так поле не
+ * окажется тем, что удобно отдать, вместо того, что нужно показать. Доводы
+ * читателя, каждый со своей ценой ошибки:
+ *
+ *   amountUsdSum считается ТОЛЬКО по записям с суммой, и рядом обязателен
+ *   withAmount — иначе частичная сумма прочтётся как полная выручка;
+ *
+ *   withChannel отдаётся ОТДЕЛЬНО от withAmount: у PayBox в адрес возврата
+ *   уходит ссылка, а не сумма, а канал может быть неизвестен у другой покупки.
+ *   Это разные пробелы, и одно число их смешает;
+ *
+ *   записи без канала идут в ключ "direct", а не выбрасываются: иначе сумма по
+ *   каналам не сойдётся с общей и это будет выглядеть потерей денег;
+ *
+ *   ноль не выдумывается нигде — покупка без суммы в amountUsdSum просто не
+ *   участвует, а не добавляет 0.
+ *
+ * ⚠️ ОТКАЗ В ЗАКРЫТУЮ, и это отличие от соседних админ-ручек намеренное. В
+ * events.ts проверка вида `if (required) {...}` оставляет ручку ОТКРЫТОЙ, когда
+ * ADMIN_TOKEN не задан. Для счётчиков событий это терпимо; здесь нет: у нас уже
+ * был случай, когда /api/metrics оказался открыт на проде ровно потому, что
+ * переменную не задали. Незаданный токен значит «закрыто», а не «свободно».
+ *
+ * ПЕРСОНАЛЬНЫХ ДАННЫХ НЕТ: только агрегаты. Адреса покупателей не уходят наружу
+ * даже под админ-токеном — для вопроса «что окупилось» они не нужны, а утечь
+ * могут.
+ */
+provisioningRouter.get("/subscriptions/by-channel", (req, res) => {
+  const required = process.env.ADMIN_TOKEN?.trim();
+  if (!required) {
+    return res.status(503).json({
+      error: "admin_token_not_configured",
+      hint: "ADMIN_TOKEN не задан — ручка закрыта намеренно: здесь деньги, а не счётчики",
+    });
+  }
+  const got = (req.headers["x-admin-token"] as string | undefined)?.trim();
+  if (got !== required) return res.status(401).json({ error: "unauthorized" });
+
+  const hoursRaw = Number(req.query.hours);
+  // Мусор в параметре не должен становиться пустым окном: NaN проходит сквозь
+  // Math.min/Math.max и молча обнуляет выборку. Умолчание — 30 суток.
+  const windowHours = Number.isFinite(hoursRaw) && hoursRaw > 0 ? Math.min(hoursRaw, 24 * 365) : 720;
+  const since = Date.now() - windowHours * 3600_000;
+
+  const subs = readSubscriptions().filter((s) => {
+    const t = Date.parse(s.ts);
+    return Number.isFinite(t) && t >= since;
+  });
+
+  const byChannel: Record<string, { count: number; amountUsdSum: number; withAmount: number }> = {};
+  for (const s of subs) {
+    const key = s.channel?.trim() || "direct";
+    const row = (byChannel[key] ??= { count: 0, amountUsdSum: 0, withAmount: 0 });
+    row.count += 1;
+    if (typeof s.amountUsd === "number" && Number.isFinite(s.amountUsd)) {
+      row.withAmount += 1;
+      row.amountUsdSum = Math.round((row.amountUsdSum + s.amountUsd) * 100) / 100;
+    }
+  }
+
+  return res.json({
+    byChannel,
+    total: subs.length,
+    withAmount: subs.filter((s) => typeof s.amountUsd === "number" && Number.isFinite(s.amountUsd)).length,
+    withChannel: subs.filter((s) => Boolean(s.channel?.trim())).length,
+    windowHours,
+  });
+});
+
 const HISTORY_LIMIT = 100;
 
 provisioningRouter.get("/healthz", (_req, res) => {

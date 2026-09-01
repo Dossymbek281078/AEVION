@@ -223,6 +223,12 @@ const ALS: AL[] = [
 // Реальная глубина поиска Stockfish по индексу уровня (useSF=aiI>=3).
 // Master=16, Stockfish(max)=20 — настоящий максимум силы движка.
 const SFD: Record<number,number> = {3:8,4:12,5:16,6:20};
+// Сила и глубина для СЛАБЫХ уровней: движок умеет играть плохо сам.
+// Замер 01.09.2026: сила 0 глубина 5 — 258 мс, сила 6 глубина 6 — 224 мс.
+// Прежний перебор на главном потоке на тех же уровнях занимал секунды и
+// блокировал интерфейс целиком.
+const SF_SILA: Record<number,number> = {0:0,1:3,2:6,3:10,4:14,5:18,6:20};
+const SF_GLUBINA: Record<number,number> = {0:4,1:5,2:6,3:8,4:12,5:16,6:20};
 
 // Семантический цвет-код категорий фич: одна категория = один оттенок, консистентно
 // на всех навигационных поверхностях (хаб «Все разделы», стрип на setup-экране, палитра).
@@ -384,7 +390,7 @@ class SF{private w:Worker|null=null;private ok=false;oshibka:string|null=null;pr
     this.cb=null;this.ecb=null;this.mpvCb=null;this.mpvLines=[];this.cur=null;
     this._pump();
   }
-  go(fen:string,d:number,cb:(f:string,t:string,p?:string)=>void,ecb?:(cp:number,mate:number,depth?:number)=>void,srochno=false){if(!this.w)return cb("","");this._submit({kind:"go",srochno,cmds:["setoption name MultiPV value 1","ucinewgame",`position fen ${fen}`,`go depth ${d}`],cb,ecb:ecb||null,mpvCb:null})}
+  go(fen:string,d:number,cb:(f:string,t:string,p?:string)=>void,ecb?:(cp:number,mate:number,depth?:number)=>void,srochno=false,sila=20){if(!this.w)return cb("","");this._submit({kind:"go",srochno,cmds:[`setoption name Skill Level value ${sila}`,"setoption name MultiPV value 1","ucinewgame",`position fen ${fen}`,`go depth ${d}`],cb,ecb:ecb||null,mpvCb:null})}
   eval(fen:string,d:number,ecb:(cp:number,mate:number,depth?:number)=>void,done:(best?:string)=>void){if(!this.w)return done();this._submit({kind:"eval",cmds:["setoption name MultiPV value 1","ucinewgame",`position fen ${fen}`,`go depth ${d}`],cb:(f,t,p)=>done(f&&t?`${f}${t}${p||""}`:undefined),ecb,mpvCb:null})}
   multiPV(fen:string,d:number,pvCount:number,cb:(lines:PVLine[])=>void,srochno=false){if(!this.w)return cb([]);this._submit({kind:"multiPV",srochno,cmds:[`setoption name MultiPV value ${pvCount}`,"ucinewgame",`position fen ${fen}`,`go depth ${d}`],cb:null,ecb:null,mpvCb:cb})}
   stop(){if(this.w){try{this.w.postMessage("stop")}catch{}}}
@@ -4908,6 +4914,17 @@ export default function CyberChessPage(){
     }
     const t=setTimeout(()=>{
       try{if(game.fen()!==fenAtTrigger){sThink(false);return}
+        // Слабые уровни тоже считает ДВИЖОК: он умеет играть плохо (Skill
+        // Level) и делает это за доли секунды, не занимая главный поток.
+        // Перебор на главном потоке оставлен только на случай, когда движок
+        // не поднялся — тогда лучше медленный соперник, чем никакого.
+        if(sfR.current?.ready()){
+          sfR.current.go(fenAtTrigger,SF_GLUBINA[aiI]??5,(f,t2,p)=>{
+            try{if(game.fen()===fenAtTrigger&&f&&t2)exec(f as Square,t2 as Square,p as any,false)}catch{}
+            sThink(false);
+          },undefined,true,SF_SILA[aiI]??6);
+          return;
+        }
         const c=new Chess(fenAtTrigger);const b=best(c,lv.depth,lv.rand);
         if(b)exec(b.from as Square,b.to as Square,b.promotion as any,false);
       }catch{}

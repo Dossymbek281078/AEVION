@@ -367,7 +367,21 @@ export default function StartupExchangePage() {
           {!loading && !loadError && listings.length === 0 && (
             <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: 36, textAlign: "center", color: "#64748b" }}>
               <div style={{ fontSize: 26, marginBottom: 8 }}>○</div>
-              <div>В этой категории пока пусто.</div>
+              {/*
+                «В этой категории» верно при активном фильтре и НЕВЕРНО, когда
+                пуста вся биржа: человек без фильтра читает про категорию,
+                которую не выбирал, и ищет, где её переключить.
+
+                Замер 01.09.2026: на витрине 19 заявок и все 19 — наши смоук-записи;
+                после того как служебные перестали показываться, ПУСТАЯ витрина
+                становится обычным состоянием, а не краем. Значит текст должен
+                быть верен именно в нём.
+              */}
+              <div>
+                {tierFilter || sectorFilter
+                  ? "В этой категории пока пусто."
+                  : "Заявок пока нет — биржа только открывается."}
+              </div>
               <button
                 type="button"
                 onClick={() => setShowWizard(true)}

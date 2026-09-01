@@ -193,7 +193,8 @@ function countsPurchase(pageFile: string): boolean {
    * в отрисовке всегда идёт пробел, косая черта или закрывающая скобка, и ни
    * один из них не может оказаться буквой продолжения имени.
    */
-  const рисуетКомпонент = ["<PurchaseReturnTracker ", "<PurchaseReturnTracker/", "<PurchaseReturnTracker>"]
+  const рисуетКомпонент = ["<PurchaseReturnTracker ", "<PurchaseReturnTracker/", "<PurchaseReturnTracker>", "<PurchaseReturnTracker
+"]
     .some((форма) => text.includes(форма));
   return text.includes("checkout_success") || рисуетКомпонент;
 }
@@ -294,7 +295,18 @@ describe("возврат после оплаты отмечается на ка�
    * адресе событие уходит, на голом адресе не уходит, мутация «снять ворота»
    * ловится. Убирать запись отсюда стоит вместе с копией, а не вместо неё.
    */
-  const KNOWN_INLINE = ["pricing/checkout/success/page.tsx"];
+  /*
+   * ✅ ПУСТ с 01.09.2026 — храповик растаял, и это правильный способ его снять.
+   *
+   * Запись держалась не из-за дефекта, а из-за копии учёта на странице. Копия
+   * была там потому, что общий компонент не нёс тариф, сумму и период. Соседнее
+   * окно инструмент починило — компонент принимает их с сегодня. Причина
+   * исключения исчезла, значит исчезло и исключение.
+   *
+   * Убирать запись ВМЕСТЕ с копией, а не вместо неё: пока копия жива, храповик
+   * стережёт именно её.
+   */
+  const KNOWN_INLINE: string[] = [];
 
   /** Инлайновая отметка: событие названо прямо в файле страницы. */
   function firesInline(file: string): boolean {
@@ -317,7 +329,8 @@ describe("возврат после оплаты отмечается на ка�
     // Урок дороже правки: починив класс в одном месте, надо спросить, где ЕЩЁ
     // он живёт. Я знал про подстроку внутри длинного имени, назвал этот класс
     // вслух — и оставил его через двадцать строк от собственного объяснения.
-    if (["<PurchaseReturnTracker ", "<PurchaseReturnTracker/", "<PurchaseReturnTracker>"]
+    if (["<PurchaseReturnTracker ", "<PurchaseReturnTracker/", "<PurchaseReturnTracker>", "<PurchaseReturnTracker
+"]
       .some((форма) => text.includes(форма))) return false;
     return /track\(\s*\{[\s\S]{0,200}?checkout_success/.test(text);
   }

@@ -7,6 +7,8 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { track } from "@/lib/track";
 import { useI18n } from "@/lib/i18n";
 import { apiUrl } from "@/lib/apiBase";
+import PurchaseReturnTracker from "@/components/PurchaseReturnTracker";
+import { естьСледОплаты } from "@/lib/paymentTrace";
 
 const APP_LINKS: Record<string, { name: string; href: string }> = {
   qcoreai:    { name: "QCoreAI", href: "/qcoreai" },
@@ -134,6 +136,18 @@ function SuccessInner() {
    * виден, а выдача после оплаты занимает секунды. Врать в эту сторону тоже
    * нельзя — поэтому текст не пугает, а называет, что делать, если не появится.
    */
+  /*
+   * Признак настоящего возврата — ОБЩИЙ, а не своя проверка по provider.
+   * Замер соседнего окна: у Lemon Squeezy провайдера в адресе НЕТ вовсе, есть
+   * только сумма. Своя проверка молча не засчитывала бы их продажи.
+   */
+  const следОплаты = естьСледОплаты({
+    provider,
+    ref: saleId ?? sessionId,
+    total: totalUsd,
+    stub,
+  });
+
   const [confirmed, setConfirmed] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -161,37 +175,39 @@ function SuccessInner() {
   }, [stub, tier]);
 
   /*
-   * ⚠️ 31.08.2026: ворота на учёт. Раньше событие уходило БЕЗУСЛОВНО, при
-   * каждом открытии адреса — то есть итоговый шаг воронки считал ЗАХОДЫ, а не
-   * покупки. Достаточно было вернуться кнопкой «назад», бросив оплату.
+   * ⚠️ 01.09.2026: перешёл на ОБЩИЙ компонент учёта, отменив собственное
+   * исключение.
    *
-   * Признак настоящего возврата на странице уже был: у каждой кассы он свой
-   * (intentId, ref, sale_id), и страница сводит их в `provider` выше. Нет
-   * признака — нет и покупки.
+   * Вчера я оставил здесь свой учёт намеренно: общий PurchaseReturnTracker не
+   * нёс тариф, сумму и период, а в этом событии они есть — замена стоила бы
+   * трёх полей воронки. Сказал об этом соседнему окну, и оно ПОЧИНИЛО
+   * инструмент: теперь компонент принимает и tier, и value, и meta.
    *
-   * Заглушка (?stub) в `provider` не попадает и не считается: показ не продажа.
-   *
-   * Общий PurchaseReturnTracker сюда не ставлю намеренно, хотя он и написан
-   * ровно для этого: он не несёт тариф, сумму и период, а они здесь в событии
-   * есть. Замена ради единообразия стоила бы трёх полей воронки — беру у него
-   * ПРИЁМ (ворота плюс защита от повторной отрисовки), а не тело.
+   * Причина исключения исчезла — значит исчезнуть должно и исключение.
+   * Оставить копию «потому что так уже сделано» значило бы держать второй
+   * способ делать то же самое, а он рано или поздно разойдётся с первым.
    */
-  const учтено = useRef(false);
-
-  useEffect(() => {
-    if (!provider || учтено.current) return;
-    учтено.current = true;
-    track({
-      type: "checkout_success",
-      tier: tier ?? undefined,
-      source: "pricing",
-      value: totalUsd ?? undefined,
-      meta: { stub, period: period ?? null, sessionId: sessionId ?? saleId ?? null, provider },
-    });
-  }, [sessionId, stub, tier, period, totalUsd]);
 
   return (
     <ProductPageShell maxWidth={680}>
+      {/* Учёт возврата — общим компонентом. Он гейтит по признаку оплаты и
+          защищён от повторной отрисовки; тариф, сумму и период принимает с
+          01.09, поэтому своя копия здесь больше не нужна. */}
+      {/*
+        Признак настоящего возврата берём ОБЩИЙ (`естьСледОплаты`), а не свою
+        проверку по provider. Причина в замере соседнего окна: у Lemon Squeezy
+        провайдера в адресе НЕТ вовсе, есть только сумма — моя проверка молча
+        не засчитывала бы их продажи. Общий признак знает все четыре кассы.
+      */}
+      {следОплаты && (
+        <PurchaseReturnTracker
+          source="pricing"
+          provider={provider ?? "unknown"}
+          tier={tier ?? undefined}
+          value={totalUsd ?? undefined}
+          meta={{ period: period ?? null, sessionId: sessionId ?? saleId ?? null, stub }}
+        />
+      )}
       <div style={{ marginBottom: 16 }}>
         <Link href="/pricing" style={{ color: "#64748b", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
           {t("pricing.checkoutSuccess.backAllTiers")}

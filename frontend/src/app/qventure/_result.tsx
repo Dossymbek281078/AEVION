@@ -107,10 +107,22 @@ export interface AnalysisResult {
 
 export const STAGES = ["idea", "pre-seed", "seed", "series-a", "growth"] as const;
 
+// Подпись для человека отдельно от значения для машины. До 01.09.2026 список
+// стадий выводил САМО значение — покупатель видел «pre-seed» и «series-a»,
+// то есть внутренние ключи. Значение уходит на сервер и остаётся прежним;
+// меняется только то, что читают глазами. Образец рядом — VERDICT_LABEL.
+export const STAGE_LABEL: Record<(typeof STAGES)[number], string> = {
+  idea: "Идея",
+  "pre-seed": "Предпосев",
+  seed: "Посев",
+  "series-a": "Раунд A",
+  growth: "Рост",
+};
+
 // Newspaper palette (see feedback_aevion_light_newspaper_ui). Verdict keeps its
 // semantic split, but aligned to the paper red/teal/amber rather than SaaS slate.
 export const VERDICT_COLOR: Record<Verdict, string> = { invest: "#0a7d72", watch: "#b7791f", pass: "#b5241b" };
-export const VERDICT_LABEL: Record<Verdict, string> = { invest: "INVEST", watch: "WATCH", pass: "PASS" };
+export const VERDICT_LABEL: Record<Verdict, string> = { invest: "ИНВЕСТИРУЕМ", watch: "НАБЛЮДАЕМ", pass: "ПАС" };
 const LENS_ICON: Record<string, string> = { scientist: "🔬", data_analyst: "📊", economist: "📈", lawyer: "⚖️" };
 
 export const usd = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
@@ -149,7 +161,7 @@ export function ScoreGauge({ score, verdict, size = 120 }: { score: number; verd
           display: "inline-block", padding: "6px 16px", borderRadius: 999, background: color,
           color: "#fff", fontWeight: 800, fontSize: 15, letterSpacing: 0.5,
         }}>{VERDICT_LABEL[verdict]}</span>
-        <div style={{ fontSize: 13, color: "var(--ink-faint, #74767c)", marginTop: 8 }}>QVenture composite score</div>
+        <div style={{ fontSize: 13, color: "var(--ink-faint, #74767c)", marginTop: 8 }}>Сводная оценка QVenture</div>
       </div>
     </div>
   );
@@ -186,7 +198,7 @@ export function ventureDataQuality(factors: ScoreFactor[]): DataQuality {
 // company in that market. Labelling the source stops a reader assuming all eight
 // were assessed about this specific company, and explains a low execution score.
 const BASIS_TAG: Record<NonNullable<ScoreFactor["basis"]>, { text: string; bg: string; fg: string; title: string }> = {
-  "company-evidence": { text: "from this plan", bg: "#ecfdf5", fg: "#047857", title: "Scored from metrics disclosed in this submission." },
+  "company-evidence": { text: "from this plan", bg: "#ecfdf5", fg: "#047857", title: "Оценка по метрикам, раскрытым в этой заявке." },
   "sector-prior": { text: "sector average", bg: "var(--paper-2, #efeee8)", fg: "var(--ink-soft, #45474c)", title: "Sector benchmark — identical for every company in this sector, not specific to this one." },
   "no-evidence": { text: "not disclosed", bg: "#fef2f2", fg: "#b91c1c", title: "Nothing was submitted for this factor, so it scores low rather than neutral. Add traction metrics to move it." },
 };
@@ -238,7 +250,7 @@ export function FactorBreakdown({ factors }: { factors: ScoreFactor[] }) {
   return (
     <div>
       <div style={{ fontSize: 12, fontWeight: 700, color: "var(--ink, #17181a)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>
-        About this company · {100 - sectorWeight}% of the score
+        О самой компании · {100 - sectorWeight}% of the score
       </div>
       {company.map((f) => <FactorBar key={f.key} f={f} />)}
 
@@ -279,7 +291,7 @@ export function LensCard({ lens }: { lens: Lens }) {
       <ul style={{ margin: "0 0 10px", paddingLeft: 18, fontSize: 13, color: "var(--ink-soft, #45474c)" }}>
         {lens.points.map((p, i) => <li key={i} style={{ marginBottom: 4 }}>{p}</li>)}
       </ul>
-      <div style={{ fontSize: 12, fontWeight: 700, color: "var(--red, #b5241b)", marginBottom: 3 }}>Risks</div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "var(--red, #b5241b)", marginBottom: 3 }}>Риски</div>
       <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: "#7f1d1d" }}>
         {lens.risks.map((r, i) => <li key={i} style={{ marginBottom: 3 }}>{r}</li>)}
       </ul>
@@ -304,7 +316,7 @@ export function StrategyPanel({ s }: { s: Strategy }) {
       {isPass && s.reEntryConditions && s.reEntryConditions.length > 0 && (
         <div style={{ marginBottom: 14, border: "1px solid #fecaca", background: "#fef2f2", borderRadius: 4, padding: "12px 16px" }}>
           <div style={{ fontSize: 13, fontWeight: 800, color: "#991b1b", marginBottom: 6 }}>
-            Not investable as presented — what would have to change
+            В текущем виде инвестировать нельзя — что нужно изменить
           </div>
           <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: "var(--ink-soft, #45474c)", lineHeight: 1.55 }}>
             {s.reEntryConditions.map((c, i) => <li key={i} style={{ marginBottom: 3 }}>{c}</li>)}
@@ -317,14 +329,14 @@ export function StrategyPanel({ s }: { s: Strategy }) {
         </div>
       )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, marginBottom: 14, opacity: isPass ? 0.62 : 1 }}>
-        {cell(isPass ? "Ticket (indicative)" : "Lead ticket", usd(s.ticketUsd.target), `range ${usd(s.ticketUsd.min)}–${usd(s.ticketUsd.max)}`)}
-        {cell("Target ownership", s.ownershipTargetPct + "%", `${s.conviction} conviction`)}
-        {cell("Valuation (pre)", mm(s.valuationBandUsd.base), `${mm(s.valuationBandUsd.low)}–${mm(s.valuationBandUsd.high)}`)}
-        {cell("Expected return", r.expectedMoic + "x", `base ${r.baseMoic}x · ${Math.round(r.lossProbability * 100)}% loss rate`)}
-        {cell("Target IRR", r.targetIrrPct + "%", `${r.horizonYears}yr horizon`)}
+        {cell(isPass ? "Чек (ориентировочно)" : "Лид-чек", usd(s.ticketUsd.target), `range ${usd(s.ticketUsd.min)}–${usd(s.ticketUsd.max)}`)}
+        {cell("Целевая доля", s.ownershipTargetPct + "%", `${s.conviction} conviction`)}
+        {cell("Оценка до раунда", mm(s.valuationBandUsd.base), `${mm(s.valuationBandUsd.low)}–${mm(s.valuationBandUsd.high)}`)}
+        {cell("Ожидаемая доходность", r.expectedMoic + "x", `base ${r.baseMoic}x · ${Math.round(r.lossProbability * 100)}% loss rate`)}
+        {cell("Целевой IRR", r.targetIrrPct + "%", `${r.horizonYears}yr horizon`)}
       </div>
       <div style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink, #17181a)", marginBottom: 6 }}>Deployment schedule</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink, #17181a)", marginBottom: 6 }}>График вложений</div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {s.tranches.map((t, i) => (
             <div key={i} style={{ flex: "1 1 180px", border: "1px solid var(--rule, #d4d3cc)", borderRadius: 4, padding: "10px 12px", background: "var(--card, #fffefb)" }}>
@@ -339,7 +351,7 @@ export function StrategyPanel({ s }: { s: Strategy }) {
         background: isPass ? "#fffbeb" : "#f0fdf4",
         border: `1px solid ${isPass ? "#fde68a" : "#bbf7d0"}`,
       }}>
-        <strong>Portfolio:</strong> {s.portfolioNote}
+        <strong>Портфель:</strong> {s.portfolioNote}
       </div>
     </div>
   );
@@ -353,7 +365,7 @@ export function ShareButton({ id }: { id: string }) {
     const url = typeof window !== "undefined" ? `${window.location.origin}/qventure/a/${id}` : `/qventure/a/${id}`;
     try {
       if (typeof navigator !== "undefined" && navigator.share) {
-        await navigator.share({ title: "QVenture analysis", url });
+        await navigator.share({ title: "Разбор QVenture", url });
         return;
       }
       await navigator.clipboard.writeText(url);
@@ -436,8 +448,8 @@ function ComparablesBlock({ sectorLabel, stage }: { sectorLabel: string; stage: 
   if (loading) {
     return (
       <div style={SECTION}>
-        <h2 style={H2}>Recent comparable rounds</h2>
-        <div style={{ fontSize: 13, color: "var(--ink-faint, #74767c)" }}>Searching for recent {sectorLabel} · {stage} rounds…</div>
+        <h2 style={H2}>Похожие сделки за последнее время</h2>
+        <div style={{ fontSize: 13, color: "var(--ink-faint, #74767c)" }}>Ищем недавние сделки: {sectorLabel} · {stage} rounds…</div>
       </div>
     );
   }
@@ -446,9 +458,9 @@ function ComparablesBlock({ sectorLabel, stage }: { sectorLabel: string; stage: 
   if (failed) {
     return (
       <div style={SECTION}>
-        <h2 style={H2}>Recent comparable rounds</h2>
+        <h2 style={H2}>Похожие сделки за последнее время</h2>
         <div style={{ fontSize: 13, color: "var(--ink-faint, #74767c)" }}>
-          Could not load comparable rounds — this does not mean there are none.
+          Не удалось загрузить похожие сделки — это не значит, что их нет.
         </div>
       </div>
     );
@@ -462,18 +474,18 @@ function ComparablesBlock({ sectorLabel, stage }: { sectorLabel: string; stage: 
   return (
     <div style={SECTION}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
-        <h2 style={{ ...H2, margin: 0 }}>Recent comparable rounds</h2>
+        <h2 style={{ ...H2, margin: 0 }}>Похожие сделки за последнее время</h2>
         <span style={{ padding: "3px 10px", borderRadius: 999, background: badge.bg, color: "#fff", fontSize: 10.5, fontWeight: 800, letterSpacing: 0.3 }}>{badge.text}</span>
       </div>
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 460 }}>
           <thead>
             <tr style={{ textAlign: "left", color: "var(--ink-faint, #74767c)", fontSize: 12 }}>
-              <th style={{ padding: "6px 8px" }}>Company</th>
-              <th style={{ padding: "6px 8px" }}>Amount</th>
-              <th style={{ padding: "6px 8px" }}>Round</th>
-              <th style={{ padding: "6px 8px" }}>Date</th>
-              {data.mode === "live" && <th style={{ padding: "6px 8px" }}>Source</th>}
+              <th style={{ padding: "6px 8px" }}>Компания</th>
+              <th style={{ padding: "6px 8px" }}>Сумма</th>
+              <th style={{ padding: "6px 8px" }}>Раунд</th>
+              <th style={{ padding: "6px 8px" }}>Дата</th>
+              {data.mode === "live" && <th style={{ padding: "6px 8px" }}>Источник</th>}
             </tr>
           </thead>
           <tbody>
@@ -485,7 +497,7 @@ function ComparablesBlock({ sectorLabel, stage }: { sectorLabel: string; stage: 
                 <td style={{ padding: "8px", color: "var(--ink-faint, #74767c)" }}>{c.date || "—"}</td>
                 {data.mode === "live" && (
                   <td style={{ padding: "8px" }}>
-                    {c.url ? <a href={c.url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--teal-deep, #075b53)", fontWeight: 700, textDecoration: "none" }}>link ↗</a> : "—"}
+                    {c.url ? <a href={c.url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--teal-deep, #075b53)", fontWeight: 700, textDecoration: "none" }}>ссылка ↗</a> : "—"}
                   </td>
                 )}
               </tr>
@@ -543,9 +555,9 @@ function BenchmarkBlock({ sectorId, sectorLabel, stage, score }: { sectorId: str
   if (failed) {
     return (
       <div style={SECTION}>
-        <h2 style={H2}>QVenture benchmark</h2>
+        <h2 style={H2}>Ориентир QVenture</h2>
         <div style={{ fontSize: 13, color: "var(--ink-faint, #74767c)" }}>
-          Could not load the benchmark — this is a loading failure, not a verdict.
+          Не удалось загрузить ориентир — это сбой загрузки, а не вердикт.
         </div>
       </div>
     );
@@ -554,8 +566,8 @@ function BenchmarkBlock({ sectorId, sectorLabel, stage, score }: { sectorId: str
 
   const header = (
     <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
-      <h2 style={{ ...H2, margin: 0 }}>QVenture benchmark</h2>
-      <span style={{ padding: "3px 10px", borderRadius: 999, background: "var(--ink, #17181a)", color: "#fff", fontSize: 10.5, fontWeight: 800, letterSpacing: 0.3 }}>NETWORK SIGNAL</span>
+      <h2 style={{ ...H2, margin: 0 }}>Ориентир QVenture</h2>
+      <span style={{ padding: "3px 10px", borderRadius: 999, background: "var(--ink, #17181a)", color: "#fff", fontSize: 10.5, fontWeight: 800, letterSpacing: 0.3 }}>СИГНАЛ СЕТИ</span>
     </div>
   );
 
@@ -576,7 +588,7 @@ function BenchmarkBlock({ sectorId, sectorLabel, stage, score }: { sectorId: str
       {header}
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
         <span style={{ fontSize: 30, fontWeight: 800, color: pctColor, lineHeight: 1 }}>{ordinal(data.percentile ?? 0)}</span>
-        <span style={{ fontSize: 14, color: "var(--ink-soft, #45474c)" }}>percentile</span>
+        <span style={{ fontSize: 14, color: "var(--ink-soft, #45474c)" }}>перцентиль</span>
         <span style={{ fontSize: 13, color: "var(--ink-faint, #74767c)" }}>— scores higher than {data.percentile}% of {data.count} {data.basisLabel}</span>
       </div>
 
@@ -601,9 +613,9 @@ function BenchmarkBlock({ sectorId, sectorLabel, stage, score }: { sectorId: str
 
       <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontSize: 12, color: "var(--ink-faint, #74767c)", marginTop: 10 }}>
         {data.p25 != null && <span>25th pct: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.p25)}</b></span>}
-        {data.median != null && <span>median: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.median)}</b></span>}
+        {data.median != null && <span>медиана: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.median)}</b></span>}
         {data.p75 != null && <span>75th pct: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.p75)}</b></span>}
-        {data.best != null && <span>best seen: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.best)}</b></span>}
+        {data.best != null && <span>лучшее из виденного: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.best)}</b></span>}
       </div>
       <div style={{ fontSize: 11.5, color: "var(--ink-faint, #74767c)", marginTop: 10 }}>{data.disclaimer}</div>
     </div>
@@ -616,13 +628,13 @@ function BenchmarkBlock({ sectorId, sectorLabel, stage, score }: { sectorId: str
 /** Revenue projection vs the venture bar for the stage — the plan-quality check. */
 function ProjectionPanel({ p }: { p: NonNullable<NonNullable<AnalysisResult["result"]["projections"]>> }) {
   const V: Record<string, { c: string; bg: string; label: string }> = {
-    "below-market": { c: "var(--red, #b5241b)", bg: "#fef2f2", label: "BELOW MARKET" },
-    conservative: { c: "var(--amber, #b7791f)", bg: "#fffbeb", label: "CONSERVATIVE" },
-    "venture-grade": { c: "var(--teal, #0a7d72)", bg: "#f0fdf4", label: "VENTURE-GRADE" },
-    grounded: { c: "var(--teal, #0a7d72)", bg: "#f0fdf4", label: "GROUNDED" },
-    aggressive: { c: "var(--amber, #b7791f)", bg: "#fffbeb", label: "AGGRESSIVE" },
-    "hockey-stick": { c: "var(--red, #b5241b)", bg: "#fef2f2", label: "HOCKEY STICK" },
-    "pre-revenue": { c: "var(--ink-faint, #74767c)", bg: "var(--paper-2, #efeee8)", label: "PRE-REVENUE" },
+    "below-market": { c: "var(--red, #b5241b)", bg: "#fef2f2", label: "НИЖЕ РЫНКА" },
+    conservative: { c: "var(--amber, #b7791f)", bg: "#fffbeb", label: "КОНСЕРВАТИВНО" },
+    "venture-grade": { c: "var(--teal, #0a7d72)", bg: "#f0fdf4", label: "ВЕНЧУРНЫЙ УРОВЕНЬ" },
+    grounded: { c: "var(--teal, #0a7d72)", bg: "#f0fdf4", label: "ОБОСНОВАННО" },
+    aggressive: { c: "var(--amber, #b7791f)", bg: "#fffbeb", label: "АГРЕССИВНО" },
+    "hockey-stick": { c: "var(--red, #b5241b)", bg: "#fef2f2", label: "КЛЮШКА" },
+    "pre-revenue": { c: "var(--ink-faint, #74767c)", bg: "var(--paper-2, #efeee8)", label: "ДО ВЫРУЧКИ" },
   };
   const fmt = (n: number) => (n >= 1e9 ? "$" + (n / 1e9).toFixed(1) + "B" : n >= 1e6 ? "$" + (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? "$" + Math.round(n / 1e3) + "k" : "$" + Math.round(n));
   // An unknown verdict (a report from a newer engine) still renders, neutrally.
@@ -630,7 +642,7 @@ function ProjectionPanel({ p }: { p: NonNullable<NonNullable<AnalysisResult["res
   return (
     <div style={{ ...SECTION, background: v.bg, borderColor: `${v.c}44` }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
-        <h2 style={{ ...H2, margin: 0 }}>Revenue projection</h2>
+        <h2 style={{ ...H2, margin: 0 }}>Прогноз выручки</h2>
         <span style={{ padding: "3px 10px", borderRadius: 999, background: v.c, color: "#fff", fontSize: 12, fontWeight: 800 }}>{v.label}</span>
         <span style={{ fontSize: 12.5, color: "var(--ink-soft, #45474c)" }}>
           {fmt(p.startRevenueUsd)} → {fmt(p.endRevenueUsd)} ({p.multiple}× / {p.years}yr)
@@ -655,12 +667,12 @@ function TamPanel({ tam }: { tam: NonNullable<AnalysisResult["result"]["tam"]> }
   );
   return (
     <div style={SECTION}>
-      <h2 style={H2}>Bottom-up TAM triangulation</h2>
+      <h2 style={H2}>TAM снизу вверх</h2>
       <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 14 }}>
-        {tam.acvUsd !== null && stat("Derived ACV", fmt(tam.acvUsd))}
-        {tam.claimedTamUsd !== null && stat("Claimed TAM", fmt(tam.claimedTamUsd))}
-        {tam.impliedAccounts !== null && stat("Implied accounts", tam.impliedAccounts.toLocaleString("en-US"))}
-        {tam.currentPenetrationPct !== null && stat("Penetration", tam.currentPenetrationPct + "%")}
+        {tam.acvUsd !== null && stat("Расчётный ACV", fmt(tam.acvUsd))}
+        {tam.claimedTamUsd !== null && stat("Заявленный TAM", fmt(tam.claimedTamUsd))}
+        {tam.impliedAccounts !== null && stat("Подразумеваемых клиентов", tam.impliedAccounts.toLocaleString("en-US"))}
+        {tam.currentPenetrationPct !== null && stat("Проникновение", tam.currentPenetrationPct + "%")}
         {stat("SOM @ 1%", fmt(tam.somAt1PctUsd))}
       </div>
       <ul style={{ margin: 0, paddingLeft: 20 }}>
@@ -684,32 +696,32 @@ function StressPanel({ stress }: { stress: NonNullable<AnalysisResult["result"][
   if (stress.resilience === "insufficient-data") {
     return (
       <div style={SECTION}>
-        <h2 style={H2}>Financial stress test</h2>
+        <h2 style={H2}>Стресс-тест финансов</h2>
         <p style={{ margin: 0, fontSize: 13, color: "var(--ink-faint, #74767c)" }}>{stress.note}</p>
       </div>
     );
   }
   const RES: Record<string, { c: string; bg: string; label: string }> = {
-    robust: { c: "var(--teal, #0a7d72)", bg: "#f0fdf4", label: "ROBUST" },
-    fragile: { c: "var(--amber, #b7791f)", bg: "#fffbeb", label: "FRAGILE" },
-    underwater: { c: "var(--red, #b5241b)", bg: "#fef2f2", label: "UNDERWATER" },
+    robust: { c: "var(--teal, #0a7d72)", bg: "#f0fdf4", label: "УСТОЙЧИВО" },
+    fragile: { c: "var(--amber, #b7791f)", bg: "#fffbeb", label: "ХРУПКО" },
+    underwater: { c: "var(--red, #b5241b)", bg: "#fef2f2", label: "ПОД ВОДОЙ" },
   };
   const HEALTH: Record<string, string> = { healthy: "var(--teal, #0a7d72)", tight: "var(--amber, #b7791f)", underwater: "var(--red, #b5241b)" };
   const r = RES[stress.resilience];
   return (
     <div style={{ ...SECTION, background: r.bg, borderColor: `${r.c}44` }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
-        <h2 style={{ ...H2, margin: 0 }}>Financial stress test</h2>
+        <h2 style={{ ...H2, margin: 0 }}>Стресс-тест финансов</h2>
         <span style={{ padding: "3px 10px", borderRadius: 999, background: r.c, color: "#fff", fontSize: 12, fontWeight: 800 }}>{r.label}</span>
-        <span style={{ fontSize: 12.5, color: "var(--ink-soft, #45474c)" }}>base LTV/CAC {stress.base.ltvCac} → worst-case {stress.worstLtvCac}</span>
+        <span style={{ fontSize: 12.5, color: "var(--ink-soft, #45474c)" }}>базовый LTV/CAC {stress.base.ltvCac} → worst-case {stress.worstLtvCac}</span>
       </div>
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 420 }}>
           <thead>
             <tr style={{ textAlign: "left", color: "var(--ink-faint, #74767c)", fontSize: 11.5, textTransform: "uppercase" }}>
-              <th style={{ padding: "6px 8px" }}>Scenario</th>
+              <th style={{ padding: "6px 8px" }}>Сценарий</th>
               <th style={{ padding: "6px 8px" }}>LTV/CAC</th>
-              <th style={{ padding: "6px 8px" }}>Payback</th>
+              <th style={{ padding: "6px 8px" }}>Окупаемость</th>
             </tr>
           </thead>
           <tbody>
@@ -743,7 +755,7 @@ function SignalCoverageChip({ coverage, fields }: { coverage: number; fields: nu
       }}
     >
       <span style={{ width: 8, height: 8, borderRadius: 999, background: color }} />
-      <span><b style={{ color }}>{pct}%</b> signal coverage · {label}</span>
+      <span><b style={{ color }}>{pct}%</b> охват сигналов · {label}</span>
       <span style={{ color: "var(--ink-faint, #74767c)" }}>({fields} metric{fields === 1 ? "" : "s"} parsed)</span>
     </div>
   );
@@ -806,16 +818,16 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
       />
 
       <div style={SECTION}>
-        <h2 style={H2}>Investment memo</h2>
+        <h2 style={H2}>Инвестиционное резюме</h2>
         <p style={{ whiteSpace: "pre-wrap", fontSize: 14, color: "var(--ink, #17181a)", lineHeight: 1.6, margin: 0 }}>{result.result.council.memo}</p>
         <div style={{ fontSize: 11.5, color: "var(--ink-faint, #74767c)", marginTop: 10 }}>
-          Narrative engine: {result.result.council.aiUsed ? `live model (${result.result.council.aiProvider})` : "deterministic (no AI key configured)"}
-          {result.result.rubricVersion ? ` · scored by rubric v${result.result.rubricVersion} — scores are only comparable within a version` : ""}
+          Текст собран: {result.result.council.aiUsed ? `живая модель (${result.result.council.aiProvider})` : "детерминированно, без модели (ключ ИИ не настроен)"}
+          {result.result.rubricVersion ? ` · оценка по рубрике v${result.result.rubricVersion} — оценки сравнимы только внутри одной версии` : ""}
         </div>
       </div>
 
       <div style={SECTION}>
-        <h2 style={H2}>Entry strategy</h2>
+        <h2 style={H2}>Стратегия входа</h2>
         <StrategyPanel s={result.result.strategy} />
       </div>
 
@@ -828,7 +840,7 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
       <ComparablesBlock sectorLabel={result.result.sector.label} stage={result.result.stage} />
 
       <div style={SECTION}>
-        <h2 style={H2}>Score breakdown</h2>
+        <h2 style={H2}>Из чего сложилась оценка</h2>
         <div style={{ marginBottom: 12 }}>
           <DataProvenanceChip
             dataQuality={ventureDataQuality(result.result.factors)}
@@ -839,7 +851,7 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
       </div>
 
       <div style={SECTION}>
-        <h2 style={H2}>Analyst council</h2>
+        <h2 style={H2}>Совет аналитиков</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
           {result.result.council.lenses.map((l) => <LensCard key={l.lens} lens={l} />)}
         </div>
@@ -847,9 +859,9 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
 
       {result.result.sector.sources && result.result.sector.sources.length > 0 && (
         <div style={SECTION}>
-          <h2 style={{ ...H2, marginBottom: 6 }}>Market data sources</h2>
+          <h2 style={{ ...H2, marginBottom: 6 }}>Источники рыночных данных</h2>
           <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "var(--ink-faint, #74767c)" }}>
-            Market-size and growth figures for {result.result.sector.label} are anchored to recent third-party research:
+            Данные о размере рынка и росте для {result.result.sector.label} are anchored to recent third-party research:
           </p>
           <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: "var(--ink-soft, #45474c)" }}>
             {result.result.sector.sources.map((s, i) => (
@@ -865,7 +877,7 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
       )}
 
       <div style={{ ...SECTION, background: "#fffbeb", borderColor: "#fde68a" }}>
-        <div style={{ fontSize: 12.5, fontWeight: 700, color: "#92400e", marginBottom: 6 }}>Assumptions & limitations</div>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: "#92400e", marginBottom: 6 }}>Допущения и ограничения</div>
         <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: "#78350f" }}>
           {result.result.assumptions.map((a, i) => <li key={i} style={{ marginBottom: 3 }}>{a}</li>)}
         </ul>

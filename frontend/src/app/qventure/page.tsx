@@ -8,7 +8,7 @@ import ModulePricingChip from "@/components/ModulePricingChip";
 import { apiUrl } from "@/lib/apiBase";
 import paper from "@/styles/aevionPaper.module.css";
 import {
-  ResultView, ScoreGauge, STAGES, VERDICT_COLOR, VERDICT_LABEL,
+  ResultView, ScoreGauge, STAGES, STAGE_LABEL, VERDICT_COLOR, VERDICT_LABEL,
   SECTION, H2, SERIF, type AnalysisResult, type Verdict,
 } from "./_result";
 
@@ -51,7 +51,7 @@ const LABEL: React.CSSProperties = { display: "block", fontSize: 11.5, fontWeigh
 
 // Pure request helper — returns the analysis or an error string, no state.
 async function analyzeReq(data: FormShape): Promise<{ ok: true; data: AnalysisResult } | { ok: false; error: string; upgradeUrl?: string | null }> {
-  if (!data.name.trim()) return { ok: false, error: "Company / product name is required." };
+  if (!data.name.trim()) return { ok: false, error: "Укажите название компании или продукта." };
   if (data.description.trim().length < 12) return { ok: false, error: "Add a longer description (min 12 characters)." };
   try {
     const payload: Record<string, unknown> = {
@@ -136,7 +136,7 @@ export default function QVenturePage() {
         <div style={{ borderTop: "3px solid var(--rule-bold, #17181a)", paddingTop: 14, marginBottom: 22 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: "var(--teal-deep, #075b53)", letterSpacing: "0.32em", textTransform: "uppercase" }}>AEVION · QVenture</div>
           <h1 style={{ margin: "8px 0 10px", fontFamily: SERIF, fontSize: 36, fontWeight: 800, letterSpacing: "-0.02em", color: "var(--ink, #17181a)", lineHeight: 1.1 }}>
-            AI Investment Analyst for Any Business
+            ИИ-аналитик инвестиций для любого бизнеса
           </h1>
           <p style={{ margin: 0, fontSize: 15.5, color: "var(--ink-soft, #45474c)", maxWidth: 760, lineHeight: 1.55 }}>
             Fund-grade due diligence in seconds. A transparent quant score, a four-role expert council
@@ -148,7 +148,7 @@ export default function QVenturePage() {
             fontSize: 14, fontWeight: 700, color: "var(--teal-deep, #075b53)", textDecoration: "none",
             borderBottom: "1px solid color-mix(in srgb, var(--teal, #0a7d72) 45%, transparent)",
           }}>
-            See a live example → <span style={{ fontWeight: 400, color: "var(--ink-faint, #74767c)" }}>(NeuroDx report)</span>
+            Живой пример → <span style={{ fontWeight: 400, color: "var(--ink-faint, #74767c)" }}>(NeuroDx report)</span>
           </Link>
         </div>
 
@@ -163,7 +163,7 @@ export default function QVenturePage() {
                 color: mode === m ? "var(--teal-deep, #075b53)" : "#64748b",
                 boxShadow: mode === m ? "0 1px 3px rgba(15,23,42,0.1)" : "none",
               }}>
-                {m === "single" ? "Analyze one" : "⚖ Compare two"}
+                {m === "single" ? "Одна сделка" : "⚖ Сравнить две"}
               </button>
             ))}
           </div>
@@ -214,12 +214,12 @@ function MarketingSections() {
   return (
     <div style={{ marginTop: 28 }}>
       <div style={SECTION}>
-        <h2 style={H2}>How it works</h2>
+        <h2 style={H2}>Как это работает</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
           {steps.map((s, i) => (
             <div key={i} style={{ padding: "4px 4px" }}>
               <div style={{ fontSize: 28, marginBottom: 8 }}>{s.icon}</div>
-              <div style={{ fontSize: 12, fontWeight: 800, color: "var(--teal-deep, #075b53)" }}>STEP {i + 1}</div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: "var(--teal-deep, #075b53)" }}>ШАГ {i + 1}</div>
               <div style={{ fontSize: 16, fontWeight: 800, color: "var(--ink, #17181a)", margin: "2px 0 6px" }}>{s.title}</div>
               <p style={{ margin: 0, fontSize: 13.5, color: "#475569", lineHeight: 1.5 }}>{s.body}</p>
             </div>
@@ -228,7 +228,7 @@ function MarketingSections() {
       </div>
 
       <div style={SECTION}>
-        <h2 style={H2}>Who it&apos;s for</h2>
+        <h2 style={H2}>Кому подходит</h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
           {audience.map((a, i) => (
             <div key={i} style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 16, background: "#fff" }}>
@@ -360,7 +360,7 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
   return (
     <>
       <div style={SECTION}>
-        <h2 style={H2}>Analyze an opportunity</h2>
+        <h2 style={H2}>Разбор сделки</h2>
         <div style={{ border: "1px dashed var(--rule-mid, #b9b8b0)", background: "var(--paper-2, #efeee8)", borderRadius: 12, padding: "14px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <input ref={fileRef} type="file" accept="application/pdf,.pdf" onChange={onDeckFile} style={{ display: "none" }} />
           <button type="button" onClick={() => fileRef.current?.click()} disabled={extracting || loading} style={{
@@ -392,12 +392,12 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
         )}
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           <button onClick={() => run(form)} disabled={loading} style={primaryBtn(loading)}>
-            {loading ? "Analyzing…" : "Run analysis"}
+            {loading ? "Разбираем…" : "Разобрать"}
           </button>
           <button onClick={runSample} disabled={loading} type="button" style={ghostBtn(loading)}>
-            ✨ See a sample analysis
+            ✨ Показать пример разбора
           </button>
-          <span style={{ fontSize: 12.5, color: "#94a3b8" }}>No input needed — loads a real seed-stage case.</span>
+          <span style={{ fontSize: 12.5, color: "#94a3b8" }}>Ничего вводить не нужно — загрузим настоящий пример стадии посева.</span>
         </div>
       </div>
       {result && <ResultView result={result} />}
@@ -458,7 +458,7 @@ function ComparePanel({ sectors }: { sectors: SectorOption[] }) {
           </div>
         )}
       <button onClick={run} disabled={loading} style={{ ...primaryBtn(loading), marginBottom: 18 }}>
-        {loading ? "Analyzing both…" : "⚖ Compare"}
+        {loading ? "Разбираем оба…" : "⚖ Compare"}
       </button>
       {pair && <CompareResult a={pair[0]} b={pair[1]} />}
     </>
@@ -506,12 +506,12 @@ function CompareResult({ a, b }: { a: AnalysisResult; b: AnalysisResult }) {
       </div>
 
       <div style={SECTION}>
-        <h2 style={H2}>Factor-by-factor delta</h2>
+        <h2 style={H2}>Разница по факторам</h2>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 460 }}>
             <thead>
               <tr style={{ textAlign: "left", color: "#64748b", fontSize: 12 }}>
-                <th style={{ padding: "6px 8px" }}>Factor</th>
+                <th style={{ padding: "6px 8px" }}>Фактор</th>
                 <th style={{ padding: "6px 8px", textAlign: "center" }}>{a.name}</th>
                 <th style={{ padding: "6px 8px", textAlign: "center" }}>{b.name}</th>
                 <th style={{ padding: "6px 8px", textAlign: "center" }}>Δ (B−A)</th>
@@ -536,7 +536,7 @@ function CompareResult({ a, b }: { a: AnalysisResult; b: AnalysisResult }) {
                 );
               })}
               <tr style={{ borderTop: "2px solid #e2e8f0" }}>
-                <td style={{ padding: "8px", fontWeight: 800, color: "var(--ink, #17181a)" }}>Composite</td>
+                <td style={{ padding: "8px", fontWeight: 800, color: "var(--ink, #17181a)" }}>Итог</td>
                 <td style={{ padding: "8px", textAlign: "center", fontWeight: 800 }}>{a.composite}</td>
                 <td style={{ padding: "8px", textAlign: "center", fontWeight: 800 }}>{b.composite}</td>
                 <td style={{ padding: "8px", textAlign: "center", fontWeight: 800, color: b.composite - a.composite >= 0 ? "#16a34a" : "#dc2626" }}>
@@ -587,43 +587,43 @@ function FormFields({ form, set, sectors, full = false }: {
     <>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 14 }}>
         <div>
-          <label style={LABEL}>Company / product name *</label>
-          <input aria-label="Company / product name" style={INPUT} value={form.name} onChange={set("name")} placeholder="e.g. NeuroDx" />
+          <label style={LABEL}>Название компании или продукта *</label>
+          <input aria-label="Название компании или продукта" style={INPUT} value={form.name} onChange={set("name")} placeholder="e.g. NeuroDx" />
         </div>
         <div>
-          <label style={LABEL}>Sector</label>
+          <label style={LABEL}>Отрасль</label>
           <select style={INPUT} value={form.sector} onChange={set("sector")}>
-            {sectors.length === 0 && <option value="ai_app">AI Applications</option>}
+            {sectors.length === 0 && <option value="ai_app">ИИ-приложения</option>}
             {sectors.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
         </div>
         <div>
-          <label style={LABEL}>Stage</label>
+          <label style={LABEL}>Стадия</label>
           <select style={INPUT} value={form.stage} onChange={set("stage")}>
-            {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
+            {STAGES.map((s) => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}
           </select>
         </div>
         {full && (
           <>
             <div>
-              <label style={LABEL}>Target market</label>
-              <input aria-label="Target market" style={INPUT} value={form.geography} onChange={set("geography")} placeholder="US" />
+              <label style={LABEL}>Целевой рынок</label>
+              <input aria-label="Целевой рынок" style={INPUT} value={form.geography} onChange={set("geography")} placeholder="US" />
             </div>
             <div>
-              <label style={LABEL}>Raising (USD, optional)</label>
-              <input aria-label="Raising (USD, optional)" style={INPUT} value={form.askUsd} onChange={set("askUsd")} placeholder="5,000,000" inputMode="numeric" />
+              <label style={LABEL}>Привлекают (USD, необязательно)</label>
+              <input aria-label="Привлекают (USD, необязательно)" style={INPUT} value={form.askUsd} onChange={set("askUsd")} placeholder="5,000,000" inputMode="numeric" />
             </div>
           </>
         )}
       </div>
       <div style={{ marginBottom: full ? 14 : 0 }}>
-        <label style={LABEL}>What does it do? *</label>
+        <label style={LABEL}>Что делает продукт? *</label>
         <textarea style={{ ...INPUT, minHeight: 72, resize: "vertical" }} value={form.description} onChange={set("description")}
           aria-label="What does it do?" placeholder="One-paragraph description of the product, the problem it solves, and the wedge." />
       </div>
       {full && (
         <div style={{ marginBottom: 16 }}>
-          <label style={LABEL}>Traction / metrics</label>
+          <label style={LABEL}>Тяга и метрики</label>
           <textarea style={{ ...INPUT, minHeight: 56, resize: "vertical" }} value={form.tractionNotes} onChange={set("tractionNotes")}
             aria-label="Traction / metrics" placeholder="e.g. $40k MRR growing 18% MoM, 3 enterprise pilots, 92% retention, LTV/CAC 4.2x" />
           {/* Execution carries 28% of the composite and scores low — not neutral — when
@@ -648,10 +648,10 @@ function FormFields({ form, set, sectors, full = false }: {
           </summary>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginTop: 12 }}>
             <div><label style={LABEL}>ARR (USD)</label><input aria-label="ARR (USD)" style={INPUT} value={form.finArr} onChange={set("finArr")} placeholder="3,000,000" inputMode="numeric" /></div>
-            <div><label style={LABEL}>Gross margin (%)</label><input aria-label="Gross margin (%)" style={INPUT} value={form.finGrossMargin} onChange={set("finGrossMargin")} placeholder="82" inputMode="numeric" /></div>
+            <div><label style={LABEL}>Валовая маржа (%)</label><input aria-label="Gross margin (%)" style={INPUT} value={form.finGrossMargin} onChange={set("finGrossMargin")} placeholder="82" inputMode="numeric" /></div>
             <div><label style={LABEL}>LTV / CAC ratio</label><input aria-label="LTV / CAC ratio" style={INPUT} value={form.finLtvCac} onChange={set("finLtvCac")} placeholder="4" inputMode="numeric" /></div>
             <div>
-              <label style={LABEL}>Churn (%)</label>
+              <label style={LABEL}>Отток (%)</label>
               <div style={{ display: "flex", gap: 6 }}>
                 <input style={{ ...INPUT, flex: 1 }} value={form.finChurn} onChange={set("finChurn")} aria-label="Churn (%)" placeholder="3" inputMode="numeric" />
                 <select style={{ ...INPUT, width: 104 }} value={form.finChurnPeriod} onChange={set("finChurnPeriod")} aria-label="Churn period">
@@ -662,9 +662,9 @@ function FormFields({ form, set, sectors, full = false }: {
                 </select>
               </div>
             </div>
-            <div><label style={LABEL}>Customers</label><input aria-label="Customers" style={INPUT} value={form.finCustomers} onChange={set("finCustomers")} placeholder="2,000" inputMode="numeric" /></div>
+            <div><label style={LABEL}>Клиенты</label><input aria-label="Клиенты" style={INPUT} value={form.finCustomers} onChange={set("finCustomers")} placeholder="2,000" inputMode="numeric" /></div>
             <div>
-              <label style={LABEL}>Growth (%)</label>
+              <label style={LABEL}>Рост (%)</label>
               <div style={{ display: "flex", gap: 6 }}>
                 <input style={{ ...INPUT, flex: 1 }} value={form.finGrowth} onChange={set("finGrowth")} aria-label="Growth (%)" placeholder="15" inputMode="numeric" />
                 <select style={{ ...INPUT, width: 104 }} value={form.finGrowthPeriod} onChange={set("finGrowthPeriod")} aria-label="Growth period">
@@ -674,7 +674,7 @@ function FormFields({ form, set, sectors, full = false }: {
                 </select>
               </div>
             </div>
-            <div><label style={LABEL}>Bottom-up TAM (USD)</label><input aria-label="Bottom-up TAM (USD)" style={INPUT} value={form.finTam} onChange={set("finTam")} placeholder="12,000,000,000" inputMode="numeric" /></div>
+            <div><label style={LABEL}>TAM снизу вверх (USD)</label><input aria-label="TAM снизу вверх (USD)" style={INPUT} value={form.finTam} onChange={set("finTam")} placeholder="12,000,000,000" inputMode="numeric" /></div>
           </div>
           <div style={{ marginTop: 14 }}>
             <label style={LABEL}>Projected revenue (USD) — this year / +1yr / +2yr (for the hockey-stick check)</label>

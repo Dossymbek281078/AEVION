@@ -257,7 +257,11 @@ paymentsRouter.get("/paybox/status/:orderId", (req, res) => {
 /* ═══ Kaspi ═══ */
 
 paymentsRouter.get("/kaspi/config", (_req, res) => {
-  res.json({ configured: false, comingSoon: true, info: "Kaspi Pay requires a merchant agreement. Contact partners@aevion.app" });
+  res.json({ configured: false, comingSoon: true, info:
+      // 01.09.2026: здесь звали писать на почтовый ящик нашего домена. Записи MX
+      // у него нет, письма туда не доходят, а ответ ручки выглядел рабочим способом связаться.
+      "Kaspi Pay requires a merchant agreement. Contact us at " +
+      `${process.env.FRONTEND_URL?.replace(/[/]+$/, "") || "https://aevion.app"}/pricing/contact`, });
 });
 
 /* ═══ General ═══ */

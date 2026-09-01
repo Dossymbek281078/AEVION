@@ -48,7 +48,7 @@ import {
   appSlugForReference,
   type LemonSqueezyReference,
 } from "../data/lemonSqueezyVariants";
-import { MEDIUM_BUNDLE } from "../data/pricing";
+import { MEDIUM_BUNDLE, TIERS } from "../data/pricing";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { getPool } from "../lib/dbPool";
 import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
@@ -108,6 +108,15 @@ interface LsSubscriptionPayload {
       status?: string;
       renews_at?: string | null;
       ends_at?: string | null;
+      /**
+       * Фактически списанная сумма, в минорных единицах.
+       *
+       * Поле объявлено 01.09.2026: до этого вебхук суммы не касался вовсе
+       * (грепом 0 упоминаний при 20 у слов variant/custom/order). У событий
+       * подписки его может не быть — отсутствие тут нормально и тревогой не
+       * считается.
+       */
+      total?: number | string | null;
     };
   };
 }
@@ -289,6 +298,47 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
     const ref = referenceForVariantId(attrs.variant_id);
     const lsSubId = payload.data?.id ?? undefined;
 
+    // СУММА. Сверять её точным равенством нельзя: скидочные коды делают
+    // меньшую сумму законной, а у годового периода она другая по устройству.
+    // Поэтому здесь только два случая, у которых нет законного прочтения.
+    //
+    // Цену берём из ЕДИНСТВЕННОГО источника — data/pricing.ts, тем же путём,
+    // которым её показывает витрина. Второй список цен на бэкенде разошёлся бы
+    // с первым молча.
+    // Проверка на undefined/null ИЗБЫТОЧНА: Number(undefined) даёт NaN, а он не
+    // проходит isFinite ниже. Мутация, снимающая её, поэтому и не ловится — это
+    // честный результат, а не дыра. Условие оставлено: оно называет намерение
+    // (отсутствие суммы у события подписки — норма, а не тревога) и стоит ноль.
+    // ФАКТИЧЕСКИ списанная сумма, в долларах. Считаем один раз: её читают
+    // и проверки ниже, и запись подписки.
+    const paidCents = attrs.total === undefined || attrs.total === null ? null : Number(attrs.total);
+    const paidUsd = paidCents !== null && Number.isFinite(paidCents) ? paidCents / 100 : undefined;
+
+    if (attrs.total !== undefined && attrs.total !== null) {
+      const paid = Number(attrs.total);
+      const tier = TIERS.find((t) => t.id === tierForLemonSqueezyReference(ref));
+      const monthlyCents = tier && tier.priceMonthly != null ? Math.round(tier.priceMonthly * 100) : null;
+      if (Number.isFinite(paid) && paid === 0) {
+        // Ноль у платного тарифа — это не «дешевле», а «доступ бесплатно».
+        console.warn(
+          `[ls/webhook] ${event}: сумма 0 при тарифе ${tier?.id ?? "?"} — доступ выдаётся БЕСПЛАТНО ` +
+            `(купон на 100% или ошибка настройки варианта)`,
+        );
+        capture(new Error(`ls_zero_total_provisioned:${payload.data?.id ?? "?"}`), { route: "ls/webhook" });
+      } else if (Number.isFinite(paid) && monthlyCents !== null && paid > monthlyCents * 12) {
+        // Порог — годовая стоимость по МЕСЯЧНОЙ цене. Годовой тариф у нас
+        // дешевле двенадцати месяцев, скидки только уменьшают, поэтому всё,
+        // что выше этой границы, законного прочтения не имеет: с человека
+        // взяли больше, чем мы где-либо обещали. И он этого не увидит — наш
+        // экран успеха показывает ОЖИДАЕМУЮ сумму из адреса возврата.
+        console.warn(
+          `[ls/webhook] ${event}: списано ${paid} при потолке ${monthlyCents * 12} для тарифа ` +
+            `${tier?.id ?? "?"} — с покупателя взяли БОЛЬШЕ обещанного`,
+        );
+        capture(new Error(`ls_overcharge:${payload.data?.id ?? "?"}`), { route: "ls/webhook" });
+      }
+    }
+
     // ── Individual app subscription (app_* variants) ──────────────────
     if (isAppReference(ref)) {
       const appSlug = appSlugForReference(ref)!;
@@ -378,6 +428,17 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         period: "monthly",
         modules,
         source: "lemonsqueezy",
+        // ФАКТИЧЕСКИ списанное, а не то, что мы ожидали. Поле amountUsd в записи
+        // подписки существовало давно и не заполнялось НИКЕМ — оно молча
+        // исчезло бы, и никто бы не заметил.
+        //
+        // Пишем его сейчас не впрок: у него есть названный читатель. Панель
+        // «выручка по каналам» соседнего окна до сих пор считает сумму из
+        // АДРЕСА ВОЗВРАТА, то есть нашу ожидаемую. Пока сверки не было, разница
+        // выглядела теоретической; теперь известно, что она реальна, и две
+        // колонки рядом — ожидаемая и списанная — полезнее одной: расхождение
+        // между ними и есть сигнал.
+        ...(paidUsd === undefined ? {} : { amountUsd: paidUsd }),
         ...(channel ? { channel } : {}),
       });
       console.log(`[ls/webhook] ${event} → provisioned ${tierId} for ${email} (ref=${ref ?? "default"})`);

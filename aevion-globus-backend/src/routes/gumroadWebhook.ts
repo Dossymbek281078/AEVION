@@ -286,6 +286,11 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
 
   const raw = result.raw as Record<string, string> | null ?? {};
 
+  // ФАКТИЧЕСКИ списанное, в долларах. Объявлено здесь, у начала тела, а не
+  // рядом с проверкой: читателей два и они в РАЗНЫХ вложенных блоках —
+  // тревоги о нулевой оплате и запись суммы в подписку. Первая редакция
+  // объявляла её внутри проверки, и до записи переменная не доживала.
+  let paidUsd: number | undefined;
   const saleId = raw.sale_id ?? raw.id ?? eventId ?? "";
   const email = (raw.email ?? "").trim().toLowerCase();
   const productId = raw.product_id ?? raw.short_product_id ?? "";
@@ -410,6 +415,51 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
       capture(new Error(`gumroad_sale_unverifiable_provisioned:${saleId}`), {
         route: "gumroad/webhook",
       });
+    }
+
+    // СУММА — только у продажи, которая ДЕЙСТВИТЕЛЬНО будет выдана.
+    //
+    // Сперва я поставил эту проверку выше, рядом со сверкой почты и товара, и
+    // она заговорила о «выданном бесплатно доступе» на пингах, которые тут же
+    // отклонялись как подделка. Хуже того, её тревога вытесняла из Sentry
+    // настоящую — про несовпадение заявки. Утверждение о выдаче имеет смысл
+    // только после того, как выдача решена.
+    //
+    // Сверить сумму с нашей ценой нечем: девять позиций каталога продаются
+    // ПРЯМОЙ ссылкой Gumroad, наша сумма в неё не передаётся вовсе, а цен
+    // модулей бэкенд не хранит. Поэтому здесь не сверка, а два однозначных
+    // случая, для которых наша цена не нужна.
+    //
+    // Доступ НЕ отбираем ни в одном из них: купон основателя на 100% выглядит
+    // так же, как ошибка настройки товара, а отказать оплатившему дороже, чем
+    // выдать лишнее. Меняется одно — случай перестаёт быть невидимым.
+    // Проверка `verdict === "confirmed"` сегодня ИЗБЫТОЧНА: провайдер отдаёт
+    // непустой `sale` только вместе с этим вердиктом (проверено по всем шести
+    // точкам возврата verifyGumroadSaleImpl). Мутация, снимающая её, поэтому и
+    // не ловится ни одним тестом — и это честный результат, а не дыра: писать
+    // тест на состояние, которого не бывает, значит закреплять выдумку.
+    // Условие оставлено намеренно: оно называет намерение и переживёт смену
+    // контракта провайдера, а стоит ноль.
+    if (verdict === "confirmed" && sale) {
+      const paidCents = Number.parseInt(String(sale.price ?? ""), 10);
+      const pingCents = Number.parseInt(String(raw.price ?? ""), 10);
+      // Наружу блока — её пишем в запись подписки ниже.
+      if (Number.isFinite(paidCents) && paidCents > 0) paidUsd = paidCents / 100;
+      if (!Number.isFinite(paidCents) || paidCents <= 0) {
+        console.warn(
+          `[gumroad/webhook] sale ${saleId}: сумма ${JSON.stringify(sale.price ?? null)} — ` +
+            `доступ выдаётся БЕСПЛАТНО (купон на 100% или ошибка настройки товара)`,
+        );
+        capture(new Error(`gumroad_zero_price_provisioned:${saleId}`), { route: "gumroad/webhook" });
+      } else if (Number.isFinite(pingCents) && pingCents !== paidCents) {
+        // Пинг не подписан (GUMROAD_WEBHOOK_SECRET на проде не задан), а адрес
+        // ручки публично известен: расхождение сумм здесь — признак подделки.
+        console.warn(
+          `[gumroad/webhook] sale ${saleId}: в пинге ${pingCents}, в продаже ${paidCents} — ` +
+            `пинг не подписан, расхождение суммы это признак подделки`,
+        );
+        capture(new Error(`gumroad_ping_price_mismatch:${saleId}`), { route: "gumroad/webhook" });
+      }
     }
   }
 
@@ -556,6 +606,10 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         period,
         modules: [],
         source: "gumroad",
+        // Сумма из ПРОДАЖИ (API), а не из пинга: пинг не подписан. Если сумма
+        // неизвестна или нулевая — поле не проставляем вовсе: ноль в выручке
+        // хуже пустоты, по нему потом посчитают деньги.
+        ...(paidUsd === undefined ? {} : { amountUsd: paidUsd }),
         ...(purchaseChannel ? { channel: purchaseChannel } : {}),
       });
 

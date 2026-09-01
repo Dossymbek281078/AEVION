@@ -615,7 +615,20 @@ qfusionaiRouter.get("/openapi.json", (_req, res) => {
       description:
         "Hybrid AI Engine — multi-provider LLM router with strategy-based selection (speed/quality/cost/auto). " +
         "Supports Anthropic, OpenAI, Gemini, DeepSeek, Grok with automatic fallback.",
-      contact: { name: "AEVION", url: "https://aevion.app", email: "support@aevion.app" },
+      contact: {
+            name: "AEVION",
+            // Форма, а не почтовый ящик: у домена aevion.app нет записи MX,
+            // письмо туда не доходит ни до кого. Обращения формы пишутся на
+            // постоянный том и читаются защищённой ручкой — это проверено
+            // соседним окном по всей цепочке, а не по виду.
+            //
+            // Прецедент 29.08 (коммит 886fe5657) ставил вместо мёртвого адреса
+            // рабочий почтовый ящик. Здесь у поля контакта уже есть url, и он
+            // решает ту же задачу, не разнося личный адрес ещё по четырём
+            // ручкам. Канал раскрытия уязвимостей это НЕ меняет: он один и
+            // задан в /.well-known/security.txt, у него свой сторож.
+            url: "https://aevion.app/pricing/contact",
+          },
     },
     servers: [{ url: `${base}/api/qfusionai`, description: "Production" }],
     paths: {

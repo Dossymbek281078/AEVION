@@ -57,11 +57,23 @@ function post(payload: Record<string, unknown>) {
     .send(raw);
 }
 
-function event(name: string, variantId: string | number, email = "buyer@test.aev") {
+function event(
+  name: string,
+  variantId: string | number,
+  email = "buyer@test.aev",
+  total?: number,
+) {
   subCounter += 1;
   return {
     meta: { event_name: name },
-    data: { id: `sub_${subCounter}`, attributes: { user_email: email, variant_id: variantId } },
+    data: {
+      id: `sub_${subCounter}`,
+      attributes: {
+        user_email: email,
+        variant_id: variantId,
+        ...(total === undefined ? {} : { total }),
+      },
+    },
   };
 }
 
@@ -150,5 +162,104 @@ describe("Lemon Squeezy: заплатил → получил именно куп
 
     expect(res.body.action).toBe("devhub_studio_pro_activated");
     expect(devhubTiersWritten()).toContain("pro");
+  });
+});
+
+/**
+ * Сумма списания: два случая без законного прочтения.
+ *
+ * ЗАМЕР 01.09.2026 (находка соседнего окна, проверена здесь заново): вебхук не
+ * касался суммы ВООБЩЕ — грепом 0 упоминаний total/amount/price при 20 у слов
+ * variant/custom/order, то есть прибор не слеп. Тариф выводился только из
+ * variant_id, а сколько человек заплатил на самом деле, никто не смотрел.
+ *
+ * Точным равенством сверять нельзя: скидочный код делает меньшую сумму
+ * законной, у годового периода она другая по устройству. Поэтому проверяются
+ * только два случая:
+ *
+ *   ноль          — это не «дешевле», а доступ бесплатно;
+ *   больше        — потолок взят как годовая стоимость по МЕСЯЧНОЙ цене:
+ *   потолка         годовой тариф у нас дешевле двенадцати месяцев, скидки
+ *                   только уменьшают, значит выше границы законного прочтения
+ *                   нет.
+ *
+ * Переплата опаснее, чем кажется: НАШ экран успеха показывает ожидаемую сумму
+ * из адреса возврата, а не списанную. Человек, с которого взяли больше, у нас
+ * увидит меньшую цифру и пойдёт спорить с банком, а не с нами.
+ *
+ * Доступ не отбираем ни в одном случае — отказать оплатившему дороже.
+ */
+describe("Lemon Squeezy: сумма списания оставляет след, когда говорит сама за себя", () => {
+  let warned: string[] = [];
+  beforeEach(() => {
+    warned = [];
+    vi.spyOn(console, "warn").mockImplementation((...a: unknown[]) => {
+      warned.push(a.map(String).join(" "));
+    });
+  });
+
+  test("нулевая сумма у платного тарифа видна", async () => {
+    const res = await post(event("subscription_created", "9002", "buyer@test.aev", 0));
+    expect(res.status, "вебхук не принял пинг — дальше мерить нечего").toBe(200);
+    expect(
+      warned.join(" "),
+      "доступ выдан бесплатно, и следа нет — снаружи неотличимо от обычной оплаты",
+    ).toContain("БЕСПЛАТНО");
+  });
+
+  test("списание выше годового потолка видно", async () => {
+    // Тариф lite: $19/мес → потолок $228. Списание $999 законного прочтения
+    // не имеет ни при какой скидке и ни при каком периоде.
+    const res = await post(event("subscription_created", "9002", "buyer@test.aev", 99900));
+    expect(res.status).toBe(200);
+    expect(warned.join(" "), "переплата прошла молча").toContain("БОЛЬШЕ обещанного");
+  });
+
+  test("фактически списанное записывается в подписку", async () => {
+    // Поле amountUsd в записи подписки существовало давно и не заполнялось
+    // НИКЕМ — оно молча исчезло бы, и никто бы не заметил. Пишем не впрок: у
+    // него есть названный читатель — панель выручки соседнего окна, которая до
+    // сих пор считает сумму из АДРЕСА ВОЗВРАТА, то есть нашу ожидаемую.
+    await post(event("subscription_created", "9002", "buyer@test.aev", 1900));
+    const arg = mockProvision.mock.calls.at(-1)?.[0] as { amountUsd?: number } | undefined;
+    expect(arg?.amountUsd, "списанная сумма не дошла до записи подписки").toBe(19);
+  });
+
+  test("сумма и канал попадают в ОДНУ запись", async () => {
+    // Ради этого всё и делалось. Соседнее окно измерило, что сумма и канал
+    // «не встречаются никогда», и вывод был неверен — их греп искал форму
+    // записи Gumroad (`channel: purchaseChannel`) и не видел сокращённую
+    // (`{ channel }`). Но проверка нужна независимо от того, кто ошибся: пара
+    // и есть предмет. Порознь эти поля бесполезны — выручка по каналам
+    // считается только там, где известны ОБА.
+    const payload = event("subscription_created", "9002", "buyer@test.aev", 2900);
+    payload.meta = { ...payload.meta, custom_data: { channel: "tt" } } as never;
+    await post(payload);
+    const arg = mockProvision.mock.calls.at(-1)?.[0] as
+      | { amountUsd?: number; channel?: string }
+      | undefined;
+    expect(arg?.amountUsd, "сумма не дошла").toBe(29);
+    expect(arg?.channel, "канал не дошёл — сумма без канала в выручку не ложится").toBe("tt");
+  });
+
+  test("если суммы в событии нет — поле не выдумывается", async () => {
+    // Отсутствие суммы у событий подписки нормально. Ноль или догадка здесь
+    // были бы хуже пустоты: по ним потом посчитают выручку.
+    await post(event("subscription_created", "9002", "nototal@test.aev"));
+    const arg = mockProvision.mock.calls.at(-1)?.[0] as { amountUsd?: number } | undefined;
+    expect(arg && "amountUsd" in arg, "поле проставлено там, где суммы не было").toBe(false);
+  });
+
+  test("контроль: обычная оплата и событие БЕЗ суммы следа не оставляют", async () => {
+    // Без этого «след есть» означало бы «я пишу в журнал всегда». И отдельно
+    // важно, что отсутствие поля тревогой не считается: у событий подписки
+    // суммы может не быть по устройству провайдера.
+    const ok = await post(event("subscription_created", "9002", "buyer@test.aev", 1900));
+    expect(ok.status).toBe(200);
+    const none = await post(event("subscription_created", "9002", "other@test.aev"));
+    expect(none.status).toBe(200);
+    const log = warned.join(" ");
+    expect(log, "обычная оплата помечена как бесплатная").not.toContain("БЕСПЛАТНО");
+    expect(log, "обычная оплата помечена как переплата").not.toContain("БОЛЬШЕ обещанного");
   });
 });

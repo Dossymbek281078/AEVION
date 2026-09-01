@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { activatable } from "@/lib/activatable";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 
@@ -78,7 +79,10 @@ export default function QCoreUpgradePage() {
           {/* Billing toggle */}
           <div style={{ display: "flex", justifyContent: "center", marginBottom: 32, gap: 0 }}>
             <button
-              onClick={() => setBilling("monthly")}
+              {...activatable(() => setBilling("monthly"))}
+              role="radio"
+              aria-checked={billing === "monthly"}
+              aria-label="Оплата помесячно"
               style={{
                 padding: "8px 24px",
                 borderRadius: "8px 0 0 8px",
@@ -93,7 +97,10 @@ export default function QCoreUpgradePage() {
               Monthly
             </button>
             <button
-              onClick={() => setBilling("annual")}
+              {...activatable(() => setBilling("annual"))}
+              role="radio"
+              aria-checked={billing === "annual"}
+              aria-label="Оплата за год"
               style={{
                 padding: "8px 24px",
                 borderRadius: "0 8px 8px 0",
@@ -134,7 +141,10 @@ export default function QCoreUpgradePage() {
           >
             {/* Pro card */}
             <div
-              onClick={() => setPlan("pro")}
+              {...activatable(() => setPlan("pro"))}
+              role="radio"
+              aria-checked={plan === "pro"}
+              aria-label="Тариф Pro"
               style={{
                 border: plan === "pro" ? "2px solid #0d9488" : "2px solid #e2e8f0",
                 borderRadius: 16,
@@ -187,7 +197,10 @@ export default function QCoreUpgradePage() {
 
             {/* Enterprise card */}
             <div
-              onClick={() => setPlan("enterprise")}
+              {...activatable(() => setPlan("enterprise"))}
+              role="radio"
+              aria-checked={plan === "enterprise"}
+              aria-label="Тариф Enterprise"
               style={{
                 border: plan === "enterprise" ? "2px solid #7c3aed" : "2px solid #e2e8f0",
                 borderRadius: 16,

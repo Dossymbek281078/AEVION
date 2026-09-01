@@ -282,7 +282,7 @@ type PVLine = {pv:number;cp:number;mate:number;depth:number;moves:string[]};
 // Serialized engine job. Все запросы (go/eval/multiPV) проходят через очередь,
 // поэтому конкурентные вызовы из разных эффектов больше не обнуляют колбэки
 // друг друга и каждый запрос доходит до bestmove. См. _submit/_pump/_finish.
-type SFJob={kind:"go"|"eval"|"multiPV";cmds:string[];cb:((f:string,t:string,p?:string)=>void)|null;ecb:((cp:number,mate:number,depth?:number)=>void)|null;mpvCb:((lines:PVLine[])=>void)|null};
+type SFJob={kind:"go"|"eval"|"multiPV";srochno?:boolean;cmds:string[];cb:((f:string,t:string,p?:string)=>void)|null;ecb:((cp:number,mate:number,depth?:number)=>void)|null;mpvCb:((lines:PVLine[])=>void)|null};
 class SF{private w:Worker|null=null;private ok=false;oshibka:string|null=null;private cb:((f:string,t:string,p?:string)=>void)|null=null;private ecb:((cp:number,mate:number,depth?:number)=>void)|null=null;private mpvCb:((lines:PVLine[])=>void)|null=null;private mpvLines:PVLine[]=[];private q:SFJob[]=[];private cur:SFJob|null=null;
   // Throttle eval-bar updates: Stockfish стримит десятки `info score` в секунду; без троттла
   // каждый = setState → ре-рендер всего компонента → дёрганье анимации хода. Обновляем ~8/сек.
@@ -355,11 +355,11 @@ class SF{private w:Worker|null=null;private ok=false;oshibka:string|null=null;pr
     // расчёт рейтинга держал воркер 7.1 секунды — и ответ на следующий ход
     // человека стоял за ним в очереди. Отсюда рост 1 → 4 → 6 → 8 секунд по
     // ходу партии.
-    if(job.kind==="go"){
+    if(job.srochno){
       this.q.unshift(job);
-      // Прерываем то, что считается сейчас, если это не такой же ход: движок
-      // на "stop" отвечает bestmove'ом, _finish подхватит и запустит наш.
-      if(this.cur&&this.cur.kind!=="go"){try{this.w?.postMessage("stop")}catch{}}
+      // Прерываем то, что считается сейчас, если оно НЕ срочное: движок на
+      // "stop" отвечает bestmove'ом, _finish подхватит и запустит наш.
+      if(this.cur&&!this.cur.srochno){try{this.w?.postMessage("stop")}catch{}}
     }else{
       this.q.push(job);
     }
@@ -384,9 +384,9 @@ class SF{private w:Worker|null=null;private ok=false;oshibka:string|null=null;pr
     this.cb=null;this.ecb=null;this.mpvCb=null;this.mpvLines=[];this.cur=null;
     this._pump();
   }
-  go(fen:string,d:number,cb:(f:string,t:string,p?:string)=>void,ecb?:(cp:number,mate:number,depth?:number)=>void){if(!this.w)return cb("","");this._submit({kind:"go",cmds:["setoption name MultiPV value 1","ucinewgame",`position fen ${fen}`,`go depth ${d}`],cb,ecb:ecb||null,mpvCb:null})}
+  go(fen:string,d:number,cb:(f:string,t:string,p?:string)=>void,ecb?:(cp:number,mate:number,depth?:number)=>void,srochno=false){if(!this.w)return cb("","");this._submit({kind:"go",srochno,cmds:["setoption name MultiPV value 1","ucinewgame",`position fen ${fen}`,`go depth ${d}`],cb,ecb:ecb||null,mpvCb:null})}
   eval(fen:string,d:number,ecb:(cp:number,mate:number,depth?:number)=>void,done:(best?:string)=>void){if(!this.w)return done();this._submit({kind:"eval",cmds:["setoption name MultiPV value 1","ucinewgame",`position fen ${fen}`,`go depth ${d}`],cb:(f,t,p)=>done(f&&t?`${f}${t}${p||""}`:undefined),ecb,mpvCb:null})}
-  multiPV(fen:string,d:number,pvCount:number,cb:(lines:PVLine[])=>void){if(!this.w)return cb([]);this._submit({kind:"multiPV",cmds:[`setoption name MultiPV value ${pvCount}`,"ucinewgame",`position fen ${fen}`,`go depth ${d}`],cb:null,ecb:null,mpvCb:cb})}
+  multiPV(fen:string,d:number,pvCount:number,cb:(lines:PVLine[])=>void,srochno=false){if(!this.w)return cb([]);this._submit({kind:"multiPV",srochno,cmds:[`setoption name MultiPV value ${pvCount}`,"ucinewgame",`position fen ${fen}`,`go depth ${d}`],cb:null,ecb:null,mpvCb:cb})}
   stop(){if(this.w){try{this.w.postMessage("stop")}catch{}}}
   terminate(){if(this.w){try{this.w.terminate()}catch{};this.w=null;this.ok=false;this.cb=null;this.ecb=null;this.mpvCb=null;this.mpvLines=[];this.q=[];this.cur=null}}}
 
@@ -4894,7 +4894,7 @@ export default function CyberChessPage(){
                 exec(from,to,pr,false);
               }
               sThink(false);
-            });
+            },true); // срочно: это ХОД СОПЕРНИКА, его ждёт человек
           }catch{sThink(false)}
         },delay);
         return()=>clearTimeout(t);
@@ -4903,7 +4903,7 @@ export default function CyberChessPage(){
         // Only apply if the board is still on the same position we asked about.
         try{if(game.fen()===fenAtTrigger&&f&&t2)exec(f as Square,t2 as Square,(p||undefined) as any,false)}catch{}
         sThink(false);
-      }),delay);
+      },undefined,true),delay); // срочно: это ХОД СОПЕРНИКА
       return()=>clearTimeout(t);
     }
     const t=setTimeout(()=>{

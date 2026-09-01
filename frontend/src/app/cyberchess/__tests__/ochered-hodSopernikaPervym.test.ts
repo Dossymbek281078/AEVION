@@ -23,13 +23,13 @@ describe("ход соперника идёт первым", () => {
   it("встаёт в НАЧАЛО очереди, а не в конец", () => {
     const s = KOD();
     expect(s.length).toBeGreaterThan(100000); // контроль: файл прочитан
-    expect(s).toContain('if(job.kind==="go"){');
+    expect(s).toContain("if(job.srochno){");
     expect(s).toContain("this.q.unshift(job);");
   });
 
   it("прерывает чужой расчёт, но не такой же ход", () => {
     const s = KOD();
-    expect(s).toContain('if(this.cur&&this.cur.kind!=="go"){try{this.w?.postMessage("stop")}catch{}}');
+    expect(s).toContain('if(this.cur&&!this.cur.srochno){try{this.w?.postMessage("stop")}catch{}}');
   });
 
   it("остальные запросы по-прежнему в конец", () => {
@@ -44,5 +44,31 @@ describe("ход соперника идёт первым", () => {
     // был его отменить.
     const s = KOD();
     expect(s).toContain("this.q=this.q.filter(j=>j.kind!==job.kind);");
+  });
+});
+
+describe("срочность — свойство задачи, а не вида запроса", () => {
+  const KOD2 = () => readFileSync(join(process.cwd(), "src/app/cyberchess/page.tsx"), "utf8");
+
+  it("ход соперника помечен срочным ОБОИМИ способами", () => {
+    // Он считается двумя путями: go (обычный) и multiPV (когда задан характер
+    // ИИ). Признак по ВИДУ запроса пропустил бы второй.
+    const s = KOD2();
+    expect(s).toContain("},true); // срочно: это ХОД СОПЕРНИКА, его ждёт человек");
+    expect(s).toContain("},undefined,true),delay); // срочно: это ХОД СОПЕРНИКА");
+  });
+
+  it("подсказки и стрелки срочными НЕ помечены", () => {
+    // Тем же go считаются подсказка, стрелка лучшего хода, превью. Их человек
+    // за доской не ждёт, и приоритет им не нужен — иначе он обесценится.
+    const s = KOD2();
+    const srochnyh = (s.match(/,true\); \/\/ срочно|,undefined,true\),delay\); \/\/ срочно/g) || []).length;
+    expect(srochnyh).toBe(2);
+  });
+
+  it("умолчание — НЕ срочно", () => {
+    // Новый вызов не должен случайно получить приоритет.
+    const s = KOD2();
+    expect(s).toContain("srochno=false){if(!this.w)return cb(");
   });
 });

@@ -2,6 +2,19 @@ import { describe, expect, test } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { stripComments } from "../cyberchess/__tests__/_stripComments";
+import { renders, usesIdentifier } from "./_renders";
+
+/*
+ * ⚠️ Помощник взят ОБЩИЙ, а не переписан здесь. Своя копия у сторожа
+ * расходится с оригиналом молча, а этот разобран на живом коде: он не
+ * принимает `image/*` внутри строки за начало комментария и не теряет
+ * остаток файла на одной обратной кавычке. Обе ошибки стоили правок.
+ *
+ * Цена связи — он живёт в каталоге чужого модуля. Поэтому рядом стоит
+ * контроль на его поведение: изменят смысл там — узнаем здесь громко, а
+ * не тихим позеленением.
+ */
 
 /**
  * Где можно заплатить — там же сказано, чем платить нельзя.
@@ -79,7 +92,7 @@ const rel = (p: string) => relative(APP, p).split(sep).join("/");
 /** Страницы, с которых человек может заплатить. */
 function sellingPages(): string[] {
   return walk(APP)
-    .filter((p) => readFileSync(p, "utf8").includes("<BuyLink"))
+    .filter((p) => stripComments(readFileSync(p, "utf8")).includes("<BuyLink"))
     .map(rel)
     .filter((r) => !NOT_A_BUYER_SURFACE.includes(r));
 }
@@ -95,8 +108,14 @@ function sellingPages(): string[] {
  * `kztReady` / `payboxLive` оставлены: так проверяют страницы, спрашивающие
  * состояние касс сами, без общего компонента.
  */
-function hasWarningIn(text: string): boolean {
-  return text.includes("<PaymentReachNotice") || text.includes("kztReady") || text.includes("payboxLive");
+function hasWarningIn(source: string): boolean {
+  // Комментарий, называющий предупреждение, предупреждением не является.
+  const text = stripComments(source);
+  return (
+    renders(text, "PaymentReachNotice") ||
+    usesIdentifier(text, "kztReady") ||
+    usesIdentifier(text, "payboxLive")
+  );
 }
 
 function warns(relPath: string): boolean {
@@ -106,6 +125,51 @@ function warns(relPath: string): boolean {
 describe("страница, с которой платят, предупреждает о способах оплаты", () => {
   const selling = sellingPages();
   const silent = selling.filter((p) => !warns(p));
+
+  test("контроль: КОММЕНТАРИЙ о предупреждении предупреждением не считается", () => {
+    // Та же ошибка, что 01.09.2026 нашлась в стороже возвратов: имя искалось в
+    // сыром тексте, и страница, ОБЪЯСНЯЮЩАЯ в комментарии, почему на ней нет
+    // предупреждения о доступности касс, считалась предупреждающей. Направление
+    // ошибки — ложное «зелено» на странице, с которой платят.
+    const onlyInComment =
+      "// <PaymentReachNotice> здесь не нужен, kztReady и payboxLive не спрашиваем." + String.fromCharCode(10) +
+      "export default function Page() { return <BuyLink id={1} />; }";
+    expect(
+      hasWarningIn(onlyInComment),
+      "комментарий о предупреждении засчитан как предупреждение",
+    ).toBe(false);
+
+    // Обратная сторона: настоящая отрисовка обязана считаться предупреждением.
+    expect(
+      hasWarningIn("export default function P() { return <PaymentReachNotice />; }"),
+      "настоящее предупреждение не опознано — срез комментариев съел код",
+    ).toBe(true);
+
+    // Опечатка в имени — не предупреждение. Отрисовки `PaymentReachNoticeX` не
+    // существует, плашка бы исчезла, а сторож остался бы зелёным: `includes`
+    // совпадает с любым продолжением имени. Находка соседнего окна на моём же
+    // признаке в стороже возвратов, здесь подтвердилась повторно.
+    expect(
+      hasWarningIn("export default function P() { return <PaymentReachNoticeX />; }"),
+      "опечатка в имени засчитана как настоящее предупреждение",
+    ).toBe(false);
+
+    // То же для полей состояния касс: `payboxLive` и `payboxLiveDraft` — разные
+    // вещи, и приставке у поля взяться неоткуда.
+    expect(
+      hasWarningIn("const x = payboxLiveDraft;"),
+      "похожее имя поля засчитано как чтение состояния кассы",
+    ).toBe(false);
+    expect(hasWarningIn("const x = payboxLive;"), "настоящее чтение состояния кассы не опознано").toBe(true);
+
+    // Граница СЛЕВА: имя, заканчивающееся нашим именем, — не наше имя. Правая
+    // граница этот случай не ловит, поэтому проба идёт прямо к признаку: без
+    // неё левая проверка пережила мутацию, то есть не охранялась ничем.
+    expect(
+      usesIdentifier("const x = fakepayboxLive;", "payboxLive"),
+      "чужое имя, оканчивающееся нашим, засчитано как чтение состояния кассы",
+    ).toBe(false);
+  });
 
   test("контроль: страницы с кнопкой покупки найдены", () => {
     // Пустой список сделал бы проверки ниже зелёными при любом состоянии сайта.

@@ -353,7 +353,7 @@ export function createPlanningStubRouter(config: PlanningStubConfig): Router {
         title: config.title,
         version: "0.1.0",
         description: config.description,
-        contact: { name: "AEVION", url: "https://aevion.app", email: "support@aevion.app" },
+        contact: { name: "AEVION", url: "https://aevion.app/pricing/contact" },
       },
       servers: [{ url: `${base}/api/${config.id}`, description: "Production" }],
       paths: {

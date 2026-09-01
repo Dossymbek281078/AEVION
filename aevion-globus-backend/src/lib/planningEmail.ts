@@ -12,6 +12,11 @@
 import nodemailer from "nodemailer";
 
 const FROM = process.env.SMTP_FROM || "AEVION <noreply@aevion.app>";
+// 01.09.2026: приглашение ответить письмом убрано из подписи.
+// У домена aevion.app НЕТ записи MX (контроль: у gmail.com и aevion.io она есть),
+// то есть ответ на такое письмо не доходил никуда: человек узнавал отлупом, мы не
+// узнавали вовсе. Звать писать на адрес можно только после того, как у домена
+// появится приём почты; до тех пор — форма, у которой обращения читаются.
 const BASE = process.env.FRONTEND_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 function getTransport() {
@@ -52,7 +57,7 @@ function layout(title: string, body: string): string {
 <body><div class="card">
   <div class="logo">AEVION</div>
   ${body}
-  <p class="muted">This is an automated confirmation from AEVION. Reply to <a href="mailto:support@aevion.app" style="color:#22d3ee">support@aevion.app</a> for help.</p>
+  <p class="muted">This is an automated confirmation from AEVION. Need help? Write to us here: <a href="${BASE}/pricing/contact" style="color:#0ea5e9">${BASE}/pricing/contact</a>.</p>
 </div></body></html>`;
 }
 

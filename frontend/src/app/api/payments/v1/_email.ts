@@ -40,6 +40,7 @@ export async function sendReceiptEmail(
       </table>
       <a href="${receiptUrl}" style="display: inline-block; margin-top: 24px; padding: 12px 22px; background: #0d9488; color: #fff; border-radius: 10px; text-decoration: none; font-weight: 800;">View printable receipt</a>
       <p style="margin-top: 28px; font-size: 11px; color: #94a3b8; line-height: 1.5;">This receipt was issued by AEVION Payments Rail. Reply to this email if you did not authorize this payment.</p>
+        <p style="margin-top: 16px; font-size: 12px; color: #475569; line-height: 1.5;">Need help with this payment? <a href="${args.origin}/pricing/contact" style="color:#0ea5e9">${args.origin}/pricing/contact</a></p>
     </div>
   </body>
 </html>`;
@@ -53,6 +54,8 @@ export async function sendReceiptEmail(
     args.last4 ? `Card: •••• ${args.last4}` : null,
     ``,
     `View receipt: ${receiptUrl}`,
+    ``,
+    `Need help with this payment? ${args.origin}/pricing/contact`,
   ]
     .filter(Boolean)
     .join("\n");

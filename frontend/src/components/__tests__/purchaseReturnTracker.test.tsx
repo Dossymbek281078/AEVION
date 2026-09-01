@@ -150,3 +150,34 @@ describe("отметка возврата после оплаты", () => {
     expect(payload.meta.checkoutId).toBe("chk-3");
   });
 });
+
+describe("заглушка не считается настоящей покупкой", () => {
+  /**
+   * 🔴 Находка соседнего окна, 01.09.2026: здесь стояло `stub === "1"`, а адрес
+   * заглушки строится как `?stub=true&tier=free`. То есть для НАСТОЯЩЕЙ
+   * заглушки признак был false, и тестовая покупка уходила в воронку как
+   * настоящая — а оттуда в сводку выручки и в рекламные пиксели, где выглядит
+   * успехом и уводит бюджет.
+   */
+  test("stub=true помечается заглушкой", () => {
+    query = "paid=1&stub=true";
+    render(<PurchaseReturnTracker source="bureau" provider="stripe" successParam="paid" />);
+    const p = trackSpy.mock.calls.at(-1)?.[0] as { meta: Record<string, unknown> };
+    expect(p.meta.stub, "настоящая заглушка учтена как настоящая покупка").toBe(true);
+  });
+
+  test("stub=1 тоже помечается — прежнее написание не сломано", () => {
+    query = "paid=1&stub=1";
+    render(<PurchaseReturnTracker source="bureau" provider="stripe" successParam="paid" />);
+    const p = trackSpy.mock.calls.at(-1)?.[0] as { meta: Record<string, unknown> };
+    expect(p.meta.stub).toBe(true);
+  });
+
+  test("без пометки покупка считается настоящей", () => {
+    // Контроль: иначе «всё заглушка» прошло бы так же зелено.
+    query = "paid=1";
+    render(<PurchaseReturnTracker source="bureau" provider="stripe" successParam="paid" />);
+    const p = trackSpy.mock.calls.at(-1)?.[0] as { meta: Record<string, unknown> };
+    expect(p.meta.stub, "настоящая покупка помечена заглушкой").toBe(false);
+  });
+});

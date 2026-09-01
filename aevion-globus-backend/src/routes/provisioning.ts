@@ -839,12 +839,41 @@ provisioningRouter.get("/subscriptions/by-channel", (req, res) => {
     }
   }
 
+  // ⚠️ ОТКУДА ДАННЫЕ — вместе с самими данными.
+  //
+  // Записи о покупках лежат в файле. Если он НЕ на постоянном диске, контейнер
+  // пересобирается при каждой выкатке, и сводка честно складывает всё, что
+  // видит, — а видит она только покупки с последней выкатки. Снаружи это
+  // неотличимо от «продаж было мало».
+  //
+  // Поэтому рядом с числами идёт происхождение: на диске ли файл и какая
+  // запись самая старая. Читатель панели обязан подписать окно данных, а не
+  // выдавать его за всю историю. Замер 01.09.2026: SUBSCRIPTIONS_FILE на проде
+  // не задана, том подключён — то есть файл В КОНТЕЙНЕРЕ.
+  const mount = process.env.RAILWAY_VOLUME_MOUNT_PATH?.trim() || null;
+  const file = subsFile().split(String.fromCharCode(92)).join("/");
+  const onVolume = mount ? file.startsWith(mount.split(String.fromCharCode(92)).join("/")) : false;
+  const all = readSubscriptions();
+  const oldest = all.reduce<string | null>((acc, x) => {
+    const t = Date.parse(x.ts);
+    if (!Number.isFinite(t)) return acc;
+    return acc === null || t < Date.parse(acc) ? x.ts : acc;
+  }, null);
+
   return res.json({
     byChannel,
     total: subs.length,
     withAmount: subs.filter((s) => typeof s.amountUsd === "number" && Number.isFinite(s.amountUsd)).length,
     withChannel: subs.filter((s) => Boolean(s.channel?.trim())).length,
     windowHours,
+    storage: {
+      // false означает «данные начинаются с последней выкатки», а не «мало продаж».
+      onVolume,
+      // Самая старая запись ВООБЩЕ, не в окне: по ней видно, с какого момента
+      // история существует. null = записей нет совсем.
+      oldestRecord: oldest,
+      recordsTotal: all.length,
+    },
   });
 });
 

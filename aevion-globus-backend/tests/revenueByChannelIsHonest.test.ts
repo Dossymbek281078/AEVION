@@ -134,6 +134,40 @@ describe("выручка по каналам: закрыта и честна", (
     expect(r.body.total).toBe(3);
   });
 
+  test("сводка говорит, ОТКУДА данные и с какого момента", async () => {
+    // Ради этого блок и добавлен. Записи о покупках лежат в файле; если он не
+    // на постоянном диске, контейнер пересобирается при каждой выкатке, и
+    // сводка честно складывает всё, что видит, — а видит она только покупки с
+    // последней выкатки. Снаружи это неотличимо от «продаж было мало».
+    const r = await request(await load())
+      .get("/api/pricing/provisioning/subscriptions/by-channel")
+      .set("X-Admin-Token", TOKEN);
+    expect(r.body.storage.onVolume, "файл во временной папке выдан за постоянный").toBe(false);
+    // Самая старая запись — ВООБЩЕ, не в окне: по ней читатель подписывает,
+    // с какого момента история существует. В стенде это запись 40-дневной
+    // давности, которая в окно 720 ч не входит.
+    expect(r.body.storage.recordsTotal, "считает только окно, а не всю историю").toBe(4);
+    expect(Date.parse(r.body.storage.oldestRecord), "самая старая запись не названа").toBeLessThan(
+      Date.now() - 30 * 24 * 3600_000,
+    );
+  });
+
+  test("файл НА постоянном диске опознаётся", async () => {
+    // Вторая сторона пробы: без неё «не на диске» означало бы «я не умею
+    // отличать», и подпись панели была бы одинаковой при любом состоянии.
+    const saved = process.env.RAILWAY_VOLUME_MOUNT_PATH;
+    process.env.RAILWAY_VOLUME_MOUNT_PATH = tmpdir();
+    try {
+      const r = await request(await load())
+        .get("/api/pricing/provisioning/subscriptions/by-channel")
+        .set("X-Admin-Token", TOKEN);
+      expect(r.body.storage.onVolume, "файл на диске не опознан").toBe(true);
+    } finally {
+      if (saved === undefined) delete process.env.RAILWAY_VOLUME_MOUNT_PATH;
+      else process.env.RAILWAY_VOLUME_MOUNT_PATH = saved;
+    }
+  });
+
   test("узкое окно сужает выборку", async () => {
     // Контроль в другую сторону: если бы окно не работало вовсе, предыдущие
     // проверки прошли бы и на неотфильтрованных данных.

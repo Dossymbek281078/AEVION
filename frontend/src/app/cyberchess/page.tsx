@@ -7106,7 +7106,7 @@ export default function CyberChessPage(){
                на первом экране. Дополняет навигационный хаб «☰ Все разделы» в хедере. ─── */}
           {!streamerMode&&(()=>{
             const killer:Array<{emoji:string;title:string;desc:string;cta:string;accent:string;onClick:()=>void}>=[
-              {emoji:"🏆",title:"Турниры онлайн",desc:"Swiss · Round-robin · нокаут. Призовой фонд в Chessy.",cta:"К турнирам",accent:"#d97706",onClick:()=>{try{window.location.href="/cyberchess/tournaments"}catch{}}},
+              {emoji:"🏆",title:"Турниры онлайн",desc:"Швейцарская · круговой · нокаут. Призовой фонд в Chessy.",cta:"К турнирам",accent:"#d97706",onClick:()=>{try{window.location.href="/cyberchess/tournaments"}catch{}}},
               {emoji:"📈",title:"CPI рейтинг",desc:"Составной рейтинг по 11 факторам — такого нет ни у lichess, ни у chess.com.",cta:"Открыть",accent:"#0891b2",onClick:()=>{try{window.location.href="/cyberchess/cpi/dashboard"}catch{}}},
               {emoji:"🪙",title:"Chessy Экономика",desc:"Аукцион, аренда коуча, подписки на стримеров — на нашей валюте.",cta:"Войти",accent:"#ca8a04",onClick:()=>{try{window.location.href="/cyberchess/economy"}catch{}}},
               {emoji:"🎲",title:"12 вариантов",desc:"Atomic · Fischer960 · KotH · Crazyhouse · Knight Riders и др.",cta:"Выбрать",accent:"#7c3aed",onClick:()=>sShowVariants(true)},
@@ -10259,7 +10259,7 @@ export default function CyberChessPage(){
                 <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                   {weak.map(w=><button key={w.th} onClick={()=>{sPzFilterTheme(w.th);sPzI(0);sPzCategory("all")}}
                     style={{padding:"3px 9px",borderRadius:999,border:"1px solid #fbbf24",background:pzFilterTheme===w.th?"#fbbf24":"#fffbeb",color:pzFilterTheme===w.th?"#fff":"#92400e",fontWeight:800,cursor:"pointer",fontSize:10}}>
-                    {w.th} · {w.wr}% ({w.total})
+                    {temaZadachiRu(w.th)} · {w.wr}% ({w.total})
                   </button>)}
                 </div>
               </div>;
@@ -10324,7 +10324,7 @@ export default function CyberChessPage(){
                     const meta=(Object.prototype.hasOwnProperty.call(THEME_META,th)?THEME_META[th]:null)||{emoji:"♟",color:T.text};
                     const active=pzFilterTheme===th;
                     return <button key={th} onClick={()=>{sPzFilterTheme(active?"all":th);sPzI(0);sPzCategory("all");sPzFilterGoal("all");sPzFilterMate(0);sPzFilterPhase("all")}}
-                      title={`${th} · ${cnt} задач`}
+                      title={`${temaZadachiRu(th)} · ${cnt} задач`}
                       style={{
                         padding:"10px 8px",borderRadius:8,
                         border:active?`2px solid ${meta.color}`:`1px solid ${T.border}`,
@@ -10335,7 +10335,7 @@ export default function CyberChessPage(){
                         transition:`all ${MOTION.fast} ${MOTION.ease}`
                       }}>
                       <span style={{fontSize:18}}>{meta.emoji}</span>
-                      <span style={{fontSize:11,fontWeight:800,lineHeight:1.2,textAlign:"center"}}>{th}</span>
+                      <span style={{fontSize:11,fontWeight:800,lineHeight:1.2,textAlign:"center"}}>{temaZadachiRu(th)}</span>
                       <span style={{fontSize:9,color:T.dim,fontWeight:800}}>{cnt}</span>
                     </button>;
                   })}
@@ -10427,7 +10427,7 @@ export default function CyberChessPage(){
                   <div style={{fontSize:10,fontWeight:700,color:T.dim,marginBottom:5,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>Тема</div>
                   <select aria-label="Тема задач" value={pzFilterTheme} onChange={e=>{sPzFilterTheme(e.target.value);sPzI(0)}} style={{width:"100%",padding:"6px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,color:T.text,cursor:"pointer",fontWeight:600}}>
                     <option value="all">Все темы</option>
-                    {[...new Set(PUZZLES.map(p=>p.theme))].sort().map(th=><option key={th} value={th}>{th}</option>)}
+                    {[...new Set(PUZZLES.map(p=>p.theme))].sort().map(th=><option key={th} value={th}>{temaZadachiRu(th)}</option>)}
                   </select>
                 </div>
                 {/* Difficulty level filter — 4 levels */}
@@ -12555,7 +12555,7 @@ ${question.trim()}`;
             {e:"📅",t:"Задача дня",d:"Одна задача в день, серия",to:"/cyberchess/daily"},
           ]},
           {title:"Соревноваться",cat:"compete",items:[
-            {e:"🏆",t:"Турниры онлайн",d:"Swiss · Round-robin · нокаут",to:"/cyberchess/tournaments",hot:true},
+            {e:"🏆",t:"Турниры онлайн",d:"Швейцарская · круговой · нокаут",to:"/cyberchess/tournaments",hot:true},
             {e:"🥊",t:"Турнирный хаб",d:"Сетка · трофеи · таблица лидеров",to:"/cyberchess/tournament"},
             {e:"📈",t:"CPI рейтинг",d:"Составной рейтинг по 11 факторам",to:"/cyberchess/cpi/dashboard",hot:true},
             {e:"🏅",t:"Таблица лидеров CPI",d:"Топ по любому фактору силы",to:"/cyberchess/cpi/leaderboard"},
@@ -15393,7 +15393,7 @@ ${question.trim()}`;
 
         // ── РАЗДЕЛЫ — навигация на маршруты, которые раньше были доступны только по URL ──
         {id:"nav-sections", icon:"☰", group:"Разделы", label:"Все разделы",          hint:"Навигационный хаб — все режимы и киллер-фичи", run:()=>sShowSections(true)},
-        {id:"nav-tourn",    icon:"🏆",group:"Разделы", label:"Турниры онлайн",        hint:"Swiss · Round-robin · нокаут",  run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/tournaments"}},
+        {id:"nav-tourn",    icon:"🏆",group:"Разделы", label:"Турниры онлайн",        hint:"Швейцарская · круговой · нокаут",  run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/tournaments"}},
         {id:"nav-economy",  icon:"🪙",group:"Разделы", label:"Chessy Экономика",      hint:"Аукцион · аренда коуча · подписки", run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/economy"}},
         {id:"nav-training", icon:"🎯",group:"Разделы", label:"Тренинг-хаб",           hint:"Ежедневные упражнения",         run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/training"}},
         {id:"nav-cpi",      icon:"📈",group:"Разделы", label:"CPI рейтинг",           hint:"Составной рейтинг по 11 факторам", run:()=>{if(typeof window!=="undefined")window.location.href="/cyberchess/cpi/dashboard"}},

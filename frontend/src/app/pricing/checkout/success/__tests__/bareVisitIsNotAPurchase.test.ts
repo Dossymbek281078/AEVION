@@ -12,21 +12,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-
-/** Тот же признак, что на странице. Держим рядом с проверкой всех четырёх касс. */
-function следОплаты(p: {
-  provider?: string | null;
-  ref?: string | null;
-  total?: number | null;
-  stub?: boolean;
-}): boolean {
-  return (
-    Boolean(p.provider) ||
-    Boolean(p.ref) ||
-    (typeof p.total === "number" && p.total > 0) ||
-    Boolean(p.stub)
-  );
-}
+import { естьСледОплаты as следОплаты } from "@/lib/paymentTrace";
 
 describe("след оплаты", () => {
   it("голый заход покупкой не считается", () => {
@@ -47,11 +33,18 @@ describe("след оплаты", () => {
     expect(следОплаты({ total: 0 })).toBe(false);
   });
 
-  it("страница действительно применяет признак, а не только объявляет", () => {
-    const s = readFileSync(
-      join(process.cwd(), "src/app/pricing/checkout/success/page.tsx"),
-      "utf8",
-    );
-    expect(s).toContain("if (!естьСледОплаты) return;");
+  it("ОБА экрана применяют признак, а не только объявляют", () => {
+    // Признак один на покупку и на отказ намеренно: два разных правила для
+    // одной пары чисел разъедутся молча, и сверить их будет нечем.
+    for (const путь of [
+      "src/app/pricing/checkout/success/page.tsx",
+      "src/app/pricing/checkout/cancel/page.tsx",
+    ]) {
+      const s = readFileSync(join(process.cwd(), путь), "utf8");
+      expect(s, `${путь} не зовёт общий признак`).toContain("естьСледОплаты({");
+      expect(s, `${путь} объявляет признак, но не применяет`).toContain(
+        "if (!следОплаты) return;",
+      );
+    }
   });
 });

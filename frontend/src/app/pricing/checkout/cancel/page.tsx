@@ -1,5 +1,6 @@
 "use client";
 
+import { естьСледОплаты } from "@/lib/paymentTrace";
 import Link from "next/link";
 import { Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
@@ -12,13 +13,39 @@ function CancelInner() {
   const sp = useSearchParams();
   const tier = sp.get("tier");
 
+  /*
+   * Тот же признак, что на экране «оплата принята», и НАМЕРЕННО тот же.
+   *
+   * Адрес публичный, событие уходило при любом открытии. Для отказа это тише,
+   * чем для покупки, но хуже по-своему: покупки теперь отфильтрованы, а отказы
+   * остались бы завышенными — и видимая доля доводящих оплату до конца стала бы
+   * хуже настоящей. По такому числу решают «воронка плохая», и чинили бы
+   * несуществующее.
+   *
+   * Проверено, что фильтр не теряет НАСТОЯЩИЕ отказы: адрес отмены задают
+   * только две кассы — PayBox (`pg_failure_url` c `?paybox=1`) и PayPal
+   * (`cancel_url` c `?paypal=1`), и обе несут метку. У LemonSqueezy и Gumroad
+   * адрес отмены не настроен вовсе, то есть их отказ до этой страницы и не
+   * доходит. Настроят — метку сюда добавить обязательно, иначе отказ станет
+   * невидимым.
+   */
+  const следОплаты = естьСледОплаты({
+    provider:
+      sp.get("provider") ??
+      (sp.get("paypal") ? "paypal" : null) ??
+      (sp.get("paybox") ? "paybox" : null),
+    ref: sp.get("ref") ?? sp.get("session_id"),
+    total: sp.get("total") ? Number(sp.get("total")) / 100 : null,
+  });
+
   useEffect(() => {
+    if (!следОплаты) return;
     track({
       type: "checkout_cancel",
       tier: tier ?? undefined,
       source: "pricing",
     });
-  }, [tier]);
+  }, [tier, следОплаты]);
 
   return (
     <ProductPageShell maxWidth={680}>

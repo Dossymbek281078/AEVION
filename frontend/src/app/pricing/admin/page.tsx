@@ -561,6 +561,15 @@ export default function PricingAdminPage() {
                 data={summary.purchaseByChannel ?? {}}
                 accent="#0f766e"
               />
+              {/* «Ожидаемая», а не «выручка»: сумма берётся из адреса возврата,
+                  то есть НАША, а не списанная кассой. Разница перестала быть
+                  теоретической 01.09.2026 — соседнее окно показало, что цену у
+                  Gumroad и LemonSqueezy назначает продавец, а сверки не было
+                  нигде. Широкое имя поля читается шире, чем оно отвечает, и по
+                  такому имени делают денежные выводы.
+
+                  Подпись N/M — знаменатель: по скольким покупкам сумма вообще
+                  известна. У возврата PayBox в адрес уходит ref, а не сумма. */}
               <Breakdown
                 title={`${t("pricing.admin.breakdown.purchaseRevenueByChannel")} · ${summary.purchaseWithKnownAmount ?? 0}/${summary.purchaseCount ?? 0}`}
                 data={summary.purchaseRevenueByChannel ?? {}}

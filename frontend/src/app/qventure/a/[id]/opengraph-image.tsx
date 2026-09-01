@@ -140,7 +140,7 @@ export default async function QVentureOgImage({
             }}
           >
             <span>AEVION · QVenture</span>
-            <span style={{ color: INK_FAINT, letterSpacing: "0.2em" }}>Investment Analysis</span>
+            <span style={{ color: INK_FAINT, letterSpacing: "0.2em" }}>Инвестиционный разбор</span>
           </div>
 
           <div

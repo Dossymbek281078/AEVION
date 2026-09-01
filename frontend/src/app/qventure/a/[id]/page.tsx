@@ -71,7 +71,7 @@ export default async function SharedAnalysisPage({ params }: Props) {
        <div className={paper.paper} style={{ background: "transparent", minHeight: 0 }}>
         {!a ? (
           <div style={{ textAlign: "center", padding: "60px 20px" }}>
-            <h1 style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 800, color: "var(--ink, #17181a)" }}>Analysis not found</h1>
+            <h1 style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 800, color: "var(--ink, #17181a)" }}>Разбор не найден</h1>
             <p style={{ color: "var(--ink-faint, #74767c)", marginTop: 8 }}>This QVenture report doesn&apos;t exist or is no longer public.</p>
             <Link href="/qventure" style={{ display: "inline-block", marginTop: 16, padding: "11px 20px", background: "var(--teal, #0a7d72)", color: "#fff", borderRadius: 4, fontWeight: 700, textDecoration: "none" }}>
               Run a new analysis →
@@ -89,7 +89,7 @@ export default async function SharedAnalysisPage({ params }: Props) {
             </div>
             <ResultView result={a} shared />
             <div style={{ marginTop: 8, padding: "20px", borderRadius: 4, background: "var(--ink, #17181a)", color: "var(--card, #fffefb)", textAlign: "center" }}>
-              <div style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, marginBottom: 10 }}>Analyze any company in any sector with QVenture</div>
+              <div style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, marginBottom: 10 }}>Разбор любой компании в любой отрасли — QVenture</div>
               <Link href="/qventure" style={{ display: "inline-block", padding: "11px 22px", background: "var(--teal, #0a7d72)", color: "#fff", borderRadius: 4, fontWeight: 700, textDecoration: "none" }}>
                 Get a fund-grade memo →
               </Link>

@@ -61,7 +61,7 @@ export default async function GalleryPage() {
           <div style={{ fontSize: 13, fontWeight: 700, color: "var(--teal-deep, #075b53)", letterSpacing: 1, textTransform: "uppercase", marginBottom: 6 }}>
             AEVION · QVenture
           </div>
-          <h1 style={{ fontSize: 28, fontWeight: 800, color: "var(--ink, #17181a)", margin: "0 0 8px" }}>Example analyses</h1>
+          <h1 style={{ fontSize: 28, fontWeight: 800, color: "var(--ink, #17181a)", margin: "0 0 8px" }}>Примеры разборов</h1>
           <p style={{ fontSize: 15, color: "var(--ink-soft, #45474c)", margin: 0, maxWidth: 640, lineHeight: 1.6 }}>
             Real QVenture outputs across sectors and stages — each is a full fund-grade memo:
             a transparent 0–100 quant score, a four-role expert council, and an entry strategy.

@@ -263,6 +263,9 @@ export default function QSkywayClient() {
   // Запрет, накрывающий город целиком, — свойство каждой площадки, поэтому
   // считается здесь и ставится в строку, а не только в регуляторную карточку.
   const padBan = padProhibition(meta?.airspace?.permission);
+  // Выбор языка ОДИН на оба места показа. Тернарник, повторённый дважды,
+  // расходится молча: поправят одно, второе останется на прежнем языке.
+  const padBanRule = padBan ? (lang === "ru" ? padBan.rule : padBan.ruleEn) : "";
   const [verify, setVerify] = useState<"idle" | "checking" | "valid" | "invalid" | "unknown">("idle");
   // Оговорка о ключе приходит вместе с вердиктом и показывается рядом с ним:
   // без `QSKYWAY_SIGN_SK` ключ подписи генерируется при старте процесса, и
@@ -1204,7 +1207,7 @@ export default function QSkywayClient() {
                       одной оговорки. Легенда говорит теми же словами, что список. */}
                   <span>{t("qskyway.legend.pads")} <span style={{ color: "#2dd4bf" }}>●</span> {t("qskyway.pad.candidate")} · <span style={{ color: "#fbbf24" }}>●</span> {t("qskyway.legend.needsInfraShort")} · <span style={{ color: "#fb7185" }}>●</span> {t("qskyway.pad.unsuitable")} · <span style={{ color: "#c8964f" }}>▨</span> {t("qskyway.legend.heightGuessed")}
                     {padBan && (
-                      <span style={{ color: "#fb7185" }} title={padBan.rule}> · 🚫 {t("qskyway.pad.cityProhibited")}</span>
+                      <span style={{ color: "#fb7185" }} title={padBanRule}> · 🚫 {t("qskyway.pad.cityProhibited")}</span>
                     )}
                   </span>
                 </div>
@@ -1451,7 +1454,7 @@ export default function QSkywayClient() {
                             в городе под сплошным запретом оставалось единственным,
                             что человек здесь читает о полёте. */}
                         {padBan && (
-                          <div style={{ color: "#fb7185", fontSize: 10, marginTop: 2 }} title={padBan.rule}>
+                          <div style={{ color: "#fb7185", fontSize: 10, marginTop: 2 }} title={padBanRule}>
                             🚫 {t("qskyway.pad.prohibited", { authority: padBan.authority })}
                           </div>
                         )}

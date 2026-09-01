@@ -21,6 +21,14 @@ export interface PadPermission {
   kind?: "permission" | "prohibition";
   /** человекочитаемое правило: «Запретная зона UAP28: полёты запрещены …» */
   regime?: string;
+  /**
+   * То же правило по-английски. Поле есть в данных давно — им пользуется
+   * основной текст карточки (`_client.tsx`, выбор `regimeEn ?? regime`), а
+   * в этом типе его не было, и подсказка запрета молча оставалась русской
+   * на любом языке. 01.09.2026: нашлось не грепом по видимому тексту —
+   * сторож языка читает textContent, а подсказка живёт в атрибуте `title`.
+   */
+  regimeEn?: string;
   /** публикация, из которой оно взято */
   source?: string;
   coveragePct?: number;
@@ -34,6 +42,16 @@ export interface PadProhibition {
    * «raster-sampled»), и в подсказке он не значит ничего.
    */
   rule: string;
+  /**
+   * Та же строка по-английски, пустая — если её нет в данных.
+   *
+   * ЯЗЫК ВЫБИРАЕТ ОТРИСОВКА, а не эта функция: сюда язык не передаётся
+   * намеренно. Восемь вызывающих, шесть из них — тесты про «вернуть null»,
+   * которым язык безразличен; обязательный параметр добавил бы им шум, а
+   * необязательный с умолчанием тихо оставил бы русский тому, кто забыл.
+   * Оба поля рядом — и забыть нельзя, и лишнего никто не пишет.
+   */
+  ruleEn: string;
 }
 
 /**
@@ -51,5 +69,11 @@ export function padProhibition(p?: PadPermission | null): PadProhibition | null 
   if (!p?.available) return null;
   if (p.kind !== "prohibition") return null;
   if ((p.coveragePct ?? 0) < 100) return null;
-  return { authority: p.authority ?? "—", rule: p.regime ?? p.source ?? "" };
+  return {
+    authority: p.authority ?? "—",
+    rule: p.regime ?? p.source ?? "",
+    // Запасной вариант — русское правило, а не пустота: сказать по-русски
+    // лучше, чем не сказать. Пустая строка означала бы «запрета нет».
+    ruleEn: p.regimeEn ?? p.regime ?? p.source ?? "",
+  };
 }

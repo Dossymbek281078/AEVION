@@ -52,6 +52,35 @@ describe("метка запрета на строке площадки", () => {
     expect(padProhibition({ ...astana, coveragePct: undefined })).toBeNull();
   });
 
+  test("подсказка запрета говорит на языке посетителя", () => {
+    // ПОВОД (01.09.2026). Английское правило лежало в данных давно, и
+    // основной текст карточки его брал (`regimeEn ?? regime`). А подсказка
+    // строки шла мимо: `rule` всегда был русским, и англоязычный посетитель
+    // видел «Запретная зона UAP28…» в модуле, который сам же и проверяет,
+    // не выдаёт ли кто чужие данные за свои.
+    //
+    // Почему не нашлось раньше: сторож языка сравнивает видимый текст, а
+    // подсказка живёт в атрибуте `title` и попадает на экран только при
+    // наведении. Граница охвата, а не дефект сторожа.
+    const en = "Prohibited area UAP28: flights banned from ground to 450 m";
+    const both = padProhibition({ ...astana, regimeEn: en });
+
+    expect(both?.rule).toContain("UAP28");
+    expect(both?.rule).toContain("Запретная");
+    expect(both?.ruleEn).toBe(en);
+    // Русская половина не потерялась, пока чинили английскую.
+    expect(both?.ruleEn).not.toContain("Запретная");
+  });
+
+  test("без английской версии подсказка говорит по-русски, а не молчит", () => {
+    // Пустая строка означала бы «запрета нет» — а он есть. Сказать
+    // по-русски хуже, чем по-английски, но несравнимо лучше, чем скрыть
+    // запрет от того, кто по нему летит.
+    const only = padProhibition(astana);
+    expect(only?.ruleEn.length ?? 0).toBeGreaterThan(10);
+    expect(only?.ruleEn).toBe(only?.rule);
+  });
+
   test("город без опубликованного режима молчит", () => {
     expect(padProhibition({ available: false })).toBeNull();
     expect(padProhibition(null)).toBeNull();

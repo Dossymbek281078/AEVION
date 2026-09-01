@@ -359,29 +359,42 @@ const memCheckpoints = new Map<string, DevHubCheckpoint>();
 type CapabilityKey = "video" | "image" | "tts" | "music" | "deploy";
 type StudioTier = "free" | "pro" | "enterprise";
 
-/*
- * 🔴 ПЛАТНЫЙ НЕ МОЖЕТ ДАВАТЬ МЕНЬШЕ БЕСПЛАТНОГО (01.09.2026).
+/**
+ * Имя голоса → идентификатор у поставщика. ОДНА таблица на модуль.
  *
- * Здесь стояло `pro: tts: 30000` при `free: tts: 100000` — заплативший $149
- * получал ВТРОЕ МЕНЬШЕ того, кто не платил.
+ * Их было две: девять голосов в ручке озвучки и четыре в шаге рабочего
+ * процесса агента. Значения у общих четырёх совпадали, но пяти — Arnold, Domi,
+ * Elli, Josh, Sam — во второй не было, а рядом стоял запасной путь
+ * `VOICE_IDS[выбор] || VOICE_IDS.Rachel`. То есть сценарий, просивший Josh,
+ * молча получал Rachel: ни ошибки, ни предупреждения, просто чужой голос.
  *
- * Единицы одинаковые, это проверено: и проверка нормы, и списание считают
- * `text.trim().length`, то есть символы. Значит инверсия, а не разные меры.
- *
- * ⚠️ Здесь стоит ПОЛ, а не ответ. Настоящее число — решение основателя об
- * упаковке: по остальным возможностям платный больше бесплатного в 17–20 раз,
- * то есть ожидаемо около двух миллионов. Пока его нет, ставлю ровно столько же,
- * сколько у free: продолжать продавать УХУДШЕНИЕ, ожидая решения, нельзя, а
- * «платный не хуже бесплатного» — не решение об упаковке, а нижняя граница
- * честности.
- *
- * Класс стоит знать: ни один тест этого не видел и не мог. Каждое число по
- * отдельности осмысленно, ошибка живёт в ОТНОШЕНИИ между строками — такое не
- * падает, это замечает первый заплативший. Находка соседнего окна, у него же
- * взят и приём: сравнивать строки МЕЖДУ СОБОЙ, а не с ожидаемым значением.
+ * Замер 01.09.2026. Два источника одного факта разошлись не значениями, а
+ * ПОЛНОТОЙ — такое не ловится сравнением значений.
  */
+const VOICE_IDS: Record<string, string> = {
+  Rachel: "21m00Tcm4TlvDq8ikWAM",
+  Adam:   "pNInz6obpgDQGcFmaJgB",
+  Antoni: "ErXwobaYiN019PkySvjV",
+  Arnold: "VR6AewLTigWG4xSOukaG",
+  Bella:  "EXAVITQu4vr4xnSDxMaL",
+  Domi:   "AZnzlk1XvdvUeBnXmlld",
+  Elli:   "MF3mGyEYCl7XYWbV9V6O",
+  Josh:   "TxGEqnHWrfWFTfGW9XjX",
+  Sam:    "yoZ06aMxZJJ28mfd3POQ",
+};
+
 const TIER_LIMITS: Record<StudioTier, Record<CapabilityKey, number>> = {
   free:       { video: 3,   image: 10,  tts: 100000, music: 5,   deploy: 10 },
+  // tts у платного тарифа поднят до уровня бесплатного 01.09.2026. Было 30000
+  // против 100000 у free — то есть ЗАПЛАТИВШИЙ получал втрое МЕНЬШЕ. Единица у
+  // обоих одна (символы текста: и проверка, и списание считают text.trim()),
+  // так что это не разные меры, а инверсия.
+  //
+  // 100000 здесь — ПОЛ, а не ответ. Настоящее число ждёт основателя: у всех
+  // прочих возможностей платный даёт в 17–20 раз больше бесплатного, и по этой
+  // закономерности озвучке причиталось бы около 2 000 000. Ставлю ровно
+  // столько же, сколько у free, потому что «платный не может давать меньше
+  // бесплатного» — не решение об упаковке, а отказ продавать ухудшение.
   pro:        { video: 50,  image: 200, tts: 100000, music: 100, deploy: -1 },
   enterprise: { video: -1,  image: -1,  tts: -1,    music: -1,  deploy: -1 },
 };
@@ -430,7 +443,20 @@ async function getUserTierChecked(userId: string): Promise<{ tier: StudioTier; t
       await pool.query(`
         INSERT INTO "DevHubTier" ("userId","tier","updatedAt") VALUES ($1,$2,NOW())
         ON CONFLICT ("userId") DO UPDATE SET "tier"=$2, "updatedAt"=NOW()
-      `, [userId, promoted]).catch(() => {});
+      `, [userId, promoted]).catch((e: unknown) => {
+        // Провал этой записи НЕ лишает человека оплаченного: тариф уже возвращён
+        // ниже, а следующий запрос снова найдёт его соединением. Поэтому не роняем.
+        //
+        // Но и молчать нельзя: если запись падает ВСЕГДА (нет прав, нет таблицы),
+        // соединение будет делаться вечно, и об этом не узнает никто. Рядом в этом
+        // же файле debitQuietly уже говорит, ЧТО и У КОГО не удалось — след без
+        // этих двух вещей бесполезен. Держим единообразие.
+        console.warn(
+          `[DevHub] тариф не перенесён в таблицу по пользователю: ${userId} → ${promoted}. ` +
+          `Доступ выдан, но каждый запрос будет искать соединением. Причина: ${
+            e instanceof Error ? e.message : String(e)}`,
+        );
+      });
       return { tier: promoted, tierKnown: true };
     }
     // No row is a real answer: this user is on the free plan. But a setUserTier
@@ -1306,6 +1332,51 @@ function foldHistory(history: ChatTurn[] | undefined): string {
   return `Conversation so far (for context — the current request may refer back to it):\n${lines.join("\n")}\n\n`;
 }
 
+/**
+ * Учёт расхода генерации кода.
+ *
+ * До 01.09.2026 его здесь не было ВОВСЕ: generateCodeWithAI зовёт платного
+ * поставщика НАПРЯМУЮ (не через smartComplete, где учёт встроен), и все три
+ * вызова — основная генерация, продолжение ответа и самоисправление — уходили
+ * невидимо. Это главная платная работа модуля: именно за неё платят $149.
+ *
+ * Нашлось не просмотром кода, а вопросом «какие ещё ручки не пишут расход»
+ * после того, как тот же дефект закрыли у /plan 31.08.
+ *
+ * Цена берётся платформенной таблицей: второй источник цен развёл бы наш отчёт
+ * с отчётом qcoreai. costUsd честно возвращает 0 для модели без цены — значит
+ * 0 здесь читается как «цена неизвестна», а не как «бесплатно».
+ */
+/**
+ * Метка модуля для учёта: гость или вошедший.
+ *
+ * Вычисление ОДНО на оба места вызова генератора. Копия условия в двух местах
+ * разошлась бы молча — ровно этот класс я сегодня чинил в таблицах голосов, где
+ * значения совпадали, а полнота нет.
+ */
+function меткаГенерации(userId: string): string {
+  const гость = userId.startsWith("guest:") || userId === "anonymous";
+  return гость ? "devhub-generate-anon" : "devhub-generate";
+}
+
+function учтиГенерацию(
+  providerId: string,
+  model: string,
+  usage: { prompt_tokens?: number; completion_tokens?: number } | undefined,
+  moduleTag: string,
+): void {
+  try {
+    insertSmartRun({
+      module: moduleTag,
+      resolved: "single",
+      costUsd: costUsd(providerId, model, usage?.prompt_tokens, usage?.completion_tokens),
+      savedUsd: 0,
+    });
+  } catch {
+    // Учёт не должен ронять ответ, ради которого его зовут.
+  }
+}
+
 async function generateCodeWithAI(
   prompt: string,
   stack: string,
@@ -1313,7 +1384,12 @@ async function generateCodeWithAI(
   existingFiles: Array<{ path: string; content: string }> = [],
   images?: ChatImage[],
   history?: ChatTurn[],
-  onProgress?: (stage: string) => void
+  onProgress?: (stage: string) => void,
+  // Метка модуля для учёта расхода. Раньше здесь стояла постоянная
+  // "devhub-generate", и отделить траты анонимных от трат вошедших было
+  // нельзя — а именно этот вопрос основатель и решает про потолок расходов.
+  // У /ask такое разделение есть с 31.08; здесь оно появилось 01.09.
+  moduleTag: string = "devhub-generate",
 ): Promise<GeneratedCodeResult> {
   const providers = getProviders();
   const configured = providers.filter((p) => p.configured);
@@ -1382,6 +1458,7 @@ async function generateCodeWithAI(
     for (const cand of chain) {
       try {
         result = await callProvider(cand.id, messages, cand.defaultModel, 0.2, images, GEN_MAX_TOKENS);
+        учтиГенерацию(cand.id, cand.defaultModel, result.usage, moduleTag);
         provider = cand;
         break;
       } catch (inner) {
@@ -1420,6 +1497,7 @@ async function generateCodeWithAI(
         },
       ];
       const cont = await callProvider(provider.id, contMessages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS);
+      учтиГенерацию(provider.id, provider.defaultModel, cont.usage, moduleTag);
       const contParsed = parseGeneratedFiles(cont.reply, []);
       if (contParsed.mode !== "fallback") {
         const have = new Set(parsed.files.map((f) => f.path));
@@ -1449,6 +1527,7 @@ async function generateCodeWithAI(
     });
     try {
       result = await callProvider(provider.id, messages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS);
+      учтиГенерацию(provider.id, provider.defaultModel, result.usage, moduleTag);
     } catch {
       break; // keep the last (still-broken) attempt rather than losing it to a retry-call failure
     }
@@ -2180,7 +2259,8 @@ devhubRouter.post("/projects/:id/generate", dhCostlyLimit("dhgenerate"), async (
 /** Shared by /generate and /database/design: generate → checkpoint → save. */
 async function runProjectGeneration(project: DevHubProject, userId: string, prompt: string, stack: string, targetFiles: string[], images?: ChatImage[], history?: ChatTurn[], onProgress?: (stage: string) => void) {
   const existingFiles = await dbListFiles(project.id);
-  const { files: generatedFiles, aiGenerated, continued, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history, onProgress);
+  const { files: generatedFiles, aiGenerated, continued, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history, onProgress,
+      меткаГенерации(userId));
   onProgress?.("saving");
   let storage: "db" | "memory" = "db";
   const cpRes = await createCheckpoint(project.id, userId, `AI: ${prompt.slice(0, 80)}`, generatedFiles.map((f) => f.path), existingFiles);
@@ -3984,17 +4064,7 @@ devhubRouter.post("/media/tts", async (req, res) => {
   }
 
   // Map voice name → ElevenLabs voice ID (common voices)
-  const VOICE_IDS: Record<string, string> = {
-    Rachel: "21m00Tcm4TlvDq8ikWAM",
-    Adam:   "pNInz6obpgDQGcFmaJgB",
-    Antoni: "ErXwobaYiN019PkySvjV",
-    Arnold: "VR6AewLTigWG4xSOukaG",
-    Bella:  "EXAVITQu4vr4xnSDxMaL",
-    Domi:   "AZnzlk1XvdvUeBnXmlld",
-    Elli:   "MF3mGyEYCl7XYWbV9V6O",
-    Josh:   "TxGEqnHWrfWFTfGW9XjX",
-    Sam:    "yoZ06aMxZJJ28mfd3POQ",
-  };
+
   const voiceId = VOICE_IDS[voice as string] ?? VOICE_IDS["Rachel"];
 
   try {
@@ -4351,7 +4421,7 @@ devhubRouter.post("/media/image", async (req, res) => {
 });
 
 // POST /api/devhub/media/sfx — ElevenLabs sound effect
-devhubRouter.post("/media/sfx", async (req, res) => {
+devhubRouter.post("/media/sfx", dhCostlyLimit("dhsfx"), async (req, res) => {
   const { text, durationSeconds, promptInfluence } = req.body || {};
   if (!text || typeof text !== "string" || !text.trim()) {
     return res.status(400).json({ error: "text (sfx description) required" });
@@ -4578,7 +4648,7 @@ function buildVoiceCloneMultipart(opts: { name: string; description?: string; mi
 }
 
 // POST /api/devhub/media/voice-clone — ElevenLabs custom voice from sample (requires confirm:true after preview)
-devhubRouter.post("/media/voice-clone", async (req, res) => {
+devhubRouter.post("/media/voice-clone", dhCostlyLimit("dhvclone"), async (req, res) => {
   const { name, description, sampleBase64, mimeType = "audio/mpeg", confirm } = req.body || {};
   if (!name || typeof name !== "string" || !name.trim()) return res.status(400).json({ error: "name required" });
   if (!sampleBase64 || typeof sampleBase64 !== "string") return res.status(400).json({ error: "sampleBase64 (audio file) required" });
@@ -4616,7 +4686,7 @@ devhubRouter.post("/media/voice-clone", async (req, res) => {
 // POST /api/devhub/media/voice-clone/preview — clone temp voice → TTS sample → delete voice
 // Body: { sampleBase64, mimeType?, previewText? }
 // Response: audio/mpeg of `previewText` rendered with the cloned voice
-devhubRouter.post("/media/voice-clone/preview", async (req, res) => {
+devhubRouter.post("/media/voice-clone/preview", dhCostlyLimit("dhvcprev"), async (req, res) => {
   const { sampleBase64, mimeType = "audio/mpeg", previewText } = req.body || {};
   if (!sampleBase64 || typeof sampleBase64 !== "string") return res.status(400).json({ error: "sampleBase64 (audio file) required" });
   if (sampleBase64.length > 12_000_000) return res.status(400).json({ error: "sample too large (max ~9 MB base64)" });
@@ -4681,7 +4751,7 @@ devhubRouter.post("/media/voice-clone/preview", async (req, res) => {
 });
 
 // POST /api/devhub/media/stt — ElevenLabs Speech-to-Text (scribe-v1)
-devhubRouter.post("/media/stt", async (req, res) => {
+devhubRouter.post("/media/stt", dhCostlyLimit("dhstt"), async (req, res) => {
   const { audioBase64, mimeType = "audio/mpeg", language } = req.body || {};
   if (!audioBase64 || typeof audioBase64 !== "string") return res.status(400).json({ error: "audioBase64 required" });
   if (audioBase64.length > 30_000_000) return res.status(400).json({ error: "audio too large (max ~22 MB base64)" });
@@ -4957,7 +5027,8 @@ async function executeWorkflowStep(
         ? step.saveAs.filter((f: unknown): f is string => typeof f === "string" && f.trim().length > 0).map((f: string) => f.trim())
         : (step.saveAs ? [String(step.saveAs)] : []);
       const existingFiles = await dbListFiles(project.id);
-      const { files, aiGenerated, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles);
+      const { files, aiGenerated, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles,
+            undefined, undefined, undefined, меткаГенерации(userId));
       const cpStep = await createCheckpoint(project.id, userId, `AI workflow step ${i}: ${prompt.slice(0, 60)}`, files.map((f) => f.path), existingFiles);
       const checkpointId = cpStep?.id ?? null;
       for (const gf of files) {
@@ -5003,11 +5074,20 @@ async function executeWorkflowStep(
       if (!apiKey) throw new Error("ELEVENLABS_API_KEY not set");
       const text = String(step.text || "");
       if (!text) throw new Error("text required for tts step");
-      const VOICE_IDS: Record<string, string> = {
-        Rachel: "21m00Tcm4TlvDq8ikWAM", Adam: "pNInz6obpgDQGcFmaJgB",
-        Antoni: "ErXwobaYiN019PkySvjV", Bella: "EXAVITQu4vr4xnSDxMaL",
-      };
-      const voiceId = VOICE_IDS[String(step.voice || "Rachel")] || VOICE_IDS.Rachel;
+
+      // Запасной путь оставлен НЕ смертельным, но перестал быть молчаливым.
+      // Сведение таблиц 01.09.2026 вернуло сценариям пять голосов, но имя всё
+      // ещё может прийти незнакомое — и тогда человек просил одно, а слышит
+      // другое, ничего об этом не узнав. Отказ, о котором никто не узнаёт,
+      // хуже отказа: работа идёт, а результат чужой.
+      const хотелиГолос = String(step.voice || "Rachel");
+      const voiceId = VOICE_IDS[хотелиГолос] || VOICE_IDS.Rachel;
+      if (!VOICE_IDS[хотелиГолос]) {
+        console.warn(
+          `[DevHub] голос "${хотелиГолос}" неизвестен, озвучиваю голосом Rachel. ` +
+          `Известные: ${Object.keys(VOICE_IDS).join(", ")}`,
+        );
+      }
       const ttsResp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
         method: "POST",
         headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },
@@ -5507,7 +5587,7 @@ async function tryAutoUploadToCloudflare(sourceUrl: string): Promise<string | nu
 }
 
 // POST /api/devhub/media/translate — DeepL text translation
-devhubRouter.post("/media/translate", async (req, res) => {
+devhubRouter.post("/media/translate", dhCostlyLimit("dhtr"), async (req, res) => {
   const { text, targetLang, sourceLang, formality } = req.body || {};
   if (!text || typeof text !== "string" || !text.trim()) return res.status(400).json({ error: "text required" });
   if (!targetLang || typeof targetLang !== "string") return res.status(400).json({ error: "targetLang required (e.g. EN, RU, DE, ES, FR)" });
@@ -5576,10 +5656,10 @@ devhubRouter.post("/media/translate", async (req, res) => {
 });
 
 // POST /api/devhub/projects/:id/files/translate — translate project file → save as new file
-devhubRouter.post("/projects/:id/files/translate", async (req, res) => {
+devhubRouter.post("/projects/:id/files/translate", dhCostlyLimit("dhftr"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
-  const read = await readProject(req.params.id);
+  const read = await readProject(String(req.params.id));
   if (!read.project && read.failed) return replyStorageUnavailable(res);
   const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
@@ -5788,12 +5868,12 @@ devhubRouter.get("/projects/:id/file-binary", async (req, res) => {
 // Bulk DeepL translate (multi-file × multi-lang)
 // ═════════════════════════════════════════════════════════════════════════════
 
-devhubRouter.post("/projects/:id/files/translate-bulk", async (req, res) => {
+devhubRouter.post("/projects/:id/files/translate-bulk", dhCostlyLimit("dhftrb"), async (req, res) => {
   // Массовый перевод — ПЛАТНЫЙ. Файлы в памяти исчезнут при перезапуске.
   let storageFallback = false;
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
-  const read = await readProject(req.params.id);
+  const read = await readProject(String(req.params.id));
   if (!read.project && read.failed) return replyStorageUnavailable(res);
   const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
@@ -6654,7 +6734,7 @@ devhubRouter.post("/media/upload-audio", async (req, res) => {
 // Brevo: create SMTP email template
 // ═════════════════════════════════════════════════════════════════════════════
 
-devhubRouter.post("/media/email-template-create", async (req, res) => {
+devhubRouter.post("/media/email-template-create", dhCostlyLimit("dhmail"), async (req, res) => {
   const { name, subject, htmlContent, senderEmail, senderName, replyTo, tag, isActive } = req.body || {};
   if (!name || typeof name !== "string") return res.status(400).json({ error: "name required" });
   if (!subject || typeof subject !== "string") return res.status(400).json({ error: "subject required" });

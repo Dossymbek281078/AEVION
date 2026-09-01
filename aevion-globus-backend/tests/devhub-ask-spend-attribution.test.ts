@@ -164,4 +164,34 @@ describe("расход /plan попадает в учёт и отделим", ()
     expect(runs[0].costUsd).toBe(costUsd("openai", "gpt-4o-mini", 1000, 500));
     expect(runs[0].costUsd).toBeGreaterThan(0);   // контроль: модель с ценой
   });
+
+  test("генерация кода ЗАПИСЫВАЕТ расход — проверка следствия, а не наличия кода", async () => {
+    // Сторож devhubSpendAccountingRatchet проверяет, что учёт ЕСТЬ В КОДЕ.
+    // Это утверждение о форме: оно осталось бы зелёным при учёте, который
+    // никогда не вызывается. Здесь проверяется следствие — после генерации в
+    // журнале расхода появляется запись с меткой генерации.
+    //
+    // Почему это важнее обычного: до 01.09.2026 генерация — главная платная
+    // работа модуля — не писала расход ВООБЩЕ, и её траты не входили ни в один
+    // наш отчёт. Найдено не просмотром кода, а вопросом «кто ещё не пишет».
+    runs.length = 0;
+    provider.reply = JSON.stringify({
+      files: [{ path: "index.html", content: "<h1>привет</h1>" }],
+      summary: "готово",
+    });
+    const a = await app();
+    const созд = await request(a).post("/api/devhub/projects").send({ name: "проверка учёта" });
+    expect(созд.status, "проект не создался — проверять нечего").toBe(201);
+    const id = созд.body?.project?.id ?? созд.body?.id;
+    expect(id, "нет идентификатора проекта").toBeTruthy();
+
+    await request(a).post(`/api/devhub/projects/${id}/generate`).send({ prompt: "страница с приветом" });
+
+    const генерации = runs.filter((r: any) => String(r.module).includes("generate"));
+    expect(
+      генерации.length,
+      "генерация не записала расход. Именно так её траты были невидимы до 01.09: " +
+        "она зовёт поставщика напрямую, минуя службу, где учёт встроен.",
+    ).toBeGreaterThan(0);
+  });
 });

@@ -149,7 +149,7 @@ export default function BatchPage() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
           <div>
             <div style={{ fontSize: 13, fontWeight: 700, color: "var(--teal-deep, #075b53)", letterSpacing: 1, textTransform: "uppercase" }}>AEVION · QVenture</div>
-            <h1 style={{ margin: "6px 0 0", fontSize: 28, fontWeight: 800, color: "var(--ink, #17181a)" }}>Deal funnel — batch analysis</h1>
+            <h1 style={{ margin: "6px 0 0", fontSize: 28, fontWeight: 800, color: "var(--ink, #17181a)" }}>Воронка сделок — пакетный разбор</h1>
           </div>
           <Link href="/qventure" style={{ padding: "9px 18px", background: "#fff", color: "var(--teal-deep, #075b53)", border: "1px solid var(--rule-mid, #b9b8b0)", borderRadius: 10, fontWeight: 700, fontSize: 13.5, textDecoration: "none" }}>
             ← Single deal
@@ -175,7 +175,7 @@ export default function BatchPage() {
           )}
           {note && <span style={{ fontSize: 13, color: "#b45309", fontWeight: 600 }}>{note}</span>}
           {!busy && !progress && rows.length === 0 && (
-            <span style={{ fontSize: 12.5, color: "var(--ink-faint, #74767c)" }}>Text-based PDFs only (not scanned images).</span>
+            <span style={{ fontSize: 12.5, color: "var(--ink-faint, #74767c)" }}>Только текстовые PDF, не сканы.</span>
           )}
         </div>
 
@@ -220,7 +220,7 @@ export default function BatchPage() {
 
             <div style={{ ...SECTION }}>
               <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center" }}>
-                <h2 style={{ ...H2, margin: 0, flex: 1 }}>Ranking</h2>
+                <h2 style={{ ...H2, margin: 0, flex: 1 }}>Рейтинг</h2>
                 <span style={{ fontSize: 12, color: "var(--ink-faint, #74767c)" }}>Sort:</span>
                 {(["composite", "redFlags", "name"] as SortKey[]).map((k) => (
                   <button key={k} type="button" onClick={() => setSort(k)} style={{
@@ -235,12 +235,12 @@ export default function BatchPage() {
                   <thead>
                     <tr style={{ textAlign: "left", color: "var(--ink-faint, #74767c)", fontSize: 12, borderBottom: "2px solid var(--rule, #d4d3cc)" }}>
                       <th style={{ padding: "8px 6px" }}>#</th>
-                      <th style={{ padding: "8px 6px" }}>Company</th>
+                      <th style={{ padding: "8px 6px" }}>Компания</th>
                       <th style={{ padding: "8px 6px" }}>Sector · Stage</th>
-                      <th style={{ padding: "8px 6px", textAlign: "right" }}>Score</th>
-                      <th style={{ padding: "8px 6px" }}>Verdict</th>
-                      <th style={{ padding: "8px 6px", textAlign: "right" }}>Flags</th>
-                      <th style={{ padding: "8px 6px" }}>Stress</th>
+                      <th style={{ padding: "8px 6px", textAlign: "right" }}>Оценка</th>
+                      <th style={{ padding: "8px 6px" }}>Вердикт</th>
+                      <th style={{ padding: "8px 6px", textAlign: "right" }}>Флаги</th>
+                      <th style={{ padding: "8px 6px" }}>Стресс</th>
                       <th style={{ padding: "8px 6px" }} />
                     </tr>
                   </thead>

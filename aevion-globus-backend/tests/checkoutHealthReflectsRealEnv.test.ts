@@ -25,6 +25,11 @@ const ПЕРЕМЕННЫЕ: Record<string, string[]> = {
   gumroad: ["GUMROAD_ACCESS_TOKEN"],
   paybox: ["PAYBOX_MERCHANT_ID", "PAYBOX_SECRET"],
   paypal: ["PAYPAL_CLIENT_ID", "PAYPAL_SECRET"],
+  lemonsqueezy: [
+    "LEMON_SQUEEZY_API_KEY",
+    "LEMON_SQUEEZY_STORE_ID",
+    "LEMON_SQUEEZY_WEBHOOK_SECRET",
+  ],
 };
 const ВСЕ = Object.values(ПЕРЕМЕННЫЕ).flat();
 
@@ -59,6 +64,16 @@ describe("состояние кассы совпадает с окружение
     const п = await состояние();
     expect(Object.keys(п).length, "список касс пуст — проверять нечего")
       .toBeGreaterThanOrEqual(3);
+  });
+
+  test("КОНТРОЛЬ ОХВАТА: у каждой кассы из ответа есть строка в карте", async () => {
+    // Карта выше написана рукой, а касс со временем становится больше.
+    // Без этой проверки пятая касса осталась бы вне охвата МОЛЧА, и файл
+    // продолжал бы выглядеть сторожем всей ручки. Именно так lemonsqueezy
+    // и выпал из первой версии: ответ отдавал четыре кассы, карта знала три.
+    const п = await состояние();
+    const вне = Object.keys(п).filter((имя) => !(имя in ПЕРЕМЕННЫЕ));
+    expect(вне, "касса есть в ответе, но не проверяется этим сторожем").toEqual([]);
   });
 
   test("ПУСТОЕ окружение — ни одна касса не объявлена настроенной", async () => {

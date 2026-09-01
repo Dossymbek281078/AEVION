@@ -110,6 +110,17 @@ interface Slot { id: string; routeId: string; t0: string; t1: string; holder: st
  * «1 зданий» выглядело бы небрежностью там, где всё остальное посчитано точно.
  * Через границу API общей функции нет — поэтому копия, а не третий способ.
  */
+/**
+ * Числительное для подсказок: по-русски согласуется, на остальных языках
+ * число несёт сама фраза ключа («{n} segment(s)»). Вынесено сюда, а не в
+ * атрибут, намеренно: сторож `noRussianInAttributes` запрещает кириллицу
+ * внутри атрибута, и это правило стоит дороже краткости — именно в
+ * атрибутах и прожили незамеченными пять русских подсказок.
+ */
+function segmentCount(n: number, lang: string): string {
+  return lang === "ru" ? plural(n, "участке", "участках", "участках") : String(n);
+}
+
 function plural(n: number, one: string, few: string, many: string): string {
   const mod10 = n % 10, mod100 = n % 100;
   if (mod10 === 1 && mod100 !== 11) return `${n} ${one}`;
@@ -1119,14 +1130,7 @@ export default function QSkywayClient() {
                   <DataProvenanceChip compact dataQuality={meta.dq} labels={{ unit: t("qskyway.unit.buildings") }} />
                   {meta.suspect.length > 0 && (
                     <span
-                      title={
-                        "Высоту из источника мы не считаем достоверной. Либо она в разы выше всей остальной " +
-                        "застройки, либо тег высоты спорит с числом этажей в том же источнике. " +
-                        "Молча мы ничего не переписываем: где источник противоречит сам себе, берём его же счёт " +
-                        "этажей вместо спорной высоты, а где высота просто выделяется — оставляем как " +
-                        "опубликовано и показываем расхождение. Страховочный запас коридор получает в обоих " +
-                        "случаях: высота из OpenStreetMap — заявление участника проекта, а не обмер службы."
-                      }
+                      title={t("qskyway.tip.suspectHeight")}
                       style={{ color: "#fbbf24", textDecoration: "underline dotted", cursor: "help" }}
                     >
                       {t("qskyway.height.suspect")}{" "}
@@ -1175,12 +1179,12 @@ export default function QSkywayClient() {
                       слепого дефолта 12 м не отличить — поэтому сказано прямо. */}
                   {meta.substituted.length > 0 && (
                     <span
-                      title={
-                        "Высота взята из статистики домов того же типа в этом городе, а не измерена и не выведена из этажности самого дома. "
-                        + "Занижать нельзя: коридор пройдёт ниже крыши, поэтому берётся 75-й процентиль, а не медиана. Примеры: "
-                        + meta.substituted.slice(0, 3).map((o) => `дом ${o.i} (${o.type}) вместо ${o.from} м, по ${o.n} известным высотам`).join("; ")
-                        + ". На карте такие дома обведены пунктиром: тёплый оттенок значит «угадано» и достаётся им наравне со слепым дефолтом 12 м, хотя утверждения разные."
-                      }
+                      title={t("qskyway.tip.substitutedHeight", {
+                        examples: meta.substituted
+                          .slice(0, 3)
+                          .map((o) => t("qskyway.tip.substExample", { i: o.i, type: o.type, from: o.from, n: o.n }))
+                          .join("; "),
+                      })}
                       style={{ color: "#c8964f", textDecoration: "underline dotted", cursor: "help" }}
                     >
                       {/* Русская форма склоняется числительным, остальные языки —
@@ -1274,9 +1278,17 @@ export default function QSkywayClient() {
                             `obstacleSegments > 0` её дублировала. TypeScript
                             дубликат не связывал и требовал разбирать null там,
                             где он недостижим. */}
+                        {/* Подстановка «—», а не 0: ноль сказал бы «участков со зданием
+                            нет», хотя мы просто не знаем. Ветка недостижима — функция
+                            выше отдаёт null ровно при их отсутствии, — но подстановка
+                            обязана быть честной и на недостижимом пути: иначе она
+                            станет ложью в тот день, когда путь откроется. */}
                         {measuredObstaclePct(stats.obstacleSegments, stats.measuredObstacleSegments) != null && (
                           <span
-                            title={`Из ${stats.obstacleSegments} участков со зданием под крылом на обмеренной городом высоте стоят ${stats.measuredObstacleSegments ?? 0}. Остальные — вывод из тега или счёта этажей OSM, либо слепой дефолт; за неуверенность коридор платит запасом по высоте.`}
+                            title={t("qskyway.tip.measuredObstacles", {
+                              total: stats.obstacleSegments ?? "—",
+                              measured: stats.measuredObstacleSegments ?? 0,
+                            })}
                             style={{ fontSize: 11, fontWeight: 400, color: (stats.measuredObstacleSegments ?? 0) === 0 ? "#fbbf24" : "#5f7086", marginLeft: 5, cursor: "help" }}
                           >
                             {t("qskyway.tel.byBuildings", { pct: measuredObstaclePct(stats.obstacleSegments, stats.measuredObstacleSegments) ?? 0 })}
@@ -1305,12 +1317,18 @@ export default function QSkywayClient() {
                     // маршруту»), просто этот вопрос не тот, который читают.
                     [t("qskyway.tel.confClearance"), stats.avgConfClearM == null ? "—" : (
                       <>
-                        <span title={`По всему коридору в среднем ${stats.avgConfClearM} ${t("qskyway.unit.m")}, включая участки над открытой землёй, где запас не нужен и равен нулю.`}>
+                        <span title={t("qskyway.tip.avgClearance", { avg: stats.avgConfClearM, unit: t("qskyway.unit.m") })}>
                           {stats.confClearOnObstaclesM ?? stats.avgConfClearM} {t("qskyway.unit.m")}
                         </span>
+                        {/* Тот же довод у «не выше N м»: без числа это обещание без
+                            величины. Прочерк — принятый в модуле знак неизвестного
+                            (`authority ?? "—"` в padPermission). */}
                         {(stats.blindInert ?? 0) > 0 && (
                           <span
-                            title={`На ${plural(stats.blindInert ?? 0, "участке", "участках", "участках")} высота под крылом угадана, а страховочный запас съеден полом коридора: коридор лёг туда же, куда лёг бы без запаса. Обещанный просвет выдержан, только если здание не выше ${stats.blindClearedUpToM} м.`}
+                            title={t("qskyway.tip.blindInert", {
+                              n: segmentCount(stats.blindInert ?? 0, lang),
+                              upTo: stats.blindClearedUpToM ?? "—",
+                            })}
                             style={{ fontSize: 11, fontWeight: 400, color: "#fbbf24", marginLeft: 5, cursor: "help" }}
                           >
                             {t("qskyway.tel.blindInert", { n: stats.blindInert ?? 0 })}

@@ -5898,7 +5898,7 @@ export default function CyberChessPage(){
                 Глазами не отличить: выглядит ровно так же. Размеры и цвета
                 заданы явно, поэтому вид не меняется. */}
             <h1 style={{fontSize:15,fontWeight:900,color:CC.text,letterSpacing:0.2,display:"inline-flex",alignItems:"center",gap:6,margin:0}}>
-              <span>CyberChess</span>
+              <span translate="no" className="notranslate">CyberChess</span>
               {isPro&&<span title={isUltimate?"Ultimate активен":"Pro активен"} style={{
                 display:"inline-flex",alignItems:"center",gap:3,
                 fontSize:9,fontWeight:900,letterSpacing:1,textTransform:"uppercase" as const,
@@ -6531,7 +6531,7 @@ export default function CyberChessPage(){
               {/* AI opponent */}
               <div>
                 <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
-                  <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>AI</span>
+                  <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>ИИ</span>
                   <input type="range" min={0} max={(chessy.owned.master_ai||isPro)?6:4}
                     value={Math.min(aiI,(chessy.owned.master_ai||isPro)?6:4)}
                     onChange={e=>{const v=+e.target.value;if(v>=5&&!(chessy.owned.master_ai||isPro)){showToast("Master/Stockfish AI — premium. Купи в Chessy-магазине","info");sShowShop(true);return}sAiI(v)}}
@@ -6649,6 +6649,7 @@ export default function CyberChessPage(){
                 <button onClick={()=>{sTab("puzzles");sPzMode("rush" as any);if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}}
                   className="cc-focus-ring"
                   aria-label="Запустить Puzzle Rush"
+                  translate="no"
                   style={{padding:"6px 12px",borderRadius:RADIUS.full,
                     border:`1px solid #fcd34d`,background:"linear-gradient(135deg,#fffbeb,#fef3c7)",color:"#92400e",
                     fontSize:12,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
@@ -7049,7 +7050,7 @@ export default function CyberChessPage(){
               </div>
               {/* Chessy */}
               <button onClick={()=>sShowShop(true)} style={{padding:`${SPACE[3]}px ${SPACE[3]}px`,borderRight:`1px solid ${CC.border}`,border:"none",borderTop:"none",borderBottom:"none",background:"transparent",textAlign:"left",cursor:"pointer"}}>
-                <div style={{fontSize:10,color:"#92400e",fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Chessy</div>
+                <div translate="no" className="notranslate" style={{fontSize:10,color:"#92400e",fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Chessy</div>
                 <div style={{display:"flex",alignItems:"baseline",gap:4,marginTop:2}}>
                   <Icon.Coin width={18} height={18}/>
                   <span style={{fontSize:24,fontWeight:900,color:"#78350f",lineHeight:1.1}}>{chessy.balance}</span>

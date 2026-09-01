@@ -19,6 +19,10 @@ import request from "supertest";
 const ФЛАГИ = {
   tierQuotaEnforced: "QCOREAI_TIER_QUOTA",
   premiumQuotaEnforced: "QCOREAI_PREMIUM_QUOTA",
+  // Третий флаг того же вида. Именно он был КОНТРОЛЕМ, когда я делал
+  // вывод о деньгах («бесплатные ограничены — значит механизм жив»),
+  // и при этом сам не проверялся ничем.
+  freeQuotaEnforced: "QCOREAI_FREE_QUOTA",
 } as const;
 
 const { qcoreaiRouter } = await import("../src/routes/qcoreai");
@@ -55,6 +59,17 @@ describe("состояние лимитов совпадает с окружен
     for (const поле of Object.keys(ФЛАГИ)) {
       expect(п, `поля ${поле} нет — проверять нечего`).toHaveProperty(поле);
     }
+  });
+
+  test("КОНТРОЛЬ ОХВАТА: у каждого поля *QuotaEnforced есть строка в карте", async () => {
+    // Карта написана рукой, а полей со временем становится больше.
+    // Без этой проверки четвёртый лимит остался бы вне охвата МОЛЧА —
+    // так из первой версии выпал freeQuotaEnforced.
+    const п = await политика();
+    const вне = Object.keys(п).filter(
+      (k) => k.endsWith("QuotaEnforced") && !(k in ФЛАГИ)
+    );
+    expect(вне, "поле есть в ответе, но не проверяется этим сторожем").toEqual([]);
   });
 
   test("флаг НЕ выставлен — ручка НЕ говорит «применяется»", async () => {

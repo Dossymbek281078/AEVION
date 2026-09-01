@@ -4927,7 +4927,19 @@ async function executeWorkflowStep(
       const text = String(step.text || "");
       if (!text) throw new Error("text required for tts step");
 
-      const voiceId = VOICE_IDS[String(step.voice || "Rachel")] || VOICE_IDS.Rachel;
+      // Запасной путь оставлен НЕ смертельным, но перестал быть молчаливым.
+      // Сведение таблиц 01.09.2026 вернуло сценариям пять голосов, но имя всё
+      // ещё может прийти незнакомое — и тогда человек просил одно, а слышит
+      // другое, ничего об этом не узнав. Отказ, о котором никто не узнаёт,
+      // хуже отказа: работа идёт, а результат чужой.
+      const хотелиГолос = String(step.voice || "Rachel");
+      const voiceId = VOICE_IDS[хотелиГолос] || VOICE_IDS.Rachel;
+      if (!VOICE_IDS[хотелиГолос]) {
+        console.warn(
+          `[DevHub] голос "${хотелиГолос}" неизвестен, озвучиваю голосом Rachel. ` +
+          `Известные: ${Object.keys(VOICE_IDS).join(", ")}`,
+        );
+      }
       const ttsResp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
         method: "POST",
         headers: { "xi-api-key": apiKey, "Content-Type": "application/json", Accept: "audio/mpeg" },

@@ -22,6 +22,7 @@ process.env.SUBSCRIPTIONS_FILE = join(mkdtempSync(join(tmpdir(), "aevion-sig-"))
 
 let вердикт: string | null = null;
 let полезная: Record<string, string> = {};
+let полезнаяPaypal: Record<string, unknown> = {};
 vi.mock("../src/lib/payment/payboxProvider", () => ({
   payboxPaymentProvider: {
     parseWebhook: () => ({
@@ -30,9 +31,21 @@ vi.mock("../src/lib/payment/payboxProvider", () => ({
     }),
   },
 }));
+let подписьВерна = true;
+vi.mock("../src/lib/payment/paypalProvider", () => ({
+  verifyPaypalWebhook: async () => подписьВерна,
+  paypalPaymentProvider: {
+    parseWebhook: () => ({
+      result: { status: "paid", reason: null, raw: полезнаяPaypal },
+      eventId: String(полезнаяPaypal.id ?? ""),
+    }),
+  },
+}));
+
 vi.mock("../src/lib/sentry/platform", () => ({ makeServiceCapture: () => () => {} }));
 
 const { payboxWebhookRouter } = await import("../src/routes/payboxWebhook");
+const { paypalWebhookRouter } = await import("../src/routes/paypalWebhook");
 const { resolvePlanFromPayload } = await import("../src/lib/planGate");
 
 let счётчик = 0;
@@ -90,5 +103,46 @@ describe("подпись PayBox проверяется по-настоящему
     const файл = process.env.SUBSCRIPTIONS_FILE as string;
     const текст = existsSync(файл) ? readFileSync(файл, "utf8") : "";
     expect(текст, "отказ по подписи всё же оставил запись").not.toContain(email);
+  });
+});
+
+describe("подпись PayPal проверяется по-настоящему", () => {
+  // Тот же класс, что у PayBox: мутация «подпись не проверяется» не ловилась
+  // ни одним из 45 файлов. У Lemon Squeezy и Gumroad эти ворота охраняются,
+  // у PayPal не охранялись — классический непочиненный брат.
+  async function уведомлениеPaypal(email: string) {
+    счётчик += 1;
+    полезнаяPaypal = {
+      id: `pp-sig-${счётчик}`,
+      payer: { email_address: email },
+      custom_id: JSON.stringify({ reference: "tier_medium_monthly" }),
+    };
+    const a = express();
+    a.use((req, _r, next) => {
+      (req as unknown as { rawBody: Buffer }).rawBody = Buffer.from("x");
+      next();
+    });
+    a.use("/api/paypal", paypalWebhookRouter);
+    return request(a).post("/api/paypal/webhook").send();
+  }
+
+  beforeEach(() => {
+    подписьВерна = true;
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  test("КОНТРОЛЬ: с верной подписью оплата проходит", async () => {
+    const email = "pp-ok@example.com";
+    const res = await уведомлениеPaypal(email);
+    expect(res.body.action).toBe("activated");
+    expect(resolvePlanFromPayload({ email }).tier).toBe("medium");
+  });
+
+  test("неверная подпись — 401 и НИКАКОЙ выдачи", async () => {
+    подписьВерна = false;
+    const email = "pp-bad@example.com";
+    const res = await уведомлениеPaypal(email);
+    expect(res.status, "подделанное уведомление PayPal принято").toBe(401);
+    expect(resolvePlanFromPayload({ email }).tier, "подпись неверна, а тариф выдан").toBe("free");
   });
 });

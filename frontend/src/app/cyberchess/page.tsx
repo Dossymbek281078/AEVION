@@ -138,6 +138,7 @@ import CommandPalette, { type Command as PaletteCommand } from "./CommandPalette
 import { loadBookmarks, addBookmark, removeBookmark, type Bookmark } from "./bookmarks";
 import { whisperPosition, whisperAndSpeak } from "./positionWhisper";
 import { CHESSY_STORAGE_KEY, CHESSY_LOG_STORAGE_KEY } from "./chessyLedger";
+import { CHESS_LAUNCH_UTC } from "./launchDate";
 import { VARIANTS, fischer960Fen, asymmetricFen, twinKingsFen, twinKingsLossSide, rollDice, filterMovesByDice, pickReinforcement, atomicFen, applyExplosion, kothFen, kothWinner, threeCheckFen, knightRidersFen, pawnApocalypseFen, buildArmyFen, ARMY_PRESETS, randomVariant, getDailyVariantState, markDailyVariantPlayed, ldVariantStats, svVariantStats, recordVariantResult, VARIANT_TUTORIAL, VARIANT_ACH_REWARDS, variantAchKey, variantAchLabel, totalVariantGames, variantsPlayedCount, favoriteVariant, bestWinrateVariant, type VariantId, type ArmySlot, type VariantStats } from "./variants";
 import { EMPTY_POOL, addToPool, removeFromPool, poolSize, isDropLegal, applyDrop, isDropAvailable, POOL_GLYPH, type DropPool } from "./powerDrop";
 import { computeThreatMap, cellColor as threatCellColor, reportThreatMap, type ThreatMap } from "./threatMap";
@@ -6621,14 +6622,14 @@ export default function CyberChessPage(){
                   запуск»), и оттуда есть путь обратно в игру. Вторая: метка ?c= на /go
                   прошла бы через белый список известных каналов и стала пустой — «chess» в нём
                   нет, то есть канал потерялся бы молча. */}
-              {/* После дня запуска блок скрывается. Обещание «напишем в день запуска»
-                  30 августа уже неуместно: запуск состоялся, и человек, читающий
-                  его в этот день, видит расхождение между словами и реальностью.
+              {/* После дня запуска блок скрывается: обещание «напишем в день запуска»
+                  в сам день запуска уже неуместно — человек видит расхождение
+                  между словами и реальностью.
                   Дату берём ОДНИМ способом с посадочной — daysUntilLaunch учитывает
                   часовой пояс запуска; свой расчёт разошёлся бы с ней на пять часов
                   в сутки, и одна страница звала бы подписаться, когда вторая уже
                   поздравляет с открытием. */}
-              {daysUntilLaunch(Date.UTC(2026, 7, 30)) > 0 && (
+              {daysUntilLaunch(CHESS_LAUNCH_UTC) > 0 && (
               <a href={kanal?`/cyberchess/launch?c=${encodeURIComponent(kanal)}`:"/cyberchess/launch"} style={{display:"block",marginTop:SPACE[2],padding:SPACE[3],
                 borderRadius:12,border:"1px dashed "+CC.border,background:CC.surface1,
                 textDecoration:"none",color:CC.text,textAlign:"center"}}>

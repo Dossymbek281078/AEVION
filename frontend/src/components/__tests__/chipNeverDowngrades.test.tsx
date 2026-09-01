@@ -74,3 +74,38 @@ describe("кнопка модуля не продаёт понижение", () 
     await waitFor(() => expect(screen.getByText("Купить")).toBeTruthy());
   });
 });
+
+/**
+ * Кнопка заказывает ИМЕННО ТОТ тариф, цену которого показывает.
+ *
+ * Найдено мутационным свипом 01.09.2026: подмена `tierId: "lite"` на `"full"`
+ * не ловилась НИ ОДНИМ тестом. То есть кнопка могла показывать «$19/мес» и
+ * оформлять заказ на другой тариф, а мы бы узнали об этом из жалоб.
+ *
+ * Прежние проверки этого файла спрашивали, ПОКАЗЫВАЕТСЯ ли кнопка. Это другое
+ * утверждение: механизм работает — не то же самое, что механизм делает верное.
+ * Ровно тот класс, который соседнее окно нашло сегодня трижды на вебхуках.
+ */
+describe("кнопка заказывает тот тариф, что показывает", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.restoreAllMocks());
+
+  it("в кассу уходит lite — тот тариф, чью цену видит человек", async () => {
+    mockPlan("free");
+    render(<ModulePricingChip moduleId="qlearn" />);
+    await waitFor(() => expect(screen.getByText("Купить")).toBeTruthy());
+    screen.getByText("Купить").click();
+
+    await waitFor(() => {
+      const вызовы = (globalThis.fetch as any).mock.calls;
+      const кассе = вызовы.find((c: any[]) => String(c[0]).includes("checkout/session"));
+      expect(кассе, "запрос в кассу не ушёл").toBeTruthy();
+      const тело = JSON.parse(кассе[1].body);
+      expect(
+        тело.tierId,
+        "кнопка показывает цену Lite, а заказывает другой тариф",
+      ).toBe("lite");
+      expect(тело.modules, "модуль не доехал до кассы").toEqual(["qlearn"]);
+    });
+  });
+});

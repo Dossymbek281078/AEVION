@@ -1,14 +1,15 @@
 import { describe, test, expect, vi, beforeEach, afterAll } from "vitest";
 import express from "express";
 import request from "supertest";
-import { mkdtempSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 /**
  * Сквозная проверка денежного пути: ОПЛАТИЛ → ПОЛУЧИЛ ДОСТУП.
  *
- * ЗАЧЕМ. В наборе 33 теста про вебхуки оплаты, и ни один не спрашивает
+ * ЗАЧЕМ. Замер 01.09.2026: в наборе было 33 теста про вебхуки оплаты, и ни один
+ * не спрашивал
  * главного: получает ли человек то, за что заплатил. Каждый шаг проверен
  * по отдельности — разбор ссылки заказа, запись подписки, чтение тарифа,
  * решение стены — и каждый зелёный. Но именно так выглядит класс поломок,
@@ -99,6 +100,9 @@ function токен(email: string) {
 }
 
 afterAll(() => {
+  // Убираем за собой: без этого каждый прогон оставляет каталог в TEMP.
+  // Замер 01.09.2026 — за день накопилось 127 штук.
+  try { rmSync(каталог, { recursive: true, force: true }); } catch { /* уже нет */ }
   delete process.env.SUBSCRIPTIONS_FILE;
   delete process.env.PAYWALL_MODULES;
   delete process.env.AUTH_JWT_SECRET;

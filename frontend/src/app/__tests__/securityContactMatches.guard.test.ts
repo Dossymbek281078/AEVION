@@ -123,8 +123,8 @@ const PENDING_FILES = new Set([
   "app/constitution/showcase/page.tsx",
   "app/developers/fintech/troubleshooting/page.tsx",
   "app/devhub/[id]/page.tsx",
-  "app/pricing/affiliate-dashboard/page.tsx",
-  "app/pricing/glossary/page.tsx",
+  // app/pricing/affiliate-dashboard/page.tsx убрана 01.09.2026: mailto заменён ссылкой на форму связи.
+  // app/pricing/glossary/page.tsx убрана 01.09.2026: mailto заменён ссылкой на форму связи.
   // app/pricing/page.tsx убрана 01.09.2026: mailto в подписи к FAQ заменён ссылкой на форму связи.
   // app/pricing/refund-policy убрана 01.09.2026: главная кнопка и шаг 1 процедуры возврата вели на ящик домена без MX; переведено на форму на двух языках.
   "app/qcoreai/budget/page.tsx",

@@ -35,8 +35,8 @@ const ИЗВЕСТНЫЕ = new Set([
   "constitution/showcase/page.tsx",
   "developers/fintech/troubleshooting/page.tsx",
   "devhub/[id]/page.tsx",
-  "pricing/affiliate-dashboard/page.tsx",
-  "pricing/glossary/page.tsx",
+    // pricing/affiliate-dashboard/page.tsx убрана 01.09.2026: mailto заменён ссылкой на форму связи.
+    // pricing/glossary/page.tsx убрана 01.09.2026: mailto заменён ссылкой на форму связи.
   // pricing/page.tsx убрана 01.09.2026: в подписи к FAQ стоял mailto на ящик
   // нашего домена, и вопрос покупателя уходил в пустоту. Ссылка ведёт на форму
   // связи, подпись заведена ключом faq.contactCta на двух языках.

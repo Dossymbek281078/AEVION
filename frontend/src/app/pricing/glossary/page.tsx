@@ -376,8 +376,9 @@ export default function PricingGlossaryPage() {
         <p style={{ color: "#475569", margin: 0, marginBottom: 14, fontSize: 13, maxWidth: 540, marginLeft: "auto", marginRight: "auto", lineHeight: 1.5 }}>
           {tp("glossary.submit.subtitle")}
         </p>
-        <a
-          href="mailto:hello@aevion.app?subject=Glossary%20term%20suggestion"
+        {/* 01.09.2026: mailto на ящик домена без записи MX — предложение термина уходило в пустоту. */}
+        <Link
+          href="/pricing/contact?topic=glossary"
           style={{
             display: "inline-block",
             padding: "8px 16px",
@@ -389,8 +390,8 @@ export default function PricingGlossaryPage() {
             textDecoration: "none",
           }}
         >
-          hello@aevion.app
-        </a>
+          Предложить термин через форму
+        </Link>
       </section>
     </ProductPageShell>
   );

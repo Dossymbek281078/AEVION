@@ -422,8 +422,9 @@ function DashboardContent({
         >
           {t("pricing.affiliateDashboard.actions.docs")}
         </Link>
-        <a
-          href={`mailto:hello@aevion.app?subject=Affiliate%20${encodeURIComponent(application.email)}`}
+        {/* 01.09.2026: mailto на ящик домена без записи MX: партнёр писал в пустоту. */}
+        <Link
+          href="/pricing/contact?topic=affiliate"
           style={{
             padding: "10px 20px",
             fontSize: 13,
@@ -435,7 +436,7 @@ function DashboardContent({
           }}
         >
           {t("pricing.affiliateDashboard.actions.contactManager")}
-        </a>
+        </Link>
       </section>
     </>
   );

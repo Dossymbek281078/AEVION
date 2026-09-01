@@ -2,6 +2,19 @@ import { describe, expect, test } from "vitest";
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { stripComments } from "../cyberchess/__tests__/_stripComments";
+import { renders } from "./_renders";
+
+/*
+ * ⚠️ Помощник взят ОБЩИЙ, а не переписан здесь. Своя копия у сторожа
+ * расходится с оригиналом молча, а этот разобран на живом коде: он не
+ * принимает `image/*` внутри строки за начало комментария и не теряет
+ * остаток файла на одной обратной кавычке. Обе ошибки стоили правок.
+ *
+ * Цена связи — он живёт в каталоге чужого модуля. Поэтому рядом стоит
+ * контроль на его поведение: изменят смысл там — узнаем здесь громко, а
+ * не тихим позеленением.
+ */
 
 /**
  * У модуля, который продаётся, на его собственной странице есть путь к оплате.
@@ -86,13 +99,26 @@ const KNOWN_SILENT = [
 ];
 
 const SIGNALS: Array<[string, (s: string) => boolean]> = [
-  ["плашка цены", (s) => s.includes("ModulePricingChip")],
-  ["кнопка апгрейда", (s) => s.includes("UpgradeButton")],
-  ["BuyLink", (s) => s.includes("<BuyLink")],
+  ["плашка цены", (s) => renders(s, "ModulePricingChip")],
+  ["кнопка апгрейда", (s) => renders(s, "UpgradeButton")],
+  ["BuyLink", (s) => renders(s, "BuyLink")],
   ["ссылка в кассу", (s) => s.includes("lemonsqueezy.com") || s.includes("gumroad.com")],
   ["ручка чекаута", (s) => s.includes("/api/pricing/checkout") || s.includes("checkout/session")],
-  ["платная стена", (s) => s.includes("PaywallScreen") || s.includes("PaywallModal")],
+  ["платная стена", (s) => renders(s, "PaywallScreen") || renders(s, "PaywallModal")],
 ];
+
+/**
+ * Признаки оплаты в ИСХОДНИКЕ страницы.
+ *
+ * Срез комментариев живёт ЗДЕСЬ, в одной функции, а не у каждого вызывающего:
+ * пока каждый читал файл сам, контроль звал срез своей рукой и проверял
+ * композицию, которую сам же собрал, а не боевой путь. Мутация такого среза
+ * прошла бы молча.
+ */
+function signalsIn(source: string): string[] {
+  const text = stripComments(source);
+  return SIGNALS.filter(([, test]) => test(text)).map(([name]) => name);
+}
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -135,8 +161,7 @@ function soldModules(): Array<{ id: string; dir: string }> {
 function signalsFor(dir: string): string[] {
   const found = new Set<string>();
   for (const f of walk(join(APP, dir))) {
-    const s = readFileSync(f, "utf8");
-    for (const [name, test] of SIGNALS) if (test(s)) found.add(name);
+    for (const name of signalsIn(readFileSync(f, "utf8"))) found.add(name);
   }
   return [...found];
 }
@@ -155,17 +180,49 @@ describe("продаваемый модуль предлагает оплату 
     // и «все продают» будет означать «я ничего не умею видеть».
     const shop = readFileSync(join(APP, "shop", "page.tsx"), "utf8");
     expect(
-      SIGNALS.some(([, t]) => t(shop)),
+      signalsIn(shop).length > 0,
       "витрина не опознана как продающая — список признаков слеп",
     ).toBe(true);
     // И наоборот: страница заведомо не продающая не должна давать признаков.
     const legal = join(APP, "terms", "page.tsx");
     if (existsSync(legal)) {
       expect(
-        SIGNALS.some(([, t]) => t(readFileSync(legal, "utf8"))),
+        signalsIn(readFileSync(legal, "utf8")).length > 0,
         "условия использования опознаны как продающая страница — признак слишком широк",
       ).toBe(false);
     }
+  });
+
+  test("контроль: признак отличает ОТРИСОВКУ от упоминания", () => {
+    // Четыре случая, и каждый стоил разбора на живом коде.
+    const nl = String.fromCharCode(10);
+
+    // 1. Только в комментарии — не признак. Страница может объяснять, почему
+    //    плашки цены на ней нет; объяснение не продаёт.
+    expect(
+      signalsIn("// ModulePricingChip тут не нужен" + nl + "/* <PaywallScreen /> тоже */" + nl + "export default function P() { return null; }").length,
+      "комментарий засчитан как способ заплатить — модуль без оплаты сойдёт за продающий",
+    ).toBe(0);
+
+    // 2. Опечатка в имени — не признак. Отрисовки `UpgradeButtonX` в React не
+    //    существует, кнопка бы исчезла, а сторож остался бы зелёным.
+    expect(
+      signalsIn("export default function P() { return <UpgradeButtonX />; }").length,
+      "опечатка в имени компонента засчитана как настоящая кнопка",
+    ).toBe(0);
+
+    // 3. Приставка в имени — ПРИЗНАК. Настоящая кнопка называется
+    //    PaddleUpgradeButton, и таких страниц девять из девяти.
+    expect(
+      signalsIn("export default function P() { return <PaddleUpgradeButton appId={1} />; }").length,
+      "настоящая кнопка апгрейда не опознана — сторож покраснеет на исправных модулях",
+    ).toBeGreaterThan(0);
+
+    // 4. Имя в коде, но без отрисовки — не признак. Мёртвый импорт не продаёт.
+    expect(
+      signalsIn("import { ModulePricingChip } from " + JSON.stringify("@/x") + ";" + nl + "export default function P() { return null; }").length,
+      "неиспользованный импорт засчитан как плашка цены",
+    ).toBe(0);
   });
 
   test("новых молчащих модулей нет", () => {

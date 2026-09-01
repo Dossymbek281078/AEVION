@@ -1,0 +1,79 @@
+import { describe, test, expect, vi, beforeEach, afterAll } from "vitest";
+import express from "express";
+import request from "supertest";
+
+/**
+ * Сторож: ручка «волшебной ссылки» не даёт выжечь почтовую квоту.
+ *
+ * ЗАЧЕМ. Эта ручка ОТПРАВЛЯЕТ ПИСЬМО по адресу из тела запроса, без входа.
+ * Предел стоит (3 обращения на адрес за 10 минут), но замер 01.09.2026: его
+ * снятие НЕ ловилось ни одним из 27 файлов, где упоминаются pricingRouter,
+ * sendEmail, rate_limited или 429. То есть защита была, а проверки на неё нет.
+ *
+ * Класс у нас известный и дорогой: у почтового провайдера СУТОЧНАЯ квота, и
+ * открытая ручка отправки выжигает её за часы. Сравнивать предел надо с
+ * жёсткой квотой провайдера, а не с интуицией о человеческом темпе.
+ *
+ * Здесь проверяется не число «3», а СВОЙСТВО: поток запросов с одного адреса
+ * обязан упереться в отказ, и упереться быстро.
+ */
+const письма: string[] = [];
+vi.mock("../src/routes/provisioning", async (настоящий) => {
+  const м = (await настоящий()) as Record<string, unknown>;
+  return {
+    ...м,
+    sendEmail: async (p: { to: string }) => {
+      письма.push(p.to);
+      return { ok: true, mode: "stub" as const };
+    },
+  };
+});
+
+const { pricingRouter } = await import("../src/routes/pricing");
+
+function приложение() {
+  const a = express();
+  a.use(express.json());
+  a.use("/api/pricing", pricingRouter);
+  return a;
+}
+
+async function запрос(ip: string) {
+  return request(приложение())
+    .post("/api/pricing/affiliate/magic-link")
+    .set("x-forwarded-for", ip)
+    .send({ email: "affiliate@example.com" });
+}
+
+beforeEach(() => {
+  письма.length = 0;
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+});
+
+afterAll(() => vi.restoreAllMocks());
+
+describe("волшебная ссылка ограничена по частоте", () => {
+  test("КОНТРОЛЬ: с ДРУГОГО адреса первый запрос проходит", async () => {
+    // Стоит ПЕРВЫМ намеренно: счётчик предела общий на файл, и после потока
+    // ниже любой адрес получал бы отказ. Иначе «упёрлось в отказ» могло бы означать, что отказывает всем и всегда,
+    // и сторож был бы про поломку, а не про предел.
+    const res = await запрос("198.51.100.42");
+    expect(res.status, "первый запрос с чистого адреса отбит").not.toBe(429);
+  });
+  test("поток с одного адреса упирается в отказ, и быстро", async () => {
+    const ip = "203.0.113.77";
+    let первыйОтказ = 0;
+    for (let i = 1; i <= 12; i += 1) {
+      const res = await запрос(ip);
+      if (res.status === 429) { первыйОтказ = i; break; }
+    }
+
+    expect(первыйОтказ, "поток из 12 запросов подряд не встретил отказа ни разу")
+      .toBeGreaterThan(0);
+    // Порядок величины, а не точное число: настройку 3 -> 5 наказывать незачем,
+    // а «предел есть, но пускает десятками» поймать надо.
+    expect(первыйОтказ, "предел настолько высок, что квоту можно выжечь")
+      .toBeLessThanOrEqual(10);
+  });
+
+});

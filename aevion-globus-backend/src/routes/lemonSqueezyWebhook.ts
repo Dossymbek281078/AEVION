@@ -303,6 +303,11 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
     // проходит isFinite ниже. Мутация, снимающая её, поэтому и не ловится — это
     // честный результат, а не дыра. Условие оставлено: оно называет намерение
     // (отсутствие суммы у события подписки — норма, а не тревога) и стоит ноль.
+    // ФАКТИЧЕСКИ списанная сумма, в долларах. Считаем один раз: её читают
+    // и проверки ниже, и запись подписки.
+    const paidCents = attrs.total === undefined || attrs.total === null ? null : Number(attrs.total);
+    const paidUsd = paidCents !== null && Number.isFinite(paidCents) ? paidCents / 100 : undefined;
+
     if (attrs.total !== undefined && attrs.total !== null) {
       const paid = Number(attrs.total);
       const tier = TIERS.find((t) => t.id === tierForLemonSqueezyReference(ref));
@@ -417,6 +422,17 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         period: "monthly",
         modules,
         source: "lemonsqueezy",
+        // ФАКТИЧЕСКИ списанное, а не то, что мы ожидали. Поле amountUsd в записи
+        // подписки существовало давно и не заполнялось НИКЕМ — оно молча
+        // исчезло бы, и никто бы не заметил.
+        //
+        // Пишем его сейчас не впрок: у него есть названный читатель. Панель
+        // «выручка по каналам» соседнего окна до сих пор считает сумму из
+        // АДРЕСА ВОЗВРАТА, то есть нашу ожидаемую. Пока сверки не было, разница
+        // выглядела теоретической; теперь известно, что она реальна, и две
+        // колонки рядом — ожидаемая и списанная — полезнее одной: расхождение
+        // между ними и есть сигнал.
+        ...(paidUsd === undefined ? {} : { amountUsd: paidUsd }),
         ...(channel ? { channel } : {}),
       });
       console.log(`[ls/webhook] ${event} → provisioned ${tierId} for ${email} (ref=${ref ?? "default"})`);

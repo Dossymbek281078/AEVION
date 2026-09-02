@@ -1216,6 +1216,7 @@ export default function PricingPage() {
               </div>
               <a
                 href={gumroadCheckoutUrl({ key: b.id })}
+                aria-label={`Получить доступ: набор ${b.id}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{

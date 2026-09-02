@@ -60,6 +60,10 @@ function memoSnippet(memo: string, max = 180): string {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
+  // Разбор конфликта 02.09.2026: их сторона проверяла `!a`, а loadAnalysis
+  // возвращает ОБЪЕКТ состояния — проверка не сработала бы никогда, и ветка
+  // «разбор не найден» была мёртвой. Взята структура с состоянием.
+  // Заголовок английский: их же коммит помечает qventure английским ПО ЗАМЫСЛУ.
   const zagruzka = await loadAnalysis(id);
   if (zagruzka.state !== "found") {
     return { title: "QVenture analysis — AEVION", robots: { index: false, follow: false } };

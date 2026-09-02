@@ -198,9 +198,9 @@ export function ventureDataQuality(factors: ScoreFactor[]): DataQuality {
 // company in that market. Labelling the source stops a reader assuming all eight
 // were assessed about this specific company, and explains a low execution score.
 const BASIS_TAG: Record<NonNullable<ScoreFactor["basis"]>, { text: string; bg: string; fg: string; title: string }> = {
-  "company-evidence": { text: "from this plan", bg: "#ecfdf5", fg: "#047857", title: "Оценка по метрикам, раскрытым в этой заявке." },
-  "sector-prior": { text: "sector average", bg: "var(--paper-2, #efeee8)", fg: "var(--ink-soft, #45474c)", title: "Sector benchmark — identical for every company in this sector, not specific to this one." },
-  "no-evidence": { text: "not disclosed", bg: "#fef2f2", fg: "#b91c1c", title: "Nothing was submitted for this factor, so it scores low rather than neutral. Add traction metrics to move it." },
+  "company-evidence": { text: "по этой заявке", bg: "#ecfdf5", fg: "#047857", title: "Оценка по метрикам, раскрытым в этой заявке." },
+  "sector-prior": { text: "среднее по отрасли", bg: "var(--paper-2, #efeee8)", fg: "var(--ink-soft, #45474c)", title: "Отраслевой ориентир — одинаков для любой компании этого рынка и не относится именно к ней." },
+  "no-evidence": { text: "не указано", bg: "#fef2f2", fg: "#b91c1c", title: "По этому фактору ничего не прислали, поэтому оценка низкая, а не нейтральная. Добавьте показатели роста, чтобы её поднять." },
 };
 
 export function FactorBar({ f }: { f: ScoreFactor }) {
@@ -468,8 +468,8 @@ function ComparablesBlock({ sectorLabel, stage }: { sectorLabel: string; stage: 
   if (!data || data.comps.length === 0) return null;
 
   const badge = data.mode === "live"
-    ? { text: "LIVE · web-sourced", bg: "var(--teal, #0a7d72)" }
-    : { text: "ILLUSTRATIVE · model-recalled", bg: "var(--amber, #b7791f)" };
+    ? { text: "ЖИВЫЕ · из открытых источников", bg: "var(--teal, #0a7d72)" }
+    : { text: "ДЛЯ ПРИМЕРА · по памяти модели", bg: "var(--amber, #b7791f)" };
 
   return (
     <div style={SECTION}>
@@ -747,7 +747,7 @@ function SignalCoverageChip({ coverage, fields }: { coverage: number; fields: nu
   const label = pct >= 40 ? "company-specific" : pct >= 15 ? "partly company-specific" : "sector-based";
   return (
     <div
-      title="Share of the composite score backed by metrics disclosed in the plan (revenue, growth, margin, LTV/CAC…) rather than sector averages. Add financials to raise it."
+      title="Доля итоговой оценки, опирающаяся на показатели из самой заявки (выручка, рост, маржа, LTV/CAC…), а не на средние по отрасли. Добавьте финансовые данные, чтобы её поднять."
       style={{
         display: "inline-flex", alignItems: "center", gap: 8, marginTop: 10,
         padding: "5px 10px", borderRadius: 999, background: "var(--paper-2, #efeee8)",

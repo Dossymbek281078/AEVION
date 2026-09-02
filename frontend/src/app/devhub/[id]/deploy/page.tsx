@@ -28,10 +28,10 @@ interface Deployment {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const STATUS_META: Record<string, { label: string; dot: string; text: string }> = {
-  pending:  { label: "Pending",  dot: "#f59e0b", text: "#fef3c7" },
-  building: { label: "Building", dot: "#3b82f6", text: "#dbeafe" },
-  live:     { label: "Live",     dot: "#22c55e", text: "#dcfce7" },
-  failed:   { label: "Failed",   dot: "#ef4444", text: "#fee2e2" },
+  pending:  { label: "Ожидает",  dot: "#f59e0b", text: "#fef3c7" },
+  building: { label: "Собирается", dot: "#3b82f6", text: "#dbeafe" },
+  live:     { label: "Работает",     dot: "#22c55e", text: "#dcfce7" },
+  failed:   { label: "Не удалось",   dot: "#ef4444", text: "#fee2e2" },
 };
 
 function statusMeta(s: string) {

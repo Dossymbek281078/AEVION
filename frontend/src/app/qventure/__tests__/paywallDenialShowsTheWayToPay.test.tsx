@@ -64,7 +64,10 @@ function podmenitFetch(otvetAnaliza: { status: number; body: unknown }) {
 function zapolnitFormu() {
   const nazvanie = screen.getAllByLabelText("Название компании или продукта")[0];
   fireEvent.change(nazvanie, { target: { value: "Тестовая компания" } });
-  const opisanie = screen.getAllByPlaceholderText(/One-paragraph description/i)[0];
+  // Ищем по ДОСТУПНОМУ ИМЕНИ, а не по подсказке. Подсказка — текст для человека,
+   // её переписывают при переводе, и тест падал бы при каждой правке формулировки
+   // (так и вышло 02.09.2026). Имя поля устойчиво и вдобавок утверждает, что оно есть.
+  const opisanie = screen.getAllByLabelText(/Что делает продукт/i)[0];
   fireEvent.change(opisanie, {
     target: { value: "Сервис для разбора инвестиционных сделок с проверкой метрик." },
   });

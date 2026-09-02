@@ -481,7 +481,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([
     { type: "code", prompt: "Landing page for an AI startup with hero, headline, CTA", saveAs: "pages/index.tsx" },
     { type: "image", prompt: "AI startup hero — futuristic, vivid colors, abstract", saveAs: "public/hero.url.txt" },
-    { type: "tts", text: "Welcome to our AI platform", voice: "Rachel", saveAs: "public/welcome.mp3.b64" },
+    { type: "tts", text: "Добро пожаловать на нашу ИИ-платформу", voice: "Rachel", saveAs: "public/welcome.mp3.b64" },
   ]);
   const [agentRunning, setAgentRunning] = useState(false);
   const [agentResults, setAgentResults] = useState<Array<{ step: number; type: string; ok: boolean; output?: any; error?: string; savedAs?: string }>>([]);
@@ -587,10 +587,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     { code: "TR", name: "Türkçe" }, { code: "JA", name: "日本語" }, { code: "ZH", name: "中文" },
   ];
   const BULK_PRESETS = [
-    { label: "🌍 Wide reach", codes: ["RU", "EN", "KK", "DE", "FR", "ES"] },
-    { label: "📰 Blog", codes: ["RU", "EN", "KK"] },
-    { label: "📚 Docs", codes: ["RU", "EN", "KK", "DE", "JA", "ZH"] },
-    { label: "🇰🇿 KZ trio", codes: ["RU", "EN", "KK"] },
+    { label: "🌍 Широкий охват", codes: ["RU", "EN", "KK", "DE", "FR", "ES"] },
+    { label: "📰 Блог", codes: ["RU", "EN", "KK"] },
+    { label: "📚 Документация", codes: ["RU", "EN", "KK", "DE", "JA", "ZH"] },
+    { label: "🇰🇿 Три языка КЗ", codes: ["RU", "EN", "KK"] },
   ];
   const [bulkPaths, setBulkPaths] = useState<string[]>([]);
   const [bulkLangs, setBulkLangs] = useState<string[]>(() => {
@@ -2082,7 +2082,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         d.domainReady && d.domain
           ? `Live: https://${d.domain}`
           : d.domain
-            ? `Адрес: ${d.liveUrl ?? d.pagesUrl} — ${d.domain} пока не отвечает (зона не делегирована)`
+            ? `Адрес: ${d.liveUrl ?? d.pagesUrl} — ${d.domain} пока не отвечает (домен не зарегистрирован)`
             : `Адрес: ${d.liveUrl ?? d.pagesUrl}`,
         d.domain && !d.domainReady ? "warning" : "success",
       );
@@ -2509,7 +2509,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       let params: any = undefined;
       if (waParams.trim()) {
         try { params = JSON.parse(waParams); } catch {
-          setWaMsg({ ok: false, text: "params must be valid JSON object" });
+          setWaMsg({ ok: false, text: "параметры должны быть объектом JSON" });
           setWaLoading(false);
           return;
         }
@@ -2626,7 +2626,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const sendByTemplate = async (templateId: number) => {
     if (!tplSendTo.trim()) {
-      setTplSendMsg({ ok: false, text: "Recipient email required" });
+      setTplSendMsg({ ok: false, text: "нужен адрес получателя" });
       return;
     }
     setTplSendingId(templateId);
@@ -2635,7 +2635,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       let params: any = undefined;
       if (tplSendParams.trim()) {
         try { params = JSON.parse(tplSendParams); } catch {
-          setTplSendMsg({ ok: false, text: "params must be valid JSON" });
+          setTplSendMsg({ ok: false, text: "параметры должны быть в формате JSON" });
           setTplSendingId(null);
           return;
         }
@@ -2735,7 +2735,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const createEmailTemplate = async () => {
     if (!tplBuilderName.trim() || !tplBuilderSubject.trim() || !tplBuilderHtml.trim()) {
-      setTplBuilderMsg({ ok: false, text: "Name, subject and HTML body are all required" });
+      setTplBuilderMsg({ ok: false, text: "нужны имя, тема и HTML-текст письма" });
       return;
     }
     setTplBuilderLoading(true);
@@ -2772,7 +2772,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const importZipFile = async (file: File) => {
     if (!project) return;
     if (file.size > 50 * 1024 * 1024) {
-      setZipResult({ ok: false, text: "ZIP too large (max 50 MB)" });
+      setZipResult({ ok: false, text: "архив слишком большой (максимум 50 МБ)" });
       return;
     }
     setZipImporting(true);
@@ -2868,7 +2868,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetch(apiUrl("/api/devhub/media/tts"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: "Hello! This is what I sound like.", voice }),
+        body: JSON.stringify({ text: "Здравствуйте! Вот так звучит мой голос.", voice }),
       });
       if (!r.ok) {
         const d = await r.json().catch(() => null);
@@ -2942,7 +2942,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const previewClonedVoice = async () => {
     if (!voiceCloneFile) {
-      setVoiceCloneMsg({ ok: false, text: "Pick an audio sample first" });
+      setVoiceCloneMsg({ ok: false, text: "сначала выберите образец звука" });
       return;
     }
     setVoicePreviewLoading(true);
@@ -2969,7 +2969,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const url = URL.createObjectURL(blob);
       setVoicePreviewUrl(url);
       setVoicePreviewOk(true);
-      setVoiceCloneMsg({ ok: true, text: "Preview ready — listen below, then Save if you like it" });
+      setVoiceCloneMsg({ ok: true, text: "Образец готов — послушайте ниже и сохраните, если нравится" });
     } catch (e: any) {
       setVoiceCloneMsg({ ok: false, text: e?.message || "Превью не открылось" });
     } finally {
@@ -2980,7 +2980,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const cloneVoice = async () => {
     if (!voiceCloneName.trim() || !voiceCloneFile) return;
     if (!voicePreviewOk) {
-      setVoiceCloneMsg({ ok: false, text: "Preview first — click 🎧 Preview, listen, then Save" });
+      setVoiceCloneMsg({ ok: false, text: "Сначала образец — нажмите «🎧 Послушать голос», послушайте и сохраните" });
       return;
     }
     setVoiceCloneLoading(true);
@@ -4010,7 +4010,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           />
                           <button
                             onClick={() => setVisualStyle("fontWeight", parseInt(visualEditStyleEdits.fontWeight ?? visualEditStyleBase.fontWeight, 10) >= 600 ? "400" : "700")}
-                            title="Bold"
+                            title="Полужирный"
                             style={{
                               width: 30, height: 30, border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 14, cursor: "pointer",
                               fontWeight: 800,
@@ -4075,7 +4075,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     <button
                       onClick={undoLastGeneration}
                       disabled={undoing}
-                      title="Revert the most recent AI change (same undo as the AI Generate tab)"
+                      title="Отменить последнюю правку ИИ (та же отмена, что на вкладке генерации)"
                       style={{
                         padding: "7px 0", background: "#fff", color: undoing ? "#94a3b8" : "#475569",
                         border: "1px solid #e2e8f0", borderRadius: 8, fontWeight: 600, fontSize: 12,
@@ -4202,12 +4202,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         cursor: pagesDeploying ? "not-allowed" : "pointer",
                       }}
                     >
-                      {pagesDeploying ? "⏳ Deploying..." : project?.deployUrl?.includes("pages.dev") ? "🔄 Redeploy to Cloudflare Pages" : "🚀 Опубликовать на Cloudflare Pages"}
+                      {pagesDeploying ? "⏳ Публикуем…" : project?.deployUrl?.includes("pages.dev") ? "🔄 Опубликовать заново" : "🚀 Опубликовать на Cloudflare Pages"}
                     </button>
                     <div style={{ fontSize: 10, color: "#9a3412", marginTop: 6 }}>
                       {domainCapabilityWorks
                         ? <>Свой поддомен выдаётся, только если Cloudflare его подтвердит; иначе адрес будет на <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>*.pages.dev</code>.</>
-                        : <>Домен <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>aevion.build</code> пока не отвечает — зона не делегирована на Cloudflare, поэтому адрес выдаётся на <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>*.pages.dev</code>.</>}
+                        : <>Домен <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>aevion.build</code> пока не отвечает — домен не зарегистрирован на Cloudflare, поэтому адрес выдаётся на <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>*.pages.dev</code>.</>}
                     </div>
                   </div>
 
@@ -4322,7 +4322,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     <button
                       onClick={syncFromGithub}
                       disabled={repoPulling}
-                      title="Pull the repo's current default-branch files into this project (a checkpoint is taken first — undo restores the pre-sync state)"
+                      title="Забрать в проект текущие файлы основной ветки репозитория (сначала делается точка возврата — отмена вернёт состояние до синхронизации)"
                       style={{
                         padding: "9px 0", background: "#fff", border: "1px solid #0d9488", color: "#0d9488",
                         borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: repoPulling ? "not-allowed" : "pointer",
@@ -4491,7 +4491,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <textarea
                           value={videoPrompt}
                           onChange={(e) => setVideoPrompt(e.target.value)}
-                          placeholder="A futuristic city skyline at sunset, cinematic, 4K..."
+                          placeholder="напр.: A futuristic city skyline at sunset, cinematic, 4K"
                           rows={3}
                           style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, resize: "vertical", boxSizing: "border-box" }}
                         />
@@ -4749,7 +4749,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <textarea
                           value={imgPrompt}
                           onChange={(e) => setImgPrompt(e.target.value)}
-                          placeholder="A serene mountain landscape at golden hour, photorealistic..."
+                          placeholder="напр.: A serene mountain landscape at golden hour, photorealistic"
                           rows={3}
                           style={{
                             width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0",
@@ -4807,7 +4807,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               <button
                                 onClick={() => uploadImageToCloudflare(imgResult.url)}
                                 disabled={cfImgUploading}
-                                title="OpenAI's image URL expires in ~1 hour. Upload to Cloudflare Images for a permanent CDN URL."
+                                title="Ссылка OpenAI на картинку живёт около часа. Загрузите в Cloudflare Images, чтобы получить постоянный адрес."
                                 style={{
                                   padding: "4px 10px", background: "#f59e0b", color: "#fff",
                                   border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer",
@@ -4856,7 +4856,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <textarea
                           value={sfxText}
                           onChange={(e) => setSfxText(e.target.value)}
-                          placeholder="Heavy rain on a metal roof with distant thunder"
+                          placeholder="напр.: Heavy rain on a metal roof with distant thunder"
                           rows={3}
                           style={{
                             width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0",
@@ -4910,7 +4910,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <textarea
                           value={musicPrompt}
                           onChange={(e) => setMusicPrompt(e.target.value)}
-                          placeholder="Lo-fi hip-hop, mellow piano, soft beats, 80 BPM..."
+                          placeholder="напр.: Lo-fi hip-hop, mellow piano, soft beats, 80 BPM"
                           rows={3}
                           style={{
                             width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0",
@@ -4975,7 +4975,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           type="text"
                           value={emailSubject}
                           onChange={(e) => setEmailSubject(e.target.value)}
-                          placeholder="Welcome to our app"
+                          placeholder="Добро пожаловать в наше приложение"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                         />
                       </div>
@@ -5044,7 +5044,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             type="text"
                             value={payPermalink}
                             onChange={(e) => setPayPermalink(e.target.value)}
-                            placeholder="my-product  (or full app.gumroad.com/l/... URL)"
+                            placeholder="my-product (или полный адрес app.gumroad.com/l/…)"
                             style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                           />
                           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>Price is set in the Gumroad product itself — create it in your Gumroad dashboard, paste its permalink here.</div>
@@ -5057,7 +5057,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               type="text"
                               value={payName}
                               onChange={(e) => setPayName(e.target.value)}
-                              placeholder="Pro subscription"
+                              placeholder="Подписка Pro"
                               style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                             />
                           </div>
@@ -5090,7 +5090,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               type="text"
                               value={payDesc}
                               onChange={(e) => setPayDesc(e.target.value)}
-                              placeholder="Monthly access to all features"
+                              placeholder="Месячный доступ ко всем возможностям"
                               style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                             />
                           </div>
@@ -5148,7 +5148,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                       <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>Перевести текст</div>
                       <div>
-                        <textarea value={trText} onChange={(e) => setTrText(e.target.value)} placeholder="Text to translate..."
+                        <textarea value={trText} onChange={(e) => setTrText(e.target.value)} placeholder="Текст для перевода…"
                           rows={4}
                           style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
                       </div>
@@ -5437,7 +5437,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Тема</label>
-                        <input value={tplBuilderSubject} onChange={(e) => setTplBuilderSubject(e.target.value)} placeholder="Welcome to AEVION, {{params.name}}!"
+                        <input value={tplBuilderSubject} onChange={(e) => setTplBuilderSubject(e.target.value)} placeholder="Добро пожаловать в AEVION, {{params.name}}!"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       <div>
@@ -5502,7 +5502,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>
                           Content ({smsContent.length}/612 chars, ~{Math.ceil(smsContent.length / 160)} segments)
                         </label>
-                        <textarea value={smsContent} onChange={(e) => setSmsContent(e.target.value)} placeholder="Your verification code is 1234"
+                        <textarea value={smsContent} onChange={(e) => setSmsContent(e.target.value)} placeholder="Ваш код подтверждения: 1234"
                           rows={4} maxLength={612}
                           style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
                       </div>
@@ -5580,12 +5580,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Название голоса</label>
-                        <input value={voiceCloneName} onChange={(e) => setVoiceCloneName(e.target.value)} placeholder="My Custom Voice"
+                        <input value={voiceCloneName} onChange={(e) => setVoiceCloneName(e.target.value)} placeholder="Мой голос"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Description (optional)</label>
-                        <input value={voiceCloneDesc} onChange={(e) => setVoiceCloneDesc(e.target.value)} placeholder="Male, calm, narrative"
+                        <input value={voiceCloneDesc} onChange={(e) => setVoiceCloneDesc(e.target.value)} placeholder="Мужской, спокойный, повествовательный"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       <div>
@@ -5597,7 +5597,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Текст для примера</label>
                         <input value={voicePreviewText} onChange={(e) => setVoicePreviewText(e.target.value)}
-                          placeholder="AEVION voice preview — your custom voice is ready"
+                          placeholder="Пример голоса AEVION — ваш голос готов"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       {voiceCloneMsg && (
@@ -5623,7 +5623,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             cursor: (voicePreviewLoading || !voiceCloneFile) ? "not-allowed" : "pointer",
                           }}
                         >
-                          {voicePreviewLoading ? "Previewing..." : "🎧 Preview voice (no commit)"}
+                          {voicePreviewLoading ? "Previewing..." : "🎧 Послушать голос (без сохранения)"}
                         </button>
                         <button
                           onClick={cloneVoice}
@@ -5656,7 +5656,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Language hint (optional, e.g. en, ru)</label>
-                        <input value={sttLanguage} onChange={(e) => setSttLanguage(e.target.value)} placeholder="auto-detect if empty"
+                        <input value={sttLanguage} onChange={(e) => setSttLanguage(e.target.value)} placeholder="оставьте пустым — определим сами"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       {sttError && (
@@ -5693,7 +5693,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {mediaTab === "drive" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div style={{ display: "flex", gap: 8 }}>
-                        <input value={driveQuery} onChange={(e) => setDriveQuery(e.target.value)} placeholder="Search Drive..."
+                        <input value={driveQuery} onChange={(e) => setDriveQuery(e.target.value)} placeholder="Поиск по Drive…"
                           onKeyDown={(e) => { if (e.key === "Enter") searchDrive(); }}
                           style={{ flex: 1, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                         <button onClick={searchDrive} disabled={driveLoading}
@@ -5932,7 +5932,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       type="text"
                       value={settingsDesc}
                       onChange={(e) => setSettingsDesc(e.target.value)}
-                      placeholder="Short description..."
+                      placeholder="Краткое описание…"
                       style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                     />
                   </div>
@@ -6000,7 +6000,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 5, background: c.role === "editor" ? "#d1fae5" : "#f1f5f9", color: c.role === "editor" ? "#065f46" : "#64748b", fontWeight: 600, flexShrink: 0 }}>{c.role}</span>
                         <button
                           onClick={() => removeCollaborator(c.userId)}
-                          title="Remove collaborator"
+                          title="Удалить соавтора"
                           style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444", fontSize: 14, fontWeight: 700, padding: "0 2px", flexShrink: 0 }}
                         >×</button>
                       </div>
@@ -6010,7 +6010,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         type="text"
                         value={settingsCollab}
                         onChange={(e) => setSettingsCollab(e.target.value)}
-                        placeholder="email or user-id"
+                        placeholder="адрес почты или id пользователя"
                         style={{ flex: "1 1 140px", minWidth: 0, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                         onKeyDown={(e) => { if (e.key === "Enter") addCollaborator(); }}
                       />

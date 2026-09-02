@@ -197,15 +197,15 @@ export default function QVenturePage() {
 
 function MarketingSections() {
   const steps = [
-    { icon: "📝", title: "Describe the deal", body: "Company, sector, stage, and a paragraph on what it does. Traction is optional but sharpens the execution score." },
-    { icon: "🧠", title: "AI runs the analysis", body: "A deterministic 0–100 quant score across 8 factors, then a four-role expert council writes the memo and entry strategy." },
-    { icon: "📊", title: "Act on the memo", body: "Verdict, ticket size, valuation band, staged tranches, and risk-adjusted return — export to PDF, save, or share." },
+    { icon: "📝", title: "Опишите сделку", body: "Company, sector, stage, and a paragraph on what it does. Traction is optional but sharpens the execution score." },
+    { icon: "🧠", title: "ИИ проводит разбор", body: "A deterministic 0–100 quant score across 8 factors, then a four-role expert council writes the memo and entry strategy." },
+    { icon: "📊", title: "Действуйте по записке", body: "Verdict, ticket size, valuation band, staged tranches, and risk-adjusted return — export to PDF, save, or share." },
   ];
   const audience = [
-    { icon: "👼", label: "Angel investors", body: "Screen inbound in seconds; write with conviction, not vibes." },
-    { icon: "🏦", label: "Micro-VCs & solo GPs", body: "A repeatable rubric across every deal in the pipeline." },
-    { icon: "🔭", label: "Scouts", body: "Turn a founder chat into a shareable, fund-grade memo." },
-    { icon: "🤝", label: "Syndicates", body: "Align the group with one transparent score and strategy." },
+    { icon: "👼", label: "Бизнес-ангелы", body: "Screen inbound in seconds; write with conviction, not vibes." },
+    { icon: "🏦", label: "Микрофонды и одиночные управляющие", body: "A repeatable rubric across every deal in the pipeline." },
+    { icon: "🔭", label: "Скауты", body: "Turn a founder chat into a shareable, fund-grade memo." },
+    { icon: "🤝", label: "Синдикаты", body: "Align the group with one transparent score and strategy." },
   ];
   const trust = [
     ["Deterministic", "The score is reproducible math, not a black box."],
@@ -590,7 +590,7 @@ function FormFields({ form, set, sectors, full = false }: {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 14 }}>
         <div>
           <label style={LABEL}>Название компании или продукта *</label>
-          <input aria-label="Название компании или продукта" style={INPUT} value={form.name} onChange={set("name")} placeholder="e.g. NeuroDx" />
+          <input aria-label="Название компании или продукта" style={INPUT} value={form.name} onChange={set("name")} placeholder="напр.: NeuroDx" />
         </div>
         <div>
           <label style={LABEL}>Отрасль</label>
@@ -609,7 +609,7 @@ function FormFields({ form, set, sectors, full = false }: {
           <>
             <div>
               <label style={LABEL}>Целевой рынок</label>
-              <input aria-label="Целевой рынок" style={INPUT} value={form.geography} onChange={set("geography")} placeholder="US" />
+              <input aria-label="Целевой рынок" style={INPUT} value={form.geography} onChange={set("geography")} placeholder="США" />
             </div>
             <div>
               <label style={LABEL}>Привлекают (USD, необязательно)</label>
@@ -621,13 +621,13 @@ function FormFields({ form, set, sectors, full = false }: {
       <div style={{ marginBottom: full ? 14 : 0 }}>
         <label style={LABEL}>Что делает продукт? *</label>
         <textarea aria-label="Что делает продукт?" style={{ ...INPUT, minHeight: 72, resize: "vertical" }} value={form.description} onChange={set("description")}
-          placeholder="One-paragraph description of the product, the problem it solves, and the wedge." />
+          placeholder="Один абзац: что за продукт, какую задачу решает и чем заходит на рынок." />
       </div>
       {full && (
         <div style={{ marginBottom: 16 }}>
           <label style={LABEL}>Тяга и метрики</label>
           <textarea aria-label="Тяга и метрики" style={{ ...INPUT, minHeight: 56, resize: "vertical" }} value={form.tractionNotes} onChange={set("tractionNotes")}
-            placeholder="e.g. $40k MRR growing 18% MoM, 3 enterprise pilots, 92% retention, LTV/CAC 4.2x" />
+            placeholder="напр.: $40k MRR, рост 18% в месяц, 3 корпоративных пилота, удержание 92%, LTV/CAC 4.2x" />
           {/* Execution carries 28% of the composite and scores low — not neutral — when
               nothing is submitted. Saying so here beats letting someone submit an empty
               field and be surprised by the number. */}
@@ -650,13 +650,13 @@ function FormFields({ form, set, sectors, full = false }: {
           </summary>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginTop: 12 }}>
             <div><label style={LABEL}>ARR (USD)</label><input aria-label="ARR (USD)" style={INPUT} value={form.finArr} onChange={set("finArr")} placeholder="3,000,000" inputMode="numeric" /></div>
-            <div><label style={LABEL}>Валовая маржа (%)</label><input aria-label="Gross margin (%)" style={INPUT} value={form.finGrossMargin} onChange={set("finGrossMargin")} placeholder="82" inputMode="numeric" /></div>
-            <div><label style={LABEL}>LTV / CAC ratio</label><input aria-label="LTV / CAC ratio" style={INPUT} value={form.finLtvCac} onChange={set("finLtvCac")} placeholder="4" inputMode="numeric" /></div>
+            <div><label style={LABEL}>Валовая маржа (%)</label><input aria-label="Валовая маржа (%)" style={INPUT} value={form.finGrossMargin} onChange={set("finGrossMargin")} placeholder="82" inputMode="numeric" /></div>
+            <div><label style={LABEL}>LTV / CAC</label><input aria-label="LTV / CAC" style={INPUT} value={form.finLtvCac} onChange={set("finLtvCac")} placeholder="4" inputMode="numeric" /></div>
             <div>
               <label style={LABEL}>Отток (%)</label>
               <div style={{ display: "flex", gap: 6 }}>
                 <input aria-label="Отток (%)" style={{ ...INPUT, flex: 1 }} value={form.finChurn} onChange={set("finChurn")} placeholder="3" inputMode="numeric" />
-                <select style={{ ...INPUT, width: 104 }} value={form.finChurnPeriod} onChange={set("finChurnPeriod")} aria-label="Churn period">
+                <select style={{ ...INPUT, width: 104 }} value={form.finChurnPeriod} onChange={set("finChurnPeriod")} aria-label="Период оттока">
                   <option value="weekly">/ week</option>
                   <option value="monthly">/ month</option>
                   <option value="quarterly">/ quarter</option>
@@ -669,7 +669,7 @@ function FormFields({ form, set, sectors, full = false }: {
               <label style={LABEL}>Рост (%)</label>
               <div style={{ display: "flex", gap: 6 }}>
                 <input aria-label="Рост (%)" style={{ ...INPUT, flex: 1 }} value={form.finGrowth} onChange={set("finGrowth")} placeholder="15" inputMode="numeric" />
-                <select style={{ ...INPUT, width: 104 }} value={form.finGrowthPeriod} onChange={set("finGrowthPeriod")} aria-label="Growth period">
+                <select style={{ ...INPUT, width: 104 }} value={form.finGrowthPeriod} onChange={set("finGrowthPeriod")} aria-label="Период роста">
                   <option value="WoW">WoW</option>
                   <option value="MoM">MoM</option>
                   <option value="YoY">YoY</option>
@@ -681,9 +681,9 @@ function FormFields({ form, set, sectors, full = false }: {
           <div style={{ marginTop: 14 }}>
             <label style={LABEL}>Projected revenue (USD) — this year / +1yr / +2yr (for the hockey-stick check)</label>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-              <input aria-label="Выручка, год 0" style={INPUT} value={form.projY0} onChange={set("projY0")} placeholder="Y0: 2,000,000" inputMode="numeric" />
-              <input aria-label="Выручка, год 1" style={INPUT} value={form.projY1} onChange={set("projY1")} placeholder="Y1: 5,000,000" inputMode="numeric" />
-              <input aria-label="Выручка, год 2" style={INPUT} value={form.projY2} onChange={set("projY2")} placeholder="Y2: 12,000,000" inputMode="numeric" />
+              <input aria-label="Выручка, год 0" style={INPUT} value={form.projY0} onChange={set("projY0")} placeholder="Год 0: 2,000,000" inputMode="numeric" />
+              <input aria-label="Выручка, год 1" style={INPUT} value={form.projY1} onChange={set("projY1")} placeholder="Год 1: 5,000,000" inputMode="numeric" />
+              <input aria-label="Выручка, год 2" style={INPUT} value={form.projY2} onChange={set("projY2")} placeholder="Год 2: 12,000,000" inputMode="numeric" />
             </div>
           </div>
         </details>

@@ -24,7 +24,7 @@ const KATALOG = path.join(__dirname, "..");
 // их не переводят, и перевод сделал бы текст хуже. Список ПОИМЁННЫЙ — без
 // него сторож либо пропустит всё, либо покрасит верное.
 const TERMINY = new Set([
-  "ARR", "ARR (USD)", "LTV", "CAC", "LTV/CAC", "LTV / CAC ratio", "TAM", "IRR",
+  "ARR", "ARR (USD)", "LTV", "CAC", "LTV/CAC", "LTV / CAC", "TAM", "IRR",
   "ACV", "USD", "MRR", "WoW", "MoM", "YoY", "PDF", "CSV", "API", "AI",
   "QVenture", "AEVION", "AEVION QVENTURE", "OK",
 ]);
@@ -115,6 +115,61 @@ function fajly(): string[] {
   return out;
 }
 
+// Подпись — не только текст между тегами. Поле объявляется человеку ещё и
+// подсказкой, названием для читалки и всплывающим текстом. 02.09.2026: сторож
+// был зелёным, пока семь подсказок оставались английскими — он читал одну
+// форму из четырёх. Нашлось не им, а отчётом доступности по проду.
+const ATRIBUTY = ["placeholder", "aria-label", "title", "alt"];
+
+// Третья форма той же подписи: значение приходит в атрибут ЧЕРЕЗ ОБЪЕКТ.
+// `title={tag.title}` в разметке выглядит безупречно, а английский текст лежит
+// в `title: "..."` рядом. 02.09.2026 так спрятались 14 строк, включая три
+// заголовка «как это работает» на самом видном месте страницы.
+const SVOJSTVA = ["text", "title", "label", "hint", "note"];
+
+function znacheniyaSvojstv(src: string): string[] {
+  const out: string[] = [];
+  for (const k of SVOJSTVA) {
+    let i = 0;
+    for (;;) {
+      i = src.indexOf(k + ": " + String.fromCharCode(34), i);
+      if (i < 0) break;
+      const s1 = i + k.length + 3;
+      const j = src.indexOf(String.fromCharCode(34), s1);
+      if (j < 0) break;
+      out.push(src.slice(s1, j).trim());
+      i = j + 1;
+    }
+  }
+  return out;
+}
+
+function znacheniyaAtributov(src: string): string[] {
+  const out: string[] = [];
+  for (const at of ATRIBUTY) {
+    let i = 0;
+    const nachalo = at + '="';
+    for (;;) {
+      i = src.indexOf(nachalo, i);
+      if (i < 0) break;
+      const j = src.indexOf('"', i + nachalo.length);
+      if (j < 0) break;
+      out.push(src.slice(i + nachalo.length, j).trim());
+      i = j + 1;
+    }
+  }
+  return out;
+}
+
+// Для атрибутов правило СТРОЖЕ, чем для подписей: «нет кириллицы» здесь даёт
+// ложное срабатывание на числах-образцах (5,000,000), а они языка не имеют.
+// Нарушение — только если есть латинские БУКВЫ и нет кириллицы.
+function angliyskoe(v: string): boolean {
+  const lat = /[A-Za-z]/.test(v);
+  const kir = /[А-ЯЁа-яё]/.test(v);
+  return lat && !kir;
+}
+
 describe("QVenture говорит на одном языке", () => {
   test("контроль: файлы найдены и подписи извлекаются", () => {
     const f = fajly();
@@ -149,6 +204,33 @@ describe("QVenture говорит на одном языке", () => {
     expect(
       narusheniya,
       "английская подпись на русском экране: модуль снова говорит на двух языках",
+    ).toEqual([]);
+  });
+
+  test("подсказки и имена для читалки — тоже на русском", () => {
+    const vse: string[] = [];
+    const svojstv: string[] = [];
+    const narusheniya: string[] = [];
+    for (const p of fajly()) {
+      const src = kod(fs.readFileSync(p, "utf8"));
+      const sv = znacheniyaSvojstv(src);
+      svojstv.push(...sv);
+      for (const v of [...znacheniyaAtributov(src), ...sv]) {
+        vse.push(v);
+        if (!v || TERMINY.has(v)) continue;
+        if (angliyskoe(v)) narusheniya.push(path.basename(p) + ": " + v);
+      }
+    }
+    // Контроль: атрибуты вообще нашлись. Пустая выборка сделала бы проверку
+    // зелёной на любом состоянии модуля — тот же ложный ноль, что и выше.
+    expect(vse.length, "атрибутов не найдено — извлекатель сломан").toBeGreaterThan(10);
+    // У КАЖДОЙ половины свой контроль охвата. Без второго обезвреживание
+    // списка свойств оставляло сторожа зелёным: атрибутов хватало, чтобы
+    // общий счёт прошёл порог. Проверено мутацией — она это и вскрыла.
+    expect(svojstv.length, "свойств объектов не найдено — вторая половина разбора мертва").toBeGreaterThan(15);
+    expect(
+      narusheniya,
+      "английская подсказка на русском экране: она исчезает при вводе, и поле остаётся без имени",
     ).toEqual([]);
   });
 });

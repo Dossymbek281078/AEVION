@@ -8,12 +8,12 @@ import { VERDICT_COLOR, VERDICT_LABEL, type Verdict } from "../_result";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Example analyses — QVenture",
+  title: "Примеры разборов — QVenture",
   description:
     "See how QVenture scores companies across sectors: fund-grade screening memos with a 0–100 quant score, a 4-expert council, and an entry strategy. Real engine outputs, no signup.",
   alternates: { canonical: "/qventure/gallery" },
   openGraph: {
-    title: "QVenture — example analyses across sectors",
+    title: "QVenture — примеры разборов по отраслям",
     description: "Fund-grade screening memos across fintech, healthtech, biotech, climate, AI and more.",
     type: "website",
   },

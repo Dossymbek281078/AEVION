@@ -197,15 +197,15 @@ export default function QVenturePage() {
 
 function MarketingSections() {
   const steps = [
-    { icon: "📝", title: "Describe the deal", body: "Company, sector, stage, and a paragraph on what it does. Traction is optional but sharpens the execution score." },
-    { icon: "🧠", title: "AI runs the analysis", body: "A deterministic 0–100 quant score across 8 factors, then a four-role expert council writes the memo and entry strategy." },
-    { icon: "📊", title: "Act on the memo", body: "Verdict, ticket size, valuation band, staged tranches, and risk-adjusted return — export to PDF, save, or share." },
+    { icon: "📝", title: "Опишите сделку", body: "Company, sector, stage, and a paragraph on what it does. Traction is optional but sharpens the execution score." },
+    { icon: "🧠", title: "ИИ проводит разбор", body: "A deterministic 0–100 quant score across 8 factors, then a four-role expert council writes the memo and entry strategy." },
+    { icon: "📊", title: "Действуйте по записке", body: "Verdict, ticket size, valuation band, staged tranches, and risk-adjusted return — export to PDF, save, or share." },
   ];
   const audience = [
-    { icon: "👼", label: "Angel investors", body: "Screen inbound in seconds; write with conviction, not vibes." },
-    { icon: "🏦", label: "Micro-VCs & solo GPs", body: "A repeatable rubric across every deal in the pipeline." },
-    { icon: "🔭", label: "Scouts", body: "Turn a founder chat into a shareable, fund-grade memo." },
-    { icon: "🤝", label: "Syndicates", body: "Align the group with one transparent score and strategy." },
+    { icon: "👼", label: "Бизнес-ангелы", body: "Screen inbound in seconds; write with conviction, not vibes." },
+    { icon: "🏦", label: "Микрофонды и одиночные управляющие", body: "A repeatable rubric across every deal in the pipeline." },
+    { icon: "🔭", label: "Скауты", body: "Turn a founder chat into a shareable, fund-grade memo." },
+    { icon: "🤝", label: "Синдикаты", body: "Align the group with one transparent score and strategy." },
   ];
   const trust = [
     ["Deterministic", "The score is reproducible math, not a black box."],

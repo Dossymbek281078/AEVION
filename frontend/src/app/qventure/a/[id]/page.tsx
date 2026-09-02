@@ -42,7 +42,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const a = await loadAnalysis(id);
   if (!a) {
-    return { title: "QVenture analysis — AEVION", robots: { index: false, follow: false } };
+    return { title: "Разбор QVenture — AEVION", robots: { index: false, follow: false } };
   }
   const verdict = VERDICT_LABEL[a.verdict as Verdict] ?? a.verdict.toUpperCase();
   const title = `${a.name} — ${a.composite}/100 · ${verdict} · QVenture`;

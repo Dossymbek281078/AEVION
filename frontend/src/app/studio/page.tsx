@@ -7,6 +7,7 @@ import { apiUrl } from "@/lib/apiBase";
 import { productById } from "@/lib/products";
 import { track } from "@/lib/track";
 import { PageTracking } from "@/components/PageTracking";
+import { CAP_META, порядокПоказа } from "./usageOrder";
 
 interface Capability {
   id: string;
@@ -25,7 +26,7 @@ interface CapabilitiesData {
 // `usedKnown: false` means the server could not read the meter. It still sends
 // a 0 so this panel renders, but 0 is also what a fresh month looks like — so
 // the bar has to say which it is rather than drawing a confident empty gauge.
-interface CapUsage { used: number; limit: number; usedKnown?: false; }
+import type { CapUsage } from "./usageTypes";
 interface CreditsData {
   tier: "free" | "pro" | "enterprise";
   month: string;
@@ -35,31 +36,6 @@ interface CreditsData {
   usage: Record<string, CapUsage>;
   degraded?: boolean;
   degradedReason?: string;
-}
-
-/**
- * Подписи, значки и ПОРЯДОК показа. Ключи приходят с бэкенда из таблицы
- * тарифов; здесь только оформление.
- *
- * Возможность, которой тут нет, всё равно будет показана — в конце и с ключом
- * вместо подписи. Это намеренно: спрятать списываемую возможность хуже, чем
- * показать её некрасиво.
- */
-const CAP_META: Record<string, { label: string; icon: string; color: string }> = {
-  video:     { label: "Videos",       icon: "\u{1F3AC}", color: "#7c3aed" },
-  image:     { label: "Images",       icon: "\u{1F5BC}️", color: "#0d9488" },
-  music:     { label: "Music",        icon: "\u{1F3B5}", color: "#b45309" },
-  tts:       { label: "TTS chars",    icon: "\u{1F399}️", color: "#0369a1" },
-  deploy:    { label: "Deploys",      icon: "\u{1F680}", color: "#64748b" },
-  speech:    { label: "Speech jobs",  icon: "\u{1F5E3}️", color: "#be123c" },
-  translate: { label: "Translations", icon: "\u{1F310}", color: "#15803d" },
-};
-
-/** Ключи в порядке показа: известные — по CAP_META, незнакомые — следом. */
-function порядокПоказа(usage: Record<string, CapUsage>): string[] {
-  const известные = Object.keys(CAP_META).filter((k) => usage[k]);
-  const остальные = Object.keys(usage).filter((k) => !CAP_META[k]);
-  return [...известные, ...остальные];
 }
 
 function UsageBar({ label, icon, used, limit, color, known = true }: { label: string; icon: string; used: number; limit: number; color: string; known?: boolean }) {

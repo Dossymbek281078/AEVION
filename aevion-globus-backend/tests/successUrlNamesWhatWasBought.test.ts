@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { buildSuccessUrl } from "../src/lib/payment/successUrl";
+import { buildCancelUrl, buildSuccessUrl } from "../src/lib/payment/successUrl";
 import type { PaymentIntentInput } from "../src/lib/payment/provider";
 
 /**
@@ -61,5 +61,46 @@ describe("адрес возврата называет купленное", () =
       readFileSync(join(dir, f), "utf8").includes("/pricing/checkout/success?")
     );
     expect(сами, "провайдер снова собирает адрес возврата сам").toEqual([]);
+  });
+});
+
+describe("адрес ОТМЕНЫ называет, к чему возвращать", () => {
+  /**
+   * 🔴 Находка соседнего окна 02.09.2026, проверенная отрисовкой экрана.
+   * Адреса отмены собирались строкой и несли ровно метку кассы; экран же
+   * рисует кнопку «вернуться к тарифу X» только при `tier` в адресе. То есть
+   * кнопка была в коде и не появлялась НИКОГДА — у человека, которого ещё
+   * можно вернуть. Замер соседа: с `?paybox=1` три ссылки, с
+   * `?paybox=1&tier=lite` — те же плюс `/pricing/lite`.
+   */
+  const вход = { reference: "tier_lite_monthly", amountCents: 1900 } as any;
+
+  it("несёт тариф и период, выведенные из ссылки заказа", () => {
+    const u = new URL(buildCancelUrl("https://aevion.app", вход, { flags: { paybox: "1" } }));
+    expect(u.pathname).toBe("/pricing/checkout/cancel");
+    expect(u.searchParams.get("tier"), "экрану нечем нарисовать кнопку возврата").toBe("lite");
+    expect(u.searchParams.get("period")).toBe("monthly");
+    expect(u.searchParams.get("ref")).toBe("tier_lite_monthly");
+  });
+
+  it("метка кассы сохранена — иначе завысим долю брошенных оплат", () => {
+    // По ней экран отличает НАСТОЯЩИЙ возврат из кассы от захода по адресу
+    // из истории (`cancelCountsOnlyRealReturns`). Потерять её, добавляя
+    // тариф, значило бы починить одно и сломать соседнее.
+    const u = new URL(buildCancelUrl("https://aevion.app", вход, { flags: { paypal: "1" } }));
+    expect(u.searchParams.get("paypal")).toBe("1");
+  });
+
+  it("суммы в адресе отмены НЕТ", () => {
+    // Платежа не было. Число рядом с «оплата отменена» читается как списание.
+    const u = new URL(buildCancelUrl("https://aevion.app", вход, { flags: { paybox: "1" } }));
+    expect(u.searchParams.get("total"), "на экране отмены показана сумма").toBeNull();
+  });
+
+  it("контроль: без разбираемой ссылки заказа тариф не выдумывается", () => {
+    const u = new URL(buildCancelUrl("https://aevion.app", { reference: "bureau_7f3a" } as any,
+      { flags: { paybox: "1" } }));
+    expect(u.searchParams.get("tier"), "тариф взят с потолка").toBeNull();
+    expect(u.searchParams.get("ref"), "ссылка заказа потеряна").toBe("bureau_7f3a");
   });
 });

@@ -26,7 +26,7 @@
  *   4. getIntent → GET /v2/checkout/orders/{id} (статус COMPLETED = оплачено)
  */
 
-import { buildSuccessUrl } from "./successUrl";
+import { buildCancelUrl, buildSuccessUrl } from "./successUrl";
 import type {
   PaymentIntent,
   PaymentIntentInput,
@@ -128,7 +128,7 @@ export const paypalPaymentProvider: PaymentProvider = {
           brand_name: "AEVION",
           user_action: "PAY_NOW",
           return_url: buildSuccessUrl(base, input, { provider: "paypal", flags: { paypal: "1" } }),
-          cancel_url: `${base}/pricing/checkout/cancel?paypal=1`,
+          cancel_url: buildCancelUrl(base, input, { flags: { paypal: "1" } }),
         },
       }),
     });

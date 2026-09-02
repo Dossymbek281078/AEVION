@@ -10,8 +10,14 @@ import { fileURLToPath } from "node:url";
  * ведут разные люди. Сверить их машинно НЕЛЬЗЯ, пока идентификаторы разные:
  * замер 02.09.2026 — пять из одиннадцати позиций витрины в каталоге не
  * находятся (`smeta` против `smeta-trainer`, `qpaynet` против
- * `qpaynet-embedded`, `bureau` против `aevion-ip-bureau`), а `devhub` и
- * `tiktok-publisher` отсутствуют вовсе.
+ * `qpaynet-embedded`, `bureau` против `aevion-ip-bureau`), а `tiktok-publisher`
+ * отсутствует вовсе.
+ *
+ * ⚠️ DevHub в этом списке БЫЛ и убран 02.09: он есть в каталоге с 31.08
+ * (коммит c1604075d) с намеренно нулевой ценой — положительная сделала бы его
+ * выбираемым в кассе, а доступ выдаётся по другой таблице. На проде этого
+ * ещё нет: прод собран 30.08. Я измерил прод и сказал про КОД — поправка
+ * лежит в документах основателя.
  *
  * Цена расхождения не косметическая. Пока списки не сходятся, любая проверка
  * «а помечен ли этот модуль как бета» молча пропускает половину витрины —
@@ -36,7 +42,6 @@ const KATALOG = join(TUT, "..", "..", "..", "..", "aevion-globus-backend", "src"
  */
 const IZVESTNYE = [
   "bureau",            // в каталоге: aevion-ip-bureau
-  "devhub",            // в каталоге НЕТ вовсе, при цене $149/мес
   "qpaynet",           // в каталоге: qpaynet-embedded
   "smeta",             // в каталоге: smeta-trainer
   "tiktok-publisher",  // в каталоге НЕТ вовсе
@@ -102,7 +107,11 @@ function idsIzKataloga(): string[] {
     const j = src.indexOf(String.fromCharCode(34), s1);
     if (j < 0) break;
     const id = src.slice(s1, j);
-    const okno = src.slice(j, j + 400);
+    // Границей служит КОНЕЦ ОБЪЕКТА, а не 400 знаков. Расстояние — догадка о
+    // вёрстке чужого файла: добавят поле или комментарий, и модуль тихо выпадет
+    // из выборки. Сегодня я на этом ошибся дважды в соседних сторожах.
+    const konec = src.indexOf("}", j);
+    const okno = src.slice(j, konec < 0 ? src.length : konec);
     if (okno.includes("availability")) out.push(id);
     i = j + 1;
   }

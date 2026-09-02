@@ -491,12 +491,23 @@ export async function provisionSubscription(input: {
 export function readSubscriptions(filter?: { email?: string; tierId?: TierId }): Subscription[] {
   const file = subsFile();
   if (!existsSync(file)) return [];
-  let content: string;
-  try {
-    content = readFileSync(file, "utf8");
-  } catch {
-    return [];
-  }
+  // СБОЙ ЧТЕНИЯ НЕ ПРЕВРАЩАЕМ В ПУСТОЙ СПИСОК.
+  //
+  // Здесь стоял `catch { return [] }`, и это давало ровно тот дефект, от
+  // которого соседняя функция countSubscriptions защищена с прошлой правки:
+  // ноль при нечитаемом файле выглядит как «никто не купил». Замер 02.09.2026
+  // пробой со сломанным хранилищем: /stats отвечал 200 и «всего 0» по ВСЕМ
+  // тарифам — то есть панель показала бы «продаж нет» при целых продажах.
+  //
+  // Два читателя одного файла вели себя противоположно: countSubscriptions
+  // честно возвращала ok:false, а эта — пустоту. Приводим к одной дисциплине.
+  //
+  // Ронять операцию здесь безопасно: обе зовущие ручки (/stats и /history)
+  // читающие и обе уже ловят исключение, отвечая 500. «Не смогли прочитать»
+  // честнее, чем «у вас ничего нет».
+  //
+  // Отсутствие файла по-прежнему ЧЕСТНЫЙ ноль — это обработано выше.
+  const content = readFileSync(file, "utf8");
   const out: Subscription[] = [];
   const wantEmail = filter?.email?.toLowerCase().trim();
   const wantTier = filter?.tierId;

@@ -63,10 +63,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   // Разбор конфликта 02.09.2026: их сторона проверяла `!a`, а loadAnalysis
   // возвращает ОБЪЕКТ состояния — проверка не сработала бы никогда, и ветка
   // «разбор не найден» была мёртвой. Взята структура с состоянием.
-  // Заголовок английский: их же коммит помечает qventure английским ПО ЗАМЫСЛУ.
+  // Заголовок РУССКИЙ — их сторона. Я сперва взял английский, выведя намерение
+  // из темы их коммита («PDF английский по замыслу»), но тема была про PDF, а не
+  // про страницу. Ответил их же сторож qventureSpeaksOneLanguage: страница
+  // обязана говорить на ОДНОМ языке, и здесь он русский. Сторож существовал и
+  // отвечал — спрашивать надо было его, а не толковать заголовок коммита.
   const zagruzka = await loadAnalysis(id);
   if (zagruzka.state !== "found") {
-    return { title: "QVenture analysis — AEVION", robots: { index: false, follow: false } };
+    return { title: "Разбор QVenture — AEVION", robots: { index: false, follow: false } };
   }
   const a = zagruzka.data;
   const verdict = VERDICT_LABEL[a.verdict as Verdict] ?? a.verdict.toUpperCase();

@@ -70,9 +70,9 @@ export const LANG_COOKIE = "aevion_lang_v1";
  * полноту перевода — то есть отставшая константа занижала бы её молча.
  */
 export const LANG_KEY_COUNT: Record<Lang, number> = {
-  ru: 7405,
-  en: 7405,
-  kk: 7364,
+  ru: 7411,
+  en: 7411,
+  kk: 7370,
   de: 134,
   fr: 134,
   es: 134,

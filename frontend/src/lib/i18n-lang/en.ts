@@ -7407,6 +7407,12 @@ const en: Record<string, string> = {
   "provenance.measured": "measured",
   "provenance.derived": "derived",
   "provenance.guessed": "guessed",
+  "qskyway.tip.avgClearance": "Across the whole corridor the average is {avg} {unit}, including segments over open ground where no margin is needed and it equals zero.",
+  "qskyway.tip.blindInert": "On {n} segment(s) the height under the wing is guessed, while the safety margin was eaten by the corridor floor: the corridor ended up exactly where it would have without the margin. The promised clearance holds only if the building is no taller than {upTo} m.",
+  "qskyway.tip.measuredObstacles": "Of {total} segments with a building under the wing, {measured} stand at a height surveyed by the city. The rest are derived from an OSM tag or floor count, or from a blind default; the corridor pays for that uncertainty with extra altitude.",
+  "qskyway.tip.substExample": "building {i} ({type}) instead of {from} m, from {n} known heights",
+  "qskyway.tip.substitutedHeight": "Height taken from statistics for buildings of the same type in this city — neither measured nor derived from this building's own floor count. Underestimating is not allowed: the corridor would pass below the roof, so the 75th percentile is used rather than the median. Examples: {examples}. On the map such buildings are outlined with a dashed line; the warm shade means 'guessed' and is given to them on a par with the blind 12 m default, although the two claims differ.",
+  "qskyway.tip.suspectHeight": "We do not treat the source height as reliable: either it is many times taller than all the surrounding development, or the height tag contradicts the floor count in the same source. We rewrite nothing silently — where the source contradicts itself we take its own floor count instead of the disputed height, and where the height merely stands out we leave it as published and show the discrepancy. The corridor gets a safety margin in both cases: a height from OpenStreetMap is a contributor's claim, not an official survey.",
 };
 
 export default en;

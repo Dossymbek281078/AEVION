@@ -371,6 +371,22 @@ export default function PricingPage() {
         const r = await fetch(apiUrl("/api/pricing"));
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const j: PricingPayload = await r.json();
+        /*
+         * Неполный ответ ведём в то же состояние, что и неудачную загрузку.
+         *
+         * Замер 02.09: страница читает пять полей БЕЗ защиты (девять
+         * обращений) — tiers, modules, bundles, notes, currencies. Сегодня прод
+         * шлёт все пять, но половины платформы выкатываются РАЗДЕЛЬНО, и при
+         * разъезде версий неполный ответ уронит денежную страницу целиком.
+         *
+         * Подставлять пустые значения нельзя: пустая таблица тарифов читается
+         * как «покупать нечего», а это худшая неправда на этой странице.
+         * Поэтому — честная ошибка, которую человек увидит и обновит страницу.
+         */
+        const обязательные = ["tiers", "modules", "bundles", "notes", "currencies"] as const;
+        const поля = j as unknown as Record<string, unknown>;
+        const нет = обязательные.filter((k) => поля[k] == null);
+        if (нет.length > 0) throw new Error(`неполный ответ: нет ${нет.join(", ")}`);
         if (!cancelled) {
           setData(j);
           setLoading(false);

@@ -66,6 +66,44 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe("неполный ответ сервера", () => {
+  it("ведёт в честную ошибку, а не в падение и не в пустую таблицу", async () => {
+    /*
+     * Половины платформы выкатываются раздельно. При разъезде версий сервер
+     * может прислать ответ без части полей — и страница читает пять из них БЕЗ
+     * защиты, то есть падала бы целиком.
+     *
+     * Подставлять пустые значения нельзя: пустая таблица тарифов читается как
+     * «покупать нечего». Поэтому проверяем именно ошибку — её человек увидит и
+     * обновит страницу.
+     */
+    vi.stubGlobal("fetch", async (u: string) => {
+      const адрес = String(u);
+      const тело = адрес.includes("checkout/healthz")
+        ? { ok: true, providers: { paybox: { configured: false } } }
+        : адрес.includes("/pricing/trust")
+          ? { numbers: [], badges: [] }
+          : { currencies: { USD: { symbol: "$", rate: 1 } }, tiers: [] }; // нет modules, bundles, notes
+      return { ok: true, status: 200, json: async () => тело } as unknown as Response;
+    });
+    const m = await import("@/app/pricing/page");
+    const Страница = m.default as () => JSX.Element;
+    await act(async () => {
+      render(
+        <I18nProvider>
+          <Страница />
+        </I18nProvider>,
+      );
+    });
+    const текст = document.body.textContent ?? "";
+    expect(текст, "страница не отрисовалась вовсе").not.toBe("");
+    expect(
+      текст.includes("неполный ответ") || текст.toLowerCase().includes("error") || текст.includes("Ошибка"),
+      "неполный ответ прошёл молча — человек увидит пустоту вместо цен",
+    ).toBe(true);
+  }, 120000);
+});
+
 describe("подпись о валюте на экране", () => {
   it("страница тарифов отрисовывается и несёт подпись о списании", async () => {
     ответыСервера();

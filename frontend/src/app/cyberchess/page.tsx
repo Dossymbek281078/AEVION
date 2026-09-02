@@ -2618,7 +2618,10 @@ export default function CyberChessPage(){
   const boardA11y=(()=>{
     const side=game.turn()==="w"?"белые":"чёрные";
     const state=over?ruResult(over):(myT?"ваш ход":"ход соперника");
-    const last=hist.length>0?`, последний ход ${hist[hist.length-1]}`:", партия ещё не начата";
+    // В задачах «партия ещё не начата» звучит неверно: партии тут и нет,
+    // есть позиция для решения. Диктор читает это на каждом заходе.
+    const нетХодов=tab==="puzzles"?", ход ещё не сделан":", партия ещё не начата";
+    const last=hist.length>0?`, последний ход ${hist[hist.length-1]}`:нетХодов;
     const check=chk&&!over?", шах":"";
     // Как ходить — по-разному на телефоне и за столом. Это описание слышит
     // человек с экранным диктором, и до 27.08.2026 оно на любом устройстве
@@ -9998,7 +10001,7 @@ export default function CyberChessPage(){
             <Card padding={SPACE[2]} tone="surface1">
               <SectionHeader title="РЕЖИМ" hint={pzMode==="rush"?(rushKind==="survival"?`Survival · 3 ошибки · адаптивно`:`Timed ${Math.floor(rushDuration/60)}:${String(rushDuration%60).padStart(2,"0")} · адаптивно`):pzMode==="timed3"?"3 мин + bonus":pzMode==="timed5"?"5 мин + bonus":pzMode==="custom"?`Custom ${Math.floor(pzCustomSec/60)}:${String(pzCustomSec%60).padStart(2,"0")}`:""}/>
               <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:SPACE[1]}}>
-                {([["learn","📚","Обучение"],["timed3","3⏱","3 мин"],["timed5","5⏱","5 мин"],["custom","⚙","Custom"],["rush","⚡","Rush"]] as const).map(([m,ic,label])=>{
+                {([["learn","📚","Обучение"],["timed3","3⏱","3 мин"],["timed5","5⏱","5 мин"],["custom","⚙","Свой"],["rush","⚡","Серия"]] as const).map(([m,ic,label])=>{
                   const active=pzMode===m;
                   return <button key={m} onClick={()=>sPzMode(m)} className="cc-focus-ring"
                     style={{padding:"8px 4px",borderRadius:RADIUS.md,
@@ -12381,7 +12384,7 @@ ${question.trim()}`;
         {icon:"♞",title:"Добро пожаловать в AEVION CyberChess",body:<>
           <p style={{margin:"0 0 10px",lineHeight:1.6}}>Полноценный шахматный тренажёр: AI-движок Stockfish, живой тренер, 500 000+ задач, 12 вариантов игры и своя валюта.</p>
           <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center",marginTop:8}}>
-            {["⚡ Puzzle Rush","🎓 Coach AI","🎲 12 вариантов","📊 Analysis","🏆 Турниры"].map(f=><span key={f} style={{fontSize:11,padding:"3px 9px",borderRadius:999,background:"rgba(5,150,105,0.12)",color:CC.brand,fontWeight:700}}>{f}</span>)}
+            {["⚡ Puzzle Rush","🎓 ИИ-тренер","🎲 12 вариантов","📊 Разбор партии","🏆 Турниры"].map(f=><span key={f} style={{fontSize:11,padding:"3px 9px",borderRadius:999,background:"rgba(5,150,105,0.12)",color:CC.brand,fontWeight:700}}>{f}</span>)}
           </div>
           <p style={{margin:"12px 0 0",color:CC.textDim,fontSize:13}}>+50 Chessy уже на счёте. Начнём?</p>
         </>},

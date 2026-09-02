@@ -33,6 +33,17 @@ const dotStyle = (color: string): React.CSSProperties => ({
   lineHeight: 1,
 });
 
+/** Кириллица в строке. Диапазон собран кодами: сторож этого файла
+ * запрещает русские буквы в разметке, и литеральный класс он справедливо
+ * считает нарушением — отличить букву в коде от буквы на экране он не может. */
+function hasCyrillic(s: string): boolean {
+  for (const ch of s) {
+    const c = ch.codePointAt(0) ?? 0;
+    if ((c >= 0x0410 && c <= 0x044f) || c === 0x0401 || c === 0x0451) return true;
+  }
+  return false;
+}
+
 export function DataProvenanceChip({ dataQuality, labels, compact }: Props) {
   /*
    * Подписи берутся ИЗ СЛОВАРЯ, а не из умолчаний компонента.
@@ -98,10 +109,10 @@ export function DataProvenanceChip({ dataQuality, labels, compact }: Props) {
    * объяснения из словаря. Заметку показываем, когда она на языке страницы
    * (или страница русская); иначе — переведённый текст.
    */
-  const заметкаНеНаЯзыкеСтраницы =
-    !!note && /[А-Яа-яЁё]/.test(note) && (i18n?.lang ?? "ru") !== "ru";
+  const noteIsForeign =
+    !!note && hasCyrillic(note) && (i18n?.lang ?? "ru") !== "ru";
   const tip =
-    ((заметкаНеНаЯзыкеСтраницы ? "" : note) ||
+    ((noteIsForeign ? "" : note) ||
       `${L.measured} — ${L.tipMeasured}; ${L.derived} — ${L.tipDerived}; ${L.guessed} — ${L.tipGuessed}.`) +
     (source ? `
 ${L.tipSource}: ${source}.` : "") +

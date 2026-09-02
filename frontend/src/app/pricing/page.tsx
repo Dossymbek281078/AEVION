@@ -8,6 +8,7 @@ import { CustomerLogosRow } from "@/components/CustomerLogosRow";
 import { apiUrl } from "@/lib/apiBase";
 import { fetchAiSavings } from "@/lib/aiSavings";
 import { gumroadCheckoutUrl } from "@/lib/gumroad";
+import { запомнитьНамерение } from "@/lib/checkoutIntent";
 import { channelFrom, withChannel } from "@/lib/products";
 import { track } from "@/lib/track";
 import { chargeCurrencyNoteKey, shouldWarnAboutCurrency } from "@/lib/chargeCurrencyNote";
@@ -261,6 +262,10 @@ export default function PricingPage() {
   }) {
     setCheckingOut(opts.tierId);
     setCheckoutNotice(null);
+    // Запоминаем тариф ДО ухода в кассу: касса вернёт отказавшегося на наш
+    // экран без тарифа в адресе, и кнопка «вернуться к тарифу» иначе не
+    // появляется вовсе (замер с контролем — см. lib/checkoutIntent.ts).
+    запомнитьНамерение(opts.tierId, opts.period ?? "monthly");
     track({
       type: "checkout_start",
       tier: opts.tierId,

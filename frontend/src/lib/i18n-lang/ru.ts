@@ -4907,7 +4907,7 @@ const ru: Record<string, string> = {
   "pricing.checkoutSuccess.nextEmailNoName": "Проверьте email — квитанция уже отправлена",
   "pricing.checkoutSuccess.nextManage": "Управление подпиской — в вашем аккаунте {processor}",
   "pricing.checkoutSuccess.nextOpenApp": "Откройте {app} и начните работать",
-  "pricing.checkoutSuccess.nextQuestions": "Вопросы? Пишите на support@aevion.app",
+  "pricing.checkoutSuccess.nextQuestions": "Вопросы? Напишите нам: aevion.app/pricing/contact",
   "pricing.checkoutSuccess.openApp": "Открыть {app}",
   "pricing.checkoutSuccess.periodAnnual": "годовая",
   "pricing.checkoutSuccess.periodMonthly": "месячная",

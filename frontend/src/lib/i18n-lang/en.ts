@@ -4907,7 +4907,7 @@ const en: Record<string, string> = {
   "pricing.checkoutSuccess.nextEmailNoName": "Check your email — the receipt has already been sent",
   "pricing.checkoutSuccess.nextManage": "Manage your subscription — in your {processor} account",
   "pricing.checkoutSuccess.nextOpenApp": "Open {app} and get started",
-  "pricing.checkoutSuccess.nextQuestions": "Questions? Email support@aevion.app",
+  "pricing.checkoutSuccess.nextQuestions": "Questions? Message us: aevion.app/pricing/contact",
   "pricing.checkoutSuccess.openApp": "Open {app}",
   "pricing.checkoutSuccess.periodAnnual": "annual",
   "pricing.checkoutSuccess.periodMonthly": "monthly",

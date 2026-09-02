@@ -4866,7 +4866,7 @@ const kk: Record<string, string> = {
   "pricing.checkoutSuccess.nextEmailNoName": "Email тексеріңіз — түбіртек жіберілді",
   "pricing.checkoutSuccess.nextManage": "Жазылымды басқару — {processor} есептік жазбаңызда",
   "pricing.checkoutSuccess.nextOpenApp": "{app} ашып, жұмысты бастаңыз",
-  "pricing.checkoutSuccess.nextQuestions": "Сұрақтар бар ма? support@aevion.app электрондық поштасына жазыңыз",
+  "pricing.checkoutSuccess.nextQuestions": "Сұрақтар бар ма? Бізге жазыңыз: aevion.app/pricing/contact",
   "pricing.checkoutSuccess.openApp": "{app} ашу",
   "pricing.checkoutSuccess.periodAnnual": "жылдық",
   "pricing.checkoutSuccess.periodMonthly": "айлық",

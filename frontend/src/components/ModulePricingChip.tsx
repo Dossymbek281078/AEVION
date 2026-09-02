@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
+import { запомнитьНамерение } from "@/lib/checkoutIntent";
 import { withChannel } from "@/lib/products";
 import { channelNow } from "@/lib/channelNow";
 
@@ -112,6 +113,12 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
     // Same event the /pricing table fires, so the funnel dashboard counts a
     // module-page purchase intent instead of silently missing it. sendBeacon
     // inside track() survives the redirect to the processor.
+    // Единственный вход в кассу, КРОМЕ страницы цен, который идёт через наш
+    // /checkout/session — значит отказ отсюда вернётся на НАШ экран отмены.
+    // Остальные шесть ведут прямо к продавцу, и их отмена до нас не доходит.
+    // Тариф здесь известен заранее ("lite"), и без этой строки человек,
+    // передумавший в кассе, не увидел бы кнопки возврата к покупке.
+    запомнитьНамерение("lite", "monthly");
     track({
       type: "checkout_start",
       tier: "lite",

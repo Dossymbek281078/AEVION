@@ -45,10 +45,13 @@ function mount(routeAlive: boolean) {
     if (url.includes("/api/qskyway/route")) {
       return routeAlive ? jsonOk({}) : Promise.reject(new Error("route unavailable"));
     }
-    if (url.includes("/api/qskyway/city")) return jsonOk(cityMinimal);
+    // ПОРЯДОК РЕШАЕТ: «/cities» содержит «/city», и проверка на «/city»,
+    // стоящая первой, перехватывает ЗАПРОС СПИСКА тоже. 02.09.2026 из-за этого
+    // выбор города не отрисовывался ни в одном тесте модуля.
     if (url.includes("/api/qskyway/cities")) {
       return jsonOk({ default: "astana", cities: [{ id: "astana", name: "Astana" }] });
     }
+    if (url.includes("/api/qskyway/city")) return jsonOk(cityMinimal);
     return jsonOk({});
   }) as unknown as typeof fetch;
 

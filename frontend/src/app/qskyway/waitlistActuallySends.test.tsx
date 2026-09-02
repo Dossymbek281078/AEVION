@@ -39,10 +39,13 @@ describe("приём адресов на странице модуля", () => {
         calls.push({ url, body: String(init.body ?? "") });
         return jsonOk({ ok: true });
       }
-      if (url.includes("/api/qskyway/city")) return jsonOk(cityMinimal);
+    // ПОРЯДОК РЕШАЕТ: «/cities» содержит «/city», и проверка на «/city»,
+    // стоящая первой, перехватывает ЗАПРОС СПИСКА тоже. 02.09.2026 из-за этого
+    // выбор города не отрисовывался ни в одном тесте модуля.
       if (url.includes("/api/qskyway/cities")) {
         return jsonOk({ default: "astana", cities: [{ id: "astana", name: "Astana" }] });
       }
+      if (url.includes("/api/qskyway/city")) return jsonOk(cityMinimal);
       if (url.includes("/api/qskyway/route")) return Promise.reject(new Error("route unavailable"));
       return jsonOk({});
     }) as unknown as typeof fetch;

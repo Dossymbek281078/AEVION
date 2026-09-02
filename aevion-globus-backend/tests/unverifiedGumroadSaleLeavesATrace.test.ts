@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, vi } from "vitest";
+import { describe, test, expect, beforeEach, afterAll, vi } from "vitest";
 import express from "express";
 import request from "supertest";
 
@@ -41,7 +41,18 @@ vi.mock("../src/lib/payment/gumroadProvider", () => ({
   },
 }));
 
+import { mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+
 process.env.GUMROAD_PRODUCT_UNVERTEST = "tier_medium_monthly";
+
+// ИЗОЛЯЦИЯ. Этот сторож доводит покупку до ВЫДАЧИ, а значит пишет подписку.
+// Без своего файла он писал в общий data/subscriptions.jsonl: замер 02.09.2026
+// — 34 строки, все от тестов. Соседние проверки, считающие подписки, начинают
+// зависеть от того, кто прогонялся раньше.
+const каталог = mkdtempSync(join(tmpdir(), "aevion-unver-"));
+process.env.SUBSCRIPTIONS_FILE = join(каталог, "subs.jsonl");
 
 const { gumroadWebhookRouter } = await import("../src/routes/gumroadWebhook");
 
@@ -62,6 +73,10 @@ async function доставка() {
   __resetWebhookDedupCache();
   return request(a).post("/api/gumroad/webhook").send();
 }
+
+afterAll(() => {
+  rmSync(каталог, { recursive: true, force: true });
+});
 
 beforeEach(() => {
   следы.length = 0;

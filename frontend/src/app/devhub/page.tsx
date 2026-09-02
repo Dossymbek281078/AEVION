@@ -114,6 +114,7 @@ const USAGE_LABEL: Record<string, string> = {
   // ветка `?? k` не падает и не краснеет, она просто печатает жаргон.
   speech: "распознаваний и клонов голоса",
   translate: "переводов",
+  generate: "генераций кода",
 };
 
 function capabilityOffReason(status: string | undefined): string {

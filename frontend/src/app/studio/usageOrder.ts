@@ -16,6 +16,7 @@ export const CAP_META: Record<string, { label: string; icon: string; color: stri
   deploy:    { label: "Deploys",      icon: "\u{1F680}", color: "#64748b" },
   speech:    { label: "Speech jobs",  icon: "\u{1F5E3}️", color: "#be123c" },
   translate: { label: "Translations", icon: "\u{1F310}", color: "#15803d" },
+  generate:  { label: "Code generations", icon: "\u{2728}", color: "#7c3aed" },
 };
 
 /** Ключи в порядке показа: известные — по CAP_META, незнакомые — следом. */

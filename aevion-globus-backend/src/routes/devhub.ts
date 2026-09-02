@@ -288,7 +288,7 @@ const memSnippets = new Map<string, DevHubSnippet>();
 const memCheckpoints = new Map<string, DevHubCheckpoint>();
 
 // ── Credit metering ───────────────────────────────────────────────────────────
-type CapabilityKey = "video" | "image" | "tts" | "music" | "deploy" | "speech" | "translate";
+type CapabilityKey = "video" | "image" | "tts" | "music" | "deploy" | "speech" | "translate" | "generate";
 type StudioTier = "free" | "pro" | "enterprise";
 
 /**
@@ -329,7 +329,7 @@ const VOICE_IDS: Record<string, string> = {
 // бесплатного тарифа. Правя любое число здесь, сперва посмотрите на его
 // единицу, а не на соседей по строке.
 const TIER_LIMITS: Record<StudioTier, Record<CapabilityKey, number>> = {
-  free:       { video: 3,   image: 10,  tts: 100000, music: 5,   deploy: 10, speech: 5,    translate: 50 },
+  free:       { video: 3,   image: 10,  tts: 100000, music: 5,   deploy: 10, speech: 5,    translate: 50, generate: 20 },
   // tts у платного тарифа поднят до уровня бесплатного 01.09.2026. Было 30000
   // против 100000 у free — то есть ЗАПЛАТИВШИЙ получал втрое МЕНЬШЕ. Единица у
   // обоих одна (символы текста: и проверка, и списание считают text.trim()),
@@ -340,8 +340,8 @@ const TIER_LIMITS: Record<StudioTier, Record<CapabilityKey, number>> = {
   // закономерности озвучке причиталось бы около 2 000 000. Ставлю ровно
   // столько же, сколько у free, потому что «платный не может давать меньше
   // бесплатного» — не решение об упаковке, а отказ продавать ухудшение.
-  pro:        { video: 50,  image: 200, tts: 100000, music: 100, deploy: -1, speech: 100,  translate: 1000 },
-  enterprise: { video: -1,  image: -1,  tts: -1,    music: -1,  deploy: -1, speech: -1,   translate: -1 },
+  pro:        { video: 50,  image: 200, tts: 100000, music: 100, deploy: -1, speech: 100,  translate: 1000, generate: -1 },
+  enterprise: { video: -1,  image: -1,  tts: -1,    music: -1,  deploy: -1, speech: -1,   translate: -1, generate: -1 },
 };
 
 // In-memory fallback: "userId:month:capability" → count
@@ -2184,8 +2184,28 @@ devhubRouter.post("/projects/:id/generate", dhCostlyLimit("dhgenerate"), async (
     ? targetFilesRaw.filter((f: unknown): f is string => typeof f === "string" && f.trim().length > 0).map((f: string) => f.trim())
     : (typeof targetFile === "string" && targetFile.trim() ? [targetFile.trim()] : []);
   const resolvedStack = stack || project.stack;
+  // Замок, а не упаковка. У генерации кода не было потолка ВООБЩЕ — только
+  // предел частоты, а он ограничивает темп, а не сумму. Арифметика потолка
+  // 02.09.2026: одна генерация до $0.84 на claude-opus-4-8 (модель на проде
+  // задана умолчанием), при 30/мин это $36 тысяч в сутки с одного адреса.
+  //
+  // Платному тарифу поставлен БЕЗЛИМИТ намеренно: генерация и есть то, за
+  // что он платит. Число 20 у бесплатного — не решение об упаковке, а
+  // отказ держать поверхность без верхней границы; меняется одной строкой
+  // в таблице тарифов, когда основатель назовёт своё.
+  const genCredit = await checkCredit(userId, "generate");
+  if (!genCredit.allowed) {
+    return res.status(402).json({
+      error: "Месячный лимит генераций исчерпан",
+      tier: genCredit.tier, used: genCredit.used, limit: genCredit.limit,
+      upgrade: "/studio#upgrade",
+    });
+  }
+
   try {
-    res.json(await runProjectGeneration(project, userId, prompt, resolvedStack, targetFiles, images, history));
+    const генерация = await runProjectGeneration(project, userId, prompt, resolvedStack, targetFiles, images, history);
+    await debitQuietly(userId, "generate");
+    res.json({ ...генерация, ...creditNote(genCredit) });
   } catch (e: any) {
     if (typeof e?.message === "string" && e.message.startsWith("NO_VISION_PROVIDER")) {
       return res.status(503).json({ error: e.message.replace("NO_VISION_PROVIDER: ", "") });

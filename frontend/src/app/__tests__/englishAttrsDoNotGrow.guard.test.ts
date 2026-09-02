@@ -53,10 +53,16 @@ function poPrirodeLatinica(v: string): boolean {
   return false;
 }
 
+// Третья форма той же подписи: значение приходит в атрибут ЧЕРЕЗ ОБЪЕКТ.
+// `title={tag.title}` в разметке безупречен, а английский текст лежит рядом
+// в `title: "..."`. Замер 02.09.2026: только в двух моих модулях так пряталось
+// 33 строки. Храповик, считающий одни атрибуты, давал бы ложное спокойствие.
+const SVOJSTVA = ["text", "title", "label", "hint", "note"];
+
 function angliyskie(src: string): string[] {
   const out: string[] = [];
-  for (const at of ATRIBUTY) {
-    const nachalo = at + '="';
+  for (const at of [...ATRIBUTY.map((x) => x + '="'), ...SVOJSTVA.map((x) => x + ': "')]) {
+    const nachalo = at; // уже с разделителем: `x="` либо `x: "`
     let i = 0;
     for (;;) {
       i = src.indexOf(nachalo, i);
@@ -71,6 +77,8 @@ function angliyskie(src: string): string[] {
       // человека к худшему результату. Интерфейс при этом говорит по-русски.
       if (v.startsWith("напр.: ")) continue;
       if (!/[A-Za-z]/.test(v) || /[А-ЯЁа-яё]/.test(v)) continue;
+      // Цветовые коды — не текст: извлекатель принимал #fef3c7 за подпись.
+      if (v.startsWith("#")) continue;
       if (TERMINY.has(v) || poPrirodeLatinica(v)) continue;
       out.push(v);
     }
@@ -113,6 +121,11 @@ describe("английские подписи в атрибутах не рас�
     expect(angliyskie('placeholder="Краткое описание"')).toEqual([]);
     expect(angliyskie('placeholder="you@example.com"')).toEqual([]);
     expect(angliyskie('placeholder="напр.: A futuristic city"')).toEqual([]);
+    // Контроль на КАЖДУЮ форму записи отдельно. У храповика уменьшение охвата
+    // выглядит как прогресс: числа падают, проверка зелёная. Мутация «убрать
+    // список свойств» проходила молча, пока этой строки не было.
+    expect(angliyskie('title: "Describe the deal"')).toEqual(["Describe the deal"]);
+    expect(angliyskie('text: "#fef3c7"')).toEqual([]);
   });
 
   it("ни в одном файле их не стало больше", () => {

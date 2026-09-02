@@ -42,6 +42,32 @@ const IZVESTNYE = [
   "tiktok-publisher",  // в каталоге НЕТ вовсе
 ];
 
+const TOVARY = join(TUT, "..", "..", "lib", "products.ts");
+
+/** Цена товара на витрине: id -> priceUsd. */
+function ceniVitriny(): Record<string, number> {
+  const src = readFileSync(TOVARY, "utf8");
+  const out: Record<string, number> = {};
+  // Окно в 400 знаков теряло два товара: у bureau и cyberchess цена стоит
+  // дальше от идентификатора. Границей служит закрывающая скобка объекта,
+  // а не выдуманное число знаков — иначе знаменатель молча занижается.
+  const re = /id:\s*"([a-z0-9-]+)"[^}]*?priceUsd:\s*([0-9.]+)/g;
+  for (let m = re.exec(src); m; m = re.exec(src)) out[m[1]] = Number(m[2]);
+  return out;
+}
+
+/** Цена модуля в каталоге: id -> addonMonthly. */
+function ceniKataloga(): Record<string, number> {
+  const src = readFileSync(KATALOG, "utf8");
+  const out: Record<string, number> = {};
+  // Та же граница, что и у витрины: закрывающая скобка объекта. С окном в
+  // 120 знаков каталог давал 33 модуля вместо 35 и терял cyberchess — то есть
+  // ЗАНИЖАЛ охват сверки, а именно охват тут и есть предмет проверки.
+  const re = /id:\s*"([a-z0-9-]+)",[^}]*?addonMonthly:\s*([0-9.]+)/g;
+  for (let m = re.exec(src); m; m = re.exec(src)) out[m[1]] = Number(m[2]);
+  return out;
+}
+
 function idsIzVitriny(): string[] {
   const src = readFileSync(VITRINA, "utf8");
   const out: string[] = [];
@@ -101,5 +127,23 @@ describe("идентификаторы витрины сходятся с кат
       net,
       "идентификатор витрины не находится в каталоге цен: сверка «помечен ли модуль как бета» будет молча его пропускать",
     ).toEqual([...IZVESTNYE].sort());
+  });
+
+  it("у сравнимых товаров цены совпадают — и сравнимых не стало меньше", () => {
+    const v = ceniVitriny();
+    const k = ceniKataloga();
+    expect(Object.keys(v).length, "цены витрины не разобраны").toBeGreaterThan(10);
+    expect(Object.keys(k).length, "цены каталога не разобраны").toBeGreaterThan(20);
+
+    const obshie = Object.keys(v).filter((id) => id in k);
+    const rashozhdeniya = obshie.filter((id) => Math.abs(v[id] - k[id]) > 0.01)
+      .map((id) => id + ": витрина $" + v[id] + ", каталог $" + k[id]);
+    expect(rashozhdeniya, "цена на витрине не совпадает с каталогом").toEqual([]);
+
+    // ЗНАМЕНАТЕЛЬ. Ноль расхождений сам по себе не значит ничего: сверить
+    // удаётся только те товары, чей id есть в обоих списках. Замер 02.09.2026 —
+    // три из шестнадцати. Если охват МОЛЧА упадёт, зелёный цвет останется, а
+    // защита исчезнет; поэтому число закреплено и может только расти.
+    expect(obshie.length, "сравнимых товаров стало МЕНЬШЕ — проверка цен ослабла").toBeGreaterThanOrEqual(3);
   });
 });

@@ -278,9 +278,11 @@ export default function SpectatorViewerPage(props: Props) {
               color: obsCopied ? T.accent : T.textDim,
               transition: "all 0.2s",
             }}
-            title="Скопировать URL для OBS Browser Source"
+            /* «Browser Source» оставлено дословно: это название источника В САМОЙ
+               программе OBS, стример ищет его именно так. Остальное по-русски. */
+            title="Скопировать ссылку для источника Browser Source в OBS"
           >
-            {obsCopied ? "✓ Скопировано" : "📺 OBS Overlay"}
+            {obsCopied ? "✓ Скопировано" : "📺 Ссылка для OBS"}
           </button>
         </div>
 

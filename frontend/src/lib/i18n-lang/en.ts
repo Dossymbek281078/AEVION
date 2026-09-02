@@ -4693,7 +4693,7 @@ const en: Record<string, string> = {
   "pricing.admin.breakdown.byType": "By event type",
   "pricing.admin.breakdown.checkoutByChannel": "Checkout started, by channel",
   "pricing.admin.breakdown.purchaseByChannel": "Paid, by channel",
-  "pricing.admin.breakdown.purchaseRevenueByChannel": "Revenue by channel",
+  "pricing.admin.breakdown.purchaseRevenueByChannel": "Expected revenue, by channel",
   "pricing.admin.breakdown.checkoutBySource": "Where purchases start",
   "pricing.admin.eduTab.domainColumn": "Domain",
   "pricing.admin.eduTab.empty": "No edu program applications yet.",

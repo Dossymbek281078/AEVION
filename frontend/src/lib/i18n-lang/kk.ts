@@ -4652,7 +4652,7 @@ const kk: Record<string, string> = {
   "pricing.admin.breakdown.byType": "Оқиға түрлері бойынша",
   "pricing.admin.breakdown.checkoutByChannel": "Төлемді бастағандар, арна бойынша",
   "pricing.admin.breakdown.purchaseByChannel": "Төледі, арна бойынша",
-  "pricing.admin.breakdown.purchaseRevenueByChannel": "Арна бойынша түсім",
+  "pricing.admin.breakdown.purchaseRevenueByChannel": "Күтілетін түсім — арналар бойынша",
   "pricing.admin.breakdown.checkoutBySource": "Төлем қайдан басталады",
   "pricing.admin.eduTab.domainColumn": "Домен",
   "pricing.admin.eduTab.empty": "Әзірге edu бағдарламасына өтінімдер жоқ.",

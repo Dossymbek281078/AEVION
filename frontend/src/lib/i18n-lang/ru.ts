@@ -4693,7 +4693,7 @@ const ru: Record<string, string> = {
   "pricing.admin.breakdown.byType": "По типам событий",
   "pricing.admin.breakdown.checkoutByChannel": "Начали оплату по каналам",
   "pricing.admin.breakdown.purchaseByChannel": "Оплатили по каналам",
-  "pricing.admin.breakdown.purchaseRevenueByChannel": "Выручка по каналам",
+  "pricing.admin.breakdown.purchaseRevenueByChannel": "Ожидаемая выручка по каналам",
   "pricing.admin.breakdown.checkoutBySource": "Откуда начинают платить",
   "pricing.admin.eduTab.domainColumn": "Домен",
   "pricing.admin.eduTab.empty": "Заявок на edu-программу пока нет.",

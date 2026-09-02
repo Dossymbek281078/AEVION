@@ -72,14 +72,38 @@ async function activeAppsFor(email: string): Promise<Set<string> | null> {
  * гейт обязан закрываться, а не открываться, на сбое. Но вызывающий видит
  * разницу в логе: тихо расширять доступ по ошибке базы нельзя.
  */
-export async function hasActiveAppSubscription(email: string | null, moduleId: string): Promise<boolean> {
-  if (!email) return false;
+/**
+ * Три состояния, а не два.
+ *
+ * ⚠️ ПОПРАВКА 02.09.2026. Прежняя функция возвращала `boolean` и на сбое
+ * чтения базы отдавала `false` — «гейт обязан закрываться, а не
+ * открываться». Направление верное и сохранено. Неверным было ДРУГОЕ:
+ * вызывающий не мог отличить «проверено, не куплено» от «проверить не
+ * удалось», и потому отвечал заплатившему `402 upgrade_required` —
+ * «модуль доступен на тарифах…» — при обычном дрожании базы.
+ *
+ * Два последствия, и второе тише первого:
+ *
+ *   1. Человек, который УЖЕ заплатил, получает предложение купить снова.
+ *   2. Каждый такой отказ шёл в `recordDeny` как сигнал спроса («every 402
+ *      is someone who WANTED a paid module»). То есть сбой инфраструктуры
+ *      попадал в цифру, по которой судят, что продавать.
+ *
+ * Направление отказа выбирается по цене, видимость отказа не выбирается.
+ */
+export type AppSubscriptionState = "active" | "none" | "unknown";
+
+export async function appSubscriptionState(
+  email: string | null,
+  moduleId: string,
+): Promise<AppSubscriptionState> {
+  if (!email) return "none";
   const slug = appSlugForModuleId(moduleId);
-  if (!slug) return false; // модуль не продаётся отдельно — и спрашивать нечего
+  if (!slug) return "none"; // модуль не продаётся отдельно — и спрашивать нечего
 
   const apps = await activeAppsFor(email);
-  if (apps === null) return false;
-  return apps.has(slug);
+  if (apps === null) return "unknown"; // чтение не удалось, а не «не куплено»
+  return apps.has(slug) ? "active" : "none";
 }
 
 /**

@@ -33,7 +33,7 @@ import { verifyBearerOptional } from "./authJwt";
 import { readLatestSubscription } from "../routes/provisioning";
 import { MODULES_PRICING, type TierId } from "../data/pricing";
 import { recordDeny } from "./paywallDenyLog";
-import { hasActiveAppSubscription } from "./appEntitlements";
+import { appSubscriptionState } from "./appEntitlements";
 
 const PUBLIC_BASE = (process.env.AEVION_PUBLIC_BASE_URL ?? "https://aevion.app").replace(/\/+$/, "");
 
@@ -319,7 +319,24 @@ export function requireModule(moduleId: string) {
     // наравне с гостем. Спрашиваем базу только здесь: до этой строки доходят
     // лишь те, кому иначе отказали бы, поэтому обычный путь остаётся без
     // запросов. Права только добавляются — отнять этот источник ничего не может.
-    if (await hasActiveAppSubscription(plan.email, moduleId)) { next(); return; }
+    const состояниеПодписки = await appSubscriptionState(plan.email, moduleId);
+    if (состояниеПодписки === "active") { next(); return; }
+
+    // «Проверить не удалось» — это НЕ «не куплено». Дверь всё равно
+    // закрываем (гейт обязан закрываться на сбое), но говорим правду и НЕ
+    // засчитываем это в спрос: иначе заплативший видит «купите тариф» при
+    // дрожании базы, а сбой инфраструктуры уезжает в цифру, по которой
+    // решают, что продавать.
+    if (состояниеПодписки === "unknown") {
+      res.status(503).json({
+        error: "entitlement_check_failed",
+        module: moduleId,
+        message:
+          "Не удалось проверить ваш доступ — это наша ошибка, а не отказ. " +
+          "Повторите через минуту; если повторяется, напишите нам.",
+      });
+      return;
+    }
 
     upgradeResponse(res, moduleId, plan);
   };

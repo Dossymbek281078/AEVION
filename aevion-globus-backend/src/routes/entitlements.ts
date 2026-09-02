@@ -17,6 +17,7 @@ import {
   normalizeTier,
 } from "../lib/planGate";
 import { MODULES_PRICING, TIERS } from "../data/pricing";
+import { appSlugForModuleId } from "../data/lemonSqueezyVariants";
 import { funnelSummary } from "../lib/paywallDenyLog";
 
 export const entitlementsRouter = Router();
@@ -26,7 +27,29 @@ export const entitlementsRouter = Router();
  *  the funnel's revenue-opportunity estimate. Null when nothing paid unlocks
  *  it (shouldn't happen for a gated module, but stays honest if pricing is
  *  misconfigured). */
-function minUnlockPriceUsd(moduleId: string): number | null {
+/**
+ * Самый дешёвый способ открыть модуль — из тех, что РЕАЛЬНО можно купить.
+ *
+ * ⚠️ ПОПРАВКА 02.09.2026. Считался минимум по одним ТАРИФАМ, а у модуля есть
+ * второй путь — добавка (`addonMonthly`). Имя обещало минимум, а отдавался
+ * минимум по половине путей.
+ *
+ * Цена ошибки не косметическая: это число умножается на количество отказов и
+ * даёт `mrrCeilingUsd` — «сколько денег на столе», по которому решают, что
+ * чинить и что продвигать. Замер на живых данных: у `constitution` добавка
+ * $9 против дешевейшего тарифа $49, то есть потолок завышался в 5.4 раза.
+ *
+ * ГРАНИЦА, и она решает: добавка учитывается ТОЛЬКО если её правда можно
+ * купить, то есть у модуля есть ссылка варианта (`app_<id>`). Цена добавки
+ * объявлена у 31 модуля, а купить можно 8 — для остальных дешевейший тариф
+ * и есть настоящий минимум, и учитывать объявленную добавку значило бы
+ * занижать потолок обещанием, которого мы не выполняем.
+ *
+ * Замер по восьми покупаемым: у четырёх добавка дешевле тарифа
+ * (cyberchess 19/29, qventure 39/49, qcontract 19/49, constitution 9/49),
+ * у одного равна, остальные вне сравнения.
+ */
+export function minUnlockPriceUsd(moduleId: string): number | null {
   const paidTiers = new Set<string>(
     tiersForModule(moduleId).map(normalizeTier).filter((t) => t !== "free")
   );
@@ -34,6 +57,13 @@ function minUnlockPriceUsd(moduleId: string): number | null {
     .filter((t) => paidTiers.has(normalizeTier(t.id)))
     .map((t) => t.priceMonthly)
     .filter((p): p is number => typeof p === "number" && p > 0);
+
+  // Добавка — второй путь, но только там, где у неё есть касса.
+  if (appSlugForModuleId(moduleId)) {
+    const addon = MODULES_PRICING.find((m) => m.id === moduleId)?.addonMonthly;
+    if (typeof addon === "number" && addon > 0) prices.push(addon);
+  }
+
   return prices.length ? Math.min(...prices) : null;
 }
 

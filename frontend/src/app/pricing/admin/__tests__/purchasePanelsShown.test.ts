@@ -6,12 +6,37 @@
  * при этом выглядит полной: соседние панели на месте.
  */
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { stripComments } from "../../../__tests__/helpers/sourceCode";
 
 const страница = stripComments(readFileSync(join(process.cwd(), "src/app/pricing/admin/page.tsx"), "utf8"));
-const словарь = readFileSync(join(process.cwd(), "src/lib/i18n-data.ts"), "utf8");
+/*
+ * Словарь читаем ОТКУДА ОН ЕСТЬ, а не по одному зашитому пути.
+ *
+ * Платформа переходит с монолита `i18n-data.ts` на файлы `i18n-lang/*.ts`, и в
+ * ветке сборки монолит уже заглушка на 93 строки. Проверка, зашитая на него,
+ * после перехода начала бы падать не из-за дефекта, а из-за переезда файла —
+ * и следующий человек «починил» бы её, выбросив утверждение. Так теряются
+ * сторожа: не отключением, а разумной на вид уборкой.
+ *
+ * Поэтому собираем оба источника и требуем, чтобы хоть один нашёлся: пустой
+ * словарь означает «проверка не состоялась», а не «подписей нет».
+ */
+function словарныеИсточники(): string {
+  const куски: string[] = [];
+  const монолит = join(process.cwd(), "src/lib/i18n-data.ts");
+  if (existsSync(монолит)) куски.push(readFileSync(монолит, "utf8"));
+  const папка = join(process.cwd(), "src/lib/i18n-lang");
+  if (existsSync(папка)) {
+    for (const имя of readdirSync(папка)) {
+      if (имя.endsWith(".ts")) куски.push(readFileSync(join(папка, имя), "utf8"));
+    }
+  }
+  return куски.join(String.fromCharCode(10));
+}
+
+const словарь = словарныеИсточники();
 
 describe("панели покупок по каналам", () => {
   it("страница читает оба поля ответа", () => {
@@ -127,8 +152,17 @@ describe("панели покупок по каналам", () => {
   });
 
   it("подписи есть на всех трёх языках", () => {
+    // Знаменатель: без него пустой словарь дал бы «ноль подписей» и выглядел
+    // бы как честный ответ, а это «я не смог прочитать словарь».
+    expect(словарь.length, "словарь не прочитан ни из одного источника").toBeGreaterThan(1000);
     const счёт = (k: string) => словарь.split(k).length - 1;
-    expect(счёт('"pricing.admin.breakdown.purchaseByChannel"')).toBe(3);
-    expect(счёт('"pricing.admin.breakdown.purchaseRevenueByChannel"')).toBe(3);
+    for (const ключ of [
+      '"pricing.admin.breakdown.purchaseByChannel"',
+      '"pricing.admin.breakdown.purchaseRevenueByChannel"',
+    ]) {
+      // Три языка платформы: en, ru, kk. Больше трёх — тоже нормально: словарь
+      // может содержать и другие языки, лишь бы подпись не потерялась.
+      expect(счёт(ключ), `подпись ${ключ} есть не на всех языках`).toBeGreaterThanOrEqual(3);
+    }
   });
 });

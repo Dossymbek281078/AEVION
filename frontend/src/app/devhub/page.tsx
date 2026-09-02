@@ -790,6 +790,7 @@ export default function DevHubPage() {
                 setSnippetForm((f) => ({ ...f, content: e.target.value }))
               }
               placeholder={t("snip.phCode")}
+              aria-label={t("snip.codeAria")}
               rows={5}
               className="mt-3 w-full px-3 py-2 rounded-md bg-slate-950 border border-slate-800 text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-700 resize-y"
             />

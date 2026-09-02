@@ -644,6 +644,8 @@ export default function QNewsPage() {
                 <button
                   onClick={() => toggleBookmark(article.id)}
                   title={bookmarked.has(article.id) ? "Remove bookmark" : "Bookmark"}
+                  aria-label={(bookmarked.has(article.id)
+                    ? "Убрать из закладок: " : "В закладки: ") + article.title}
                   style={{ position: "absolute", top: 14, right: 14, background: "transparent", border: "none", cursor: "pointer", fontSize: 18, opacity: 0.7 }}
                 >
                   {bookmarked.has(article.id) ? "🔖" : "📎"}

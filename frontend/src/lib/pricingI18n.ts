@@ -484,7 +484,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     /* Loading / errors */
     "loading.pricing": "Загружаем прайс...",
     "error.unavailable": "Прайс недоступен",
-    "error.checkBackend": "Проверь, что бэкенд запущен (npm run dev в aevion-globus-backend).",
+    "error.whatNow": "Мы уже разбираемся. Обновите страницу через минуту — или напишите нам, если нужно срочно.",
 
     /* Contact form */
     "contact.badge": "ENTERPRISE / SALES",
@@ -961,7 +961,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
 
     "loading.pricing": "Loading pricing...",
     "error.unavailable": "Pricing unavailable",
-    "error.checkBackend": "Check that the backend is running (npm run dev in aevion-globus-backend).",
+    "error.whatNow": "We are on it. Refresh in a minute — or contact us if it is urgent.",
 
     "contact.badge": "ENTERPRISE / SALES",
     "contact.title": "Contact sales",

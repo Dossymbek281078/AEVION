@@ -546,7 +546,12 @@ type UsageCell = { used: number; limit: number; usedKnown?: false };
 async function getAllMonthUsage(userId: string): Promise<{ tier: StudioTier; tierKnown: boolean; month: string; usage: Record<CapabilityKey, UsageCell>; anyUnknown: boolean }> {
   const { tier, tierKnown } = await getUserTierChecked(userId);
   const month = creditMonth();
-  const caps: CapabilityKey[] = ["video", "image", "tts", "music", "deploy"];
+  // Список выводится ИЗ ТАБЛИЦЫ, а не пишется рядом с ней. Прежде он был
+  // литеральным, и 02.09 это стоило бы дефекта: две новые возможности
+  // (речь, перевод) начали списываться, а на экране остатка их бы не было —
+  // человек тратит квоту, которой не видит. Второй список того же самого
+  // расходится молча: он не падает и не краснеет.
+  const caps = Object.keys(TIER_LIMITS.free) as CapabilityKey[];
   const usage: Record<string, UsageCell> = {};
   let anyUnknown = false;
   for (const cap of caps) {

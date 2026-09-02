@@ -78,7 +78,24 @@ function resolvePermalink(reference: string): string {
     process.env[`GUMROAD_${ключ}_PERMALINK`],
     process.env.GUMROAD_DEFAULT_PERMALINK,
   ];
-  return порядок.find((v) => typeof v === "string" && v.trim() !== "")?.trim() ?? reference;
+  const найденный = порядок.find((v) => typeof v === "string" && v.trim() !== "")?.trim();
+  if (!найденный) {
+    /*
+     * Ни одного сопоставления и нет товара по умолчанию — адрес соберётся из
+     * САМОЙ ссылки, а такого товара у Gumroad может не быть. Прежде это
+     * происходило молча: покупатель нажимал «купить» и попадал на страницу
+     * несуществующего товара, а у нас не оставалось ни следа.
+     *
+     * Поведение не меняем — вернуть отказ отсюда значило бы сломать вызовы, где
+     * ссылка И ЕСТЬ пермалинк. Но молчать перестаём.
+     */
+    console.warn(
+      `[gumroad] пермалинк для "${reference}" не настроен ни одним именем ` +
+        `(GUMROAD_PERMALINK_${ключ}, GUMROAD_${ключ}_PERMALINK, GUMROAD_DEFAULT_PERMALINK) — ` +
+        `адрес кассы соберётся из самой ссылки`,
+    );
+  }
+  return найденный ?? reference;
 }
 
 function gumroadCheckoutUrl(permalink: string, email?: string | null): string {

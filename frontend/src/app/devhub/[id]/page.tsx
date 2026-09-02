@@ -481,7 +481,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([
     { type: "code", prompt: "Landing page for an AI startup with hero, headline, CTA", saveAs: "pages/index.tsx" },
     { type: "image", prompt: "AI startup hero — futuristic, vivid colors, abstract", saveAs: "public/hero.url.txt" },
-    { type: "tts", text: "Welcome to our AI platform", voice: "Rachel", saveAs: "public/welcome.mp3.b64" },
+    { type: "tts", text: "Добро пожаловать на нашу ИИ-платформу", voice: "Rachel", saveAs: "public/welcome.mp3.b64" },
   ]);
   const [agentRunning, setAgentRunning] = useState(false);
   const [agentResults, setAgentResults] = useState<Array<{ step: number; type: string; ok: boolean; output?: any; error?: string; savedAs?: string }>>([]);
@@ -587,10 +587,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     { code: "TR", name: "Türkçe" }, { code: "JA", name: "日本語" }, { code: "ZH", name: "中文" },
   ];
   const BULK_PRESETS = [
-    { label: "🌍 Wide reach", codes: ["RU", "EN", "KK", "DE", "FR", "ES"] },
-    { label: "📰 Blog", codes: ["RU", "EN", "KK"] },
-    { label: "📚 Docs", codes: ["RU", "EN", "KK", "DE", "JA", "ZH"] },
-    { label: "🇰🇿 KZ trio", codes: ["RU", "EN", "KK"] },
+    { label: "🌍 Широкий охват", codes: ["RU", "EN", "KK", "DE", "FR", "ES"] },
+    { label: "📰 Блог", codes: ["RU", "EN", "KK"] },
+    { label: "📚 Документация", codes: ["RU", "EN", "KK", "DE", "JA", "ZH"] },
+    { label: "🇰🇿 Три языка КЗ", codes: ["RU", "EN", "KK"] },
   ];
   const [bulkPaths, setBulkPaths] = useState<string[]>([]);
   const [bulkLangs, setBulkLangs] = useState<string[]>(() => {
@@ -2509,7 +2509,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       let params: any = undefined;
       if (waParams.trim()) {
         try { params = JSON.parse(waParams); } catch {
-          setWaMsg({ ok: false, text: "params must be valid JSON object" });
+          setWaMsg({ ok: false, text: "параметры должны быть объектом JSON" });
           setWaLoading(false);
           return;
         }
@@ -2626,7 +2626,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const sendByTemplate = async (templateId: number) => {
     if (!tplSendTo.trim()) {
-      setTplSendMsg({ ok: false, text: "Recipient email required" });
+      setTplSendMsg({ ok: false, text: "нужен адрес получателя" });
       return;
     }
     setTplSendingId(templateId);
@@ -2635,7 +2635,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       let params: any = undefined;
       if (tplSendParams.trim()) {
         try { params = JSON.parse(tplSendParams); } catch {
-          setTplSendMsg({ ok: false, text: "params must be valid JSON" });
+          setTplSendMsg({ ok: false, text: "параметры должны быть в формате JSON" });
           setTplSendingId(null);
           return;
         }
@@ -2735,7 +2735,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const createEmailTemplate = async () => {
     if (!tplBuilderName.trim() || !tplBuilderSubject.trim() || !tplBuilderHtml.trim()) {
-      setTplBuilderMsg({ ok: false, text: "Name, subject and HTML body are all required" });
+      setTplBuilderMsg({ ok: false, text: "нужны имя, тема и HTML-текст письма" });
       return;
     }
     setTplBuilderLoading(true);
@@ -2772,7 +2772,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const importZipFile = async (file: File) => {
     if (!project) return;
     if (file.size > 50 * 1024 * 1024) {
-      setZipResult({ ok: false, text: "ZIP too large (max 50 MB)" });
+      setZipResult({ ok: false, text: "архив слишком большой (максимум 50 МБ)" });
       return;
     }
     setZipImporting(true);
@@ -2868,7 +2868,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetch(apiUrl("/api/devhub/media/tts"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: "Hello! This is what I sound like.", voice }),
+        body: JSON.stringify({ text: "Здравствуйте! Вот так звучит мой голос.", voice }),
       });
       if (!r.ok) {
         const d = await r.json().catch(() => null);
@@ -2942,7 +2942,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const previewClonedVoice = async () => {
     if (!voiceCloneFile) {
-      setVoiceCloneMsg({ ok: false, text: "Pick an audio sample first" });
+      setVoiceCloneMsg({ ok: false, text: "сначала выберите образец звука" });
       return;
     }
     setVoicePreviewLoading(true);
@@ -2969,7 +2969,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const url = URL.createObjectURL(blob);
       setVoicePreviewUrl(url);
       setVoicePreviewOk(true);
-      setVoiceCloneMsg({ ok: true, text: "Preview ready — listen below, then Save if you like it" });
+      setVoiceCloneMsg({ ok: true, text: "Образец готов — послушайте ниже и сохраните, если нравится" });
     } catch (e: any) {
       setVoiceCloneMsg({ ok: false, text: e?.message || "Превью не открылось" });
     } finally {
@@ -2980,7 +2980,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const cloneVoice = async () => {
     if (!voiceCloneName.trim() || !voiceCloneFile) return;
     if (!voicePreviewOk) {
-      setVoiceCloneMsg({ ok: false, text: "Preview first — click 🎧 Preview, listen, then Save" });
+      setVoiceCloneMsg({ ok: false, text: "Сначала образец — нажмите «🎧 Послушать голос», послушайте и сохраните" });
       return;
     }
     setVoiceCloneLoading(true);
@@ -5623,7 +5623,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             cursor: (voicePreviewLoading || !voiceCloneFile) ? "not-allowed" : "pointer",
                           }}
                         >
-                          {voicePreviewLoading ? "Previewing..." : "🎧 Preview voice (no commit)"}
+                          {voicePreviewLoading ? "Previewing..." : "🎧 Послушать голос (без сохранения)"}
                         </button>
                         <button
                           onClick={cloneVoice}

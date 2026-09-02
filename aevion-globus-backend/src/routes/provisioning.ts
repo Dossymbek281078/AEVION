@@ -217,7 +217,21 @@ export function readLatestSubscription(email: string): Subscription | null {
       }
     }
     return latest;
-  } catch {
+  } catch (e) {
+    // Поведение НЕ меняем: возвращаем null, то есть ворота считают, что
+    // подписки нет. Бросать здесь нельзя — это превратило бы недоступность
+    // хранилища в полный отказ платформы вместо частичного.
+    //
+    // Но молчать нельзя тем более. Замер 02.09.2026 пробой со сломанным
+    // хранилищем: сбой чтения на воротах НЕОТЛИЧИМ от «подписки нет», и
+    // заплативший видит «Free, оформите подписку». Этот случай здесь уже
+    // был настоящим дефектом. Раньше след не оставался вовсе.
+    //
+    // Третий брат того же класса в этом файле: countSubscriptions чинили
+    // раньше, readSubscriptions — сегодня, эту — сейчас.
+    const причина = e instanceof Error ? e.message : String(e);
+    console.error(`[provisioning] подписка НЕ прочитана -> ${target} :: ${причина}`);
+    capture(e, { route: "provisioning/readLatestSubscription", email: target });
     return null;
   }
 }

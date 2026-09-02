@@ -19,6 +19,7 @@
  * только на ответ сервера, и у каждого класса отказа свой текст.
  */
 
+import { useI18nOptional } from "@/lib/i18n";
 import { useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { channelNow } from "@/lib/channelNow";
@@ -105,10 +106,26 @@ export function WaitlistCapture({
   promise,
   buttonLabel,
   tone = "dark",
-  lang = "ru",
+  lang,
   doneText,
 }: WaitlistCaptureProps) {
-  const copy = COPY[lang];
+  /*
+   * Язык берём из словаря, если проп не передан.
+   *
+   * Замер 02.09.2026 отрисовкой: на английской /go человек видел «вы@почта.рф»
+   * ровно в том поле, где оставляет контакт — а это единственная кликабельная
+   * ссылка из шапок соцсетей, то есть первое, что видит пришедший извне.
+   *
+   * Переводы ЗДЕСЬ БЫЛИ с самого начала: дефект не в текстах, а в умолчании.
+   * Проп не передавали шесть страниц из девяти, и умолчание было русским —
+   * тот же класс, что у чипа провенанса днём раньше.
+   *
+   * Вне провайдера (в тестах) остаётся русский: так ведёт себя и прежний код,
+   * и менять поведение проверок заодно с починкой языка не надо.
+   */
+  const i18n = useI18nOptional();
+  const язык: "ru" | "en" = lang ?? (i18n?.lang === "en" ? "en" : "ru");
+  const copy = COPY[язык];
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState("");

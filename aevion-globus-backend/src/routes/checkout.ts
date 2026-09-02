@@ -11,6 +11,7 @@ import {
 } from "../data/pricing";
 import { provisionSubscription, countSubscriptions } from "./provisioning";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { rateLimit } from "../lib/rateLimit";
 
 const capture = makeServiceCapture("checkout");
 
@@ -61,7 +62,34 @@ interface CheckoutBody {
 }
 
 // ── POST /session ─────────────────────────────────────────────────────────────
-checkoutRouter.post("/session", async (req, res) => {
+/**
+ * Предел темпа на создание платёжной сессии.
+ *
+ * ЗАЧЕМ. Ручка анонимная и на каждый вызов ходит ВО ВНЕШНЮЮ кассу
+ * (payboxPaymentProvider.createIntent / paypalPaymentProvider.createIntent).
+ * До 02.09.2026 предела не было ни здесь, ни на роутере, ни глобально
+ * (проверено: в модуле 0 ограничителей, у checkoutRouter нет .use, в
+ * index.ts до маршрутов только bodyLimitByPath). То есть темп обращений к
+ * платёжному провайдеру задавал вызывающий, а не мы.
+ *
+ * ПОЧЕМУ 30, а не строже. Покупатель может нажать «оплатить» несколько раз
+ * подряд — он видит задержку и не понимает, идёт ли что-то. Предел должен
+ * ловить машинный поток, а не живого человека: 30 в минуту с одного адреса
+ * это заведомо больше любого ручного темпа и заведомо меньше того, чем
+ * можно выжечь квоту провайдера. Слишком строгий предел здесь опаснее
+ * отсутствующего: он отсекает ПОКУПКУ, то есть стоит нам денег напрямую.
+ *
+ * keyFn НЕ переопределяем намеренно: умолчание уже нормализует адрес
+ * (в том числе IPv6), а свой ключ — известный способ незаметно отказаться
+ * от этой нормализации.
+ */
+const sessionLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 30,
+  message: "Слишком много попыток оплаты. Подождите минуту и попробуйте снова.",
+});
+
+checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
   try {
     const body = (req.body ?? {}) as CheckoutBody;
 

@@ -7,6 +7,7 @@ import LanguageSwitcher from "@/components/LanguageSwitcher";
 import PlatformAiSavings from "@/components/PlatformAiSavings";
 import RevenueGoalBadge from "@/components/RevenueGoalBadge";
 import AiOfflineToggle from "@/components/AiOfflineToggle";
+import SkipToContent from "@/components/SkipToContent";
 
 export function SiteHeader() {
   const origin = getBackendOrigin();
@@ -41,6 +42,8 @@ export function SiteHeader() {
     };
   }, []);
   return (
+    <>
+    <SkipToContent />
     <header
       ref={headerRef}
       style={{
@@ -108,5 +111,6 @@ export function SiteHeader() {
         </div>
       </div>
     </header>
+    </>
   );
 }

@@ -397,6 +397,24 @@ router.post('/ask', async (req: Request, res: Response) => {
       });
     }
 
+    // Провайдер ИИ не настроен — это ОТКАЗ, а не ответ тренера.
+    //
+    // QCoreAI в таком случае не бросает, а возвращает 200 с текстом
+    // «[QCoreAI — no AI provider configured] Your question: "…"» и ЭХОМ всего
+    // внутреннего промпта. Раньше эта строка уходила человеку как ответ
+    // тренера: английская служебная метка и наша же инженерия промпта на
+    // экране. Замер 02.09.2026 на локальном бэкенде без ключа — ответ 200.
+    //
+    // Соседний модуль (psyappDeps) этот случай уже различает и отвечает 503
+    // по-человечески; делаем так же.
+    if (/no ai provider configured/i.test(text)) {
+      return res.status(503).json({
+        error: 'llm_not_configured',
+        text: 'Тренер сейчас недоступен — разбор позиции не подключён. Партия и задачи работают как обычно.',
+        sessionId: sid,
+      });
+    }
+
     appendSession(session, 'user', question);
     appendSession(session, 'assistant', text);
 

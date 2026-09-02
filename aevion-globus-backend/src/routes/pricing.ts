@@ -789,7 +789,7 @@ async function notifyApplication(app: ProgramApplication): Promise<void> {
  */
 pricingRouter.post("/affiliate/apply", (req, res) => {
   const ip = clientIp(req);
-  if (programRateLimited(ip, "affiliate")) {
+  if (programRateLimited(ip, "affiliate_apply")) {
     return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
   }
   const body = req.body ?? {};
@@ -833,7 +833,7 @@ pricingRouter.post("/affiliate/apply", (req, res) => {
  */
 pricingRouter.post("/partners/apply", (req, res) => {
   const ip = clientIp(req);
-  if (programRateLimited(ip, "partners")) {
+  if (programRateLimited(ip, "partners_apply")) {
     return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
   }
   const body = req.body ?? {};
@@ -1099,7 +1099,7 @@ function magicLinkHtml(
  */
 pricingRouter.post("/affiliate/magic-link", (req, res) => {
   const ip = clientIp(req);
-  if (programRateLimited(ip, "affiliate")) {
+  if (programRateLimited(ip, "affiliate_link")) {
     return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
   }
   const body = req.body ?? {};
@@ -1183,7 +1183,7 @@ pricingRouter.get("/affiliate/dashboard", (req, res) => {
  */
 pricingRouter.post("/partners/magic-link", (req, res) => {
   const ip = clientIp(req);
-  if (programRateLimited(ip, "partners")) {
+  if (programRateLimited(ip, "partners_link")) {
     return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
   }
   const body = req.body ?? {};

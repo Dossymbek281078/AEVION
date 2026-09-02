@@ -1292,6 +1292,33 @@ function foldHistory(history: ChatTurn[] | undefined): string {
  * разошлась бы молча — ровно этот класс я сегодня чинил в таблицах голосов, где
  * значения совпадали, а полнота нет.
  */
+/**
+ * Учёт ОБЪЁМА там, где цену посчитать нечем.
+ *
+ * Восемь поверхностей DevHub зовут платных поставщиков, которых нет в нашей
+ * таблице цен: звук, клон голоса и его предпрослушка, распознавание речи,
+ * перевод (три ручки), шаблон письма. Наш расчёт цены считает по токенам,
+ * а у секунд звука и символов речи их не бывает.
+ *
+ * До этого они не оставляли следа ВООБЩЕ. Теперь остаётся объём, а цена
+ * честно нулевая — и суффикс в имени модуля говорит об этом прямо, чтобы
+ * ноль не прочитали как «попользовались, стоило ноль». Это разные вещи:
+ * «двести вызовов, цена неизвестна» решаемо, тишина — нет.
+ *
+ * Цену НЕ подставляем даже приблизительно: выдумка, поданная как замер,
+ * дороже отсутствия числа.
+ */
+function учтиБезЦены(поверхность: string): void {
+  try {
+    insertSmartRun({
+      module: `devhub-${поверхность}-БЕЗ-ЦЕНЫ`,
+      resolved: "single",
+      costUsd: 0,
+      savedUsd: 0,
+    });
+  } catch { /* Учёт не должен ронять ответ, ради которого его зовут. */ }
+}
+
 function меткаГенерации(userId: string): string {
   const гость = userId.startsWith("guest:") || userId === "anonymous";
   return гость ? "devhub-generate-anon" : "devhub-generate";
@@ -4430,6 +4457,7 @@ devhubRouter.post("/media/sfx", dhCostlyLimit("dhsfx"), async (req, res) => {
       console.warn("[DevHub] /media/sfx: расход не прочитан, выдано без учёта; пользователь", sfxUserId);
     }
     await debitQuietly(sfxUserId, "music");
+    учтиБезЦены("sfx");
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Content-Length", audioBuffer.length);
     res.setHeader("Cache-Control", "no-store");
@@ -4664,6 +4692,7 @@ devhubRouter.post("/media/voice-clone", dhCostlyLimit("dhvclone"), async (req, r
     }
     const data = await r.json() as { voice_id: string; requires_verification?: boolean };
     await debitQuietly(vcloneUserId, "speech");
+    учтиБезЦены("voice-clone");
     res.json({ ok: true, ...creditNote(vcloneCredit), voiceId: data.voice_id, requiresVerification: data.requires_verification ?? false });
   } catch (e: any) {
     res.status(500).json({ error: safeErrorText(e) || "Voice clone failed" });
@@ -4741,6 +4770,7 @@ devhubRouter.post("/media/voice-clone/preview", dhCostlyLimit("dhvcprev"), async
       console.warn("[DevHub] /media/voice-clone/preview: расход не прочитан, выдано без учёта; пользователь", vcprevUserId);
     }
     await debitQuietly(vcprevUserId, "speech");
+    учтиБезЦены("voice-clone-preview");
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Content-Length", audio.length);
     res.setHeader("X-Aevion-Preview-Bytes", String(audio.length));
@@ -4796,6 +4826,7 @@ devhubRouter.post("/media/stt", dhCostlyLimit("dhstt"), async (req, res) => {
     }
     const data = await r.json() as { text?: string; language_code?: string; language_probability?: number };
       await debitQuietly(sttUserId, "speech");
+      учтиБезЦены("stt");
     res.json({ ok: true, ...creditNote(sttCredit), text: data.text || "", language: data.language_code || null, confidence: data.language_probability ?? null });
   } catch (e: any) {
     res.status(500).json({ error: safeErrorText(e) || "STT failed" });
@@ -5672,6 +5703,7 @@ devhubRouter.post("/media/translate", dhCostlyLimit("dhtr"), async (req, res) =>
     }
     noteProviderSuccess("translate");
     await debitQuietly(trUserId, "translate");
+    учтиБезЦены("translate");
     res.json({
       ok: true,
       ...creditNote(trCredit),
@@ -5770,6 +5802,7 @@ devhubRouter.post("/projects/:id/files/translate", dhCostlyLimit("dhftr"), async
       else memFiles.set(out.id, out);
     }
     await debitQuietly(userId, "translate", 1);
+    учтиБезЦены("files-translate");
     res.json({
       ...creditNote(ftrCredit),
       ok: true,
@@ -5994,6 +6027,7 @@ devhubRouter.post("/projects/:id/files/translate-bulk", dhCostlyLimit("dhftrb"),
 
   const okCount = results.filter((r) => r.ok).length;
   await debitQuietly(userId, "translate", okCount);
+  учтиБезЦены("files-translate-bulk");
   res.json({
     ...creditNote(ftrbCredit),
     ...(storageFallback ? MEMORY_NOTE : {}),
@@ -6823,6 +6857,7 @@ devhubRouter.post("/media/email-template-create", dhCostlyLimit("dhmail"), async
     }
     const data = await r.json().catch(() => ({})) as { id?: number };
     if (!data.id) return res.status(500).json({ error: "Brevo did not return template id" });
+    учтиБезЦены("email-template");
     res.json({ ok: true, id: data.id, name: payload.templateName, subject: payload.subject });
   } catch (e: any) {
     res.status(500).json({ error: safeErrorText(e) || "Template create failed" });

@@ -137,6 +137,10 @@ export default async function CyberChessLaunchPage({
 
 
         <WaitlistCapture
+          // Язык задан ЯВНО: страница объявлена lang="ru" на <main>.
+          // Без этого форма пошла бы за языком посетителя и на русской
+          // странице показала бы английские подписи.
+          lang="ru"
           source={source}
           tone="light"
           title={left > 0

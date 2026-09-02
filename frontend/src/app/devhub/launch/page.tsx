@@ -131,6 +131,10 @@ export default async function DevhubLaunchPage({
         <LandingView source={source} />
 
         <WaitlistCapture
+          // Язык задан ЯВНО: посадочная целиком на русском.
+          // Без этого форма пошла бы за языком посетителя и на русской
+          // странице показала бы английские подписи.
+          lang="ru"
           source={source}
           tone="light"
           title="Написать вам в день запуска"

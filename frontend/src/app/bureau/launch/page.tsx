@@ -77,7 +77,7 @@ export default async function BureauLaunchPage({
   const source = channel ? `bureau-${channel}` : "bureau";
 
   return (
-    <main style={{ minHeight: "100vh", background: PAPER, color: INK, padding: "clamp(16px, 4vw, 32px) 18px 56px" }}>
+    <main lang="ru" style={{ minHeight: "100vh", background: PAPER, color: INK, padding: "clamp(16px, 4vw, 32px) 18px 56px" }}>
       {/* Заходы сюда не считались до 28.08.2026: страница собирает адреса, но
           события page_view не слала. Воронка считает переходы ОТ page_view,
           поэтому её посетители не попадали в знаменатель — конверсия выглядела

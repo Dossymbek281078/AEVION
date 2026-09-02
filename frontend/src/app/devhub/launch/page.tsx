@@ -104,7 +104,7 @@ export default async function DevhubLaunchPage({
   const source = channel ? `devhub-${channel}` : "devhub";
 
   return (
-    <main className={paper.paper} style={{ minHeight: "100vh", padding: "clamp(16px, 4vw, 32px) 18px 56px" }}>
+    <main lang="ru" className={paper.paper} style={{ minHeight: "100vh", padding: "clamp(16px, 4vw, 32px) 18px 56px" }}>
       {/* Заходы сюда не считались до 28.08.2026: страница собирает адреса, но
           события page_view не слала. Воронка считает переходы ОТ page_view,
           поэтому её посетители не попадали в знаменатель — конверсия выглядела

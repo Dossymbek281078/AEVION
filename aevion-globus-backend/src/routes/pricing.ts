@@ -260,19 +260,13 @@ const promoLimiter = rateLimit({
   message: "Слишком много проверок кода. Подождите минуту.",
 });
 
-// Заявка и подписка на рассылку пишут строку в ФАЙЛ на диске. Без предела
-// это неограниченная анонимная запись: файл растёт, а полезные заявки тонут
-// среди мусора. Человек отправляет заявку один раз.
-const leadLimiter = rateLimit({
-  windowMs: 60_000,
-  max: 20,
-  message: "Слишком много заявок. Подождите минуту.",
-});
-const newsletterLimiter = rateLimit({
-  windowMs: 60_000,
-  max: 20,
-  message: "Слишком много попыток подписки. Подождите минуту.",
-});
+// ВАЖНО для следующего читателя: у /lead и /newsletter предел УЖЕ ЕСТЬ —
+// isRateLimited(ip) внутри самих обработчиков (отказ 429, retryAfter 10m).
+// 02.09.2026 я этого не увидел: греп искал "rateLimit(" и другого имени не
+// знал, поэтому знаменатель свипа получился неверным. Свои ограничители
+// отсюда убраны как ВТОРОЙ способ делать то же самое. Поведение обеих ручек
+// закреплено сторожем publicPricingEndpointsAreRateLimited — он проверяет
+// способность отказать, а не конкретный механизм.
 
 pricingRouter.post("/promo/validate", promoLimiter, (req, res) => {
   const body = req.body ?? {};
@@ -328,7 +322,7 @@ pricingRouter.get("/promo", (_req, res) => {
  *
  * Returns: { ok: true, id }
  */
-pricingRouter.post("/lead", leadLimiter, (req, res) => {
+pricingRouter.post("/lead", (req, res) => {
   const ip = clientIp(req);
   if (isRateLimited(ip)) {
     return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
@@ -558,7 +552,7 @@ interface NewsletterEntry {
  *
  * Лёгкий signup-форм для лидгена тех, кто не готов покупать.
  */
-pricingRouter.post("/newsletter", newsletterLimiter, (req, res) => {
+pricingRouter.post("/newsletter", (req, res) => {
   const ip = clientIp(req);
   if (newsletterRateLimited(ip)) {
     return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });

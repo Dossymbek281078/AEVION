@@ -50,13 +50,14 @@ const ISHODNIK = join(
 const PRIZNAKI = ["canEdit", "userId !==", ".userId ===", "requireAuth", "verifyBearer"];
 
 /**
- * Известные на 02.09.2026. Одиннадцать подтверждены пробой прода; четыре
+ * Известные на 02.09.2026, СЕМНАДЦАТЬ. Двенадцать подтверждены пробой прода;
  * (`/media/sfx`, `/media/upload-audio`, `/media/email-template-send`,
  * `/media/voice-clone/preview`) найдены разбором и пробой не проверялись —
  * их поведение не утверждается, они здесь только чтобы список был полным.
  */
 const IZVESTNYE = [
   "/ask",
+  "/media/drive-search", // 503 «не настроено» — то есть ВХОД не спрашивают
   "/media/email",
   "/media/email-template-create",
   "/media/email-template-send",
@@ -71,6 +72,7 @@ const IZVESTNYE = [
   "/media/voice-clone",
   "/media/voice-clone/preview",
   "/media/whatsapp",
+  "/snippets/:id/star", // пробой НЕ проверял: ручка меняет состояние
 ];
 
 function bezProverkiPrav(src: string): string[] {
@@ -79,7 +81,21 @@ function bezProverkiPrav(src: string): string[] {
   for (let n = 0; n < lines.length; n++) {
     const m = /devhubRouter\.(post|put|patch|delete)\(\s*"([^"]+)"/.exec(lines[n]);
     if (!m) continue;
-    const okno = lines.slice(n, n + 45).join(String.fromCharCode(10));
+    // ГРАНИЦА — закрытие самого вызова, по скобкам. Два неверных варианта,
+    // на которых я побывал за один час, и оба врали правдоподобно:
+    //   окно в 45 строк — у 46 обработчиков из 93 длина меньше, окно залезало
+    //     в соседний и заимствовало ЕГО проверку прав (ложное «защищено»);
+    //   до следующей ручки — у /ask следующая объявлена через 1201 строку,
+    //     между ними помощники с canEdit (то же ложное «защищено»).
+    // Считать надо структуру, а не расстояние.
+    const nachalo = lines.slice(0, n).join(String.fromCharCode(10)).length + (n ? 1 : 0);
+    const otkuda = src.indexOf("devhubRouter.", nachalo);
+    let gl = 0, konec = src.length;
+    for (let c = src.indexOf("(", otkuda); c < src.length; c++) {
+      if (src[c] === "(") gl++;
+      else if (src[c] === ")") { gl--; if (gl === 0) { konec = c; break; } }
+    }
+    const okno = src.slice(otkuda, konec);
     if (PRIZNAKI.some((p) => okno.includes(p))) continue;
     out.push(m[2]);
   }

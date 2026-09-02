@@ -9460,7 +9460,7 @@ export default function CyberChessPage(){
               <div style={{borderRadius:10,background:"#0f172a",padding:"10px 12px",border:"1px solid #334155"}}>
                 <div style={{fontSize:11,fontWeight:800,color:"#94a3b8",letterSpacing:"0.06em",textTransform:"uppercase" as const,marginBottom:8,display:"flex",justifyContent:"space-between"}}>
                   <span>📈 График оценки</span>
-                  <span style={{fontSize:10,color:"#64748b"}}>{analysis.length} ходов</span>
+                  <span style={{fontSize:10,color:"#64748b"}}>{analysis.length} {ccPlural(analysis.length,"ход","хода","ходов")}</span>
                 </div>
                 {(()=>{
                   const gW=Math.max(100,analysis.length*4);

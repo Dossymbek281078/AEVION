@@ -27,8 +27,11 @@ type Props = {
 
 const NOTES_STORAGE = "aevion_chess_dock_notes_v1";
 
-const SECTIONS: { id: Section; icon: string; label: string }[] = [
-  { id: "chessy",  icon: "💰", label: "Chessy" },
+// imya: подпись — имя продукта, переводить её нельзя. Живой перевод
+// получал «Chessy» на КАЖДОМ заходе (замер 02.09.2026: три отправки с
+// экрана анализа) — это платный вызов и риск, что вернётся «Чесси».
+const SECTIONS: { id: Section; icon: string; label: string; imya?: boolean }[] = [
+  { id: "chessy",  icon: "💰", label: "Chessy", imya: true },
   { id: "daily",   icon: "🎯", label: "Задача дня" },
   { id: "notes",   icon: "📝", label: "Заметки" },
   { id: "links",   icon: "🔗", label: "Ссылки" },
@@ -76,6 +79,8 @@ export default function WorkspaceDock({ chessyBalance, onOpenDailyModal, onOpenC
           const active = open === s.id;
           return (
             <button key={s.id} onClick={() => toggle(s.id)} title={s.label} aria-label={s.label} aria-pressed={active}
+              translate={s.imya ? "no" : undefined}
+              className={s.imya ? "notranslate" : undefined}
               style={{
                 width: 38, height: 38, borderRadius: 8,
                 border: "none", cursor: "pointer",

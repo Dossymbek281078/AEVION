@@ -288,7 +288,7 @@ const memSnippets = new Map<string, DevHubSnippet>();
 const memCheckpoints = new Map<string, DevHubCheckpoint>();
 
 // ── Credit metering ───────────────────────────────────────────────────────────
-type CapabilityKey = "video" | "image" | "tts" | "music" | "deploy";
+type CapabilityKey = "video" | "image" | "tts" | "music" | "deploy" | "speech" | "translate";
 type StudioTier = "free" | "pro" | "enterprise";
 
 /**
@@ -329,7 +329,7 @@ const VOICE_IDS: Record<string, string> = {
 // бесплатного тарифа. Правя любое число здесь, сперва посмотрите на его
 // единицу, а не на соседей по строке.
 const TIER_LIMITS: Record<StudioTier, Record<CapabilityKey, number>> = {
-  free:       { video: 3,   image: 10,  tts: 100000, music: 5,   deploy: 10 },
+  free:       { video: 3,   image: 10,  tts: 100000, music: 5,   deploy: 10, speech: 5,    translate: 50 },
   // tts у платного тарифа поднят до уровня бесплатного 01.09.2026. Было 30000
   // против 100000 у free — то есть ЗАПЛАТИВШИЙ получал втрое МЕНЬШЕ. Единица у
   // обоих одна (символы текста: и проверка, и списание считают text.trim()),
@@ -340,8 +340,8 @@ const TIER_LIMITS: Record<StudioTier, Record<CapabilityKey, number>> = {
   // закономерности озвучке причиталось бы около 2 000 000. Ставлю ровно
   // столько же, сколько у free, потому что «платный не может давать меньше
   // бесплатного» — не решение об упаковке, а отказ продавать ухудшение.
-  pro:        { video: 50,  image: 200, tts: 100000, music: 100, deploy: -1 },
-  enterprise: { video: -1,  image: -1,  tts: -1,    music: -1,  deploy: -1 },
+  pro:        { video: 50,  image: 200, tts: 100000, music: 100, deploy: -1, speech: 100,  translate: 1000 },
+  enterprise: { video: -1,  image: -1,  tts: -1,    music: -1,  deploy: -1, speech: -1,   translate: -1 },
 };
 
 // In-memory fallback: "userId:month:capability" → count
@@ -4363,6 +4363,17 @@ devhubRouter.post("/media/sfx", dhCostlyLimit("dhsfx"), async (req, res) => {
     return res.status(400).json({ error: "text too long (max 1000 chars)" });
   }
 
+  const sfxAuth = verifyBearerOptional(req);
+  const sfxUserId = requesterId(req, sfxAuth?.sub);
+  const sfxCredit = await checkCredit(sfxUserId, "music");
+  if (!sfxCredit.allowed) {
+    return res.status(402).json({
+      error: "Месячный лимит аудиоэффектов исчерпан",
+      tier: sfxCredit.tier, used: sfxCredit.used, limit: sfxCredit.limit,
+      upgrade: "/studio#upgrade",
+    });
+  }
+
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) {
     return res.status(503).json({
@@ -4388,6 +4399,12 @@ devhubRouter.post("/media/sfx", dhCostlyLimit("dhsfx"), async (req, res) => {
       return res.status(r.status).json({ error: `ElevenLabs SFX error: ${errText.slice(0, 300)}` });
     }
     const audioBuffer = Buffer.from(await r.arrayBuffer());
+    if (!sfxCredit.usedKnown) {
+      // Ответ двоичный, признак в тело не положить. Молчать нельзя:
+      // иначе неизвестный остаток выглядит как обычный успех.
+      console.warn("[DevHub] /media/sfx: расход не прочитан, выдано без учёта; пользователь", sfxUserId);
+    }
+    await debitQuietly(sfxUserId, "music");
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Content-Length", audioBuffer.length);
     res.setHeader("Cache-Control", "no-store");
@@ -4587,6 +4604,17 @@ devhubRouter.post("/media/voice-clone", dhCostlyLimit("dhvclone"), async (req, r
   if (!sampleBase64 || typeof sampleBase64 !== "string") return res.status(400).json({ error: "sampleBase64 (audio file) required" });
   if (sampleBase64.length > 12_000_000) return res.status(400).json({ error: "sample too large (max ~9 MB base64)" });
 
+  const vcloneAuth = verifyBearerOptional(req);
+  const vcloneUserId = requesterId(req, vcloneAuth?.sub);
+  const vcloneCredit = await checkCredit(vcloneUserId, "speech");
+  if (!vcloneCredit.allowed) {
+    return res.status(402).json({
+      error: "Месячный лимит клонирования голоса исчерпан",
+      tier: vcloneCredit.tier, used: vcloneCredit.used, limit: vcloneCredit.limit,
+      upgrade: "/studio#upgrade",
+    });
+  }
+
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) return res.status(503).json({ error: "ElevenLabs not configured — set ELEVENLABS_API_KEY", setupUrl: "https://elevenlabs.io/api" });
 
@@ -4610,7 +4638,8 @@ devhubRouter.post("/media/voice-clone", dhCostlyLimit("dhvclone"), async (req, r
       return res.status(r.status).json({ error: `Voice clone error: ${errText.slice(0, 300)}` });
     }
     const data = await r.json() as { voice_id: string; requires_verification?: boolean };
-    res.json({ ok: true, voiceId: data.voice_id, requiresVerification: data.requires_verification ?? false });
+    await debitQuietly(vcloneUserId, "speech");
+    res.json({ ok: true, ...creditNote(vcloneCredit), voiceId: data.voice_id, requiresVerification: data.requires_verification ?? false });
   } catch (e: any) {
     res.status(500).json({ error: safeErrorText(e) || "Voice clone failed" });
   }
@@ -4623,6 +4652,17 @@ devhubRouter.post("/media/voice-clone/preview", dhCostlyLimit("dhvcprev"), async
   const { sampleBase64, mimeType = "audio/mpeg", previewText } = req.body || {};
   if (!sampleBase64 || typeof sampleBase64 !== "string") return res.status(400).json({ error: "sampleBase64 (audio file) required" });
   if (sampleBase64.length > 12_000_000) return res.status(400).json({ error: "sample too large (max ~9 MB base64)" });
+
+  const vcprevAuth = verifyBearerOptional(req);
+  const vcprevUserId = requesterId(req, vcprevAuth?.sub);
+  const vcprevCredit = await checkCredit(vcprevUserId, "speech");
+  if (!vcprevCredit.allowed) {
+    return res.status(402).json({
+      error: "Месячный лимит клонирования голоса исчерпан",
+      tier: vcprevCredit.tier, used: vcprevCredit.used, limit: vcprevCredit.limit,
+      upgrade: "/studio#upgrade",
+    });
+  }
 
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) return res.status(503).json({ error: "ElevenLabs not configured — set ELEVENLABS_API_KEY", setupUrl: "https://elevenlabs.io/api" });
@@ -4670,6 +4710,12 @@ devhubRouter.post("/media/voice-clone/preview", dhCostlyLimit("dhvcprev"), async
       });
     } catch { /* leak is acceptable — preview already returned */ }
 
+    if (!vcprevCredit.usedKnown) {
+      // Ответ двоичный, признак в тело не положить. Молчать нельзя:
+      // иначе неизвестный остаток выглядит как обычный успех.
+      console.warn("[DevHub] /media/voice-clone/preview: расход не прочитан, выдано без учёта; пользователь", vcprevUserId);
+    }
+    await debitQuietly(vcprevUserId, "speech");
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Content-Length", audio.length);
     res.setHeader("X-Aevion-Preview-Bytes", String(audio.length));
@@ -4688,6 +4734,17 @@ devhubRouter.post("/media/stt", dhCostlyLimit("dhstt"), async (req, res) => {
   const { audioBase64, mimeType = "audio/mpeg", language } = req.body || {};
   if (!audioBase64 || typeof audioBase64 !== "string") return res.status(400).json({ error: "audioBase64 required" });
   if (audioBase64.length > 30_000_000) return res.status(400).json({ error: "audio too large (max ~22 MB base64)" });
+
+  const sttAuth = verifyBearerOptional(req);
+  const sttUserId = requesterId(req, sttAuth?.sub);
+  const sttCredit = await checkCredit(sttUserId, "speech");
+  if (!sttCredit.allowed) {
+    return res.status(402).json({
+      error: "Месячный лимит распознавания речи исчерпан",
+      tier: sttCredit.tier, used: sttCredit.used, limit: sttCredit.limit,
+      upgrade: "/studio#upgrade",
+    });
+  }
 
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) return res.status(503).json({ error: "ElevenLabs not configured — set ELEVENLABS_API_KEY" });
@@ -4713,7 +4770,8 @@ devhubRouter.post("/media/stt", dhCostlyLimit("dhstt"), async (req, res) => {
       return res.status(r.status).json({ error: `STT error: ${errText.slice(0, 300)}` });
     }
     const data = await r.json() as { text?: string; language_code?: string; language_probability?: number };
-    res.json({ ok: true, text: data.text || "", language: data.language_code || null, confidence: data.language_probability ?? null });
+      await debitQuietly(sttUserId, "speech");
+    res.json({ ok: true, ...creditNote(sttCredit), text: data.text || "", language: data.language_code || null, confidence: data.language_probability ?? null });
   } catch (e: any) {
     res.status(500).json({ error: safeErrorText(e) || "STT failed" });
   }
@@ -5526,6 +5584,17 @@ devhubRouter.post("/media/translate", dhCostlyLimit("dhtr"), async (req, res) =>
   if (!targetLang || typeof targetLang !== "string") return res.status(400).json({ error: "targetLang required (e.g. EN, RU, DE, ES, FR)" });
   if (text.length > 128_000) return res.status(400).json({ error: "text too long (max 128k chars)" });
 
+  const trAuth = verifyBearerOptional(req);
+  const trUserId = requesterId(req, trAuth?.sub);
+  const trCredit = await checkCredit(trUserId, "translate");
+  if (!trCredit.allowed) {
+    return res.status(402).json({
+      error: "Месячный лимит перевода исчерпан",
+      tier: trCredit.tier, used: trCredit.used, limit: trCredit.limit,
+      upgrade: "/studio#upgrade",
+    });
+  }
+
   const apiKey = process.env.DEEPL_API_KEY;
   if (!apiKey) {
     return res.status(503).json({
@@ -5577,8 +5646,10 @@ devhubRouter.post("/media/translate", dhCostlyLimit("dhtr"), async (req, res) =>
       return res.status(500).json({ error: "no translation returned" });
     }
     noteProviderSuccess("translate");
+    await debitQuietly(trUserId, "translate");
     res.json({
       ok: true,
+      ...creditNote(trCredit),
       text: first.text,
       detectedSource: first.detected_source_language,
       targetLang: targetLang.toUpperCase(),
@@ -5600,6 +5671,15 @@ devhubRouter.post("/projects/:id/files/translate", dhCostlyLimit("dhftr"), async
   const { path, targetLang, saveAs } = req.body || {};
   if (!path || typeof path !== "string") return res.status(400).json({ error: "path required" });
   if (!targetLang || typeof targetLang !== "string") return res.status(400).json({ error: "targetLang required" });
+
+  const ftrCredit = await checkCredit(userId, "translate", 1);
+  if (!ftrCredit.allowed) {
+    return res.status(402).json({
+      error: "Месячный лимит перевода исчерпан",
+      tier: ftrCredit.tier, used: ftrCredit.used, limit: ftrCredit.limit,
+      upgrade: "/studio#upgrade",
+    });
+  }
 
   const apiKey = process.env.DEEPL_API_KEY;
   if (!apiKey) return res.status(503).json({ error: "DeepL not configured — set DEEPL_API_KEY" });
@@ -5664,7 +5744,9 @@ devhubRouter.post("/projects/:id/files/translate", dhCostlyLimit("dhftr"), async
       if (existing) { existing.content = out.content; existing.updatedAt = out.updatedAt; }
       else memFiles.set(out.id, out);
     }
+    await debitQuietly(userId, "translate", 1);
     res.json({
+      ...creditNote(ftrCredit),
       ok: true,
       path: newPath,
       bytes: translated.length,
@@ -5816,6 +5898,15 @@ devhubRouter.post("/projects/:id/files/translate-bulk", dhCostlyLimit("dhftrb"),
   if (!Array.isArray(targetLangs) || targetLangs.length === 0) return res.status(400).json({ error: "targetLangs array required" });
   if (paths.length * targetLangs.length > 50) return res.status(400).json({ error: "max 50 translations per bulk call" });
 
+  const ftrbCredit = await checkCredit(userId, "translate", paths.length * targetLangs.length);
+  if (!ftrbCredit.allowed) {
+    return res.status(402).json({
+      error: "Месячный лимит перевода исчерпан",
+      tier: ftrbCredit.tier, used: ftrbCredit.used, limit: ftrbCredit.limit,
+      upgrade: "/studio#upgrade",
+    });
+  }
+
   const apiKey = process.env.DEEPL_API_KEY;
   if (!apiKey) return res.status(503).json({ error: "DeepL not configured — set DEEPL_API_KEY" });
   const endpoint = apiKey.endsWith(":fx") ? "https://api-free.deepl.com/v2/translate" : "https://api.deepl.com/v2/translate";
@@ -5877,7 +5968,9 @@ devhubRouter.post("/projects/:id/files/translate-bulk", dhCostlyLimit("dhftrb"),
   }
 
   const okCount = results.filter((r) => r.ok).length;
+  await debitQuietly(userId, "translate", okCount);
   res.json({
+    ...creditNote(ftrbCredit),
     ...(storageFallback ? MEMORY_NOTE : {}),
     ok: okCount === results.length,
     total: results.length,

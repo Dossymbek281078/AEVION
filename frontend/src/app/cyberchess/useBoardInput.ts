@@ -137,7 +137,7 @@ export interface BoardInputOptions {
   scratchOn: boolean;
   scratchGame: Chess | null;
   autoQueen: boolean;
-  hotseat: boolean;
+  hotseat: boolean;  // используется ниже: см. chuzhoyHod
   variant: string;
   dicePieceType: string | null;
   editorMode: boolean;
@@ -159,6 +159,22 @@ export interface BoardInputOptions {
 
 type BRect = { l: number; t: number; cw: number; flip: boolean };
 type DragState = { from: Square; sx: number; sy: number; pid: number; ptype: string; active: boolean; bRect: BRect };
+
+
+/**
+ * Ход соперника — то есть ввод сейчас НЕ наш.
+ *
+ * Флаг hotseat («двое за одним экраном») приходил в этот модуль с апреля и не
+ * читался здесь ни разу: все пять мест сравнивали game.turn() с pCol, то есть
+ * с цветом ОДНОГО игрока. Следствие проверено браузером 02.09.2026: белые
+ * ходят, чёрные не отзываются ни мышью, ни с клавиатуры, а белые при этом
+ * могут сходить ВТОРОЙ раз подряд — очередь не переключалась вовсе.
+ * Режим «Два игрока · один экран» стоит на первом экране модуля.
+ */
+export function chuzhoyHod(o: { tab: string; game: { turn: () => string }; pCol: string; hotseat: boolean }): boolean {
+  if (o.tab === "analysis" || o.hotseat) return false;   // ходим за обе стороны
+  return o.game.turn() !== o.pCol;
+}
 
 export function useBoardInput(opts: BoardInputOptions) {
   const boardRef = useRef<HTMLDivElement | null>(null);
@@ -322,7 +338,7 @@ export function useBoardInput(opts: BoardInputOptions) {
     }
     const pieceSrc = o.scratchOn && o.scratchGame
       ? o.scratchGame
-      : (o.tab !== "analysis" && o.game.turn() !== o.pCol && o.on ? o.virtualGame : o.game);
+      : (chuzhoyHod(o) && o.on ? o.virtualGame : o.game);
     const piece = pieceSrc.get(from) || o.game.get(from);
     if (!piece) {
       if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG === true) {
@@ -496,7 +512,7 @@ export function useBoardInput(opts: BoardInputOptions) {
       } else { o.sScratchSel(null); o.sScratchVm(new Set()); }
       return;
     }
-    if (o.tab !== "analysis" && o.game.turn() !== o.pCol && o.on && !o.over) {
+    if (chuzhoyHod(o) && o.on && !o.over) {
       // Premove drop
       if (o.pmsRef.current.length >= o.pmLim) return;
       const piece = o.virtualGame.get(from);
@@ -686,7 +702,7 @@ export function useBoardInput(opts: BoardInputOptions) {
       return;
     }
 
-    const isPM = o.tab !== "analysis" && o.game.turn() !== o.pCol && o.on && !o.over;
+    const isPM = chuzhoyHod(o) && o.on && !o.over;
 
     // Read latest sel/vm via refs so a fast follow-up click sees fresh state
     // (refs are updated synchronously below when sSel/sVm are called from this hook).
@@ -742,7 +758,7 @@ export function useBoardInput(opts: BoardInputOptions) {
 
     const checkBoard = isPM ? o.virtualGame : o.game;
     const p = checkBoard.get(sq);
-    const side = o.tab === "analysis" ? o.game.turn() : o.pCol;
+    const side = (o.tab === "analysis" || o.hotseat) ? o.game.turn() : o.pCol;
     const canDrag = !!p && (o.tab === "analysis" || p.color === side) && !o.over;
     if (typeof window !== "undefined" && (window as any).__CC_DEBUG_DRAG === true) {
       // eslint-disable-next-line no-console
@@ -765,7 +781,7 @@ export function useBoardInput(opts: BoardInputOptions) {
       console.log("[CC] onBoardDown: drag ARMED + ghost shown immediately");
     }
 
-    const isMyTurn = o.tab === "analysis" || o.game.turn() === o.pCol;
+    const isMyTurn = !chuzhoyHod(o);
     if (isMyTurn) {
       o.sSel(sq); o.selRef.current = sq;
       const all = o.game.moves({ square: sq, verbose: true });

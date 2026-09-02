@@ -279,7 +279,7 @@ function SuccessInner() {
             {t("pricing.checkoutSuccess.whatsNext")}
           </h3>
           <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8 }}>
-            {[
+            {([
               { icon: "📧", text: processor
                   ? t("pricing.checkoutSuccess.nextEmail", { processor })
                   : t("pricing.checkoutSuccess.nextEmailNoName") },
@@ -294,11 +294,27 @@ function SuccessInner() {
               ...(processor
                 ? [{ icon: "⚙️", text: t("pricing.checkoutSuccess.nextManage", { processor }) }]
                 : []),
-              { icon: "💬", text: t("pricing.checkoutSuccess.nextQuestions") },
-            ].map((item, i) => (
+              // Вопрос сразу после оплаты — самый срочный на платформе. Пункт
+              // ведёт в нашу форму с уже подставленной темой покупки, а не на
+              // почтовый адрес: у домена нет MX, и письмо туда выглядело бы для
+              // заплатившего человека как молчание в ответ.
+              {
+                icon: "💬",
+                text: t("pricing.checkoutSuccess.nextQuestions"),
+                href: "/pricing/contact?topic=purchase",
+              },
+            ] as Array<{ icon: string; text: string; href?: string }>).map((item, i) => (
               <li key={i} style={{ display: "flex", gap: 10, fontSize: 13, color: "#475569" }}>
                 <span>{item.icon}</span>
-                <span>{item.text}</span>
+                <span>
+                  {item.href ? (
+                    <Link href={item.href} style={{ color: "#2563eb", textDecoration: "underline" }}>
+                      {item.text}
+                    </Link>
+                  ) : (
+                    item.text
+                  )}
+                </span>
               </li>
             ))}
           </ul>

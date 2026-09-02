@@ -10,7 +10,7 @@ interface Props {
 }
 
 export default function LanguageSwitcher({ variant = "compact" }: Props) {
-  const { lang, setLang } = useI18n();
+  const { lang, setLang, t } = useI18n();
   const { usable, partial } = langsByCoverage();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -49,7 +49,7 @@ export default function LanguageSwitcher({ variant = "compact" }: Props) {
         onClick={() => setOpen(o => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        title="Выбрать язык / Select language"
+        title={t("langSwitch.pick")}
         style={{
           display: "inline-flex",
           alignItems: "center",
@@ -147,7 +147,7 @@ export default function LanguageSwitcher({ variant = "compact" }: Props) {
                 {partialShare !== null && (
                   <span
                     style={{ fontSize: 11, color: "#8a8886", flexShrink: 0 }}
-                    title={`Готового словаря — ${partialShare}%. Остальное переводится машинным переводом на лету; если он недоступен, текст останется на языке оригинала.`}
+                    title={t("langSwitch.partial", { share: String(partialShare) })}
                   >
                     машинный
                   </span>

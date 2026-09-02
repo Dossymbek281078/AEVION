@@ -7413,6 +7413,8 @@ const en: Record<string, string> = {
   "qskyway.tip.substExample": "building {i} ({type}) instead of {from} m, from {n} known heights",
   "qskyway.tip.substitutedHeight": "Height taken from statistics for buildings of the same type in this city — neither measured nor derived from this building's own floor count. Underestimating is not allowed: the corridor would pass below the roof, so the 75th percentile is used rather than the median. Examples: {examples}. On the map such buildings are outlined with a dashed line; the warm shade means 'guessed' and is given to them on a par with the blind 12 m default, although the two claims differ.",
   "qskyway.tip.suspectHeight": "We do not treat the source height as reliable: either it is many times taller than all the surrounding development, or the height tag contradicts the floor count in the same source. We rewrite nothing silently — where the source contradicts itself we take its own floor count instead of the disputed height, and where the height merely stands out we leave it as published and show the discrepancy. The corridor gets a safety margin in both cases: a height from OpenStreetMap is a contributor's claim, not an official survey.",
+  "langSwitch.pick": "Select language",
+  "langSwitch.partial": "Dictionary is {share}% complete. The rest is machine-translated on the fly; if that is unavailable, the text stays in the original language.",
 };
 
 export default en;

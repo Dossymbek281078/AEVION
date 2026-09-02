@@ -43,13 +43,34 @@ function merchantId(): string {
 }
 
 function secret(): string {
-  const v = process.env.PAYBOX_SECRET;
+  const v = payboxSecret();
   if (!v) throw new Error("PayBox: missing PAYBOX_SECRET");
   return v;
 }
 
 function publicBase(): string {
   return (process.env.AEVION_PUBLIC_BASE_URL ?? "https://aevion.app").replace(/\/+$/, "");
+}
+
+/**
+ * ОДИН источник секрета PayBox на всю платформу.
+ *
+ * Замер 02.09.2026: секрет читали под ДВУМЯ именами. Провайдер кассы и страница
+ * состояния спрашивали PAYBOX_SECRET, а routes/payments.ts —
+ * PAYBOX_SECRET_KEY, и именно он ПОДПИСЫВАЕТ платёжный запрос. Задай владелец
+ * одно имя — половина платежей осталась бы без подписи, а страница состояния
+ * при этом рапортовала бы «настроено». Ошибка вылезла бы только после ввода
+ * настоящих секретов, то есть на живых деньгах.
+ *
+ * Принимаем оба имени: какое бы ни задали, работает вся платформа.
+ */
+export function payboxSecret(): string {
+  return (process.env.PAYBOX_SECRET ?? process.env.PAYBOX_SECRET_KEY ?? "").trim();
+}
+
+/** Идентификатор продавца — имя одно, но резолвер тут же, чтобы читатель был один. */
+export function payboxMerchantId(): string {
+  return (process.env.PAYBOX_MERCHANT_ID ?? process.env.PAYBOX_MERCHANT ?? "").trim();
 }
 
 function testingMode(): "1" | "0" {
@@ -59,7 +80,7 @@ function testingMode(): "1" | "0" {
 
 /** True только когда заданы оба обязательных секрета — иначе провайдер не активен. */
 export function isPayboxConfigured(): boolean {
-  return Boolean(process.env.PAYBOX_MERCHANT_ID?.trim() && process.env.PAYBOX_SECRET?.trim());
+  return Boolean(payboxMerchantId() && payboxSecret());
 }
 
 function genSalt(): string {
@@ -183,7 +204,7 @@ export const payboxPaymentProvider: PaymentProvider = {
 
     // Без секрета подпись вычислить нечем → не доверяем (а не падаем). Возвращаем
     // invalid_signature, чтобы роут ответил 401, а не 400 на необработанном throw.
-    if (!process.env.PAYBOX_SECRET?.trim()) {
+    if (!payboxSecret()) {
       return {
         intentId: `paybox:${paymentId}`,
         result: { status: "failed" as const, paidAt: null, reason: "invalid_signature", raw: flat },

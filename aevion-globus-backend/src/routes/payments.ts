@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { payboxSecret, payboxMerchantId } from "../lib/payment/payboxProvider";
 import { isPayboxConfigured } from "../lib/payment/payboxProvider";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
@@ -9,8 +10,10 @@ const capturePaymentsError = makeServiceCapture("payments");
 export const paymentsRouter = Router();
 
 const GUMROAD_TOKEN = () => process.env.GUMROAD_ACCESS_TOKEN?.trim() || "";
-const PAYBOX_MERCHANT = () => process.env.PAYBOX_MERCHANT_ID?.trim() || "";
-const PAYBOX_SECRET = () => process.env.PAYBOX_SECRET_KEY?.trim() || "";
+const PAYBOX_MERCHANT = () => payboxMerchantId();
+// Общий резолвер: этот файл читал PAYBOX_SECRET_KEY, а касса — PAYBOX_SECRET.
+// Одно имя из двух оставило бы подпись платежа пустой при «настроенной» кассе.
+const PAYBOX_SECRET = () => payboxSecret();
 
 /** A Gumroad checkout is "real" only when a product permalink is configured. */
 function gumroadConfigured(reference: string): boolean {

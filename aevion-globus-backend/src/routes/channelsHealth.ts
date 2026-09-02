@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { payboxSecret, payboxMerchantId } from "../lib/payment/payboxProvider";
 import { emailQuotaToday } from "../lib/brevoQuota";
 import { lemonSqueezyTiersConfigured } from "../data/lemonSqueezyVariants";
 
@@ -41,7 +42,10 @@ channelsHealthRouter.get("/channels", (_req: Request, res: Response) => {
   // ── оплата ───────────────────────────────────────────────────────────
   const lemonsqueezy = set("LEMON_SQUEEZY_API_KEY") && set("LEMON_SQUEEZY_STORE_ID");
   const gumroad = set("GUMROAD_ACCESS_TOKEN");
-  const paybox = set("PAYBOX_MERCHANT_ID") && set("PAYBOX_SECRET");
+  // Через общий резолвер, а не по одному имени: секрет принимается под двумя
+  // именами, и страница состояния обязана отвечать то же, что делает касса.
+  // Иначе получаем худший вид расхождения — «настроено» при неработающей оплате.
+  const paybox = Boolean(payboxMerchantId() && payboxSecret());
   const paypal = set("PAYPAL_CLIENT_ID") && set("PAYPAL_SECRET");
 
   // ── подписи вебхуков ─────────────────────────────────────────────────

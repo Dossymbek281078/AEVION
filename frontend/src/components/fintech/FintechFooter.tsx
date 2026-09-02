@@ -41,7 +41,9 @@ export default function FintechFooter({ hideHealthBadge = false }: Props) {
   return (
     <footer style={{
       marginTop: 60,
-      padding: "28px 24px 36px",
+      // Нижний отступ учитывает плавающую кнопку агента (см. SiteFooter).
+      // Нет кнопки — переменная не задана — отступ прежний.
+      padding: "28px 24px calc(36px + var(--aevion-agent-h, 0px))",
       borderTop: "1px solid #334155",
       background: "#1e293b",
       borderRadius: 12,

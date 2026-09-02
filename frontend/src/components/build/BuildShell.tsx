@@ -258,7 +258,9 @@ function MobileBottomNav({ pathname, skin }: { pathname: string; skin: ShellSkin
     <nav
       aria-label="Bottom navigation"
       className={`fixed inset-x-0 bottom-0 z-30 border-t backdrop-blur sm:hidden ${skin.bottomNav}`}
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      // К безопасной зоне телефона добавляем высоту кнопки агента: она
+      // закреплена в правом нижнем углу и накрывает последнюю строку.
+      style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + var(--aevion-agent-h, 0px))" }}
     >
       <ul className="mx-auto grid max-w-md grid-cols-5">
         {tabs.map((t) => {

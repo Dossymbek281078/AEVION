@@ -291,6 +291,24 @@ export default function QSkywayClient() {
     return v === key ? c.name : v;
   };
 
+  // Чип провенанса берёт подсказку из `dataQuality.note`, ЗАМЕЩАЯ ею своё
+  // человеческое пояснение. У наших городов в этом поле лежит разработческая
+  // скоропись — расшифровка кодировки `hs` для того, кто читает API:
+  //
+  //   «hs 0=обмерено властями … 1=выведено(тег height из OSM либо
+  //    levels×3.2+1.6м парапет) 2=угадано(75-й процентиль …)»
+  //
+  // 02.09.2026: замер живого прода показал, что именно её и читает посетитель,
+  // наведя курсор, — по-русски на любом языке. Пояснение чипа при этом
+  // переведено на три языка и объясняет то же самое человеческими словами.
+  //
+  // Поле у чипа НЕ лишнее: соседние страницы кладут туда осмысленный текст.
+  // Неверна наша сторона — мы кладём туда заметку для разработчика. Правим
+  // здесь, а не в данных: файлы городов генерируются, и правка в них не
+  // переживёт пересборку.
+  const devNoteStripped = <T extends { note?: string } | null | undefined>(dq: T) =>
+    (dq ? { ...dq, note: undefined } : dq);
+
   const padBan = padProhibition(meta?.airspace?.permission);
   // Выбор языка ОДИН на оба места показа. Тернарник, повторённый дважды,
   // расходится молча: поправят одно, второе останется на прежнем языке.
@@ -1145,7 +1163,7 @@ export default function QSkywayClient() {
                       <span style={{ color: "#94a3b8" }}>{t("qskyway.verify.unknown")}</span>
                     )}
                   </button>
-                  <DataProvenanceChip compact dataQuality={meta.dq} labels={{ unit: t("qskyway.unit.buildings") }} />
+                  <DataProvenanceChip compact dataQuality={devNoteStripped(meta.dq)} labels={{ unit: t("qskyway.unit.buildings") }} />
                   {meta.suspect.length > 0 && (
                     <span
                       title={t("qskyway.tip.suspectHeight")}

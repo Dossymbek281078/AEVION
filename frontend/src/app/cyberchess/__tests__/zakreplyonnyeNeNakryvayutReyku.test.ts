@@ -65,3 +65,24 @@ describe("блок покупки в рейке", () => {
     expect(баннер).toContain("marginBottom: POLOSA_VSPLYVASHEK");
   });
 });
+
+describe("рейка и чужие закреплённые соседи", () => {
+  it("рейка начинается НИЖЕ переключателя языка платформы", async () => {
+    const { OTSTUP_SVERHU } = await import("../AevionProjectsBanner");
+    // Переключатель «RU ▼» занимает 16..46px по вертикали (замер 01.09.2026
+    // на 1280 и 1920). Рейка выше 46 накрывает его нижнюю половину, и кнопка
+    // смены языка перестаёт нажиматься на всех десктопных ширинах.
+    expect(OTSTUP_SVERHU).toBeGreaterThan(46);
+    const баннер = readFileSync(join(__dirname, "..", "AevionProjectsBanner.tsx"), "utf8");
+    expect(баннер).toContain("top: OTSTUP_SVERHU");
+  });
+
+  it("плашка стрима поднята над полосой всплывашек", () => {
+    const код = readFileSync(join(__dirname, "..", "page.tsx"), "utf8");
+    const i = код.indexOf("zIndex:7900");
+    expect(i, "плашка стрима пропала — проверку переписать").toBeGreaterThan(0);
+    const строка = код.slice(Math.max(0, i - 200), i + 40);
+    // иначе две наши закреплённые панели встают друг на друга у одного края
+    expect(строка).toContain("bottom:POLOSA_VSPLYVASHEK");
+  });
+});

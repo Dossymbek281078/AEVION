@@ -138,6 +138,7 @@ import CommandPalette, { type Command as PaletteCommand } from "./CommandPalette
 import { loadBookmarks, addBookmark, removeBookmark, type Bookmark } from "./bookmarks";
 import { whisperPosition, whisperAndSpeak } from "./positionWhisper";
 import { CHESSY_STORAGE_KEY, CHESSY_LOG_STORAGE_KEY } from "./chessyLedger";
+import { POLOSA_VSPLYVASHEK } from "./AevionProjectsBanner";
 import { CHESS_LAUNCH_UTC } from "./launchDate";
 import { VARIANTS, fischer960Fen, asymmetricFen, twinKingsFen, twinKingsLossSide, rollDice, filterMovesByDice, pickReinforcement, atomicFen, applyExplosion, kothFen, kothWinner, threeCheckFen, knightRidersFen, pawnApocalypseFen, buildArmyFen, ARMY_PRESETS, randomVariant, getDailyVariantState, markDailyVariantPlayed, ldVariantStats, svVariantStats, recordVariantResult, VARIANT_TUTORIAL, VARIANT_ACH_REWARDS, variantAchKey, variantAchLabel, totalVariantGames, variantsPlayedCount, favoriteVariant, bestWinrateVariant, type VariantId, type ArmySlot, type VariantStats } from "./variants";
 import { EMPTY_POOL, addToPool, removeFromPool, poolSize, isDropLegal, applyDrop, isDropAvailable, POOL_GLYPH, type DropPool } from "./powerDrop";
@@ -12279,7 +12280,7 @@ ${question.trim()}`;
     {showPipSuggest&&!on&&!anyOnboardingModal&&vwPx>=900&&<div
       role="alert"
       style={{
-        position:"fixed",right:"calc(20px + var(--aevion-projects-w, 0px))",bottom:20,zIndex:7900,
+        position:"fixed",right:"calc(20px + var(--aevion-projects-w, 0px))",bottom:POLOSA_VSPLYVASHEK,zIndex:7900,
         display:"flex",alignItems:"center",gap:10,
         padding:"10px 14px",borderRadius:999,
         background:"linear-gradient(135deg,#1e1b4b 0%,#581c87 100%)",color:"#fff",

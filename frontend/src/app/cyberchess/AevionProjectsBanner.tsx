@@ -25,6 +25,14 @@ const BANNER_W = 240;
  */
 export const POLOSA_VSPLYVASHEK = 96;
 
+/**
+ * Отступ рейки сверху. Переключатель языка платформы («RU ▼») стоит в потоке
+ * у правого края и занимает по вертикали 16..46px — замер 01.09.2026 на 1280
+ * и 1920. Рейка закреплена и накрывала его нижнюю половину: кнопка смены
+ * языка не нажималась ни на одной десктопной ширине. 56 = 46 + запас.
+ */
+export const OTSTUP_SVERHU = 56;
+
 export default function AevionProjectsBanner({ onHide }: Props) {
   // Панель фиксированная и лежит ПОВЕРХ страницы: без компенсации она срезает
   // правый край контента — на лаунчпаде под неё уходил край кнопки «Играть».
@@ -46,7 +54,7 @@ export default function AevionProjectsBanner({ onHide }: Props) {
 
   return (
     <div style={{
-      position: "fixed", right: 0, top: 28, bottom: 0, width: BANNER_W,
+      position: "fixed", right: 0, top: OTSTUP_SVERHU, bottom: 0, width: BANNER_W,
       background: "#1e1c19", borderLeft: "1px solid #3d3b39",
       display: "flex", flexDirection: "column", zIndex: 150,
       overflow: "hidden",

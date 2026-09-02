@@ -548,6 +548,12 @@ qventureRouter.get("/analyses/:id/pdf", async (req: Request, res: Response) => {
     const W = 495;
 
     // Header
+    // Записка и весь PDF намеренно на АНГЛИЙСКОМ, хотя интерфейс модуля
+    // русский. Это не недосмотр: промт итоговой записки прямо задаёт
+    // «for an English-speaking investor» (lib/qventure/lenses.ts) — покупатель
+    // пересылает документ инвесткомитету и внешним инвесторам.
+    // 02.09.2026 я чуть не «починил» это, переведя 28 строк. Не переводить
+    // без решения основателя: это состав продукта, а не язык кнопок.
     doc.fontSize(20).font("Helvetica-Bold").fillColor("#0f172a").text("AEVION QVenture — Investment Memo");
     doc.fontSize(9).font("Helvetica").fillColor("#64748b")
       .text(`Generated ${new Date().toISOString().slice(0, 10)} · AEVION AI Investment Analyst · not investment advice`);

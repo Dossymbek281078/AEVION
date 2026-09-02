@@ -684,17 +684,17 @@ type BoardTheme = {name:string;light:string;dark:string;border:string;icon:strin
 const BOARD_THEMES: BoardTheme[] = [
   {name:"AEVION",light:"#e8e0d5",dark:"#5d8a6e",border:"#4a7a5e",icon:"⚡"},
   {name:"Янтарь",light:"#f0d9b5",dark:"#b58863",border:"#b58863",icon:"♟"},
-  {name:"Emerald",light:"#eeeed2",dark:"#769656",border:"#769656",icon:"🌿"},
-  {name:"Ocean",light:"#dee3e6",dark:"#5b8baf",border:"#4a7a9b",icon:"🌊"},
-  {name:"Purple",light:"#e8dff0",dark:"#9370ab",border:"#7b5e99",icon:"💜"},
-  {name:"Wood",light:"#e6c89c",dark:"#a0724a",border:"#8b5e3c",icon:"🪵"},
-  {name:"Dark",light:"#b0b0b0",dark:"#555555",border:"#444444",icon:"🌑"},
-  {name:"Ice",light:"#e8f4f8",dark:"#7eb8d0",border:"#5a9ab5",icon:"❄️"},
-  {name:"Rose",light:"#f5e6e0",dark:"#c47a6c",border:"#b06858",icon:"🌹"},
+  {name:"Изумруд",light:"#eeeed2",dark:"#769656",border:"#769656",icon:"🌿"},
+  {name:"Океан",light:"#dee3e6",dark:"#5b8baf",border:"#4a7a9b",icon:"🌊"},
+  {name:"Пурпур",light:"#e8dff0",dark:"#9370ab",border:"#7b5e99",icon:"💜"},
+  {name:"Дерево",light:"#e6c89c",dark:"#a0724a",border:"#8b5e3c",icon:"🪵"},
+  {name:"Тёмная",light:"#b0b0b0",dark:"#555555",border:"#444444",icon:"🌑"},
+  {name:"Лёд",light:"#e8f4f8",dark:"#7eb8d0",border:"#5a9ab5",icon:"❄️"},
+  {name:"Роза",light:"#f5e6e0",dark:"#c47a6c",border:"#b06858",icon:"🌹"},
   // Premium (owned key in Chessy state)
-  {name:"Neon",light:"#1a0b2e",dark:"#ff00e6",border:"#7c3aed",icon:"⚡",premium:"theme_neon"},
-  {name:"Obsidian",light:"#1f2937",dark:"#0a0a0a",border:"#fbbf24",icon:"🖤",premium:"theme_obsidian"},
-  {name:"Sakura",light:"#ffe0ec",dark:"#f472b6",border:"#ec4899",icon:"🌸",premium:"theme_sakura"},
+  {name:"Неон",light:"#1a0b2e",dark:"#ff00e6",border:"#7c3aed",icon:"⚡",premium:"theme_neon"},
+  {name:"Обсидиан",light:"#1f2937",dark:"#0a0a0a",border:"#fbbf24",icon:"🖤",premium:"theme_obsidian"},
+  {name:"Сакура",light:"#ffe0ec",dark:"#f472b6",border:"#ec4899",icon:"🌸",premium:"theme_sakura"},
 ];
 
 /* ═══ StatusBar — game state badge with inline SVG icons ═══ */

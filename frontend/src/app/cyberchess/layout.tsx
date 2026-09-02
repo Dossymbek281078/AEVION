@@ -20,16 +20,16 @@ export const metadata: Metadata = {
     apple: [{ url: "/cyberchess-icon-192.svg" }],
   },
   openGraph: {
-    title: "CyberChess — AI-коуч, CPI рейтинг, 12 вариантов",
+    title: "CyberChess — ИИ-коуч, CPI рейтинг, 12 вариантов",
     description:
-      "AI-коуч Алексей · Composite Performance Index (11 факторов) · Stockfish multiPV · Chessy currency · стрим-в-приложении. AEVION CyberChess.",
+      "ИИ-коуч Алексей · Composite Performance Index (11 факторов) · Stockfish multiPV · Chessy currency · стрим-в-приложении. AEVION CyberChess.",
     type: "website",
     siteName: "AEVION CyberChess",
     url: "/cyberchess",
   },
   twitter: {
     card: "summary_large_image",
-    title: "CyberChess — лучший AI-коуч в шахматах",
+    title: "CyberChess — лучший ИИ-коуч в шахматах",
     description:
       // 5800+ было верно, когда банк собирали вручную. Живой замер 20.08.2026:
       // 502 584 задачи (GET /api/cyberchess-puzzles). Занижение в 86 раз стояло

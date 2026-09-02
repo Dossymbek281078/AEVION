@@ -24,7 +24,7 @@ const KATALOG = path.join(__dirname, "..");
 // их не переводят, и перевод сделал бы текст хуже. Список ПОИМЁННЫЙ — без
 // него сторож либо пропустит всё, либо покрасит верное.
 const TERMINY = new Set([
-  "ARR", "ARR (USD)", "LTV", "CAC", "LTV/CAC", "LTV / CAC ratio", "TAM", "IRR",
+  "ARR", "ARR (USD)", "LTV", "CAC", "LTV/CAC", "LTV / CAC", "TAM", "IRR",
   "ACV", "USD", "MRR", "WoW", "MoM", "YoY", "PDF", "CSV", "API", "AI",
   "QVenture", "AEVION", "AEVION QVENTURE", "OK",
 ]);

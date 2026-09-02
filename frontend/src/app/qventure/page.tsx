@@ -651,7 +651,7 @@ function FormFields({ form, set, sectors, full = false }: {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginTop: 12 }}>
             <div><label style={LABEL}>ARR (USD)</label><input aria-label="ARR (USD)" style={INPUT} value={form.finArr} onChange={set("finArr")} placeholder="3,000,000" inputMode="numeric" /></div>
             <div><label style={LABEL}>Валовая маржа (%)</label><input aria-label="Валовая маржа (%)" style={INPUT} value={form.finGrossMargin} onChange={set("finGrossMargin")} placeholder="82" inputMode="numeric" /></div>
-            <div><label style={LABEL}>LTV / CAC ratio</label><input aria-label="LTV / CAC ratio" style={INPUT} value={form.finLtvCac} onChange={set("finLtvCac")} placeholder="4" inputMode="numeric" /></div>
+            <div><label style={LABEL}>LTV / CAC</label><input aria-label="LTV / CAC" style={INPUT} value={form.finLtvCac} onChange={set("finLtvCac")} placeholder="4" inputMode="numeric" /></div>
             <div>
               <label style={LABEL}>Отток (%)</label>
               <div style={{ display: "flex", gap: 6 }}>

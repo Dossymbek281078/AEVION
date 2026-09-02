@@ -21,5 +21,36 @@ export function bezKommentariev(kod: string): string {
   return bezBlochnyh
     .split(NL)
     .filter((l) => !l.trim().startsWith("//"))
+    .map(obrezatHvost)
     .join(NL);
+}
+
+/**
+ * Строчный комментарий В КОНЦЕ строки кода. Прежняя версия убирала только
+ * строки, начинающиеся с «//», и потому оставляла `const a = 1; // sample data`
+ * целиком — сторож краснел на пояснении, а описание функции обещало, что
+ * строчные комментарии вырезаются. Обещание и поведение разошлись молча.
+ *
+ * Осторожно с двумя случаями, где «//» не комментарий:
+ *   https://… — перед ним двоеточие;
+ *   "a//b"    — внутри строки, кавычек до него нечётное число.
+ */
+function obrezatHvost(stroka: string): string {
+  const KAV = ['"', "'", "`"];
+  for (let i = 0; i + 1 < stroka.length; i++) {
+    if (stroka[i] !== "/" || stroka[i + 1] !== "/") continue;
+    if (i > 0 && stroka[i - 1] === ":") continue;
+    let vnutri = false;
+    let otkryta = "";
+    for (let j = 0; j < i; j++) {
+      const c = stroka[j];
+      if (!KAV.includes(c)) continue;
+      if (j > 0 && stroka[j - 1] === String.fromCharCode(92)) continue;
+      if (!vnutri) { vnutri = true; otkryta = c; }
+      else if (c === otkryta) { vnutri = false; }
+    }
+    if (vnutri) continue;
+    return stroka.slice(0, i);
+  }
+  return stroka;
 }

@@ -29,8 +29,8 @@ describe("тексты отказов QSkyway обращены к посетит
   it("контроль прибора: словари прочитаны и ключи отказов в них есть", () => {
     // Иначе «запрещённых слов нет» верно и для пустого словаря.
     expect(Object.keys(T).length).toBeGreaterThan(2);
-    const errKeys = Object.keys(T.ru || {}).filter((k) => k.startsWith("qskyway.err."));
-    expect(errKeys.length, "ключей qskyway.err.* нет — проверять нечего").toBeGreaterThan(0);
+    const moduleKeys = Object.keys(T.ru || {}).filter((k) => k.startsWith("qskyway."));
+    expect(moduleKeys.length, "ключей модуля нет — проверять нечего").toBeGreaterThan(0);
   });
 
   for (const lang of ["en", "ru", "kk"]) {
@@ -38,7 +38,21 @@ describe("тексты отказов QSkyway обращены к посетит
       const table = (T[lang] || {}) as Record<string, string>;
       const bad: string[] = [];
       for (const [k, v] of Object.entries(table)) {
-        if (!k.startsWith("qskyway.err.")) continue;
+        // ОХВАТ РАСШИРЕН 02.09.2026 с `qskyway.err.*` на ВСЕ ключи модуля.
+        //
+        // ПОВОД. Слово «бэкенд» стояло в четырёх строках, и сторож молчал: они
+        // лежат под `tel.*`, `just.*`, `slots.*` и `tip.*`, а он смотрел только
+        // `err.*`. При этом «Бэкенд не ответил» — сообщение об отказе по
+        // существу, просто ключ ему дали по МЕСТУ показа, а не по смыслу.
+        //
+        // Класс общий: охват, заданный префиксом ключа, отстаёт от смысла,
+        // потому что ключи именуют по месту в интерфейсе.
+        //
+        // ⚠️ И отдельно: расширять надо ЗДЕСЬ. Строкой выше есть похожий
+        // фильтр для контроля охвата — я сперва поправил его, мутация не
+        // поймалась, и полчаса ушло бы на догадки. Отбор, решающий дело,
+        // стоит внутри цикла.
+        if (!k.startsWith("qskyway.")) continue;
         const low = String(v).toLowerCase();
         for (const w of DEV_ONLY) {
           if (low.includes(w)) { bad.push(k + ": " + String(v).slice(0, 60)); break; }

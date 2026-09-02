@@ -422,6 +422,7 @@ export default function RealBuildPage() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Поиск"
+                aria-label="Поиск по расценкам"
                 className="w-28 border border-slate-300 rounded px-2 py-1.5 text-xs"
               />
             </div>
@@ -452,6 +453,7 @@ export default function RealBuildPage() {
                             onClick={() => addPosition(p)}
                             className="px-2 py-1 text-[10px] font-bold bg-emerald-600 text-white rounded hover:bg-emerald-700"
                             title={`Добавить (объём по умолчанию ${formatKzt(p.qty)})`}
+                            aria-label={`Добавить в смету: ${p.name}`}
                           >
                             +
                           </button>

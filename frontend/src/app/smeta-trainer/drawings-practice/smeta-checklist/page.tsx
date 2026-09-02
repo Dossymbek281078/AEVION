@@ -190,8 +190,16 @@ export default function SmetaChecklistPage() {
                     }`}
                   >
                     <div className="flex items-start gap-3">
+                      {/*
+                        Текст пункта стоит РЯДОМ и не связан с полем: читалка
+                        объявляет «флажок» без названия. Замер 02.09.2026:
+                        44 безымянных флажка на этой странице.
+                        Текст пункта — размеченный, поэтому для имени снимаем
+                        теги: читалке нужен смысл, а не разметка.
+                      */}
                       <input
                         type="checkbox"
+                        aria-label={item.text.replace(/<[^>]+>/g, "")}
                         checked={!!checked[item.id]}
                         onChange={() => toggle(item.id)}
                         className="mt-1 w-5 h-5 accent-emerald-500 cursor-pointer shrink-0"

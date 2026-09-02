@@ -136,6 +136,7 @@ export default function MethodologyPage() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Поиск по методике (например: транспорт, индекс, морозостойкость)"
+                aria-label="Поиск по методике"
                 className="flex-1 border rounded px-3 py-1.5 text-sm"
               />
               <div className="flex gap-1">

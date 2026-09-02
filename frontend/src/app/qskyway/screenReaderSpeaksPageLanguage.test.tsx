@@ -39,10 +39,13 @@ function jsonOk(body: unknown) {
 function mount() {
   globalThis.fetch = vi.fn((input: RequestInfo | URL) => {
     const url = String(input);
-    if (url.includes("/api/qskyway/city")) return jsonOk(cityMinimal);
+    // ПОРЯДОК РЕШАЕТ: «/cities» содержит «/city», и проверка на «/city»,
+    // стоящая первой, перехватывает ЗАПРОС СПИСКА тоже. 02.09.2026 из-за этого
+    // выбор города не отрисовывался ни в одном тесте модуля.
     if (url.includes("/api/qskyway/cities")) {
       return jsonOk({ default: "astana", cities: [{ id: "astana", name: "Astana" }] });
     }
+    if (url.includes("/api/qskyway/city")) return jsonOk(cityMinimal);
     if (url.includes("/api/qskyway/route")) return Promise.reject(new Error("route unavailable"));
     return jsonOk({});
   }) as unknown as typeof fetch;
@@ -93,7 +96,14 @@ function hasCyrillic(s: string): boolean {
 describe("имена кнопок для читалки — на языке страницы", () => {
   test("новых русских подписей на английской отрисовке нет", async () => {
     const r = mount();
-    await waitFor(() => expect(r.container.querySelectorAll("button").length).toBeGreaterThan(3), { timeout: 10000 });
+    // Ждём ПРИЗНАК НУЖНОГО состояния, а не «кнопок больше трёх». Прежнее
+    // условие удовлетворялось кнопками, отрисованными до загрузки города, и
+    // сбор шёл по неполной странице. Предмет этого сторожа — подписи для
+    // диктора, поэтому ждём кнопку С ПОДПИСЬЮ: раньше неё проверять нечего.
+    await waitFor(
+      () => expect(r.container.querySelector("button[aria-label]"), "кнопок с подписью ещё нет").not.toBeNull(),
+      { timeout: 10000 },
+    );
 
     const names: string[] = [];
     r.container.querySelectorAll("button").forEach((b) => {
@@ -116,7 +126,14 @@ describe("имена кнопок для читалки — на языке ст
     // Храповик обязан замечать и УЛУЧШЕНИЕ: если долг починили, а строка
     // осталась в списке, она молча разрешает новую такую же.
     const r = mount();
-    await waitFor(() => expect(r.container.querySelectorAll("button").length).toBeGreaterThan(3), { timeout: 10000 });
+    // Ждём ПРИЗНАК НУЖНОГО состояния, а не «кнопок больше трёх». Прежнее
+    // условие удовлетворялось кнопками, отрисованными до загрузки города, и
+    // сбор шёл по неполной странице. Предмет этого сторожа — подписи для
+    // диктора, поэтому ждём кнопку С ПОДПИСЬЮ: раньше неё проверять нечего.
+    await waitFor(
+      () => expect(r.container.querySelector("button[aria-label]"), "кнопок с подписью ещё нет").not.toBeNull(),
+      { timeout: 10000 },
+    );
 
     const all = Array.from(r.container.querySelectorAll("button"))
       .map((b) => ((b.getAttribute("aria-label") || b.textContent) ?? "").trim())

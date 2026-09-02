@@ -75,10 +75,25 @@ function jsonOk(body: unknown) {
 function mockNetwork() {
   globalThis.fetch = vi.fn((input: RequestInfo | URL) => {
     const url = String(input);
-    if (url.includes("/api/qskyway/city")) return jsonOk(cityMinimal);
+    // ПОРЯДОК ЗДЕСЬ РЕШАЕТ (02.09.2026). «/cities» содержит «/city», поэтому
+    // проверка на «/city» первой перехватывала И запрос списка городов: список
+    // получал ответ ОДНОГО города, состояние оставалось пустым, и выбор города
+    // не отрисовывался НИ РАЗУ. Сторож всё это время мерил страницу без
+    // первого органа управления на ней — и не краснел, потому что пустоту он
+    // не проверяет.
     if (url.includes("/api/qskyway/cities")) {
-      return jsonOk({ default: "astana", cities: [{ id: "astana", name: "Astana" }] });
+      // Городов ДВА, а не один: блок закрыт условием `cities.length > 1`, и с
+      // одним городом он не рисуется даже при верном ответе. Названия — те,
+      // что реально отдаёт прод; английских вариантов у них нет.
+      return jsonOk({
+        default: "astana",
+        cities: [
+          { id: "astana", name: "Астана — центр (бульвар Нуржол)" },
+          { id: "nyc", name: "Нью-Йорк — Мидтаун (Манхэттен)" },
+        ],
+      });
     }
+    if (url.includes("/api/qskyway/city")) return jsonOk(cityMinimal);
     if (url.includes("/api/qskyway/route")) return Promise.reject(new Error("route unavailable"));
     return jsonOk({});
   }) as unknown as typeof fetch;
@@ -92,7 +107,19 @@ async function ownTextsIn(lang: string): Promise<string[]> {
       <Client />
     </I18nProvider>,
   );
-  await waitFor(() => expect(r.container.querySelectorAll("button").length).toBeGreaterThan(3), { timeout: 10000 });
+  // ЖДЁМ ГОРОДА, а не «кнопок больше трёх».
+  //
+  // ПОВОД (02.09.2026). Прежнее условие удовлетворялось кнопками, которые
+  // отрисованы ДО загрузки списка городов, и сбор шёл по неполной странице.
+  // Кнопки выбора города — а это первый орган управления на экране — в счёт
+  // не попадали НИ РАЗУ.
+  //
+  // Проверено: с прежним ожиданием счёт одноязычных строк 3, с этим — см.
+  // порог ниже. Слабое ожидание не роняет тест, оно молча сужает предмет.
+  await waitFor(
+    () => expect(r.container.querySelector(".qsky-cities button"), "города ещё не загрузились").not.toBeNull(),
+    { timeout: 10000 },
+  );
 
   // ⚠️ Дописано 31.08.2026 при сборке к 10.09, и без этого тест сравнивал
   // английский с английским.

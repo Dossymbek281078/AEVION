@@ -273,6 +273,42 @@ export default function QSkywayClient() {
   const smokeSlotCount = countSmokeSlots(slots.list);
   // Запрет, накрывающий город целиком, — свойство каждой площадки, поэтому
   // считается здесь и ставится в строку, а не только в регуляторную карточку.
+  // Название города на языке посетителя.
+  //
+  // ПОВОД (02.09.2026). Сервер отдаёт названия ТОЛЬКО по-русски — английского
+  // варианта в данных городов нет вовсе. Англоязычный посетитель читал
+  // «Нью-Йорк — Мидтаун (Манхэттен)» на первом органе управления страницы.
+  //
+  // Список городов у себя НЕ ДЕРЖИМ: вторая копия разошлась бы с серверной
+  // молча, а это ровно тот класс, который модуль ловит в чужих данных. Вместо
+  // списка спрашиваем словарь: нет ключа — остаётся имя с сервера. Тогда новый
+  // город появится сразу и по-русски, а не пропадёт с экрана.
+  //
+  // `t()` возвращает САМ КЛЮЧ, когда перевода нет, — по этому и отличаем.
+  const cityLabel = (c: { id: string; name: string }) => {
+    const key = "qskyway.city." + c.id;
+    const v = t(key);
+    return v === key ? c.name : v;
+  };
+
+  // Чип провенанса берёт подсказку из `dataQuality.note`, ЗАМЕЩАЯ ею своё
+  // человеческое пояснение. У наших городов в этом поле лежит разработческая
+  // скоропись — расшифровка кодировки `hs` для того, кто читает API:
+  //
+  //   «hs 0=обмерено властями … 1=выведено(тег height из OSM либо
+  //    levels×3.2+1.6м парапет) 2=угадано(75-й процентиль …)»
+  //
+  // 02.09.2026: замер живого прода показал, что именно её и читает посетитель,
+  // наведя курсор, — по-русски на любом языке. Пояснение чипа при этом
+  // переведено на три языка и объясняет то же самое человеческими словами.
+  //
+  // Поле у чипа НЕ лишнее: соседние страницы кладут туда осмысленный текст.
+  // Неверна наша сторона — мы кладём туда заметку для разработчика. Правим
+  // здесь, а не в данных: файлы городов генерируются, и правка в них не
+  // переживёт пересборку.
+  const devNoteStripped = <T extends { note?: string } | null | undefined>(dq: T) =>
+    (dq ? { ...dq, note: undefined } : dq);
+
   const padBan = padProhibition(meta?.airspace?.permission);
   // Выбор языка ОДИН на оба места показа. Тернарник, повторённый дважды,
   // расходится молча: поправят одно, второе останется на прежнем языке.
@@ -916,7 +952,7 @@ export default function QSkywayClient() {
             {cities.map((c) => (
               <button key={c.id} onClick={() => { setCityId(c.id); loadCity(c.id); }}
                 style={{ fontSize: 13, borderRadius: 8, padding: "7px 13px", cursor: "pointer", ...(cityId === c.id ? { background: "#22d3ee", color: "#04212a", border: "none", fontWeight: 600 } : { background: "transparent", color: "#9fb0c4", border: "1px solid #1e2836" }) }}>
-                {c.name}
+                {cityLabel(c)}
               </button>
             ))}
           </div>
@@ -1127,7 +1163,7 @@ export default function QSkywayClient() {
                       <span style={{ color: "#94a3b8" }}>{t("qskyway.verify.unknown")}</span>
                     )}
                   </button>
-                  <DataProvenanceChip compact dataQuality={meta.dq} labels={{ unit: t("qskyway.unit.buildings") }} />
+                  <DataProvenanceChip compact dataQuality={devNoteStripped(meta.dq)} labels={{ unit: t("qskyway.unit.buildings") }} />
                   {meta.suspect.length > 0 && (
                     <span
                       title={t("qskyway.tip.suspectHeight")}

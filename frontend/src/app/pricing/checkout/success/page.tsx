@@ -1,13 +1,14 @@
 "use client";
 
-import { PurchaseReturnTracker } from "@/components/PurchaseReturnTracker";
-import { естьСледОплаты } from "@/lib/paymentTrace";
 import Link from "next/link";
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { track } from "@/lib/track";
 import { useI18n } from "@/lib/i18n";
+import { apiUrl } from "@/lib/apiBase";
+import PurchaseReturnTracker from "@/components/PurchaseReturnTracker";
+import { естьСледОплаты } from "@/lib/paymentTrace";
 
 const APP_LINKS: Record<string, { name: string; href: string }> = {
   qcoreai:    { name: "QCoreAI", href: "/qcoreai" },
@@ -113,29 +114,104 @@ function SuccessInner() {
   const knownApp = Object.prototype.hasOwnProperty.call(APP_LINKS, appId) && appId !== "platform";
   const appLink = knownApp ? APP_LINKS[appId] : null;
 
+  /*
+   * ⚠️ 31.08.2026: экран УТВЕРЖДАЛ активацию, ничего не спросив.
+   *
+   * Замер: 305 строк, обращений к серверу НОЛЬ. Тариф брался из адреса
+   * (`?tier=pro`), и любой, кто открыл ссылку — или вернулся кнопкой «назад»,
+   * бросив оплату, — читал «Pro активирован!». На самом дорогом экране
+   * платформы, сразу после того, как деньги списаны.
+   *
+   * Это не падение и не ошибка: страница уверенно отвечает успехом. Именно
+   * поэтому её не видел ни один тест — ей нечем было упасть.
+   *
+   * Теперь спрашиваем сервер, кто мы есть, и сверяем с тем, что обещает адрес.
+   * Три состояния, а не два:
+   *
+   *   null   ещё спрашиваем      — «оплата принята, проверяем доступ»
+   *   true   тариф подтверждён   — «активирован», и это правда
+   *   false  не подтверждён      — «доступ появится за несколько минут»
+   *
+   * Третье состояние — не «ошибка»: у гостя без входа доступ и не может быть
+   * виден, а выдача после оплаты занимает секунды. Врать в эту сторону тоже
+   * нельзя — поэтому текст не пугает, а называет, что делать, если не появится.
+   */
+  /*
+   * Признак настоящего возврата — ОБЩИЙ, а не своя проверка по provider.
+   * Замер соседнего окна: у Lemon Squeezy провайдера в адресе НЕТ вовсе, есть
+   * только сумма. Своя проверка молча не засчитывала бы их продажи.
+   */
   const следОплаты = естьСледОплаты({
     provider,
-    ref: sessionId ?? saleId,
+    ref: saleId ?? sessionId,
     total: totalUsd,
     stub,
   });
 
+  const [confirmed, setConfirmed] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (stub) return;
+    let живо = true;
+    fetch(apiUrl("/api/me/entitlements"), { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!живо) return;
+        const план = String(d?.plan ?? "").toLowerCase();
+        // Тариф из адреса подтверждён, если сервер называет ТОТ ЖЕ. Незнание
+        // тарифа (PayBox не кладёт его в адрес) — не подтверждение: тогда
+        // достаточно того, что сервер видит любой платный.
+        const ждали = String(tier ?? "").toLowerCase();
+        setConfirmed(ждали ? план === ждали : план !== "" && план !== "free");
+      })
+      .catch(() => {
+        // Отказ сети — это «не знаем», а не «не активировано». Тон текста
+        // одинаков для обоих: мы не обещаем и не пугаем.
+        // Три исхода, а не два: null это «не знаем». Стояло false, и на экране
+        // разницы нет — но false означает «сервер сказал НЕТ», а сеть молчала.
+        // Следующий, кто напишет по нему «активация не прошла», обвинит
+        // покупателя в неоплате из-за собственного обрыва связи.
+        if (живо) setConfirmed(null);
+      });
+    return () => {
+      живо = false;
+    };
+  }, [stub, tier]);
+
   /*
-   * Учёт покупки — ОБЩИМ компонентом, а не своей строкой на этой странице.
+   * ⚠️ 01.09.2026: перешёл на ОБЩИЙ компонент учёта, отменив собственное
+   * исключение.
    *
-   * У меня здесь был свой вызов track(), у сборки — компонент
-   * PurchaseReturnTracker, и оба под ОДНИМ признаком следа оплаты (его сборка
-   * взяла у меня после замера про LemonSqueezy). Слить это как есть значило бы
-   * посчитать каждую покупку ДВАЖДЫ — и в сводке, и в рекламных счётчиках, где
-   * задвоенная выручка выглядит как успех и уводит бюджет.
+   * Вчера я оставил здесь свой учёт намеренно: общий PurchaseReturnTracker не
+   * нёс тариф, сумму и период, а в этом событии они есть — замена стоила бы
+   * трёх полей воронки. Сказал об этом соседнему окну, и оно ПОЧИНИЛО
+   * инструмент: теперь компонент принимает и tier, и value, и meta.
    *
-   * Поэтому беру их устройство: одна точка учёта на все страницы возврата.
-   * Мету передаём свою — она точнее общей: у общего компонента `stub`
-   * читается как `stub=1`, а наши адреса заглушки несут `stub=true`.
+   * Причина исключения исчезла — значит исчезнуть должно и исключение.
+   * Оставить копию «потому что так уже сделано» значило бы держать второй
+   * способ делать то же самое, а он рано или поздно разойдётся с первым.
    */
 
   return (
     <ProductPageShell maxWidth={680}>
+      {/* Учёт возврата — общим компонентом. Он гейтит по признаку оплаты и
+          защищён от повторной отрисовки; тариф, сумму и период принимает с
+          01.09, поэтому своя копия здесь больше не нужна. */}
+      {/*
+        Признак настоящего возврата берём ОБЩИЙ (`естьСледОплаты`), а не свою
+        проверку по provider. Причина в замере соседнего окна: у Lemon Squeezy
+        провайдера в адресе НЕТ вовсе, есть только сумма — моя проверка молча
+        не засчитывала бы их продажи. Общий признак знает все четыре кассы.
+      */}
+      {следОплаты && (
+        <PurchaseReturnTracker
+          source="pricing"
+          provider={provider ?? "unknown"}
+          tier={tier ?? undefined}
+          value={totalUsd ?? undefined}
+          meta={{ period: period ?? null, sessionId: sessionId ?? saleId ?? null, stub }}
+        />
+      )}
       <div style={{ marginBottom: 16 }}>
         <Link href="/pricing" style={{ color: "#64748b", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
           {t("pricing.checkoutSuccess.backAllTiers")}
@@ -166,9 +242,18 @@ function SuccessInner() {
               ? tierName
                 ? t("pricing.checkoutSuccess.titleTrial", { tier: tierName, days: trialDays })
                 : t("pricing.checkoutSuccess.titleTrialNoTier", { days: trialDays })
-              : tierName
-                ? t("pricing.checkoutSuccess.titleActivated", { tier: tierName })
-                : t("pricing.checkoutSuccess.titleActivatedNoTier")}
+              : confirmed === true
+                ? tierName
+                  ? t("pricing.checkoutSuccess.titleActivated", { tier: tierName })
+                  : t("pricing.checkoutSuccess.titleActivatedNoTier")
+                : /*
+                   * Пока сервер не подтвердил — «оплата принята», а не
+                   * «активирован». Разница не в вежливости: второе человек
+                   * читает как «можно идти пользоваться», и если выдача не
+                   * прошла, он узнает об этом сам, наткнувшись на платную
+                   * стену, и уже не свяжет одно с другим.
+                   */
+                  t("pricing.checkoutSuccess.titlePending")}
         </h1>
 
         {/* Subtitle */}
@@ -201,17 +286,7 @@ function SuccessInner() {
         )}
 
         {/* Amount */}
-        {следОплаты && (
-        <PurchaseReturnTracker
-          source="pricing"
-          provider={provider ?? "unknown"}
-          tier={tier ?? undefined}
-          value={totalUsd ?? undefined}
-          meta={{ stub, period: period ?? null, sessionId: sessionId ?? saleId ?? null }}
-        />
-      )}
-
-      {!stub && totalUsd !== null && totalUsd > 0 && (
+        {!stub && totalUsd !== null && totalUsd > 0 && (
           <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 20 }}>
             {t("pricing.checkoutSuccess.amountLabel")} <strong>${totalUsd}</strong>
           </div>

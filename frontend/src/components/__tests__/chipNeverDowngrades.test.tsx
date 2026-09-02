@@ -28,6 +28,35 @@ const TIERS = {
   currencies: {},
 };
 
+/**
+ * Фикстура повторяет ЖИВОЙ ответ /api/me/entitlements, а не удобную выдумку:
+ * { plan, email, reason, modules: [{ module, requiredTiers, entitled }] }.
+ *
+ * Прежняя подавала только { plan } — и сторож был слеп к целому вопросу:
+ * «а есть ли у человека доступ УЖЕ». Подписчик Lite, которому модуль открыт,
+ * видел «Купить Lite» — предложение купить то, что у него есть. Тариф и карта
+ * доступа отвечают на РАЗНЫЕ вопросы, и второй мы не задавали.
+ */
+function mockPlanWithModules(plan: string | null, ужеЕсть: boolean, moduleId: string) {
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (u: string) => {
+    if (String(u).includes("entitlements")) {
+      if (plan === null) return { ok: false, json: async () => ({}) } as Response;
+      return {
+        ok: true,
+        json: async () => ({
+          plan,
+          email: null,
+          reason: "test",
+          modules: [{ module: moduleId, requiredTiers: ["lite"], entitled: ужеЕсть }],
+        }),
+      } as Response;
+    }
+    return original ? original(u as never) : ({ ok: false, json: async () => ({}) } as Response);
+  }) as typeof fetch;
+  return () => { globalThis.fetch = original; };
+}
+
 function mockPlan(plan: string | null) {
   globalThis.fetch = vi.fn(async (url: any) => {
     const u = String(url);
@@ -86,6 +115,48 @@ describe("кнопка модуля не продаёт понижение", () 
  * утверждение: механизм работает — не то же самое, что механизм делает верное.
  * Ровно тот класс, который соседнее окно нашло сегодня трижды на вебхуках.
  */
+describe("не продаём то, что уже есть", () => {
+  it("подписчику, которому модуль УЖЕ открыт, кнопки «Купить» нет", async () => {
+    const restore = mockPlanWithModules("lite", true, "qlearn");
+    try {
+      render(<ModulePricingChip moduleId="qlearn" />);
+      // Ждём ПОЛОЖИТЕЛЬНОГО признака, а не отсутствия кнопки.
+      // Первая редакция ждала «кнопки нет» — и это условие выполняется само
+      // собой, пока чип ещё грузит цены и права. Мутация «снять проверку
+      // доступа» её НЕ уронила: тест был зелен на сломанном коде.
+      // Сначала дожидаемся замены («Уже включено» рисуется только когда покупка
+      // не нужна), и лишь потом утверждаем, что кнопки нет.
+      await waitFor(() => {
+        expect(
+          screen.queryByText(/Уже включено/i),
+          "замена кнопки не появилась — значит права ещё не применены",
+        ).not.toBeNull();
+      });
+      expect(
+        screen.queryByRole("button", { name: /Купить/i }),
+        "предлагаем купить доступ, который у человека уже есть",
+      ).toBeNull();
+    } finally {
+      restore();
+    }
+  });
+
+  it("контроль: тому же тарифу БЕЗ доступа кнопка показывается", async () => {
+    const restore = mockPlanWithModules("lite", false, "qlearn");
+    try {
+      render(<ModulePricingChip moduleId="qlearn" />);
+      await waitFor(() => {
+        expect(
+          screen.queryByRole("button", { name: /Купить/i }),
+          "контроль: кнопка пропала и без доступа — значит проверка меряет не то",
+        ).not.toBeNull();
+      });
+    } finally {
+      restore();
+    }
+  });
+});
+
 describe("кнопка заказывает тот тариф, что показывает", () => {
   beforeEach(() => vi.clearAllMocks());
   afterEach(() => vi.restoreAllMocks());

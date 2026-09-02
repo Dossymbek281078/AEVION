@@ -114,13 +114,25 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
    * иметь возможность купить. Молчание сервера не должно закрывать кассу.
    */
   const [ownTier, setOwnTier] = useState<string | null>(null);
+  const [ужеЕсть, setУжеЕсть] = useState(false);
 
   useEffect(() => {
     let живо = true;
     fetch(apiUrl("/api/me/entitlements"), { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (живо) setOwnTier(typeof d?.plan === "string" ? d.plan.toLowerCase() : null);
+        if (!живо) return;
+        setOwnTier(typeof d?.plan === "string" ? d.plan.toLowerCase() : null);
+        // Карта доступа по модулям приходит в том же ответе, и мы её не читали.
+        // Замер 02.09.2026: ответ /api/me/entitlements это
+        // { plan, email, reason, modules: [{ module, requiredTiers, entitled }] }.
+        // Тариф отвечает на вопрос «понизит ли покупка», карта — на вопрос
+        // «а есть ли у него уже доступ». Это РАЗНЫЕ вопросы, и второй мы не
+        // задавали: подписчик Lite, которому этот модуль уже открыт, видел
+        // «Купить Lite» — предложение купить то, что у него есть.
+        const карта = Array.isArray(d?.modules) ? d.modules : [];
+        const мой = карта.find((m: { module?: string }) => m?.module === moduleId);
+        setУжеЕсть(мой?.entitled === true);
       })
       .catch(() => {});
     return () => {
@@ -132,6 +144,12 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
   // ноль: неизвестный тариф не повод запрещать покупку.
   const RANK: Record<string, number> = { free: 0, lite: 1, medium: 2, full: 3, pro: 4, enterprise: 5 };
   const покупкаПонизит = (RANK[ownTier ?? ""] ?? 0) > RANK.lite;
+  // Платящий, у которого доступ уже есть, покупать его повторно не должен.
+  // Бесплатный тариф исключён намеренно: у него entitled бывает истинным
+  // просто потому, что стена не включена, и прятать кнопку там значило бы
+  // убрать продажу вместо починки стены.
+  const платящий = (RANK[ownTier ?? ""] ?? 0) > RANK.free;
+  const незачемПокупать = покупкаПонизит || (платящий && ужеЕсть);
   if (!data || !Array.isArray(data.tiers)) return null;
 
   const findTier = (id: string) => data.tiers.find((t) => t.id === id);
@@ -250,10 +268,14 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
         Это не «спрятать кассу»: человек уже платит больше, продавать ему
         меньшее за деньги нечестно.
       */}
-      {!hideBuy && покупкаПонизит && (
+      {!hideBuy && незачемПокупать && (
         <Link
           href="/account"
-          title="У вас тариф выше Lite — эта кнопка оформила бы Lite и понизила доступ"
+          title={
+            покупкаПонизит
+              ? "У вас тариф выше Lite — эта кнопка оформила бы Lite и понизила доступ"
+              : "Этот модуль уже открыт вашим тарифом — покупать его повторно незачем"
+          }
           style={{
             padding: "6px 14px",
             borderRadius: 999,
@@ -268,7 +290,7 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
           Уже включено
         </Link>
       )}
-      {!hideBuy && !покупкаПонизит && (
+      {!hideBuy && !незачемПокупать && (
         <button
           type="button"
           onClick={buyNow}

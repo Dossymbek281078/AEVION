@@ -102,7 +102,16 @@ function ContactInner() {
         tier: form.tier || undefined,
         industry: form.industry || undefined,
         source: "pricing/contact",
-        meta: { hasCompany: !!form.company, hasMessage: !!form.message, seats: form.seats },
+        // Источник события намеренно ОСТАЁТСЯ прежним: сводка считает `bySource`
+        // по точному совпадению строки, и метка в нём расщепила бы один
+        // показатель на три — прежние числа «упали» бы на ровном месте.
+        // Тема живёт в meta: там она видна и ничего не ломает.
+        meta: {
+          hasCompany: !!form.company,
+          hasMessage: !!form.message,
+          seats: form.seats,
+          topic: темаИзАдреса || undefined,
+        },
       });
       setSuccess(j.id);
     } catch (e: unknown) {

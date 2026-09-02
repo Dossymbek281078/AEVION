@@ -302,7 +302,14 @@ router.post('/comment', async (req: Request, res: Response) => {
         temperature: body.temperature,
         timeoutMs: 6500, // opus-4-8 isn't instant; give the GM разбор room before fallback
       });
-      if (llmText && llmText !== fallback) {
+      // Провайдер не настроен — QCoreAI не бросает, а возвращает 200 с
+      // текстом «[QCoreAI — no AI provider configured] Your question: "…"»,
+      // куда подставлен весь наш промпт. Без этой проверки он уходил в
+      // комментарий и ПРОИЗНОСИЛСЯ вслух. Замер 02.09.2026 на локальном
+      // бэкенде без ключа. Здесь, в отличие от /ask, есть хороший запасной
+      // путь — правиловый комментарий, поэтому падаем в него, а не в отказ.
+      const otkazProvaydera = typeof llmText === 'string' && /no ai provider configured/i.test(llmText);
+      if (llmText && llmText !== fallback && !otkazProvaydera) {
         text = llmText;
         source = 'llm';
       }

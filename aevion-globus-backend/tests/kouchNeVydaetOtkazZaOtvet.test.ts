@@ -40,12 +40,18 @@ describe("тренер и ненастроенный провайдер", () => 
     // Ищем в КОДЕ, а не в тексте файла: первое вхождение метки — в моём же
     // объяснении наверху, и окно после него не содержит ответа. Прибор,
     // спотыкающийся о собственный комментарий, я уже ловил дважды.
+    // Вхождений метки в коде БОЛЬШЕ ОДНОГО: свой путь у /ask и свой у
+    // /comment. Проверка «первое вхождение» сломалась ровно тогда, когда
+    // появился второй — искать надо ЛЮБОЕ, где рядом стоит отказ.
     const к = bezKommentariev(КОД());
-    const i = к.search(/no ai provider configured/i);
-    expect(i, "проверки на ненастроенного провайдера нет в коде").toBeGreaterThan(0);
-    const кусок = к.slice(i, i + 400);
-    expect(кусок).toContain("503");
-    expect(кусок).toContain("llm_not_configured");
+    const места: number[] = [];
+    for (let i = 0; (i = к.toLowerCase().indexOf("no ai provider configured", i + 1)) > 0; ) места.push(i);
+    expect(места.length, "проверки на ненастроенного провайдера нет в коде").toBeGreaterThan(0);
+    const естьОтказ = места.some((i) => {
+      const кусок = к.slice(i, i + 400);
+      return кусок.includes("503") && кусок.includes("llm_not_configured");
+    });
+    expect(естьОтказ, "ни одно место не отвечает 503 llm_not_configured").toBe(true);
   });
 
   it("человеку отвечают по-русски и без служебных слов", () => {
@@ -55,6 +61,19 @@ describe("тренер и ненастроенный провайдер", () => 
     const кусок = к.slice(i, i + 300);
     expect(кусок).toMatch(/[А-Яа-яЁё]{6}/);              // текст на русском
     expect(кусок).not.toMatch(/QCoreAI|provider|prompt/); // без внутренних слов
+  });
+
+  it("живой комментарий тоже не произносит служебный отказ", () => {
+    // У /comment есть хороший запасной путь — правиловый комментарий, поэтому
+    // здесь правильный ответ не 503, а откат в него: человек слышит разбор,
+    // просто не от модели. Замер 02.09.2026: без проверки в комментарий
+    // уходило «[QCoreAI — no AI provider configured] Your question: …».
+    const к = bezKommentariev(КОД());
+    const i = к.indexOf("otkazProvaydera");
+    expect(i, "проверки на пути живого комментария нет").toBeGreaterThan(0);
+    const кусок = к.slice(i, i + 300);
+    expect(кусок).toMatch(/no ai provider configured/i);
+    expect(кусок).toContain("!otkazProvaydera");
   });
 
   it("проверка ловит обе формы метки — с большой и с маленькой буквы", () => {

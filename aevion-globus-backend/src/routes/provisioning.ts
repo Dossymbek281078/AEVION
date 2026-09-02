@@ -582,7 +582,7 @@ export function welcomeHtml(sub: Subscription): string {
           <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0"/>
           <p style="font-size:12px;color:#94a3b8;line-height:1.5;margin:0">
             ID подписки: <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px">${sub.id}</code><br/>
-            Поддержка: <a href="${FRONTEND_URL}/pricing/contact" style="color:#0d9488">${FRONTEND_URL.replace(/^https?:\/\//, "")}/pricing/contact</a>
+            Поддержка: <a href="${FRONTEND_URL}/pricing/contact?topic=purchase" style="color:#0d9488">${FRONTEND_URL.replace(/^https?:\/\//, "")}/pricing/contact</a>
           </p>
         </td></tr>
       </table>
@@ -606,7 +606,7 @@ ${includedLine(sub)}
 ${ctaFor(sub).label}: ${FRONTEND_URL}${ctaFor(sub).href}
 
 ID подписки: ${sub.id}
-Поддержка: ${FRONTEND_URL}/pricing/contact
+Поддержка: ${FRONTEND_URL}/pricing/contact?topic=purchase
 `;
 }
 

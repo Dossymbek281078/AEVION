@@ -38,6 +38,21 @@ function ContactInner() {
   const tp = usePricingT();
   const { t } = useI18n();
   const sp = useSearchParams();
+  /*
+   * Тема обращения из адреса: `?topic=purchase`.
+   *
+   * Соседнее окно уже ставит такие ссылки со страниц (glossary, affiliate), а
+   * письмо о покупке ведёт сюда с `topic=purchase`. Без чтения параметра все
+   * обращения выглядят одинаково, и письмо ЗАПЛАТИВШЕГО теряется среди
+   * прочих — а это тот, кому мы уже должны.
+   *
+   * Отдельное поле не заводим: `source` уже сохраняется в записи обращения и
+   * виден в админке. Второе поле про то же самое разъехалось бы с ним.
+   *
+   * Значение из адреса НЕ доверяем: оставляем только строчные буквы и дефис,
+   * не длиннее двадцати. Иначе в запись уедет что угодно из чужой ссылки.
+   */
+  const темаИзАдреса = (sp.get("topic") ?? "").toLowerCase().replace(/[^a-z-]/g, "").slice(0, 20);
   const [form, setForm] = useState<LeadForm>(INITIAL);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
@@ -75,7 +90,7 @@ function ContactInner() {
           tier: form.tier || undefined,
           seats: form.seats,
           message: form.message || undefined,
-          source: "pricing/contact",
+          source: темаИзАдреса ? `pricing/contact:${темаИзАдреса}` : "pricing/contact",
         }),
       });
       const j = await r.json();

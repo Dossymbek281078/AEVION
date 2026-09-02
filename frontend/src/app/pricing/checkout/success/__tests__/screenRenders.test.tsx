@@ -35,6 +35,30 @@ async function открыть(поиск: string) {
 
 afterEach(() => cleanup());
 
+describe("экран после оплаты при отказе сервера", () => {
+  it("не показывает внутренностей", async () => {
+    /*
+     * Класс найден соседним окном на странице цен: при недоступном бэкенде
+     * покупателю показывали внутренний адрес API, сообщение движка и инструкцию
+     * запустить сервер. Грепом это не находится принципиально — строка
+     * собиралась из трёх мест, порознь безобидных.
+     *
+     * Здесь тот же вопрос к самому дорогому экрану: что человек увидит, если
+     * сервер не ответит ПОСЛЕ того, как деньги уже списаны.
+     */
+    vi.stubGlobal("fetch", async () => {
+      throw new Error("Failed to parse URL from /api-backend/api/me/entitlements");
+    });
+    await открыть("paybox=1&ref=abc&tier=lite&total=4900");
+    const текст = document.body.textContent ?? "";
+    expect(текст, "экран пуст при отказе сервера").not.toBe("");
+    for (const внутреннее of ["/api-backend", "/api/", "npm run", "localhost", "Failed to parse"]) {
+      expect(текст, `на экране внутренности: ${внутреннее}`).not.toContain(внутреннее);
+    }
+    vi.unstubAllGlobals();
+  }, 60000);
+});
+
 describe("экран после оплаты отрисовывается", () => {
   it("возврат PayBox: страница живая и сумма на месте", async () => {
     await открыть("paybox=1&ref=abc&tier=lite&total=4900");

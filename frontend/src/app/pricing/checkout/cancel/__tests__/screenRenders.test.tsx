@@ -32,6 +32,23 @@ async function открыть(поиск: string) {
 
 afterEach(() => cleanup());
 
+describe("экран отмены при отказе сервера", () => {
+  it("не показывает внутренностей", async () => {
+    // Тот же вопрос, что к экрану успеха: сюда человек попадает уже сорвавшись,
+    // и технические подробности здесь читаются как «у них всё сломано».
+    vi.stubGlobal("fetch", async () => {
+      throw new Error("Failed to parse URL from /api-backend/api/pricing");
+    });
+    await открыть("paybox=1&tier=lite");
+    const текст = document.body.textContent ?? "";
+    expect(текст, "экран пуст при отказе сервера").not.toBe("");
+    for (const внутреннее of ["/api-backend", "/api/", "npm run", "localhost", "Failed to parse"]) {
+      expect(текст, `на экране внутренности: ${внутреннее}`).not.toContain(внутреннее);
+    }
+    vi.unstubAllGlobals();
+  }, 60000);
+});
+
 describe("экран отмены отрисовывается", () => {
   it("настоящая отмена PayBox: страница живая", async () => {
     await открыть("paybox=1&tier=lite");

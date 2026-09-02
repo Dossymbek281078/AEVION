@@ -2082,7 +2082,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         d.domainReady && d.domain
           ? `Live: https://${d.domain}`
           : d.domain
-            ? `Адрес: ${d.liveUrl ?? d.pagesUrl} — ${d.domain} пока не отвечает (зона не делегирована)`
+            ? `Адрес: ${d.liveUrl ?? d.pagesUrl} — ${d.domain} пока не отвечает (домен не зарегистрирован)`
             : `Адрес: ${d.liveUrl ?? d.pagesUrl}`,
         d.domain && !d.domainReady ? "warning" : "success",
       );
@@ -4202,12 +4202,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         cursor: pagesDeploying ? "not-allowed" : "pointer",
                       }}
                     >
-                      {pagesDeploying ? "⏳ Deploying..." : project?.deployUrl?.includes("pages.dev") ? "🔄 Redeploy to Cloudflare Pages" : "🚀 Опубликовать на Cloudflare Pages"}
+                      {pagesDeploying ? "⏳ Публикуем…" : project?.deployUrl?.includes("pages.dev") ? "🔄 Опубликовать заново" : "🚀 Опубликовать на Cloudflare Pages"}
                     </button>
                     <div style={{ fontSize: 10, color: "#9a3412", marginTop: 6 }}>
                       {domainCapabilityWorks
                         ? <>Свой поддомен выдаётся, только если Cloudflare его подтвердит; иначе адрес будет на <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>*.pages.dev</code>.</>
-                        : <>Домен <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>aevion.build</code> пока не отвечает — зона не делегирована на Cloudflare, поэтому адрес выдаётся на <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>*.pages.dev</code>.</>}
+                        : <>Домен <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>aevion.build</code> пока не отвечает — домен не зарегистрирован на Cloudflare, поэтому адрес выдаётся на <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>*.pages.dev</code>.</>}
                     </div>
                   </div>
 

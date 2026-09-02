@@ -26,6 +26,7 @@ import { CASE_STUDIES, getCaseStudy } from "../data/cases";
 import { CHANGELOG, type ChangelogKind } from "../data/changelog";
 import { sendEmail, purgeSubscriptions, writeSubscription, readLatestSubscription, type Subscription } from "./provisioning";
 import { clientIp, rateLimit } from "../lib/rateLimit";
+import { makeServiceCapture } from "../lib/sentry/platform";
 
 export const pricingRouter = Router();
 
@@ -1040,6 +1041,9 @@ function verifyDashboardToken(email: string, scope: "affiliate" | "partners", go
   }
 }
 
+// Канал тревог у этого модуля до 02.09.2026 отсутствовал вовсе.
+const capture = makeServiceCapture("pricing");
+
 function readJsonlAll<T>(file: string): T[] {
   if (!existsSync(file)) return [];
   try {
@@ -1054,7 +1058,18 @@ function readJsonlAll<T>(file: string): T[] {
       }
     }
     return out;
-  } catch {
+  } catch (e) {
+    // Поведение прежнее — пустой список: у части вызывающих есть свой
+    // catch, и бросок они всё равно проглотят, а чинить каждую ручку
+    // программы партнёров отсюда не мой заход.
+    //
+    // Но отказ обязан быть виден. Замер 02.09.2026 пробой со сломанным
+    // хранилищем: нечитаемый файл заявок даёт партнёру 404 «вас нет», а
+    // нечитаемый файл сделок — НУЛЕВЫЕ комиссии. Оба молча, следа не
+    // оставалось вовсе.
+    const причина = e instanceof Error ? e.message : String(e);
+    console.error(`[pricing] журнал НЕ прочитан -> ${file} :: ${причина}`);
+    capture(e, { route: "pricing/readJsonlAll", file });
     return [];
   }
 }

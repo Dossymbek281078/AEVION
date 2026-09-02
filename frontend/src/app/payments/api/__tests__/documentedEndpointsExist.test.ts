@@ -2,6 +2,7 @@ import { describe, test, expect } from "vitest";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { stripComments } from "../../../__tests__/helpers/sourceCode";
 
 /**
  * Каждая ручка, обещанная на витрине API, существует — и с тем же методом.
@@ -51,7 +52,17 @@ function fieldAfter(src: string, from: number, name: string): { value: string; e
 
 /** Пары «метод + путь», обещанные на витрине. */
 function promised(): Array<{ method: string; path: string }> {
-  const src = readFileSync(PAGE, "utf8");
+  // Комментарии срезаются с ОБЕИХ сторон сравнения. Закомментированная
+  // запись на витрине — не обещание, а закомментированный обработчик — не
+  // маршрут. Без среза первое давало бы ложное красное, второе — ложное
+  // ЗЕЛЁНОЕ; второе тише и потому дороже.
+  //
+  // Честная граница: мутационно закреплена только сторона МАРШРУТА — там
+  // спрятанный в комментарий обработчик делает сторожа зелёным, и проба на это
+  // есть. Сторона витрины пробы не имеет: чтобы её поставить, пришлось бы
+  // держать в самой витрине закомментированную запись ради теста. Направление
+  // её отказа безопаснее — ложное КРАСНОЕ, а оно громкое и разберётся сразу.
+  const src = stripComments(readFileSync(PAGE, "utf8"));
   const out: Array<{ method: string; path: string }> = [];
   let pos = 0;
   for (;;) {
@@ -103,7 +114,7 @@ function real(): Map<string, Set<string>> {
       }
       if (entry !== "route.ts") continue;
       const key = norm("/" + toPosix(relative(API, dir)));
-      const src = readFileSync(full, "utf8");
+      const src = stripComments(readFileSync(full, "utf8"));
       const methods = new Set<string>();
       for (const m of METHODS) {
         if (src.includes("export async function " + m)) methods.add(m);

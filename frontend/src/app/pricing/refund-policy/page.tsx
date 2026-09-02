@@ -326,8 +326,17 @@ export default function PricingRefundPolicyPage() {
           {tp("refund.contact.subtitle")}
         </p>
         <div style={{ display: "inline-flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
-          <a
-            href="mailto:billing@aevion.app?subject=Refund%20request"
+          {/*
+            01.09.2026: здесь была ГЛАВНАЯ кнопка со ссылкой mailto
+            на почтовый ящик нашего домена. Записи MX у него нет, письма туда
+            не доходят никуда. Человек, которому нужен ВОЗВРАТ ДЕНЕГ, отправлял
+            письмо в пустоту и ждал ответа.
+
+            Рабочая форма стояла рядом, второй серой кнопкой: верный путь был,
+            но главным предлагался мёртвый.
+          */}
+          <Link
+            href="/pricing/contact?topic=refund"
             style={{
               padding: "10px 20px",
               fontSize: 13,
@@ -338,10 +347,14 @@ export default function PricingRefundPolicyPage() {
               textDecoration: "none",
             }}
           >
-            billing@aevion.app
-          </a>
+            {tp("refund.contact.formCta")}
+          </Link>
           <Link
-            href="/pricing/contact"
+            // Вторая кнопка вела туда же, куда теперь ведёт первая: две
+            // одинаковые кнопки рядом — не выбор, а шум. Оставляем её путём к
+            // тарифам: на странице возврата человек часто хочет не вернуть
+            // деньги, а сменить тариф.
+            href="/pricing"
             style={{
               padding: "10px 20px",
               fontSize: 13,

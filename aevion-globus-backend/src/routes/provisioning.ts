@@ -860,6 +860,21 @@ provisioningRouter.get("/subscriptions/by-channel", (req, res) => {
     return acc === null || t < Date.parse(acc) ? x.ts : acc;
   }, null);
 
+  // САМАЯ СВЕЖАЯ запись — тоже вообще, а не в окне.
+  //
+  // Замер на проде 01.09.2026: покупок всего 31, свежайшей 36 дней. При окне по
+  // умолчанию (720 ч) сводка честно вернёт ноль — и панель покажет «выручка 0»,
+  // что читается как «продаж нет». А правда другая: продаж не было ЗА МЕСЯЦ.
+  //
+  // Ноль без даты последней покупки неотличим от пустого хранилища. С ней
+  // читатель может сказать «последняя покупка N дней назад» — и это уже
+  // осмысленный ответ, а не пугающая цифра.
+  const newest = all.reduce<string | null>((acc, x) => {
+    const t = Date.parse(x.ts);
+    if (!Number.isFinite(t)) return acc;
+    return acc === null || t > Date.parse(acc) ? x.ts : acc;
+  }, null);
+
   return res.json({
     byChannel,
     total: subs.length,
@@ -872,6 +887,9 @@ provisioningRouter.get("/subscriptions/by-channel", (req, res) => {
       // Самая старая запись ВООБЩЕ, не в окне: по ней видно, с какого момента
       // история существует. null = записей нет совсем.
       oldestRecord: oldest,
+      // Пара «самая старая — самая свежая» отвечает на два разных вопроса:
+      // с какого момента история существует и когда была последняя покупка.
+      newestRecord: newest,
       recordsTotal: all.length,
     },
   });

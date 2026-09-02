@@ -123,10 +123,10 @@ const PENDING_FILES = new Set([
   "app/constitution/showcase/page.tsx",
   "app/developers/fintech/troubleshooting/page.tsx",
   "app/devhub/[id]/page.tsx",
-  "app/pricing/affiliate-dashboard/page.tsx",
-  "app/pricing/glossary/page.tsx",
-  "app/pricing/page.tsx",
-  "app/pricing/refund-policy/page.tsx",
+  // app/pricing/affiliate-dashboard/page.tsx убрана 01.09.2026: mailto заменён ссылкой на форму связи.
+  // app/pricing/glossary/page.tsx убрана 01.09.2026: mailto заменён ссылкой на форму связи.
+  // app/pricing/page.tsx убрана 01.09.2026: mailto в подписи к FAQ заменён ссылкой на форму связи.
+  // app/pricing/refund-policy убрана 01.09.2026: главная кнопка и шаг 1 процедуры возврата вели на ящик домена без MX; переведено на форму на двух языках.
   "app/qcoreai/budget/page.tsx",
   "app/qstore/page.tsx",
   "app/terms/page.tsx",
@@ -140,7 +140,11 @@ const PENDING_FILES = new Set([
   "lib/i18n-lang/en.ts",
   "lib/i18n-lang/kk.ts",
   "lib/i18n-lang/ru.ts",
-  "lib/pricingI18n.ts",
+  // lib/pricingI18n.ts убран 01.09.2026: страница возврата денег звала писать на
+  // billing@aevion.app — ящик домена без записи MX. Это был худший случай
+  // класса: человек, которому нужен ВОЗВРАТ, отправлял письмо в пустоту, и это
+  // стояло ШАГОМ 1 процедуры. Шесть мест на двух языках переведены на форму
+  // связи; сторож сам потребовал сократить список проверкой «не протух».
 ]);
 
 describe("адреса на домене без почты не расползаются", () => {

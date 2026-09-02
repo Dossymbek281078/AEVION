@@ -25,6 +25,7 @@
 import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { stripComments } from "./helpers/sourceCode";
 
 const КОРЕНЬ = join(process.cwd(), "src/app");
 
@@ -35,14 +36,12 @@ const ИЗВЕСТНЫЕ = new Set([
   "constitution/showcase/page.tsx",
   "developers/fintech/troubleshooting/page.tsx",
   "devhub/[id]/page.tsx",
-  "pricing/affiliate-dashboard/page.tsx",
-  "pricing/glossary/page.tsx",
-  "pricing/page.tsx",
-  "pricing/refund-policy/page.tsx",
-  "pricing/security/page.tsx",
+  // pricing/affiliate-dashboard/page.tsx убрана 01.09.2026: обращение партнёра уходило в пустоту; то же.
+  // pricing/glossary/page.tsx убрана 01.09.2026: предложение термина уходило в пустоту; ссылка ведёт на форму с пометкой темы.
+  // pricing/page.tsx убрана 01.09.2026: подпись под FAQ звала на mailto; ссылка ведёт на форму, подпись заведена ключом faq.contactCta.
+  // pricing/refund-policy/page.tsx убрана 01.09.2026: страница возврата денег звала на ящик домена без MX — и это стояло ШАГОМ 1 процедуры; шесть мест на двух языках переведены на форму связи.
   "qcoreai/budget/page.tsx",
   "qstore/page.tsx",
-  "support/page.tsx",
 ]);
 
 function страницы(каталог: string, префикс = ""): string[] {
@@ -61,10 +60,32 @@ function страницы(каталог: string, префикс = ""): string[]
 
 const СМЕРТЕЛЬНЫЙ_ДОМЕН = /@aevion\.app/;
 
+/*
+ * Комментарии вырезаем ДО поиска — ОБЩИМ помощником, а не своим.
+ *
+ * Свой я написал и тут же нашёл в нём беду: наивная вырезалка съела настоящую
+ * строку страницы и объявила её комментарием. Помощник в helpers/sourceCode.ts
+ * заведён 21.08.2026 ровно от этого класса и уже используется пятью сторожами;
+ * второй способ делать то же самое — лишний источник расхождений.
+ */
+
+/*
+ * ⚠️ Этот файл сведён вручную 01.09.2026 из ДВУХ веток, и обе стороны нужны.
+ *
+ * Из ветки воронки — вызов общей вырезалки комментариев: без него сторож читает
+ * исходник сырым, и страница, где адрес остался только в объяснении «здесь был
+ * такой-то адрес», не выйдет из списка НИКОГДА.
+ *
+ * Из ветки платежей — сокращённый список: четыре страницы починены, и вторая
+ * половина сторожа («список не протухает») потребовала их убрать.
+ *
+ * Взять одну сторону целиком нельзя ни в какую: их файл вернёт четыре записи о
+ * починенном, мой — вернёт сырое чтение.
+ */
 describe("новых мёртвых адресов не появляется", () => {
   const все = страницы(КОРЕНЬ);
   const сАдресом = все.filter((p) =>
-    СМЕРТЕЛЬНЫЙ_ДОМЕН.test(readFileSync(join(КОРЕНЬ, p), "utf8")),
+    СМЕРТЕЛЬНЫЙ_ДОМЕН.test(stripComments(readFileSync(join(КОРЕНЬ, p), "utf8"))),
   );
 
   it("обход и поиск работают — проверено подложенной пробой", () => {

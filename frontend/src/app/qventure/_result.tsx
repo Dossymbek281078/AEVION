@@ -747,7 +747,7 @@ function SignalCoverageChip({ coverage, fields }: { coverage: number; fields: nu
   const label = pct >= 40 ? "company-specific" : pct >= 15 ? "partly company-specific" : "sector-based";
   return (
     <div
-      title="Share of the composite score backed by metrics disclosed in the plan (revenue, growth, margin, LTV/CAC…) rather than sector averages. Add financials to raise it."
+      title="Доля итоговой оценки, опирающаяся на показатели из самой заявки (выручка, рост, маржа, LTV/CAC…), а не на средние по отрасли. Добавьте финансовые данные, чтобы её поднять."
       style={{
         display: "inline-flex", alignItems: "center", gap: 8, marginTop: 10,
         padding: "5px 10px", borderRadius: 999, background: "var(--paper-2, #efeee8)",

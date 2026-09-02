@@ -25,7 +25,7 @@ import { ROADMAP, PHASE_META } from "../data/roadmap";
 import { CASE_STUDIES, getCaseStudy } from "../data/cases";
 import { CHANGELOG, type ChangelogKind } from "../data/changelog";
 import { sendEmail, purgeSubscriptions, writeSubscription, readLatestSubscription, type Subscription } from "./provisioning";
-import { clientIp } from "../lib/rateLimit";
+import { clientIp, rateLimit } from "../lib/rateLimit";
 
 export const pricingRouter = Router();
 
@@ -239,7 +239,42 @@ pricingRouter.post("/quote", (req, res) => {
  *
  * Используется фронтом для отдельной проверки кода до отправки full-quote.
  */
-pricingRouter.post("/promo/validate", (req, res) => {
+
+/**
+ * Пределы темпа на три публичные ручки, у которых их не было (замер 02.09.2026:
+ * из 12 POST-ручек этого модуля предел стоял у пяти).
+ *
+ * Ограничители РАЗНЫЕ, а не один общий: общий бакет уже был находкой в этом
+ * репозитории — соседние ручки начинают отбирать лимит друг у друга, и
+ * человек, отправивший заявку, не может проверить промокод.
+ *
+ * keyFn нигде не переопределяем: умолчание нормализует адрес, включая IPv6.
+ */
+
+// Оракул «код верен или нет». Без предела это перебор промокодов: их пять,
+// имена короткие. Ущерб ограничен (скидка не больше 50%), но и предел стоит
+// одной строки. 20 в минуту — заведомо больше, чем человек вводит руками.
+const promoLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 20,
+  message: "Слишком много проверок кода. Подождите минуту.",
+});
+
+// Заявка и подписка на рассылку пишут строку в ФАЙЛ на диске. Без предела
+// это неограниченная анонимная запись: файл растёт, а полезные заявки тонут
+// среди мусора. Человек отправляет заявку один раз.
+const leadLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 20,
+  message: "Слишком много заявок. Подождите минуту.",
+});
+const newsletterLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 20,
+  message: "Слишком много попыток подписки. Подождите минуту.",
+});
+
+pricingRouter.post("/promo/validate", promoLimiter, (req, res) => {
   const body = req.body ?? {};
   const code = typeof body.code === "string" ? body.code.trim().slice(0, 40) : "";
   const tierId = body.tierId as TierId;
@@ -293,7 +328,7 @@ pricingRouter.get("/promo", (_req, res) => {
  *
  * Returns: { ok: true, id }
  */
-pricingRouter.post("/lead", (req, res) => {
+pricingRouter.post("/lead", leadLimiter, (req, res) => {
   const ip = clientIp(req);
   if (isRateLimited(ip)) {
     return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
@@ -523,7 +558,7 @@ interface NewsletterEntry {
  *
  * Лёгкий signup-форм для лидгена тех, кто не готов покупать.
  */
-pricingRouter.post("/newsletter", (req, res) => {
+pricingRouter.post("/newsletter", newsletterLimiter, (req, res) => {
   const ip = clientIp(req);
   if (newsletterRateLimited(ip)) {
     return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });

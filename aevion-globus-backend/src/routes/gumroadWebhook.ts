@@ -356,9 +356,27 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
       return res.status(401).json({ ok: false, error: "sale_not_found" });
     }
     if (verdict === "unverifiable") {
+      // Выдаём непроверенное НАМЕРЕННО: сверка не удалась по НАШЕЙ причине
+      // (нет токена, API кассы недоступен), и наказывать за это настоящего
+      // покупателя нельзя. Поведение оставлено как было.
+      //
+      // Но след обязан быть. Замер 02.09.2026: у Gumroad подписи на проде
+      // НЕТ — пустое тело получает 200, тогда как остальные три кассы
+      // отвечают 401. Значит сверка продажи — ЕДИНСТВЕННЫЙ замок. Истеки
+      // токен — непроверяемым станет каждый вебхук, мы начнём выдавать
+      // подписки кому угодно, и узнать об этом было бы неоткуда: раньше
+      // здесь стоял только console.warn, а лог процесса живёт недолго и
+      // его никто не читает.
+      //
+      // Поэтому отказ ЗАМКА идёт в Sentry — канал, который читают.
       console.warn(
         `[gumroad/webhook] sale ${saleId} unverifiable (no token or API unavailable) — provisioning anyway`,
       );
+      capture(new Error("gumroad_sale_unverifiable_provisioned"), {
+        route: "gumroad/webhook",
+        saleId,
+        email,
+      });
     }
   }
 

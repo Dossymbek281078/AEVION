@@ -53,14 +53,32 @@ function publicBase(): string {
 }
 
 function resolvePermalink(reference: string): string {
-  // GUMROAD_PERMALINK_<UPPER_REFERENCE> → specific product
-  // GUMROAD_DEFAULT_PERMALINK → catch-all
-  const envKey = `GUMROAD_PERMALINK_${reference.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
-  return (
-    process.env[envKey] ??
-    process.env.GUMROAD_DEFAULT_PERMALINK ??
-    reference
-  );
+  const ключ = reference.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+
+  /*
+   * ДВЕ ЗАПИСИ ОДНОГО ИМЕНИ, и ворота с действием читали разные.
+   *
+   * Маршрут Конституции решает «есть ли у нас пермалинк», спрашивая
+   * `GUMROAD_CONSTITUTION_PRO_PERMALINK` — она и задана на проде. Сюда же
+   * приходит ссылка `constitution-pro`, и искали мы
+   * `GUMROAD_PERMALINK_CONSTITUTION_PRO` — другую переменную, не заданную
+   * нигде. Ворота говорили «есть», действие не находило.
+   *
+   * Сегодня расхождение скрыто: ключ LemonSqueezy задан, и до ветки Gumroad
+   * дело не доходит. Уберут его — и покупатель уедет по ссылке, собранной из
+   * САМОЙ ссылки (`gumroad.com/l/constitution-pro`), то есть на товар,
+   * которого может не быть. Ошибка проявится ровно тогда, когда откажет
+   * первый провайдер, — в момент, когда запас и нужен.
+   *
+   * Обе записи читаем здесь, а не переименовываем переменную: имя живёт в
+   * настройках сервиса, и переименование сломало бы работающие ворота.
+   */
+  const порядок = [
+    process.env[`GUMROAD_PERMALINK_${ключ}`],
+    process.env[`GUMROAD_${ключ}_PERMALINK`],
+    process.env.GUMROAD_DEFAULT_PERMALINK,
+  ];
+  return порядок.find((v) => typeof v === "string" && v.trim() !== "")?.trim() ?? reference;
 }
 
 function gumroadCheckoutUrl(permalink: string, email?: string | null): string {

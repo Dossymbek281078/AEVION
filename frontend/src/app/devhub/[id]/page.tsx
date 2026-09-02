@@ -4010,7 +4010,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           />
                           <button
                             onClick={() => setVisualStyle("fontWeight", parseInt(visualEditStyleEdits.fontWeight ?? visualEditStyleBase.fontWeight, 10) >= 600 ? "400" : "700")}
-                            title="Bold"
+                            title="Полужирный"
                             style={{
                               width: 30, height: 30, border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 14, cursor: "pointer",
                               fontWeight: 800,
@@ -4075,7 +4075,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     <button
                       onClick={undoLastGeneration}
                       disabled={undoing}
-                      title="Revert the most recent AI change (same undo as the AI Generate tab)"
+                      title="Отменить последнюю правку ИИ (та же отмена, что на вкладке генерации)"
                       style={{
                         padding: "7px 0", background: "#fff", color: undoing ? "#94a3b8" : "#475569",
                         border: "1px solid #e2e8f0", borderRadius: 8, fontWeight: 600, fontSize: 12,
@@ -4322,7 +4322,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     <button
                       onClick={syncFromGithub}
                       disabled={repoPulling}
-                      title="Pull the repo's current default-branch files into this project (a checkpoint is taken first — undo restores the pre-sync state)"
+                      title="Забрать в проект текущие файлы основной ветки репозитория (сначала делается точка возврата — отмена вернёт состояние до синхронизации)"
                       style={{
                         padding: "9px 0", background: "#fff", border: "1px solid #0d9488", color: "#0d9488",
                         borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: repoPulling ? "not-allowed" : "pointer",
@@ -4491,7 +4491,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <textarea
                           value={videoPrompt}
                           onChange={(e) => setVideoPrompt(e.target.value)}
-                          placeholder="A futuristic city skyline at sunset, cinematic, 4K..."
+                          placeholder="напр.: A futuristic city skyline at sunset, cinematic, 4K"
                           rows={3}
                           style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, resize: "vertical", boxSizing: "border-box" }}
                         />
@@ -4749,7 +4749,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <textarea
                           value={imgPrompt}
                           onChange={(e) => setImgPrompt(e.target.value)}
-                          placeholder="A serene mountain landscape at golden hour, photorealistic..."
+                          placeholder="напр.: A serene mountain landscape at golden hour, photorealistic"
                           rows={3}
                           style={{
                             width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0",
@@ -4807,7 +4807,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               <button
                                 onClick={() => uploadImageToCloudflare(imgResult.url)}
                                 disabled={cfImgUploading}
-                                title="OpenAI's image URL expires in ~1 hour. Upload to Cloudflare Images for a permanent CDN URL."
+                                title="Ссылка OpenAI на картинку живёт около часа. Загрузите в Cloudflare Images, чтобы получить постоянный адрес."
                                 style={{
                                   padding: "4px 10px", background: "#f59e0b", color: "#fff",
                                   border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer",
@@ -4856,7 +4856,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <textarea
                           value={sfxText}
                           onChange={(e) => setSfxText(e.target.value)}
-                          placeholder="Heavy rain on a metal roof with distant thunder"
+                          placeholder="напр.: Heavy rain on a metal roof with distant thunder"
                           rows={3}
                           style={{
                             width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0",
@@ -4910,7 +4910,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <textarea
                           value={musicPrompt}
                           onChange={(e) => setMusicPrompt(e.target.value)}
-                          placeholder="Lo-fi hip-hop, mellow piano, soft beats, 80 BPM..."
+                          placeholder="напр.: Lo-fi hip-hop, mellow piano, soft beats, 80 BPM"
                           rows={3}
                           style={{
                             width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0",
@@ -4975,7 +4975,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           type="text"
                           value={emailSubject}
                           onChange={(e) => setEmailSubject(e.target.value)}
-                          placeholder="Welcome to our app"
+                          placeholder="Добро пожаловать в наше приложение"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                         />
                       </div>
@@ -5044,7 +5044,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             type="text"
                             value={payPermalink}
                             onChange={(e) => setPayPermalink(e.target.value)}
-                            placeholder="my-product  (or full app.gumroad.com/l/... URL)"
+                            placeholder="my-product (или полный адрес app.gumroad.com/l/…)"
                             style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                           />
                           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>Price is set in the Gumroad product itself — create it in your Gumroad dashboard, paste its permalink here.</div>
@@ -5057,7 +5057,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               type="text"
                               value={payName}
                               onChange={(e) => setPayName(e.target.value)}
-                              placeholder="Pro subscription"
+                              placeholder="Подписка Pro"
                               style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                             />
                           </div>
@@ -5090,7 +5090,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               type="text"
                               value={payDesc}
                               onChange={(e) => setPayDesc(e.target.value)}
-                              placeholder="Monthly access to all features"
+                              placeholder="Месячный доступ ко всем возможностям"
                               style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                             />
                           </div>
@@ -5148,7 +5148,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                       <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>Перевести текст</div>
                       <div>
-                        <textarea value={trText} onChange={(e) => setTrText(e.target.value)} placeholder="Text to translate..."
+                        <textarea value={trText} onChange={(e) => setTrText(e.target.value)} placeholder="Текст для перевода…"
                           rows={4}
                           style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
                       </div>
@@ -5437,7 +5437,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Тема</label>
-                        <input value={tplBuilderSubject} onChange={(e) => setTplBuilderSubject(e.target.value)} placeholder="Welcome to AEVION, {{params.name}}!"
+                        <input value={tplBuilderSubject} onChange={(e) => setTplBuilderSubject(e.target.value)} placeholder="Добро пожаловать в AEVION, {{params.name}}!"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       <div>
@@ -5502,7 +5502,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>
                           Content ({smsContent.length}/612 chars, ~{Math.ceil(smsContent.length / 160)} segments)
                         </label>
-                        <textarea value={smsContent} onChange={(e) => setSmsContent(e.target.value)} placeholder="Your verification code is 1234"
+                        <textarea value={smsContent} onChange={(e) => setSmsContent(e.target.value)} placeholder="Ваш код подтверждения: 1234"
                           rows={4} maxLength={612}
                           style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
                       </div>
@@ -5580,12 +5580,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Название голоса</label>
-                        <input value={voiceCloneName} onChange={(e) => setVoiceCloneName(e.target.value)} placeholder="My Custom Voice"
+                        <input value={voiceCloneName} onChange={(e) => setVoiceCloneName(e.target.value)} placeholder="Мой голос"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Description (optional)</label>
-                        <input value={voiceCloneDesc} onChange={(e) => setVoiceCloneDesc(e.target.value)} placeholder="Male, calm, narrative"
+                        <input value={voiceCloneDesc} onChange={(e) => setVoiceCloneDesc(e.target.value)} placeholder="Мужской, спокойный, повествовательный"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       <div>
@@ -5597,7 +5597,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Текст для примера</label>
                         <input value={voicePreviewText} onChange={(e) => setVoicePreviewText(e.target.value)}
-                          placeholder="AEVION voice preview — your custom voice is ready"
+                          placeholder="Пример голоса AEVION — ваш голос готов"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       {voiceCloneMsg && (
@@ -5656,7 +5656,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Language hint (optional, e.g. en, ru)</label>
-                        <input value={sttLanguage} onChange={(e) => setSttLanguage(e.target.value)} placeholder="auto-detect if empty"
+                        <input value={sttLanguage} onChange={(e) => setSttLanguage(e.target.value)} placeholder="оставьте пустым — определим сами"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       {sttError && (
@@ -5693,7 +5693,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {mediaTab === "drive" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div style={{ display: "flex", gap: 8 }}>
-                        <input value={driveQuery} onChange={(e) => setDriveQuery(e.target.value)} placeholder="Search Drive..."
+                        <input value={driveQuery} onChange={(e) => setDriveQuery(e.target.value)} placeholder="Поиск по Drive…"
                           onKeyDown={(e) => { if (e.key === "Enter") searchDrive(); }}
                           style={{ flex: 1, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                         <button onClick={searchDrive} disabled={driveLoading}
@@ -5932,7 +5932,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       type="text"
                       value={settingsDesc}
                       onChange={(e) => setSettingsDesc(e.target.value)}
-                      placeholder="Short description..."
+                      placeholder="Краткое описание…"
                       style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                     />
                   </div>
@@ -6000,7 +6000,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 5, background: c.role === "editor" ? "#d1fae5" : "#f1f5f9", color: c.role === "editor" ? "#065f46" : "#64748b", fontWeight: 600, flexShrink: 0 }}>{c.role}</span>
                         <button
                           onClick={() => removeCollaborator(c.userId)}
-                          title="Remove collaborator"
+                          title="Удалить соавтора"
                           style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444", fontSize: 14, fontWeight: 700, padding: "0 2px", flexShrink: 0 }}
                         >×</button>
                       </div>
@@ -6010,7 +6010,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         type="text"
                         value={settingsCollab}
                         onChange={(e) => setSettingsCollab(e.target.value)}
-                        placeholder="email or user-id"
+                        placeholder="адрес почты или id пользователя"
                         style={{ flex: "1 1 140px", minWidth: 0, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                         onKeyDown={(e) => { if (e.key === "Enter") addCollaborator(); }}
                       />

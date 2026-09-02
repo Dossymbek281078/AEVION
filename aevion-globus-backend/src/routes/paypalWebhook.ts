@@ -42,6 +42,21 @@ export function tierForReference(ref: string): TierId {
   if (r.startsWith("tier_enterprise_")) return "enterprise";
   if (r.includes("medium")) return "medium";
   if (r.includes("full") || r.includes("all-access") || r.includes("business") || r.includes("team")) return "full";
+  // Незнакомая ссылка НЕ должна выдавать платный тариф молча.
+  //
+  // Поведение оставлено прежним — выдаём lite: покупатель заплатил, и не
+  // выдать ему ничего хуже, чем выдать меньше обещанного. Но он мог
+  // оплатить ДРУГОЙ тариф, и тогда это наша ошибка, о которой надо знать.
+  //
+  // У соседней кассы (paybox) ровно это уже сделано и закреплено сторожем
+  // payboxUnknownReferenceIsLoud; у paypal тот же провал шёл без единого
+  // следа (замер 02.09.2026). Приводим к одной дисциплине.
+  if (!r.includes("lite")) {
+    console.warn(`[paypal/webhook] незнакомая ссылка заказа "${ref}" — выдан lite`);
+    capture(new Error(`paypal: неизвестная ссылка заказа "${ref}", выдан lite`), {
+      route: "paypal/webhook/tierForReference",
+    });
+  }
   return "lite";
 }
 

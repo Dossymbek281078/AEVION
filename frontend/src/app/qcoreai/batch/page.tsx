@@ -220,6 +220,7 @@ export default function BatchPage() {
                 value={inputsText}
                 onChange={(e) => setInputsText(e.target.value)}
                 placeholder={"Summarise the Q1 report\nCompare GPT-4o vs Claude Sonnet\nDraft a pitch for the AI investor deck"}
+                aria-label="Список задач, по одной в строке"
                 rows={7}
                 style={{
                   width: "100%", padding: "8px 10px", borderRadius: 8, resize: "vertical",
@@ -254,7 +255,7 @@ export default function BatchPage() {
                   step={0.1}
                   value={maxCostUsd || ""}
                   onChange={(e) => setMaxCostUsd(parseFloat(e.target.value) || 0)}
-                  placeholder="Max $/run"
+                  aria-label="Предел расхода на прогон, $" placeholder="Max $/run"
                   style={{
                     width: 90, padding: "5px 8px", borderRadius: 8, border: "1px solid #cbd5e1",
                     fontSize: 12, fontFamily: "inherit",

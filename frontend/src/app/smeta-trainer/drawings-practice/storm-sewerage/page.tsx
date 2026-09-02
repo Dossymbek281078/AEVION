@@ -227,6 +227,7 @@ Q = q · F · ψ · n_заст
                       value={v}
                       onChange={(e) => setAns(ex.id, e.target.value)}
                       placeholder={`ваш ответ, ${ex.unit}`}
+                      aria-label={`Ответ на задачу ${ex.id}, в ${ex.unit}`}
                       className="bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-slate-100 text-sm w-48 focus:outline-none focus:border-blue-500"
                     />
                     <span className="text-slate-500 text-sm">{ex.unit}</span>

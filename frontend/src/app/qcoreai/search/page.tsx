@@ -73,7 +73,7 @@ export default function QCoreSearchPage() {
               value={query}
               onChange={(e) => handleChange(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") doSearch(query); }}
-              placeholder="Search sessions and runs…"
+              aria-label="Поиск по сессиям и прогонам" placeholder="Search sessions and runs…"
               style={{
                 width: "100%", padding: "14px 16px 14px 44px",
                 borderRadius: 14, border: "1.5px solid rgba(15,23,42,0.15)",

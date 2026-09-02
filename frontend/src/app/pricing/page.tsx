@@ -1562,6 +1562,11 @@ export default function PricingPage() {
                 value={calcPromo}
                 onChange={(e) => setCalcPromo(e.target.value.toUpperCase())}
                 id="calc-promo"
+                aria-describedby="calc-promo-msg"
+                aria-invalid={
+                  !!calcPromo && !quote?.promo &&
+                  !!quote?.notes.some((n) => n.toLowerCase().includes("промо"))
+                }
                 placeholder="AEVION20 / STARTUP50"
                 style={{
                   width: 200,
@@ -1579,16 +1584,28 @@ export default function PricingPage() {
                   textTransform: "uppercase",
                 }}
               />
-              {quote?.promo && (
-                <div style={{ marginTop: 4, fontSize: 11, color: "#34d399" }}>
-                  ✓ {quote.promo.description}
-                </div>
-              )}
-              {calcPromo && !quote?.promo && quote?.notes.some((n) => n.toLowerCase().includes("промо")) && (
-                <div style={{ marginTop: 4, fontSize: 11, color: "#fca5a5" }}>
-                  ✗ {quote.notes.find((n) => n.toLowerCase().includes("промо"))}
-                </div>
-              )}
+              {/*
+                Живая область объявляет исход ввода промокода. Замер 02.09.2026
+                на проде: сообщение «✗ Промо-код не найден» показывалось ТОЛЬКО
+                значком и цветом — ни role, ни aria-live, ни aria-invalid. Человек
+                с читалкой жал Enter и не узнавал, что код отклонён.
+
+                Область отрисована ВСЕГДА, даже пустая: живая область, которая
+                появляется вместе с текстом, объявляется ненадёжно — читалка
+                должна знать о ней заранее.
+              */}
+              <div id="calc-promo-msg" role="status" aria-live="polite">
+                {quote?.promo && (
+                  <div style={{ marginTop: 4, fontSize: 11, color: "#34d399" }}>
+                    ✓ {quote.promo.description}
+                  </div>
+                )}
+                {calcPromo && !quote?.promo && quote?.notes.some((n) => n.toLowerCase().includes("промо")) && (
+                  <div style={{ marginTop: 4, fontSize: 11, color: "#fca5a5" }}>
+                    ✗ {quote.notes.find((n) => n.toLowerCase().includes("промо"))}
+                  </div>
+                )}
+              </div>
             </div>
             <div>
               <label

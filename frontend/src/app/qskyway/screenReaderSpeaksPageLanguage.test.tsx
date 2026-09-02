@@ -103,7 +103,14 @@ function hasCyrillic(s: string): boolean {
 describe("имена кнопок для читалки — на языке страницы", () => {
   test("новых русских подписей на английской отрисовке нет", async () => {
     const r = mount();
-    await waitFor(() => expect(r.container.querySelectorAll("button").length).toBeGreaterThan(3), { timeout: 10000 });
+    // Ждём ПРИЗНАК НУЖНОГО состояния, а не «кнопок больше трёх». Прежнее
+    // условие удовлетворялось кнопками, отрисованными до загрузки города, и
+    // сбор шёл по неполной странице. Предмет этого сторожа — подписи для
+    // диктора, поэтому ждём кнопку С ПОДПИСЬЮ: раньше неё проверять нечего.
+    await waitFor(
+      () => expect(r.container.querySelector("button[aria-label]"), "кнопок с подписью ещё нет").not.toBeNull(),
+      { timeout: 10000 },
+    );
 
     const names: string[] = [];
     r.container.querySelectorAll("button").forEach((b) => {
@@ -126,7 +133,14 @@ describe("имена кнопок для читалки — на языке ст
     // Храповик обязан замечать и УЛУЧШЕНИЕ: если долг починили, а строка
     // осталась в списке, она молча разрешает новую такую же.
     const r = mount();
-    await waitFor(() => expect(r.container.querySelectorAll("button").length).toBeGreaterThan(3), { timeout: 10000 });
+    // Ждём ПРИЗНАК НУЖНОГО состояния, а не «кнопок больше трёх». Прежнее
+    // условие удовлетворялось кнопками, отрисованными до загрузки города, и
+    // сбор шёл по неполной странице. Предмет этого сторожа — подписи для
+    // диктора, поэтому ждём кнопку С ПОДПИСЬЮ: раньше неё проверять нечего.
+    await waitFor(
+      () => expect(r.container.querySelector("button[aria-label]"), "кнопок с подписью ещё нет").not.toBeNull(),
+      { timeout: 10000 },
+    );
 
     const all = Array.from(r.container.querySelectorAll("button"))
       .map((b) => ((b.getAttribute("aria-label") || b.textContent) ?? "").trim())

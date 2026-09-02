@@ -55,6 +55,9 @@ interface EventsSummary {
   /** Канал привлечения из метки ?c= (BuyLink кладёт его в meta.channel). */
   checkoutByChannel?: Record<string, number>;
   purchaseByChannel?: Record<string, number>;
+  returnsByProvider?: Record<string, { успехов: number; отказов: number }>;
+  returnsSuccess?: number;
+  returnsCancel?: number;
   purchaseRevenueByChannel?: Record<string, number>;
   purchaseCount?: number;
   purchaseWithKnownAmount?: number;
@@ -634,6 +637,54 @@ export default function PricingAdminPage() {
                 data={summary.purchaseByChannel ?? {}}
                 accent="#0f766e"
               />
+              {/* ВОЗВРАТЫ ИЗ КАСС. Отказ мы записываем с 01.09, а читать его
+                  было некому: событие писалось в журнал и умирало там. Здесь
+                  оно наконец отвечает на вопрос «у какой кассы люди
+                  отваливаются» — а починки у разных касс разные.
+
+                  Пара, а не отказы отдельно: у кассы с большим потоком отказов
+                  будет больше просто потому, что через неё идут все.
+
+                  Оговорка под таблицей обязательна и не косметическая. Адрес
+                  отмены задают только PayBox и PayPal; у Gumroad и LemonSqueezy
+                  его нет, и отказ до нас НЕ ДОХОДИТ. Ноль отказов у них значит
+                  «мы не узнаём», а не «никто не отваливается» — без этой строки
+                  худшая касса выглядит лучшей. */}
+              {summary.returnsByProvider && Object.keys(summary.returnsByProvider).length > 0 ? (
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a", marginBottom: 8 }}>
+                    Возвраты из касс · успехов {summary.returnsSuccess ?? 0} / отказов{" "}
+                    {summary.returnsCancel ?? 0}
+                  </div>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ textAlign: "left", color: "#64748b" }}>
+                        <th style={{ padding: "6px 8px", fontWeight: 600 }}>Касса</th>
+                        <th style={{ padding: "6px 8px", fontWeight: 600 }}>Оплатили</th>
+                        <th style={{ padding: "6px 8px", fontWeight: 600 }}>Отказались</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(summary.returnsByProvider)
+                        .sort((a, b) => b[1].отказов - a[1].отказов)
+                        .map(([касса, пара]) => (
+                          <tr key={касса} style={{ borderTop: "1px solid rgba(15,23,42,0.08)" }}>
+                            <td style={{ padding: "6px 8px", fontWeight: 700 }}>{касса}</td>
+                            <td style={{ padding: "6px 8px" }}>{пара.успехов}</td>
+                            <td style={{ padding: "6px 8px", fontWeight: 700, color: "#b91c1c" }}>
+                              {пара.отказов}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                  <div style={{ marginTop: 8, fontSize: 12, color: "#78350f", background: "#fef3c7", padding: "8px 10px", borderRadius: 8 }}>
+                    Отказ доходит до нас только от PayBox и PayPal — им задан адрес отмены. У
+                    Gumroad и LemonSqueezy он не настроен, поэтому ноль отказов у них означает «мы
+                    не узнаём», а не «никто не отваливается».
+                  </div>
+                </div>
+              ) : null}
               {/* «Ожидаемая», а не «выручка»: сумма берётся из адреса возврата,
                   то есть НАША, а не списанная кассой. Разница перестала быть
                   теоретической 01.09.2026 — соседнее окно показало, что цену у

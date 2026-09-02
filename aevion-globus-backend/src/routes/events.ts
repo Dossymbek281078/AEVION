@@ -161,6 +161,62 @@ export function summarizeCheckoutStarts(events: Array<Pick<AnalyticsEvent, "type
 }
 
 /**
+ * Возвраты из касс: сколько дошло до оплаты и сколько отвалилось, ПО КАССАМ.
+ *
+ * Зачем. Отказ мы записываем с 01.09 (`checkout_cancel` с кассой в мете), но не
+ * читает его никто: ни сводка, ни панель. Событие пишется в журнал и умирает
+ * там — то есть мы платим за сбор данных и не получаем ответа на вопрос «у
+ * какой кассы люди отваливаются», а это разные починки: у одной чинят форму
+ * карты, у другой — валюту, у третьей вообще ничего не чинят.
+ *
+ * Считаем ПАРУ, а не отказы отдельно. Голое «41 отказ у PayBox» не значит
+ * ничего: у кассы с большим потоком отказов будет больше просто потому, что
+ * через неё идут все. Пара «успехи и отказы» сравнима, потому что оба события
+ * приходят одинаково — с нашего же экрана возврата.
+ *
+ * ЧЕГО ЭТА ПАРА НЕ ЗНАЕТ, и это надо читать вместе с числами. Адрес отмены
+ * задают только PayBox и PayPal; у LemonSqueezy и Gumroad он не настроен, и их
+ * отказ до нашего экрана НЕ ДОХОДИТ вовсе. Ноль отказов у них означает «мы не
+ * узнаём», а не «никто не отваливается» — прочитать это как хороший показатель
+ * значит выбрать худшую кассу за лучшую.
+ */
+export function summarizeCheckoutReturns(
+  events: Array<Pick<AnalyticsEvent, "type"> & { meta?: Record<string, unknown> }>,
+): {
+  byProvider: Record<string, { успехов: number; отказов: number }>;
+  успехов: number;
+  отказов: number;
+} {
+  const byProvider: Record<string, { успехов: number; отказов: number }> = {};
+  let успехов = 0;
+  let отказов = 0;
+
+  for (const ev of events) {
+    const успех = ev.type === "checkout_success";
+    const отказ = ev.type === "checkout_cancel";
+    if (!успех && !отказ) continue;
+    // Заглушка — не покупка и не отказ: она вообще не про деньги.
+    if (ev.meta?.stub === true) continue;
+
+    const p = ev.meta?.provider;
+    // Касса неизвестна — своя корзина, а не приписывание к чужой: приписанное
+    // число выглядит достовернее, чем оно есть.
+    const key = typeof p === "string" && p.trim() ? p.trim() : "unknown";
+    const строка = byProvider[key] ?? { успехов: 0, отказов: 0 };
+    if (успех) {
+      строка.успехов += 1;
+      успехов += 1;
+    } else {
+      строка.отказов += 1;
+      отказов += 1;
+    }
+    byProvider[key] = строка;
+  }
+
+  return { byProvider, успехов, отказов };
+}
+
+/**
  * Покупки по каналам — и отдельно выручка по тем, у кого сумма известна.
  *
  * Зачем отдельно от `byChannel`. Тот считает ВСЕ события подряд: просмотры,
@@ -411,6 +467,7 @@ eventsRouter.get("/summary", (req, res) => {
   /** Разбивку по ним считает summarizeCheckoutStarts — см. её комментарий. */
   const checkoutEvents: AnalyticsEvent[] = [];
   const purchaseEvents: AnalyticsEvent[] = [];
+  const returnEvents: AnalyticsEvent[] = [];
   // Канал (tt / ig / yt …) — единственный ответ на вопрос «какая раздача
   // принесла людей». Он приезжает в meta, а сводка до 13.08.2026 считала
   // только поля верхнего уровня: метка доезжала и НЕ показывалась никому.
@@ -438,6 +495,7 @@ eventsRouter.get("/summary", (req, res) => {
       if (ev.sid) sids.add(ev.sid);
       if (ev.type === "checkout_start") checkoutEvents.push(ev);
       if (ev.type === "checkout_success") purchaseEvents.push(ev);
+      if (ev.type === "checkout_success" || ev.type === "checkout_cancel") returnEvents.push(ev);
     } catch {
       // skip malformed line
     }
@@ -445,6 +503,7 @@ eventsRouter.get("/summary", (req, res) => {
 
   const checkoutSummary = summarizeCheckoutStarts(checkoutEvents);
   const purchases = summarizePurchases(purchaseEvents);
+  const returns = summarizeCheckoutReturns(returnEvents);
 
   res.json({
     total,
@@ -458,6 +517,9 @@ eventsRouter.get("/summary", (req, res) => {
     purchaseRevenueByChannel: purchases.revenueByChannel,
     purchaseCount: purchases.total,
     purchaseWithKnownAmount: purchases.сКоторыхИзвестнаСумма,
+    returnsByProvider: returns.byProvider,
+    returnsSuccess: returns.успехов,
+    returnsCancel: returns.отказов,
     byChannel,
     byProduct,
     sessionCount: sids.size,

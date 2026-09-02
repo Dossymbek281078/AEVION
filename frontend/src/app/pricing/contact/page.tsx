@@ -110,7 +110,7 @@ function ContactInner() {
           hasCompany: !!form.company,
           hasMessage: !!form.message,
           seats: form.seats,
-          topic: темаИзАдреса || undefined,
+          ...(темаИзАдреса ? { topic: темаИзАдреса } : {}),
         },
       });
       setSuccess(j.id);

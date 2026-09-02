@@ -324,8 +324,54 @@ interface EmailPayload {
  * Отдаём только признак и адрес отправителя (он и так виден в любом письме).
  * Ключ не покидает процесс.
  */
-export function emailSenderStatus(): { configured: boolean; from: string; mode: "real" | "stub" } {
-  return { configured: Boolean(RESEND_KEY), from: FROM_EMAIL, mode: RESEND_KEY ? "real" : "stub" };
+/**
+ * Исход ПОСЛЕДНЕЙ настоящей отправки.
+ *
+ * ⚠️ Находка соседнего окна 02.09.2026, проверена в этом файле. До неё
+ * состояние отвечало `configured` и `mode`, выведенные из ОДНОГО факта —
+ * задан ли ключ. То есть «настроены ли мы отправлять», а не «доходит ли».
+ *
+ * Разница описана строкой 72 этого же файла: домен отправителя нужно
+ * подтвердить у поставщика, иначе КАЖДОЕ письмо отвергается. При этом
+ * `configured` остаётся true, `mode` остаётся "real", и снаружи это
+ * неотличимо от исправной отправки.
+ *
+ * Доказательств поломки нет: за неделю ни одной ошибки прода про письма. Но
+ * покупок почти не было, значит и отправок почти не было, и ноль отказов
+ * означает «не проверялось», а не «работает». Поэтому вопрос закрывается
+ * прибором, а не наблюдением: одна настоящая отправка — и мы знаем правду.
+ *
+ * ПЕРСОНАЛЬНЫХ ДАННЫХ ЗДЕСЬ НЕТ И БЫТЬ НЕ ДОЛЖНО. Ни адреса получателя, ни
+ * текста ошибки поставщика: в сообщениях Resend встречается адрес, а это
+ * публичная ручка состояния. Хватает признака и кода ответа.
+ *
+ * Живёт в памяти процесса и обнуляется при перезапуске — осознанно: таблица
+ * ради диагностики завела бы ещё одну сущность на денежном пути.
+ */
+type ИсходОтправки = { ok: boolean; httpStatus: number | null; when: string };
+let последняяОтправка: ИсходОтправки | null = null;
+
+function записатьИсход(ok: boolean, httpStatus: number | null): void {
+  последняяОтправка = { ok, httpStatus, when: new Date().toISOString() };
+}
+
+export function emailSenderStatus(): {
+  configured: boolean;
+  from: string;
+  mode: "real" | "stub";
+  lastSend: ИсходОтправки | null;
+  /** Явными словами, потому что `null` читают как «всё хорошо». */
+  lastSendMeaning: string;
+} {
+  return {
+    configured: Boolean(RESEND_KEY),
+    from: FROM_EMAIL,
+    mode: RESEND_KEY ? "real" : "stub",
+    lastSend: последняяОтправка,
+    lastSendMeaning: последняяОтправка
+      ? (последняяОтправка.ok ? "последняя отправка прошла" : "последняя отправка ОТКЛОНЕНА поставщиком")
+      : "настоящих отправок с момента запуска ещё не было — это НЕ подтверждение работоспособности",
+  };
 }
 
 export async function sendEmail(payload: EmailPayload): Promise<{ ok: boolean; mode: "real" | "stub"; id?: string; error?: string; degraded?: boolean; degradedReason?: string }> {
@@ -397,6 +443,7 @@ export async function sendEmail(payload: EmailPayload): Promise<{ ok: boolean; m
         recipientDomain: доменПолучателя,
         status: String(r.status),
       });
+      записатьИсход(false, r.status);
       return { ok: false, mode: "real", error: причина };
     }
     if (!j.id) {
@@ -408,9 +455,11 @@ export async function sendEmail(payload: EmailPayload): Promise<{ ok: boolean; m
       capture(new Error(`sendEmail degraded: ${degradedReason}`), { route: "provisioning/sendEmail", to: payload.to });
       return { ok: true, mode: "real", degraded: true, degradedReason };
     }
+    записатьИсход(true, r.status);
     return { ok: true, mode: "real", id: j.id };
   } catch (e) {
     capture(e);
+    записатьИсход(false, null);
     return { ok: false, mode: "real", error: e instanceof Error ? e.message : String(e) };
   }
 }

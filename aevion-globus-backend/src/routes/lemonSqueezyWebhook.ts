@@ -310,6 +310,7 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         period: "monthly",
         modules,
         source: "lemonsqueezy",
+        providerPaymentId: lsSubId,
         ...(channel ? { channel } : {}),
       });
       console.log(`[ls/webhook] ${event} → provisioned ${tierId} for ${email} (ref=${ref ?? "default"})`);

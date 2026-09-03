@@ -176,6 +176,7 @@ payboxWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         period,
         modules: module ? [module] : [],
         source: "paybox",
+        providerPaymentId: paymentId,
       });
 
       // Помодульную покупку записываем ЕЩЁ и в базу. Тарифная запись живёт

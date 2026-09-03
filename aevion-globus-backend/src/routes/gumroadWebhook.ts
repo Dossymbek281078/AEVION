@@ -534,6 +534,7 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         period,
         modules: [],
         source: "gumroad",
+        providerPaymentId: saleId,
         ...(purchaseChannel ? { channel: purchaseChannel } : {}),
       });
 

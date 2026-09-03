@@ -73,6 +73,17 @@ export interface Subscription {
   amountUsd?: number;
   promoCode?: string;
   stripeSessionId?: string;
+  /**
+   * Идентификатор платежа У ПРОВАЙДЕРА (sale_id у Gumroad, pg_payment_id у
+   * PayBox, id ордера у PayPal, id подписки у LemonSqueezy).
+   *
+   * Заведено 03.09.2026. До этого связать платёж с выдачей можно было только
+   * у paybox и paypal — там идентификатор зашит в номер подписки. У Gumroad
+   * (главная касса) и LemonSqueezy он не сохранялся вовсе, поэтому на вопрос
+   * «человек заплатил, выдали ли мы» ответа не было ни у поддержки, ни у
+   * страницы успеха, которая показывает тариф ИЗ АДРЕСНОЙ СТРОКИ.
+   */
+  providerPaymentId?: string;
   /** Кто провёл платёж: "gumroad" | "lemonsqueezy" | "stripe" и т.п. */
   source?: string;
   /**
@@ -485,6 +496,7 @@ export async function provisionSubscription(input: {
   amountUsd?: number;
   promoCode?: string;
   stripeSessionId?: string;
+  providerPaymentId?: string;
   paddleTransactionId?: string;
   source?: string;
   channel?: string;
@@ -506,6 +518,7 @@ export async function provisionSubscription(input: {
     amountUsd: input.amountUsd,
     promoCode: input.promoCode,
     stripeSessionId: input.stripeSessionId,
+    providerPaymentId: input.providerPaymentId,
     source: input.source,
     channel: input.channel,
   };

@@ -178,6 +178,7 @@ paypalWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         period,
         modules: module ? [module] : [],
         source: "paypal",
+        providerPaymentId: paymentId,
       });
 
       // Помодульную покупку записываем ЕЩЁ и в базу — см. тот же разбор в

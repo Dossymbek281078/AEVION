@@ -99,9 +99,23 @@ function angliyskie(src: string): string[] {
   return out;
 }
 
+/*
+ * ВНУТРЕННИЕ ЭКРАНЫ ИСКЛЮЧЕНЫ НАМЕРЕННО.
+ *
+ * Замысел сторожа — про ПОСЕТИТЕЛЯ: русскоязычная страница, а подпись поля или
+ * имя для читалки остались английскими. Админка и обозреватель API — не для
+ * посетителя, там английские подписи норма, а не долг.
+ *
+ * Записано 03.09.2026 по решению автора сторожа. Не расширять охват «для
+ * полноты»: тогда проверка станет вечно красной, и её отключат — а это хуже,
+ * чем узкая, но живая.
+ */
+const ВНУТРЕННИЕ = new Set(["admin", "api-explorer"]);
+
 function fajly(d: string, out: string[] = []): string[] {
   for (const e of readdirSync(d)) {
     if (e === "node_modules" || e === "__tests__") continue;
+    if (ВНУТРЕННИЕ.has(e)) continue;
     const p = join(d, e);
     if (statSync(p).isDirectory()) fajly(p, out);
     else if (p.endsWith(".tsx") || p.endsWith(".ts")) out.push(p);

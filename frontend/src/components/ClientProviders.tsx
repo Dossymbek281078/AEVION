@@ -11,6 +11,7 @@ import { AppShellLanguagePill } from "@/components/AppShellLanguagePill";
 import { AppShellRevenueBadge } from "@/components/AppShellRevenueBadge";
 import { AutoTranslate } from "@/components/AutoTranslate";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
+import RouteAnnouncer from "@/components/RouteAnnouncer";
 import { WebVitals } from "@/components/WebVitals";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { PaywallModal } from "@/components/PaywallModal";
@@ -65,6 +66,13 @@ export function ClientProviders({ children }: { children: React.ReactNode }) {
         {!isApp && !isBare && <SiteHeader />}
         {isApp && !isBare && <AppShellLanguagePill />}
         {isApp && !isBare && !isCyberchess && <AppShellRevenueBadge />}
+        {/*
+          Переход между страницами клиентский: браузер не переносит фокус
+          и не объявляет новую комнату. Замер 03.09.2026 — на всех трёх
+          переходах цепочки фокус оказывался на body, а живых областей
+          на страницах было ноль.
+        */}
+        <RouteAnnouncer />
         <ToastProvider>
           <PlanLimitToastBridge />
           <div style={{ flex: 1 }}>{children}</div>

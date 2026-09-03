@@ -7419,6 +7419,18 @@ const en: Record<string, string> = {
   "qskyway.city.nyc": "New York — Midtown (Manhattan)",
   "qskyway.city.tokyo": "Tokyo — Nishi-Shinjuku",
   "langSwitch.aria": "Interface language",
+  "chain.title": "Chain receipt",
+  "chain.lead": "Every step is signed separately. Verify any of them yourself — we do not ask you to take our word.",
+  "chain.step": "Step {n} of {total}",
+  "chain.ok": "verified",
+  "chain.revoked": "revoked",
+  "chain.missing": "not found",
+  "chain.failed": "verification failed",
+  "chain.open": "open verification",
+  "chain.empty": "No steps given. Add them to the address: ?steps=…",
+  "chain.previewWarn": "Some signatures were issued in preview mode: the platform key is not set yet, so they cannot be verified later.",
+  "chain.hash": "Content hash",
+  "chain.at": "Time",
 };
 
 export default en;

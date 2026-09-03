@@ -98,7 +98,14 @@ checkoutRouter.post("/session", async (req, res) => {
     const channel = typeof body.channel === "string" ? body.channel.trim().slice(0, 40) : "";
 
     if (!body.tierId || !["free", "lite", "medium", "full", "pro", "enterprise"].includes(body.tierId)) {
-      return res.status(400).json({ error: "invalid_tier" });
+      // Единственный ответ чекаута без человеческого текста (замер 03.09.2026:
+      // 5 с текстом против 1 без). Соседние ответы этого же файла его несут —
+      // непоследовательность внутри одной функции почти всегда недосмотр,
+      // а не решение.
+      return res.status(400).json({
+        error: "invalid_tier",
+        message: "Такого тарифа нет. Вернитесь на страницу цен и выберите план заново.",
+      });
     }
     const tier = getTier(body.tierId)!;
     const period: BillingPeriod = body.period === "annual" ? "annual" : "monthly";

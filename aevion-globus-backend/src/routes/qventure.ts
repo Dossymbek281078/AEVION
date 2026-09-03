@@ -155,6 +155,24 @@ async function backfillDedupeHashes(): Promise<void> {
 const generalLimiter = rateLimit({ windowMs: 60_000, max: 40, keyPrefix: "qventure:general", message: "rate_limited" });
 // 6/min left no room: an investor screening a handful of deals in one sitting hit
 // the wall, and the smoke suite sat exactly at the ceiling so any retry failed it.
+// ЦЕНА ОДНОГО ЗАПРОСА, чтобы следующий менял предел с открытыми глазами.
+// Один /analyze = ПЯТЬ вызовов платной модели: четыре линзы разом (runCouncil)
+// плюс сведение. То есть 15/мин это до 75 вызовов в минуту с одного ключа —
+// вдвое с лишним выше платформенной нормы для дорогих ручек (30/мин на ОДИН
+// вызов у dhCostlyLimit в devhub).
+//
+// Почему это НЕ повод понижать сгоряча: 6/мин уже пробовали и вернули, причина
+// строкой ниже. И наивное повторение денег не стоит — одинаковый вход отдаёт
+// готовый разбор через dedupeHash, не считая заново. Чтобы жечь, надо
+// намеренно менять вход каждый раз.
+//
+// Чего здесь НЕТ и что было бы настоящей защитой: суточного или месячного
+// потолка. Поминутный предел сверен с человеческим темпом, а не с жёсткой
+// квотой поставщика — 15/мин это 21 600 разборов в сутки с одного адреса.
+// Сделать это правильно значит завести учёт как у DevHub (таблица расхода,
+// checkCredit), а не второй ограничитель в памяти: он обнуляется при каждой
+// выкатке, то есть даёт видимость потолка вместо потолка.
+// Замер 03.09.2026.
 const analyzeLimiter = rateLimit({ windowMs: 60_000, max: 15, keyPrefix: "qventure:analyze", message: "rate_limited" });
 
 export const qventureRouter = Router();

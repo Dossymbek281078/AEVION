@@ -1144,6 +1144,18 @@ function suitability(cityId: string, city: CityData): VertiportScore[] {
   });
 }
 
+// ИМЯ ЗАИМСТВОВАТЬ НЕЛЬЗЯ (03.09.2026). В поле `note`, уходящем наружу, стояло
+// «(QSign)» — а подпись ставится СВОИМ ключом модуля, не службой QSign. Здесь, в
+// комментарии, сказано верно — «QSign-style», в манере, — но наружу оговорка
+// «style» не уезжала.
+//
+// Разница не косметическая именно сейчас: платформенная подпись умеет связывать
+// заверения в цепочку (`causalSignatureId`), и интегратор, прочитавший «QSign»,
+// решит, что маршрут уже в этой цепочке. Он в ней НЕ состоит.
+//
+// До экрана строка не доходит — страница читает только `alg` и `contentHash`.
+// Её читатель — тот, кто обращается к API напрямую, а для истории «модули
+// передают друг другу проверяемое» это и есть главная аудитория.
 // ── Ed25519 signing (QSign-style attestation over the immutable twin) ──────────
 /**
  * Ключ подписи и ЧЕСТНЫЙ признак того, временный ли он.
@@ -1183,8 +1195,8 @@ function signCity(cityId: string, city: CityData): Signature {
   const sig: Signature = {
     alg: "Ed25519", contentHash, signature, publicKey: SIGN_PK_B64,
     note: SIGN_EPHEMERAL
-      ? "Ephemeral key (per-instance). Provide QSKYWAY_SIGN_SK for a stable key. Аттестация неизменности двойника (QSign)."
-      : "Аттестация неизменности двойника (QSign). Подпись покрывает встроенный twin.",
+      ? "Ephemeral key (per-instance). Provide QSKYWAY_SIGN_SK for a stable key. Аттестация неизменности двойника: подпись СВОИМ ключом модуля (Ed25519), не служба QSign."
+      : "Аттестация неизменности двойника: подпись СВОИМ ключом модуля (Ed25519), не служба QSign. Подпись покрывает встроенный twin.",
   };
   sigCache.set(cityId, sig);
   return sig;

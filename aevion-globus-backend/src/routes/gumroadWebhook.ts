@@ -255,7 +255,6 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   const productId = raw.product_id ?? raw.short_product_id ?? "";
   const refunded = result.status === "refunded";
   const failed = result.status === "failed";
-  const isMembership = raw.is_recurring_billing === "true";
 
   if (!email) {
     console.warn("[gumroad/webhook] missing email, ignoring");
@@ -514,7 +513,20 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
 
     if (result.status === "paid") {
       const tierId = tierForReference(reference);
-      const period = isMembership ? "monthly" : "monthly"; // Gumroad one-time → treat as monthly for provisioning
+      // ПЕРИОД БЕРЁМ ИЗ ССЫЛКИ, а не считаем всех месячными.
+      //
+      // Здесь стоял `isMembership ? "monthly" : "monthly"` — тернарник, у
+      // которого обе ветки одинаковы, то есть флаг не влиял ни на что.
+      // Замер 03.09.2026: Gumroad продаёт ГОДОВЫЕ тарифы (tier_lite_annual,
+      // tier_medium_annual, tier_full_annual — у каждого своя переменная
+      // товара), и все они записывались как месячные. Срок доступа считается
+      // по периоду, а годовая покупка у Gumroad — РАЗОВЫЙ платёж: продления
+      // не будет. То есть человек платил за год и терял доступ через месяц,
+      // а следующего события пришлось бы ждать одиннадцать месяцев.
+      //
+      // Правило то же, что у paybox и paypal (periodForReference): решает
+      // слово в ссылке заказа.
+      const period = reference.toLowerCase().includes("annual") ? "annual" : "monthly";
 
       const provResult = await provisionSubscription({
         email,

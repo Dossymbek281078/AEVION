@@ -401,8 +401,26 @@ checkoutRouter.get("/healthz", (_req, res) => {
         webhook: "/api/gumroad/webhook",
         webhookConfigured: Boolean(process.env.GUMROAD_WEBHOOK_SECRET?.trim()),
       },
-      paybox: { configured: isPayboxConfigured(), trigger: "currency=KZT", webhook: "/api/paybox/webhook" },
-      paypal: { configured: isPaypalConfigured(), trigger: "method=paypal", webhook: "/api/paypal/webhook" },
+      // ⚠️ У ЭТИХ ДВУХ КАСС БЫЛО ТОЛЬКО `configured`, и это асимметрия,
+      // а не мелочь. У LemonSqueezy и Gumroad рядом стоит
+      // `webhookConfigured` — признак того, что купленное ВЫДАДУТ: без
+      // секрета вебхука оплата принимается, а права не начисляются.
+      //
+      // PayBox — касса казахстанского трафика, то есть ровно та, где
+      // такая тишина дороже всего. Спрашивать про неё было нечем:
+      // снаружи «настроено» и «выдаст» выглядели одинаково.
+      paybox: {
+        configured: isPayboxConfigured(),
+        webhookConfigured: Boolean(process.env.PAYBOX_SECRET?.trim()),
+        trigger: "currency=KZT",
+        webhook: "/api/paybox/webhook",
+      },
+      paypal: {
+        configured: isPaypalConfigured(),
+        webhookConfigured: Boolean(process.env.PAYPAL_WEBHOOK_ID?.trim()),
+        trigger: "method=paypal",
+        webhook: "/api/paypal/webhook",
+      },
     },
     frontendUrl: FRONTEND_URL,
   });

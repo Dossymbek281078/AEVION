@@ -139,7 +139,11 @@ channelsHealthRouter.get("/channels", (_req: Request, res: Response) => {
    * несопоставленных отдаётся рядом — по нему видно, чего именно нет.
    */
   const variants = variantMappingStatus();
-  const canGrant = !lemonsqueezy || variants.mapped > 0;
+  // Годным считается вариант, у которого переменная задана И выглядит
+  // идентификатором. Прежде здесь стояло «переменная непуста»: мусор в
+  // значении доезжает до кассы как NaN, а состояние оставалось зелёным.
+  const usableVariants = variants.varsSet - variants.malformed.length;
+  const canGrant = !lemonsqueezy || usableVariants > 0;
 
   res.json({
     ok: true,
@@ -158,7 +162,12 @@ channelsHealthRouter.get("/channels", (_req: Request, res: Response) => {
         configured: lemonsqueezy,
         signed: signedLemon,
         // Наружу — только наши внутренние имена товаров, не идентификаторы.
-        variants: { total: variants.total, mapped: variants.mapped, unmapped: variants.unmapped },
+        variants: {
+          total: variants.total,
+          varsSet: variants.varsSet,
+          malformed: variants.malformed,
+          unmapped: variants.unmapped,
+        },
       },
       gumroad: { configured: gumroad, signed: signedGumroad },
       paybox: { configured: paybox },
@@ -169,7 +178,11 @@ channelsHealthRouter.get("/channels", (_req: Request, res: Response) => {
       ...(email ? [] : ["SMTP_HOST+SMTP_USER+SMTP_PASS либо RESEND_API_KEY"]),
       ...(google ? [] : ["GOOGLE_OAUTH_CLIENT_ID+SECRET"]),
       ...(github ? [] : ["GITHUB_OAUTH_CLIENT_ID+SECRET"]),
-      ...(lemonsqueezy && variants.mapped === 0
+      ...(lemonsqueezy && variants.malformed.length > 0
+        ? ["LEMON_SQUEEZY_VARIANT_* задан(ы) не числом: " + variants.malformed.join(", ") +
+           " — в кассу уедет NaN, доступ не выдастся"]
+        : []),
+      ...(lemonsqueezy && usableVariants === 0
         ? ["LEMON_SQUEEZY_VARIANT_* (деньги принимаются, доступ не выдаётся ни за один товар)"]
         : []),
       ...(gumroad && !signedGumroad ? ["GUMROAD_WEBHOOK_SECRET (оплата принимается без подписи)"] : []),

@@ -26,7 +26,7 @@
  *   4. getIntent → GET /v2/checkout/orders/{id} (статус COMPLETED = оплачено)
  */
 
-import { buildSuccessUrl } from "./successUrl";
+import { buildCancelUrl, buildSuccessUrl } from "./successUrl";
 import type {
   PaymentIntent,
   PaymentIntentInput,
@@ -102,14 +102,12 @@ function statusFromOrder(orderStatus: string): PaymentResult["status"] {
 export const paypalPaymentProvider: PaymentProvider = {
   id: "paypal",
 
+
   async createIntent(input: PaymentIntentInput): Promise<PaymentIntent> {
     const t = await getToken();
     const base = publicBase();
     const value = (input.amountCents / 100).toFixed(2);
-    const customId = JSON.stringify({
-      reference: input.reference,
-      ...(input.customData ?? {}),
-    }).slice(0, 127); // PayPal custom_id ≤ 127 символов
+    const customId = собратьCustomId(input.reference, input.customData);
 
     const r = await fetch(`${apiBase()}/v2/checkout/orders`, {
       method: "POST",
@@ -128,7 +126,7 @@ export const paypalPaymentProvider: PaymentProvider = {
           brand_name: "AEVION",
           user_action: "PAY_NOW",
           return_url: buildSuccessUrl(base, input, { provider: "paypal", flags: { paypal: "1" } }),
-          cancel_url: `${base}/pricing/checkout/cancel?paypal=1`,
+          cancel_url: buildCancelUrl(base, input, { flags: { paypal: "1" } }),
         },
       }),
     });
@@ -253,4 +251,44 @@ export async function verifyPaypalWebhook(
   } catch {
     return false;
   }
+}
+
+/**
+ * `custom_id` для PayPal: не длиннее 127 символов И всегда разбираемый.
+ *
+ * 🔴 ПОПРАВКА 02.09.2026, находка соседнего окна. Было так:
+ *
+ *     JSON.stringify({ reference, ...customData }).slice(0, 127)
+ *
+ * Это срез СТРОКИ JSON. Перевалило за 127 — наружу уезжает обрезанный, то
+ * есть НЕВАЛИДНЫЙ JSON. Разбор в вебхуке падает в запасную ветку и
+ * возвращает `{ reference: customId }`, то есть кусок JSON целиком вместо
+ * ссылки заказа. Такой платёж не привязать ни к чему: деньги пришли, а к
+ * чему они — неизвестно.
+ *
+ * Теряется при этом не «поле аналитики», а ВЫДАЧА КУПЛЕННОГО. И проявится
+ * не сразу: сегодня, вероятно, влезает, а сломается ровно тогда, когда в
+ * `customData` добавят ещё одно поле, — то есть при обычной работе и молча.
+ *
+ * Стало: собираем по одному полю, пока результат помещается. Не влезло —
+ * поле не едет, но JSON остаётся целым.
+ *
+ * Если не помещается даже минимальный объект (ссылка длиннее ~110 символов),
+ * отдаём ссылку ГОЛОЙ строкой: запасная ветка разбора вернёт её как
+ * `reference`, и это верный ответ, а не мусор.
+ */
+export function собратьCustomId(
+  reference: string,
+  customData?: Record<string, string | undefined>,
+): string {
+  const ПРЕДЕЛ = 127;
+  if (JSON.stringify({ reference }).length > ПРЕДЕЛ) return reference.slice(0, ПРЕДЕЛ);
+
+  let итог: Record<string, string> = { reference };
+  for (const [k, v] of Object.entries(customData ?? {})) {
+    if (v === undefined || v === null || v === "") continue;
+    const проба = { ...итог, [k]: String(v) };
+    if (JSON.stringify(проба).length <= ПРЕДЕЛ) итог = проба;
+  }
+  return JSON.stringify(итог);
 }

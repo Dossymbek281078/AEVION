@@ -65,8 +65,43 @@ describe("оплата, превращающаяся в доступ", () => {
       const r = await request(app()).get("/api/health/channels");
       expect(r.body.canPay, "провайдер должен считаться настроенным").toBe(true);
       expect(r.body.canGrant, "оплата не даёт прав, а ручка молчит").toBe(false);
-      expect(r.body.payments.lemonsqueezy.variants.mapped).toBe(0);
+      expect(r.body.payments.lemonsqueezy.variants.varsSet).toBe(0);
       expect(r.body.missing.join(" ")).toContain("LEMON_SQUEEZY_VARIANT_");
+    } finally {
+      for (const [k, v] of Object.entries(back)) if (v !== undefined) process.env[k] = v;
+    }
+  });
+
+  test("переменная задана МУСОРОМ — это не сопоставление, а ловушка", async () => {
+    // Ради этого случая проверка и переписана. Прежде поле называлось
+    // `mapped` и считало «переменная непуста»: любое значение делало
+    // состояние зелёным. Между тем провайдер делает
+    // `Number.parseInt(variantId, 10)` — нечисловое значение доезжает до
+    // кассы как NaN, покупатель платит и НЕ получает доступ, а ручка всё
+    // это время отвечает «выдача настроена».
+    //
+    // Самая правдоподобная опечатка здесь не случайная: у Lemon Squeezy
+    // ДВА разных идентификатора, и тот, что виден в адресе чекаута, —
+    // UUID. Подставить его вместо числового варианта проще всего.
+    for (const k of KEYS) process.env[k] = "x";
+    const all = Object.keys(process.env).filter((k) => k.startsWith("LEMON_SQUEEZY_VARIANT_"));
+    const back: Record<string, string | undefined> = {};
+    for (const k of all) { back[k] = process.env[k]; delete process.env[k]; }
+    try {
+      process.env[VARIANT] = "ab30b6f3-1d69-4db6-b7ab-86ef0d363a57";
+      const r = await request(app()).get("/api/health/channels");
+      const v = r.body.payments.lemonsqueezy.variants;
+
+      expect(v.varsSet, "переменная задана — это правда").toBeGreaterThan(0);
+      expect(v.malformed.length, "мусор не опознан как мусор").toBeGreaterThan(0);
+      expect(
+        r.body.canGrant,
+        "ручка обещает выдачу доступа, а до кассы уедет NaN",
+      ).toBe(false);
+      expect(
+        r.body.missing.join(" "),
+        "человеку не сказано, ЧТО именно не так с переменной",
+      ).toContain("не числом");
     } finally {
       for (const [k, v] of Object.entries(back)) if (v !== undefined) process.env[k] = v;
     }
@@ -77,7 +112,9 @@ describe("оплата, превращающаяся в доступ", () => {
     process.env[VARIANT] = "999999";
     const r = await request(app()).get("/api/health/channels");
     expect(r.body.canGrant).toBe(true);
-    expect(r.body.payments.lemonsqueezy.variants.mapped).toBeGreaterThan(0);
+    expect(r.body.payments.lemonsqueezy.variants.varsSet).toBeGreaterThan(0);
+    // Задана и ВЫГЛЯДИТ идентификатором — иначе до кассы доедет NaN.
+    expect(r.body.payments.lemonsqueezy.variants.malformed).toEqual([]);
     expect(r.body.payments.lemonsqueezy.variants.unmapped).not.toContain("app_devhub");
   });
 

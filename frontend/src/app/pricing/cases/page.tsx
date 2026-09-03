@@ -70,7 +70,10 @@ export default function PricingCasesPage() {
     fetch(apiUrl("/api/pricing/cases"))
       .then((r) => r.json())
       .then((j: { items: CaseStudy[] }) => setCases(j.items))
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+      .catch((e: unknown) => {
+        console.error("[pricing/cases] запрос не прошёл:", e);
+        setError(e instanceof Error ? e.message : String(e));
+      });
     track({ type: "page_view", source: "pricing/cases" });
   }, []);
 
@@ -108,7 +111,7 @@ export default function PricingCasesPage() {
           }}
         >
           <h2 style={{ margin: 0, marginBottom: 8 }}>{tp("error.unavailable")}</h2>
-          <p style={{ margin: 0 }}>/api/pricing/cases — {error}</p>
+          <p style={{ margin: 0 }}>{tp("error.whatNow")}</p>
         </div>
       </ProductPageShell>
     );

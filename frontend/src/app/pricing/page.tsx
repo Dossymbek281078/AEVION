@@ -377,6 +377,7 @@ export default function PricingPage() {
         }
       } catch (e: unknown) {
         if (!cancelled) {
+          console.error("[pricing] /api/pricing:", e);
           setError(e instanceof Error ? e.message : String(e));
           setLoading(false);
         }
@@ -528,12 +529,7 @@ export default function PricingPage() {
           }}
         >
           <h2 style={{ margin: 0, marginBottom: 8 }}>{tp("error.unavailable")}</h2>
-          <p style={{ margin: 0 }}>
-            /api/pricing. {error ? `${error}` : ""}
-          </p>
-          <p style={{ margin: 0, marginTop: 8, fontSize: 13 }}>
-            {tp("error.checkBackend")}
-          </p>
+          <p style={{ margin: 0 }}>{tp("error.whatNow")}</p>
         </div>
       </ProductPageShell>
     );

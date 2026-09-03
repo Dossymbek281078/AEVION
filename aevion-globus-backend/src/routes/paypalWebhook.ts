@@ -49,12 +49,23 @@ function periodForReference(ref: string): BillingPeriod {
   return ref.toLowerCase().includes("annual") ? "annual" : "monthly";
 }
 
-/** custom_id = JSON { reference, module? } (createIntent). Возвращаем оба поля. */
-function parseCustomId(customId?: string): { reference: string; module?: string } {
+/**
+ * `custom_id` = JSON { reference, module?, channel? } (createIntent).
+ *
+ * ⚠️ ПОПРАВКА 02.09.2026, находка соседнего окна. Канал ДОЕЗЖАЛ сюда —
+ * провайдер кладёт `{ reference, ...customData }`, а customData несёт
+ * `channel`, — и выбрасывался здесь: разбор возвращал ровно две ключа.
+ *
+ * Следствие: каждая покупка через PayPal ложилась в записи как «direct», и
+ * панель «фактически списано по каналам» занижала именно тот канал, который
+ * приводит валютных покупателей. Ошибка тихая: цифра есть, она правдоподобна
+ * и она неверна.
+ */
+function parseCustomId(customId?: string): { reference: string; module?: string; channel?: string } {
   if (!customId) return { reference: "" };
   try {
-    const j = JSON.parse(customId) as { reference?: string; module?: string };
-    return { reference: j.reference ?? "", module: j.module };
+    const j = JSON.parse(customId) as { reference?: string; module?: string; channel?: string };
+    return { reference: j.reference ?? "", module: j.module, channel: j.channel };
   } catch {
     return { reference: customId };
   }
@@ -99,7 +110,20 @@ paypalWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   const raw = (result.raw as Record<string, unknown> | null) ?? {};
   const payer = (raw.payer as { email_address?: string } | undefined);
   const email = (payer?.email_address ?? "").trim().toLowerCase();
-  const { reference, module } = parseCustomId(raw.custom_id as string | undefined);
+  const { reference, module, channel } = parseCustomId(raw.custom_id as string | undefined);
+
+  // Сумма заказа: PayPal кладёт её в purchase_units[0].amount.
+  const paypalUnits = raw.purchase_units as
+    | Array<{ amount?: { value?: string; currency_code?: string } }>
+    | undefined;
+  const paypalAmount = paypalUnits?.[0]?.amount;
+  const paypalAmountValue = Number(paypalAmount?.value);
+  const paypalAmountUsd =
+    String(paypalAmount?.currency_code ?? "").toUpperCase() === "USD" &&
+    Number.isFinite(paypalAmountValue) &&
+    paypalAmountValue > 0
+      ? paypalAmountValue
+      : undefined;
   const paymentId = (raw.id as string | undefined) ?? eventId ?? reference;
   const refunded = result.status === "refunded";
   const failed = result.status === "failed";
@@ -163,6 +187,20 @@ paypalWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         period,
         modules: module ? [module] : [],
         source: "paypal",
+        // Сумма ПРИХОДИТ в событии и до сегодня выбрасывалась: провайдер
+        // отдаёт весь заказ PayPal, а вебхук читал из него только статус.
+        // Из четырёх касс PayPal был единственным без суммы — значит его
+        // покупки попадали в панель «фактически списано» БЕЗ денег, и
+        // знаменатель withAmount занижал именно валютный канал.
+        //
+        // Валюту проверяем так же, как у PayBox: поле называется amountUsd, и
+        // записать в него сумму в другой валюте значило бы соврать молча.
+        ...(paypalAmountUsd !== undefined ? { amountUsd: paypalAmountUsd } : {}),
+        // Канал приходит из custom_id — тем же путём, что у остальных касс.
+        // Обрезка до 40 символов как у PayBox: одна длина на все кассы,
+        // иначе один и тот же канал даст РАЗНЫЕ строки в сводке, и разбивка
+        // «по каналам» распадётся на близнецов.
+        ...(channel ? { channel: String(channel).trim().slice(0, 40) } : {}),
       });
 
       // Помодульную покупку записываем ЕЩЁ и в базу — см. тот же разбор в

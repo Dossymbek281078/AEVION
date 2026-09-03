@@ -63,6 +63,15 @@ export default function PayoutsPage() {
   const [destination, setDestination] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  /**
+   * Подписанный акт — основание выплаты.
+   *
+   * Прямая задача основателя 03.09.2026: «без подписи выплаты нет». Сервер
+   * отказывает без него (422 с человеческим текстом), поэтому поле не
+   * украшение: без выбора акта кнопка не должна даже пытаться.
+   */
+  const [signatureId, setSignatureId] = useState("");
+  const [acts, setActs] = useState<Array<{ signatureId: string; at: string }>>([]);
 
   useEffect(() => {
     const saved = getAuthToken() ?? "";
@@ -76,19 +85,40 @@ export default function PayoutsPage() {
       setWallets(w.wallets ?? []);
       if (w.wallets?.[0]) setWalletId(w.wallets[0].id);
     }).finally(() => setLoading(false));
+
+    // Подписанные акты — основания выплаты. Отдельным запросом, а не в
+    // Promise.all выше: их отсутствие не должно мешать показать кошельки и
+    // историю. Ручка отдаёт только подписи текущего пользователя.
+    fetch(apiUrl("/api/qsign/v2/audit?event=sign&limit=20"), {
+      headers: { Authorization: `Bearer ${saved}` },
+    })
+      .then((r) => (r.ok ? r.json() : { items: [] }))
+      .then((j) => {
+        const items = (j.items ?? j.rows ?? []) as Array<{ signatureId?: string; at?: string }>;
+        setActs(
+          items
+            .filter((x) => x.signatureId)
+            .map((x) => ({ signatureId: String(x.signatureId), at: String(x.at ?? "") })),
+        );
+      })
+      .catch(() => setActs([]));
   }, []);
 
   async function submit() {
-    if (!walletId || !amount || !destination) return;
+    if (!walletId || !amount || !destination || !signatureId) return;
     setSubmitting(true); setError("");
     try {
       const r = await fetch(apiUrl("/api/qpaynet/payouts"), {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ walletId, amount: parseFloat(amount), method, destination }),
+        body: JSON.stringify({ walletId, amount: parseFloat(amount), method, destination, signatureId }),
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.error ?? t("qpaynet.payouts.err.generic"));
+      // Человеческий текст ВПЕРЁД кода. Сервер отдаёт `message` для человека
+      // и `error` для машины; страница показывала код — то есть на отказ
+      // выплаты человек увидел бы `act_signature_required` вместо «подпишите
+      // акт в QSign». Тот же класс, что жаргон разработчика на витрине.
+      if (!r.ok) throw new Error(d.message ?? d.error ?? t("qpaynet.payouts.err.generic"));
       const list = await fetch(apiUrl("/api/qpaynet/payouts"), { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json());
       setPayouts(list.payouts ?? []);
       setAmount(""); setDestination("");
@@ -159,8 +189,33 @@ export default function PayoutsPage() {
               </p>
             )}
           </div>
+          {/*
+            Основание выплаты. Сервер отказывает без него (422 с человеческим
+            текстом), поэтому поле обязательное, а кнопка без выбора не
+            нажимается: показать отказ там, где его можно предотвратить, —
+            это перекладывание нашей проверки на человека.
+          */}
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">{t("qpaynet.payouts.actLabel")}</label>
+            {acts.length === 0 ? (
+              <p className="text-[11px] text-amber-400">{t("qpaynet.payouts.actNone")}</p>
+            ) : (
+              <select
+                value={signatureId}
+                onChange={e => setSignatureId(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm"
+              >
+                <option value="">{t("qpaynet.payouts.actPick")}</option>
+                {acts.map(a => (
+                  <option key={a.signatureId} value={a.signatureId}>
+                    {a.signatureId.slice(0, 12)} · {a.at.slice(0, 10)}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
           {error && <p className="text-sm text-red-400">{error}</p>}
-          <button onClick={submit} disabled={submitting || !amount || !destination}
+          <button onClick={submit} disabled={submitting || !amount || !destination || !signatureId}
             className="w-full py-2.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 rounded-lg text-sm font-semibold">
             {submitting ? "..." : t("qpaynet.payouts.submit")}
           </button>

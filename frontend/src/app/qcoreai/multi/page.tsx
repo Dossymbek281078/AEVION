@@ -2172,11 +2172,13 @@ export default function QCoreMultiAgentPage() {
                   <span>Council size</span>
                   <button
                     onClick={() => setCouncilSize((n) => Math.max(2, n - 1))}
+                    aria-label="Уменьшить размер совета"
                     style={{ border: "none", background: "rgba(168,85,247,0.4)", color: "#fff", borderRadius: 6, width: 22, height: 22, cursor: "pointer", fontWeight: 800 }}
                   >−</button>
                   <span style={{ minWidth: 14, textAlign: "center" }}>{councilSize}</span>
                   <button
                     onClick={() => setCouncilSize((n) => Math.min(8, n + 1))}
+                    aria-label="Увеличить размер совета"
                     style={{ border: "none", background: "rgba(168,85,247,0.4)", color: "#fff", borderRadius: 6, width: 22, height: 22, cursor: "pointer", fontWeight: 800 }}
                   >+</button>
                 </div>
@@ -3302,6 +3304,7 @@ export default function QCoreMultiAgentPage() {
               <a
                 href="/qcoreai/search"
                 title="Search all sessions and runs"
+                aria-label="Поиск по сессиям и прогонам"
                 style={{ padding: "10px 11px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", color: "#475569", fontSize: 14, textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
               >
                 🔎
@@ -3310,6 +3313,7 @@ export default function QCoreMultiAgentPage() {
               <button
                 onClick={() => { setSelectMode((v) => !v); setSelectedSessionIds(new Set()); }}
                 title="Multi-select sessions"
+                aria-label="Выбрать несколько сессий"
                 style={{
                   padding: "10px 10px", borderRadius: 10,
                   border: "1px solid rgba(15,23,42,0.15)", background: selectMode ? "#f0fdf4" : "#fff",
@@ -3402,6 +3406,7 @@ export default function QCoreMultiAgentPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search runs… (text, tags)"
+                aria-label="Поиск по прогонам"
                 style={{
                   width: "100%",
                   padding: "8px 32px 8px 12px",
@@ -4305,6 +4310,7 @@ export default function QCoreMultiAgentPage() {
                     ? "Describe your task — Analyst plans, two Writers draft on different models, Judge synthesizes."
                     : "Describe your task — Analyst decomposes, Writer drafts, Critic reviews and revises."
                 }
+                aria-label="Задача для команды агентов"
                 disabled={busy}
                 rows={3}
                 style={{

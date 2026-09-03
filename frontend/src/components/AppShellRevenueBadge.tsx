@@ -43,6 +43,43 @@ export function AppShellRevenueBadge() {
     return () => mq.removeEventListener("change", apply);
   }, []);
 
+  // Плашка закреплена сверху слева и накрывает содержимое в углу: замер
+  // 01.09.2026 — на восьми страницах qcoreai под ней пряталась ссылка
+  // «← QCoreAI». Отступ страницы берётся из переменной, и до сегодня её
+  // публиковала ТОЛЬКО плашка языка, а накрывала эта. Работало случайно:
+  // обе рисуются вместе, и высоты у них пока схожи. Станет эта выше — отступ
+  // за ней не пойдёт, и накрытие вернётся молча.
+  //
+  // Теперь каждая плашка отвечает за себя, а правило берёт максимум из двух.
+  useEffect(() => {
+    // Берём элемент по его же признаку, а не через ref: Next-овый Link
+    // пробрасывает ref не во всех версиях, и замер 01.09.2026 показал, что
+    // переменная не публиковалась вовсе — эффект молча выходил на null.
+    const el = document.querySelector<HTMLElement>('a[data-app-shell-pill]');
+    const root = document.documentElement;
+    if (!el) return;
+    const обновить = () => {
+      const h = el.getBoundingClientRect().height;
+      root.style.setProperty("--aevion-badge-h", `${Math.round(h) + 12}px`);
+    };
+    обновить();
+    // ResizeObserver есть не везде: в тестовой среде его нет, и без этой
+    // проверки компонент падал с ReferenceError — плашка переставала
+    // рисоваться вовсе. Высоту публикуем в любом случае, наблюдатель лишь
+    // держит её в свежем виде при изменении размера.
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(обновить);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty("--aevion-badge-h");
+    };
+  // Зависимости: у компонента ДВА ранних выхода — по ширине и по ДАННЫМ.
+  // Первая версия зависела только от ширины, и элемент появлялся позже,
+  // когда приходили данные: эффект к тому моменту уже отработал и ничего
+  // не нашёл. Замер это и показал — переменная не публиковалась вовсе.
+  }, [wideEnough, pct, days]);
+
   if (!wideEnough) return null;
   if (!goals || !summary || pct === null || days === null) return null;
 

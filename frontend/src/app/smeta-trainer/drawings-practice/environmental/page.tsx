@@ -563,8 +563,14 @@ export default function EnvironmentalPage() {
           <ul className="space-y-2">
             {CHECKLIST.map((item, i) => (
               <li key={i} className="flex items-start gap-2 text-sm">
+                {/*
+                  Текст пункта стоит РЯДОМ, но не связан с полем: глазами
+                  видно, читалке нет — она объявляет «флажок» без названия.
+                  Замер 02.09.2026: десять безымянных флажков на этой странице.
+                */}
                 <input
                   type="checkbox"
+                  aria-label={item}
                   checked={!!checked[i]}
                   onChange={(e) => setChecked((p) => ({ ...p, [i]: e.target.checked }))}
                   className="mt-1 accent-green-600"

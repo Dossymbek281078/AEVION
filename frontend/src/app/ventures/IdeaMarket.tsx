@@ -231,11 +231,11 @@ function SubmitForm() {
     <form onSubmit={submit} style={{ marginTop: 24, background: "var(--card)", border: "1px solid var(--cardL)", borderRadius: 14, padding: 20, boxShadow: "var(--sh)" }}>
       <p className="vtx-mth" style={{ color: "var(--amber)" }}>Предложи свою идею в маркет</p>
       <div style={{ display: "grid", gap: 10 }}>
-        <input style={input} placeholder="Название идеи*" maxLength={120} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
-        <textarea style={{ ...input, minHeight: 84, resize: "vertical" }} placeholder="Питч: что это, для кого, как зарабатывает* (мин. 10 символов)" maxLength={600} value={f.pitch} onChange={(e) => setF({ ...f, pitch: e.target.value })} />
+        <input style={input} aria-label="Название идеи" placeholder="Название идеи*" maxLength={120} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
+        <textarea aria-label="Питч идеи" style={{ ...input, minHeight: 84, resize: "vertical" }} placeholder="Питч: что это, для кого, как зарабатывает* (мин. 10 символов)" maxLength={600} value={f.pitch} onChange={(e) => setF({ ...f, pitch: e.target.value })} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <input style={input} placeholder="Модель (SaaS, DTC…)" maxLength={60} value={f.model} onChange={(e) => setF({ ...f, model: e.target.value })} />
-          <input style={input} placeholder="Потолок ($10M, $1B…)" maxLength={30} value={f.ceiling} onChange={(e) => setF({ ...f, ceiling: e.target.value })} />
+          <input style={input} aria-label="Модель бизнеса" placeholder="Модель (SaaS, DTC…)" maxLength={60} value={f.model} onChange={(e) => setF({ ...f, model: e.target.value })} />
+          <input style={input} aria-label="Потолок рынка" placeholder="Потолок ($10M, $1B…)" maxLength={30} value={f.ceiling} onChange={(e) => setF({ ...f, ceiling: e.target.value })} />
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button type="submit" disabled={busy} style={{ padding: "10px 18px", borderRadius: 9, border: "none", background: "var(--amber)", color: "var(--ink)", fontWeight: 700, fontSize: 14, cursor: busy ? "default" : "pointer" }}>

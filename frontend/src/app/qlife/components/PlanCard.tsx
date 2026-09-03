@@ -79,8 +79,9 @@ export default function PlanCard() {
 
       <div style={styles.controls}>
         <div style={styles.ageRow}>
-          <label style={styles.label}>Your age</label>
+          <label style={styles.label} htmlFor="qlife-age">Your age</label>
           <input
+            id="qlife-age"
             type="number"
             value={age}
             onChange={(e) => setAge(e.target.value)}

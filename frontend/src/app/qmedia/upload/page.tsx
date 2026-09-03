@@ -73,10 +73,10 @@ export default function QMediaUploadPage() {
             <button key={t} onClick={() => setType(t)} className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${type === t ? "bg-slate-700 text-white" : "text-slate-400"}`}>{l}</button>
           ))}
         </div>
-        <input value={title} onChange={e => setTitle(e.target.value)} placeholder={type === "track" ? "Название трека *" : "Название видео *"} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
+        <input aria-label={type === "track" ? "Название трека" : "Название видео"} value={title} onChange={e => setTitle(e.target.value)} placeholder={type === "track" ? "Название трека *" : "Название видео *"} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
         {type === "track" ? (
           <>
-            <input value={artist} onChange={e => setArtist(e.target.value)} placeholder="Исполнитель" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
+            <input aria-label="Исполнитель" value={artist} onChange={e => setArtist(e.target.value)} placeholder="Исполнитель" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
             <select value={genre} onChange={e => setGenre(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-violet-500">
               {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
             </select>
@@ -89,9 +89,9 @@ export default function QMediaUploadPage() {
             <textarea rows={3} value={description} onChange={e => setDescription(e.target.value)} placeholder="Описание видео" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500 resize-none" />
           </>
         )}
-        <input value={url} onChange={e => setUrl(e.target.value)} placeholder="URL файла * (https://...)" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
-        <input value={coverUrl} onChange={e => setCoverUrl(e.target.value)} placeholder="URL обложки (опционально)" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
-        <input value={tags} onChange={e => setTags(e.target.value)} placeholder="Теги через запятую: jazz, piano, acoustic" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
+        <input aria-label="Ссылка на файл" value={url} onChange={e => setUrl(e.target.value)} placeholder="URL файла * (https://...)" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
+        <input aria-label="Ссылка на обложку" value={coverUrl} onChange={e => setCoverUrl(e.target.value)} placeholder="URL обложки (опционально)" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
+        <input aria-label="Теги через запятую" value={tags} onChange={e => setTags(e.target.value)} placeholder="Теги через запятую: jazz, piano, acoustic" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-violet-500" />
         <label className="flex items-center gap-3 cursor-pointer">
           <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)} className="w-4 h-4 accent-violet-500" />
           <span className="text-sm text-slate-300">Публичный доступ</span>

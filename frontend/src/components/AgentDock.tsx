@@ -121,6 +121,35 @@ export function AgentDock() {
   const sendRef = useRef(send);
   sendRef.current = send;
 
+  // Кнопка агента закреплена в правом нижнем углу и накрывает последнюю
+  // строку подвала: замер 02.09.2026 на проде — ссылка «Помощь» -> /help
+  // недостижима на 40 адресах, прокрутка не спасает (подвал и так внизу).
+  //
+  // Публикуем высоту кнопки, чтобы подвал на неё отступил. Тот же приём уже
+  // работает в обратную сторону: баннер установки публикует свою высоту, а
+  // эта кнопка на неё отступает.
+  useEffect(() => {
+    const кнопка = launcherRef.current;
+    const корень = document.documentElement;
+    if (!кнопка) {
+      // Кнопки нет (док открыт) — переменную снимаем, иначе подвал держит
+      // отступ под то, чего на экране уже нет.
+      корень.style.removeProperty("--aevion-agent-h");
+      return;
+    }
+    const обновить = () => {
+      const h = кнопка.getBoundingClientRect().height;
+      if (h > 0) корень.style.setProperty("--aevion-agent-h", `${Math.round(h) + 24}px`);
+    };
+    обновить();
+    // В тестовой среде ResizeObserver отсутствует. Отступ уже выставлен выше;
+    // без сторожа размера компонент не должен падать целиком.
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(обновить);
+    ro.observe(кнопка);
+    return () => ro.disconnect();
+  }, [open]);
+
   // Any page can dispatch AGENT_EVENT_NAME to open + prefill (± auto-send) the
   // dock — e.g. the per-module prompt chips on /[id].
   useEffect(() => {

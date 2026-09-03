@@ -577,6 +577,7 @@ export default function AppsPage() {
                       {app.checkoutUrl ? (
                         <a
                           href={app.checkoutUrl}
+                          aria-label={`Подписаться: ${app.name}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={() =>
@@ -603,6 +604,7 @@ export default function AppsPage() {
                       ) : (
                         <Link
                           href={app.href}
+                          aria-label={`${app.price === 0 ? "Открыть бесплатно" : "Получить доступ"}: ${app.name}`}
                           style={{
                             padding: "8px 18px",
                             background: clr,

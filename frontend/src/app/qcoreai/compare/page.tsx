@@ -196,6 +196,7 @@ function CompareContent() {
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         <input
           placeholder="Run A ID or share token"
+          aria-label="Прогон A: идентификатор или ссылка"
           value={inputA}
           onChange={(e) => setInputA(e.target.value)}
           style={{ flex: 1, minWidth: 200, padding: "8px 12px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 13, outline: "none" }}
@@ -203,6 +204,7 @@ function CompareContent() {
         <span style={{ alignSelf: "center", color: "#94a3b8", fontWeight: 700 }}>vs</span>
         <input
           placeholder="Run B ID or share token"
+          aria-label="Прогон B: идентификатор или ссылка"
           value={inputB}
           onChange={(e) => setInputB(e.target.value)}
           style={{ flex: 1, minWidth: 200, padding: "8px 12px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 13, outline: "none" }}

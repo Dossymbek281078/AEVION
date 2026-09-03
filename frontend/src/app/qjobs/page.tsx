@@ -535,6 +535,7 @@ export default function QJobsPage() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              aria-label="Поиск по вакансиям"
               placeholder="Search jobs..."
               style={{
                 flex: 1,

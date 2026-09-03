@@ -297,6 +297,7 @@ export default function ImportCheckPage() {
             value={csvText}
             onChange={(e) => setCsvText(e.target.value)}
             rows={10}
+            aria-label="Данные для проверки в формате CSV"
             placeholder={`Формат CSV (разделитель — , ; или таб):\n\ncode,volume,formula,name,unit,category,fot_per_unit,em_per_unit,mat_per_unit\n\nЕсли code в учебном корпусе — остальные колонки игнорируются.\nИначе нужны: name, unit, category (одна из 9), и хотя бы одна из fot/em/mat.\nПример пользовательской: CUSTOM-01,12,Шахта лифта,Демонтаж кладки,м³,демонтажные,3500,2200,0`}
             className="w-full border border-slate-300 rounded p-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
           />

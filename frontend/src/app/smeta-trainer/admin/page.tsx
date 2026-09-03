@@ -191,6 +191,7 @@ export default function AdminPage() {
             </p>
             <input
               type="password"
+              aria-label="Токен доступа"
               placeholder="eyJhbGciOi..."
               value={jwt}
               onChange={(e) => setJwt(e.target.value)}

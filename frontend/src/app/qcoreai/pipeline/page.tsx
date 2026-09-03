@@ -202,9 +202,9 @@ export default function PipelinePage() {
                         <button onClick={() => setExpandedStep(expanded ? null : i)} style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 12, color: "#94a3b8" }}>
                           {expanded ? "▴" : "▾"} Config
                         </button>
-                        <button onClick={() => moveStep(i, -1)} disabled={i === 0} style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 12, color: "#cbd5e1" }}>↑</button>
-                        <button onClick={() => moveStep(i, 1)} disabled={i === steps.length - 1} style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 12, color: "#cbd5e1" }}>↓</button>
-                        <button onClick={() => removeStep(i)} style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 14, color: "#fca5a5" }}>×</button>
+                        <button aria-label={`Переместить шаг ${i + 1} вверх`} onClick={() => moveStep(i, -1)} disabled={i === 0} style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 12, color: "#cbd5e1" }}>↑</button>
+                        <button aria-label={`Переместить шаг ${i + 1} вниз`} onClick={() => moveStep(i, 1)} disabled={i === steps.length - 1} style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 12, color: "#cbd5e1" }}>↓</button>
+                        <button aria-label={`Удалить шаг ${i + 1}`} onClick={() => removeStep(i)} style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 14, color: "#fca5a5" }}>×</button>
                       </div>
                       {expanded && (
                         <div style={{ padding: "8px 12px 12px", borderTop: "1px solid rgba(15,23,42,0.06)" }}>

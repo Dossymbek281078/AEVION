@@ -153,6 +153,7 @@ export default function SscGlobalSearchPage() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && !running && runSearch()}
+                aria-label="Поиск по сборнику сметных цен"
                 placeholder="например: цемент, плитка, 101-0001"
                 className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
               />

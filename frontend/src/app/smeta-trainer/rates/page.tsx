@@ -192,6 +192,7 @@ function RatesCatalogPageInner() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Шифр или наименование (напр.: ОТД-13 или штукатурка)"
+                aria-label="Поиск расценки по шифру или наименованию"
                 className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
               />
             </div>
@@ -256,6 +257,7 @@ function RatesCatalogPageInner() {
                 value={minPrice}
                 onChange={(e) => setMinPrice(e.target.value)}
                 placeholder="0"
+                aria-label="Цена от, тенге"
                 className="w-full border border-slate-300 rounded px-2 py-2 text-sm font-mono"
               />
             </div>
@@ -268,6 +270,7 @@ function RatesCatalogPageInner() {
                 value={maxPrice}
                 onChange={(e) => setMaxPrice(e.target.value)}
                 placeholder="∞"
+                aria-label="Цена до, тенге"
                 className="w-full border border-slate-300 rounded px-2 py-2 text-sm font-mono"
               />
             </div>

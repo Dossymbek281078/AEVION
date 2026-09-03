@@ -88,6 +88,7 @@ export default function Onboarding({ onStarted }: Props) {
             onClick={() => setAlias(suggestAlias())}
             style={styles.diceBtn}
             title="Сгенерировать новый"
+            aria-label="Сгенерировать новый псевдоним"
           >
             🎲
           </button>

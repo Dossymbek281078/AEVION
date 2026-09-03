@@ -212,6 +212,7 @@ export default function SscReferencePage() {
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                aria-label="Поиск по коду или наименованию"
                 placeholder="Поиск по коду или наименованию (например: 211-101 или щебень)"
                 className="flex-1 border rounded px-3 py-2 text-sm"
               />

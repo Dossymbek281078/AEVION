@@ -79,6 +79,7 @@ export default function LessonsSearchPage() {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            aria-label="Поиск по урокам"
             placeholder="Введите запрос: «накладные», «КС-2», «дефектная ведомость», «зимнее»..."
             autoFocus
             className="w-full border border-slate-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"

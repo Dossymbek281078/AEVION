@@ -994,6 +994,7 @@ export default function StatusPage() {
               type="email"
               required
               autoComplete="email"
+              aria-label="Адрес электронной почты"
               placeholder="you@company.com"
               value={subEmail}
               onChange={(e) => {

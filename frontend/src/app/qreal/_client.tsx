@@ -349,14 +349,14 @@ export default function QRealClient() {
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder={t("qreal.brief.title.ph")}
+            aria-label={t("qreal.brief.title.aria")} placeholder={t("qreal.brief.title.ph")}
             className="mt-4 w-full border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-teal-700"
           />
           <textarea
             value={brief}
             onChange={(e) => setBrief(e.target.value)}
             rows={4}
-            placeholder={t("qreal.brief.brief.ph")}
+            aria-label={t("qreal.brief.brief.aria")} placeholder={t("qreal.brief.brief.ph")}
             className="mt-2 w-full border border-neutral-300 bg-white px-3 py-2 text-sm leading-relaxed outline-none focus:border-teal-700"
           />
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -555,7 +555,7 @@ export default function QRealClient() {
                     type="url"
                     value={refDraft[c.id] ?? ""}
                     onChange={(ev) => setRefDraft({ ...refDraft, [c.id]: ev.target.value })}
-                    placeholder={t("qreal.cast.ref.add")}
+                    aria-label={t("qreal.cast.ref.aria")} placeholder={t("qreal.cast.ref.add")}
                     className="mt-2 w-full border border-neutral-300 bg-white px-2 py-1 text-[11px] text-neutral-700"
                   />
                   <div className="mt-2 flex items-center gap-3">

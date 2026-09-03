@@ -41,7 +41,7 @@ async function подождать(мс = 220) {
 
 describe("переход между комнатами не теряет человека", () => {
   beforeEach(() => {
-    текущийПуть = "/qright";
+    текущийПуть = "/";
     document.body.innerHTML = "";
   });
 
@@ -245,6 +245,33 @@ describe("переход между комнатами не теряет чел�
     } finally {
       словарь = прежний;
     }
+  });
+
+  it("смена языка не забирает фокус: адрес не менялся", async () => {
+    // Эффект зависит от словаря, и смена языка человеком его перезапускает.
+    // Объявить заново уместно, забрать фокус — нет: человек никуда не
+    // переходил и мог работать в середине формы. Найдено ВЫЧИТКОЙ, тесты
+    // этого не показывали.
+    const h1 = document.createElement("h1");
+    h1.textContent = "Договор";
+    const поле = document.createElement("input");
+    document.body.append(h1, поле);
+
+    const { rerender } = render(<RouteAnnouncer />);
+    await подождать(50);
+
+    текущийПуть = "/qcontract";
+    rerender(<RouteAnnouncer />);
+    await подождать();
+    expect(document.activeElement).toBe(h1);
+
+    // человек ушёл в поле и переключил язык — адрес тот же
+    поле.focus();
+    словарь = { ...словарь, "chain.room.qcontract": "Contract (en)" };
+    rerender(<RouteAnnouncer />);
+    await подождать();
+
+    expect(document.activeElement).toBe(поле);
   });
 
   it("живая область объявлена вежливой и читается целиком", () => {

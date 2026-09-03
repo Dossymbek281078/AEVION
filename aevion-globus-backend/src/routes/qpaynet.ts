@@ -2533,6 +2533,30 @@ qpaynetRouter.post("/payouts", moneyLimiter, async (req, res) => {
 
   const pool = getPool();
   const ownerId = auth.sub ?? auth.email ?? "anon";
+
+  // ─── Выплата возможна ТОЛЬКО по подписанному акту ───────────────────────
+  //
+  // Прямая задача основателя (03.09.2026): «без подписи выплаты нет».
+  // Критерий приёмки — проба выплаты БЕЗ подписи даёт отказ с человеческим
+  // текстом, а не 500 и не тихое «ок».
+  //
+  // Стоит ДО списания намеренно: ни одна копейка не должна двинуться, пока
+  // основание не проверено. Ниже баланс уменьшается первой же операцией, и
+  // отказ после неё означал бы снятые деньги без выплаты.
+  //
+  // «Не смогли проверить» и «нет основания» — РАЗНЫЕ ответы, и оба честные.
+  // Молчаливое СОГЛАСИЕ здесь было бы тем же классом, что молчаливый отказ на
+  // витрине, только дороже: там человек не получает письма, тут уходят деньги.
+  const актПодписи = await проверитьПодписанныйАкт(
+    pool,
+    String((req.body as Record<string, unknown> | undefined)?.signatureId ?? "").trim(),
+    ownerId,
+    auth.email ?? null,
+  );
+  if (!актПодписи.ok) {
+    return res.status(актПодписи.status).json({ error: актПодписи.code, message: актПодписи.message });
+  }
+
   const w = await pool.query(
     "SELECT id, balance, status FROM qpaynet_wallets WHERE id=$1 AND owner_id=$2",
     [walletId, ownerId],
@@ -2560,7 +2584,18 @@ qpaynetRouter.post("/payouts", moneyLimiter, async (req, res) => {
     [id, ownerId, walletId, tiin, method, destination.slice(0, 100), txId],
   );
 
-  res.status(201).json({ id, amount, fee: fromTiin(fee), method, status: "requested", txId });
+  res.status(201).json({
+    id, amount, fee: fromTiin(fee), method, status: "requested", txId,
+    // Режим подписи отдаётся НАРУЖУ, а не схлопывается в «подписано».
+    // На проде ключ платформы не задан (`qsign.mode = "preview"`), и
+    // подписи, выданные сегодня, потом не проверить. Скрыть это значило бы
+    // обещать доказуемость, которой у нас пока нет.
+    signatureMode: актПодписи.mode,
+    signatureNote:
+      актПодписи.mode === "preview"
+        ? "Акт подписан в предварительном режиме: ключ платформы ещё не задан, проверить эту подпись позже будет нельзя."
+        : "Акт подписан полной подписью платформы.",
+  });
 });
 
 // GET /api/qpaynet/payouts — list my payouts
@@ -4196,4 +4231,109 @@ export function startQpaynetRetryWorker(): void {
   if (process.env.NODE_ENV === "test" && process.env.QPAYNET_RETRY_IN_TEST !== "1") return;
   setInterval(() => { void runRetryTick(); }, RETRY_INTERVAL_MS).unref();
   console.log(`[qpaynet] retry worker + idempotency GC + stripe-events GC started`);
+}
+
+/**
+ * Проверка основания выплаты: подписанный акт.
+ *
+ * Прямая задача основателя 03.09.2026 — «без подписи выплаты нет».
+ *
+ * ЧТО ПРОВЕРЯЕТСЯ И ПОЧЕМУ ИМЕННО ЭТО:
+ *
+ *   основание названо      иначе выплата ни к чему не привязана
+ *   подпись существует     иначе основанием служит выдуманный идентификатор
+ *   подпись не отозвана    отозванная равна отсутствующей
+ *   подпись ВАША           чужая подпись — это чужое основание
+ *
+ * ⚠️ РЕЖИМ ПОДПИСИ ВОЗВРАЩАЕТСЯ НАРУЖУ, а не схлопывается в «подписано».
+ * На проде сейчас `qsign: { mode: "preview", reason: "seed_unset" }` — ключ
+ * платформы не задан, и подписи, выданные сегодня, потом не проверить.
+ * Пока это так, «подписано» было бы обещанием доказуемости, которого у нас
+ * нет. Поэтому ответ выплаты несёт `signatureMode`, и `preview` в нём видно.
+ *
+ * ОТКАЗ РАЗНЫЙ ДЛЯ РАЗНЫХ ПРИЧИН, и это не косметика: «не смогли проверить»
+ * и «нет основания» — разные ответы. Первый означает нашу поломку, второй —
+ * что человек не сделал шага. Свести их в один значило бы врать в одну из
+ * сторон.
+ *
+ * Дверь на сбое ЗАКРЫВАЕТСЯ: если таблицу подписей не прочитать, выплата не
+ * проходит. Здесь это верное направление — цена ошибочного пропуска
+ * измеряется деньгами, а цена ошибочного отказа секундами.
+ */
+type ИсходПроверкиАкта =
+  | { ok: true; mode: "full" | "preview" }
+  | { ok: false; status: number; code: string; message: string };
+
+export async function проверитьПодписанныйАкт(
+  pool: { query: (sql: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }> },
+  signatureId: string,
+  ownerId: string,
+  email: string | null,
+): Promise<ИсходПроверкиАкта> {
+  if (!signatureId) {
+    return {
+      ok: false,
+      status: 422,
+      code: "act_signature_required",
+      message:
+        "Выплата возможна только по подписанному акту. Подпишите акт в QSign и " +
+        "повторите — идентификатор подписи придёт вместе с ним.",
+    };
+  }
+
+  let rows: Array<Record<string, unknown>>;
+  try {
+    const r = await pool.query(
+      'SELECT "id", "issuerUserId", "issuerEmail", "revokedAt", "signatureDilithium" ' +
+        'FROM "QSignSignature" WHERE "id" = $1',
+      [signatureId],
+    );
+    rows = r.rows;
+  } catch {
+    // Прочитать не удалось — это НЕ «подписи нет». Дверь закрываем, но
+    // говорим правду: иначе человек будет искать ошибку у себя.
+    return {
+      ok: false,
+      status: 503,
+      code: "act_signature_check_failed",
+      message:
+        "Не удалось проверить подпись акта — это наша ошибка, а не отказ. " +
+        "Повторите через минуту; деньги не списаны.",
+    };
+  }
+
+  const row = rows[0];
+  if (!row) {
+    return {
+      ok: false,
+      status: 422,
+      code: "act_signature_not_found",
+      message: "Подпись с таким идентификатором не найдена. Проверьте, что акт подписан.",
+    };
+  }
+  if (row.revokedAt) {
+    return {
+      ok: false,
+      status: 422,
+      code: "act_signature_revoked",
+      message: "Подпись этого акта отозвана. Подпишите акт заново.",
+    };
+  }
+
+  const свой =
+    (row.issuerUserId != null && String(row.issuerUserId) === ownerId) ||
+    (email != null && row.issuerEmail != null &&
+      String(row.issuerEmail).toLowerCase() === email.toLowerCase());
+  if (!свой) {
+    return {
+      ok: false,
+      status: 403,
+      code: "act_signature_not_yours",
+      message: "Этот акт подписан другим человеком — по нему выплату получить нельзя.",
+    };
+  }
+
+  // Полная подпись платформы есть только когда задан ключ. Нет — режим
+  // предварительный, и это видно снаружи.
+  return { ok: true, mode: row.signatureDilithium ? "full" : "preview" };
 }

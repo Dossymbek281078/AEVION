@@ -10,7 +10,10 @@
  * То есть обходной путь был нужен, а отказ от отрисовки — нет.
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, cleanup, act } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { chargeCurrencyNoteKey } from "@/lib/chargeCurrencyNote";
+import { render, cleanup, act, fireEvent } from "@testing-library/react";
 import { I18nProvider } from "@/lib/i18n";
 
 vi.mock("next/navigation", () => ({
@@ -119,5 +122,55 @@ describe("подпись о валюте на экране", () => {
     const подпись = document.querySelector('[data-testid="charge-currency-note"]');
     expect(подпись, "подписи о валюте нет на экране").not.toBeNull();
     expect(подпись?.textContent?.trim().length ?? 0, "подпись пустая").toBeGreaterThan(0);
+
+    /*
+     * НЕПУСТАЯ ПОДПИСЬ — ЕЩЁ НЕ ВЕРНАЯ. До сегодня проверка кончалась строкой
+     * выше, и её удовлетворял ЛЮБОЙ текст — включая обещание списать в тенге
+     * при неработающей тенге-кассе. Это ровно тот случай, когда ждёшь наличия
+     * вместо признака нужного.
+     *
+     * Сверяем экран с РЕШЕНИЕМ селектора, а не с формулировкой: текст подписи
+     * менять можно свободно, нельзя — показать не ту подпись.
+     */
+    const словарь = readFileSync(join(process.cwd(), "src/lib/i18n-data.ts"), "utf8");
+    const значение = (ключ: string): string => {
+      const метка = '"' + ключ + '": "';
+      const от = словарь.indexOf(метка);
+      expect(от, `ключ ${ключ} не найден в словаре`).toBeGreaterThan(-1);
+      const начало = от + метка.length;
+      return словарь.slice(начало, словарь.indexOf('"', начало));
+    };
+    const текстПодписи = () =>
+      document.querySelector('[data-testid="charge-currency-note"]')?.textContent ?? "";
+
+    expect(текстПодписи(), "в долларах показана не та подпись").toContain(
+      значение(chargeCurrencyNoteKey("USD", false)),
+    );
+
+    /*
+     * А теперь ветка, живая на проде СЕГОДНЯ. Замер 03.09.2026: PayBox не
+     * настроен — `configured: false` и у переменных сервиса, и у нашей ручки
+     * состояния каналов. Значит выбравший тенге спишется в долларах, и экран
+     * обязан сказать это заранее.
+     *
+     * Валюту переключаем по-настоящему, через тот же select, что и человек:
+     * подделка состояния проверяла бы подделку.
+     */
+    const выбор = document.querySelector("select") as HTMLSelectElement | null;
+    expect(выбор, "переключателя валюты нет на экране").not.toBeNull();
+    await act(async () => {
+      fireEvent.change(выбор as HTMLSelectElement, { target: { value: "KZT" } });
+    });
+
+    const ожидаемый = chargeCurrencyNoteKey("KZT", false);
+    const обещаниеТенге = chargeCurrencyNoteKey("KZT", true);
+    expect(ожидаемый, "селектор перестал различать эти два случая").not.toBe(обещаниеТенге);
+
+    expect(текстПодписи(), "на экране не та подпись, которую выбрал селектор").toContain(
+      значение(ожидаемый),
+    );
+    expect(текстПодписи(), "экран обещает списание в тенге при неработающей кассе").not.toContain(
+      значение(обещаниеТенге),
+    );
   }, 120000);
 });

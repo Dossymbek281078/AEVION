@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getApiBase } from "@/lib/apiBase";
 import { channelFrom, keepChannel } from "@/lib/products";
+import { CHESS_LAUNCH_UTC } from "../launchDate";
 import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 import { ccPlural } from "../ccPlural";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
@@ -83,7 +84,7 @@ export default async function CyberChessLaunchPage({
   // одновременно обещала августовскую дату и писала «Уже открыто» — отсчёт
   // дошёл до нуля, а запуска не было. Дата обещана в шести местах этого
   // файла и в картинке для соцсетей: меняя, менять везде.
-  const left = daysUntilLaunch(Date.UTC(2026, 8, 30)); // 30 сентября 2026
+  const left = daysUntilLaunch(CHESS_LAUNCH_UTC);
 
   // Метка канала из адреса: /cyberchess/launch?c=tt в подписи ролика TikTok,
   // ?c=ig в шапке Instagram. Без неё все адреса лягут с одинаковым

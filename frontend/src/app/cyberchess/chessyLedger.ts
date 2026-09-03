@@ -95,3 +95,47 @@ export function migrateWallet<T extends WalletState>(raw: unknown, fallback: T):
     ach: dict<number>(r.ach) || {},
   };
 }
+
+
+/**
+ * Ключ хранения кошелька и начисление ПРЯМО В ХРАНИЛИЩЕ.
+ *
+ * Заведено 01.09.2026: страница тренировок обещала «+25 Chessy зачислено»
+ * и не зачисляла ничего — рядом лежал комментарий «в проде это был бы POST».
+ * Начислить она не могла: кошелёк живёт в состоянии главной страницы, а
+ * тренировки — отдельный маршрут. Ключ теперь ОДИН и объявлен здесь, чтобы
+ * второй маршрут не завёл себе третью копию.
+ */
+export const CHESSY_STORAGE_KEY = "aevion_chessy_v1";
+export const CHESSY_LOG_STORAGE_KEY = "aevion_chessy_log_v1";
+
+/**
+ * Начисляет n монет в хранилище и пишет строку в журнал.
+ * Возвращает новый баланс либо null — «не смог». Ноль баланса и «не смог»
+ * это РАЗНЫЕ ответы, и вызывающий обязан их различать: обещать зачисление,
+ * которого не было, хуже, чем честно сказать об отказе.
+ */
+export function awardInStorage(n: number, reason: string): number | null {
+  if (typeof window === "undefined" || !Number.isFinite(n) || n <= 0) return null;
+  try {
+    const сырой = window.localStorage.getItem(CHESSY_STORAGE_KEY);
+    const было = сырой ? JSON.parse(сырой) : null;
+    if (!было || typeof было !== "object") return null;
+    const стало = award(было as LedgerState, n);
+    window.localStorage.setItem(CHESSY_STORAGE_KEY, JSON.stringify(стало));
+    try {
+      const л = window.localStorage.getItem(CHESSY_LOG_STORAGE_KEY);
+      const журнал = л ? JSON.parse(л) : [];
+      const строка = { ts: Date.now(), amount: n, reason, sign: 1 };
+      window.localStorage.setItem(
+        CHESSY_LOG_STORAGE_KEY,
+        JSON.stringify([строка, ...(Array.isArray(журнал) ? журнал : [])].slice(0, 50)),
+      );
+    } catch {
+      /* журнал — не деньги: его отказ не отменяет начисления */
+    }
+    return (стало as LedgerState).balance;
+  } catch {
+    return null;
+  }
+}

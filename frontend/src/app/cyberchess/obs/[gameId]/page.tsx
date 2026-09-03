@@ -107,6 +107,18 @@ export default function ObsOverlayPage() {
   const [state, setState] = useState<SSEState>({});
   const [connected, setConnected] = useState(false);
   const [voiceMsg, setVoiceMsg] = useState<VoiceMsg | null>(null);
+
+  // OBS накладывает страницу поверх видео, поэтому фон обязан быть прозрачным,
+  // а прокрутка скрыта. Раньше это делала собственная разметка <body>; теперь
+  // ставим на настоящий body и возвращаем как было при уходе со страницы.
+  useEffect(() => {
+    const b = document.body;
+    const былФон = b.style.background;
+    const былаПрокрутка = b.style.overflow;
+    b.style.background = "transparent";
+    b.style.overflow = "hidden";
+    return () => { b.style.background = былФон; b.style.overflow = былаПрокрутка; };
+  }, []);
   const voiceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -169,10 +181,15 @@ export default function ObsOverlayPage() {
   const evalRatio = evalWhiteRatio(state.evalCp, state.evalMate ?? undefined);
 
   return (
-    <html>
-      <head>
-        <meta name="viewport" content="width=device-width,initial-scale=1" />
-        <style>{`
+    <>
+      {/* Здесь стояли <html>, <head> и <body>. В App Router их рисует ТОЛЬКО
+          корневой layout: страница внутри него давала вложенные html/body,
+          гидратация падала с React #418, и оверлей показывал ПУСТОЙ экран —
+          для любого gameId, а не только для несуществующего. Замер 02.09.2026:
+          на странице оставалось 4 символа текста и одна ошибка в консоли.
+          Прозрачный фон, который задавала та разметка, теперь ставится
+          эффектом ниже — он нужен OBS, чтобы оверлей ложился поверх видео. */}
+      <style>{`
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { background: transparent !important; overflow: hidden; }
           @keyframes obs-voice-in {
@@ -182,9 +199,8 @@ export default function ObsOverlayPage() {
           @keyframes obs-blink {
             0%,100% { opacity: 1; } 50% { opacity: 0.4; }
           }
-        `}</style>
-      </head>
-      <body style={{ ...bgStyle, display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 0 }}>
+      `}</style>
+      <div style={{ ...bgStyle, display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 0 }}>
         <audio ref={audioRef} style={{ display: "none" }} />
 
         {/* Info bar — top */}
@@ -331,7 +347,7 @@ export default function ObsOverlayPage() {
             🎙 {voiceMsg.text}
           </div>
         )}
-      </body>
-    </html>
+      </div>
+    </>
   );
 }

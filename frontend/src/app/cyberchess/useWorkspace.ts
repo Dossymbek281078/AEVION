@@ -20,11 +20,11 @@ const STORAGE_KEY = "aevion_chess_workspace_v1";
 const ALL: WorkspacePreset[] = ["focus", "standard", "stream", "study", "coach"];
 
 export const WORKSPACE_META: Record<WorkspacePreset, { icon: string; name: string; hint: string; key: string }> = {
-  focus:    { icon: "◻", name: "Focus",    hint: "Только доска, максимум места", key: "1" },
-  standard: { icon: "▦", name: "Standard", hint: "Доска + ходы / eval (по умолчанию)", key: "2" },
-  stream:   { icon: "▶",  name: "Stream",   hint: "Доска + YouTube/Twitch/Lichess", key: "3" },
-  study:    { icon: "✎", name: "Study",    hint: "Доска + multipv + дебютное дерево", key: "4" },
-  coach:    { icon: "🎓", name: "Coach",    hint: "Доска + AI-советник + предсказания", key: "5" },
+  focus:    { icon: "◻", name: "Доска",    hint: "Только доска, максимум места", key: "1" },
+  standard: { icon: "▦", name: "Обычная", hint: "Доска, ходы и оценка — по умолчанию", key: "2" },
+  stream:   { icon: "▶",  name: "Стрим",   hint: "Доска + YouTube/Twitch/Lichess", key: "3" },
+  study:    { icon: "✎", name: "Разбор",    hint: "Доска, несколько линий и дебютное дерево", key: "4" },
+  coach:    { icon: "🎓", name: "Тренер",    hint: "Доска, ИИ-советник и предсказания", key: "5" },
 };
 
 function load(): WorkspacePreset {

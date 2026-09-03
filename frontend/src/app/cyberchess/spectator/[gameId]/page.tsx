@@ -149,6 +149,11 @@ export default function SpectatorViewerPage(props: Props) {
 
   const [state, setState] = useState<SpectatorState>({});
   const [connected, setConnected] = useState(false);
+  // «Подключаемся» и «нет связи» — РАЗНЫЕ состояния. Раньше их различал
+  // connected внутри ветки, куда попадали только при connected === false,
+  // поэтому надпись «CONNECTING…» была недостижима, а зритель в первые
+  // секунды живой трансляции читал «OFFLINE» — то есть неправду.
+  const [byloSoedinenie, setByloSoedinenie] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [obsCopied, setObsCopied] = useState(false);
 
@@ -167,6 +172,7 @@ export default function SpectatorViewerPage(props: Props) {
 
     es.onopen = () => {
       setConnected(true);
+      setByloSoedinenie(true);
       setError(null);
     };
 
@@ -272,9 +278,11 @@ export default function SpectatorViewerPage(props: Props) {
               color: obsCopied ? T.accent : T.textDim,
               transition: "all 0.2s",
             }}
-            title="Скопировать URL для OBS Browser Source"
+            /* «Browser Source» оставлено дословно: это название источника В САМОЙ
+               программе OBS, стример ищет его именно так. Остальное по-русски. */
+            title="Скопировать ссылку для источника Browser Source в OBS"
           >
-            {obsCopied ? "✓ Скопировано" : "📺 OBS Overlay"}
+            {obsCopied ? "✓ Скопировано" : "📺 Ссылка для OBS"}
           </button>
         </div>
 
@@ -502,7 +510,7 @@ export default function SpectatorViewerPage(props: Props) {
                         letterSpacing: 1,
                       }}
                     >
-                      LIVE
+                      В ЭФИРЕ
                     </span>
                   </>
                 ) : finished ? (
@@ -514,7 +522,7 @@ export default function SpectatorViewerPage(props: Props) {
                       letterSpacing: 1,
                     }}
                   >
-                    FINISHED
+                    ЗАВЕРШЕНА
                   </span>
                 ) : (
                   <span
@@ -525,7 +533,7 @@ export default function SpectatorViewerPage(props: Props) {
                       letterSpacing: 1,
                     }}
                   >
-                    {connected ? "CONNECTING…" : "OFFLINE"}
+                    {byloSoedinenie ? "НЕТ СВЯЗИ" : "ПОДКЛЮЧАЕМСЯ…"}
                   </span>
                 )}
                 <span style={{ marginLeft: "auto", color: T.textDim, fontSize: 12 }}>

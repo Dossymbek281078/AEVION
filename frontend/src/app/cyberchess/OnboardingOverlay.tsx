@@ -246,7 +246,7 @@ export default function OnboardingOverlay({ onComplete, onSkip, mode = "dark" }:
         <p style={{ margin: "8px 0 22px", fontSize: 14, color: p.textMuted, textAlign: "center", lineHeight: 1.5 }}>
           С чего начнём? Выбор можно сменить в любой момент — вкладки сверху.
           <br />
-          <span style={{ color: p.accent, fontWeight: 700 }}>+50 Chessy</span> уже на счёте.
+          <span translate="no" className="notranslate" style={{ color: p.accent, fontWeight: 700 }}>+50 Chessy</span> уже на счёте.
         </p>
 
         <div

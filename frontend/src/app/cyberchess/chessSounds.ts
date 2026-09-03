@@ -279,7 +279,7 @@ const CLASSIC: ChessSoundPreset[] = [
 // 20 ЭКЗОТИЧЕСКИХ
 const EXOTIC: ChessSoundPreset[] = [
   {
-    id: "exotic-sci-fi", name: "Sci-Fi", emoji: "🛸", category: "exotic",
+    id: "exotic-sci-fi", name: "Фантастика", emoji: "🛸", category: "exotic",
     desc: "Звуковые эффекты как из космической оперы.",
     events: {
       move:    [tone("sawtooth", 800, 0.10, 0.10, 1600)],
@@ -291,7 +291,7 @@ const EXOTIC: ChessSoundPreset[] = [
     },
   },
   {
-    id: "exotic-blip", name: "8-bit Blip", emoji: "👾", category: "exotic",
+    id: "exotic-blip", name: "8-бит", emoji: "👾", category: "exotic",
     desc: "Аркада 80-х — пиксельные блипы.",
     events: {
       move:    [tone("square", 880, 0.05, 0.12)],
@@ -303,7 +303,7 @@ const EXOTIC: ChessSoundPreset[] = [
     },
   },
   {
-    id: "exotic-glitch", name: "Glitch", emoji: "📺", category: "exotic",
+    id: "exotic-glitch", name: "Глитч", emoji: "📺", category: "exotic",
     desc: "Цифровой глитч — короткий искажённый разряд.",
     events: {
       move:    [{ kind: "noise", lp: 4000, hp: 800, dur: 0.04, vol: 0.18 }],
@@ -315,8 +315,8 @@ const EXOTIC: ChessSoundPreset[] = [
     },
   },
   {
-    id: "exotic-cyber", name: "Cyberpunk", emoji: "🌃", category: "exotic",
-    desc: "Кибер-неон — низкие синтетические pulse.",
+    id: "exotic-cyber", name: "Киберпанк", emoji: "🌃", category: "exotic",
+    desc: "Кибер-неон — низкие синтетические импульсы.",
     events: {
       move:    [{ kind: "fm", carrier: 220, mod: 110, modIdx: 80, dur: 0.10, vol: 0.20 }],
       capture: [{ kind: "fm", carrier: 110, mod: 220, modIdx: 150, dur: 0.16, vol: 0.30 }],
@@ -435,8 +435,8 @@ const EXOTIC: ChessSoundPreset[] = [
     },
   },
   {
-    id: "exotic-laser-cat", name: "Котов-Laser", emoji: "🐱", category: "exotic",
-    desc: "Мява-pew-pew — для лёгких партий.",
+    id: "exotic-laser-cat", name: "Котов-лазер", emoji: "🐱", category: "exotic",
+    desc: "Мяу-пиу-пиу — для лёгких партий.",
     events: {
       move:    [tone("sawtooth", 1400, 0.05, 0.12, 800)],
       capture: [tone("sawtooth", 800, 0.10, 0.22, 200), tone("triangle", 1200, 0.06, 0.14, 600)],
@@ -459,8 +459,8 @@ const EXOTIC: ChessSoundPreset[] = [
     },
   },
   {
-    id: "exotic-orbital", name: "Orbital pulse", emoji: "🪐", category: "exotic",
-    desc: "Пульсар — ритмичный электронный pulse.",
+    id: "exotic-orbital", name: "Орбитальный импульс", emoji: "🪐", category: "exotic",
+    desc: "Пульсар — ритмичный электронный импульс.",
     events: {
       move:    [tone("square", 200, 0.06, 0.16), tone("square", 400, 0.04, 0.10)],
       capture: [tone("square", 100, 0.10, 0.24), tone("square", 200, 0.08, 0.16)],
@@ -484,7 +484,7 @@ const EXOTIC: ChessSoundPreset[] = [
   },
   {
     id: "exotic-modem", name: "Модем", emoji: "📞", category: "exotic",
-    desc: "Dial-up из 90-х — короткий handshake.",
+    desc: "Модем из 90-х — короткое рукопожатие.",
     events: {
       move:    [tone("square", 1200, 0.04, 0.14), tone("square", 1800, 0.04, 0.10)],
       capture: [tone("square", 800, 0.08, 0.22), tone("square", 1400, 0.06, 0.16), tone("square", 600, 0.04, 0.12)],
@@ -656,7 +656,7 @@ const EXTRA: ChessSoundPreset[] = [
   },
   {
     id: "exotic-laser2", name: "Лазер писк", emoji: "🔫", category: "exotic",
-    desc: "Sci-fi бластер — нисходящий писк.",
+    desc: "Фантастический бластер — нисходящий писк.",
     events: {
       move:    [tone("sawtooth", 2200, 0.07, 0.10, 600)],
       capture: [tone("sawtooth", 1800, 0.12, 0.16, 200), tone("square", 900, 0.05, 0.08)],
@@ -716,7 +716,7 @@ const EXTRA: ChessSoundPreset[] = [
   },
   {
     id: "exotic-harp", name: "Арфа", emoji: "🎵", category: "exotic",
-    desc: "Щипок струны арфы — мягкий pluck.",
+    desc: "Щипок струны арфы — мягкий и короткий.",
     events: {
       move:    [{ kind: "pluck", freq: 880, dur: 0.30, vol: 0.20, decay: 1.0 }],
       capture: [{ kind: "pluck", freq: 587, dur: 0.34, vol: 0.26, decay: 1.0 }, { kind: "pluck", freq: 880, dur: 0.24, vol: 0.14, decay: 1.0 }],

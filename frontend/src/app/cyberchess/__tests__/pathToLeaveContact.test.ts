@@ -60,12 +60,18 @@ describe("со страницы шахмат есть путь оставить 
   });
 
   test("после дня запуска блок скрывается, а не обещает прошедшее", () => {
-    // 30 августа обещание «напишем в день запуска» уже неуместно: запуск
-    // состоялся. Проверяем, что показ ограничен датой И что дата берётся
-    // ОДНИМ способом с посадочной — иначе страницы разойдутся на пять часов.
+    // Проверка обещала «дата берётся ОДНИМ способом с посадочной», а закрепляла
+    // ДРУГОЙ литерал: здесь 30 августа, на посадочной 30 сентября. То есть она
+    // не просто пропускала расхождение — она его ФИКСИРОВАЛА. Блок приёма
+    // адреса из-за этого исчез с главной 31.08, за месяц до запуска.
+    // Теперь сверяем то, что и обещали: обе страницы берут ОДНУ константу.
     const i = stranica.search(/["`]\/cyberchess\/launch/);
     const okno = stranica.slice(Math.max(0, i - 900), i);
-    expect(okno).toContain("daysUntilLaunch(Date.UTC(2026, 7, 30)) > 0");
+    expect(okno).toContain("daysUntilLaunch(CHESS_LAUNCH_UTC) > 0");
     expect(stranica).toContain('import { daysUntilLaunch } from "@/lib/daysUntilLaunch";');
+    expect(stranica).toContain('from "./launchDate"');
+    const посадочная = fs.readFileSync(
+      path.join(__dirname, "..", "launch", "page.tsx"), "utf8");
+    expect(посадочная).toContain("daysUntilLaunch(CHESS_LAUNCH_UTC)");
   });
 });

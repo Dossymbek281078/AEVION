@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { CHESS_LAUNCH_UTC } from "../launchDate";
 import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 
 export const runtime = "edge";
@@ -49,7 +50,7 @@ export default function CyberChessLaunchOg() {
             AEVION · CyberChess
           </div>
           <div style={{ fontSize: 78, fontWeight: 800, lineHeight: 1.05, letterSpacing: -2, display: "flex" }}>
-            {daysUntilLaunch(Date.UTC(2026, 8, 30)) > 0
+            {daysUntilLaunch(CHESS_LAUNCH_UTC) > 0
               ? "Открываем 30 сентября"
               : "Уже открыто"}
           </div>

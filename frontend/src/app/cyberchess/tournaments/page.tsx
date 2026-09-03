@@ -306,10 +306,10 @@ export default function TournamentsHubPage() {
                 v === "all"
                   ? "Все"
                   : v === "single_elimination"
-                  ? "Elim"
+                  ? "На вылет"
                   : v === "swiss"
                   ? "Швейцарская"
-                  : "RR"
+                  : "Круговой"
               }
             />
           ))}
@@ -493,7 +493,7 @@ const inputStyle: React.CSSProperties = {
 };
 
 function formatLabel(f: Format, t: Tournament): string {
-  if (f === "single_elimination") return "Single Elim";
+  if (f === "single_elimination") return "На вылет";
   if (f === "swiss") {
     const rounds = t.swissRounds ?? 5;
     return `Швейцарская · ${rounds} туров`;

@@ -4,6 +4,7 @@
 // собранный из CPI weak factor + Coach SR reminders + daily variant.
 // Zone: aevion-core/main owns frontend/src/app/cyberchess/**
 
+import { awardInStorage } from "../chessyLedger";
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { ccPlural } from "../ccPlural";
@@ -67,13 +68,13 @@ const FACTOR_DRILLS: Record<string, { name: string; emoji: string; drillName: st
 
 // Daily variant — deterministic per day (mirrors variants.ts dailyVariant logic)
 const VARIANT_POOL = [
-  { id: "fischer960", name: "Fischer 960", emoji: "🎲", desc: "Случайный бэкранк" },
-  { id: "atomic", name: "Atomic", emoji: "💥", desc: "Взятие = взрыв 3×3" },
-  { id: "kingofthehill", name: "King of the Hill", emoji: "⛰", desc: "Король в центр = победа" },
-  { id: "threecheck", name: "Three-Check", emoji: "⚡", desc: "3 шаха = победа" },
-  { id: "crazyhouse", name: "Crazyhouse", emoji: "🏚", desc: "Дроп каждый ход" },
-  { id: "twinkings", name: "Twin Kings", emoji: "👑", desc: "Ферзь = второй король" },
-  { id: "knightriders", name: "Knight Riders", emoji: "🐎", desc: "Только кони + пешки" },
+  { id: "fischer960", name: "Шахматы Фишера 960", emoji: "🎲", desc: "Случайный бэкранк" },
+  { id: "atomic", name: "Атомные", emoji: "💥", desc: "Взятие = взрыв 3×3" },
+  { id: "kingofthehill", name: "Царь горы", emoji: "⛰", desc: "Король в центр = победа" },
+  { id: "threecheck", name: "Три шаха", emoji: "⚡", desc: "3 шаха = победа" },
+  { id: "crazyhouse", name: "Крейзихаус", emoji: "🏚", desc: "Дроп каждый ход" },
+  { id: "twinkings", name: "Два короля", emoji: "👑", desc: "Ферзь = второй король" },
+  { id: "knightriders", name: "Только кони", emoji: "🐎", desc: "Только кони + пешки" },
 ];
 
 function todaysVariant() {
@@ -91,6 +92,7 @@ export default function TrainingHubPage() {
   const [cpiState, setCpiState] = useState<CPIState | null>(null);
   const [reminders, setReminders] = useState<Array<{ entryId: string; milestone: 1 | 3 | 7 }>>([]);
   const [dailyClaimed, setDailyClaimed] = useState(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
 
   useEffect(() => {
     setCpiState(ldCPIState());
@@ -130,10 +132,18 @@ export default function TrainingHubPage() {
   const drill = weakFactor ? FACTOR_DRILLS[weakFactor] || FACTOR_DRILLS.E : FACTOR_DRILLS.E;
 
   const claimDaily = () => {
+    // Раньше здесь стоял alert «+25 Chessy зачислено» и НИ ОДНОГО начисления:
+    // рядом лежал комментарий «в проде это был бы POST». Человеку обещали
+    // монеты, которых он не получал, и отметку «забрано» ставили всё равно —
+    // то есть бонус пропадал навсегда. Теперь сначала деньги, потом отметка.
+    const баланс = awardInStorage(25, "Ежедневный бонус · центр обучения");
+    if (баланс === null) {
+      setClaimError("Не удалось зачислить бонус — попробуйте ещё раз.");
+      return;
+    }
     try { localStorage.setItem("aevion_cyberchess_training_daily_claimed_v1", todayKey()) } catch {}
+    setClaimError(null);
     setDailyClaimed(true);
-    // In production, this would POST /api/cyberchess/training/daily-bonus
-    alert("✨ +25 Chessy зачислено на твой счёт");
   };
 
   return (
@@ -237,7 +247,7 @@ export default function TrainingHubPage() {
               <span>{dailyVariant.name}</span>
             </div>
             <div style={{ fontSize: 13, color: C.dim, marginBottom: 12, lineHeight: 1.5 }}>
-              {dailyVariant.desc}. Победа = <strong style={{ color: C.gold }}>+50 Chessy</strong> bonus
+              {dailyVariant.desc}. Победа = <strong style={{ color: C.gold }}>+50 Chessy</strong> сверху
             </div>
             <Link href={`/cyberchess?variant=${dailyVariant.id}`} style={{
               display: "inline-block",
@@ -334,6 +344,12 @@ export default function TrainingHubPage() {
             >
               {dailyClaimed ? "✓ Получено" : "Забрать +25 Chessy"}
             </button>
+            {/* Отказ обязан быть виден: молчаливый пропуск неотличим от успеха. */}
+            {claimError && (
+              <div role="alert" style={{ marginTop: 8, fontSize: 12, color: "#b0453f" }}>
+                {claimError}
+              </div>
+            )}
           </div>
         </div>
 

@@ -293,6 +293,10 @@ export default function TournamentDetailPage({
   }, [rounds, meta?.currentRound, meta?.realPlayers, meta?.status, tournamentId]);
 
   const titleGuess = meta?.title ?? prettyTitle(tournamentId);
+  // По устаревшей ссылке страница делала заголовок ИЗ АДРЕСА: «net-takogo-turnira»
+  // превращалось в «🏆 Net Takogo Turnira», и человек видел правдоподобный
+  // турнир, которого нет. Отличаем «сервер не ответил» от «такого турнира нет».
+  const turnirNeNayden = !meta && /(^|[^0-9])404([^0-9]|$)/.test(errorMsg || "");
   const format: Format = meta?.format ?? "single_elimination";
 
   // ── registration handler ─────────────────────────────────────────
@@ -512,7 +516,7 @@ export default function TournamentDetailPage({
 
       {/* Header */}
       <header style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 32, margin: 0, letterSpacing: -0.5 }}>🏆 {titleGuess}</h1>
+        <h1 style={{ fontSize: 32, margin: 0, letterSpacing: -0.5 }}>🏆 {turnirNeNayden ? "Турнир не найден" : titleGuess}</h1>
         <div
           style={{
             marginTop: 6,
@@ -573,7 +577,9 @@ export default function TournamentDetailPage({
 
         {errorMsg && (
           <div style={{ color: T.orange, marginTop: 8, fontSize: 12 }}>
-            Бэкенд недоступен ({errorMsg}). Показываем sample data, если оно есть.
+            {turnirNeNayden
+              ? "Такого турнира нет — возможно, ссылка устарела. Вернитесь к списку турниров."
+              : "Сервер турниров не ответил. Показываем то, что удалось загрузить."}
           </div>
         )}
 

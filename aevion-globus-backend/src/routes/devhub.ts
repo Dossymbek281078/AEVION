@@ -3969,7 +3969,7 @@ devhubRouter.post("/media/email", async (req, res) => {
 });
 
 // POST /api/devhub/media/payment-link — create Lemon Squeezy checkout link
-devhubRouter.post("/media/payment-link", async (req, res) => {
+devhubRouter.post("/media/payment-link", dhCostlyLimit("dhpaylink"), async (req, res) => {
   const { name, amountCents, description, successUrl } = req.body || {};
   if (!name || typeof name !== "string") return res.status(400).json({ error: "name required" });
   const amt = Number(amountCents);
@@ -4576,7 +4576,7 @@ devhubRouter.post("/media/stt", async (req, res) => {
 });
 
 // POST /api/devhub/media/drive-search — Google Drive file search
-devhubRouter.post("/media/drive-search", async (req, res) => {
+devhubRouter.post("/media/drive-search", dhCostlyLimit("dhdrive"), async (req, res) => {
   const { query = "", limit = 20 } = req.body || {};
   const token = process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
   if (!token) {
@@ -5225,7 +5225,7 @@ devhubRouter.post("/media/whatsapp", async (req, res) => {
 // here — same public-URL scheme as lib/payment/gumroadProvider. No API key needed
 // to generate the link (the URL is a public product page).
 // Body: { permalink: string (slug or full Gumroad URL), email?: string }
-devhubRouter.post("/media/gumroad-checkout", async (req, res) => {
+devhubRouter.post("/media/gumroad-checkout", dhCostlyLimit("dhgumroad"), async (req, res) => {
   const { permalink, email } = req.body || {};
   if (!permalink || typeof permalink !== "string" || !permalink.trim()) return res.status(400).json({ error: "permalink required (Gumroad product slug, e.g. 'my-product')" });
   // Accept a raw slug or a full https://app.gumroad.com/l/<slug> URL.
@@ -6466,7 +6466,7 @@ async function tryAutoUploadAudioToR2(buf: Buffer, contentType: string, key: str
 
 // POST /api/devhub/media/upload-audio — upload audio to Cloudflare R2 (permanent CDN URL)
 // Body: { sourceUrl?: string } OR { base64: string, mimeType?: string, key?: string }
-devhubRouter.post("/media/upload-audio", async (req, res) => {
+devhubRouter.post("/media/upload-audio", dhCostlyLimit("dhupaudio"), async (req, res) => {
   const { sourceUrl, base64, mimeType = "audio/mpeg", key } = req.body || {};
   if (!sourceUrl && !base64) return res.status(400).json({ error: "sourceUrl or base64 required" });
   if (!r2Configured()) {

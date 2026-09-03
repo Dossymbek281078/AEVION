@@ -316,6 +316,20 @@ async function countAnalyses(): Promise<number | null> {
   }
 }
 
+/**
+ * Откуда взят текст записки — по ФАКТУ ответа модели, не по настройке.
+ * До 03.09.2026 признак считался от настройки поставщика: при упавших вызовах
+ * документ утверждал «live model», хотя внутри была заготовка.
+ */
+function narrativeSource(c: { aiUsed: boolean; aiProvider: string; aiLive?: number; aiTotal?: number }): string {
+  if (typeof c.aiLive !== "number" || typeof c.aiTotal !== "number") {
+    return c.aiUsed ? `model ${c.aiProvider} (per-part source not recorded)` : "deterministic (no model)";
+  }
+  if (c.aiLive === 0) return "deterministic — model did not answer";
+  if (c.aiLive === c.aiTotal) return `live model (${c.aiProvider})`;
+  return `partial: ${c.aiLive} of ${c.aiTotal} parts from ${c.aiProvider}, rest deterministic`;
+}
+
 qventureRouter.get("/health", async (_req: Request, res: Response) => {
   res.json({
     ok: true,
@@ -606,7 +620,11 @@ qventureRouter.get("/analyses/:id/pdf", async (req: Request, res: Response) => {
     doc.moveDown(0.2);
     doc.fontSize(10).font("Helvetica").fillColor("#1e293b").text(r.council.memo, { width: W, align: "left" });
     doc.fontSize(8).fillColor("#94a3b8")
-      .text(`Narrative engine: ${r.council.aiUsed ? `live model (${r.council.aiProvider})` : "deterministic (no AI key)"}`);
+      // Тот же признак, что на экране, и та же честность: partial —
+      // отдельное состояние. Документ покупатель пересылает инвесткомитету,
+      // и «live model» на заготовке было бы утверждением, а не пометкой.
+      // Записи до 03.09.2026 полей не имеют — для них честно «not recorded».
+      .text(`Narrative engine: ${narrativeSource(r.council)}`, { width: W })
     doc.moveDown(0.8);
 
     // Entry strategy

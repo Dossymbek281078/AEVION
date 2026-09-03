@@ -64,7 +64,7 @@ export interface AnalysisResult {
     assumptions: string[];
     sector: { id?: string; label: string; sources?: SectorSource[] };
     stage: string;
-    council: { lenses: Lens[]; memo: string; aiUsed: boolean; aiProvider: string };
+    council: { lenses: Lens[]; memo: string; aiUsed: boolean; aiProvider: string; aiLive?: number; aiTotal?: number };
     // Company-specific scoring (added 2026-07; optional for older persisted records).
     signalCoverage?: number;
     redFlags?: string[];
@@ -202,6 +202,22 @@ const BASIS_TAG: Record<NonNullable<ScoreFactor["basis"]>, { text: string; bg: s
   "sector-prior": { text: "среднее по отрасли", bg: "var(--paper-2, #efeee8)", fg: "var(--ink-soft, #45474c)", title: "Отраслевой ориентир — одинаков для любой компании этого рынка и не относится именно к ней." },
   "no-evidence": { text: "не указано", bg: "#fef2f2", fg: "#b91c1c", title: "По этому фактору ничего не прислали, поэтому оценка низкая, а не нейтральная. Добавьте показатели роста, чтобы её поднять." },
 };
+
+/**
+ * Откуда взялся текст записки — по ФАКТУ, а не по настройке.
+ *
+ * Полей aiLive/aiTotal нет у разборов, сделанных до 03.09.2026: тогда признак
+ * считался от настройки поставщика и ответа на этот вопрос просто не * существовало. Для них говорим «источник не записан» — это честнее, чем
+ * повторить прежнее утверждение как факт.
+ */
+export function istochnikTeksta(c: { aiUsed: boolean; aiProvider: string; aiLive?: number; aiTotal?: number }): string {
+  if (typeof c.aiLive !== "number" || typeof c.aiTotal !== "number") {
+    return c.aiUsed ? `модель ${c.aiProvider} (источник частей не записан)` : "детерминированный разбор";
+  }
+  if (c.aiLive === 0) return "детерминированный разбор — модель не ответила";
+  if (c.aiLive === c.aiTotal) return `живая модель (${c.aiProvider})`;
+  return `частично: ${c.aiLive} из ${c.aiTotal} частей от модели ${c.aiProvider}, остальное — заготовка`;
+}
 
 export function FactorBar({ f }: { f: ScoreFactor }) {
   const color = f.score >= 70 ? "var(--teal, #0a7d72)" : f.score >= 50 ? "var(--amber, #b7791f)" : "var(--red, #b5241b)";
@@ -821,7 +837,12 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
         <h2 style={H2}>Инвестиционное резюме</h2>
         <p style={{ whiteSpace: "pre-wrap", fontSize: 14, color: "var(--ink, #17181a)", lineHeight: 1.6, margin: 0 }}>{result.result.council.memo}</p>
         <div style={{ fontSize: 11.5, color: "var(--ink-faint, #74767c)", marginTop: 10 }}>
-          Текст собран: {result.result.council.aiUsed ? `живая модель (${result.result.council.aiProvider})` : "детерминированно, без модели (ключ ИИ не настроен)"}
+          {/* ТРИ состояния, а не два. Прежняя строка печатала «живая модель»,
+              когда поставщик всего лишь НАСТРОЕН: при упавших вызовах человек
+              видел заготовку и читал, что это разбор модели. Теперь считаем
+              по факту ответа. У записей до 03.09.2026 полей нет — там честнее
+              сказать «не знаю», чем додумать. */}
+          Текст собран: {istochnikTeksta(result.result.council)}
           {result.result.rubricVersion ? ` · оценка по рубрике v${result.result.rubricVersion} — оценки сравнимы только внутри одной версии` : ""}
         </div>
       </div>

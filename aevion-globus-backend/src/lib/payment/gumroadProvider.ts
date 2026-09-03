@@ -63,8 +63,25 @@ function resolvePermalink(reference: string): string {
   );
 }
 
+/**
+ * Из значения переменной делаем СЛАГ.
+ *
+ * Значение может быть и слагом (`pyiaz`), и полной ссылкой, скопированной со
+ * страницы товара (`https://aevion.gumroad.com/l/pyiaz`) — второе куда
+ * естественнее при настройке. До 03.09.2026 префикс приклеивался слепо, и из
+ * полной ссылки получалось `https://app.gumroad.com/l/https://aevion.gumroad.com/l/pyiaz`:
+ * ручка отвечает 200, покупатель жмёт «оплатить» и попадает на 404 у Gumroad.
+ * Тариф просто нельзя купить, и снаружи это неотличимо от исправной работы.
+ *
+ * Правило то же, что в devhub.ts (там этот случай уже предусмотрен): срезать
+ * `https://хост/l/`, ведущие косые и хвост после `/?#`.
+ */
+function permalinkSlugFromEnv(raw: string): string {
+  return raw.trim().replace(/^https?:\/\/[^/]+\/l\//i, "").replace(/^\/+|[/?#].*$/g, "");
+}
+
 function gumroadCheckoutUrl(permalink: string, email?: string | null): string {
-  const base = `https://app.gumroad.com/l/${permalink}`;
+  const base = `https://app.gumroad.com/l/${permalinkSlugFromEnv(permalink)}`;
   if (!email) return base;
   return `${base}?wanted_email=${encodeURIComponent(email)}`;
 }

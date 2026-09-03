@@ -2,7 +2,9 @@ import { Router } from "express";
 import { pgIntId } from "../lib/queryNumber";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
-import { requesterId } from "../lib/devhubGuest";
+// Обе стороны нужны: у них шире набор из devhubGuest, у меня — devhubGuestLink.
+// Все четыре символа используются в теле файла, проверено счётом вхождений.
+import { requesterId, devhubGuestId, DEVHUB_GUEST_HEADER } from "../lib/devhubGuest";
 import { requestGuestLink, confirmGuestLink } from "../lib/devhubGuestLink";
 import { noteEmailSent } from "../lib/brevoQuota";
 // Ограничитель дорогих ручек. Тот же помощник, что стоит на 27 соседних ручках в
@@ -39,7 +41,7 @@ import { ensureDevHubTables, isDevHubDbReady, getDevHubDbError } from "../lib/en
 import { callProvider, getProviders, type ChatImage } from "../services/qcoreai/providers";
 import { extractJsonObject, salvageCompleteArrayObjects } from "../services/qcoreai/jsonReply";
 import { smartComplete } from "../services/qcoreai/smartComplete";
-import { insertSmartRun } from "../lib/smartRunLog";
+import { insertSmartRun, aggregateSmartRunsForUser } from "../lib/smartRunLog";
 import { costUsd } from "../services/qcoreai/pricing";
 import { applyHealth, noteProviderFailure, noteProviderSuccess } from "../lib/providerHealth";
 import { captureException } from "../lib/sentry";
@@ -48,6 +50,10 @@ import { classifyGithubResponse, githubUnreachable } from "../lib/githubFailure"
 import { buildRunInstructions } from "../lib/devhubRunInstructions";
 import { validateGeneratedFiles } from "../lib/syntaxCheck";
 import { deployViaWrangler, warmWrangler } from "../lib/wranglerPagesDeploy";
+// Функция переименована на моей стороне: redactInfraDetails вместо
+// safeErrorText — имя говорит, ЧТО она делает (вырезает адрес и устройство
+// инфраструктуры из текста ошибки). Вызовы из сведённой ветки отстали от
+// переименования; правлю их, а не завожу второе имя для одного смысла.
 import { redactInfraDetails } from "../lib/safeErrorText";
 import { checkPublicUrl } from "../lib/publicUrlOnly";
 
@@ -1388,13 +1394,14 @@ function foldHistory(history: ChatTurn[] | undefined): string {
  * Цену НЕ подставляем даже приблизительно: выдумка, поданная как замер,
  * дороже отсутствия числа.
  */
-function учтиБезЦены(поверхность: string): void {
+function учтиБезЦены(поверхность: string, userId: string | null): void {
   try {
     insertSmartRun({
       module: `devhub-${поверхность}-БЕЗ-ЦЕНЫ`,
       resolved: "single",
       costUsd: 0,
       savedUsd: 0,
+      userId,
     });
   } catch { /* Учёт не должен ронять ответ, ради которого его зовут. */ }
 }
@@ -1409,13 +1416,14 @@ function учтиГенерацию(
   model: string,
   usage: { prompt_tokens?: number; completion_tokens?: number } | undefined,
   moduleTag: string,
+  userId: string | null,
 ): void {
   try {
     insertSmartRun({
       module: moduleTag,
       resolved: "single",
       costUsd: costUsd(providerId, model, usage?.prompt_tokens, usage?.completion_tokens),
-      savedUsd: 0,
+      savedUsd: 0, userId,
     });
   } catch {
     // Учёт не должен ронять ответ, ради которого его зовут.
@@ -1435,6 +1443,11 @@ async function generateCodeWithAI(
   // нельзя — а именно этот вопрос основатель и решает про потолок расходов.
   // У /ask такое разделение есть с 31.08; здесь оно появилось 01.09.
   moduleTag: string = "devhub-generate",
+  // Кто потратил. Нужен, чтобы покупатель видел СВОЙ расход на экране, а не
+  // только админ — прямая задача основателя от 03.09.2026. Значение по
+  // умолчанию null: модуль, который личность не знает, честно пишет пусто,
+  // а не подставляет «anonymous» (выдуманное значение неотличимо от факта).
+  userId: string | null = null,
 ): Promise<GeneratedCodeResult> {
   const providers = getProviders();
   const configured = providers.filter((p) => p.configured);
@@ -1503,7 +1516,7 @@ async function generateCodeWithAI(
     for (const cand of chain) {
       try {
         result = await callProvider(cand.id, messages, cand.defaultModel, 0.2, images, GEN_MAX_TOKENS);
-        учтиГенерацию(cand.id, cand.defaultModel, result.usage, moduleTag);
+        учтиГенерацию(cand.id, cand.defaultModel, result.usage, moduleTag, userId);
         provider = cand;
         break;
       } catch (inner) {
@@ -1542,7 +1555,7 @@ async function generateCodeWithAI(
         },
       ];
       const cont = await callProvider(provider.id, contMessages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS);
-      учтиГенерацию(provider.id, provider.defaultModel, cont.usage, moduleTag);
+      учтиГенерацию(provider.id, provider.defaultModel, cont.usage, moduleTag, userId);
       const contParsed = parseGeneratedFiles(cont.reply, []);
       if (contParsed.mode !== "fallback") {
         const have = new Set(parsed.files.map((f) => f.path));
@@ -1572,7 +1585,7 @@ async function generateCodeWithAI(
     });
     try {
       result = await callProvider(provider.id, messages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS);
-      учтиГенерацию(provider.id, provider.defaultModel, result.usage, moduleTag);
+      учтиГенерацию(provider.id, provider.defaultModel, result.usage, moduleTag, userId);
     } catch {
       break; // keep the last (still-broken) attempt rather than losing it to a retry-call failure
     }
@@ -2325,7 +2338,7 @@ devhubRouter.post("/projects/:id/generate", dhCostlyLimit("dhgenerate"), async (
 async function runProjectGeneration(project: DevHubProject, userId: string, prompt: string, stack: string, targetFiles: string[], images?: ChatImage[], history?: ChatTurn[], onProgress?: (stage: string) => void) {
   const existingFiles = await dbListFiles(project.id);
   const { files: generatedFiles, aiGenerated, continued, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history, onProgress,
-      меткаГенерации(userId));
+      меткаГенерации(userId), userId);
   onProgress?.("saving");
   let storage: "db" | "memory" = "db";
   const cpRes = await createCheckpoint(project.id, userId, `AI: ${prompt.slice(0, 80)}`, generatedFiles.map((f) => f.path), existingFiles);
@@ -4537,7 +4550,7 @@ devhubRouter.post("/media/sfx", dhCostlyLimit("dhsfx"), async (req, res) => {
       console.warn("[DevHub] /media/sfx: расход не прочитан, выдано без учёта; пользователь", sfxUserId);
     }
     await debitQuietly(sfxUserId, "music");
-    учтиБезЦены("sfx");
+    учтиБезЦены("sfx", sfxUserId);
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Content-Length", audioBuffer.length);
     res.setHeader("Cache-Control", "no-store");
@@ -4772,7 +4785,7 @@ devhubRouter.post("/media/voice-clone", dhCostlyLimit("dhvclone"), async (req, r
     }
     const data = await r.json() as { voice_id: string; requires_verification?: boolean };
     await debitQuietly(vcloneUserId, "speech");
-    учтиБезЦены("voice-clone");
+    учтиБезЦены("voice-clone", vcloneUserId);
     res.json({ ok: true, ...creditNote(vcloneCredit), voiceId: data.voice_id, requiresVerification: data.requires_verification ?? false });
   } catch (e: any) {
     res.status(500).json({ error: redactInfraDetails(e) || "Voice clone failed" });
@@ -4850,7 +4863,7 @@ devhubRouter.post("/media/voice-clone/preview", dhCostlyLimit("dhvcprev"), async
       console.warn("[DevHub] /media/voice-clone/preview: расход не прочитан, выдано без учёта; пользователь", vcprevUserId);
     }
     await debitQuietly(vcprevUserId, "speech");
-    учтиБезЦены("voice-clone-preview");
+    учтиБезЦены("voice-clone-preview", vcprevUserId);
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Content-Length", audio.length);
     res.setHeader("X-Aevion-Preview-Bytes", String(audio.length));
@@ -4906,7 +4919,7 @@ devhubRouter.post("/media/stt", dhCostlyLimit("dhstt"), async (req, res) => {
     }
     const data = await r.json() as { text?: string; language_code?: string; language_probability?: number };
       await debitQuietly(sttUserId, "speech");
-      учтиБезЦены("stt");
+      учтиБезЦены("stt", sttUserId);
     res.json({ ok: true, ...creditNote(sttCredit), text: data.text || "", language: data.language_code || null, confidence: data.language_probability ?? null });
   } catch (e: any) {
     res.status(500).json({ error: redactInfraDetails(e) || "STT failed" });
@@ -5155,7 +5168,7 @@ async function executeWorkflowStep(
         : (step.saveAs ? [String(step.saveAs)] : []);
       const existingFiles = await dbListFiles(project.id);
       const { files, aiGenerated, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles,
-            undefined, undefined, undefined, меткаГенерации(userId));
+            undefined, undefined, undefined, меткаГенерации(userId), userId);
       const cpStep = await createCheckpoint(project.id, userId, `AI workflow step ${i}: ${prompt.slice(0, 60)}`, files.map((f) => f.path), existingFiles);
       const checkpointId = cpStep?.id ?? null;
       for (const gf of files) {
@@ -5783,7 +5796,7 @@ devhubRouter.post("/media/translate", dhCostlyLimit("dhtr"), async (req, res) =>
     }
     noteProviderSuccess("translate");
     await debitQuietly(trUserId, "translate");
-    учтиБезЦены("translate");
+    учтиБезЦены("translate", trUserId);
     res.json({
       ok: true,
       ...creditNote(trCredit),
@@ -5882,7 +5895,7 @@ devhubRouter.post("/projects/:id/files/translate", dhCostlyLimit("dhftr"), async
       else memFiles.set(out.id, out);
     }
     await debitQuietly(userId, "translate", 1);
-    учтиБезЦены("files-translate");
+    учтиБезЦены("files-translate", userId);
     res.json({
       ...creditNote(ftrCredit),
       ok: true,
@@ -6107,7 +6120,7 @@ devhubRouter.post("/projects/:id/files/translate-bulk", dhCostlyLimit("dhftrb"),
 
   const okCount = results.filter((r) => r.ok).length;
   await debitQuietly(userId, "translate", okCount);
-  учтиБезЦены("files-translate-bulk");
+  учтиБезЦены("files-translate-bulk", userId);
   res.json({
     ...creditNote(ftrbCredit),
     ...(storageFallback ? MEMORY_NOTE : {}),
@@ -6937,7 +6950,7 @@ devhubRouter.post("/media/email-template-create", dhCostlyLimit("dhmail"), async
     }
     const data = await r.json().catch(() => ({})) as { id?: number };
     if (!data.id) return res.status(500).json({ error: "Brevo did not return template id" });
-    учтиБезЦены("email-template");
+    учтиБезЦены("email-template", null);
     res.json({ ok: true, id: data.id, name: payload.templateName, subject: payload.subject });
   } catch (e: any) {
     res.status(500).json({ error: redactInfraDetails(e) || "Template create failed" });
@@ -7736,6 +7749,106 @@ devhubRouter.get("/studio/capabilities", async (_req, res) => {
 // GET  /api/devhub/studio/credits
 // POST /api/devhub/studio/tier  { tier: "pro" | "free" | "enterprise" }  (admin)
 // ═════════════════════════════════════════════════════════════════════════════
+
+// GET /api/devhub/studio/spend — сколько потратили ЗАПУСКИ ЭТОГО ЧЕЛОВЕКА.
+//
+// Заведена 03.09.2026 по прямой задаче основателя: расход должен быть виден
+// покупателю на экране, а не только админу. Место, где тратят твои деньги
+// невидимо, местом жительства не становится.
+//
+// Три честности, без которых цифра врала бы:
+//   1) хранилище недоступно -> "не знаю", а не ноль: ноль означает «вы ничего
+//      не потратили», и это успокаивает ложно;
+//   2) рядом с суммой идёт число вызовов, у которых цену посчитать НЕЧЕМ
+//      (поставщика нет в нашей таблице цен) — иначе сумма читается как полная;
+//   3) записи ДО 03.09 личности не знают, поэтому у давних пользователей
+//      сумма будет неполной, и об этом сказано прямо в ответе.
+// POST /api/devhub/studio/adopt-guest — забрать СВОЮ гостевую работу в аккаунт.
+//
+// Замер 03.09.2026: человек, который попробовал DevHub гостем и затем вошёл,
+// ТЕРЯЛ все свои проекты из виду. Гостевые проекты висят на "guest:<id>", а
+// после входа личностью становится sub из токена — и список отдаёт пустоту.
+// Механизма переноса не было НИ ОДНОГО (проверено: ни ручки, ни SQL).
+//
+// Бьёт это дважды: по первой опоре планеты («вошёл один раз — узнают везде»)
+// и по воронке — работа исчезает ровно в тот момент, когда человек решил
+// остаться.
+//
+// Про безопасность: гостевой идентификатор САМ ПО СЕБЕ даёт доступ к этим
+// проектам (он и есть ключ). Значит перенос не открывает ничего нового —
+// он лишь переписывает владельца на того, кто уже держит ключ.
+devhubRouter.post("/studio/adopt-guest", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) {
+    // Не 401: сюда попадёт и обычный гость, который просто ещё не вошёл.
+    // Ему надо сказать ЧТО сделать, а не отказать без объяснения.
+    return res.status(400).json({
+      error: "not_signed_in",
+      message: "Войдите — тогда гостевая работа перейдёт в ваш аккаунт.",
+    });
+  }
+  const guestId = devhubGuestId(req.headers[DEVHUB_GUEST_HEADER]);
+  if (guestId === "anonymous") {
+    return res.status(400).json({
+      error: "no_guest_id",
+      message: "Гостевая работа не найдена: браузер не прислал свой идентификатор.",
+    });
+  }
+  if (guestId === auth.sub) {
+    return res.json({ ok: true, adopted: 0, note: "Эта работа уже ваша." });
+  }
+  try {
+    let adopted = 0;
+    if (isDevHubDbReady()) {
+      const r = await pool.query(
+        `UPDATE "DevHubProject" SET "userId" = $1 WHERE "userId" = $2`,
+        [auth.sub, guestId],
+      );
+      adopted = r.rowCount ?? 0;
+      // История расхода переезжает вместе с работой: иначе человек увидит
+      // проекты, но не увидит, во что они обошлись.
+      await pool.query(
+        `UPDATE "smart_run_log" SET "userId" = $1 WHERE "userId" = $2`,
+        [auth.sub, guestId],
+      ).catch((e: unknown) => {
+        // Не роняем перенос из-за истории: проекты важнее. Но и не молчим.
+        console.warn(`[DevHub] расход гостя ${guestId} не перенесён:`, e);
+      });
+    }
+    // В памяти — тот же перенос, иначе при недоступной базе работа
+    // «переедет» только наполовину и это будет выглядеть как потеря.
+    for (const p of memProjects.values()) {
+      if (p.userId === guestId) { p.userId = auth.sub; adopted++; }
+    }
+    res.json({ ok: true, adopted });
+  } catch (e: any) {
+    res.status(500).json({ error: redactInfraDetails(e) || "adopt failed" });
+  }
+});
+
+
+devhubRouter.get("/studio/spend", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = requesterId(req, auth?.sub);
+  const agg = await aggregateSmartRunsForUser(userId);
+  if (!agg) {
+    return res.status(503).json({
+      error: "storage_unavailable",
+      message: "Расход посчитать не удалось — это не ноль, а отсутствие ответа.",
+    });
+  }
+  res.json({
+    ok: true,
+    runs: agg.runs,
+    costUsd: agg.costUsd,
+    unpricedRuns: agg.unpricedRuns,
+    since: "2026-09-03",
+    note: agg.unpricedRuns > 0
+      ? `Из ${agg.runs} запусков у ${agg.unpricedRuns} цену посчитать нечем: у их поставщика нет тарифа в нашей таблице. Сумма по ним не учтена.`
+      : undefined,
+  });
+});
+
 
 devhubRouter.get("/studio/credits", async (req, res) => {
   const auth = verifyBearerOptional(req);

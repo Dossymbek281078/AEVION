@@ -29,9 +29,17 @@ async function ensureTable(): Promise<boolean> {
         "resolved"  TEXT NOT NULL,
         "depth"     TEXT,
         "costUsd"   DOUBLE PRECISION NOT NULL DEFAULT 0,
-        "savedUsd"  DOUBLE PRECISION NOT NULL DEFAULT 0
+        "savedUsd"  DOUBLE PRECISION NOT NULL DEFAULT 0,
+        "userId"    TEXT
       );
     `);
+      // Для УЖЕ созданной таблицы CREATE TABLE IF NOT EXISTS колонку не добавит,
+      // поэтому отдельным шагом. Колонка обнуляемая: старые записи и записи
+      // модулей, которые пользователя не знают, останутся без неё — это честно,
+      // а не дефект. Заведена 03.09.2026 ради прямой задачи основателя:
+      // покупатель должен видеть СВОЙ расход на экране, а не только админ.
+      await pool.query(`ALTER TABLE "smart_run_log" ADD COLUMN IF NOT EXISTS "userId" TEXT;`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS "smart_run_log_user_ts_idx" ON "smart_run_log" ("userId","ts");`);
     await pool.query(`CREATE INDEX IF NOT EXISTS "smart_run_log_module_ts_idx" ON "smart_run_log" ("module", "ts");`);
     dbUsable = true;
   } catch (e: any) {
@@ -47,6 +55,12 @@ export type SmartRunRow = {
   depth?: "light" | "deep";
   costUsd: number;
   savedUsd: number;
+  /**
+   * Кто потратил. Необязательное: модули, которые пользователя не знают,
+   * пишут без него, и это честнее, чем подставлять «anonymous» — пустое
+   * поле видно как незнание, а выдуманное значение неотличимо от факта.
+   */
+  userId?: string | null;
 };
 
 /** Fire-and-forget: persist one routed run. Never throws. */
@@ -84,8 +98,8 @@ export function insertSmartRun(row: SmartRunRow): void {
         return;
       }
       await getPool().query(
-        `INSERT INTO "smart_run_log" ("module","resolved","depth","costUsd","savedUsd") VALUES ($1,$2,$3,$4,$5)`,
-        [row.module, row.resolved, row.depth ?? null, row.costUsd, row.savedUsd]
+        `INSERT INTO "smart_run_log" ("module","resolved","depth","costUsd","savedUsd","userId") VALUES ($1,$2,$3,$4,$5,$6)`,
+        [row.module, row.resolved, row.depth ?? null, row.costUsd, row.savedUsd, row.userId ?? null]
       );
       } catch (e) {
         // Не роняем: учёт не должен ломать операцию, ради которой его зовут.
@@ -124,6 +138,47 @@ export type SmartAllTime = {
 };
 
 /** All-time aggregate from the DB, or null when persistence is unavailable. */
+/**
+ * Расход ОДНОГО человека — то, что он вправе увидеть у себя на экране.
+ *
+ * Заведено 03.09.2026 по прямой задаче основателя: «открою кабинет как
+ * покупатель и увижу, сколько потратили мои запуски». До этого расход
+ * существовал только в разрезе модулей, то есть был виден админу и не был
+ * виден тому, чьи это деньги.
+ *
+ * Возвращает null, если хранилище недоступно — НЕ ноль. Ноль означал бы
+ * «вы ничего не потратили», а это другое утверждение, и оно успокаивает
+ * ложно.
+ */
+export async function aggregateSmartRunsForUser(
+  userId: string,
+): Promise<{ runs: number; costUsd: number; unpricedRuns: number } | null> {
+  if (!(await ensureTable())) return null;
+  try {
+    const r = await getPool().query(
+      `SELECT
+         COUNT(*)                                        AS runs,
+         COALESCE(SUM("costUsd"), 0)                     AS cost,
+         COUNT(*) FILTER (WHERE "module" LIKE '%БЕЗ-ЦЕНЫ') AS unpriced
+       FROM "smart_run_log"
+       WHERE "userId" = $1`,
+      [userId],
+    );
+    const row = r.rows[0] || {};
+    return {
+      runs: Number(row.runs || 0),
+      costUsd: Number(row.cost || 0),
+      // Сколько из них — вызовы, цену которых посчитать нечем. Без этого числа
+      // сумма читается как полная, а она неполна: у восьми поверхностей
+      // поставщика нет в нашей таблице цен.
+      unpricedRuns: Number(row.unpriced || 0),
+    };
+  } catch (e: any) {
+    console.warn(`[smartRunLog] расход пользователя не прочитан: ${e?.message || e}`);
+    return null;
+  }
+}
+
 export async function aggregateSmartRuns(): Promise<SmartAllTime | null> {
   if (!(await ensureTable())) return null;
   try {

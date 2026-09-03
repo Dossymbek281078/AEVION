@@ -7418,6 +7418,7 @@ const ru: Record<string, string> = {
   "qskyway.city.astana": "Астана — центр (бульвар Нуржол)",
   "qskyway.city.nyc": "Нью-Йорк — Мидтаун (Манхэттен)",
   "qskyway.city.tokyo": "Токио — Ниси-Синдзюку",
+  "langSwitch.aria": "Язык интерфейса",
 };
 
 export default ru;

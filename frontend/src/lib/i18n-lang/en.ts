@@ -7418,6 +7418,7 @@ const en: Record<string, string> = {
   "qskyway.city.astana": "Astana — centre (Nurzhol Boulevard)",
   "qskyway.city.nyc": "New York — Midtown (Manhattan)",
   "qskyway.city.tokyo": "Tokyo — Nishi-Shinjuku",
+  "langSwitch.aria": "Interface language",
 };
 
 export default en;

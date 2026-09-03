@@ -7377,6 +7377,7 @@ const kk: Record<string, string> = {
   "qskyway.city.astana": "Астана — орталық (Нұржол бульвары)",
   "qskyway.city.nyc": "Нью-Йорк — Мидтаун (Манхэттен)",
   "qskyway.city.tokyo": "Токио — Ниси-Синдзюку",
+  "langSwitch.aria": "Интерфейс тілі",
 };
 
 export default kk;

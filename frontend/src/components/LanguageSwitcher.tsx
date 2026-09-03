@@ -88,7 +88,7 @@ export default function LanguageSwitcher({ variant = "compact" }: Props) {
       {open && (
         <div
           role="listbox"
-          aria-label="Язык интерфейса"
+          aria-label={t("langSwitch.aria")}
           style={{
             position: "absolute",
             top: "calc(100% + 6px)",

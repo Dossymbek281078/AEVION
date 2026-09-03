@@ -400,6 +400,19 @@ checkoutRouter.get("/healthz", (_req, res) => {
         sellable: gumroadSellable([...лс.configured, ...лс.missing]),
         webhook: "/api/gumroad/webhook",
         webhookConfigured: Boolean(process.env.GUMROAD_WEBHOOK_SECRET?.trim()),
+        // ⚠️ У Gumroad `false` здесь НЕ означает «не выдаст». Замер 03.09.2026:
+        // на проде секрет вебхука не задан, и это осознанно — при его
+        // отсутствии обработчик не принимает вслепую, а проверяет продажу
+        // через API самого Gumroad по токену доступа. Отклоняет только при
+        // определённом «нет такой продажи»; не смог проверить — ведёт себя
+        // как раньше, чтобы настоящий покупатель не терял доступ из-за
+        // чужого сбоя.
+        //
+        // Поле без этой пары читалось бы как тревога, а тревога на исправном
+        // месте приучает не смотреть. Поэтому рядом стоит, чем оно заменено.
+        salesVerifiedViaApi:
+          Boolean(process.env.GUMROAD_ACCESS_TOKEN?.trim()) &&
+          process.env.GUMROAD_VERIFY_SALES !== "0",
       },
       // ⚠️ У ЭТИХ ДВУХ КАСС БЫЛО ТОЛЬКО `configured`, и это асимметрия,
       // а не мелочь. У LemonSqueezy и Gumroad рядом стоит

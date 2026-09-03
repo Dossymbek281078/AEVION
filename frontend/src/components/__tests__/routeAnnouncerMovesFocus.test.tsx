@@ -161,6 +161,32 @@ describe("переход между комнатами не теряет чел�
     expect(document.activeElement).toBe(кнопка);
   });
 
+  it("перенос строки в заголовке не склеивает слова", async () => {
+    // Замер 03.09.2026 на проде: у /qpaynet заголовок «Платёжная
+    // инфраструктура<br>встроенная в AEVION». textContent игнорирует <br> и
+    // даёт «инфраструктуравстроенная» — слово, которого нет. Страница при
+    // этом ВЕРНА: врало чтение. innerText уважает перенос.
+    const h1 = document.createElement("h1");
+    h1.textContent = "Платёжная инфраструктуравстроенная в AEVION";
+    // jsdom не реализует innerText — подставляем то, что дал бы браузер
+    Object.defineProperty(h1, "innerText", {
+      value: "Платёжная инфраструктура\nвстроенная в AEVION",
+      configurable: true,
+    });
+    document.body.appendChild(h1);
+
+    const { rerender, container } = render(<RouteAnnouncer />);
+    await подождать(50);
+
+    текущийПуть = "/qpaynet";
+    rerender(<RouteAnnouncer />);
+    await подождать();
+
+    const сказано = container.querySelector("[role=status]")?.textContent || "";
+    expect(сказано).toContain("инфраструктура встроенная");
+    expect(сказано).not.toContain("инфраструктуравстроенная");
+  });
+
   it("живая область объявлена вежливой и читается целиком", () => {
     const { container } = render(<RouteAnnouncer />);
     const область = container.querySelector("[role=status]");

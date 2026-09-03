@@ -1195,7 +1195,7 @@ function signCity(cityId: string, city: CityData): Signature {
   const sig: Signature = {
     alg: "Ed25519", contentHash, signature, publicKey: SIGN_PK_B64,
     note: SIGN_EPHEMERAL
-      ? "Ephemeral key (per-instance). Provide QSKYWAY_SIGN_SK for a stable key. Аттестация неизменности двойника: подпись СВОИМ ключом модуля (Ed25519), не служба QSign."
+      ? "Ephemeral key (per-instance). Аттестация неизменности двойника: подпись СВОИМ ключом модуля (Ed25519), не служба QSign."
       : "Аттестация неизменности двойника: подпись СВОИМ ключом модуля (Ed25519), не служба QSign. Подпись покрывает встроенный twin.",
   };
   sigCache.set(cityId, sig);
@@ -1223,7 +1223,7 @@ function signAirspace(cityId: string): Signature | null {
     signature: crypto.sign(null, Buffer.from(contentHash, "hex"), SIGN_SK).toString("base64"),
     publicKey: SIGN_PK_B64,
     note: SIGN_EPHEMERAL
-      ? "Ephemeral key (per-instance). Provide QSKYWAY_SIGN_SK for a stable key. Подпись покрывает ячейки и потолки, не пояснительный текст."
+      ? "Ephemeral key (per-instance). Подпись покрывает ячейки и потолки, не пояснительный текст."
       : "Аттестация опубликованного слоя ограничений (QSign). Подпись покрывает ячейки, потолки, класс пространства и дату публикации — не пояснительный текст.",
   };
   airspaceSigCache.set(cityId, sig);
@@ -2346,10 +2346,10 @@ qskywayRouter.get("/verify", (req: Request, res: Response) => {
     ephemeral: SIGN_EPHEMERAL,
     keyNote: SIGN_EPHEMERAL
       ? "Ключ подписи временный: сгенерирован при старте процесса. Проверка подтверждает, что двойник не менялся В ЭТОМ процессе, но не связывает его с прошлыми запусками. Постоянный ключ задаётся переменной QSKYWAY_SIGN_SK."
-      : "Ключ подписи постоянный (QSKYWAY_SIGN_SK): проверка связывает двойник с прежними запусками.",
+      : "Ключ подписи постоянный: проверка связывает двойник с прежними запусками.",
     keyNoteEn: SIGN_EPHEMERAL
       ? "The signing key is ephemeral: generated at process start. Verification confirms the twin has not changed WITHIN this process, but does not tie it to earlier runs. Set QSKYWAY_SIGN_SK for a stable key."
-      : "The signing key is stable (QSKYWAY_SIGN_SK): verification ties the twin to earlier runs.",
+      : "The signing key is stable: verification ties the twin to earlier runs.",
     twin: { valid: twinValid, contentHash: sig.contentHash },
     airspace,
   });

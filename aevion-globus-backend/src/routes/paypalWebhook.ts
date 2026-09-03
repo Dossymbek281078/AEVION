@@ -111,6 +111,19 @@ paypalWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   const payer = (raw.payer as { email_address?: string } | undefined);
   const email = (payer?.email_address ?? "").trim().toLowerCase();
   const { reference, module, channel } = parseCustomId(raw.custom_id as string | undefined);
+
+  // Сумма заказа: PayPal кладёт её в purchase_units[0].amount.
+  const paypalUnits = raw.purchase_units as
+    | Array<{ amount?: { value?: string; currency_code?: string } }>
+    | undefined;
+  const paypalAmount = paypalUnits?.[0]?.amount;
+  const paypalAmountValue = Number(paypalAmount?.value);
+  const paypalAmountUsd =
+    String(paypalAmount?.currency_code ?? "").toUpperCase() === "USD" &&
+    Number.isFinite(paypalAmountValue) &&
+    paypalAmountValue > 0
+      ? paypalAmountValue
+      : undefined;
   const paymentId = (raw.id as string | undefined) ?? eventId ?? reference;
   const refunded = result.status === "refunded";
   const failed = result.status === "failed";
@@ -174,6 +187,15 @@ paypalWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         period,
         modules: module ? [module] : [],
         source: "paypal",
+        // Сумма ПРИХОДИТ в событии и до сегодня выбрасывалась: провайдер
+        // отдаёт весь заказ PayPal, а вебхук читал из него только статус.
+        // Из четырёх касс PayPal был единственным без суммы — значит его
+        // покупки попадали в панель «фактически списано» БЕЗ денег, и
+        // знаменатель withAmount занижал именно валютный канал.
+        //
+        // Валюту проверяем так же, как у PayBox: поле называется amountUsd, и
+        // записать в него сумму в другой валюте значило бы соврать молча.
+        ...(paypalAmountUsd !== undefined ? { amountUsd: paypalAmountUsd } : {}),
         // Канал приходит из custom_id — тем же путём, что у остальных касс.
         // Обрезка до 40 символов как у PayBox: одна длина на все кассы,
         // иначе один и тот же канал даст РАЗНЫЕ строки в сводке, и разбивка

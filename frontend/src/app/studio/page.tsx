@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { СОБЫТИЕ_ПЕРЕНОСА } from "@/components/DevHubGuestIdentity";
 import { apiUrl } from "@/lib/apiBase";
 import { productById } from "@/lib/products";
 import { track } from "@/lib/track";
@@ -166,6 +167,26 @@ export default function StudioPage() {
   >(null);
   const [spendFailed, setSpendFailed] = useState(false);
 
+  const loadSpend = useCallback(() => {
+    fetch(apiUrl("/api/devhub/studio/spend"), { cache: "no-store" })
+      .then(async (r) => {
+        if (!r.ok) { setSpendFailed(true); return null; }
+        return r.json();
+      })
+      .then((d) => { if (d && typeof d.runs === "number") setSpend(d); })
+      .catch(() => setSpendFailed(true));
+  }, []);
+
+  // Гостевые запуски переезжают в аккаунт при входе, и перенос идёт
+  // ПАРАЛЛЕЛЬНО этой загрузке — без перечитывания покупатель увидел бы «0
+  // запусков, $0» сразу после входа, хотя его запуски только что стали его.
+  // Это ровно то, что основатель просил показать на экране.
+  useEffect(() => {
+    const onAdopted = () => { loadSpend(); };
+    window.addEventListener(СОБЫТИЕ_ПЕРЕНОСА, onAdopted);
+    return () => window.removeEventListener(СОБЫТИЕ_ПЕРЕНОСА, onAdopted);
+  }, [loadSpend]);
+
   useEffect(() => {
     fetch(apiUrl("/api/devhub/studio/capabilities"), { cache: "no-store" })
       .then((r) => r.json())
@@ -176,18 +197,15 @@ export default function StudioPage() {
       .then((r) => r.json())
       .then((d: CreditsData) => setCredits(d))
       .catch(() => {});
-    fetch(apiUrl("/api/devhub/studio/spend"), { cache: "no-store" })
-      .then(async (r) => {
-        if (!r.ok) { setSpendFailed(true); return null; }
-        return r.json();
-      })
-      .then((d) => { if (d && typeof d.runs === "number") setSpend(d); })
-      .catch(() => setSpendFailed(true));
+    loadSpend();
     fetch(apiUrl("/api/qcoreai/smart/savings"), { cache: "no-store" })
       .then((r) => r.json())
       .then((d: SmartSavings) => { if (d && typeof d.runs === "number") setSavings(d); })
       .catch(() => {});
-  }, []);
+    // loadSpend стабилен (useCallback без зависимостей), поэтому эффект
+    // по-прежнему выполняется РОВНО один раз; список зависимостей просто
+    // перестал врать о том, что эффект использует.
+  }, [loadSpend]);
 
   const liveCount = caps?.summary.live ?? 0;
   const totalCount = caps?.summary.total ?? 12;

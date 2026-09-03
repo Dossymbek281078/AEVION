@@ -189,7 +189,7 @@ export const AI_PERSONALITIES: AiPersonality[] = [
     realName: "Bobby Fischer",
     emoji: "⚔",
     description:
-      "Энергичная игра, глубокая дебютная подготовка. Любит ясные планы и exchange-варианты.",
+      "Энергичная игра, глубокая дебютная подготовка. Любит ясные планы и разменные.",
     eloRange: [2650, 2850],
     style: {
       aggressiveness: 0.7,
@@ -212,7 +212,7 @@ export const AI_PERSONALITIES: AiPersonality[] = [
     realName: "Levon Aronian",
     emoji: "✨",
     description:
-      "Креатив, неожиданные ходы, sharp openings. Любит оригинальные планы, не боится риска.",
+      "Креатив, неожиданные ходы, острые дебюты. Любит оригинальные планы, не боится риска.",
     eloRange: [2700, 2820],
     style: {
       aggressiveness: 0.72,
@@ -235,7 +235,7 @@ export const AI_PERSONALITIES: AiPersonality[] = [
     realName: "Fabiano Caruana",
     emoji: "📚",
     description:
-      "Глубокая теория, точные mainline-варианты. Корректность во всём, без авантюр.",
+      "Глубокая теория, точные главные варианты. Корректность во всём, без авантюр.",
     eloRange: [2700, 2850],
     style: {
       aggressiveness: 0.55,
@@ -570,7 +570,7 @@ const COMMENT_LIBRARY: Record<string, CommentBank> = {
       "Точность во всём.",
     ],
     capture: ["Размен по теории."],
-    check: ["Шах. Mainline."],
+    check: ["Шах. По главной линии."],
   },
   nepo: {
     generic: [

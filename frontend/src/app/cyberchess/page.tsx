@@ -7419,7 +7419,12 @@ export default function CyberChessPage(){
             <Card {...cardProps}>
               <div style={lbl}>Партия</div>
               <div style={{fontSize:13,color:CC.textDim}}>Ход: <b style={{color:CC.text}}>{Math.max(1,Math.ceil(hist.length/2))}</b></div>
-              <div style={{fontSize:13,color:CC.textDim,marginTop:3}}>Движок: <b style={{color:CC.text}}>Stockfish 18 · d22</b></div>
+              {/* Подпись говорит о том, что ПРОИСХОДИТ, а не о том, что задумано.
+                  Замер 03.09.2026 на живом сайте: здесь стояло «Stockfish 18 · d22»,
+                  а движок не выдал НИ ОДНОЙ реплики — ход считал запасной расчёт, и
+                  человек ждал соперника до двадцати секунд, читая имя движка,
+                  который не запустился. */}
+              <div style={{fontSize:13,color:CC.textDim,marginTop:3}}>Движок: <b style={{color:sfOk?CC.text:CC.gold}}>{sfOk?"Stockfish 18 · d22":"не запустился — считает запасной расчёт"}</b></div>
               <div style={{fontSize:13,color:CC.textDim,marginTop:3}}>Коуч: <b style={{color:CC.text}}>супер-GM</b></div>
             </Card>
           </aside>;

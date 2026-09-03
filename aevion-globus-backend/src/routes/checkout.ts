@@ -9,7 +9,7 @@ import {
   TIERS, getTier, getModulePrice, resolvePromoCode, CURRENCY_RATES, MAX_PROMO_DISCOUNT_RATIO, buildQuote,
   type TierId, type BillingPeriod, type CurrencyCode,
 } from "../data/pricing";
-import { provisionSubscription, countSubscriptions } from "./provisioning";
+import { provisionSubscription, countSubscriptions, findSubscriptionByPaymentId } from "./provisioning";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { rateLimit } from "../lib/rateLimit";
 
@@ -87,6 +87,50 @@ const sessionLimiter = rateLimit({
   windowMs: 60_000,
   max: 30,
   message: "Слишком много попыток оплаты. Подождите минуту и попробуйте снова.",
+});
+
+/**
+ * «Состоялась ли выдача по моей оплате».
+ *
+ * ЗАЧЕМ. Страница успеха до 03.09.2026 показывала тариф ПРЯМО ИЗ АДРЕСНОЙ
+ * СТРОКИ. Это значение, во-первых, подделывается, а во-вторых ничего не знает
+ * о неудаче: если выдача не состоялась, человек всё равно видел «всё готово»
+ * и не обращался в поддержку.
+ *
+ * ТРИ ИСХОДА, и это главное:
+ *   200 { ready: true, tier }  — выдано;
+ *   200 { ready: false }       — ещё нет (вебхук в пути — норма первые секунды);
+ *   503 { error: "lookup_failed" } — СПРОСИТЬ НЕ УДАЛОСЬ.
+ *
+ * Третий нельзя схлопывать во второй: сбой чтения, выданный за «ещё не
+ * готово», сказал бы заплатившему «ждите» навсегда, и страница крутила бы
+ * ожидание вечно.
+ *
+ * Ручка анонимная (покупатель ещё не вошёл), поэтому: свой предел темпа —
+ * её будут опрашивать в цикле, — и в ответе НЕТ ничего личного, только
+ * готовность и тариф.
+ */
+const statusLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 60,
+  message: "Слишком много проверок. Подождите минуту.",
+});
+
+checkoutRouter.get("/status", statusLimiter, (req, res) => {
+  const intentId = typeof req.query.intentId === "string" ? req.query.intentId.trim() : "";
+  if (!intentId) return res.status(400).json({ error: "intent_required" });
+  try {
+    const итог = findSubscriptionByPaymentId(intentId);
+    if (!итог.найдено) return res.json({ ready: false });
+    return res.json({ ready: true, tier: итог.подписка.tierId, period: итог.подписка.period });
+  } catch (e) {
+    capture(e);
+    console.error("[checkout/status] lookup failed", e);
+    return res.status(503).json({
+      error: "lookup_failed",
+      message: "Не удалось проверить статус. Оплата не потеряна — обновите страницу через минуту.",
+    });
+  }
 });
 
 checkoutRouter.post("/session", sessionLimiter, async (req, res) => {

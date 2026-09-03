@@ -211,6 +211,45 @@ export function countSubscriptions(): { ok: boolean; total: number } {
  * the LS subscription webhook on cancel/expire) correctly supersedes an
  * earlier paid record. Returns null if the email has no records.
  */
+/**
+ * Найти подписку по идентификатору платежа у провайдера.
+ *
+ * Нужна странице успеха: сразу после оплаты она должна СПРОСИТЬ, состоялась
+ * ли выдача, а не верить адресной строке.
+ *
+ * ТРИ ИСХОДА, а не два — это главное в этой функции:
+ *   • подписка найдена  → { найдено: true, подписка }
+ *   • не найдена        → { найдено: false }
+ *   • ПРОЧИТАТЬ НЕ УДАЛОСЬ → бросаем.
+ *
+ * Третий нельзя схлопывать во второй: сбой чтения, выданный за «ещё не
+ * готово», сказал бы заплатившему человеку «ждите» навсегда.
+ *
+ * Старые записи paybox и paypal идентификатора в отдельном поле не имеют —
+ * там он зашит в номер подписки (`sub_paybox_<id>`), поэтому смотрим и туда.
+ */
+export function findSubscriptionByPaymentId(
+  paymentId: string
+): { найдено: true; подписка: Subscription } | { найдено: false } {
+  const цель = paymentId.trim();
+  if (!цель) return { найдено: false };
+  const file = subsFile();
+  if (!existsSync(file)) return { найдено: false };
+  // Ошибку чтения НЕ глотаем: см. комментарий выше.
+  const content = readFileSync(file, "utf8");
+  let найденная: Subscription | null = null;
+  for (const line of content.split(String.fromCharCode(10))) {
+    if (!line.trim()) continue;
+    try {
+      const sub = JSON.parse(line) as Subscription;
+      if (sub.providerPaymentId === цель || (sub.id ?? "").endsWith(`_${цель}`)) найденная = sub;
+    } catch {
+      // битую строку пропускаем: одна запись не должна прятать остальные
+    }
+  }
+  return найденная ? { найдено: true, подписка: найденная } : { найдено: false };
+}
+
 export function readLatestSubscription(email: string): Subscription | null {
   const target = email.trim().toLowerCase();
   if (!target) return null;

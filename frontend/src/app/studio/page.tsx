@@ -155,6 +155,16 @@ export default function StudioPage() {
   const [loading, setLoading] = useState(true);
   const [credits, setCredits] = useState<CreditsData | null>(null);
   const [savings, setSavings] = useState<SmartSavings | null>(null);
+  /**
+   * Расход ЭТОГО человека. Три состояния, а не два: null — ещё не спросили
+   * или спросить не удалось; объект — ответ. Ноль и «не знаю» здесь разные
+   * вещи, и путать их нельзя: «вы потратили $0» успокаивает, «посчитать не
+   * удалось» заставляет проверить.
+   */
+  const [spend, setSpend] = useState<
+    { runs: number; costUsd: number; unpricedRuns: number; note?: string } | null
+  >(null);
+  const [spendFailed, setSpendFailed] = useState(false);
 
   useEffect(() => {
     fetch(apiUrl("/api/devhub/studio/capabilities"), { cache: "no-store" })
@@ -166,6 +176,13 @@ export default function StudioPage() {
       .then((r) => r.json())
       .then((d: CreditsData) => setCredits(d))
       .catch(() => {});
+    fetch(apiUrl("/api/devhub/studio/spend"), { cache: "no-store" })
+      .then(async (r) => {
+        if (!r.ok) { setSpendFailed(true); return null; }
+        return r.json();
+      })
+      .then((d) => { if (d && typeof d.runs === "number") setSpend(d); })
+      .catch(() => setSpendFailed(true));
     fetch(apiUrl("/api/qcoreai/smart/savings"), { cache: "no-store" })
       .then((r) => r.json())
       .then((d: SmartSavings) => { if (d && typeof d.runs === "number") setSavings(d); })
@@ -266,6 +283,41 @@ export default function StudioPage() {
               </div>
             )}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 20 }}>
+              {/*
+                Расход ЭТОГО человека. Заведено 03.09.2026 по прямой задаче
+                основателя: место, где тратят твои деньги невидимо, местом
+                жительства не становится.
+
+                Три состояния разведены намеренно: сумма / «посчитать не
+                удалось» / молчание, пока ответ не пришёл. Ноль и незнание —
+                разные утверждения, и первое успокаивает ложно.
+              */}
+              {spend && (
+                <div style={{
+                  gridColumn: "1 / -1", padding: "10px 14px", marginBottom: 10,
+                  border: "1px solid #e2e8f0", borderRadius: 10, background: "#f8fafc",
+                  fontSize: 13, color: "#334155",
+                }}>
+                  <b>Ваши запуски</b>: {spend.runs} — потрачено{" "}
+                  <b>${spend.costUsd.toFixed(4)}</b>
+                  {spend.unpricedRuns > 0 && (
+                    <span style={{ color: "#92400e" }}>
+                      {" "}· у {spend.unpricedRuns} из них цену посчитать нечем
+                      (у поставщика нет тарифа в нашей таблице), сумма по ним не учтена
+                    </span>
+                  )}
+                </div>
+              )}
+              {spendFailed && (
+                <div style={{
+                  gridColumn: "1 / -1", padding: "10px 14px", marginBottom: 10,
+                  border: "1px solid #fcd34d", borderRadius: 10, background: "#fffbeb",
+                  fontSize: 13, color: "#92400e",
+                }}>
+                  Расход посчитать не удалось. Это <b>не ноль</b>, а отсутствие ответа —
+                  попробуйте обновить страницу.
+                </div>
+              )}
               {порядокПоказа(credits.usage).map((k) => {
                   const v = credits.usage[k];
                   const m = CAP_META[k];

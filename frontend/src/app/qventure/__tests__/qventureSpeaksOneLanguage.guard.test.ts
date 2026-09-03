@@ -127,6 +127,36 @@ const ATRIBUTY = ["placeholder", "aria-label", "title", "alt"];
 // заголовка «как это работает» на самом видном месте страницы.
 const SVOJSTVA = ["text", "title", "label", "hint", "note"];
 
+// Четвёртая форма той же подписи: текст приходит АРГУМЕНТОМ функции.
+// `setExtractNote("Upload failed…")` не является ни подписью между тегами,
+// ни атрибутом, ни свойством объекта — и три прежние проверки его не видели.
+// Замер 03.09.2026: так прятались семь сообщений, которые человек читает
+// именно в неудачный момент — когда презентация не загрузилась.
+const POKAZYVAYUT = ["setExtractNote", "showToast", "setError", "setNotice", "setCheckoutNotice"];
+
+function argumentyPokaza(src: string): string[] {
+  const out: string[] = [];
+  for (const f of POKAZYVAYUT) {
+    let i = 0;
+    for (;;) {
+      i = src.indexOf(f + "(", i);
+      if (i < 0) break;
+      // Строка обязана идти СРАЗУ за скобкой — через пробелы, переводы строк
+      // и открывающие скобки. Первая версия брала первую кавычку ГДЕ УГОДНО
+      // после имени функции и вытаскивала адреса запросов из тела вызова.
+      // Расстояние снова оказалось плохой границей; здесь ею служит позиция.
+      let c = i + f.length + 1;
+      while (c < src.length && " \t\r\n(".includes(src[c])) c++;
+      i = c;
+      if (src[c] !== String.fromCharCode(34)) continue;
+      const j2 = src.indexOf(String.fromCharCode(34), c + 1);
+      if (j2 < 0) continue;
+      out.push(src.slice(c + 1, j2).trim());
+    }
+  }
+  return out;
+}
+
 function znacheniyaSvojstv(src: string): string[] {
   const out: string[] = [];
   for (const k of SVOJSTVA) {
@@ -210,12 +240,15 @@ describe("QVenture говорит на одном языке", () => {
   test("подсказки и имена для читалки — тоже на русском", () => {
     const vse: string[] = [];
     const svojstv: string[] = [];
+    const argumenty: string[] = [];
     const narusheniya: string[] = [];
     for (const p of fajly()) {
       const src = kod(fs.readFileSync(p, "utf8"));
       const sv = znacheniyaSvojstv(src);
+      const arg = argumentyPokaza(src);
+      argumenty.push(...arg);
       svojstv.push(...sv);
-      for (const v of [...znacheniyaAtributov(src), ...sv]) {
+      for (const v of [...znacheniyaAtributov(src), ...sv, ...arg]) {
         vse.push(v);
         if (!v || TERMINY.has(v)) continue;
         if (angliyskoe(v)) narusheniya.push(path.basename(p) + ": " + v);
@@ -228,6 +261,12 @@ describe("QVenture говорит на одном языке", () => {
     // списка свойств оставляло сторожа зелёным: атрибутов хватало, чтобы
     // общий счёт прошёл порог. Проверено мутацией — она это и вскрыла.
     expect(svojstv.length, "свойств объектов не найдено — вторая половина разбора мертва").toBeGreaterThan(15);
+    // У КАЖДОЙ добавленной половины свой контроль. Третий раз за два дня
+    // мутация вскрывает одно и то же: общий счёт переживает потерю новой
+    // половины и остаётся выше порога, а защита исчезает бесшумно.
+    // Порог от ЗАМЕРА, а не от ожидания: сейчас находится 2 (я сперва написал
+    // «больше четырёх» по привычке и получил красное на исправном коде).
+    expect(argumenty.length, "аргументов показа не найдено — третья половина мертва").toBeGreaterThan(1);
     expect(
       narusheniya,
       "английская подсказка на русском экране: она исчезает при вводе, и поле остаётся без имени",

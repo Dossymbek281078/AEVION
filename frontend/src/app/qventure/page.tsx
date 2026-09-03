@@ -308,7 +308,7 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
     e.target.value = ""; // let the same file be re-selected later
     if (!file) return;
     if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-      setExtractNote("Please upload a PDF pitch deck."); return;
+      setExtractNote("Загрузите презентацию в формате PDF."); return;
     }
     setExtracting(true); setError(null); setExtractNote(null);
     try {
@@ -316,7 +316,7 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
         method: "POST", headers: { "Content-Type": "application/pdf" }, body: file,
       });
       const j = await res.json();
-      if (!res.ok || !j?.ok) { setExtractNote(j?.hint || j?.error || "Could not read that deck — enter the details manually."); return; }
+      if (!res.ok || !j?.ok) { setExtractNote(j?.hint || j?.error || "Не удалось разобрать презентацию — заполните поля вручную."); return; }
       const d = j.data;
       const fin = d.financials || {};
       const num = (v: unknown) => (typeof v === "number" && isFinite(v) && v > 0 ? String(v) : "");
@@ -348,12 +348,12 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
       const gotExact = Object.values(fin).some((v) => typeof v === "number" && v) || proj.length > 0;
       setExtractNote(
         (d.aiUsed
-          ? "✓ Pre-filled from your deck (AI-parsed). "
-          : "✓ Pre-filled from your deck (text-parsed). ") +
-          (gotExact ? "Exact financials filled in below — review and run the analysis." : "Review the fields and run the analysis."),
+          ? "✓ Заполнено по вашей презентации (разобрано ИИ). "
+          : "✓ Заполнено по вашей презентации (разобрано по тексту). ") +
+          (gotExact ? "Точные финансовые данные заполнены ниже — проверьте и запускайте разбор." : "Проверьте поля и запускайте разбор."),
       );
     } catch {
-      setExtractNote("Upload failed — check your connection and try again.");
+      setExtractNote("Загрузить не удалось — проверьте связь и попробуйте ещё раз.");
     } finally {
       setExtracting(false);
     }

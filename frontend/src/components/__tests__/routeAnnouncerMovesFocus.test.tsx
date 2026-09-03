@@ -17,6 +17,20 @@ import path from "node:path";
 let текущийПуть = "/qright";
 vi.mock("next/navigation", () => ({ usePathname: () => текущийПуть }));
 
+// Словарь подменяем: компонент обязан брать имя комнаты ОТТУДА, а не из
+// зашитой строки. Значения намеренно английские — так видно, что объявление
+// идёт на языке интерфейса, а не на языке автора кода.
+let словарь: Record<string, string> = {
+  "chain.room.qright": "Authorship record",
+  "chain.room.qcontract": "Contract",
+  "chain.room.qsign": "Signature",
+  "chain.room.qpaynet": "Payout",
+  "chain.step": "Step {n} of {m}",
+};
+vi.mock("@/lib/i18n", () => ({
+  useI18n: () => ({ t: (k: string) => словарь[k] ?? k }),
+}));
+
 import RouteAnnouncer from "../RouteAnnouncer";
 
 async function подождать(мс = 220) {
@@ -185,6 +199,52 @@ describe("переход между комнатами не теряет чел�
     const сказано = container.querySelector("[role=status]")?.textContent || "";
     expect(сказано).toContain("инфраструктура встроенная");
     expect(сказано).not.toContain("инфраструктуравстроенная");
+  });
+
+  it("комната и шаг звучат на языке интерфейса, а не автора кода", async () => {
+    // Дефект найден 03.09.2026 в МОЕЙ ЖЕ работе: имя комнаты было зашито
+    // по-русски, и на английской странице человек услышал бы смесь —
+    // «Отметка авторства. Шаг 1 из 4. Protect Your Work».
+    const h1 = document.createElement("h1");
+    h1.textContent = "Protect Your Work";
+    document.body.appendChild(h1);
+
+    const { rerender, container } = render(<RouteAnnouncer />);
+    await подождать(50);
+
+    текущийПуть = "/qright";
+    rerender(<RouteAnnouncer />);
+    await подождать();
+
+    const сказано = container.querySelector("[role=status]")?.textContent || "";
+    expect(сказано).toContain("Authorship record");
+    expect(сказано).toContain("Step 1 of 4");
+    expect(сказано).not.toContain("Отметка авторства");
+  });
+
+  it("ключа нет в словаре — берём запасное имя, а не произносим ключ", async () => {
+    const прежний = словарь;
+    словарь = {};
+    try {
+      const h1 = document.createElement("h1");
+      h1.textContent = "Договор";
+      document.body.appendChild(h1);
+
+      const { rerender, container } = render(<RouteAnnouncer />);
+      await подождать(50);
+
+      текущийПуть = "/qcontract";
+      rerender(<RouteAnnouncer />);
+      await подождать();
+
+      const сказано = container.querySelector("[role=status]")?.textContent || "";
+      // молчать или произносить «chain.room.qcontract» — оба хуже
+      expect(сказано).toContain("Договор");
+      expect(сказано).not.toContain("chain.room");
+      expect(сказано).not.toContain("chain.step");
+    } finally {
+      словарь = прежний;
+    }
   });
 
   it("живая область объявлена вежливой и читается целиком", () => {

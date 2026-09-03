@@ -2,7 +2,7 @@ import { Router } from "express";
 import { pgIntId } from "../lib/queryNumber";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
-import { requesterId } from "../lib/devhubGuest";
+import { requesterId, devhubGuestId, DEVHUB_GUEST_HEADER } from "../lib/devhubGuest";
 import { noteEmailSent } from "../lib/brevoQuota";
 // Ограничитель дорогих ручек. Тот же помощник, что стоит на 27 соседних ручках в
 // коммите d9cc19ce0 (28.07) — он ждёт мержа 22 дня, поэтому здесь пока только две
@@ -7677,6 +7677,70 @@ devhubRouter.get("/studio/capabilities", async (_req, res) => {
 //      (поставщика нет в нашей таблице цен) — иначе сумма читается как полная;
 //   3) записи ДО 03.09 личности не знают, поэтому у давних пользователей
 //      сумма будет неполной, и об этом сказано прямо в ответе.
+// POST /api/devhub/studio/adopt-guest — забрать СВОЮ гостевую работу в аккаунт.
+//
+// Замер 03.09.2026: человек, который попробовал DevHub гостем и затем вошёл,
+// ТЕРЯЛ все свои проекты из виду. Гостевые проекты висят на "guest:<id>", а
+// после входа личностью становится sub из токена — и список отдаёт пустоту.
+// Механизма переноса не было НИ ОДНОГО (проверено: ни ручки, ни SQL).
+//
+// Бьёт это дважды: по первой опоре планеты («вошёл один раз — узнают везде»)
+// и по воронке — работа исчезает ровно в тот момент, когда человек решил
+// остаться.
+//
+// Про безопасность: гостевой идентификатор САМ ПО СЕБЕ даёт доступ к этим
+// проектам (он и есть ключ). Значит перенос не открывает ничего нового —
+// он лишь переписывает владельца на того, кто уже держит ключ.
+devhubRouter.post("/studio/adopt-guest", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  if (!auth?.sub) {
+    // Не 401: сюда попадёт и обычный гость, который просто ещё не вошёл.
+    // Ему надо сказать ЧТО сделать, а не отказать без объяснения.
+    return res.status(400).json({
+      error: "not_signed_in",
+      message: "Войдите — тогда гостевая работа перейдёт в ваш аккаунт.",
+    });
+  }
+  const guestId = devhubGuestId(req.headers[DEVHUB_GUEST_HEADER]);
+  if (guestId === "anonymous") {
+    return res.status(400).json({
+      error: "no_guest_id",
+      message: "Гостевая работа не найдена: браузер не прислал свой идентификатор.",
+    });
+  }
+  if (guestId === auth.sub) {
+    return res.json({ ok: true, adopted: 0, note: "Эта работа уже ваша." });
+  }
+  try {
+    let adopted = 0;
+    if (isDevHubDbReady()) {
+      const r = await pool.query(
+        `UPDATE "DevHubProject" SET "userId" = $1 WHERE "userId" = $2`,
+        [auth.sub, guestId],
+      );
+      adopted = r.rowCount ?? 0;
+      // История расхода переезжает вместе с работой: иначе человек увидит
+      // проекты, но не увидит, во что они обошлись.
+      await pool.query(
+        `UPDATE "smart_run_log" SET "userId" = $1 WHERE "userId" = $2`,
+        [auth.sub, guestId],
+      ).catch((e: unknown) => {
+        // Не роняем перенос из-за истории: проекты важнее. Но и не молчим.
+        console.warn(`[DevHub] расход гостя ${guestId} не перенесён:`, e);
+      });
+    }
+    // В памяти — тот же перенос, иначе при недоступной базе работа
+    // «переедет» только наполовину и это будет выглядеть как потеря.
+    for (const p of memProjects.values()) {
+      if (p.userId === guestId) { p.userId = auth.sub; adopted++; }
+    }
+    res.json({ ok: true, adopted });
+  } catch (e: any) {
+    res.status(500).json({ error: safeErrorText(e) || "adopt failed" });
+  }
+});
+
+
 devhubRouter.get("/studio/spend", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);

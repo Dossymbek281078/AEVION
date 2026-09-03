@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { track } from "@/lib/track";
 import { useI18n } from "@/lib/i18n";
+import { apiUrl } from "@/lib/apiBase";
 
 const APP_LINKS: Record<string, { name: string; href: string }> = {
   qcoreai:    { name: "QCoreAI", href: "/qcoreai" },
@@ -64,7 +65,51 @@ function SuccessInner() {
       ? new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000).toLocaleDateString("ru-RU")
       : null;
 
-  const tierName = tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : "Pro";
+  // ТАРИФ БЕРЁМ У СЕРВЕРА, а к адресной строке откатываемся только пока
+  // ответа нет.
+  //
+  // До 03.09.2026 страница показывала тариф ПРЯМО ИЗ АДРЕСА. Это значение,
+  // во-первых, подделывается (?tier=enterprise — и человек видит Enterprise),
+  // а во-вторых ничего не знает о неудаче выдачи: если провижининг не
+  // состоялся, покупатель всё равно читал «тариф активирован» и не шёл в
+  // поддержку.
+  //
+  // Ручка отвечает тремя исходами, и «не смогли проверить» мы НЕ выдаём за
+  // «не выдано»: в этом случае просто оставляем то, что знали до вопроса.
+  const [подтверждённый, setПодтверждённый] = useState<string | null>(null);
+  const intentId = sessionId ?? saleId;
+
+  useEffect(() => {
+    if (!intentId) return;
+    let отменено = false;
+    let попыток = 0;
+    // Вебхук от кассы приходит за секунды, но не мгновенно — поэтому
+    // переспрашиваем несколько раз, а не судим по первому ответу.
+    const спросить = async () => {
+      попыток += 1;
+      try {
+        const r = await fetch(apiUrl(`/api/pricing/checkout/status?intentId=${encodeURIComponent(intentId)}`));
+        if (!r.ok) return;
+        const j = (await r.json()) as { ready?: boolean; tier?: string };
+        if (!отменено && j.ready && j.tier) {
+          setПодтверждённый(j.tier);
+          return;
+        }
+      } catch {
+        // Сеть недоступна — это НЕ «не выдано». Молча пробуем ещё раз.
+      }
+      if (!отменено && попыток < 8) setTimeout(спросить, 2500);
+    };
+    void спросить();
+    return () => {
+      отменено = true;
+    };
+  }, [intentId]);
+
+  const источникТарифа = подтверждённый ?? tier;
+  const tierName = источникТарифа
+    ? источникТарифа.charAt(0).toUpperCase() + источникТарифа.slice(1)
+    : "Pro";
   const appLink = APP_LINKS[appId] ?? APP_LINKS["platform"];
 
   useEffect(() => {

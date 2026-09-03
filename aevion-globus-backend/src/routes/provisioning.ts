@@ -354,11 +354,11 @@ const TIER_DISPLAY: Record<TierId, string> = {
   business: "Full",
 };
 
-function welcomeHtml(sub: Subscription): string {
+export function welcomeHtml(sub: Subscription): string {
   const tierName = TIER_DISPLAY[sub.tierId];
   const trialBlock = sub.trialDays > 0
     ? `<div style="margin:16px 0;padding:14px;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;color:#78350f">
-         <strong>Триал-период активен до ${new Date(Date.now() + sub.trialDays * 86400000).toLocaleDateString("ru-RU")}.</strong>
+         <strong>Триал-период активен до ${срокИзПодписки(sub).toLocaleDateString("ru-RU")}.</strong>
          Карта не списывается до окончания.
        </div>`
     : "";
@@ -400,10 +400,10 @@ function welcomeHtml(sub: Subscription): string {
 </html>`;
 }
 
-function welcomeText(sub: Subscription): string {
+export function welcomeText(sub: Subscription): string {
   const tierName = TIER_DISPLAY[sub.tierId];
   const trial = sub.trialDays > 0
-    ? `\nТриал-период активен до ${new Date(Date.now() + sub.trialDays * 86400000).toLocaleDateString("ru-RU")}. Карта не списывается до окончания.\n`
+    ? `\nТриал-период активен до ${срокИзПодписки(sub).toLocaleDateString("ru-RU")}. Карта не списывается до окончания.\n`
     : "";
   return `Добро пожаловать в AEVION ${tierName}!
 
@@ -441,6 +441,26 @@ ID подписки: ${sub.id}
  *
  * Пробный период остаётся В ДНЯХ: он и продаётся днями, календарь тут ни при чём.
  */
+/**
+ * Дата окончания ДЛЯ ПИСЬМА — из самой подписки, а не пересчитанная.
+ *
+ * До 03.09.2026 письмо считало её заново: `Date.now() + trialDays * 86400000`.
+ * Это второй источник правды об одном факте. Сегодня оба ответа совпадали с
+ * точностью до миллисекунд, но:
+ *   • перерисуют письмо позже (повтор, дайджест) — дата уедет вперёд, а ворота
+ *     останутся прежними, и человеку названа НЕ та дата;
+ *   • изменят правило срока — письмо молча продолжит считать по-старому.
+ *     Ровно это случилось бы сегодня: месячный срок переехал на календарь.
+ *
+ * Запасной путь оставлен намеренно: у старых записей поля может не быть, и
+ * письмо из-за этого падать не должно.
+ */
+function срокИзПодписки(sub: Subscription): Date {
+  const из = sub.validUntil ? new Date(sub.validUntil) : null;
+  if (из && !Number.isNaN(из.getTime())) return из;
+  return new Date(Date.now() + sub.trialDays * 86400000);
+}
+
 export function вычислитьСрок(от: Date, period: BillingPeriod, trialDays: number): string {
   if (trialDays > 0) return new Date(от.getTime() + trialDays * 86400000).toISOString();
   const месяцев = period === "annual" ? 12 : 1;

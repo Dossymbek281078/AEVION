@@ -422,6 +422,39 @@ ID подписки: ${sub.id}
  * Главная provisioning-функция: вызывается из webhook после успешной оплаты
  * и из stub-checkout (для smoke-теста UX без реального Stripe).
  */
+/**
+ * До какого момента действует оплаченный доступ.
+ *
+ * ПОЧЕМУ НЕ «30 ДНЕЙ». Так было до 03.09.2026, и это расходилось с тем, как
+ * списывает касса: она берёт деньги в ТО ЖЕ ЧИСЛО следующего месяца. В месяцах
+ * из 31 дня доступ гас на сутки РАНЬШЕ продления — то есть заплативший человек
+ * видел «Free, оформите подписку», хотя платёж был в силе. Семь месяцев в году
+ * длиной 31 день. Отсрочки в коде нет, ни один тест это правило не закреплял.
+ *
+ * Годовой срок по той же причине не 365 дней: в високосном году это давало те
+ * же сутки разрыва.
+ *
+ * ЗАЖИМ КОНЦА МЕСЯЦА обязателен: 31 января плюс месяц — это 28 (или 29)
+ * февраля, а не 3 марта. Без зажима JS сам переносит остаток на следующий
+ * месяц и выдаёт человеку лишние дни, а на годовой границе — лишний день
+ * 29 февраля.
+ *
+ * Пробный период остаётся В ДНЯХ: он и продаётся днями, календарь тут ни при чём.
+ */
+export function вычислитьСрок(от: Date, period: BillingPeriod, trialDays: number): string {
+  if (trialDays > 0) return new Date(от.getTime() + trialDays * 86400000).toISOString();
+  const месяцев = period === "annual" ? 12 : 1;
+  const год = от.getUTCFullYear();
+  const месяц = от.getUTCMonth();
+  const день = от.getUTCDate();
+  const цель = new Date(
+    Date.UTC(год, месяц + месяцев, 1, от.getUTCHours(), от.getUTCMinutes(), от.getUTCSeconds(), от.getUTCMilliseconds())
+  );
+  const последний = new Date(Date.UTC(цель.getUTCFullYear(), цель.getUTCMonth() + 1, 0)).getUTCDate();
+  цель.setUTCDate(Math.min(день, последний));
+  return цель.toISOString();
+}
+
 export async function provisionSubscription(input: {
   email: string;
   tierId: TierId;
@@ -438,7 +471,7 @@ export async function provisionSubscription(input: {
 }): Promise<{ subscription: Subscription; emailSent: boolean; emailMode: "real" | "stub"; emailError?: string; emailDegraded?: boolean }> {
   const trialDays = input.trialDays ?? 0;
   const period: BillingPeriod = input.period ?? "monthly";
-  const validityDays = trialDays > 0 ? trialDays : period === "annual" ? 365 : 30;
+  const validUntil = вычислитьСрок(new Date(), period, trialDays);
 
   const subscription: Subscription = {
     id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -449,7 +482,7 @@ export async function provisionSubscription(input: {
     seats: input.seats ?? 1,
     modules: input.modules ?? [],
     trialDays,
-    validUntil: new Date(Date.now() + validityDays * 86400000).toISOString(),
+    validUntil,
     amountUsd: input.amountUsd,
     promoCode: input.promoCode,
     stripeSessionId: input.stripeSessionId,

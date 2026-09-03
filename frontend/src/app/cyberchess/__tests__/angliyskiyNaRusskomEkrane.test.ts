@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { bezKommentariev } from "./bezKommentariev";
 import { readFileSync } from "fs";
 import { join } from "path";
 
@@ -26,6 +27,19 @@ describe("на экране шахмат нет английских слов в
   // прежние проверки её пропустили — они искали «AI ≈ {rat}» и «Master AI».
   // Нашла её не проверка, а сама страница: она отправила «AI» живому
   // переводчику как нерусское слово.
+  it("нет и СОСТАВНЫХ «AI-…» — они пережили прошлую чистку", () => {
+    // 03.09.2026: одиночное «AI» я убрал 01.09 и отчитался. Составные жили
+    // дальше и были видны человеку: «AI-уровень» в поиске, «AI-соперник» в
+    // описании, «AI-наставник» в палитре команд, «AI-движок Stockfish» на
+    // витрине модуля. Шаблон на одиночное слово их не ловил.
+    const s = bezKommentariev(KOD());
+    const места = [...s.matchAll(/AI-/g)].length;
+    expect(места, "«AI-…» на русском экране: пиши «ИИ-…»").toBe(0);
+    // контроль прибора в обе стороны
+    expect([...bezKommentariev('const a = "AI-тренер";').matchAll(/AI-/g)].length).toBe(1);
+    expect([...bezKommentariev('// тут был AI-тренер').matchAll(/AI-/g)].length).toBe(0);
+  });
+
   it("на экране нет ОДИНОЧНОГО «AI» — только «ИИ»", () => {
     const s = KOD();
     const места = [...s.matchAll(/>\s*AI\s*</g)].length;

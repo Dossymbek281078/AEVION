@@ -8363,7 +8363,7 @@ export default function CyberChessPage(){
               const summary=`AEVION CyberChess · ${ruResult(over)} · ${hist.length} ходов · ${currentOpening?.name||"Стандарт"} · ELO ${rat}\nhttps://aevion.app/cyberchess`;
               try{navigator.clipboard.writeText(summary).then(()=>showToast("📤 Итог скопирован в буфер","success")).catch(()=>showToast("Не удалось скопировать","error"))}catch{showToast("Буфер обмена недоступен","error")}
             }}>📤 Поделиться</Btn>}
-            {over&&!hotseat&&<Btn size="md" variant="secondary" title="Новая партия с теми же настройками против другого AI-уровня" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>⚙ Настройки</Btn>}
+            {over&&!hotseat&&<Btn size="md" variant="secondary" title="Новая партия с теми же настройками против другого уровня ИИ" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>⚙ Настройки</Btn>}
             {/* Premove Undo / Clear — moved to the top strip above the board (premoves row).
                 Removed from this bottom controls row to avoid duplication. */}
           </div>
@@ -8670,7 +8670,7 @@ export default function CyberChessPage(){
                   if(!r.ok)throw new Error(`ask ${r.status}`);
                   const j=await r.json() as {text?:string};
                   const text=(j?.text||"").trim();
-                  if(text)sCoachRemark({kind:"position",title:"🧠 Разбор гроссмейстера",body:text,hint:"AI-тренер уровня 2600+ · на основе позиции и оценки движка"});
+                  if(text)sCoachRemark({kind:"position",title:"🧠 Разбор гроссмейстера",body:text,hint:"ИИ-тренер уровня 2600+ · на основе позиции и оценки движка"});
                   else sCoachRemark({kind:"position",title:"🧠 Разбор гроссмейстера",body:"Не удалось получить разбор — попробуй ещё раз.",hint:"Или используй 🔍 Объясни (движок+эвристика)"});
                 }catch{
                   sCoachRemark({kind:"position",title:"🧠 GM-разбор недоступен",body:"ИИ-тренер сейчас не отвечает. Используй 🔍 Объясни, 📋 Найди план или 🎯 Тактика — они работают на движке.",hint:"GM-разбор требует связи с QCoreAI"});
@@ -11405,7 +11405,7 @@ ${question.trim()}`;
             <div style={{borderRadius:10,background:T.surface,border:`1px solid ${T.border}`,padding:"8px 10px",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
               <span style={{fontSize:11,color:T.dim,fontWeight:800}}>Режим тренера:</span>
               <div style={{display:"flex",gap:4}}>
-                <button onClick={()=>sCoachAIEnabled(true)} title="AI-разбор: ИИ-тренер анализирует позицию движком (Stockfish) и объясняет на уровне супер-GM — отвечает на вопросы, показывает планы и ошибки." style={{padding:"6px 10px",borderRadius:6,border:coachAIEnabled?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:coachAIEnabled?"rgba(5,150,105,0.08)":"#fff",color:coachAIEnabled?T.accent:T.dim,fontSize:12,fontWeight:800,cursor:"pointer"}}>🤖 AI-разбор</button>
+                <button onClick={()=>sCoachAIEnabled(true)} title="ИИ-разбор: ИИ-тренер анализирует позицию движком (Stockfish) и объясняет на уровне супер-GM — отвечает на вопросы, показывает планы и ошибки." style={{padding:"6px 10px",borderRadius:6,border:coachAIEnabled?`2px solid ${T.accent}`:`1px solid ${T.border}`,background:coachAIEnabled?"rgba(5,150,105,0.08)":"#fff",color:coachAIEnabled?T.accent:T.dim,fontSize:12,fontWeight:800,cursor:"pointer"}}>🤖 ИИ-разбор</button>
                 <button onClick={()=>sCoachAIEnabled(false)} title="Свободный чат без авто-разбора позиции — просто диалог с тренером." style={{padding:"6px 10px",borderRadius:6,border:!coachAIEnabled?`2px solid ${T.blue}`:`1px solid ${T.border}`,background:!coachAIEnabled?"rgba(37,99,235,0.08)":"#fff",color:!coachAIEnabled?T.blue:T.dim,fontSize:12,fontWeight:800,cursor:"pointer"}}>✏️ Свободно</button>
               </div>
               {coachAIEnabled&&<><span style={{width:1,height:20,background:T.border}}/>
@@ -11749,7 +11749,7 @@ ${question.trim()}`;
         {/* Search + filter row */}
         <div style={{display:"flex",gap:SPACE[2],marginBottom:SPACE[2],flexWrap:"wrap",alignItems:"center"}}>
           <input aria-label="Поиск по партиям" value={gamesSearch} onChange={e=>sGamesSearch(e.target.value)}
-            placeholder="🔎 Поиск по дебюту, AI-уровню, результату…"
+            placeholder="🔎 Поиск по дебюту, уровню ИИ, результату…"
             style={{flex:"2 1 220px",minWidth:200,padding:"8px 12px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,fontSize:13,background:CC.surface1,color:CC.text,outline:"none"}}/>
           <select aria-label="Сортировка партий" value={gamesSort} onChange={e=>sGamesSort(e.target.value as any)}
             style={{padding:"8px 10px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,fontSize:12,fontWeight:700,background:CC.surface1,color:CC.text,cursor:"pointer"}}>
@@ -11840,7 +11840,7 @@ ${question.trim()}`;
         {id:"theme_neon",name:"Тема Neon ⚡",desc:"Киберпанк-доска, неоновый градиент",cost:50,kind:"unlock"},
         {id:"theme_obsidian",name:"Тема Obsidian 🖤",desc:"Чёрное с золотом",cost:50,kind:"unlock"},
         {id:"theme_sakura",name:"Тема Sakura 🌸",desc:"Пастель + розовый",cost:50,kind:"unlock"},
-        {id:"ai_rival",name:"AI Rival «Алексей» 🧠",desc:"Персональный AI-соперник, который запоминает твои партии и растёт с тобой (beta)",cost:100,kind:"unlock"},
+        {id:"ai_rival",name:"Соперник «Алексей» 🧠",desc:"Персональный ИИ-соперник, который запоминает твои партии и растёт с тобой (beta)",cost:100,kind:"unlock"},
         {id:"hint_ghost",
           name:(()=>{
             const left=(chessy.ach as Record<string,number>).hints_left||0;
@@ -12387,7 +12387,7 @@ ${question.trim()}`;
     {tourStep>=0&&(()=>{
       const slides=[
         {icon:"♞",title:"Добро пожаловать в AEVION CyberChess",body:<>
-          <p style={{margin:"0 0 10px",lineHeight:1.6}}>Полноценный шахматный тренажёр: AI-движок Stockfish, живой тренер, 500 000+ задач, 12 вариантов игры и своя валюта.</p>
+          <p style={{margin:"0 0 10px",lineHeight:1.6}}>Полноценный шахматный тренажёр: движок Stockfish, живой тренер, 500 000+ задач, 12 вариантов игры и своя валюта.</p>
           <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center",marginTop:8}}>
             {["⚡ Puzzle Rush","🎓 ИИ-тренер","🎲 12 вариантов","📊 Разбор партии","🏆 Турниры"].map(f=><span key={f} style={{fontSize:11,padding:"3px 9px",borderRadius:999,background:"rgba(5,150,105,0.12)",color:CC.brand,fontWeight:700}}>{f}</span>)}
           </div>
@@ -12572,7 +12572,7 @@ ${question.trim()}`;
             {e:"🌐",t:"Онлайн-матч",d:"Матчмейкинг с реальными игроками",to:"/cyberchess/matchmaking"},
           ]},
           {title:"Учиться",cat:"learn",items:[
-            {e:"🎓",t:"AI-Коуч",d:"Разбор уровня супер-GM (Opus 4.8)",act:()=>sTab("coach"),hot:true},
+            {e:"🎓",t:"ИИ-тренер",d:"Разбор уровня супер-GM",act:()=>sTab("coach"),hot:true},
             {e:"🧩",t:"Задачи",d:"Тактика · Rush · разбор решения на доске",act:()=>sTab("puzzles")},
             {e:"📊",t:"Анализ",d:"Движок · стрелки · WhatIf-объяснения",act:()=>sTab("analysis")},
             {e:"📚",t:"Репертуар",d:"Тренажёр дебютов + Lichess Masters",to:"/cyberchess/repertoire"},
@@ -15362,7 +15362,7 @@ ${question.trim()}`;
         }},
 
         // ── COACH / TRAINING ──
-        {id:"coach",        icon:"🎓",group:"Coach",   label:"Открыть Coach",      hint:"AI-наставник + база знаний 90+ тем",         run:()=>sTab("coach")},
+        {id:"coach",        icon:"🎓",group:"Coach",   label:"Открыть тренера",   hint:"ИИ-наставник + база знаний 90+ тем",         run:()=>sTab("coach")},
         {id:"coach-knowledge",icon:"📚",group:"Coach", label:"База знаний тренера",   hint:"9 категорий · дебюты / тактика / эндшпиль / время / память / roadmap",  run:()=>{sTab("coach");setTimeout(()=>sShowKnowledge(true),50)}},
         {id:"coach-lessons",  icon:"📖",group:"Тренер", label:"Уроки тренера (курс)", hint:`${LESSONS.length} уроков beginner→advanced с теорией+позициями+упражнениями`, run:()=>{sTab("coach");setTimeout(()=>sShowLessons(true),50)}},
         {id:"coord-trainer",icon:"🎯",group:"Coach",   label:"Координаты",         hint:"Тренировка чтения доски (30 сек)",          run:()=>{sShowCoord(true);sCoordSession(null);sCoordResult(null);sCoordLB(coordLoadLB())}},

@@ -5,6 +5,7 @@ import { useAdoptPreHydrationValues } from "@/lib/useAdoptPreHydrationValues";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
+import { СОБЫТИЕ_ПЕРЕНОСА } from "@/components/DevHubGuestIdentity";
 import { apiUrl } from "@/lib/apiBase";
 import { useDevhubT } from "./i18n";
 import { catalog } from "@/lib/aevionCatalog";
@@ -202,6 +203,17 @@ export default function DevHubPage() {
   }, []);
 
   useEffect(() => { fetchProjects(); }, [fetchProjects]);
+
+  // Перенос гостевой работы в аккаунт идёт ПАРАЛЛЕЛЬНО первой загрузке списка
+  // (оба из useEffect на монтировании), поэтому список успевает уехать пустым.
+  // Дождаться переноса синхронно нельзя — он в соседнем компоненте; поэтому он
+  // оповещает, а мы перечитываем. Событие приходит ТОЛЬКО когда что-то реально
+  // переехало, так что лишнего запроса у обычного посетителя не будет.
+  useEffect(() => {
+    const onAdopted = () => { fetchProjects(); };
+    window.addEventListener(СОБЫТИЕ_ПЕРЕНОСА, onAdopted);
+    return () => window.removeEventListener(СОБЫТИЕ_ПЕРЕНОСА, onAdopted);
+  }, [fetchProjects]);
 
   useEffect(() => {
     fetch(apiUrl("/api/devhub/studio/capabilities"), { cache: "no-store" })

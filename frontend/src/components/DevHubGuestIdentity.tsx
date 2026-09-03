@@ -26,6 +26,13 @@ installDevhubGuestHeader();
  */
 const ОТМЕТКА = "aevion.devhub.guest.adopted";
 
+/**
+ * Оповещение «гостевая работа переехала, список пора перечитать».
+ * Экспортируется намеренно: слушатель обязан импортировать это имя, а не
+ * повторять строку у себя — две копии одного имени расходятся молча.
+ */
+export const СОБЫТИЕ_ПЕРЕНОСА = "aevion-devhub-guest-adopted";
+
 function перенестиОдинРаз(): void {
   if (typeof window === "undefined") return;
   try {
@@ -39,7 +46,18 @@ function перенестиОдинРаз(): void {
       method: "POST",
       headers: { Authorization: `Bearer ${токен}` },
     })
-      .then((r) => { if (r.ok) window.localStorage.setItem(ОТМЕТКА, "1"); })
+      .then(async (r) => {
+        if (!r.ok) return;
+        window.localStorage.setItem(ОТМЕТКА, "1");
+        // Список проектов уже уехал ДО переноса: он тоже грузится из useEffect
+        // на монтировании, и гонку выигрывает более короткий запрос. Без
+        // оповещения человек увидел бы ПУСТОТУ до перезагрузки страницы — то
+        // есть ровно ту потерю, ради которой перенос и написан.
+        const d = (await r.json().catch(() => null)) as { adopted?: number } | null;
+        if (typeof d?.adopted === "number" && d.adopted > 0) {
+          window.dispatchEvent(new CustomEvent(СОБЫТИЕ_ПЕРЕНОСА, { detail: d.adopted }));
+        }
+      })
       // Молчим намеренно: перенос — удобство, а не операция, ради которой
       // человек пришёл. Уронить из-за него страницу нельзя. Но и отметку при
       // отказе НЕ ставим, чтобы попытка повторилась в следующий заход.

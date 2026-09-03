@@ -88,6 +88,79 @@ describe("переход между комнатами не теряет чел�
     expect(document.activeElement).toBe(main);
   });
 
+  it("фокус удерживается, если страница дорисовалась ПОСЛЕ перехода", async () => {
+    // Дефект, найденный 03.09.2026 РЕНДЕРОМ, а не тестами: на переходе
+    // /qcontract -> /qsign объявление срабатывало, а фокус слетал на body.
+    // Причина — React заменял узел заголовка уже после нашего вызова.
+    // Здесь это воспроизведено: подменяем h1 сразу после перехода.
+    const первый = document.createElement("h1");
+    первый.textContent = "Подпись";
+    document.body.appendChild(первый);
+
+    const { rerender } = render(<RouteAnnouncer />);
+    await подождать(50);
+
+    текущийПуть = "/qsign";
+    rerender(<RouteAnnouncer />);
+    await подождать(80);
+
+    // страница дорисовалась: узел заменён новым
+    первый.remove();
+    const второй = document.createElement("h1");
+    второй.textContent = "Подпись";
+    document.body.appendChild(второй);
+
+    await подождать(400);
+    expect(document.activeElement).toBe(второй);
+  });
+
+  it("фокус удерживается и при ПОЗДНЕЙ дорисовке, а не только первой попыткой", async () => {
+    // Мутация вскрыла, что прошлый тест доказывал лишь ОДНУ попытку: подмена
+    // узла случалась раньше первой проверки. Здесь страница дорисовывается
+    // поздно — вернуть фокус может только повторение.
+    const первый = document.createElement("h1");
+    первый.textContent = "Выплата";
+    document.body.appendChild(первый);
+
+    const { rerender } = render(<RouteAnnouncer />);
+    await подождать(50);
+
+    текущийПуть = "/qpaynet";
+    rerender(<RouteAnnouncer />);
+    await подождать(400);
+
+    первый.remove();
+    const поздний = document.createElement("h1");
+    поздний.textContent = "Выплата";
+    document.body.appendChild(поздний);
+
+    await подождать(500);
+    expect(document.activeElement).toBe(поздний);
+  });
+
+  it("НЕ отнимает фокус у человека, ушедшего дальше по странице", async () => {
+    // Риск, введённый самой починкой: механизм, возвращающий фокус целую
+    // секунду, легко превращается в механизм, который его ОТНИМАЕТ. Человек
+    // нажал Tab и ушёл на кнопку — фокус обязан остаться у него.
+    const h1 = document.createElement("h1");
+    h1.textContent = "Договор";
+    const кнопка = document.createElement("button");
+    кнопка.textContent = "Дальше";
+    document.body.append(h1, кнопка);
+
+    const { rerender } = render(<RouteAnnouncer />);
+    await подождать(50);
+
+    текущийПуть = "/qcontract";
+    rerender(<RouteAnnouncer />);
+    await подождать(150);
+
+    кнопка.focus();
+    await подождать(500);
+
+    expect(document.activeElement).toBe(кнопка);
+  });
+
   it("живая область объявлена вежливой и читается целиком", () => {
     const { container } = render(<RouteAnnouncer />);
     const область = container.querySelector("[role=status]");

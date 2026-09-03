@@ -302,6 +302,12 @@ async function ensurePayoutsTable(): Promise<void> {
       );
       CREATE INDEX IF NOT EXISTS idx_qpp_owner ON qpaynet_payouts (owner_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_qpp_status ON qpaynet_payouts (status, created_at DESC);
+      -- Основание выплаты хранится РЯДОМ с выплатой, а не только
+      -- проверяется в момент запроса. Проверка без записи оставляет связь
+      -- «эта выплата по этому акту» живущей одно мгновение: через час
+      -- ответить, чем обоснована выплата, будет нечем.
+      ALTER TABLE qpaynet_payouts ADD COLUMN IF NOT EXISTS signature_id TEXT;
+      ALTER TABLE qpaynet_payouts ADD COLUMN IF NOT EXISTS signature_mode TEXT;
     `);
     payoutsTableReady = true;
   } catch (err) {
@@ -2547,9 +2553,12 @@ qpaynetRouter.post("/payouts", moneyLimiter, async (req, res) => {
   // «Не смогли проверить» и «нет основания» — РАЗНЫЕ ответы, и оба честные.
   // Молчаливое СОГЛАСИЕ здесь было бы тем же классом, что молчаливый отказ на
   // витрине, только дороже: там человек не получает письма, тут уходят деньги.
+  const signatureId = String(
+    (req.body as Record<string, unknown> | undefined)?.signatureId ?? "",
+  ).trim();
   const актПодписи = await проверитьПодписанныйАкт(
     pool,
-    String((req.body as Record<string, unknown> | undefined)?.signatureId ?? "").trim(),
+    signatureId,
     ownerId,
     auth.email ?? null,
   );
@@ -2579,9 +2588,9 @@ qpaynetRouter.post("/payouts", moneyLimiter, async (req, res) => {
     [txId, walletId, ownerId, tiin, fee, `Payout (${method}): ${destination.slice(-4)}`],
   );
   await pool.query(
-    `INSERT INTO qpaynet_payouts (id, owner_id, wallet_id, amount, method, destination, paid_external_ref)
-     VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-    [id, ownerId, walletId, tiin, method, destination.slice(0, 100), txId],
+    `INSERT INTO qpaynet_payouts (id, owner_id, wallet_id, amount, method, destination, paid_external_ref, signature_id, signature_mode)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [id, ownerId, walletId, tiin, method, destination.slice(0, 100), txId, signatureId, актПодписи.mode],
   );
 
   res.status(201).json({

@@ -1047,6 +1047,7 @@ export default function PricingPage() {
                       color: isHighlight ? "#5eead4" : "#0d9488",
                       marginBottom: 6,
                     }}
+                    aria-label={`${tp("tier.tryTrial")}: ${tier.id}`}
                     onClick={() =>
                       startCheckout(
                         tier.id === "lite" && liteModule

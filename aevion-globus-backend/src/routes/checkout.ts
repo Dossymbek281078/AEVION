@@ -298,13 +298,27 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
     //    конвертируем в тенге по курсу из CURRENCY_RATES; PayBox принимает
     //    pg_amount в основной единице (тенге), поэтому передаём amountCents в
     //    тыйынах (тенге*100), а провайдер делит на 100.
+    // МЕСТА ВЕЗЁМ В КАССУ — но только туда, где за них реально берут деньги.
+    //
+    // Замер 04.09.2026: витрина считает цену по числу мест (buildQuote выше),
+    // а вебхуки провижинили без `seats`, и умолчание provisioning.ts:564
+    // ставило единицу. Человек платил за пять мест, а его же страница
+    // подписки показывала одно (routes/pricing.ts:1512).
+    //
+    // ⚠ ТОЛЬКО paybox и paypal. У Lemon Squeezy и Gumroad наша сумма до кассы
+    // не доезжает (см. предупреждение выше) — там списывают цену товара, то
+    // есть за ОДНО место, и запись «1» там ПРАВИЛЬНАЯ. Скопировать эту правку
+    // туда значило бы записать места, за которые денег не брали. Пока не
+    // решён пункт 8 записки основателя — не копировать.
+    const местаДляКассы: Record<string, string> = seats > 1 ? { seats: String(seats) } : {};
+
     if (body.currency === "KZT" && isPayboxConfigured()) {
       try {
         const kztCents = Math.round(totalCents * CURRENCY_RATES.KZT.rate);
         const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
         const intent = await payboxPaymentProvider.createIntent({
           reference, amountCents: kztCents, currency: "KZT", description, email: body.email ?? null,
-          customData: liteModule ? { module: liteModule } : undefined,
+          customData: { ...(liteModule ? { module: liteModule } : {}), ...местаДляКассы },
           // Модуль для адреса возврата: страница после оплаты обязана
           // назвать то, за что заплатили. Только при ОДНОМ купленном
           // модуле — на наборе называть один было бы враньём.
@@ -331,7 +345,7 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
         const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
         const intent = await paypalPaymentProvider.createIntent({
           reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
-          customData: liteModule ? { module: liteModule } : undefined,
+          customData: { ...(liteModule ? { module: liteModule } : {}), ...местаДляКассы },
           // Модуль для адреса возврата: страница после оплаты обязана
           // назвать то, за что заплатили. Только при ОДНОМ купленном
           // модуле — на наборе называть один было бы враньём.

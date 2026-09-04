@@ -63,13 +63,19 @@ export function tierForReference(ref: string): TierId {
 
 
 /** custom_id = JSON { reference, module? } (createIntent). Возвращаем оба поля. */
-function parseCustomId(customId?: string): { reference: string; module?: string } {
-  if (!customId) return { reference: "" };
+function parseCustomId(customId?: string): { reference: string; module?: string; seats: number } {
+  if (!customId) return { reference: "", seats: 1 };
   try {
-    const j = JSON.parse(customId) as { reference?: string; module?: string };
-    return { reference: j.reference ?? "", module: j.module };
+    const j = JSON.parse(customId) as { reference?: string; module?: string; seats?: unknown };
+    // Места приходят СНАРУЖИ — проверяем как чужое значение: не число,
+    // дробь, ноль, минус дают одно место. `Number(x) || 1` не годится:
+    // он пропустил бы дробь дальше в запись подписки.
+    // Целое, а не parseInt: "3.9" усёкся бы до 3 и прошёл молча.
+    const n = Number(String(j.seats ?? "").trim());
+    const seats = Number.isInteger(n) && n >= 1 ? Math.min(1000, n) : 1;
+    return { reference: j.reference ?? "", module: j.module, seats };
   } catch {
-    return { reference: customId };
+    return { reference: customId, seats: 1 };
   }
 }
 
@@ -112,7 +118,7 @@ paypalWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   const raw = (result.raw as Record<string, unknown> | null) ?? {};
   const payer = (raw.payer as { email_address?: string } | undefined);
   const email = (payer?.email_address ?? "").trim().toLowerCase();
-  const { reference, module } = parseCustomId(raw.custom_id as string | undefined);
+  const { reference, module, seats } = parseCustomId(raw.custom_id as string | undefined);
   const paymentId = (raw.id as string | undefined) ?? eventId ?? reference;
   const refunded = result.status === "refunded";
   const failed = result.status === "failed";
@@ -174,6 +180,7 @@ paypalWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         email,
         tierId,
         period,
+        seats,
         modules: module ? [module] : [],
         source: "paypal",
         providerPaymentId: paymentId,

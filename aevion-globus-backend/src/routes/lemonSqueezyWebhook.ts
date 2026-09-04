@@ -40,6 +40,7 @@
 import { Router } from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
+import { periodForReference } from "../lib/payment/billingPeriod";
 import {
   referenceForVariantId,
   tierForLemonSqueezyReference,
@@ -304,10 +305,22 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
       // Значит `source` — это «через какую кассу прошли деньги», а канал —
       // другая ось, и складывать их в одно поле нельзя ни там, ни здесь.
       const channel = payload.meta?.custom_data?.channel?.trim().slice(0, 40);
+      // ПЕРИОД БЕРЁМ ИЗ ССЫЛКИ. Здесь было зашито "monthly", а магазин
+      // продаёт годовые тарифы (LEMON_SQUEEZY_VARIANT_{LITE,MEDIUM,FULL,
+      // PLANET}_ANNUAL — см. data/lemonSqueezyVariants.ts), и витрина
+      // строит ссылку `tier_${id}_annual`. То есть годовая покупка
+      // записывалась месячной, срок доступа считался на месяц, а
+      // следующее событие от кассы пришло бы через одиннадцать.
+      //
+      // Тот же дефект был у gumroad и починен 03.09.2026; у paybox и
+      // paypal правило было изначально. Четвёртая касса отстала молча,
+      // потому что правило жило тремя копиями — теперь оно одно
+      // (lib/payment/billingPeriod).
+      const period = periodForReference(ref ?? "");
       const result = await provisionSubscription({
         email,
         tierId,
-        period: "monthly",
+        period,
         modules,
         source: "lemonsqueezy",
         providerPaymentId: lsSubId,

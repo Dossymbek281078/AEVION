@@ -15,6 +15,7 @@ import { Router, type Request, type Response } from "express";
 import { paypalPaymentProvider, verifyPaypalWebhook } from "../lib/payment/paypalProvider";
 import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
 import type { TierId, BillingPeriod } from "../data/pricing";
+import { periodForReference } from "../lib/payment/billingPeriod";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
 import { upsertAppSubscription } from "../lib/appEntitlements";
@@ -60,9 +61,6 @@ export function tierForReference(ref: string): TierId {
   return "lite";
 }
 
-function periodForReference(ref: string): BillingPeriod {
-  return ref.toLowerCase().includes("annual") ? "annual" : "monthly";
-}
 
 /** custom_id = JSON { reference, module? } (createIntent). Возвращаем оба поля. */
 function parseCustomId(customId?: string): { reference: string; module?: string } {

@@ -25,6 +25,7 @@
 import { Router, type Request, type Response } from "express";
 import { gumroadPaymentProvider, verifyGumroadSaleDetailed } from "../lib/payment/gumroadProvider";
 import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
+import { periodForReference } from "../lib/payment/billingPeriod";
 import type { TierId } from "../data/pricing";
 import { getPool } from "../lib/dbPool";
 import { makeServiceCapture } from "../lib/sentry/platform";
@@ -526,7 +527,7 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
       //
       // Правило то же, что у paybox и paypal (periodForReference): решает
       // слово в ссылке заказа.
-      const period = reference.toLowerCase().includes("annual") ? "annual" : "monthly";
+      const period = periodForReference(reference);
 
       const provResult = await provisionSubscription({
         email,

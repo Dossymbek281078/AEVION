@@ -177,6 +177,32 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
     const trialDays = body.trial && (tier.id === "lite" || tier.id === "medium" || tier.id === "full") ? 14 : 0;
     const totalCents = Math.round(totalUsd * 100);
 
+    // ЗАПРОШЕННЫЙ ПРОБНЫЙ ПЕРИОД НЕ ИГНОРИРУЕМ МОЛЧА.
+    //
+    // Замер 04.09.2026 пробой: `trial: true` и `trial: false` дают ПОЛНОСТЬЮ
+    // одинаковый ответ — тот же платёжный адрес, та же сумма. Причина: число
+    // дней используется только ниже, в ветке нулевой цены, а сумма считается
+    // расчётом, который о пробном периоде не знает вовсе (в data/pricing.ts
+    // слова trial нет). При обычной цене ветка не берётся, и 14 дней никуда
+    // не попадают — все четыре кассы записывают потом trialDays: 0.
+    //
+    // При этом кнопка на странице цен обещает «Попробовать 14 дней бесплатно».
+    //
+    // Поведение НЕ меняю: как именно должен работать пробный период — решение
+    // основателя (оно может жить и на стороне товара у провайдера, чего отсюда
+    // не видно). Меняется одно: расхождение перестаёт быть невидимым.
+    if (trialDays > 0 && totalCents > 0) {
+      console.warn(
+        `[checkout/session] пробный период запрошен, но НЕ применён: tier=${tier.id} ` +
+          `period=${period} сумма=${totalCents}¢ — покупатель платит сразу`
+      );
+      capture(new Error("checkout_trial_requested_but_not_applied"), {
+        route: "checkout/session",
+        tier: tier.id,
+        period,
+      });
+    }
+
     const reference = `tier_${tier.id}_${period}`;
 
     // Free / fully discounted — no checkout needed, provision directly.

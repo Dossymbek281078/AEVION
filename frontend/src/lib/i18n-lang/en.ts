@@ -7403,7 +7403,7 @@ const en: Record<string, string> = {
   "pricing.checkoutSuccess.titlePending": "Payment received — checking your access",
   "pricing.checkoutSuccess.titleTrialNoTier": "Trial started — {days} days",
   "pricing.home.notice.currencyDiffers": "Prices shown in {shown}, the checkout charges {charged}. Click again to continue.",
-  "provenance.real": "measured",
+  "provenance.real": "from real data",
   "provenance.tipMeasured": "real measurement/record",
   "provenance.tipDerived": "derived from an adjacent signal",
   "provenance.tipGuessed": "placeholder default",

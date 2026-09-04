@@ -5968,7 +5968,7 @@ export default function CyberChessPage(){
           </span>}
 
         {/* Active variant indicator (sticky, visible always) */}
-        {variant!=="standard"&&<button onClick={()=>sShowVariants(true)} className="cc-focus-ring"
+        {variant!=="standard"&&<button onClick={()=>sShowVariants(true)} 
           style={{
             display:"inline-flex",alignItems:"center",gap:6,padding:"4px 10px",
             background:"linear-gradient(135deg,#fef3c7,#fed7aa)",
@@ -6107,7 +6107,7 @@ export default function CyberChessPage(){
             onClick={()=>sShowShop(true)}
             title={`Chessy за задачи, уроки и достижения · баланс ${chessy.balance} · всего заработано ${chessy.lifetime} · клик → магазин`}
             aria-label="Магазин Chessy"
-            className="cc-focus-ring cc-touch"
+            className="cc-touch"
             style={{
               display:"inline-flex",alignItems:"center",gap:6,padding:"6px 14px",
               borderRadius:`${RADIUS.full}px 0 0 ${RADIUS.full}px`,
@@ -6153,7 +6153,7 @@ export default function CyberChessPage(){
             onClick={()=>sShowChessyInfo(true)}
             title="Что такое Chessy?"
             aria-label="Что такое Chessy"
-            className="cc-focus-ring cc-touch"
+            className="cc-touch"
             style={{
               display:"inline-flex",alignItems:"center",justifyContent:"center",
               width:28,height:32,
@@ -6448,7 +6448,7 @@ export default function CyberChessPage(){
                       sUseCustom(false);
                       const first=TCS.findIndex(t=>t.cat===c);
                       if(first>=0)sTcI(first);
-                    }} className="cc-focus-ring" style={{
+                    }} style={{
                       display:"inline-flex",alignItems:"center",gap:5,
                       padding:"5px 12px",borderRadius:RADIUS.full,
                       border:"none",
@@ -6512,7 +6512,7 @@ export default function CyberChessPage(){
                 <div style={{display:"inline-flex",gap:2,padding:2,borderRadius:RADIUS.full,background:CC.surface2,border:`1px solid ${CC.border}`}}>
                   {([["w","♔","Белые"],["b","♚","Чёрные"]] as const).map(([v,ic,name])=>{
                     const selected=pCol===v;
-                    return <button key={v} onClick={()=>sPCol(v as ChessColor)} className="cc-focus-ring"
+                    return <button key={v} onClick={()=>sPCol(v as ChessColor)} 
                       style={{display:"inline-flex",alignItems:"center",gap:5,
                         padding:"4px 12px",borderRadius:RADIUS.full,border:"none",
                         background:selected?"#fff":"transparent",
@@ -6525,7 +6525,7 @@ export default function CyberChessPage(){
                       <span>{name}</span>
                     </button>;
                   })}
-                  <button onClick={()=>sPCol(Math.random()<0.5?"w":"b")} title="Случайный цвет"
+                  <button onClick={()=>sPCol(Math.random()<0.5?"w":"b")} title="Случайный цвет" aria-label="Случайный цвет"
                     className="cc-focus-ring"
                     style={{display:"inline-flex",alignItems:"center",
                       padding:"4px 10px",borderRadius:RADIUS.full,border:"none",
@@ -6539,7 +6539,7 @@ export default function CyberChessPage(){
               <div>
                 <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
                   <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>ИИ</span>
-                  <input type="range" min={0} max={(chessy.owned.master_ai||isPro)?6:4}
+                  <input type="range" aria-label="Сила соперника" min={0} max={(chessy.owned.master_ai||isPro)?6:4}
                     value={Math.min(aiI,(chessy.owned.master_ai||isPro)?6:4)}
                     onChange={e=>{const v=+e.target.value;if(v>=5&&!(chessy.owned.master_ai||isPro)){showToast("Master/Stockfish AI — premium. Купи в Chessy-магазине","info");sShowShop(true);return}sAiI(v)}}
                     style={{flex:1,accentColor:lv.color}}/>
@@ -6574,7 +6574,7 @@ export default function CyberChessPage(){
             <div style={{marginTop:SPACE[3],display:"flex",flexDirection:"column",gap:SPACE[2]}}>
               {/* Primary CTA «ИГРАТЬ» — доминирует: полная ширина, крупнее вторичных режимов.
                   (Раньше был одной ячейкой grid 2fr/1fr/1fr — не выигрывал по вниманию.) */}
-                <button onClick={()=>{sHotseat(false);sRivalMode(false);newG()}} className="cc-focus-ring cc-touch"
+                <button onClick={()=>{sHotseat(false);sRivalMode(false);newG()}} className="cc-touch"
                   style={{width:"100%",padding:"22px 26px",borderRadius:RADIUS.lg,border:"none",
                     background:`linear-gradient(135deg,${CC.brand},#10b981 55%,#14b8a6)`,color:"#fff",
                     fontWeight:900,fontSize:20,cursor:"pointer",
@@ -6800,7 +6800,7 @@ export default function CyberChessPage(){
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:SPACE[2]}}>
                 {dashes.map(d=>{
                   const open=isOpen(d.id);
-                  return <button key={d.id} onClick={()=>toggle(d.id)} className="cc-focus-ring" style={{
+                  return <button key={d.id} onClick={()=>toggle(d.id)}  style={{
                     position:"relative",overflow:"hidden",
                     padding:"16px 18px",
                     border:`1px solid ${open?d.ring:"transparent"}`,
@@ -9151,7 +9151,7 @@ export default function CyberChessPage(){
                 sCinematicMoment({label:"🎬 CINEMATIC REPLAY",color:"#0f172a",sub:`${hist.length} ходов · режиссёр AEVION`});
                 setTimeout(()=>sCinematicMoment(null),1800);
               }}
-              className="cc-focus-ring"
+              
               style={{flex:"1 1 220px",padding:"12px 16px",borderRadius:10,
                 border:"none",background:"linear-gradient(90deg,#0c0a09,#1e1b4b,#831843,#1e1b4b,#0c0a09)",
                 backgroundSize:"200% 100%",
@@ -9163,7 +9163,7 @@ export default function CyberChessPage(){
             </button>
             <button
               onClick={()=>{const txt=generateStory();sStoryText(txt);sShowStory(true);setTimeout(()=>speakStory(txt),300)}}
-              className="cc-focus-ring"
+              
               style={{flex:"1 1 220px",padding:"12px 16px",borderRadius:10,
                 border:"none",background:"linear-gradient(90deg,#7c2d12,#c2410c,#f59e0b,#c2410c,#7c2d12)",
                 backgroundSize:"200% 100%",
@@ -10757,7 +10757,7 @@ export default function CyberChessPage(){
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:4}}>
                   <span style={{fontSize:14,color:T.dim,fontWeight:700}}>Глубина</span>
-                  <input type="range" min={8} max={22} value={mpvDepth} onChange={e=>sMpvDepth(+e.target.value)} style={{width:80,accentColor:T.purple}}/>
+                  <input type="range" aria-label="Глубина расчёта" min={8} max={22} value={mpvDepth} onChange={e=>sMpvDepth(+e.target.value)} style={{width:80,accentColor:T.purple}}/>
                   <span style={{fontSize:13,fontWeight:900,color:T.purple,minWidth:20}}>{mpvDepth}</span>
                 </div>
                 <button onClick={runMultiPV} style={{padding:"6px 14px",borderRadius:7,border:"none",background:T.purple,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer"}}>{mpvRunning?"Analyzing...":"▶ Analyze"}</button>
@@ -11612,7 +11612,7 @@ ${question.trim()}`;
             {(["q","r","b","n"] as const).map(pt=>{
               const labels:Record<string,string>={q:"Ферзь",r:"Ладья",b:"Слон",n:"Конь"};
               const hot:Record<string,string>={q:"Q",r:"R",b:"B",n:"N"};
-              return <button key={pt} onClick={()=>{exec(promo.from,promo.to,pt);sPromo(null)}} className="cc-focus-ring"
+              return <button key={pt} onClick={()=>{exec(promo.from,promo.to,pt);sPromo(null)}} 
                 style={{
                   display:"flex",flexDirection:"column",alignItems:"center",gap:4,
                   padding:`${SPACE[2]}px ${SPACE[1]}px`,
@@ -12188,7 +12188,7 @@ ${question.trim()}`;
         {ENDGAMES.map((eg,i)=>{
           const gTone:"brand"|"info"=eg.goal==="Win"?"brand":"info";
           return <button key={i} onClick={()=>loadEndgame(eg)}
-            className="cc-focus-ring"
+            
             style={{padding:`${SPACE[3]}px ${SPACE[4]}px`,borderRadius:RADIUS.lg,
               border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",
               textAlign:"left",display:"flex",flexDirection:"column",gap:SPACE[1],
@@ -13634,7 +13634,7 @@ ${question.trim()}`;
           </div>
           <div style={{padding:SPACE[2],borderRadius:RADIUS.md,background:CC.surface1,border:`1px solid ${CC.border}`}}>
             <label style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const,display:"block"}}>Скорость хода</label>
-            <input type="range" min={150} max={800} step={50} value={reelSpeed} onChange={e=>sReelSpeed(+e.target.value)}
+            <input type="range" aria-label="Скорость ролика" min={150} max={800} step={50} value={reelSpeed} onChange={e=>sReelSpeed(+e.target.value)}
               style={{width:"100%",accentColor:CC.brand}}/>
             <div style={{fontSize:12,color:CC.text,marginTop:2}}>{reelSpeed} мс / ход</div>
             <div style={{fontSize:10,color:CC.textDim}}>{reelSpeed<300?"быстро":reelSpeed<500?"средне":"медленно"}</div>
@@ -14428,7 +14428,7 @@ ${question.trim()}`;
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginTop:SPACE[3],marginBottom:SPACE[1]}}>⚡ Очередь премувов</div>
             <label style={{display:"flex",alignItems:"center",gap:SPACE[2],fontSize:12,color:CC.textDim,fontWeight:600}}>
               <span>Лимит: <b style={{color:CC.text}}>{pmLim}</b></span>
-              <input type="range" min={1} max={50} value={pmLim} onChange={e=>sPmLim(+e.target.value)} style={{flex:1,accentColor:CC.brand}}/>
+              <input type="range" aria-label="Предел премувов" min={1} max={50} value={pmLim} onChange={e=>sPmLim(+e.target.value)} style={{flex:1,accentColor:CC.brand}}/>
             </label>
           </div>
           <div>

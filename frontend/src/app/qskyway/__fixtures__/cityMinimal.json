@@ -1,593 +1,593 @@
 {
-  "city": "Астана — центр (бульвар Нуржол)",
-  "bbox": {
-    "minLat": 51.1183717,
-    "maxLat": 51.1356973,
-    "minLon": 71.4104119,
-    "maxLon": 71.4432041
-  },
-  "meters": {
-    "w": 2291,
-    "h": 1915
-  },
-  "grid": {
-    "cols": 8,
-    "rows": 6,
-    "cell": 20,
-    "heights": [
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      40,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      55,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0
+ "city": "Астана — центр (бульвар Нуржол)",
+ "bbox": {
+  "minLat": 51.1183717,
+  "maxLat": 51.1356973,
+  "minLon": 71.4104119,
+  "maxLon": 71.4432041
+ },
+ "meters": {
+  "w": 2291,
+  "h": 1915
+ },
+ "grid": {
+  "cols": 8,
+  "rows": 6,
+  "cell": 20,
+  "heights": [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   40,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   55,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "src": [
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2,
+   2
+  ]
+ },
+ "buildings": [
+  {
+   "h": 5,
+   "hs": 1,
+   "r": [
+    [
+     91.1,
+     1033.4
     ],
-    "src": [
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2,
-      2
-    ]
-  },
-  "buildings": [
-    {
-      "h": 5,
-      "hs": 1,
-      "r": [
-        [
-          91.1,
-          1033.4
-        ],
-        [
-          86.6,
-          1032.4
-        ],
-        [
-          99.3,
-          981
-        ],
-        [
-          130.7,
-          988.6
-        ],
-        [
-          125.5,
-          1009.9
-        ],
-        [
-          121.1,
-          1008.8
-        ],
-        [
-          117.7,
-          1022.3
-        ],
-        [
-          122.2,
-          1023.3
-        ],
-        [
-          132.6,
-          1025.9
-        ],
-        [
-          128.5,
-          1042.6
-        ],
-        [
-          118,
-          1040
-        ],
-        [
-          107.3,
-          1037.4
-        ],
-        [
-          105.9,
-          1043.1
-        ],
-        [
-          89.7,
-          1039.2
-        ],
-        [
-          91.1,
-          1033.4
-        ]
-      ]
-    },
-    {
-      "h": 40,
-      "hs": 1,
-      "r": [
-        [
-          1483.2,
-          1495.7
-        ],
-        [
-          1524.3,
-          1505.1
-        ],
-        [
-          1559.6,
-          1513.3
-        ],
-        [
-          1542.2,
-          1587.9
-        ],
-        [
-          1467.6,
-          1570.7
-        ],
-        [
-          1472.1,
-          1551.4
-        ],
-        [
-          1484.7,
-          1554.3
-        ],
-        [
-          1483.1,
-          1561.2
-        ],
-        [
-          1532,
-          1572.4
-        ],
-        [
-          1543.1,
-          1524.9
-        ],
-        [
-          1493.5,
-          1513.4
-        ],
-        [
-          1491.4,
-          1522.4
-        ],
-        [
-          1477.7,
-          1519.2
-        ],
-        [
-          1483.2,
-          1495.7
-        ]
-      ]
-    }
-  ],
-  "vertiports": [
-    {
-      "c": 1,
-      "r": 1,
-      "x": 20,
-      "y": 20
-    },
-    {
-      "c": 6,
-      "r": 4,
-      "x": 120,
-      "y": 80
-    }
-  ],
-  "dataQuality": {
-    "total": 475,
-    "measured": 0,
-    "derived": 238,
-    "guessed": 237,
-    "measuredPct": 0,
-    "realPct": 50.1,
-    "source": "OpenStreetMap (Overpass, ODbL)",
-    "note": "hs 0=обмерено властями (в этом городе такого источника нет) 1=выведено(тег height из OSM либо levels×3.2+1.6м парапет) 2=угадано(75-й процентиль высот этого же типа зданий в этом же городе, при 3+ известных высотах и только для типов, которые о высоте что-то говорят; иначе дефолт 12м). Тег OSM ставит участник проекта, а не служба обмера, поэтому он выведенный: ему добавляется страховочный просвет. Появление LiDAR/LOD2/3D Tiles поднимет measuredPct и просвет снизит.",
-    "suspect": [
-      {
-        "i": 194,
-        "osm": "way/486561786",
-        "h": 382,
-        "times": 4.66,
-        "why": "towers over the city"
-      }
+    [
+     86.6,
+     1032.4
     ],
-    "substituted": [
-      {
-        "i": 10,
-        "type": "commercial",
-        "from": 12,
-        "n": 17
-      },
-      {
-        "i": 92,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 101,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 102,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 195,
-        "type": "commercial",
-        "from": 12,
-        "n": 17
-      },
-      {
-        "i": 198,
-        "type": "commercial",
-        "from": 12,
-        "n": 17
-      },
-      {
-        "i": 203,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 225,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 237,
-        "type": "government",
-        "from": 12,
-        "n": 4
-      },
-      {
-        "i": 245,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 253,
-        "type": "office",
-        "from": 12,
-        "n": 15
-      },
-      {
-        "i": 328,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 329,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 330,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 332,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 372,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 374,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 387,
-        "type": "government",
-        "from": 12,
-        "n": 4
-      },
-      {
-        "i": 397,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 400,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 401,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 406,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 407,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 410,
-        "type": "office",
-        "from": 12,
-        "n": 15
-      },
-      {
-        "i": 411,
-        "type": "office",
-        "from": 12,
-        "n": 15
-      },
-      {
-        "i": 432,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 433,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 434,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 435,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 461,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 462,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 463,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 464,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 467,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 468,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 469,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 470,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      },
-      {
-        "i": 471,
-        "type": "apartments",
-        "from": 12,
-        "n": 80
-      }
+    [
+     99.3,
+     981
+    ],
+    [
+     130.7,
+     988.6
+    ],
+    [
+     125.5,
+     1009.9
+    ],
+    [
+     121.1,
+     1008.8
+    ],
+    [
+     117.7,
+     1022.3
+    ],
+    [
+     122.2,
+     1023.3
+    ],
+    [
+     132.6,
+     1025.9
+    ],
+    [
+     128.5,
+     1042.6
+    ],
+    [
+     118,
+     1040
+    ],
+    [
+     107.3,
+     1037.4
+    ],
+    [
+     105.9,
+     1043.1
+    ],
+    [
+     89.7,
+     1039.2
+    ],
+    [
+     91.1,
+     1033.4
     ]
+   ]
   },
-  "heightReview": [
-    {
-      "city": "astana",
-      "index": 194,
-      "osm": "way/486561786",
-      "taggedM": 382,
-      "publishedM": 310.8,
-      "publishedSource": "https://en.wikipedia.org/wiki/Abu_Dhabi_Plaza",
-      "verdict": "overstated",
-      "reviewedAt": "2026-08-11",
-      "note": "Абу-Даби Плаза. Тег OSM даёт 382 м при 75 этажах — 5.09 м на этаж, что вдвое выше обычного; статья, на которую ссылается сам объект, публикует 310.8 м. Ошибка в безопасную сторону: завышенное препятствие стоит крюка, тогда как заниженное означало бы пролёт без запаса. Высоту в твине не переписываем — починка принадлежит OSM; здесь зафиксировано, что расхождение проверено и на сколько именно."
-    }
-  ],
-  "nofly": [],
-  "wind": {
-    "fromDeg": 210,
-    "groundMs": 4,
-    "topMs": 26.2,
-    "source": "illustrative",
-    "note": "иллюстративная послойная модель (METAR временно недоступен)"
-  },
-  "airspace": {
-    "available": false,
-    "note": "Сетку потолков высоты регулятор этого города не публикует, поэтому высотного ограничения здесь нет. Это НЕ значит, что города нет правил — см. блок permission рядом.",
-    "noteEn": "This city's regulator publishes no altitude-ceiling grid, so there is no altitude constraint here. That does NOT mean the city has no rules — see the permission block next to this one.",
-    "permission": {
-      "available": true,
-      "authority": "Казаэронавигация / AIP KZ",
-      "source": "AIP Kazakhstan ENR 5.1 — запретная зона UAP28 (круг R=4.5 км, 51°07'32\"N 071°26'46\"E)",
-      "sourceUrl": "https://www.ans.kz/AIP/eAIP/2026-05-14-AIRAC/html/eAIP/UA-ENR-5.1-ru-RU.html",
-      "regime": "Запретная зона UAP28: полёты запрещены от земли до 4800 ft, круглосуточно",
-      "regimeEn": "Prohibited area UAP28: flights are forbidden from the ground up to 4800 ft, around the clock",
-      "kind": "prohibition",
-      "basis": "ingested",
-      "effective": "AIRAC 2026-05-14",
-      "sampled": "2026-07-26",
-      "coveragePct": 100,
-      "uniform": true,
-      "note": "Весь твин лежит внутри опубликованной ЗАПРЕТНОЙ зоны: полёты здесь запрещены, а не разрешены по согласованию. Демонстрация маршрутизации остаётся корректной как расчёт, но реальный полёт по ней недопустим без изменения статуса зоны.",
-      "noteEn": "The entire twin lies inside a published PROHIBITED area: flights here are forbidden, not permitted subject to coordination. The routing demonstration remains valid as a calculation, but an actual flight along it is not admissible unless the status of the area changes.",
-      "provenanceNoteEn": "The value was ingested from the regulator's vector publication.",
-      "provenanceNote": "Значение загружено из векторной публикации регулятора.",
-      "authorityEn": "Kazaeronavigatsia (ANS of Kazakhstan) / AIP KZ"
-    }
-  },
-  "vertiportScores": [
-    {
-      "id": "vp0",
-      "c": 64,
-      "r": 44,
-      "x": 1290,
-      "y": 890,
-      "openRadiusM": 100,
-      "clearanceM": 0,
-      "distNoFlyM": 184,
-      "ceilingM": null,
-      "needsAtcCoordination": false,
-      "suitability": 78,
-      "class": "candidate-pad"
-    },
-    {
-      "id": "vp1",
-      "c": 2,
-      "r": 93,
-      "x": 50,
-      "y": 1870,
-      "openRadiusM": 40,
-      "clearanceM": 0,
-      "distNoFlyM": 1010,
-      "ceilingM": null,
-      "needsAtcCoordination": false,
-      "suitability": 67,
-      "class": "candidate-pad"
-    }
-  ],
-  "_signature": {
-    "alg": "Ed25519",
-    "contentHash": "977286ef2eb34aa4ea0c509fd7b9f13126f81217e84249d0a42c8a713190a9c6",
-    "signature": "FleljDZezFi+H5zslJyqVOXwQ+DwGkQl9uHw6sFSZLNXpq8xUlEk1lBOdDPDZ/CxpgmehEDRMcD+cQM8ZAbgCA==",
-    "publicKey": "MCowBQYDK2VwAyEAFG05yU/tQx4ADppLagZxq2jHHzupPgoRxQehfZUBIMw=",
-    "note": "Ephemeral key (per-instance). Provide QSKYWAY_SIGN_SK for a stable key. Аттестация неизменности двойника (QSign)."
+  {
+   "h": 40,
+   "hs": 1,
+   "r": [
+    [
+     1483.2,
+     1495.7
+    ],
+    [
+     1524.3,
+     1505.1
+    ],
+    [
+     1559.6,
+     1513.3
+    ],
+    [
+     1542.2,
+     1587.9
+    ],
+    [
+     1467.6,
+     1570.7
+    ],
+    [
+     1472.1,
+     1551.4
+    ],
+    [
+     1484.7,
+     1554.3
+    ],
+    [
+     1483.1,
+     1561.2
+    ],
+    [
+     1532,
+     1572.4
+    ],
+    [
+     1543.1,
+     1524.9
+    ],
+    [
+     1493.5,
+     1513.4
+    ],
+    [
+     1491.4,
+     1522.4
+    ],
+    [
+     1477.7,
+     1519.2
+    ],
+    [
+     1483.2,
+     1495.7
+    ]
+   ]
   }
+ ],
+ "vertiports": [
+  {
+   "c": 1,
+   "r": 1,
+   "x": 20,
+   "y": 20
+  },
+  {
+   "c": 6,
+   "r": 4,
+   "x": 120,
+   "y": 80
+  }
+ ],
+ "dataQuality": {
+  "total": 475,
+  "measured": 0,
+  "derived": 238,
+  "guessed": 237,
+  "measuredPct": 0,
+  "realPct": 50.1,
+  "source": "OpenStreetMap (Overpass, ODbL)",
+  "note": "hs 0=обмерено властями (в этом городе такого источника нет) 1=выведено(тег height из OSM либо levels×3.2+1.6м парапет) 2=угадано(75-й процентиль высот этого же типа зданий в этом же городе, при 3+ известных высотах и только для типов, которые о высоте что-то говорят; иначе дефолт 12м). Тег OSM ставит участник проекта, а не служба обмера, поэтому он выведенный: ему добавляется страховочный просвет. Появление LiDAR/LOD2/3D Tiles поднимет measuredPct и просвет снизит.",
+  "suspect": [
+   {
+    "i": 194,
+    "osm": "way/486561786",
+    "h": 382,
+    "times": 4.66,
+    "why": "towers over the city"
+   }
+  ],
+  "substituted": [
+   {
+    "i": 10,
+    "type": "commercial",
+    "from": 12,
+    "n": 17
+   },
+   {
+    "i": 92,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 101,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 102,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 195,
+    "type": "commercial",
+    "from": 12,
+    "n": 17
+   },
+   {
+    "i": 198,
+    "type": "commercial",
+    "from": 12,
+    "n": 17
+   },
+   {
+    "i": 203,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 225,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 237,
+    "type": "government",
+    "from": 12,
+    "n": 4
+   },
+   {
+    "i": 245,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 253,
+    "type": "office",
+    "from": 12,
+    "n": 15
+   },
+   {
+    "i": 328,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 329,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 330,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 332,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 372,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 374,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 387,
+    "type": "government",
+    "from": 12,
+    "n": 4
+   },
+   {
+    "i": 397,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 400,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 401,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 406,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 407,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 410,
+    "type": "office",
+    "from": 12,
+    "n": 15
+   },
+   {
+    "i": 411,
+    "type": "office",
+    "from": 12,
+    "n": 15
+   },
+   {
+    "i": 432,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 433,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 434,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 435,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 461,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 462,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 463,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 464,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 467,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 468,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 469,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 470,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   },
+   {
+    "i": 471,
+    "type": "apartments",
+    "from": 12,
+    "n": 80
+   }
+  ]
+ },
+ "heightReview": [
+  {
+   "city": "astana",
+   "index": 194,
+   "osm": "way/486561786",
+   "taggedM": 382,
+   "publishedM": 310.8,
+   "publishedSource": "https://en.wikipedia.org/wiki/Abu_Dhabi_Plaza",
+   "verdict": "overstated",
+   "reviewedAt": "2026-08-11",
+   "note": "Абу-Даби Плаза. Тег OSM даёт 382 м при 75 этажах — 5.09 м на этаж, что вдвое выше обычного; статья, на которую ссылается сам объект, публикует 310.8 м. Ошибка в безопасную сторону: завышенное препятствие стоит крюка, тогда как заниженное означало бы пролёт без запаса. Высоту в твине не переписываем — починка принадлежит OSM; здесь зафиксировано, что расхождение проверено и на сколько именно."
+  }
+ ],
+ "nofly": [],
+ "wind": {
+  "fromDeg": 210,
+  "groundMs": 4,
+  "topMs": 26.2,
+  "source": "illustrative",
+  "note": "иллюстративная послойная модель (METAR временно недоступен)"
+ },
+ "airspace": {
+  "available": false,
+  "note": "Сетку потолков высоты регулятор этого города не публикует, поэтому высотного ограничения здесь нет. Это НЕ значит, что города нет правил — см. блок permission рядом.",
+  "noteEn": "This city's regulator publishes no altitude-ceiling grid, so there is no altitude constraint here. That does NOT mean the city has no rules — see the permission block next to this one.",
+  "permission": {
+   "available": true,
+   "authority": "Казаэронавигация / AIP KZ",
+   "authorityEn": "Kazaeronavigatsia (ANS of Kazakhstan) / AIP KZ",
+   "source": "AIP Kazakhstan ENR 5.1 — запретная зона UAP28 (круг R=4.5 км, 51°07'32\"N 071°26'46\"E)",
+   "sourceUrl": "https://www.ans.kz/AIP/eAIP/2026-05-14-AIRAC/html/eAIP/UA-ENR-5.1-ru-RU.html",
+   "regime": "Запретная зона UAP28: полёты запрещены от земли до 4800 ft, круглосуточно",
+   "regimeEn": "Prohibited area UAP28: flights are forbidden from the ground up to 4800 ft, around the clock",
+   "kind": "prohibition",
+   "basis": "ingested",
+   "effective": "AIRAC 2026-05-14",
+   "sampled": "2026-07-26",
+   "coveragePct": 100,
+   "uniform": true,
+   "note": "Весь твин лежит внутри опубликованной ЗАПРЕТНОЙ зоны: полёты здесь запрещены, а не разрешены по согласованию. Демонстрация маршрутизации остаётся корректной как расчёт, но реальный полёт по ней недопустим без изменения статуса зоны.",
+   "noteEn": "The entire twin lies inside a published PROHIBITED area: flights here are forbidden, not permitted subject to coordination. The routing demonstration remains valid as a calculation, but an actual flight along it is not admissible unless the status of the area changes.",
+   "provenanceNoteEn": "The value was ingested from the regulator's vector publication.",
+   "provenanceNote": "Значение загружено из векторной публикации регулятора."
+  }
+ },
+ "vertiportScores": [
+  {
+   "id": "vp0",
+   "c": 64,
+   "r": 44,
+   "x": 1290,
+   "y": 890,
+   "openRadiusM": 100,
+   "clearanceM": 0,
+   "distNoFlyM": 184,
+   "ceilingM": null,
+   "needsAtcCoordination": false,
+   "suitability": 78,
+   "class": "candidate-pad"
+  },
+  {
+   "id": "vp1",
+   "c": 2,
+   "r": 93,
+   "x": 50,
+   "y": 1870,
+   "openRadiusM": 40,
+   "clearanceM": 0,
+   "distNoFlyM": 1010,
+   "ceilingM": null,
+   "needsAtcCoordination": false,
+   "suitability": 67,
+   "class": "candidate-pad"
+  }
+ ],
+ "_signature": {
+  "alg": "Ed25519",
+  "contentHash": "977286ef2eb34aa4ea0c509fd7b9f13126f81217e84249d0a42c8a713190a9c6",
+  "signature": "FleljDZezFi+H5zslJyqVOXwQ+DwGkQl9uHw6sFSZLNXpq8xUlEk1lBOdDPDZ/CxpgmehEDRMcD+cQM8ZAbgCA==",
+  "publicKey": "MCowBQYDK2VwAyEAFG05yU/tQx4ADppLagZxq2jHHzupPgoRxQehfZUBIMw=",
+  "note": "Ephemeral key (per-instance). Provide QSKYWAY_SIGN_SK for a stable key. Аттестация неизменности двойника (QSign)."
+ }
 }

@@ -21,6 +21,7 @@ import { payboxPaymentProvider } from "../lib/payment/payboxProvider";
 import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
 import type { TierId, BillingPeriod } from "../data/pricing";
 import { periodForReference } from "../lib/payment/billingPeriod";
+import { местИзКассы, модулиИзКассы } from "../lib/payment/customData";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
 import { upsertAppSubscription } from "../lib/appEntitlements";
@@ -76,19 +77,6 @@ export function tierForReference(ref: string): TierId {
 
 
 // Liveness probe — PayBox шлёт только POST; GET для ручной проверки URL в ЛК.
-/**
- * Число мест из данных кассы. Значение приходит СНАРУЖИ, поэтому проверяем
- * его как чужое: не число, дробь, ноль, минус, «5; DROP» — всё это одно
- * место, а не NaN и не отрицательный предел. `Number(x) || 1` тут не годится:
- * он молча превращает "3.9" в 3.9 и пропускает дробь дальше в запись.
- */
-function местИзКассы(raw: unknown): number {
-  // Number.parseInt здесь НЕ годится: "3.9" он усечёт до 3, то есть примет
-  // дробь молча, вопреки обещанию комментария выше. Требуем целое.
-  const n = Number(String(raw ?? "").trim());
-  if (!Number.isInteger(n) || n < 1) return 1;
-  return Math.min(1000, n);
-}
 
 payboxWebhookRouter.get("/webhook", (_req: Request, res: Response) => {
   res.json({
@@ -138,6 +126,7 @@ payboxWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   const reference = referenceFromOrderId(orderId);
   const module = raw.pg_param_module || undefined;
   const seats = местИзКассы(raw.pg_param_seats);
+  const modules = модулиИзКассы(raw.pg_param_modules, module);
 
   try {
     if (refunded || failed) {
@@ -188,7 +177,7 @@ payboxWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         tierId,
         period,
         seats,
-        modules: module ? [module] : [],
+        modules,
         source: "paybox",
         providerPaymentId: paymentId,
       });

@@ -10,6 +10,7 @@ import {
   type TierId, type BillingPeriod, type CurrencyCode,
 } from "../data/pricing";
 import { provisionSubscription, countSubscriptions, findSubscriptionByPaymentId } from "./provisioning";
+import { модулиДляКассы } from "../lib/payment/customData";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { rateLimit } from "../lib/rateLimit";
 
@@ -312,13 +313,34 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
     // решён пункт 8 записки основателя — не копировать.
     const местаДляКассы: Record<string, string> = seats > 1 ? { seats: String(seats) } : {};
 
+    // СПИСОК модулей, а не первый из них.
+    //
+    // Замер 04.09.2026: в кассу уезжал `(body.modules ?? [])[0]` и только для
+    // Lite, а цена считается по ВСЕМ выбранным (сторож
+    // liteIncludesOneModuleInThePrice закрепляет, что модуль сверх слота
+    // прибавляет к сумме). На paybox и paypal, где сумма действительно
+    // списывается, это уже не расхождение учёта, а ОПЛАЧЕНО И НЕ ВЫДАНО:
+    // planGate пускает к модулю Lite только если тот записан выбранным.
+    //
+    // ⚠ Та же граница, что у мест: только эти две кассы. У Lemon Squeezy и
+    // Gumroad наша сумма до кассы не доезжает, там платят цену товара —
+    // запись одного модуля там соответствует оплате.
+    //
+    // ⚠ И отдельно: у medium докупленный модуль вне `includedIn` не
+    // откроется, даже будучи записанным — `isModuleEntitled` спрашивает
+    // выбранные модули ТОЛЬКО у lite. Это вопрос о продукте, не правка;
+    // запись всё равно обязана отражать оплаченное.
+    const выбранныеМодули = модулиДляКассы(body.modules);
+    const модулиДляЗаписи: Record<string, string> =
+      выбранныеМодули.length > 0 ? { modules: выбранныеМодули.join(",") } : {};
+
     if (body.currency === "KZT" && isPayboxConfigured()) {
       try {
         const kztCents = Math.round(totalCents * CURRENCY_RATES.KZT.rate);
         const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
         const intent = await payboxPaymentProvider.createIntent({
           reference, amountCents: kztCents, currency: "KZT", description, email: body.email ?? null,
-          customData: { ...(liteModule ? { module: liteModule } : {}), ...местаДляКассы },
+          customData: { ...(liteModule ? { module: liteModule } : {}), ...местаДляКассы, ...модулиДляЗаписи },
           // Модуль для адреса возврата: страница после оплаты обязана
           // назвать то, за что заплатили. Только при ОДНОМ купленном
           // модуле — на наборе называть один было бы враньём.
@@ -345,7 +367,7 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
         const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
         const intent = await paypalPaymentProvider.createIntent({
           reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
-          customData: { ...(liteModule ? { module: liteModule } : {}), ...местаДляКассы },
+          customData: { ...(liteModule ? { module: liteModule } : {}), ...местаДляКассы, ...модулиДляЗаписи },
           // Модуль для адреса возврата: страница после оплаты обязана
           // назвать то, за что заплатили. Только при ОДНОМ купленном
           // модуле — на наборе называть один было бы враньём.

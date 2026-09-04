@@ -72,6 +72,7 @@
   "app/qcoreai/memory/page.tsx": 2,
   "app/qcoreai/multi/page.tsx": 96,
   "app/qcoreai/notebook/page.tsx": 7,
+  "app/qcoreai/optimize/page.tsx": 2,
   "app/qcoreai/orgs/page.tsx": 3,
   "app/qcoreai/pipeline/page.tsx": 7,
   "app/qcoreai/schedule/page.tsx": 2,

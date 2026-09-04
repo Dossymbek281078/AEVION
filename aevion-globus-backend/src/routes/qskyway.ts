@@ -2138,7 +2138,14 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
     permission: PERMISSION[resolved.id]
       ? {
           authority: PERMISSION[resolved.id].authority,
+          authorityEn: PERMISSION[resolved.id].authorityEn,
           regime: PERMISSION[resolved.id].regime,
+          // Артефакт путешествует ОДИН: тот, кто получил обоснование,
+          // читает его без нашей страницы и без нашего словаря. Английский
+          // текст режима в данных ЕСТЬ (qskyway.permission.*.ts), но документ
+          // его терял — и покупатель, читающий по-английски, получал
+          // единственную русскую строку в остальном английском документе.
+          regimeEn: PERMISSION[resolved.id].regimeEn,
           // Part of the SIGNED payload: a filing that says "permission regime"
           // where the rule is a ban is the worst possible place to lose this.
           kind: PERMISSION[resolved.id].kind,

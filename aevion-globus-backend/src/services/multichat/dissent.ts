@@ -74,12 +74,12 @@ const UNIT_ALIASES: Array<[RegExp, string]> = [
   [/^(рубл|руб|rub)/i, "rub"],
   [/^(процент|proc|pct)/i, "pct"],
   [/^(недел|week)/i, "week"],
-  [/^(месяц|мес|month)/i, "month"],
+  [/^(месяц|мес(?![а-яё])|month)/i, "month"],
   [/^(дн|день|дня|дней|сут|day)/i, "day"],
   [/^(час|hour)/i, "hour"],
   [/^(год|лет|года|year)/i, "year"],
   [/^(человек|людей|сотрудник|people|person)/i, "people"],
-  [/^(штук|шт|piece|item)/i, "piece"],
+  [/^(штук|шт(?![а-яё])|piece|item)/i, "piece"],
 ];
 
 export function normalizeUnit(word: string | null | undefined): string | null {

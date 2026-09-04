@@ -28,14 +28,21 @@ process.env.AFFILIATE_FILE = join(
 delete process.env.NOTIFY_EMAIL; // внутреннее уведомление не настроено — не мешает замеру
 
 const { исход } = vi.hoisted(() => ({
-  исход: { ok: false as boolean, error: "domain is not verified" as string | undefined },
+  исход: {
+    ok: false as boolean,
+    error: "domain is not verified" as string | undefined,
+    вызовов: 0,
+  },
 }));
 
 vi.mock("../src/routes/provisioning", async (importOriginal) => {
   const orig = await importOriginal<typeof import("../src/routes/provisioning")>();
   return {
     ...orig,
-    sendEmail: async () => ({ ok: исход.ok, mode: "real" as const, error: исход.error }),
+    sendEmail: async () => {
+      исход.вызовов += 1;
+      return { ok: исход.ok, mode: "real" as const, error: исход.error };
+    },
   };
 });
 
@@ -56,6 +63,7 @@ beforeEach(() => {
   ошибки = [];
   исход.ok = false;
   исход.error = "domain is not verified";
+  исход.вызовов = 0;
   vi.spyOn(console, "error").mockImplementation((...a: unknown[]) => {
     ошибки.push(a.map((x) => String(x)).join(" "));
   });
@@ -115,9 +123,13 @@ describe("отказ отправки виден в месте вызова", ()
       .send({ ...ЗАЯВКА, email: "other@example.com" });
 
     expect(r.status).toBe(201);
-    // Даём тот же срок, что и в первом случае: если бы строка появлялась всегда,
-    // этот контроль её застал бы.
-    await new Promise((res) => setTimeout(res, 300));
+
+    // Ждём ПОЛОЖИТЕЛЬНОГО признака, а не времени: отправка точно состоялась.
+    // Пауза на 300 мс делала вывод из тишины — под нагрузкой строка успела бы
+    // появиться позже, и контроль сказал бы «чисто», не дождавшись. Это не
+    // мигание, а ложное зелёное: тест проходит по неверной причине.
+    await vi.waitFor(() => expect(исход.вызовов).toBeGreaterThan(0), { timeout: 3000 });
+
     expect(ошибки.filter((s) => s.includes("письмо НЕ отправлено"))).toHaveLength(0);
   });
 });

@@ -109,7 +109,11 @@ export default function ChainReceiptPage() {
   };
 
   return (
-    <main lang="ru" style={{ maxWidth: 820, margin: "0 auto", padding: "32px 20px 64px" }}>
+    /* lang НЕ объявляем. Весь текст страницы приходит из словаря, значит
+       язык выбирает посетитель, а не мы. Сторож declaredLangRuPages поймал
+       первую редакцию: пометка ru на странице без русских литералов врёт
+       ровно так же, как её отсутствие на русской. */
+    <main style={{ maxWidth: 820, margin: "0 auto", padding: "32px 20px 64px" }}>
       <h1 style={{ fontSize: 28, fontWeight: 900, margin: "0 0 8px" }}>{t("chain.title")}</h1>
       <p style={{ color: "#5a6472", margin: "0 0 24px", maxWidth: "42em" }}>{t("chain.lead")}</p>
 

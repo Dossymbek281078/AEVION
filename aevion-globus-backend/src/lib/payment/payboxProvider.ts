@@ -62,6 +62,23 @@ export function isPayboxConfigured(): boolean {
   return Boolean(process.env.PAYBOX_MERCHANT_ID?.trim() && process.env.PAYBOX_SECRET?.trim());
 }
 
+/**
+ * Задан ли секрет, которым PayBox подписывает вебхук.
+ *
+ * Вопрос ДРУГОЙ, чем `isPayboxConfigured`, и потому у него своё имя: касса
+ * готова принимать деньги, когда есть и продавец, и секрет; а выдать доступ
+ * после оплаты мы сможем, только если умеем проверить подпись. Настройка
+ * бывает частичной, и тогда честные ответы на эти два вопроса расходятся.
+ *
+ * Живёт здесь, а не у вызывающего: переменную читает модуль-владелец, иначе
+ * одно утверждение о мире расползается по репозиторию вторым написанием и
+ * расходится при первой же правке одного из них. Ровно это стережёт
+ * providerReadinessNotRecomputed.guard — и поймал меня.
+ */
+export function isPayboxWebhookSecretSet(): boolean {
+  return Boolean(process.env.PAYBOX_SECRET?.trim());
+}
+
 function genSalt(): string {
   return randomBytes(8).toString("hex");
 }

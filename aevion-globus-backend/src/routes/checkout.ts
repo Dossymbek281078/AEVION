@@ -2,7 +2,7 @@ import { Router } from "express";
 import { gumroadSellable } from "../lib/payment/gumroadProvider";
 import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
 import { lemonSqueezyPaymentProvider } from "../lib/payment/lemonSqueezyProvider";
-import { payboxPaymentProvider, isPayboxConfigured } from "../lib/payment/payboxProvider";
+import { payboxPaymentProvider, isPayboxConfigured, isPayboxWebhookSecretSet } from "../lib/payment/payboxProvider";
 import { paypalPaymentProvider, isPaypalConfigured } from "../lib/payment/paypalProvider";
 import { resolveLemonSqueezyVariant, lemonSqueezySellable } from "../data/lemonSqueezyVariants";
 import {
@@ -424,7 +424,7 @@ checkoutRouter.get("/healthz", (_req, res) => {
       // снаружи «настроено» и «выдаст» выглядели одинаково.
       paybox: {
         configured: isPayboxConfigured(),
-        webhookConfigured: Boolean(process.env.PAYBOX_SECRET?.trim()),
+        webhookConfigured: isPayboxWebhookSecretSet(),
         // 🔴 ЛОВУШКА ЗАПУСКА, сделанная видимой 04.09.2026.
         //
         // Тестовый режим у PayBox стоит ПО УМОЛЧАНИЮ: провайдер шлёт

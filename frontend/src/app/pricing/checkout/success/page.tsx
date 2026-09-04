@@ -9,6 +9,7 @@ import { useI18n } from "@/lib/i18n";
 import { apiUrl } from "@/lib/apiBase";
 import PurchaseReturnTracker from "@/components/PurchaseReturnTracker";
 import { естьСледОплаты } from "@/lib/paymentTrace";
+import { изСправочника } from "@/lib/mapLookup";
 
 const APP_LINKS: Record<string, { name: string; href: string }> = {
   qcoreai:    { name: "QCoreAI", href: "/qcoreai" },
@@ -80,7 +81,14 @@ function SuccessInner() {
     (sp.get("gumroad") || saleId ? "gumroad" : null);
   // Название сервиса пишем, только если знаем его наверняка. Не знаем —
   // строка без названия: выдуманное имя хуже отсутствующего.
-  const processor = provider ? (PROCESSOR_LABEL[provider] ?? null) : null;
+  // Спрашиваем СВОЙ ключ, а не просто индексируем: `provider` приходит из
+  // адреса, а у обычного объекта имена `constructor` и `toString` разрешаются
+  // в наследство. Замер рендером 04.09.2026 на `?provider=constructor`:
+  // человек сразу после оплаты видел «paid via function Object() { [native
+  // code] }» — и то же самое ещё дважды, в строке про письмо и про управление
+  // подпиской. Список касс закрытый, поэтому проверка своего ключа тут точнее,
+  // чем объект без прототипа: незнакомое имя обязано давать пустоту.
+  const processor = изСправочника(PROCESSOR_LABEL, provider) ?? null;
   const stub = sp.get("stub") === "true";
   const tier = sp.get("tier") ?? sp.get("tierId");
   const period = sp.get("period");

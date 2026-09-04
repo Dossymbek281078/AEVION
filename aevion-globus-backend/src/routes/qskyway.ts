@@ -2345,10 +2345,10 @@ qskywayRouter.get("/verify", (req: Request, res: Response) => {
     // preview, seed_unset), то есть терялась она ровно там, где важна.
     ephemeral: SIGN_EPHEMERAL,
     keyNote: SIGN_EPHEMERAL
-      ? "Ключ подписи временный: сгенерирован при старте процесса. Проверка подтверждает, что двойник не менялся В ЭТОМ процессе, но не связывает его с прошлыми запусками. Постоянный ключ задаётся переменной QSKYWAY_SIGN_SK."
+   ?"Ключ подписи временный: сгенерирован при старте процесса. Проверка подтверждает, что двойник не менялся В ЭТОМ процессе, но не связывает его с прошлыми запусками."
       : "Ключ подписи постоянный: проверка связывает двойник с прежними запусками.",
     keyNoteEn: SIGN_EPHEMERAL
-      ? "The signing key is ephemeral: generated at process start. Verification confirms the twin has not changed WITHIN this process, but does not tie it to earlier runs. Set QSKYWAY_SIGN_SK for a stable key."
+   ?"The signing key is ephemeral: generated at process start. Verification confirms the twin has not changed WITHIN this process, but does not tie it to earlier runs."
       : "The signing key is stable: verification ties the twin to earlier runs.",
     twin: { valid: twinValid, contentHash: sig.contentHash },
     airspace,

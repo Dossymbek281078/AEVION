@@ -1,4 +1,5 @@
-import { describe, test, expect } from "vitest";
+import { describe, test, expect, vi, afterAll } from "vitest";
+import crypto from "node:crypto";
 import express from "express";
 import request from "supertest";
 import { qskywayRouter } from "../src/routes/qskyway";
@@ -91,5 +92,51 @@ describe("тексты для посетителя не называют наш�
     // Контроль охвата: ноль строк означал бы, что сторож ослеп, а не что чисто.
     expect(scanned, "строк не собрано вовсе — сторож ослеп").toBeGreaterThan(20);
     expect(bad, "имя переменной окружения в тексте для посетителя:\n" + bad.join("\n")).toEqual([]);
+  });
+});
+
+/**
+ * ВТОРАЯ ПОЛОВИНА ОХВАТА, и она важнее первой.
+ *
+ * Пояснение о ключе имеет ДВЕ ветки: «ключ одноразовый» и «ключ постоянный».
+ * В тесте переменная не задана, значит проверяется только первая — а посетитель
+ * прода видит ВТОРУЮ (`ephemeral: false`). Сторож, знающий одну ветку, зелен и
+ * слеп ровно там, где смотрит человек.
+ *
+ * Ключ генерируется здесь же, одноразовый, никуда не печатается и живёт только
+ * в памяти процесса теста. Модуль читает переменную при загрузке, поэтому
+ * нужен `resetModules` и динамический импорт: присваивание после обычного
+ * импорта опоздало бы.
+ */
+describe("тексты для посетителя: ветка ПОСТОЯННОГО ключа", () => {
+  const saved = process.env.QSKYWAY_SIGN_SK;
+  afterAll(() => {
+    if (saved === undefined) delete process.env.QSKYWAY_SIGN_SK;
+    else process.env.QSKYWAY_SIGN_SK = saved;
+    vi.resetModules();
+  });
+
+  test("постоянный ключ: имени переменной в ответе нет", async () => {
+    process.env.QSKYWAY_SIGN_SK = crypto
+      .generateKeyPairSync("ed25519")
+      .privateKey.export({ type: "pkcs8", format: "der" })
+      .toString("base64");
+    vi.resetModules();
+
+    const mod = await import("../src/routes/qskyway");
+    const a = express();
+    a.use(express.json());
+    a.use("/api/qskyway", mod.qskywayRouter);
+
+    const res = await request(a).get("/api/qskyway/verify").query({ city: "astana" });
+    expect(res.status).toBe(200);
+
+    // Контроль: мы действительно в ДРУГОЙ ветке, иначе проверка повторяет первую.
+    expect(res.body?.ephemeral, "ключ обязан быть постоянным — иначе ветка не та").toBe(false);
+
+    const all = strings(res.body);
+    expect(all.length, "строк не собрано — сторож ослеп").toBeGreaterThan(5);
+    const bad = all.filter((x) => ENVISH.test(x)).map((x) => x.slice(0, 90));
+    expect(bad, "имя переменной в ветке постоянного ключа:\n" + bad.join("\n")).toEqual([]);
   });
 });

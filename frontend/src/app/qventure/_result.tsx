@@ -266,7 +266,7 @@ export function FactorBreakdown({ factors }: { factors: ScoreFactor[] }) {
   return (
     <div>
       <div style={{ fontSize: 12, fontWeight: 700, color: "var(--ink, #17181a)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>
-        О самой компании · {100 - sectorWeight}% of the score
+        О самой компании · {100 - sectorWeight}% оценки
       </div>
       {company.map((f) => <FactorBar key={f.key} f={f} />)}
 
@@ -279,9 +279,9 @@ export function FactorBreakdown({ factors }: { factors: ScoreFactor[] }) {
           fontSize: 12.5, fontWeight: 600, color: "var(--ink-soft, #45474c)", textAlign: "left",
         }}
       >
-        {showSector ? "▾" : "▸"} Sector context · {sectorWeight}% of the score ·{" "}
+        {showSector ? "▾" : "▸"} Контекст отрасли · {sectorWeight}% оценки ·{" "}
         <span style={{ fontWeight: 400 }}>
-          {sector.length} factors identical for every company in this sector
+          {sector.length} факторов, одинаковых для каждой company in this sector
         </span>
       </button>
       {showSector && (
@@ -315,6 +315,13 @@ export function LensCard({ lens }: { lens: Lens }) {
   );
 }
 
+/** Уверенность — машинное значение из движка; человеку показываем словом. */
+const UVERENNOST: Record<"high" | "medium" | "low", string> = {
+  high: "высокая",
+  medium: "средняя",
+  low: "низкая",
+};
+
 export function StrategyPanel({ s }: { s: Strategy }) {
   const r = s.returns;
   const cell = (label: string, value: string, sub?: string) => (
@@ -345,11 +352,11 @@ export function StrategyPanel({ s }: { s: Strategy }) {
         </div>
       )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, marginBottom: 14, opacity: isPass ? 0.62 : 1 }}>
-        {cell(isPass ? "Чек (ориентировочно)" : "Лид-чек", usd(s.ticketUsd.target), `range ${usd(s.ticketUsd.min)}–${usd(s.ticketUsd.max)}`)}
-        {cell("Целевая доля", s.ownershipTargetPct + "%", `${s.conviction} conviction`)}
+        {cell(isPass ? "Чек (ориентировочно)" : "Лид-чек", usd(s.ticketUsd.target), `диапазон ${usd(s.ticketUsd.min)}–${usd(s.ticketUsd.max)}`)}
+        {cell("Целевая доля", s.ownershipTargetPct + "%", `уверенность: ${UVERENNOST[s.conviction]}`)}
         {cell("Оценка до раунда", mm(s.valuationBandUsd.base), `${mm(s.valuationBandUsd.low)}–${mm(s.valuationBandUsd.high)}`)}
-        {cell("Ожидаемая доходность", r.expectedMoic + "x", `base ${r.baseMoic}x · ${Math.round(r.lossProbability * 100)}% loss rate`)}
-        {cell("Целевой IRR", r.targetIrrPct + "%", `${r.horizonYears}yr horizon`)}
+        {cell("Ожидаемая доходность", r.expectedMoic + "x", `база ${r.baseMoic}x · вероятность потери ${Math.round(r.lossProbability * 100)}%`)}
+        {cell("Целевой IRR", r.targetIrrPct + "%", `горизонт ${r.horizonYears} лет`)}
       </div>
       <div style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink, #17181a)", marginBottom: 6 }}>График вложений</div>

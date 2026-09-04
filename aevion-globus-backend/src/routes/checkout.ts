@@ -174,6 +174,57 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
     });
     const totalUsd = quote.total;
 
+    // ЧТО СПИШУТ, ЕСЛИ КАССА НЕ ЗНАЕТ НАШЕЙ СУММЫ.
+    //
+    // Замер 04.09.2026 чтением кода. Из четырёх касс нашу сумму получают и
+    // списывают только две: paybox (payboxProvider.ts:113) и paypal
+    // (paypalProvider.ts:108). Lemon Squeezy и Gumroad её лишь возвращают
+    // обратно в объекте намерения и списывают ЦЕНУ СВОЕГО ТОВАРА:
+    //   • у LS в теле запроса нет поля цены вовсе (тело собирается в
+    //     lemonSqueezyProvider.ts:139-165), вариант выбирается по ссылке;
+    //   • у Gumroad адрес — это `l/<permalink>` без суммы
+    //     (gumroadProvider.ts:84), товар тоже выбирается по ссылке (:58).
+    //
+    // Пока покупка обычная, расхождения нет: цена товара и есть цена тарифа.
+    // Оно появляется, когда наша сумма ОТЛИЧАЕТСЯ от базовой цены тарифа —
+    // добавочные места, добавочные модули, промокод, скидка за срок. И оно
+    // несимметрично по цене ошибки:
+    //   места/модули — страница показала больше, спишут меньше: теряем мы;
+    //   промокод     — страница показала меньше, спишут больше: ПЕРЕПЛАЧИВАЕТ
+    //                  ПОКУПАТЕЛЬ, которому мы сами назвали цену.
+    //
+    // Поведение здесь НЕ меняется: списывать правильную сумму через LS —
+    // это либо custom_price на стороне магазина, либо отдельные варианты,
+    // и это решение основателя, а не моё. Меняется одно: расхождение
+    // перестаёт быть невидимым. Ровно та же развилка, что у пробного
+    // периода ниже.
+    //
+    // Родственное: комментарий на строках выше про 13.08.2026 — тогда
+    // свели РАСЧЁТ в один источник, потому что «витрина показывала одну
+    // сумму, а списывали другую». На этих двух путях класс пережил ту
+    // починку: считаем мы теперь одинаково, а до кассы сумма не доезжает.
+    const базоваяЦенаCents = Math.round(
+      buildQuote({ tierId: tier.id, modules: [], seats: 1, period, currency: "USD" }).total * 100
+    );
+    function предупредитьЕслиСуммаНеДоедет(провайдер: string): void {
+      if (totalCents === базоваяЦенаCents) return;
+      console.warn(
+        `[checkout/session] сумма не доедет до кассы: провайдер=${провайдер} ` +
+          `показано=${totalCents} спишут≈${базоваяЦенаCents} tier=${tier.id} period=${period} seats=${seats}`
+      );
+      capture(new Error("checkout_amount_not_sent_to_provider"), {
+        route: "checkout/session",
+        provider: провайдер,
+        shownCents: totalCents,
+        providerPriceCents: базоваяЦенаCents,
+        tier: tier.id,
+        period,
+        seats,
+        hasPromo: Boolean(body.promoCode),
+        moduleCount: (body.modules ?? []).length,
+      });
+    }
+
     const trialDays = body.trial && (tier.id === "lite" || tier.id === "medium" || tier.id === "full") ? 14 : 0;
     const totalCents = Math.round(totalUsd * 100);
 
@@ -320,6 +371,7 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
         // Lite = 1 продукт на выбор: пробрасываем выбранный модуль в custom_data,
         // чтобы вебхук провижинил подписку именно на него.
         const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
+        предупредитьЕслиСуммаНеДоедет("lemonsqueezy");
         const intent = await lemonSqueezyPaymentProvider.createIntent({
           reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
           customData: liteModule ? { module: liteModule } : undefined,
@@ -338,6 +390,7 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
 
     // 2) Gumroad — fallback (one-time продукты / пока LS не настроен).
     if (gumroadPermalinkConfigured(reference)) {
+      предупредитьЕслиСуммаНеДоедет("gumroad");
       const intent = await gumroadPaymentProvider.createIntent({
         reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
       });

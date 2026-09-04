@@ -20,7 +20,22 @@ import { bezKommentariev } from "./bezKommentariev";
  * правило контура (globals.css) работает и поверх строчных стилей.
  */
 
-const КОД = () => bezKommentariev(readFileSync(join(__dirname, "..", "page.tsx"), "utf8"));
+import { readdirSync, statSync } from "node:fs";
+
+const КОРЕНЬ = join(__dirname, "..");
+
+/** Все исходники модуля, а не один файл: класс живёт и в общих компонентах. */
+function исходники(каталог: string, найдено: string[] = []): string[] {
+  for (const имя of readdirSync(каталог)) {
+    if (имя === "__tests__" || имя === "node_modules") continue;
+    const п = join(каталог, имя);
+    if (statSync(п).isDirectory()) исходники(п, найдено);
+    else if (/\.tsx?$/.test(имя)) найдено.push(п);
+  }
+  return найдено;
+}
+
+const КОД = () => bezKommentariev(readFileSync(join(КОРЕНЬ, "page.tsx"), "utf8"));
 
 describe("кольцо фокуса", () => {
   it("кнопки со своей тенью не глушат фокус классом", () => {
@@ -48,6 +63,33 @@ describe("кольцо фокуса", () => {
       }
     }
     expect(плохие).toEqual([]);
+  });
+
+  it("по ВСЕМУ модулю, а не только в page.tsx", () => {
+    // 04.09.2026: page.tsx был чист, а два места жили в общих компонентах
+    // (ui.tsx: кнопка Btn и вкладка) — то есть в КАЖДОЙ кнопке модуля сразу.
+    const файлы = исходники(КОРЕНЬ);
+    expect(файлы.length).toBeGreaterThan(100); // контроль охвата
+    const плохие: string[] = [];
+    for (const ф of файлы) {
+      const код = bezKommentariev(readFileSync(ф, "utf8"));
+      for (const имя of ["button", "div"]) {
+        for (const кусок of код.split("<" + имя).slice(1)) {
+          let глубина = 0, конец = -1;
+          for (let i = 0; i < кусок.length; i++) {
+            const c = кусок[i];
+            if (c === "{") глубина++;
+            else if (c === "}") глубина--;
+            else if (c === ">" && глубина === 0) { конец = i; break; }
+          }
+          const тег = конец > 0 ? кусок.slice(0, конец) : кусок;
+          if (тег.includes("cc-focus-ring") && тег.includes("boxShadow")) {
+            плохие.push(ф.slice(КОРЕНЬ.length + 1));
+          }
+        }
+      }
+    }
+    expect([...new Set(плохие)]).toEqual([]);
   });
 
   it("контроль прибора: разбор тегов НАХОДИТ сломанный случай", () => {

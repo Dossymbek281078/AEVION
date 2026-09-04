@@ -155,8 +155,21 @@ const TIER_LABELS: Record<CanonicalTier, string> = {
   enterprise: "Enterprise",
 };
 
+/**
+ * Подпись тарифа. Спрашиваем СВОЙ ключ, а не индексируем напрямую.
+ *
+ * Тип обещает `CanonicalTier`, но значение приезжает из ответа сервера и из
+ * адреса, а типы во время исполнения не проверяются. У обычного объекта имя
+ * `constructor` разрешается в наследство и даёт ФУНКЦИЮ, причём истинную —
+ * поэтому страховка `?? t` не срабатывает, и на экран уходит
+ * «function Object() { [native code] }». Ровно это 04.09.2026 показывалось
+ * покупателю на экране после оплаты, в трёх местах сразу.
+ *
+ * Вероятность здесь ниже, чем там: сюда тарифы кладёт наш же сервер. Но
+ * правка стоит одной строки, а класс за сутки нашёлся трижды.
+ */
 export function tierLabel(t: CanonicalTier): string {
-  return TIER_LABELS[t] ?? t;
+  return Object.prototype.hasOwnProperty.call(TIER_LABELS, t) ? TIER_LABELS[t] : String(t);
 }
 
 /** Pretty tier list for display, e.g. ["full"] → "Full" (free is dropped). */

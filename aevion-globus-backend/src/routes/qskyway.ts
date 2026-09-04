@@ -1574,6 +1574,17 @@ qskywayRouter.get("/city", (req: Request, res: Response) => {
       note: windSourceOf(id) === "metar"
         ? "у земли — реальный METAR ближайшего аэропорта; рост по высоте — иллюстративная модель (METAR не содержит данных о ветре на высоте)"
         : "иллюстративная послойная модель (METAR временно недоступен)",
+        // Английская половина по соглашению модуля (X / XEn), как у scope,
+        // rule и keyNote. Заметка объясняет, что число НА ВЫСОТЕ - модель:
+        // METAR наблюдается у поверхности. Пока она была только по-русски,
+        // оговорку видел лишь тот, кто читает наш API по-русски.
+        //
+        // Казахской половины НЕТ намеренно: выдумывать формулировку на языке,
+        // которого не знаешь, - это то самое заявление сильнее продукта.
+        // Лучше названный пробел, чем правдоподобный перевод.
+        noteEn: windSourceOf(id) === "metar"
+          ? "Surface wind is a real METAR from the nearest airport; the increase with altitude is an illustrative model - METAR carries no winds-aloft data"
+          : "Illustrative wind model (METAR unavailable)",
     },
     airspace: airspaceBlock(id, city),
     vertiportScores: suitability(id, city),

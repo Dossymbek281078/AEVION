@@ -40,6 +40,11 @@ jobs:
         run: npm run check:tests
       - name: Scripts type check (build covers src only)
         run: npm run check:scripts
+      # sdk/ — восемь клиентских библиотек, каждая со своим package.json и
+      # полем "types". Публиковали обещание типов, не проверяя его: каталог
+      # не входил ни в один конфиг репозитория.
+      - name: SDK type check (build covers src only)
+        run: npm run check:sdk
       - run: npm test
       # Сторожа модулей — чистый Node без зависимостей, поэтому шаг живёт здесь,
       # а не отдельной работой (working-directory возвращаем в корень репозитория).

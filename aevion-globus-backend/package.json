@@ -65,6 +65,7 @@
     "test:watch": "vitest",
     "check:scripts": "tsc --noEmit --project tsconfig.scripts.json",
     "check:tests": "tsc --noEmit --project tsconfig.tests.json",
+    "check:sdk": "tsc --noEmit --project tsconfig.sdk.json",
     "launch:dry": "ts-node -T scripts/launch-announce-dry.ts",
     "backup": "node scripts/backup.mjs",
     "backup:list": "node scripts/restore.mjs --list",

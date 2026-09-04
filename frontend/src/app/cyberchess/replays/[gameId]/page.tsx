@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { ReplayFetchError, kodOtveta, tekstOtkaza } from "./otkaz";
 
 // ----- Types -----
 
@@ -145,7 +146,7 @@ async function fetchReplay(gameId: string): Promise<ReplayGame> {
   const res = await fetch(`${API_BASE}/replays/${encodeURIComponent(gameId)}`, {
     cache: "no-store",
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) throw new ReplayFetchError(res.status);
   const data = (await res.json()) as { ok: boolean; replay: ReplayGame };
   if (!data.ok) throw new Error("API returned ok=false");
   return data.replay;
@@ -193,7 +194,7 @@ export default function ReplayViewerPage() {
         // человек не понимает ни что случилось, ни что делать.
         if (!alive) return;
         console.warn("[replay] не удалось загрузить партию:", e);
-        setError("Не удалось загрузить партию. Попробуйте обновить страницу.");
+        setError(tekstOtkaza(kodOtveta(e)));
       });
     return () => {
       alive = false;

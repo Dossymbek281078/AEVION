@@ -46,6 +46,30 @@ export function getDevhubGuestId(): string | null {
   }
 }
 
+/**
+ * Выдать браузеру НОВУЮ гостевую личность.
+ *
+ * Зовётся ровно в одном случае: после того как гостевая работа переехала в
+ * аккаунт. Прежняя личность с этого момента принадлежит аккаунту, и оставлять
+ * её браузеру нельзя — иначе следующая гостевая работа (человек вышел и снова
+ * пробует без входа, или браузером пользуется второй человек) ляжет на ту же
+ * личность, которую перенос уже считает разобранной, и пропадёт из виду
+ * ровно так же, как до починки.
+ *
+ * Возвращает новую личность или `null`, если хранилище недоступно.
+ */
+export function rotateDevhubGuestId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const fresh = newId();
+    if (!GUEST_ID.test(fresh)) return null;
+    window.localStorage.setItem(STORAGE_KEY, fresh);
+    return fresh;
+  } catch {
+    return null;
+  }
+}
+
 /** Адрес ручки DevHub — только таким запросам добавляется заголовок. */
 export function isDevhubApiUrl(input: unknown): boolean {
   let url = "";

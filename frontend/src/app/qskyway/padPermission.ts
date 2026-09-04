@@ -18,6 +18,7 @@
 export interface PadPermission {
   available: boolean;
   authority?: string;
+  authorityEn?: string;
   kind?: "permission" | "prohibition";
   /** человекочитаемое правило: «Запретная зона UAP28: полёты запрещены …» */
   regime?: string;
@@ -36,6 +37,7 @@ export interface PadPermission {
 
 export interface PadProhibition {
   authority: string;
+  authorityEn: string;
   /**
    * Что именно запрещено — уходит в подсказку строки. Берётся `regime`, а НЕ
    * `basis`: на живых данных `basis` это способ получения («ingested»,
@@ -71,6 +73,8 @@ export function padProhibition(p?: PadPermission | null): PadProhibition | null 
   if ((p.coveragePct ?? 0) < 100) return null;
   return {
     authority: p.authority ?? "—",
+    // Запасной вариант — русское название, а не пустота.
+    authorityEn: p.authorityEn ?? p.authority ?? "—",
     rule: p.regime ?? p.source ?? "",
     // Запасной вариант — русское правило, а не пустота: сказать по-русски
     // лучше, чем не сказать. Пустая строка означала бы «запрета нет».

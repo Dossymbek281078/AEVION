@@ -78,6 +78,7 @@ export function permissionSummary(cityId: string) {
   return {
     available: true as const,
     authority: p.authority,
+    authorityEn: p.authorityEn,
     source: p.source,
     sourceUrl: p.sourceUrl,
     regime: p.regime,

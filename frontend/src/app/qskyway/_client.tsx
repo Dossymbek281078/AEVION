@@ -44,7 +44,7 @@ interface AirspaceSummary {
   noteEn?: string;
   freshness?: { checked: boolean; upToDate: boolean | null; publishedEffective: string | null; cellsChanged: number; checkedAt: string | null };
   /** a regulator gate on the operation, published separately from any ceiling */
-  permission?: { available: boolean; authority?: string; regime?: string; regimeEn?: string; kind?: "permission" | "prohibition"; basis?: string; effective?: string; sampled?: string; coveragePct?: number; uniform?: boolean; note?: string; noteEn?: string; provenanceNote?: string; provenanceNoteEn?: string };
+  permission?: { available: boolean; authority?: string; authorityEn?: string; regime?: string; regimeEn?: string; kind?: "permission" | "prohibition"; basis?: string; effective?: string; sampled?: string; coveragePct?: number; uniform?: boolean; note?: string; noteEn?: string; provenanceNote?: string; provenanceNoteEn?: string };
   _signature?: { alg: string; contentHash: string };
 }
 /** Per-route verdict against that ceiling. compliant=null → no feed, no verdict. */
@@ -155,7 +155,9 @@ function airspaceRegSource(a: AirspaceSummary | undefined, ru: boolean, noGridNo
     if (perm?.available) {
       return {
         tier: "official",
-        authority: perm.authority,
+        // Английское название органа В ДАННЫХ ЕСТЬ и было неиспользуемым:
+      // страница показывала кириллицу поверх английского интерфейса.
+      authority: ru ? perm.authority : perm.authorityEn ?? perm.authority,
         // The statute text is long; it belongs in the tooltip, not wrapping
         // across the toolbar. The chip line answers "whose rule", the hover
         // answers "which rule".
@@ -313,6 +315,7 @@ export default function QSkywayClient() {
   // Выбор языка ОДИН на оба места показа. Тернарник, повторённый дважды,
   // расходится молча: поправят одно, второе останется на прежнем языке.
   const padBanRule = padBan ? (lang === "ru" ? padBan.rule : padBan.ruleEn) : "";
+  const padBanAuthority = padBan ? (lang === "ru" ? padBan.authority : padBan.authorityEn) : "";
   const [verify, setVerify] = useState<"idle" | "checking" | "valid" | "invalid" | "unknown">("idle");
   // Оговорка о ключе приходит вместе с вердиктом и показывается рядом с ним:
   // без `QSKYWAY_SIGN_SK` ключ подписи генерируется при старте процесса, и
@@ -1509,7 +1512,7 @@ export default function QSkywayClient() {
                             что человек здесь читает о полёте. */}
                         {padBan && (
                           <div style={{ color: "#fb7185", fontSize: 10, marginTop: 2 }} title={padBanRule}>
-                            🚫 {t("qskyway.pad.prohibited", { authority: padBan.authority })}
+                            🚫 {t("qskyway.pad.prohibited", { authority: padBanAuthority })}
                           </div>
                         )}
                       </div>

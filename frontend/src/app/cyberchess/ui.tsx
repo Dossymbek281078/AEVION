@@ -377,6 +377,34 @@ export function Tooltip({ label, children, placement = "top", delay = 350 }:
   if (label === undefined || label === null || label === "") return <>{children}</>;
   const show$ = () => { clearTimeout(timer.current); timer.current = setTimeout(() => setShow(true), delay); };
   const hide$ = () => { clearTimeout(timer.current); setShow(false); };
+  // Подпись тултипа становится ИМЕНЕМ органа управления, если своего имени
+  // у него нет.
+  //
+  // Замер вкладки доступности 04.09.2026: на /cyberchess/studio четыре кнопки
+  // объявлялись одним значком — «⇄, кнопка», «✕, кнопка». Подпись у них БЫЛА,
+  // но жила в тултипе: он рисует отдельный span и с кнопкой ничем не связан,
+  // а по правилам вычисления имени содержимое кнопки (значок) побеждает всё
+  // остальное. Глазами подпись видна, читалке — нет.
+  //
+  // Чиним МЕХАНИЗМ, а не двадцать мест: Tooltip зовут из 15 файлов модуля, и
+  // дописывать aria-label каждому вызову значило бы оставить грабли следующему.
+  //
+  // Своё имя НЕ перебиваем: если вызывающий уже задал aria-label или
+  // aria-labelledby, он знал, что делает, — там имя может быть точнее подписи
+  // (например, различать одинаковые кнопки в списке).
+  const nazvanieIzPodpisi = typeof label === "string" ? label : null;
+  const rebenok = React.isValidElement(children) ? children : null;
+  const svoyoImyaEst =
+    !!rebenok &&
+    (!!(rebenok.props as Record<string, unknown>)["aria-label"] ||
+      !!(rebenok.props as Record<string, unknown>)["aria-labelledby"]);
+  const soderzhimoe =
+    nazvanieIzPodpisi && rebenok && !svoyoImyaEst
+      ? React.cloneElement(rebenok as React.ReactElement<Record<string, unknown>>, {
+          "aria-label": nazvanieIzPodpisi,
+        })
+      : children;
+
   const pos: React.CSSProperties =
     placement === "bottom" ? { top: "calc(100% + 6px)", left: "50%", transform: "translateX(-50%)" } :
     placement === "left"   ? { right: "calc(100% + 6px)", top: "50%", transform: "translateY(-50%)" } :
@@ -388,7 +416,7 @@ export function Tooltip({ label, children, placement = "top", delay = 350 }:
       onFocus={show$} onBlur={hide$}
       style={{ position: "relative", display: "inline-flex", alignItems: "center" }}
     >
-      {children}
+      {soderzhimoe}
       {show && (
         <span role="tooltip" style={{
           position: "absolute", ...pos,

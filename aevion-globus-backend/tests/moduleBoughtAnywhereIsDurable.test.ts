@@ -38,6 +38,12 @@ vi.mock("../src/lib/appEntitlements", () => ({
 vi.mock("../src/routes/provisioning", () => ({
   provisionSubscription: async () => ({ subscription: { id: "sub-777" } }),
   writeSubscription: () => {},
+  // Возврат спрашивает действующую подписку, чтобы не понизить ЧУЖУЮ
+  // покупку. Подмена обязана отдавать всю поверхность, которой пользуется
+  // обработчик: иначе он падает на несуществующей функции, и тест краснеет
+  // по причине, не связанной со своим предметом.
+  // `null` = действующей подписки нет, то есть понижение пишется как раньше.
+  readLatestSubscription: () => null,
 }));
 
 const captured: Array<Record<string, unknown>> = [];

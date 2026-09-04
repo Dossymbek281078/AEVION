@@ -13,7 +13,12 @@
 
 import { Router, type Request, type Response } from "express";
 import { paypalPaymentProvider, verifyPaypalWebhook } from "../lib/payment/paypalProvider";
-import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
+import {
+  provisionSubscription,
+  writeSubscription,
+  readLatestSubscription,
+  type Subscription,
+} from "./provisioning";
 import type { TierId, BillingPeriod } from "../data/pricing";
 import { periodForReference } from "../lib/payment/billingPeriod";
 import { местИзКассы, модулиИзКассы } from "../lib/payment/customData";
@@ -22,6 +27,43 @@ import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webho
 import { upsertAppSubscription } from "../lib/appEntitlements";
 
 const capture = makeServiceCapture("paypalWebhook");
+
+/**
+ * Возврат отзывает ТУ подписку, за которую вернули деньги, а не любую.
+ *
+ * Ворота платного доступа спрашивают `readLatestSubscription` — она берёт
+ * ПОСЛЕДНЮЮ ЗАПИСАННУЮ строку по адресу. А ветка возврата писала понижение
+ * до `free` безусловно. Отсюда сценарий, бьющий по заплатившему:
+ *
+ *   купил Lite -> обновился до Medium (новая платная запись)
+ *   -> пришёл возврат за ПЕРВЫЙ платёж -> понижение легло последним
+ *   -> человек потерял Medium, за который заплатил и который не возвращали.
+ *
+ * Отзыв при возврате намеренный и правильный; неправильно было отзывать
+ * ЛЮБУЮ подписку вместо той, за которую вернули деньги.
+ *
+ * Различить есть чем, и это проверено по разборщикам (04.09.2026): у PayBox
+ * возврат приходит тем же уведомлением с `pg_refund=1`, сохраняя
+ * `pg_payment_id` исходного платежа; у PayPal идентификатор берётся из
+ * `supplementary_data.related_ids.order_id`, одинакового у списания и
+ * возврата. Поле `providerPaymentId` в записях появилось 04.09 утром.
+ *
+ * НАПРАВЛЕНИЕ ОТКАЗА выбрано осознанно: сомневаемся — ОТЗЫВАЕМ. Не отозвать
+ * возвращённое хуже, чем понизить лишний раз: первое отдаёт платное даром и
+ * не видно никому, второе человек заметит и напишет.
+ */
+function возвратКасаетсяДействующей(
+  действующая: Subscription | null,
+  paymentId: string
+): boolean {
+  if (!действующая) return true;                      // отзывать нечего
+  if (действующая.tierId === "free") return true;     // уже бесплатная
+  if (!paymentId) return true;                         // не знаем, за что возврат
+  if (действующая.providerPaymentId) return действующая.providerPaymentId === paymentId;
+  // Давние записи без поля: идентификатор зашит в номер подписки. Длину
+  // требуем, иначе короткий идентификатор совпал бы с чужой записью.
+  return paymentId.length >= 8 ? (действующая.id ?? "").endsWith(`_${paymentId}`) : true;
+}
 
 export const paypalWebhookRouter = Router();
 
@@ -138,6 +180,20 @@ paypalWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
 
   try {
     if (refunded || failed) {
+      const действующая = readLatestSubscription(email);
+      const отзываем = возвратКасаетсяДействующей(действующая, paymentId);
+      if (!отзываем) {
+        console.warn(
+          `[paypal/webhook] возврат за ДРУГУЮ покупку: действующая подписка ` +
+            `${действующая?.tierId} не тронута, возврат по ${paymentId}`
+        );
+        capture(new Error("refund_for_older_purchase_kept_current_subscription"), {
+          route: "paypal/webhook/refund",
+          email,
+          refundedPaymentId: paymentId,
+          currentTier: действующая?.tierId,
+        });
+      }
       const downgrade: Subscription = {
         id: `sub_paypal_${paymentId}`,
         ts: new Date().toISOString(),
@@ -149,7 +205,7 @@ paypalWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         trialDays: 0,
         source: `paypal:${result.status}`,
       };
-      writeSubscription(downgrade);
+      if (отзываем) writeSubscription(downgrade);
 
       // Возврат обязан снимать И помодульную запись. Тариф понижается в
       // файле, а строка в AppSubscription живёт отдельно — и запасной путь

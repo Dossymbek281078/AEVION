@@ -71,7 +71,7 @@ export default function PricingCasesPage() {
       .then((r) => r.json())
       .then((j: { items: CaseStudy[] }) => setCases(j.items))
       .catch((e: unknown) => {
-        console.warn("[pricing/cases] загрузка не удалась:", e);
+        console.error("[pricing/cases] запрос не прошёл:", e);
         setError(e instanceof Error ? e.message : String(e));
       });
     track({ type: "page_view", source: "pricing/cases" });
@@ -111,12 +111,7 @@ export default function PricingCasesPage() {
           }}
         >
           <h2 style={{ margin: 0, marginBottom: 8 }}>{tp("error.unavailable")}</h2>
-          {/* Человеку — фраза, подробность в журнал браузера. Здесь стояли
-              внутренний адрес ручки и сообщение движка: посетитель читал
-              «/api/... — Failed to parse URL», то есть нашу внутренность в
-              момент, когда ему и так не повезло. Тот же класс чинили на
-              форме связи и на странице цен. */}
-          <p style={{ margin: 0 }}>{tp("error.retryHint")}</p>
+          <p style={{ margin: 0 }}>{tp("error.whatNow")}</p>
         </div>
       </ProductPageShell>
     );

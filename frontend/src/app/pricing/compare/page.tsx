@@ -67,7 +67,7 @@ export default function PricingComparePage() {
       .then((r) => r.json())
       .then((j: PricingPayload) => setData(j))
       .catch((e: unknown) => {
-        console.warn("[pricing/compare] загрузка не удалась:", e);
+        console.error("[pricing/compare] запрос не прошёл:", e);
         setError(e instanceof Error ? e.message : String(e));
       });
     track({ type: "page_view", source: "pricing/compare" });
@@ -121,12 +121,7 @@ export default function PricingComparePage() {
           }}
         >
           <h2 style={{ margin: 0, marginBottom: 8 }}>{tp("error.unavailable")}</h2>
-          {/* Человеку — фраза, подробность в журнал браузера. Здесь стояли
-              внутренний адрес ручки и сообщение движка: посетитель читал
-              «/api/... — Failed to parse URL», то есть нашу внутренность в
-              момент, когда ему и так не повезло. Тот же класс чинили на
-              форме связи и на странице цен. */}
-          <p style={{ margin: 0 }}>{tp("error.retryHint")}</p>
+          <p style={{ margin: 0 }}>{tp("error.whatNow")}</p>
         </div>
       </ProductPageShell>
     );
@@ -271,7 +266,7 @@ export default function PricingComparePage() {
         <div
           style={{
             position: "sticky",
-            top: 0,
+            top: 'var(--aevion-header-h, 0px)',
             zIndex: 20,
             background: "#fff",
             padding: "8px 0",

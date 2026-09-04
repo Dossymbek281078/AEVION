@@ -200,7 +200,10 @@ function ChainReceiptContent() {
           ? t("chain.checking")
           : шаги && шаги.length > 0
             ? t("chain.done", { n: String(шаги.length) }) +
-              " " +
+              // Разделитель, а не пробел: без него читалка произносит
+              // «Шагов: 4 подтверждено: 3» одной фразой, и число шагов
+              // склеивается с первым исходом. Тире слышно как пауза.
+              " — " +
               (["ok", "revoked", "missing", "failed"] as Состояние[])
                 .map((с) => [с, шаги.filter((x) => x.состояние === с).length] as const)
                 .filter(([, n]) => n > 0)

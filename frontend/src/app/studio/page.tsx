@@ -373,11 +373,23 @@ export default function StudioPage() {
             <div style={{ display: "flex", gap: 20, textAlign: "center" }}>
               <div>
                 <div style={{ fontSize: 22, fontWeight: 800, color: "#0d9488" }}>${savings.totalCostUsd.toFixed(2)}</div>
-                <div style={{ fontSize: 10, color: "#64748b", fontWeight: 700 }}>ACTUAL SPEND</div>
+                {/*
+                  Владелец числа назван прямо в подписи. На этой же странице
+                  выше стоит персональный блок «Ваши запуски — потрачено $X», а
+                  здесь число ПЛАТФОРМЕННОЕ: ручка /smart/savings считает всех
+                  пользователей и все модули (в обработчике даже `_req` не
+                  используется — фильтровать не по чему).
+
+                  Без слова ALL USERS покупатель видит рядом два денежных числа
+                  разного охвата, и верит он более крупному и уверенному — то
+                  есть чужому. Персональный блок добавил я 03.09, значит и
+                  двусмысленность создал я: до него число на странице было одно.
+                */}
+                <div style={{ fontSize: 10, color: "#64748b", fontWeight: 700 }}>ACTUAL SPEND · ALL USERS</div>
               </div>
               <div>
                 <div style={{ fontSize: 22, fontWeight: 800, color: "#94a3b8", textDecoration: "line-through" }}>${savings.estAlwaysCouncilUsd.toFixed(2)}</div>
-                <div style={{ fontSize: 10, color: "#64748b", fontWeight: 700 }}>WITHOUT ROUTING</div>
+                <div style={{ fontSize: 10, color: "#64748b", fontWeight: 700 }}>WITHOUT ROUTING · ALL USERS</div>
               </div>
             </div>
           </div>

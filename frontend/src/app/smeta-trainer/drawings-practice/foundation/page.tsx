@@ -321,7 +321,7 @@ export default function FoundationPage() {
                       className="flex-1 border rounded px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200"
                     />
                     {!revealed[key] && (
-                      <button onClick={handleCheck} aria-label="Проверить ответ" disabled={!inputs[key]?.trim()}
+                      <button onClick={handleCheck} aria-label={`Проверить ответ: ${ex.title}`} disabled={!inputs[key]?.trim()}
                         className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded hover:bg-indigo-700 disabled:opacity-40">✓</button>
                     )}
                   </div>

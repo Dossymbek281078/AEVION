@@ -7435,6 +7435,7 @@ const en: Record<string, string> = {
   "chain.open": "open verification",
   "chain.empty": "No steps given. Add them to the address: ?steps=…",
   "chain.previewWarn": "Some signatures were issued in preview mode: the platform key is not set yet, so they cannot be verified later.",
+  "chain.unknownWarn": "Some steps carry no signature block in the response. That does not mean a step was forged — it means there is nothing to check: no signature was attached.",
   "chain.hash": "Content hash",
   "chain.at": "Time",
 };

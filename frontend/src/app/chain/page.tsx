@@ -33,7 +33,21 @@ type Шаг = {
   состояние: Состояние;
   createdAt: string | null;
   payloadHash: string | null;
-  preview: boolean;
+  /**
+   * Состояний ТРИ, а не два, и это не педантизм.
+   *
+   * `real`    — подпись ключом платформы;
+   * `preview` — хэш содержимого, который пересчитает кто угодно;
+   * `unknown` — блока подписи в ответе НЕТ вовсе (сервер отдаёт `null`
+   *             для записей, у которых поля подписи не было).
+   *
+   * Первая редакция читала `d?.dilithium?.mode === "preview"` и схлопывала
+   * третий случай во второй по значению `false` — то есть отсутствие
+   * доказательства показывалось как полноценная подпись. На странице,
+   * которая обещает проверяемость, это худший из возможных дефектов:
+   * переобещание УМОЛЧАНИЕМ, о котором никто не узнает.
+   */
+  подпись: "real" | "preview" | "unknown";
 };
 
 function разобратьШаги(raw: string | null): string[] {
@@ -62,25 +76,28 @@ function ChainReceiptContent() {
         try {
           const r = await fetch(apiUrl(`/api/qsign/v2/verify/${encodeURIComponent(id)}`));
           if (r.status === 404) {
-            return { id, состояние: "missing", createdAt: null, payloadHash: null, preview: false };
+            return { id, состояние: "missing", createdAt: null, payloadHash: null, подпись: "unknown" };
           }
           if (!r.ok) {
-            return { id, состояние: "failed", createdAt: null, payloadHash: null, preview: false };
+            return { id, состояние: "failed", createdAt: null, payloadHash: null, подпись: "unknown" };
           }
           const d = await r.json();
           // Предварительный режим виден по длине значения подписи: полная
           // ML-DSA много длиннее хэша. Читаем поле, если сервер его назвал.
-          const mode = String(d?.dilithium?.mode ?? "");
+          const блок = d?.dilithium;
+          const mode = блок ? String(блок.mode ?? "") : "";
           return {
             id,
             состояние: d?.revoked ? "revoked" : d?.valid ? "ok" : "failed",
             createdAt: typeof d?.createdAt === "string" ? d.createdAt : null,
             payloadHash: typeof d?.payloadHash === "string" ? d.payloadHash : null,
-            preview: mode === "preview",
+            // Ни одно значение не назначается по умолчанию: неизвестное
+            // остаётся неизвестным, а не превращается в «всё хорошо».
+            подпись: !блок ? "unknown" : mode === "real" ? "real" : "preview",
           };
         } catch {
           // Сеть молчала — это «не знаем», а не «подделка».
-          return { id, состояние: "failed", createdAt: null, payloadHash: null, preview: false };
+          return { id, состояние: "failed", createdAt: null, payloadHash: null, подпись: "unknown" };
         }
       }),
     ).then((r) => {
@@ -93,7 +110,14 @@ function ChainReceiptContent() {
   }, [params]);
 
   const всего = ids.length || ЦЕПОЧКА_ПЛАНЕТЫ.length;
-  const естьPreview = (шаги ?? []).some((s) => s.preview);
+  const естьPreview = (шаги ?? []).some((s) => s.подпись === "preview");
+  // Отдельная врезка, а не общая: «подпись — это хэш» и «подписи в ответе
+  // нет» — разные утверждения, и человеку важно знать, какое из них про
+  // его чек. Показываем только когда есть что показать: шаги, которых не
+  // нашли, к вопросу о подписи отношения не имеют.
+  const естьНеизвестные = (шаги ?? []).some(
+    (s) => s.подпись === "unknown" && s.состояние !== "missing" && s.состояние !== "failed",
+  );
 
   const цвет: Record<Состояние, string> = {
     ok: "#1f6f6b",
@@ -131,6 +155,23 @@ function ChainReceiptContent() {
           }}
         >
           {t("chain.previewWarn")}
+        </p>
+      )}
+
+      {естьНеизвестные && (
+        <p
+          role="status"
+          style={{
+            border: "1px solid #7a8496",
+            background: "#f2f4f7",
+            color: "#4a5262",
+            borderRadius: 8,
+            padding: "10px 14px",
+            margin: "0 0 24px",
+            fontSize: 14,
+          }}
+        >
+          {t("chain.unknownWarn")}
         </p>
       )}
 

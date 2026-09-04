@@ -183,6 +183,24 @@ function SuccessInner() {
   }, [stub, tier]);
 
   /*
+   * ⚠️ ЧТО ЗДЕСЬ ЗАЩИЩАЕТ, а что оказалось декорацией.
+   *
+   * `tier` приходит из адреса и попадал в заголовок как есть, с заглавной
+   * буквы: `?trial=14&tier=Zolotoy` давал «пробный доступ Zolotoy» на нашем
+   * домене — на экране, который человек читает как подтверждение покупки.
+   *
+   * Защищают ДВА условия ниже: ветка триала и ветка активации обе требуют
+   * `confirmed === true`, а подтверждение ставится, только когда сервер
+   * назвал ТОТ ЖЕ тариф. Значит там, где имя вообще доходит до экрана, оно
+   * уже сверено с сервером.
+   *
+   * Сперва я завёл здесь ещё и `tierName = confirmed ? tierName : null`
+   * и счёл это защитой. Мутация показала обратное: тест зелен и с ним, и без
+   * него — переменная недостижима иначе как при подтверждении. Убрал: код,
+   * который выглядит защитой и ничего не охраняет, дороже отсутствующего.
+   */
+
+  /*
    * ⚠️ 01.09.2026: перешёл на ОБЩИЙ компонент учёта, отменив собственное
    * исключение.
    *
@@ -242,7 +260,7 @@ function SuccessInner() {
         <h1 style={{ fontSize: 30, fontWeight: 900, margin: "0 0 12px", letterSpacing: "-0.02em" }}>
           {stub
             ? t("pricing.checkoutSuccess.titleStub")
-            : trialDays > 0
+            : trialDays > 0 && confirmed === true
               ? tierName
                 ? t("pricing.checkoutSuccess.titleTrial", { tier: tierName, days: trialDays })
                 : t("pricing.checkoutSuccess.titleTrialNoTier", { days: trialDays })
@@ -264,11 +282,13 @@ function SuccessInner() {
         <p style={{ fontSize: 15, lineHeight: 1.6, margin: "0 0 20px", opacity: 0.92, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }}>
           {stub
             ? t("pricing.checkoutSuccess.subtitleStub")
-            : trialDays > 0
+            : trialDays > 0 && confirmed === true
               ? t("pricing.checkoutSuccess.subtitleTrial", { date: trialEndDate ?? "" })
-              : tierName
-                ? t("pricing.checkoutSuccess.subtitleActivated", { tier: tierName })
-                : t("pricing.checkoutSuccess.subtitleActivatedNoTier")}
+              : confirmed === true
+                ? tierName
+                  ? t("pricing.checkoutSuccess.subtitleActivated", { tier: tierName })
+                  : t("pricing.checkoutSuccess.subtitleActivatedNoTier")
+                : t("pricing.checkoutSuccess.subtitlePending")}
         </p>
 
         {/* Trial end date badge */}

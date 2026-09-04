@@ -11,6 +11,16 @@ import {
 } from "../data/pricing";
 import { provisionSubscription, countSubscriptions, findSubscriptionByPaymentId } from "./provisioning";
 import { модулиДляКассы } from "../lib/payment/customData";
+
+/**
+ * Сочетания признаков, о которых уже сообщили в Sentry за жизнь процесса.
+ *
+ * Живёт на уровне модуля намеренно: расхождение суммы с кассой — свойство
+ * НАСТРОЙКИ (какой товар в магазине, что умеет провайдер), а не отдельного
+ * запроса. Второй такой же случай не добавляет знания, а квоту тревог тратит.
+ * В журнал при этом пишется КАЖДЫЙ случай — оттуда и берётся частота.
+ */
+const ужеСообщено = new Set<string>();
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { rateLimit } from "../lib/rateLimit";
 
@@ -209,10 +219,24 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
     );
     function предупредитьЕслиСуммаНеДоедет(провайдер: string): void {
       if (totalCents === базоваяЦенаCents) return;
+      // В ЖУРНАЛ пишем каждый случай — он нужен, чтобы посчитать, как часто
+      // это происходит. А В SENTRY шлём по одному на СОЧЕТАНИЕ признаков за
+      // жизнь процесса.
+      //
+      // Иначе получается машина шума на законном трафике: расхождение даёт
+      // КАЖДАЯ покупка с промокодом, с местами или с добавочными модулями,
+      // а это нормальные покупки, а не аварии. Тревога, срабатывающая на
+      // обычной работе, приучает себя не читать — и настоящая авария в ней
+      // потеряется. Своё же правило, поэтому применяю к себе.
       console.warn(
         `[checkout/session] сумма не доедет до кассы: провайдер=${провайдер} ` +
           `показано=${totalCents} спишут≈${базоваяЦенаCents} tier=${tier.id} period=${period} seats=${seats}`
       );
+      const ключТревоги = `${провайдер}:${tier.id}:${period}:${
+        body.promoCode ? "promo" : ""
+      }:${seats > 1 ? "seats" : ""}:${(body.modules ?? []).length > 0 ? "modules" : ""}`;
+      if (ужеСообщено.has(ключТревоги)) return;
+      ужеСообщено.add(ключТревоги);
       capture(new Error("checkout_amount_not_sent_to_provider"), {
         route: "checkout/session",
         provider: провайдер,

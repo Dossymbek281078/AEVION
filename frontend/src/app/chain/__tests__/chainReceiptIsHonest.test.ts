@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -60,6 +60,18 @@ describe("чек цепочки честен", () => {
     expect(src, "страница молчит о preview — обещает проверяемость, которой нет")
       .toContain("previewWarn");
     expect(src, "признак preview не читается из ответа").toContain("preview");
+  });
+
+  it("ссылка «открыть шаг» ведёт в существующий маршрут", () => {
+    // Демонстрационная страница ссылается на комнату подписи. Мёртвая
+    // ссылка здесь дороже обычной: человек пришёл ПРОВЕРЯТЬ, и первый же
+    // переход, ведущий в никуда, отменяет всё, ради чего страница есть.
+    // Замер 04.09.2026: маршрут qsign/verify/[id] существует.
+    const src = безКомментариев(СТРАНИЦА);
+    expect(src, "страница перестала ссылаться на комнату подписи")
+      .toContain("/qsign/verify/");
+    const marshrut = join(__dirname, "..", "..", "qsign", "verify", "[id]");
+    expect(existsSync(marshrut), `маршрута ${marshrut} нет — ссылка ведёт в 404`).toBe(true);
   });
 
   it("подписи идут через словарь, а не зашиты", () => {

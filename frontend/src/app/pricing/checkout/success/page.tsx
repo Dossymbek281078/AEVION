@@ -310,7 +310,14 @@ function SuccessInner() {
         )}
 
         {/* Amount */}
-        {!stub && totalUsd !== null && totalUsd > 0 && (
+        {/*
+          * Сумма — такое же утверждение, как и тариф: `?total=5000` рисовало
+          * «Сумма: $50» рядом с «оплата принята», и вместе это читается как
+          * «мы получили от вас 50 долларов». Пока сервер не подтвердил, мы
+          * этого не знаем. Условие то же, что у заголовка и абзаца, — экран
+          * должен говорить одним голосом.
+          */}
+        {!stub && confirmed === true && totalUsd !== null && totalUsd > 0 && (
           <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 20 }}>
             {t("pricing.checkoutSuccess.amountLabel")} <strong>${totalUsd}</strong>
           </div>

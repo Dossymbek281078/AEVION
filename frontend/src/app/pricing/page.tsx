@@ -398,6 +398,12 @@ export default function PricingPage() {
         }
       } catch (e: unknown) {
         if (!cancelled) {
+          // Причина — в журнал, человеку — фраза. Раньше это сообщение
+          // печаталось прямо на экране вместе с адресом ручки: посетитель
+          // читал «неполный ответ: нет tiers, modules», то есть нашу
+          // внутреннюю диагностику. Убрать с экрана мало — без записи причина
+          // исчезла бы вовсе, и следующий разбор начинался бы с нуля.
+          console.error("[pricing] каталог не загрузился:", e);
           setError(e instanceof Error ? e.message : String(e));
           setLoading(false);
         }
@@ -549,12 +555,12 @@ export default function PricingPage() {
           }}
         >
           <h2 style={{ margin: 0, marginBottom: 8 }}>{tp("error.unavailable")}</h2>
-          <p style={{ margin: 0 }}>
-            /api/pricing. {error ? `${error}` : ""}
-          </p>
-          <p style={{ margin: 0, marginTop: 8, fontSize: 13 }}>
-            {tp("error.checkBackend")}
-          </p>
+          {/* Человеку — фраза, подробность в журнал. Здесь стояли внутренний
+              адрес ручки, сообщение движка и совет «проверь, что бэкенд
+              запущен (npm run ...)» — инструкция разработчику на самой
+              посещаемой странице. Ветка сборки убрала это раньше; беру их
+              форму, чтобы не разойтись во второй раз. */}
+          <p style={{ margin: 0 }}>{tp("error.whatNow")}</p>
         </div>
       </ProductPageShell>
     );

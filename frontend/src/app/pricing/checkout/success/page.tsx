@@ -80,7 +80,29 @@ function SuccessInner() {
     (sp.get("gumroad") || saleId ? "gumroad" : null);
   // Название сервиса пишем, только если знаем его наверняка. Не знаем —
   // строка без названия: выдуманное имя хуже отсутствующего.
-  const processor = provider ? (PROCESSOR_LABEL[provider] ?? null) : null;
+  /*
+   * Прямая индексация находит и УНАСЛЕДОВАННОЕ, а `??` этого не ловит: он
+   * отсеивает только null и undefined, а `PROCESSOR_LABEL["constructor"]` —
+   * функция Object, вполне себе значение.
+   *
+   * Замер соседнего окна 04.09 ОТРИСОВКОЙ этой страницы с `?provider=constructor`:
+   *
+   *   paid via function Object() { [native code] } · secure
+   *   check your email — a receipt from function Object() { [native code] }
+   *   manage your subscription — in your function Object() { [native code] }
+   *
+   * Три раза на экране, который человек видит сразу после списания денег.
+   * Чтением кода это не видно: строка ниже выглядит аккуратной страховкой.
+   *
+   * Ключ здесь ЗАКРЫТЫЙ — четыре кассы, — поэтому проверяем собственное
+   * свойство и честно отдаём null: неизвестная касса не называется никак, и
+   * страница уже умеет молчать о том, чего не знает. Там, где ключ свободный
+   * (накопители сводок), правильнее объект без прототипа: см. routes/events.ts.
+   */
+  const processor =
+    provider && Object.prototype.hasOwnProperty.call(PROCESSOR_LABEL, provider)
+      ? (PROCESSOR_LABEL[provider] ?? null)
+      : null;
   const stub = sp.get("stub") === "true";
   const tier = sp.get("tier") ?? sp.get("tierId");
   const period = sp.get("period");

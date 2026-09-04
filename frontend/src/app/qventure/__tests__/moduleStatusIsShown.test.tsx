@@ -15,7 +15,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 
 vi.mock("@/lib/apiBase", () => ({ apiUrl: (p: string) => p }));
 
-import ModuleStatusNote from "../ModuleStatusNote";
+import ModuleStatusNote from "@/components/ModuleStatusNote";
 
 function otvet(body: unknown, status = 200) {
   return vi.fn(async () => new Response(JSON.stringify(body), { status }));

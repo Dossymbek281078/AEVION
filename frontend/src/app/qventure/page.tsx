@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import ModulePricingChip from "@/components/ModulePricingChip";
-import ModuleStatusNote from "./ModuleStatusNote";
+import ModuleStatusNote from "@/components/ModuleStatusNote";
 import { apiUrl } from "@/lib/apiBase";
 import paper from "@/styles/aevionPaper.module.css";
 import {

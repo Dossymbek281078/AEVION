@@ -53,11 +53,26 @@ writeFileSync(
     providerPaymentId: "sale-777",
   }) + "\n" +
     JSON.stringify({
-      id: "sub_paybox_pay-999",
+      id: "sub_paybox_pay-999-2026",
       ts: new Date().toISOString(),
       email: "old@example.test",
       tierId: "lite",
       period: "monthly",
+      seats: 1,
+      modules: [],
+      trialDays: 0,
+    }) + "\n" +
+    // Запись, чей номер КОНЧАЕТСЯ на короткое значение: без ограничения
+    // длины запрос `?intentId=2026` совпал бы с ней и раскрыл чужой тариф.
+    // Без этой строки проверка «короткий не совпадает» была бы пустой —
+    // совпадать было бы не с чем. Первая версия так и оказалась пустой,
+    // мутация это показала.
+    JSON.stringify({
+      id: "sub_gumroad_2026",
+      ts: new Date().toISOString(),
+      email: "someone@example.test",
+      tierId: "enterprise",
+      period: "annual",
       seats: 1,
       modules: [],
       trialDays: 0,
@@ -92,9 +107,21 @@ describe("статус выдачи различает три исхода", () 
   test("старая запись без поля — находится по номеру подписки", async () => {
     // У paybox и paypal идентификатор зашит в номер: sub_paybox_<id>.
     // Иначе давние покупки отвечали бы «не выдано» при живой подписке.
-    const r = await request(приложение()).get("/api/pricing/checkout/status?intentId=pay-999");
+    const r = await request(приложение()).get("/api/pricing/checkout/status?intentId=pay-999-2026");
     expect(r.body.ready, "старая запись не найдена по номеру подписки").toBe(true);
     expect(r.body.tier).toBe("lite");
+  });
+
+  test("КОРОТКИЙ идентификатор не совпадает с чужой подпиской", async () => {
+    // Идентификатор приходит из АДРЕСНОЙ СТРОКИ, то есть подделывается.
+    // Без ограничения длины запрос `?intentId=2026` совпал бы с любой
+    // подпиской, чей номер кончается на `_2026`, и показал бы чужой тариф.
+    // Найдено вычиткой собственного дифа 04.09.2026.
+    const r = await request(приложение()).get("/api/pricing/checkout/status?intentId=2026");
+    expect(
+      r.body.ready,
+      "короткий подделанный идентификатор совпал с чужой подпиской и раскрыл её тариф"
+    ).toBe(false);
   });
 
   test("ещё не выдано — ready:false, но код 200", async () => {

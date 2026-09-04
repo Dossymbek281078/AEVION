@@ -37,20 +37,33 @@ const БЕЗ_ПРЕДЕЛА_ОЖИДАЕМО = [
   "/api/pricing/subscription/lite-module",
 ];
 
-const РУЧКИ: Array<[string, unknown]> = [
-  ["/api/pricing/quote", { tier: "full", period: "monthly", seats: 1 }],
-  ["/api/pricing/promo/validate", { code: "NOPE", tier: "full", period: "monthly" }],
-  ["/api/pricing/lead", { email: "l@example.test", message: "hi" }],
-  ["/api/pricing/newsletter", { email: "n@example.test" }],
-  ["/api/pricing/partners/deals", {}],
-  ["/api/pricing/affiliate/apply", { email: "a@example.test" }],
-  ["/api/pricing/partners/apply", { email: "p@example.test" }],
-  ["/api/pricing/edu/apply", { email: "e@example.test" }],
-  ["/api/pricing/affiliate/magic-link", { email: "a@example.test" }],
-  ["/api/pricing/partners/magic-link", { email: "p@example.test" }],
-  ["/api/pricing/subscription/lite-module", { email: "x@example.test", module: "qsign" }],
-  ["/api/pricing/checkout/session", { tier: "nonsense", period: "monthly" }],
+// Метод стоит рядом с путём: храповик перебирал ТОЛЬКО POST, и новая GET-ручка
+// статуса выдачи в охват не попала — тот самый «список, написанный рукой,
+// отстаёт», только в моём же стороже (замер 04.09.2026).
+const РУЧКИ: Array<[string, unknown, "post" | "get"]> = [
+  ["/api/pricing/quote", { tier: "full", period: "monthly", seats: 1 }, "post"],
+  ["/api/pricing/promo/validate", { code: "NOPE", tier: "full", period: "monthly" }, "post"],
+  ["/api/pricing/lead", { email: "l@example.test", message: "hi" }, "post"],
+  ["/api/pricing/newsletter", { email: "n@example.test" }, "post"],
+  ["/api/pricing/partners/deals", {}, "post"],
+  ["/api/pricing/affiliate/apply", { email: "a@example.test" }, "post"],
+  ["/api/pricing/partners/apply", { email: "p@example.test" }, "post"],
+  ["/api/pricing/edu/apply", { email: "e@example.test" }, "post"],
+  ["/api/pricing/affiliate/magic-link", { email: "a@example.test" }, "post"],
+  ["/api/pricing/partners/magic-link", { email: "p@example.test" }, "post"],
+  ["/api/pricing/subscription/lite-module", { email: "x@example.test", module: "qsign" }, "post"],
+  ["/api/pricing/checkout/session", { tier: "nonsense", period: "monthly" }, "post"],
+  ["/api/pricing/checkout/status?intentId=нет-такого", {}, "get"],
 ];
+
+/**
+ * Перебор обязан быть ВЫШЕ самого щедрого предела на денежном пути, иначе
+ * «отбить не удалось» означает «я не дострелил», а не «предела нет».
+ * Замер 04.09.2026: было 45, а у ручки статуса выдачи предел 60/мин — она
+ * попала в список беспредельных, имея ограничитель. Держать это число
+ * больше максимума из checkout.ts / pricing.ts.
+ */
+const ПОПЫТОК = 70;
 
 test(
   "ни одна денежная ручка не потеряла предел темпа",
@@ -68,10 +81,13 @@ test(
       app.use("/api/pricing", pricingRouter);
 
       const безПредела: string[] = [];
-      for (const [путь, тело] of РУЧКИ) {
+      for (const [путь, тело, метод] of РУЧКИ) {
         let отбили = false;
-        for (let i = 0; i < 45; i += 1) {
-          const r = await request(app).post(путь).send(тело as object);
+        for (let i = 0; i < ПОПЫТОК; i += 1) {
+          const r =
+            метод === "get"
+              ? await request(app).get(путь)
+              : await request(app).post(путь).send(тело as object);
           if (r.status === 429) { отбили = true; break; }
         }
         if (!отбили) безПредела.push(путь);

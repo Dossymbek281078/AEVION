@@ -628,9 +628,9 @@ function BenchmarkBlock({ sectorId, sectorLabel, stage, score }: { sectorId: str
       </div>
 
       <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontSize: 12, color: "var(--ink-faint, #74767c)", marginTop: 10 }}>
-        {data.p25 != null && <span>25th pct: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.p25)}</b></span>}
+        {data.p25 != null && <span>25-й процентиль: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.p25)}</b></span>}
         {data.median != null && <span>медиана: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.median)}</b></span>}
-        {data.p75 != null && <span>75th pct: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.p75)}</b></span>}
+        {data.p75 != null && <span>75-й процентиль: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.p75)}</b></span>}
         {data.best != null && <span>лучшее из виденного: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.best)}</b></span>}
       </div>
       <div style={{ fontSize: 11.5, color: "var(--ink-faint, #74767c)", marginTop: 10 }}>{data.disclaimer}</div>
@@ -760,7 +760,7 @@ function StressPanel({ stress }: { stress: NonNullable<AnalysisResult["result"][
 function SignalCoverageChip({ coverage, fields }: { coverage: number; fields: number }) {
   const pct = Math.round(coverage * 100);
   const color = pct >= 40 ? "var(--teal, #0a7d72)" : pct >= 15 ? "var(--amber, #b7791f)" : "var(--ink-faint, #74767c)";
-  const label = pct >= 40 ? "company-specific" : pct >= 15 ? "partly company-specific" : "sector-based";
+  const label = pct >= 40 ? "company-specific" : pct >= 15 ? "частично по этой компании" : "sector-based";
   return (
     <div
       title="Доля итоговой оценки, опирающаяся на показатели из самой заявки (выручка, рост, маржа, LTV/CAC…), а не на средние по отрасли. Добавьте финансовые данные, чтобы её поднять."

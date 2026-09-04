@@ -53,7 +53,7 @@ const LABEL: React.CSSProperties = { display: "block", fontSize: 11.5, fontWeigh
 // Pure request helper — returns the analysis or an error string, no state.
 async function analyzeReq(data: FormShape): Promise<{ ok: true; data: AnalysisResult } | { ok: false; error: string; upgradeUrl?: string | null }> {
   if (!data.name.trim()) return { ok: false, error: "Укажите название компании или продукта." };
-  if (data.description.trim().length < 12) return { ok: false, error: "Add a longer description (min 12 characters)." };
+  if (data.description.trim().length < 12) return { ok: false, error: "Добавьте описание подробнее — не меньше 12 знаков." };
   try {
     const payload: Record<string, unknown> = {
       name: data.name.trim(), sector: data.sector, stage: data.stage,
@@ -369,7 +369,7 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
             padding: "10px 18px", background: extracting ? "var(--teal, #0a7d72)" : "var(--teal-deep, #075b53)", color: "#fff", border: "none",
             borderRadius: 9, fontSize: 14, fontWeight: 700, cursor: extracting ? "wait" : "pointer", whiteSpace: "nowrap",
           }}>
-            {extracting ? "Reading deck…" : "📄 Загрузить презентацию (PDF)"}
+            {extracting ? "Читаем презентацию…" : "📄 Загрузить презентацию (PDF)"}
           </button>
           <span style={{ fontSize: 12.5, color: extractNote ? "var(--teal-deep, #075b53)" : "#94a3b8", fontWeight: extractNote ? 600 : 400 }}>
             {extractNote || "Мы вытащим поля и заполним форму — вы проверяете и запускаете."}
@@ -410,8 +410,8 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
 // ─── Compare two ──────────────────────────────────────────────────────────────
 
 function ComparePanel({ sectors }: { sectors: SectorOption[] }) {
-  const [a, setA] = useState<FormShape>(() => ({ ...emptyForm(), name: "Company A" }));
-  const [b, setB] = useState<FormShape>(() => ({ ...emptyForm(), name: "Company B" }));
+  const [a, setA] = useState<FormShape>(() => ({ ...emptyForm(), name: "Компания А" }));
+  const [b, setB] = useState<FormShape>(() => ({ ...emptyForm(), name: "Компания Б" }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Своё состояние: это отдельный компонент, у него нет доступа к первому.
@@ -441,7 +441,7 @@ function ComparePanel({ sectors }: { sectors: SectorOption[] }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16 }}>
         {([["a", a], ["b", b]] as const).map(([which, f]) => (
           <div key={which} style={SECTION}>
-            <h2 style={H2}>{which === "a" ? "Company A" : "Company B"}</h2>
+            <h2 style={H2}>{which === "a" ? "Компания А" : "Компания Б"}</h2>
             <FormFields form={f} set={setter(which)} sectors={sectors} />
           </div>
         ))}
@@ -479,7 +479,7 @@ function CompareResult({ a, b }: { a: AnalysisResult; b: AnalysisResult }) {
         <div>
           <h2 style={{ ...H2, marginBottom: 4 }}>{r.name}</h2>
           <div style={{ fontSize: 13, color: "#64748b" }}>{r.result.sector.label} · {r.result.stage}</div>
-          {winner === side && <div style={{ fontSize: 12, fontWeight: 800, color: "var(--teal-deep, #075b53)", marginTop: 6 }}>◆ Higher score</div>}
+          {winner === side && <div style={{ fontSize: 12, fontWeight: 800, color: "var(--teal-deep, #075b53)", marginTop: 6 }}>◆ Оценка выше</div>}
         </div>
       </div>
       <div style={{ marginTop: 12 }}><ScoreGauge score={r.composite} verdict={r.verdict} size={104} /></div>

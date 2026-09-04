@@ -6347,7 +6347,7 @@ const ru: Record<string, string> = {
   "qskyway.wind.demo": "демо",
   "qskyway.wind.demoTip": "METAR недоступен — используется иллюстративная демо-модель",
   "qskyway.wind.label": "🌬 ветер {wind}",
-  "qskyway.wind.metarTip": "Наземный ветер — реальный METAR ближайшего аэропорта",
+  "qskyway.wind.metarTip": "Наземный ветер — реальный METAR ближайшего аэропорта; рост по высоте — иллюстративная модель: METAR не содержит данных о ветре на высоте",
   "rec.add": "+ Добавить регулярный",
   "rec.aria.delete": "Удалить {label}",
   "rec.aria.pause": "Поставить на паузу {label}",

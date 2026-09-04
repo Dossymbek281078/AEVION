@@ -6347,7 +6347,7 @@ const en: Record<string, string> = {
   "qskyway.wind.demo": "demo",
   "qskyway.wind.demoTip": "METAR is unavailable — an illustrative demo model is used",
   "qskyway.wind.label": "🌬 wind {wind}",
-  "qskyway.wind.metarTip": "Surface wind is a real METAR from the nearest airport",
+  "qskyway.wind.metarTip": "Surface wind is a real METAR from the nearest airport; the increase with altitude is an illustrative model — METAR carries no winds-aloft data",
   "rec.add": "+ Add recurring",
   "rec.aria.delete": "Delete {label}",
   "rec.aria.pause": "Pause {label}",

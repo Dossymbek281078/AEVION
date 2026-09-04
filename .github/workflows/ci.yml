@@ -31,6 +31,15 @@ jobs:
       - name: projects↔pricing audit (catches missing MODULES_PRICING rows)
         run: npm run audit:projects-pricing
       - run: npm run build
+      # Тесты и скрипты бэкенда сборка НЕ проверяет: include основного
+      # конфига — только src/**. Замер 04.09.2026: 419 файлов тестов не
+      # проверялись типами НИ РАЗУ, у скриптов тот же дефект нашли 19.08.
+      # Обе команды зелёные на момент добавления; проверяются 404 файла из
+      # 419, остаток — храповик в tsconfig.tests.json, он только укорачивается.
+      - name: Test files type check (build covers src only)
+        run: npm run check:tests
+      - name: Scripts type check (build covers src only)
+        run: npm run check:scripts
       - run: npm test
       # Сторожа модулей — чистый Node без зависимостей, поэтому шаг живёт здесь,
       # а не отдельной работой (working-directory возвращаем в корень репозитория).
@@ -72,6 +81,11 @@ jobs:
       # a test that passes.
       - name: Frontend unit tests
         run: npm run test -- --run
+      # `next build` исключает *.test.ts — 242 файла тестов не проверялись
+      # типами вовсе. Отдельным конфигом, а не снятием исключения: ошибка
+      # типов в тесте иначе роняла бы боевую сборку и блокировала выкатку.
+      - name: Test files type check (next build excludes tests)
+        run: npm run typecheck:tests
       - run: npm run build
 
   payments-smoke:

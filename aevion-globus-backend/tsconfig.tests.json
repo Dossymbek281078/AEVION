@@ -55,6 +55,13 @@
     "tests/bureauSecurityHardening.test.ts",
     "tests/cyberchessDailySolveBounds.test.ts",
     "tests/devhub-integrations.test.ts",
+    // Приходит С ПРОДОМ, на этой ветке файла нет. Замер пробным мержем
+    // 04.09: без этой строки шаг CI краснеет НА МЕРЖЕ — то есть ровно тогда,
+    // когда проверка нужна, она бы заблокировала слияние чужой работой.
+    // Не дефект: `dates()` отдаёт результат match с запасным пустым массивом,
+    // отсюда параметр типа never у includes. На исполнении массив заполняется.
+    // Лечится одним токеном: `?? ([] as string[])`.
+    "tests/launchDateIsOneNumber.test.ts",
     "tests/planningEmailSilentSkip.test.ts",
     "tests/qrealSaveFailureIsVisible.test.ts",
     "tests/qskywayAirspaceCellId.test.ts",

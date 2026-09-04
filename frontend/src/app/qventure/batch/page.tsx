@@ -51,7 +51,7 @@ export default function BatchPage() {
         method: "POST", headers: { "Content-Type": "application/pdf" }, body: file,
       });
       const ej = await ex.json();
-      if (!ex.ok || !ej?.ok) return { error: `${label}: ${ej?.hint || ej?.error || "could not read deck"}` };
+      if (!ex.ok || !ej?.ok) return { error: `${label}: ${ej?.hint || ej?.error || "не удалось разобрать презентацию"}` };
       fields = ej.data as Record<string, unknown>;
     } catch {
       return { error: `${label}: upload failed` };
@@ -70,7 +70,7 @@ export default function BatchPage() {
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
         });
         if (an.status === 429 || an.status === 503) {
-          setNote("Rate limit reached — waiting a few seconds before continuing…");
+          setNote("Достигнут предел частоты — ждём несколько секунд и продолжаем…");
           await sleep(11_000);
           continue;
         }
@@ -197,7 +197,7 @@ export default function BatchPage() {
           <>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 14, alignItems: "center" }}>
               {[
-                { k: "Deals scored", v: String(rows.length) },
+                { k: "Разобрано сделок", v: String(rows.length) },
                 { k: "Invest", v: String(invest) },
                 { k: "Watch", v: String(watch) },
                 { k: "Pass", v: String(rows.length - invest - watch) },
@@ -227,7 +227,7 @@ export default function BatchPage() {
                     padding: "5px 11px", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer",
                     border: "1px solid " + (sort === k ? "var(--teal-deep, #075b53)" : "var(--rule, #d4d3cc)"),
                     background: sort === k ? "var(--teal-deep, #075b53)" : "#fff", color: sort === k ? "#fff" : "var(--ink-soft, #45474c)",
-                  }}>{k === "composite" ? "Score" : k === "redFlags" ? "Red flags" : "Name"}</button>
+                  }}>{k === "composite" ? "Оценка" : k === "redFlags" ? "Тревожные признаки" : "Название"}</button>
                 ))}
               </div>
               <div style={{ overflowX: "auto" }}>

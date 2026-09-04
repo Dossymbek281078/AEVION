@@ -390,6 +390,7 @@ export default function VentilationPage() {
                     onKeyDown={e => e.key === "Enter" && !reviewed && v.trim() && go(ex)}
                     disabled={reviewed && ok}
                     placeholder={`Ответ в ${ex.unit}...`}
+                    aria-label={`Ответ на задачу ${ex.id}, в ${ex.unit}`}
                     className="flex-1 border rounded px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-teal-500 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200 disabled:opacity-60"
                   />
                   {!reviewed && (

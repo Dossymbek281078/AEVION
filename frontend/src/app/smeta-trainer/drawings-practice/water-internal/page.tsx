@@ -142,6 +142,7 @@ function ExerciseCard({ ex }: { ex: Exercise }) {
             setChecked(false);
           }}
           placeholder={`Ответ в ${ex.unit}`}
+          aria-label={`Ответ на задачу ${ex.id}, в ${ex.unit}`}
           className="w-48 rounded-lg border border-cyan-800/60 bg-slate-950/70 px-3 py-2 text-slate-100 placeholder-slate-500 focus:border-cyan-400 focus:outline-none"
         />
         <span className="text-sm text-slate-400">{ex.unit}</span>

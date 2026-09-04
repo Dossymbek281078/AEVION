@@ -242,6 +242,7 @@ export default function ConstitutionApiPlaygroundPage() {
                   onClick={copy}
                   className="ml-2 px-3 py-1 rounded text-xs border border-cyan-400/40 text-cyan-300 hover:bg-cyan-500/10"
                   title={t("constitution.api.copyTitle")}
+                  aria-label={t("constitution.api.copyTitle")}
                 >
                   📋
                 </button>

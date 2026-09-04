@@ -41,7 +41,7 @@ const ЗАКРЕПЛЕНО: Array<[string, string[]]> = [
   // объявит несколько одинаковых строк, и выбрать будет нельзя.
   ["pricing/page.tsx", ["tier.tryTrial\")}: ${tier.id}", "tier.openCalc\")}: ${tier.id}"]],
   ["ventures/IdeaMarket.tsx", ["Отметить интерес", "${i.name}"]],
-  ["devhub/page.tsx", ["Copy: ${s.title}", "Star: ${s.title}"]],
+  ["devhub/page.tsx", ["snip.copyAria", "snip.starAria", "${s.title}"]],
   ["smeta-trainer/drawings-practice/finishing/page.tsx", ["Проверить ответ: ${ex.title}"]],
   ["smeta-trainer/drawings-practice/walls/page.tsx", ["Проверить ответ: ${ex.title}"]],
   ["smeta-trainer/drawings-practice/timeline/page.tsx", ["Название этапа ${s.id}", "Удалить этап ${s.id}"]],

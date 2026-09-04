@@ -82,3 +82,68 @@ describe("вызванный ключ существует в словаре", (
     ).toEqual([]);
   });
 });
+
+/**
+ * ДИНАМИЧЕСКИЕ ключи: сторож выше их честно ПРОПУСКАЕТ и печатает счёт.
+ *
+ * Это правильная граница, но дырка настоящая: `t("qskyway.just." + reason)`
+ * собирает ключ из значения, и если словарь его не знает, человек читает на
+ * экране сам ключ — «qskyway.just.forged». Ни один греп такого не найдёт,
+ * потому что литерала в коде нет.
+ *
+ * Значения закрыты типом, поэтому список ВЫВОДИТСЯ ИЗ КОДА, а не пишется
+ * руками: добавят третью причину — сторож потребует её ключ сам. Руками
+ * написанный список был бы второй копией того же знания и разошёлся бы молча.
+ *
+ * Разбор позиционный, без регулярок: класс символов, собранный из строки,
+ * на этой машине уже терял слэши и молча совпадал ни с чем.
+ */
+describe("динамические ключи модуля покрыты словарём", () => {
+  const reasonsFromType = (): string[] => {
+    const src = readFileSync(join(DIR, "verifyVerdict.ts"), "utf8");
+    const MARK = "export type VerifyReason";
+    const i = src.indexOf(MARK);
+    if (i === -1) return [];
+    const semi = src.indexOf(";", i);
+    const body = src.slice(src.indexOf("=", i) + 1, semi);
+    return body
+      .split("|")
+      .map((x) => x.trim())
+      .filter((x) => x.startsWith('"') && x.endsWith('"'))
+      .map((x) => x.slice(1, -1));
+  };
+
+  test("список причин читается из типа, а не задан руками", () => {
+    const r = reasonsFromType();
+    // Контроль прибора: ноль означал бы, что разбор сломан, а не что причин нет.
+    expect(r.length, "причины из VerifyReason не разобраны — сторож ослеп").toBeGreaterThanOrEqual(2);
+    expect(r, "ожидались обе известные причины").toContain("tampered");
+    expect(r, "ожидались обе известные причины").toContain("forged");
+  });
+
+  test("динамический ключ есть везде, где есть его статический сосед", () => {
+    // Требуем СОГЛАСОВАННОСТИ, а не полноты. Восемь языков переведены на 1 %,
+    // и требовать в них наши ключи значит завести вечно красную проверку —
+    // такую отключают в первый же день. Сосед qskyway.just.invalid стоит рядом
+    // с причиной в одной строке: где есть он, там обязана быть и причина,
+    // иначе человек прочитает половину фразы и сам ключ.
+    const SIBLING = "qskyway.just.invalid";
+    const table = allTranslations();
+    const langs = Object.keys(table).filter((l) => typeof table[l]?.[SIBLING] === "string");
+
+    // Контроль прибора: соседа нет нигде — значит сломан разбор, а не словарь.
+    expect(langs.length, "язык-сосед не найден ни разу — сторож ослеп").toBeGreaterThanOrEqual(2);
+
+    const missing: string[] = [];
+    let checked = 0;
+    for (const reason of reasonsFromType()) {
+      for (const lang of langs) {
+        checked += 1;
+        const v = table[lang]?.["qskyway.just." + reason];
+        if (typeof v !== "string" || v.trim() === "") missing.push(lang + ": " + reason);
+      }
+    }
+    expect(checked, "ни одной пары язык-причина не проверено").toBeGreaterThan(0);
+    expect(missing, "причина без перевода там, где сосед переведён: " + missing.join(", ")).toEqual([]);
+  });
+});

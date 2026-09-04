@@ -101,3 +101,44 @@ describe("каждая касса говорит, выдаст ли куплен
     }
   });
 });
+
+describe("у Gumroad видно, чем заменена отсутствующая подпись", () => {
+  // Подписи вебхука у Gumroad нет по устройству — секрет задаётся не всегда, и
+  // тогда защищает сверка продажи с API Gumroad. Пока это поле не отдавалось,
+  // ответ «webhookConfigured: false» читался как «покупку может подделать кто
+  // угодно», хотя подделка отсеивается сверкой. Поле без пары — тревога, от
+  // которой отучаются смотреть.
+  const сохранить = () => ({ t: process.env.GUMROAD_ACCESS_TOKEN, v: process.env.GUMROAD_VERIFY_SALES });
+  const вернуть = (b: { t?: string; v?: string }) => {
+    if (b.t === undefined) delete process.env.GUMROAD_ACCESS_TOKEN; else process.env.GUMROAD_ACCESS_TOKEN = b.t;
+    if (b.v === undefined) delete process.env.GUMROAD_VERIFY_SALES; else process.env.GUMROAD_VERIFY_SALES = b.v;
+  };
+
+  it("токен есть и сверка не выключена — сверяем", async () => {
+    const b = сохранить();
+    try {
+      process.env.GUMROAD_ACCESS_TOKEN = "test-token";
+      delete process.env.GUMROAD_VERIFY_SALES;
+      const r = await request(app()).get("/api/pricing/checkout/healthz");
+      expect(
+        r.body.providers?.gumroad?.salesVerifiedViaApi,
+        "компенсирующий контроль есть, но снаружи о нём не сказано",
+      ).toBe(true);
+    } finally { вернуть(b); }
+  });
+
+  it("сверку выключили — поле честно говорит нет", async () => {
+    // Односторонняя проверка объявила бы поле защищённым, будь оно
+    // прибито к true. Нужны обе стороны.
+    const b = сохранить();
+    try {
+      process.env.GUMROAD_ACCESS_TOKEN = "test-token";
+      process.env.GUMROAD_VERIFY_SALES = "0";
+      const r = await request(app()).get("/api/pricing/checkout/healthz");
+      expect(
+        r.body.providers?.gumroad?.salesVerifiedViaApi,
+        "сверка выключена, а снаружи по-прежнему «сверяем» — это ложное спокойствие",
+      ).toBe(false);
+    } finally { вернуть(b); }
+  });
+});

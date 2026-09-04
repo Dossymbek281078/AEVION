@@ -779,10 +779,26 @@ export default function PricingPage() {
             <button
               key={p.code}
               onClick={() => {
+                // Промокод применяется в калькуляторе НЕЗАВИСИМО от буфера —
+                // это и есть то, ради чего человек нажал.
                 setCalcPromo(p.code);
-                navigator.clipboard?.writeText(p.code).catch(() => {});
-                setCopiedPromo(p.code);
-                setTimeout(() => setCopiedPromo(null), 1500);
+                /*
+                 * А «Скопировано» обещаем только по факту. Раньше подпись
+                 * показывалась безусловно, хотя отказ копирования был проглочен:
+                 * человек уходил вставлять код в другое место и вставлял пустоту.
+                 * Мелочь, но это ровно тот класс, когда неудача выглядит успехом.
+                 *
+                 * Буфера может не быть вовсе (старый браузер, небезопасный
+                 * контекст) — тогда `?.` даёт undefined, обещания нет, а промокод
+                 * всё равно применён и виден в калькуляторе.
+                 */
+                navigator.clipboard
+                  ?.writeText(p.code)
+                  .then(() => {
+                    setCopiedPromo(p.code);
+                    setTimeout(() => setCopiedPromo(null), 1500);
+                  })
+                  .catch(() => {});
               }}
               title={p.description}
               style={{

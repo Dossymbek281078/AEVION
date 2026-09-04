@@ -82,7 +82,7 @@ export function tierForReference(ref: string): TierId {
  */
 export function ссылкаПодписки(ref: string): boolean {
   return /^tier[_-]/i.test(ref) ||
-    /(lite|medium|full|business|team|all-access|enterprise|pro)/i.test(ref);
+    /(^|[_-])(lite|medium|full|business|team|all-access|enterprise|pro)([_-]|$)/i.test(ref);
 }
 
 function periodForReference(ref: string): BillingPeriod {

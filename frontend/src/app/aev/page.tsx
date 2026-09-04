@@ -2205,14 +2205,14 @@ function InsightPanel({ wallet, setWallet, insight, setInsight }: {
                   +{q.earned.toFixed(3)}
                 </span>
                 <button onClick={() => triggerOne(q.id)} title="Триггернуть cache-hit (демо)"
-                  aria-label="Триггернуть cache-hit для этого вопроса"
+                  aria-label={`Прогреть кэш для вопроса: ${q.q}`}
                   style={{
                     padding: "5px 9px", borderRadius: 5, border: "1px solid #fde047", background: "#fefce8",
                     color: "#854d0e", fontSize: 11, fontWeight: 800, cursor: "pointer",
                   }}>
                   ⚡
                 </button>
-                <button onClick={() => removeOne(q.id)} title="Удалить вопрос" aria-label="Удалить вопрос"
+                <button onClick={() => removeOne(q.id)} title="Удалить вопрос" aria-label={`Удалить вопрос: ${q.q}`}
                   style={{
                     padding: "5px 9px", borderRadius: 5, border: "1px solid #fca5a5", background: "#fff",
                     color: "#dc2626", fontSize: 11, fontWeight: 800, cursor: "pointer",

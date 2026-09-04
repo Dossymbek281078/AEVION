@@ -1,5 +1,6 @@
 import { describe, test, expect, vi } from "vitest";
 import { render } from "@testing-library/react";
+import { sobratVidimyj, angliyskieStroki, tolkoLatinica, ostalosLatinskoeSlovo, TERMINY_OBSHIE } from "@/test-utils/renderedText";
 
 /**
  * Экран модуля говорит по-русски — проверка по ОТРИСОВАННОЙ странице.
@@ -33,25 +34,8 @@ vi.mock("@/components/ModulePricingChip", () => ({ default: () => null }));
 
 import QVenturePage from "../page";
 
-/**
- * Латиница по природе и термины, которые в русской речи не переводят.
- * Список короткий намеренно: длинный превращает сторожа в решето.
- */
-const MOZHNO = [
-  "QVenture", "AEVION", "ARR", "USD", "LTV", "CAC", "TAM", "SOM", "SAM",
-  "MRR", "IRR", "PDF", "AI", "IC", "MoM", "WoW", "YoY", "KZ", "US",
-];
-
-function tolkoLatinica(s: string): boolean {
-  return /[A-Za-z]/.test(s) && !/[А-ЯЁа-яё]/.test(s);
-}
-
-/** Убираем то, что латиница по природе, и смотрим, осталось ли слово. */
-function bezTerminov(s: string): string {
-  let out = s;
-  for (const t of MOZHNO) out = out.split(t).join(" ");
-  return out;
-}
+/** Термины сверх общего списка — финансовые сокращения этого модуля. */
+const TERMINY = [...TERMINY_OBSHIE, "QVenture", "ARR", "LTV", "CAC", "TAM", "SOM", "SAM", "MRR", "IRR", "IC", "MoM", "WoW", "YoY", "KZ", "US"];
 
 describe("экран QVenture говорит по-русски (по отрисовке)", () => {
   test("КОНТРОЛЬ: правило отличает английское от русского", () => {
@@ -61,54 +45,34 @@ describe("экран QVenture говорит по-русски (по отрис�
     expect(tolkoLatinica("Прозрачно"), "русское принято за английское").toBe(false);
     expect(tolkoLatinica("QVenture — разбор"), "смешанное принято за английское").toBe(false);
     // И отбор терминов: латиница по природе не должна становиться находкой.
-    expect(/[A-Za-z]{2,}/.test(bezTerminov("ARR USD")), "термины не отсеиваются").toBe(false);
-    expect(/[A-Za-z]{2,}/.test(bezTerminov("Upload deck")), "отсев съедает настоящее").toBe(true);
+    expect(ostalosLatinskoeSlovo("ARR USD", TERMINY), "термины не отсеиваются").toBe(false);
+    expect(ostalosLatinskoeSlovo("Upload deck", TERMINY), "отсев съедает настоящее").toBe(true);
   });
 
   test("видимый текст и подписи — не английские", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
     const { container } = render(<QVenturePage />);
 
-    const vidno: string[] = [];
-    const atributy: string[] = [];
-    // Всё, что доходит до человека: собственный текст узла плюс подписи,
-    // которые произносит читалка и показывает всплывающая подсказка.
-    container.querySelectorAll("*").forEach((el) => {
-      for (const a of ["aria-label", "title", "placeholder", "alt"]) {
-        const v = el.getAttribute(a);
-        if (v && v.trim()) { vidno.push(v.trim()); atributy.push(v.trim()); }
-      }
-      el.childNodes.forEach((n) => {
-        if (n.nodeType === 3) {
-          const t = (n.textContent || "").trim();
-          if (t) vidno.push(t);
-        }
-      });
-    });
+    const v = sobratVidimyj(container);
 
     // КОНТРОЛЬ ОХВАТА: страница отрисовалась и текст собран. Пустая выборка
     // сделала бы проверку зелёной на любом состоянии модуля.
-    expect(vidno.length, "видимого текста не найдено — страница не отрисовалась").toBeGreaterThan(40);
+    expect(v.tekst.length, "видимого текста не найдено — страница не отрисовалась").toBeGreaterThan(40);
     // У КАЖДОГО сборщика свой контроль. Мутация «отключить сбор атрибутов»
     // проходила молча: общего счёта хватало за счёт текстовых узлов, а
     // подписи для читалки и подсказки полей выпадали из проверки целиком.
-    expect(atributy.length, "атрибутов не собрано — подписи для читалки вне проверки").toBeGreaterThan(8);
+    expect(v.atributy.length, "атрибутов не собрано — подписи для читалки вне проверки").toBeGreaterThan(8);
     // И контроль в обратную сторону: русский текст на странице ЕСТЬ, то есть
     // мы смотрим на русскую страницу, а не на пустую разметку.
     expect(
-      vidno.filter((v) => /[А-ЯЁа-яё]/.test(v)).length,
+      v.vsyo.filter((s) => /[А-ЯЁа-яё]/.test(s)).length,
       "русского текста нет вовсе — проверка бессмысленна",
     ).toBeGreaterThan(20);
 
-    const angliyskie = vidno.filter((v) => {
-      if (!tolkoLatinica(v)) return false;
-      const ost = bezTerminov(v);
-      // Осталось ли ЛАТИНСКОЕ СЛОВО из двух букв и длиннее.
-      return /[A-Za-z]{2,}/.test(ost);
-    });
+    const angliyskie = angliyskieStroki(v, TERMINY);
 
     expect(
-      [...new Set(angliyskie)],
+      angliyskie,
       "английский текст на русском экране: человек читает его первым, до всякой ошибки",
     ).toEqual([]);
   });

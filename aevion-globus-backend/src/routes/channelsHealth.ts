@@ -102,6 +102,19 @@ channelsHealthRouter.get("/channels", (_req: Request, res: Response) => {
   };
 
   const canRegister = email || google || github;
+
+  // Доходит ли ЗАЯВКА до человека.
+  //
+  // Обработчик заявок ведёт себя правильно: если адрес не задан, он не
+  // придумывает запасной (однажды придуманный уводил наши заявки в чужую
+  // компанию с похожим именем), пишет предупреждение и сохраняет заявку.
+  // Беда в том, что предупреждение уходит в журнал контейнера, который
+  // никто не открывает: снаружи «заявки идут в никуда» и «всё хорошо»
+  // выглядели одинаково.
+  //
+  // На витрине при этом обещано «Customer Success одобрит заявку в
+  // течение…» — обещание, которому нужен человек, а человек не узнаёт.
+  const applicationsNotified = Boolean(process.env.NOTIFY_EMAIL?.trim());
   const canPay = lemonsqueezy || gumroad || paybox || paypal;
   // ДВА РАЗНЫХ ВОПРОСА, и раньше на них отвечало одно поле.
   //
@@ -146,6 +159,7 @@ channelsHealthRouter.get("/channels", (_req: Request, res: Response) => {
     canRegister,
     canPay,
       canGrant,
+      applicationsNotified,
       canStartPurchase,
       mail,
     signup: {
@@ -171,6 +185,7 @@ channelsHealthRouter.get("/channels", (_req: Request, res: Response) => {
     },
     // Что чинить в первую очередь, если canRegister/canPay = false.
     missing: [
+      ...(applicationsNotified ? [] : ["NOTIFY_EMAIL (заявки сохраняются, но о них никто не узнаёт)"]),
       ...(email ? [] : ["SMTP_HOST+SMTP_USER+SMTP_PASS либо RESEND_API_KEY"]),
       ...(google ? [] : ["GOOGLE_OAUTH_CLIENT_ID+SECRET"]),
       ...(github ? [] : ["GITHUB_OAUTH_CLIENT_ID+SECRET"]),

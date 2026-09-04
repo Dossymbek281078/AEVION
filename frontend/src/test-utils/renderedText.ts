@@ -40,7 +40,14 @@ export function sobratVidimyj(koren: Element): VidimyjTekst {
   const tekst: string[] = [];
   const atributy: string[] = [];
 
+  // Содержимое <style> и <script> — НЕ видимый текст: это правила оформления
+  // и код. Первая версия собирала их наравне с подписями, и на первой же
+  // странице выдала «@keyframes pulse-dot {…}» как английскую надпись.
+  // Шум такого рода опаснее пропуска: он приучает не читать список.
+  const NEVIDIMYE = new Set(["STYLE", "SCRIPT", "NOSCRIPT", "TEMPLATE"]);
+
   koren.querySelectorAll("*").forEach((el) => {
+    if (NEVIDIMYE.has(el.tagName)) return;
     for (const a of ATRIBUTY) {
       const v = el.getAttribute(a);
       if (v && v.trim()) atributy.push(v.trim());
@@ -67,6 +74,22 @@ export const TERMINY_OBSHIE = [
   "Monaco", "VS", "Code", "SPA", "ZIP", "CDN", "SSL", "DNS", "SMS",
 ];
 
+/**
+ * Похоже на ЗНАЧЕНИЕ, а не на подпись: адрес, имя файла, домен, число с
+ * единицей. Такие строки приходят из данных и латиницей по природе.
+ *
+ * Различаем по ФОРМЕ, а не по числу слов. Правило «без пробела — не подпись»
+ * выглядит проще и было бы ошибкой: 03.09.2026 оно ослепило соседнего сторожа
+ * ровно на однословных подписях — Building, Pending, Failed, Draft.
+ */
+export function pohozheNaZnachenie(s: string): boolean {
+  if (s.includes("://")) return true;                    // адрес
+  if (/^[\w.-]+\.[a-z]{2,5}$/i.test(s)) return true;      // файл или домен
+  if (/^[0-9][0-9.,]*\s?[a-z%]{1,4}$/i.test(s)) return true; // 0ms, 12.5kb, 40%
+  if (/^[0-9\s.,:+-]+$/.test(s)) return true;             // только числа и знаки
+  return false;
+}
+
 /** Есть латинские буквы и нет кириллицы. */
 export function tolkoLatinica(s: string): boolean {
   return /[A-Za-z]/.test(s) && !/[А-ЯЁа-яё]/.test(s);
@@ -88,6 +111,8 @@ export function ostalosLatinskoeSlovo(s: string, terminy: string[]): boolean {
  * вскрыты мутацией 03.09.2026 на первом же таком стороже.
  */
 export function angliyskieStroki(v: VidimyjTekst, terminy: string[] = TERMINY_OBSHIE): string[] {
-  const bad = v.vsyo.filter((s) => tolkoLatinica(s) && ostalosLatinskoeSlovo(s, terminy));
+  const bad = v.vsyo.filter(
+    (s) => tolkoLatinica(s) && !pohozheNaZnachenie(s) && ostalosLatinskoeSlovo(s, terminy),
+  );
   return [...new Set(bad)];
 }

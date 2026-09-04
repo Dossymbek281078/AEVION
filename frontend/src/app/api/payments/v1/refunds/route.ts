@@ -10,6 +10,7 @@ import {
   getOrigin,
   signHmac,
   store,
+  PAYMENTS_API_MODE,
   withCors,
   type ApiLink,
 } from "../_lib";
@@ -27,6 +28,13 @@ type ApiRefund = {
   currency: string;
   reason: string;
   status: "succeeded";
+  /**
+   * Режим API. Возврат создаётся со статусом succeeded, и по ответу его было
+   * не отличить от настоящего возврата денег: обращения к кассе в этом дереве
+   * нет вовсе. Страницы о демонстрационном режиме говорят честно, а ответ
+   * читает машина — чужая интеграция, наш дашборд, скрипт сверки.
+   */
+  mode: typeof PAYMENTS_API_MODE;
   created: number;
 };
 
@@ -211,6 +219,7 @@ export async function POST(req: NextRequest) {
     currency: link.currency,
     reason: (body.reason || "requested_by_customer").slice(0, 120),
     status: "succeeded",
+        mode: PAYMENTS_API_MODE,
     created: Date.now(),
   };
 

@@ -491,7 +491,7 @@ export default function PwaInstall() {
           </li>
           <li style={bulletItem}>
             <span aria-hidden style={{ color: '#34d399' }}>📶</span>
-            <span>Работает офлайн — играй с AI без сети</span>
+            <span>Работает офлайн — играй с ИИ без сети</span>
           </li>
           <li style={bulletItem}>
             <span aria-hidden style={{ color: '#34d399' }}>🔔</span>

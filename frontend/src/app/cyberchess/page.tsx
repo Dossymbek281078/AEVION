@@ -4863,7 +4863,7 @@ export default function CyberChessPage(){
             try{
               const parts=fenAtTrigger.split(" ");parts[1]=parts[1]==="w"?"b":"w";parts[3]="-";
               const ng=new Chess(parts.join(" "));setGame(ng);sBk(k=>k+1);
-              showToast(`🎲 AI пропускает ход (${diceLabel})`,"info");
+              showToast(`🎲 ИИ пропускает ход (${diceLabel})`,"info");
             }catch{}
           }else{
             // Pick random-ish best from allowed (mini search not worth it here)
@@ -6541,7 +6541,7 @@ export default function CyberChessPage(){
                   <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>ИИ</span>
                   <input type="range" aria-label="Сила соперника" min={0} max={(chessy.owned.master_ai||isPro)?6:4}
                     value={Math.min(aiI,(chessy.owned.master_ai||isPro)?6:4)}
-                    onChange={e=>{const v=+e.target.value;if(v>=5&&!(chessy.owned.master_ai||isPro)){showToast("Master/Stockfish AI — premium. Купи в Chessy-магазине","info");sShowShop(true);return}sAiI(v)}}
+                    onChange={e=>{const v=+e.target.value;if(v>=5&&!(chessy.owned.master_ai||isPro)){showToast("Master/Stockfish — платный уровень. Купи в Chessy-магазине","info");sShowShop(true);return}sAiI(v)}}
                     style={{flex:1,accentColor:lv.color}}/>
                   <span style={{fontSize:11,fontWeight:800,color:lv.color,whiteSpace:"nowrap"}}>{lv.ru} · {lv.elo}{aiI>=5&&!(chessy.owned.master_ai||isPro)?" 🔒":""}</span>
                 </div>
@@ -6879,7 +6879,7 @@ export default function CyberChessPage(){
                   </button>
                   <button onClick={()=>{sHotseat(v=>!v);showToast(hotseat?"Режим «вдвоём» выключен":"Играете вдвоём за одной доской","info")}} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${hotseat?"#3b82f6":CC.border}`,background:hotseat?"linear-gradient(135deg,#dbeafe,#bfdbfe)":CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>👥</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>За одним экраном</span><span style={{marginLeft:"auto",fontSize:10,fontWeight:900,padding:"2px 7px",borderRadius:10,background:hotseat?"#3b82f6":"#e5e7eb",color:hotseat?"#fff":CC.textDim}}>{hotseat?"ON":"OFF"}</span></div>
-                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>Без AI — оба игрока ходят на одном устройстве.</div>
+                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>Без ИИ — оба игрока ходят на одном устройстве.</div>
                   </button>
                   {/* P2P — play with friend online via WebRTC */}
                   <button onClick={()=>{
@@ -6895,7 +6895,7 @@ export default function CyberChessPage(){
                   </button>
                   <button onClick={()=>sShowTournament(true)} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>🏆</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Турниры</span></div>
-                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>Свисс / Round-Robin против AI разных рейтингов.</div>
+                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>Швейцарка / круговая против ИИ разных рейтингов.</div>
                   </button>
                   <button onClick={()=>sShowVariantStats(true)} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>📈</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Статы по режимам</span></div>
@@ -6971,7 +6971,7 @@ export default function CyberChessPage(){
               маленькие pill-кнопки прямо под главной кнопкой партии. */}
           {false&&(()=>{
             const hero=[
-              {sym:SYM.play,title:"Сыграть прямо сейчас",sub:"AI любого уровня · 5 секунд до старта",cta:"Начать партию",onClick:()=>{sSetup(true);sTab("play")}},
+              {sym:SYM.play,title:"Сыграть прямо сейчас",sub:"ИИ любого уровня · 5 секунд до старта",cta:"Начать партию",onClick:()=>{sSetup(true);sTab("play")}},
               {sym:SYM.puzzle,title:"Решить задачу",sub:`Случайная из ${pzCountLabel} тактических`,cta:"Попробовать",onClick:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
               {sym:SYM.masters,title:"Изучить классику",sub:"Партии чемпионов · режим «угадай ход»",cta:"Открыть",onClick:()=>{sShowMasters(true);sMasterCurrent(null);sMasterMode("replay")}},
             ];
@@ -8372,7 +8372,7 @@ export default function CyberChessPage(){
             <Btn size="md" variant="gold" className="cc-game-btn" onClick={()=>{if(!confirm("Предложить ничью?"))return;if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("ИИ отклонил ничью","error")}}>½ Ничья</Btn>
             <Btn size="md" variant="secondary" className="cc-game-btn" icon={<Icon.Undo width={14} height={14}/>} onClick={()=>{
               if(hist.length<2){showToast("Ходов нет","error");return}
-              if(think){showToast("AI думает — подожди","error");return}
+              if(think){showToast("ИИ думает — подожди","error");return}
               if(!hotseat){
                 // Probability-based AI acceptance: Beginner=100% ... Master=0%
                 const prob=Math.max(0,(5-aiI)/5);
@@ -8475,7 +8475,7 @@ export default function CyberChessPage(){
                   background:game.turn()===pCol?CC.brand:CC.textDim,
                   animation:game.turn()===pCol&&on&&!over?"cc-pulse-glow 1.5s infinite":undefined,
                 }}/>
-                {over?"Партия завершена":game.turn()===pCol?"Твой ход":"Ход AI"}
+                {over?"Партия завершена":game.turn()===pCol?"Твой ход":"Ход ИИ"}
               </div>
               {/* Move count + TC */}
               <div style={{fontSize:10,color:CC.textMute,marginTop:1}}>
@@ -11307,7 +11307,7 @@ ${question.trim()}`;
                     {modeBtn("🤖","Против ИИ","играй с ботом, тренер комментирует",()=>{
                       sCoachAIEnabled(true);sEditorMode(false);
                       const cl=pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);pT.reset();aT.reset();
-                      showToast("Новая игра против AI","success");
+                      showToast("Новая игра против ИИ","success");
                     },isVsAI)}
                     {modeBtn("✋","За обоих","двигай сам обе стороны",()=>{
                       sCoachAIEnabled(false);sEditorMode(false);
@@ -12398,7 +12398,7 @@ ${question.trim()}`;
           <p style={{margin:"0 0 10px",lineHeight:1.6}}><b>Тайм-режимы</b> — 3мин / 5мин / свой: авто-переход после каждого решения, итоговый экран с WR%.</p>
           <p style={{margin:0,color:CC.textDim,fontSize:13}}>Нажми <b>Задачи</b> в верхней навигации → Выбери режим → Вперёд!</p>
         </>},
-        {icon:"🎓",title:"AI Coach с Anthropic Claude",body:<>
+        {icon:"🎓",title:"ИИ-коуч на Anthropic Claude",body:<>
           <p style={{margin:"0 0 10px",lineHeight:1.6}}>Задай вопрос во вкладке Coach — тренер видит текущую позицию, оценку движка и историю ходов.</p>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:10}}>
             {["🔍 Объясни позицию","📋 Найди план","🎯 Где тактика","🛡 Слабости"].map(a=><div key={a} style={{fontSize:11,padding:"5px 8px",background:"rgba(124,58,237,0.08)",borderRadius:6,color:"#6d28d9",fontWeight:700,textAlign:"center"}}>{a}</div>)}
@@ -12544,7 +12544,7 @@ ${question.trim()}`;
           ["🤝 Друг онлайн","P2P без сервера — отправь другу ссылку"],
           ["Декор доски в настройках","Шанырак, Волна, Klimt…"],
           ["?? / !! тосты","Авто-обнаружение блунда/брилланта"],
-          ["WhatIf в Analysis","AI объяснит любую кандидатную линию"],
+          ["WhatIf в Analysis","ИИ объяснит любую кандидатную линию"],
         ]},
       ] as const).map(grp=><div key={grp.title} style={{marginBottom:SPACE[3]}}>
         <div style={{fontSize:10,fontWeight:900,letterSpacing:1.2,textTransform:"uppercase" as const,color:CC.textMute,marginBottom:6}}>{grp.title}</div>
@@ -13686,7 +13686,7 @@ ${question.trim()}`;
           <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.brandSoft,border:`1px solid ${CC.brand}`}}>
             <div style={{fontSize:12,fontWeight:900,color:CC.brand,letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:SPACE[2]}}>💰 Как заработать</div>
             <ul style={{margin:0,paddingLeft:18,fontSize:12,color:CC.text,lineHeight:1.8}}>
-              <li><b>Победа</b> 5–160 (зависит от силы AI и времени)</li>
+              <li><b>Победа</b> 5–160 (зависит от силы ИИ и времени)</li>
               <li><b>Задача</b> 2–15 (по рейтингу задачи)</li>
               <li><b>Задача дня</b> +50 за первое решение в день</li>
               <li><b>Ежедневный бонус</b> +5 / +30 (серия 3) / +100 (серия 7)</li>
@@ -13700,13 +13700,13 @@ ${question.trim()}`;
           <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.dangerSoft,border:`1px solid ${CC.danger}`}}>
             <div style={{fontSize:12,fontWeight:900,color:CC.danger,letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:SPACE[2]}}>🛒 На что тратить</div>
             <ul style={{margin:0,paddingLeft:18,fontSize:12,color:CC.text,lineHeight:1.8}}>
-              <li><b>Отмена хода</b> 3 (откат хода в партии vs AI)</li>
+              <li><b>Отмена хода</b> 3 (откат хода в партии vs ИИ)</li>
               <li><b>Подсказка в задаче</b> 5</li>
               <li><b>Ghost-подсказка</b> 15 (стрелка лучшего хода)</li>
               <li><b>Глубокий разбор</b> 20 (коуч)</li>
               <li><b>Открытие уровня «Мастер»</b> 30 (2400 ELO)</li>
               <li><b>Premium-тема</b> 50 (Neon / Obsidian / Sakura)</li>
-              <li><b>AI Rival Алексей</b> 100 (бета)</li>
+              <li><b>ИИ-соперник Алексей</b> 100 (бета)</li>
             </ul>
           </div>
         </div>
@@ -15331,7 +15331,7 @@ ${question.trim()}`;
       const cmds:PaletteCommand[]=[
         // ── PLAY ──
         {id:"play-quick",   icon:"▶",  group:"Play", label:"Быстрая игра",        hint:"Быстрый старт с текущими настройками",       hotkey:"N", run:()=>{sHotseat(false);sRivalMode(false);sTab("play");newG()}},
-        {id:"play-matchme", icon:"⚡", group:"Play", label:"Соперник по рейтингу",             hint:"AI под мой рейтинг",                        run:()=>{const ti=rat<600?0:rat<900?1:rat<1300?2:rat<1700?3:rat<2100?4:5;const c=(chessy.owned.master_ai||isPro)?ti:Math.min(ti,4);sAiI(c);sHotseat(false);sRivalMode(false);sTab("play");setTimeout(()=>newG(),50)}},
+        {id:"play-matchme", icon:"⚡", group:"Play", label:"Соперник по рейтингу",             hint:"ИИ под мой рейтинг",                        run:()=>{const ti=rat<600?0:rat<900?1:rat<1300?2:rat<1700?3:rat<2100?4:5;const c=(chessy.owned.master_ai||isPro)?ti:Math.min(ti,4);sAiI(c);sHotseat(false);sRivalMode(false);sTab("play");setTimeout(()=>newG(),50)}},
         {id:"play-hotseat", icon:"👥", group:"Play", label:"Вдвоём за одним экраном", hint:"Один экран · два игрока",                   run:()=>{sHotseat(true);sRivalMode(false);sTab("play");setTimeout(()=>newG(),50)}},
         {id:"play-variants",icon:"🎲", group:"Play", label:"Выбрать вариант шахмат",hint:"Fischer 960 / Atomic / Crazyhouse / +9",   run:()=>sShowVariants(true)},
         {id:"play-tournament",icon:"🏆",group:"Play",label:"Турнир",                hint:"Свисс / Round-Robin",                       run:()=>sShowTournament(true)},
@@ -15385,7 +15385,7 @@ ${question.trim()}`;
         {id:"ws-standard",  icon:"▦", group:"Workspace", label:"Стандарт — доска + панель", hotkey:"2", run:()=>{sWsPreset("standard");showToast(wsToast("standard"),"info")}},
         {id:"ws-stream",    icon:"▶", group:"Workspace", label:"Стрим — + YouTube/Twitch", hotkey:"3", run:()=>{sWsPreset("stream");showToast(wsToast("stream"),"info")}},
         {id:"ws-study",     icon:"✎", group:"Workspace", label:"Обучение — + multipv",     hotkey:"4", run:()=>{sWsPreset("study");showToast(wsToast("study"),"info")}},
-        {id:"ws-coach",     icon:"🎓",group:"Workspace", label:"Коуч — + предсказания AI", hotkey:"5", run:()=>{sWsPreset("coach");showToast(wsToast("coach"),"info")}},
+        {id:"ws-coach",     icon:"🎓",group:"Workspace", label:"Коуч — + предсказания ИИ", hotkey:"5", run:()=>{sWsPreset("coach");showToast(wsToast("coach"),"info")}},
 
         // ── BOARD / GAME ──
         {id:"flip",         icon:"⇅", group:"Board", label:"Перевернуть доску",   hotkey:"F", run:()=>sFlip(v=>!v)},

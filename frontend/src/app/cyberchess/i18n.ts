@@ -144,7 +144,7 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "fide.calib.tooltip_r2":       "Объяснённая дисперсия R²",
     "fide.calib.tooltip_floor":    "Спец-модель высокого уровня",
     // AI personality picker
-    "ai.title":                    "Стиль AI",
+    "ai.title":                    "Стиль ИИ",
     "ai.subtitle":                 "Выбери личность — каждая играет по-своему",
     "ai.play_with":                "Играть с",
     "ai.selected":                 "ВЫБРАНО",
@@ -200,7 +200,7 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "drill.wrong":                 "✗ Неверно. Правильно:",
     "drill.timeout":               "⏱ Время вышло! Ответ:",
     // Mirror Mode panel
-    "mirror.studied":              "AI изучил твои последние партии",
+    "mirror.studied":              "ИИ изучил твои последние партии",
     "mirror.no_data":              "Нет данных об играх",
     "mirror.plays_like_you":       "играет как ты",
     "mirror.need_games":           "Нужно 5+ партий для анализа",

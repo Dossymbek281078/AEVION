@@ -63,8 +63,8 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: "first_win",      title: "Первая победа",     desc: "Победи в первой партии",       icon: "🥇", category: "games", reward: 50, target: 1 },
   { id: "wins_10",        title: "Победитель",        desc: "Победи 10 раз",                icon: "🏆", category: "games", reward: 100, target: 10 },
   { id: "wins_50",        title: "Чемпион",           desc: "Победи 50 раз",                icon: "👑", category: "games", reward: 300, target: 50 },
-  { id: "beat_expert",    title: "Победил Expert",    desc: "Победи AI уровня Expert",      icon: "🎖", category: "games", reward: 100 },
-  { id: "beat_master",    title: "Победил Master",    desc: "Победи AI уровня Master",      icon: "🏅", category: "games", reward: 200 },
+  { id: "beat_expert",    title: "Победил Expert",    desc: "Победи ИИ уровня Expert",      icon: "🎖", category: "games", reward: 100 },
+  { id: "beat_master",    title: "Победил Master",    desc: "Победи ИИ уровня Master",      icon: "🏅", category: "games", reward: 200 },
   { id: "endgame_master", title: "Мастер эндшпилей",  desc: "Выиграй эндшпиль из тренажёра", icon: "🏰", category: "games", reward: 80 },
 
   // ───────── Puzzles (existing IDs!) ─────────
@@ -99,9 +99,9 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: "stream_10",          title: "Стример",        desc: "10 трансляций партий",                     icon: "🎙", category: "social", reward: 120, target: 10 },
   { id: "replay_view_5",      title: "Кинолюб",        desc: "Посмотри 5 завершённых трансляций",        icon: "🎞", category: "social", reward: 25, target: 5 },
   { id: "replay_view_20",     title: "Аналитик",       desc: "Посмотри 20 трансляций — изучай чужие",    icon: "📽", category: "social", reward: 80, target: 20 },
-  { id: "personality_try_3",  title: "Стилист",        desc: "Попробуй 3 разных AI personalities",       icon: "🎭", category: "social", reward: 40, target: 3 },
-  { id: "personality_try_all",title: "Полиглот шахмат",desc: "Попробуй все 10 AI personalities",         icon: "🌟", category: "social", reward: 200, target: 10 },
-  { id: "personality_win_1",  title: "Победил легенду",desc: "Победи AI с personality (Magnus/Hikaru/...)",icon:"🏆",category: "social", reward: 80, target: 1 },
+  { id: "personality_try_3",  title: "Стилист",        desc: "Попробуй 3 разных стиля соперника",       icon: "🎭", category: "social", reward: 40, target: 3 },
+  { id: "personality_try_all",title: "Полиглот шахмат",desc: "Попробуй все 10 стилей соперника",         icon: "🌟", category: "social", reward: 200, target: 10 },
+  { id: "personality_win_1",  title: "Победил легенду",desc: "Победи ИИ в стиле легенды (Магнус, Хикару и другие)",icon:"🏆",category: "social", reward: 80, target: 1 },
   { id: "fide_check",         title: "Калибровка",     desc: "Открой FIDE-оценку своей силы",            icon: "📐", category: "social", reward: 15, target: 1 },
   { id: "ac_clean_1",   title: "Честная игра",      desc: "Заверши партию с вердиктом 'Чисто' от анти-чит системы", icon: "🛡", category: "social", reward: 30,  target: 1  },
   { id: "ac_clean_5",   title: "Рыцарь чести",       desc: "5 партий подряд без подозрений",                          icon: "⚔",  category: "social", reward: 100, target: 5  },

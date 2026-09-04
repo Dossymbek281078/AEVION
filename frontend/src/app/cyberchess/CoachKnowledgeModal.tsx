@@ -273,7 +273,7 @@ export default function CoachKnowledge({ visible, onClose, onLoadPosition }: Pro
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 18 }}>📚</span>
             <div>
-              <div style={{ fontSize: 14, fontWeight: 900 }}>База знаний — AI Coach</div>
+              <div style={{ fontSize: 14, fontWeight: 900 }}>База знаний — ИИ-коуч</div>
               <div style={{ fontSize: 10, opacity: 0.85, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                 <span>Тактика · Эндшпиль · Дебюты · Миттельшпиль · Стратегия · Время · Память · Roadmap</span>
                 {totalAll > 0 && <span style={{ padding: "1px 8px", borderRadius: 999, background: "rgba(255,255,255,0.18)", fontWeight: 800 }}>

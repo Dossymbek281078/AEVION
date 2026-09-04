@@ -171,7 +171,7 @@ export default function SpectatorVoiceFeed({
           }}
         >
           <span aria-hidden>🎙</span>
-          <span>AI комментарий</span>
+          <span>ИИ комментарий</span>
           {playing && !muted && (
             <span
               style={{

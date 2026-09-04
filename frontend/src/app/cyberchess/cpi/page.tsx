@@ -293,7 +293,7 @@ CPI_new = clamp(CPI_old + ΔCPI, 0, 4000)`}</pre>
             <ul style={{ margin: 0, paddingLeft: 22, fontSize: 13, color: C.dim, lineHeight: 1.7 }}>
               <li><strong style={{ color: C.text }}>Веса факторов</strong> — симуляция на 100+ партий разного уровня</li>
               <li><strong style={{ color: C.text }}>Сопоставление CPI и FIDE</strong> — показывать ли &laquo;эквивалент по FIDE&raquo;?</li>
-              <li><strong style={{ color: C.text }}>Античит</strong> — сильный игрок может симулировать ошибки. Считать только в режимах против AI?</li>
+              <li><strong style={{ color: C.text }}>Античит</strong> — сильный игрок может симулировать ошибки. Считать только в режимах против ИИ?</li>
               <li><strong style={{ color: C.text }}>Затухание</strong> — должен ли CPI &laquo;затухать&raquo; если не играешь?</li>
               <li><strong style={{ color: C.text }}>Стеклянный потолок</strong> — потолок 4000 — может ли быть мало для топов?</li>
             </ul>

@@ -680,7 +680,7 @@ export default function VoiceCoach({
         }}
       >
         <span style={{ fontSize: 14 }}>🎙️</span>
-        <span style={{ color: '#9aa4b2' }}>AI Коуч</span>
+        <span style={{ color: '#9aa4b2' }}>ИИ Коуч</span>
         {isSpeaking && <span style={{ color: '#7ee787', fontSize: 11 }}>🔊 говорит</span>}
         {isLoadingComment && <span style={{ color: '#9aa4b2', fontSize: 11 }}>⏳</span>}
         {muted && <span style={{ color: '#6b7280', fontSize: 10 }}>MUTE</span>}

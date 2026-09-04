@@ -99,7 +99,7 @@ const INTENTS: Array<{
   title: string;
   hint: string;
 }> = [
-  { intent: "play", icon: "♟", title: "Играть", hint: "Партия против AI 800–2400 — 5 секунд до старта" },
+  { intent: "play", icon: "♟", title: "Играть", hint: "Партия против ИИ 800–2400 — 5 секунд до старта" },
   { intent: "learn", icon: "🎓", title: "Учиться", hint: `Курс из ${LESSONS.length} уроков и живой ИИ-тренер` },
   { intent: "puzzles", icon: "⚡", title: "Задачи", hint: "Тысячи задач под твой уровень" },
 ];

@@ -233,7 +233,7 @@ function ChainReceiptContent() {
                 </span>
               </div>
               <div style={{ color: "#6b7686", fontSize: 13 }}>
-                {t("chain.step", { n: String(i + 1), total: String(всего) })}
+                {t("chain.step", { n: String(i + 1), m: String(всего) })}
               </div>
               {s.createdAt && (
                 <div style={{ color: "#6b7686", fontSize: 13 }}>

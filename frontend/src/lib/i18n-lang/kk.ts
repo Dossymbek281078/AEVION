@@ -7390,7 +7390,7 @@ const kk: Record<string, string> = {
   "chain.room.qpaynet": "Төлем",
   "chain.title": "Тізбек түбіртегі",
   "chain.lead": "Әр қадам бөлек қол қойылған. Кез келгенін өзіңіз тексеріңіз — сөзге сенуді сұрамаймыз.",
-  "chain.step": "{total} қадамның {n}-і",
+  "chain.step": "{m} қадамның {n}-сі",
   "chain.ok": "расталды",
   "chain.revoked": "кері қайтарылды",
   "chain.missing": "табылмады",

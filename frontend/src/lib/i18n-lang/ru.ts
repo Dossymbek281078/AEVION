@@ -7431,7 +7431,7 @@ const ru: Record<string, string> = {
   "chain.room.qpaynet": "Выплата",
   "chain.title": "Чек цепочки",
   "chain.lead": "Каждый шаг подписан отдельно. Проверьте любой сам — мы не просим верить на слово.",
-  "chain.step": "Шаг {n} из {total}",
+  "chain.step": "Шаг {n} из {m}",
   "chain.ok": "подтверждено",
   "chain.revoked": "отозвано",
   "chain.missing": "не найдено",

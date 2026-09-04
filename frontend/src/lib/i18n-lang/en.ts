@@ -7431,7 +7431,7 @@ const en: Record<string, string> = {
   "chain.room.qpaynet": "Payout",
   "chain.title": "Chain receipt",
   "chain.lead": "Every step is signed separately. Verify any of them yourself — we do not ask you to take our word.",
-  "chain.step": "Step {n} of {total}",
+  "chain.step": "Step {n} of {m}",
   "chain.ok": "verified",
   "chain.revoked": "revoked",
   "chain.missing": "not found",

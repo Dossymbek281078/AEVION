@@ -83,7 +83,7 @@ describe("one language per page", () => {
     // live keys, which is the whole reason a percentage no longer costs eleven
     // dictionaries. Stale numbers would make the UI lie without failing a build.
     for (const lang of LANGS) {
-      expect(LANG_KEY_COUNT[lang], `${lang} — regenerate with scripts/splitI18n.mjs`)
+      expect(LANG_KEY_COUNT[lang], `${lang} — LANG_KEY_COUNT is stale: update the number in i18n-data.ts. Do NOT run scripts/splitI18n.mjs — it split the dictionary once, in August, and would now read a file that no longer holds it.`)
         .toBe(Object.keys(translations[lang]).length);
     }
   });

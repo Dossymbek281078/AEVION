@@ -72,7 +72,7 @@ export default async function SharedAnalysisPage({ params }: Props) {
         {!a ? (
           <div style={{ textAlign: "center", padding: "60px 20px" }}>
             <h1 style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 800, color: "var(--ink, #17181a)" }}>Разбор не найден</h1>
-            <p style={{ color: "var(--ink-faint, #74767c)", marginTop: 8 }}>This QVenture report doesn&apos;t exist or is no longer public.</p>
+            <p style={{ color: "var(--ink-faint, #74767c)", marginTop: 8 }}>Этот разбор QVenture не существует или больше не открыт по ссылке.</p>
             <Link href="/qventure" style={{ display: "inline-block", marginTop: 16, padding: "11px 20px", background: "var(--teal, #0a7d72)", color: "#fff", borderRadius: 4, fontWeight: 700, textDecoration: "none" }}>
               Новый разбор →
             </Link>

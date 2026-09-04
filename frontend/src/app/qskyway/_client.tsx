@@ -5,6 +5,7 @@ import { apiUrl } from "@/lib/apiBase";
 import { useI18n } from "@/lib/i18n";
 import { DataProvenanceChip } from "@/components/DataProvenanceChip";
 import { RegulatorySourceChip } from "@/components/RegulatorySourceChip";
+import ModuleStatusNote from "@/components/ModuleStatusNote";
 import { CompetitorMatrix } from "@/components/CompetitorMatrix";
 import WaitlistCapture from "@/components/WaitlistCapture";
 import { competitorsFor } from "@/lib/competitors";
@@ -933,6 +934,13 @@ export default function QSkywayClient() {
         <p style={{ color: "#5f7086", fontSize: 12, margin: "0 0 18px" }}>
           {t("qskyway.hero.disclaimer")}
         </p>
+            {/*
+              Статус берётся из живого каталога, а не пишется здесь: каталог
+              помечает модуль `availability: "beta"`, и до сегодня об этом знала
+              только страница цен. Страница модуля говорила правду своими словами
+              (оговорка выше), но с каталогом связана не была - разошлись бы молча.
+            */}
+            <ModuleStatusNote moduleId="qskyway" />
 
         {/*
           На телефоне три кнопки города вставали столбиком: названия длинные

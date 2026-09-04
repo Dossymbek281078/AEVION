@@ -1560,7 +1560,7 @@ qskywayRouter.get("/city", (req: Request, res: Response) => {
     // застройки» — верно, но не проверяемо. Высоту при этом не переписываем:
     // починка принадлежит OSM. См. src/data/qskywayHeightReview.ts.
     heightReview: heightReviewsForCity(id),
-    nofly: zones.map((z) => ({ id: z.id, name: z.name, kind: z.kind, x: Math.round(z.x), y: Math.round(z.y), radiusM: z.radiusM, until: z.until ?? null, realityNote: z.realityNote ?? null })),
+    nofly: zones.map((z) => ({ id: z.id, name: z.name, kind: z.kind, x: Math.round(z.x), y: Math.round(z.y), radiusM: z.radiusM, until: z.until ?? null, realityNote: z.realityNote ?? null, realityNoteEn: z.realityNoteEn ?? null })),
     // Один знак после запятой, а не сырое число с плавающей точкой. На экране
     // стояло «5.14→27.35 м/с»: две цифры точности у величины, ВЕРХНЯЯ ЧАСТЬ
     // которой — иллюстративная модель (это сказано в note ниже). Ложная
@@ -2538,7 +2538,15 @@ qskywayRouter.post("/airspace/register", registerLimiter, async (req: Request, r
   }
 
   const contentHash = airspaceContentHash(src);
-  const title = `${src.source} — ${resolved.city.city}, редакция ${src.effective}`;
+  // Имя модуля в заголовке — чтобы запись НАХОДИЛАСЬ поиском по «QSkyway».
+  // Замер 04.09.2026 на проде: поиск «UASFM» находит объект, «qskyway» и
+  // «airspace» — ноль. Реестр ищет по заголовку и описанию, вида объекта
+  // не видит, а зритель демонстрации ищет именно имя модуля, которым
+  // только что пользовался.
+  //
+  // ⚠️ Существующим записям это НЕ поможет: повторное внесение отбивается
+  // сверкой contentHash, заголовок у них останется прежним.
+  const title = `QSkyway · ${src.source} — ${resolved.city.city}, редакция ${src.effective}`;
   const description =
     `Опубликованный слой ограничений высоты, использованный QSkyway для маршрутизации. ` +
     `Орган: ${src.authority}. Режим: ${src.regime}. Ячеек: ${src.cells.length}. ` +

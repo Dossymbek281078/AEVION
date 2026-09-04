@@ -734,7 +734,7 @@ export default function DevHubPage() {
                         <button
                           onClick={() => removeSnippet(s)}
                           className="text-xs font-semibold px-2.5 py-1 rounded-md border border-slate-700 bg-slate-800 hover:bg-rose-900/60 hover:border-rose-800 text-slate-300 hover:text-rose-200 transition-colors ml-auto mr-2"
-                          aria-label={t("snip.removeAria")}
+                          aria-label={`${t("snip.removeAria")}: ${s.title}`}
                         >
                           {t("snip.remove")}
                         </button>

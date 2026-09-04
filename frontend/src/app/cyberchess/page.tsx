@@ -6526,6 +6526,12 @@ export default function CyberChessPage(){
                     </button>;
                   })}
                   <button onClick={()=>sPCol(Math.random()<0.5?"w":"b")} title="Случайный цвет"
+                    /* Имя, а не значок. Содержимое кнопки — 🎲, и по правилам
+                       имени оно ПОБЕЖДАЕТ title: читалка объявляла «игральная
+                       кость, кнопка» — роль есть, дела нет. Замер вкладки
+                       доступности: из 67 кнопок страницы безымянна была ровно
+                       эта. Передана 02.09, дожила до 04.09. */
+                    aria-label="Случайный цвет"
                     className="cc-focus-ring"
                     style={{display:"inline-flex",alignItems:"center",
                       padding:"4px 10px",borderRadius:RADIUS.full,border:"none",

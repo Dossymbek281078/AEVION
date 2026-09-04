@@ -184,10 +184,11 @@ export default function BureauOrgListPage() {
           </div>
           <form onSubmit={create} style={{ display: "grid", gap: 12 }}>
             <div>
-              <label style={{ fontSize: 12, fontWeight: 800, color: "#0f172a", marginBottom: 4, display: "block" }}>
+              <label htmlFor="org-name" style={{ fontSize: 12, fontWeight: 800, color: "#0f172a", marginBottom: 4, display: "block" }}>
                 Organization name *
               </label>
               <input
+                id="org-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Acme IP Studio"
@@ -198,10 +199,11 @@ export default function BureauOrgListPage() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10 }}>
               <div>
-                <label style={{ fontSize: 11, fontWeight: 800, color: "#475569", marginBottom: 4, display: "block" }}>
+                <label htmlFor="org-billing-email" style={{ fontSize: 11, fontWeight: 800, color: "#475569", marginBottom: 4, display: "block" }}>
                   Billing email
                 </label>
                 <input
+                  id="org-billing-email"
                   value={billingEmail}
                   onChange={(e) => setBillingEmail(e.target.value)}
                   placeholder="finance@your-firm.com"
@@ -210,10 +212,11 @@ export default function BureauOrgListPage() {
                 />
               </div>
               <div>
-                <label style={{ fontSize: 11, fontWeight: 800, color: "#475569", marginBottom: 4, display: "block" }}>
+                <label htmlFor="org-country" style={{ fontSize: 11, fontWeight: 800, color: "#475569", marginBottom: 4, display: "block" }}>
                   Country
                 </label>
                 <input
+                  id="org-country"
                   value={billingCountry}
                   onChange={(e) => setBillingCountry(e.target.value)}
                   placeholder="KZ"

@@ -114,6 +114,7 @@ Rules:
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
+                aria-label="Промт для оптимизации"
                 placeholder="Paste the prompt you want to optimize…"
                 rows={8}
                 style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #cbd5e1", fontSize: 13, resize: "vertical", fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
@@ -125,6 +126,7 @@ Rules:
               <input
                 value={context}
                 onChange={(e) => setContext(e.target.value)}
+                aria-label="Для чего используется промт"
                 placeholder="e.g. used for legal document summarization"
                 style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 13, outline: "none", boxSizing: "border-box" }}
               />

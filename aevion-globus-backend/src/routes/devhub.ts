@@ -124,6 +124,32 @@ function dhCreateLimit() {
   });
 }
 
+/**
+ * Предел для переноса гостевой работы в аккаунт.
+ *
+ * СВОЙ префикс, а не общий с созданием проектов: иначе попытки переноса
+ * тратили бы предел, отведённый на создание, и защита одной поверхности
+ * молча ослабляла бы другую.
+ *
+ * Настоящий человек зовёт эту ручку ОДИН раз на браузер. Десять в минуту —
+ * запас на перезагрузки и на две вкладки; всё, что выше, это перебор чужих
+ * гостевых идентификаторов, а он тут единственный осмысленный способ
+ * навредить: сам идентификатор и есть ключ к проектам, и удалять их он
+ * позволяет уже сейчас (DELETE /projects/:id авторизуется тем же requesterId).
+ * Умолчание строгое: защита, включающаяся только при заданной переменной,
+ * — это защита, которой нет.
+ */
+function dhAdoptLimit() {
+  const raw = Number(process.env.DEVHUB_ADOPT_RATE_LIMIT);
+  const max = Number.isFinite(raw) && raw > 0 ? raw : 10;
+  return rateLimit({
+    windowMs: 60_000,
+    max,
+    keyPrefix: "dhadopt",
+    message: "Слишком много попыток подряд. Подождите минуту.",
+  });
+}
+
 devhubRouter.use(
   ["/media/email", "/media/email-template-send", "/media/sms", "/media/whatsapp"],
   dhSendLimit(),
@@ -7691,7 +7717,7 @@ devhubRouter.get("/studio/capabilities", async (_req, res) => {
 // Про безопасность: гостевой идентификатор САМ ПО СЕБЕ даёт доступ к этим
 // проектам (он и есть ключ). Значит перенос не открывает ничего нового —
 // он лишь переписывает владельца на того, кто уже держит ключ.
-devhubRouter.post("/studio/adopt-guest", async (req, res) => {
+devhubRouter.post("/studio/adopt-guest", dhAdoptLimit(), async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth?.sub) {
     // Не 401: сюда попадёт и обычный гость, который просто ещё не вошёл.

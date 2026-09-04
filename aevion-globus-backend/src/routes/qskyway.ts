@@ -2538,7 +2538,15 @@ qskywayRouter.post("/airspace/register", registerLimiter, async (req: Request, r
   }
 
   const contentHash = airspaceContentHash(src);
-  const title = `${src.source} — ${resolved.city.city}, редакция ${src.effective}`;
+  // Имя модуля в заголовке — чтобы запись НАХОДИЛАСЬ поиском по «QSkyway».
+  // Замер 04.09.2026 на проде: поиск «UASFM» находит объект, «qskyway» и
+  // «airspace» — ноль. Реестр ищет по заголовку и описанию, вида объекта
+  // не видит, а зритель демонстрации ищет именно имя модуля, которым
+  // только что пользовался.
+  //
+  // ⚠️ Существующим записям это НЕ поможет: повторное внесение отбивается
+  // сверкой contentHash, заголовок у них останется прежним.
+  const title = `QSkyway · ${src.source} — ${resolved.city.city}, редакция ${src.effective}`;
   const description =
     `Опубликованный слой ограничений высоты, использованный QSkyway для маршрутизации. ` +
     `Орган: ${src.authority}. Режим: ${src.regime}. Ячеек: ${src.cells.length}. ` +

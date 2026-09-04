@@ -689,12 +689,15 @@ export async function provisionSubscription(input: {
     const причина = result.ok
       ? "отправка не настроена (режим заглушки) — письмо даже не пытались отправить"
       : (result.error ?? "причина не названа");
-    const уровень = result.ok ? console.warn : console.error;
-    уровень(
+    const сообщение =
       `[provisioning] ОПЛАЧЕНО, письмо с доступом НЕ отправлено: ` +
-        `подписка ${subscription.id}, тариф ${subscription.tierId}, ` +
-        `получатель @${доменПолучателя} — ${причина}`,
-    );
+      `подписка ${subscription.id}, тариф ${subscription.tierId}, ` +
+      `получатель @${доменПолучателя} — ${причина}`;
+    // Метод консоли не отрываем от объекта: `const у = console.warn; у(...)`
+    // в Node работает, но это опора на то, что методы там связаны, — в другой
+    // среде тот же код бросает. Развилка из двух строк дешевле такой опоры.
+    if (result.ok) console.warn(сообщение);
+    else console.error(сообщение);
   }
 
   return {

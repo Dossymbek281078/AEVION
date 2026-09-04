@@ -36,6 +36,15 @@ const ЗАКРЕПЛЕНО: Array<[string, string[]]> = [
   ["psyapp-deps/components/Onboarding.tsx", ["Сгенерировать новый псевдоним"]],
   ["qlife/components/PlanCard.tsx", ['htmlFor="qlife-age"', 'id="qlife-age"']],
   ["devhub/i18n.ts", ["snip.codeAria"]],
+  // Добавлено 04.09.2026: класс «одно имя у нескольких действий».
+  // Эти подписи различают элементы внутри цикла — без них читалка
+  // объявит несколько одинаковых строк, и выбрать будет нельзя.
+  ["pricing/page.tsx", ["tier.tryTrial\")}: ${tier.id}", "tier.openCalc\")}: ${tier.id}"]],
+  ["ventures/IdeaMarket.tsx", ["Отметить интерес", "${i.name}"]],
+  ["devhub/page.tsx", ["Copy: ${s.title}", "Star: ${s.title}"]],
+  ["smeta-trainer/drawings-practice/finishing/page.tsx", ["Проверить ответ: ${ex.title}"]],
+  ["smeta-trainer/drawings-practice/walls/page.tsx", ["Проверить ответ: ${ex.title}"]],
+  ["smeta-trainer/drawings-practice/timeline/page.tsx", ["Название этапа ${s.id}", "Удалить этап ${s.id}"]],
 ];
 
 describe("доступные имена не исчезают из органов управления", () => {
@@ -56,6 +65,6 @@ describe("доступные имена не исчезают из органо�
   it("охват не сузился незаметно: закреплённых файлов не меньше 16", () => {
     // Список можно РАСШИРЯТЬ. Сужение означает, что кто-то убрал строку
     // вместо того, чтобы починить упавшую проверку.
-    expect(ЗАКРЕПЛЕНО.length).toBeGreaterThanOrEqual(16);
+    expect(ЗАКРЕПЛЕНО.length).toBeGreaterThanOrEqual(22);
   });
 });

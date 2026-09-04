@@ -636,7 +636,7 @@ function EducationEditor({
                 <button
                   onClick={() => remove(e.id)}
                   className="text-xs text-rose-300/80 hover:text-rose-200"
-                  aria-label="Delete education"
+                  aria-label={`Delete education: ${e.institution}`}
                 >
                   ✕
                 </button>

@@ -18,6 +18,7 @@ import type { TierId, BillingPeriod } from "../data/pricing";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
 import { upsertAppSubscription } from "../lib/appEntitlements";
+import { ссылкаПодписки } from "../lib/payment/subscriptionReference";
 
 const capture = makeServiceCapture("paypalWebhook");
 
@@ -179,6 +180,18 @@ paypalWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
     }
 
     if (result.status === "paid") {
+      // Вебхук PayPal приходит на ВЕСЬ аккаунт, а не только на заказы нашего
+      // чекаута. Прямой перевод, счёт, старая подписка — событие придёт, почта в
+      // нём будет, а ссылки нашего формата не будет: `parseCustomId` вернёт пустую
+      // строку, разбор тарифа уйдёт в умолчание, и человек, не покупавший у нас
+      // ничего, получит подписку. Тот же класс, что закрыт у PayBox 04.09.
+      if (!ссылкаПодписки(reference)) {
+        console.warn(
+          `[paypal/webhook] заказ "${reference}" не похож на подписку — тариф не выдаём`,
+        );
+        return res.json({ ok: true, ignored: "not_a_subscription_reference", reference });
+      }
+
       const tierId = tierForReference(reference);
       const period = periodForReference(reference);
       const provResult = await provisionSubscription({

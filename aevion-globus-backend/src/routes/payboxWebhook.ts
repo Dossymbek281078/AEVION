@@ -17,6 +17,7 @@
  */
 
 import { Router, type Request, type Response } from "express";
+import { ссылкаПодписки } from "../lib/payment/subscriptionReference";
 import { payboxPaymentProvider } from "../lib/payment/payboxProvider";
 import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
 import type { TierId, BillingPeriod } from "../data/pricing";
@@ -73,17 +74,7 @@ export function tierForReference(ref: string): TierId {
   return "lite";
 }
 
-/**
- * Похожа ли ссылка заказа на покупку ПОДПИСКИ.
- *
- * Экспортируется ради проверки: правило, живущее только внутри обработчика,
- * невозможно закрепить — тест повторил бы его копией и остался бы зелёным
- * при любой правке. Сегодня я на это уже наступал в другом файле.
- */
-export function ссылкаПодписки(ref: string): boolean {
-  return /^tier[_-]/i.test(ref) ||
-    /(^|[_-])(lite|medium|full|business|team|all-access|enterprise|pro)([_-]|$)/i.test(ref);
-}
+
 
 function periodForReference(ref: string): BillingPeriod {
   return ref.toLowerCase().includes("annual") ? "annual" : "monthly";

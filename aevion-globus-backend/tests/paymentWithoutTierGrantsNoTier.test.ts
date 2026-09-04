@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { tierForReference, ссылкаПодписки } from "../src/routes/payboxWebhook";
+import { tierForReference } from "../src/routes/payboxWebhook";
+// Правило «это вообще про подписку?» живёт в общем модуле: копий разбора
+// тарифа три (по одной на кассу), и они уже разошлись. Второй копии правила
+// быть не должно.
+import { ссылкаПодписки } from "../src/lib/payment/subscriptionReference";
 
 /**
  * Платёж, который тарифом не является, тарифа и не получает.

@@ -111,8 +111,22 @@ export function installDevhubGuestHeader(): () => void {
   if (!id) return () => {};
   const original = window.fetch;
   installed = true;
-  window.fetch = ((input: RequestInfo | URL, init?: RequestInit) =>
-    isDevhubApiUrl(input) ? original(input, withGuestHeader(init, id)) : original(input, init)) as typeof window.fetch;
+  window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    if (!isDevhubApiUrl(input)) return original(input, init);
+    // Личность читается НА КАЖДЫЙ запрос, а не запоминается при установке.
+    //
+    // После переноса гостевой работы в аккаунт личность МЕНЯЕТСЯ
+    // (rotateDevhubGuestId), а захваченное значение продолжало бы уходить в
+    // заголовке до перезагрузки страницы. Выход из аккаунта страницу не
+    // перезагружает, поэтому окно не теоретическое: новая гостевая работа
+    // легла бы на уже разобранную личность и снова пропала бы из виду при
+    // следующем входе — ровно тот дефект, ради которого перенос и написан.
+    //
+    // Запасное значение — то, что было при установке: если хранилище вдруг
+    // отказало, лучше слать прежнюю личность, чем не слать заголовок вовсе
+    // (без него посетитель попадает в ОБЩИЙ ящик к чужим черновикам).
+    return original(input, withGuestHeader(init, getDevhubGuestId() ?? id));
+  }) as typeof window.fetch;
   return () => {
     window.fetch = original;
     installed = false;

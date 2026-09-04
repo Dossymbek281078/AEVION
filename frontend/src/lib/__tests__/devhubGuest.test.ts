@@ -5,6 +5,7 @@ import {
   isDevhubApiUrl,
   withGuestHeader,
   installDevhubGuestHeader,
+  rotateDevhubGuestId,
 } from "../devhubGuest";
 
 const GUEST_ID = /^[A-Za-z0-9_-]{8,64}$/;
@@ -112,6 +113,24 @@ describe("перехватчик на месте", () => {
     await window.fetch("https://api.aevion.app/api/devhub/projects");
     await window.fetch("https://api.aevion.app/api/devhub/snippets");
     expect(seen[0].header).toBe(seen[1].header);
+  });
+
+  test("после смены личности заголовок несёт НОВУЮ", async () => {
+    // Личность меняется после того, как гостевая работа переехала в аккаунт.
+    // Перехватчик брал её ОДИН раз при установке, поэтому до перезагрузки
+    // страницы уходила бы прежняя — а выход из аккаунта страницу не
+    // перезагружает. Тогда новая гостевая работа легла бы на уже разобранную
+    // личность и снова пропала бы при следующем входе.
+    await window.fetch("https://api.aevion.app/api/devhub/projects");
+    const было = seen[0].header;
+    const новая = rotateDevhubGuestId();
+    expect(новая, "смена личности не удалась — проверять нечего").toMatch(GUEST_ID);
+
+    await window.fetch("https://api.aevion.app/api/devhub/projects");
+    expect(seen[1].header, "заголовок несёт прежнюю личность, а она уже принадлежит аккаунту")
+      .toBe(новая);
+    expect(seen[1].header, "личность вообще не изменилась — проба ничего не проверила")
+      .not.toBe(было);
   });
 
   test("откат возвращает исходный fetch", async () => {

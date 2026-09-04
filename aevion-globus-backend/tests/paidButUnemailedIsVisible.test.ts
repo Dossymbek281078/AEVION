@@ -18,6 +18,18 @@ import { tmpdir } from "node:os";
  * границу: ответ операции остаётся успешным, доступ выдан.
  */
 
+const { события } = vi.hoisted(() => ({ события: [] as Array<Record<string, unknown>> }));
+
+vi.mock("../src/lib/sentry/platform", async (importOriginal) => {
+  const orig = await importOriginal<typeof import("../src/lib/sentry/platform")>();
+  return {
+    ...orig,
+    makeServiceCapture: () => (err: unknown, ctx?: Record<string, unknown>) => {
+      события.push({ сообщение: String(err), ...(ctx ?? {}) });
+    },
+  };
+});
+
 const ВРЕМЕННЫЙ = mkdtempSync(join(tmpdir(), "aevion-subs-"));
 const KEY = "re_test_secret_value_do_not_leak_000";
 
@@ -39,6 +51,7 @@ let ошибки: string[] = [];
 
 beforeEach(() => {
   ошибки = [];
+  события.length = 0;
   vi.spyOn(console, "error").mockImplementation((...a: unknown[]) => {
     ошибки.push(a.map((x) => String(x)).join(" "));
   });
@@ -47,6 +60,10 @@ beforeEach(() => {
 
 afterEach(() => {
   globalThis.fetch = исходныйFetch;
+  // Возвращаем окружение: проверка режима заглушки СТИРАЕТ ключ, и без этой
+  // строки любой следующий тест зависел бы от порядка. Порядок — не то, на что
+  // стоит опираться: он меняется от параллельности и от фильтра запуска.
+  process.env.RESEND_API_KEY = KEY;
   vi.restoreAllMocks();
 });
 
@@ -72,6 +89,41 @@ describe("оплаченная покупка без письма оставля
     // Приватность: домен есть, адрес целиком нет.
     expect(строка).toContain("@example.com");
     expect(строка).not.toContain("buyer@example.com");
+  });
+
+  test("событие для Sentry несёт ПОКУПКУ, а не только письмо", async () => {
+    const { provisionSubscription } = await загрузить();
+    globalThis.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 403,
+      json: async () => ({ message: "domain is not verified" }),
+    })) as unknown as typeof fetch;
+
+    const r = await provisionSubscription(ПОКУПКА);
+
+    // Событий может быть два: одно заводит сам отправщик о своём отказе.
+    // Нас интересует то, по которому можно найти ЧЕЛОВЕКА.
+    const сОплатой = события.filter((e) => e.subscriptionId === r.subscription.id);
+    expect(сОплатой).toHaveLength(1);
+    expect(сОплатой[0].tierId).toBe("medium");
+    expect(String(сОплатой[0].сообщение)).toContain("оплачено");
+    // Адрес целиком не уходит и в Sentry — только домен.
+    expect(JSON.stringify(сОплатой[0])).not.toContain("buyer@example.com");
+  });
+
+  test("режим заглушки НЕ заводит событие: это настройка, а не происшествие", async () => {
+    // Без ключа отправщик отвечает {ok:true, mode:"stub"} — письма не было вовсе.
+    // Предупреждение в журнал нужно, событие на каждую оплату — нет: оно утопило
+    // бы настоящие отказы, пока ключ не задан.
+    delete process.env.RESEND_API_KEY;
+    process.env.SUBSCRIPTIONS_FILE = join(ВРЕМЕННЫЙ, "subscriptions.jsonl");
+    vi.resetModules();
+    const { provisionSubscription } = await import("../src/routes/provisioning");
+
+    const r = await provisionSubscription(ПОКУПКА);
+
+    expect(r.emailMode).toBe("stub");
+    expect(события.filter((e) => e.subscriptionId === r.subscription.id)).toHaveLength(0);
   });
 
   test("контроль: письмо ушло — следа об отказе нет", async () => {

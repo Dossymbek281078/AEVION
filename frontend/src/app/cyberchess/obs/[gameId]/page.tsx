@@ -106,6 +106,10 @@ export default function ObsOverlayPage() {
   // SSE state
   const [state, setState] = useState<SSEState>({});
   const [connected, setConnected] = useState(false);
+  // «Ещё не подключились» и «связь оборвалась» — РАЗНЫЕ состояния, и на эфире
+  // разница видна: в первом случае данных ещё нет, во втором на экране висит
+  // устаревшая позиция. Тот же флаг и по той же причине есть у страницы зрителя.
+  const [byloSoedinenie, setByloSoedinenie] = useState(false);
   const [voiceMsg, setVoiceMsg] = useState<VoiceMsg | null>(null);
 
   // OBS накладывает страницу поверх видео, поэтому фон обязан быть прозрачным,
@@ -126,7 +130,7 @@ export default function ObsOverlayPage() {
     if (!gameId) return;
     const es = new EventSource(`/api-backend/api/cyberchess-spectator/${gameId}`);
 
-    es.onopen = () => setConnected(true);
+    es.onopen = () => { setConnected(true); setByloSoedinenie(true); };
     es.onmessage = (e) => {
       try {
         const d = JSON.parse(e.data) as SSEState;
@@ -150,7 +154,7 @@ export default function ObsOverlayPage() {
         }
       } catch {}
     });
-    es.addEventListener("ended", () => setState(prev => ({ ...prev, result: prev.result ?? "Game ended" })));
+    es.addEventListener("ended", () => setState(prev => ({ ...prev, result: prev.result ?? "Партия завершена" })));
     es.onerror = () => setConnected(false);
 
     return () => { es.close(); if (voiceTimerRef.current) clearTimeout(voiceTimerRef.current); };
@@ -225,14 +229,19 @@ export default function ObsOverlayPage() {
               {state.result
                 ? `🏁 ${state.result}`
                 : (<>
+                    {/* Точка ЗЕЛЁНАЯ только при живом потоке. Прежде она была
+                        зелёной всегда, менялось лишь мигание: при обрыве на
+                        эфир уходил «живой» индикатор рядом с застывшей
+                        позицией — зритель видел старый ход как текущий. */}
                     <span style={{
                       width: 8, height: 8, borderRadius: "50%",
-                      background: "#10b981",
+                      background: connected ? "#10b981" : "#9ca3af",
                       animation: connected ? "obs-blink 2s ease-in-out infinite" : "none",
                       display: "inline-block",
                     }}/>
-                    {whiteToMove ? "Ход белых" : "Ход чёрных"}
-                    {` · ${state.hist?.length ?? 0} ходов`}
+                    {connected
+                      ? <>{whiteToMove ? "Ход белых" : "Ход чёрных"}{` · ${state.hist?.length ?? 0} ходов`}</>
+                      : (byloSoedinenie ? "Связь потеряна" : "Подключаемся…")}
                   </>)
               }
             </span>

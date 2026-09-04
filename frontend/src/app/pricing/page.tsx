@@ -1071,6 +1071,7 @@ export default function PricingPage() {
                       color: isHighlight ? "#94a3b8" : "#64748b",
                       marginBottom: 12,
                     }}
+                    aria-label={`${tp("tier.openCalc")}: ${tier.id}`}
                     onClick={() => {
                       setCalcTier(tier.id);
                       document.getElementById("calculator")?.scrollIntoView({ behavior: "smooth" });

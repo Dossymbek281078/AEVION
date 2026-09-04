@@ -725,7 +725,7 @@ export default function DevHubPage() {
                       <button
                         onClick={() => starSnippet(s)}
                         className="flex items-center gap-1 text-xs font-semibold text-amber-300 hover:text-amber-200"
-                        aria-label="star snippet"
+                        aria-label={`Star: ${s.title}`}
                       >
                         <span aria-hidden>★</span>
                         <span>{s.stars}</span>
@@ -740,6 +740,7 @@ export default function DevHubPage() {
                         </button>
                       )}
                       <button
+                        aria-label={`Copy: ${s.title}`}
                         onClick={() => copySnippet(s)}
                         className={
                           "text-xs font-semibold px-2.5 py-1 rounded-md border transition-colors " +

@@ -27,7 +27,10 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/lib/apiBase", () => ({
   apiUrl: (p: string) => p,
-  fetchWithRedeployRetry: (...a: unknown[]) => (globalThis.fetch as never)(...(a as [])),
+  // Приведение к never делало вызов непроверяемым — и типы бы это заметили,
+  // если бы тесты проверялись. Пишем честную подпись.
+  fetchWithRedeployRetry: (input: RequestInfo | URL, init?: RequestInit) =>
+    globalThis.fetch(input, init),
 }));
 vi.mock("@/components/Wave1Nav", () => ({ Wave1Nav: () => null }));
 // Редактор кода тянет тяжёлый пакет и к языку интерфейса отношения не имеет.

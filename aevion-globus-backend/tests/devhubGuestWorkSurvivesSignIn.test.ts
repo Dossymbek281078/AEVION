@@ -19,10 +19,16 @@ import jwt from "jsonwebtoken";
  * владельца на того, кто ключ уже держит. Здесь это закреплено отдельным
  * случаем: ЧУЖИЕ проекты не переезжают.
  */
-const { режим } = vi.hoisted(() => ({ режим: { падать: false } }));
+const { режим } = vi.hoisted(() => ({
+  режим: { падать: false, бдГотова: false, запросы: [] as string[] },
+}));
 vi.mock("../src/lib/dbPool", () => ({
   getPool: () => ({
-    query: async () => { if (режим.падать) throw new Error("нет базы"); return { rows: [], rowCount: 0 }; },
+    query: async (sql: string) => {
+      if (режим.падать) throw new Error("нет базы");
+      режим.запросы.push(String(sql));
+      return { rows: [], rowCount: 0 };
+    },
   }),
   getPoolStats: () => null,
 }));
@@ -30,7 +36,7 @@ vi.mock("../src/lib/ensureDevHubTables", () => ({
   ensureDevHubTables: vi.fn().mockResolvedValue(undefined),
   // В памяти: перенос обязан работать и при недоступной базе, иначе работа
   // «переедет» наполовину, а это выглядит как потеря.
-  isDevHubDbReady: () => false,
+  isDevHubDbReady: () => режим.бдГотова,
 }));
 
 const SECRET = "test-secret-for-devhub-guest-adoption-long-enough";
@@ -50,6 +56,8 @@ describe("гостевая работа переживает вход в акк�
     __resetDevHubStore();
     process.env.AUTH_JWT_SECRET = SECRET;
     режим.падать = false;
+    режим.бдГотова = false;
+    режим.запросы.length = 0;
   });
 
   test("прибор исправен: гость создаёт проект и видит его", async () => {
@@ -139,6 +147,37 @@ describe("гостевая работа переживает вход в акк�
     const список = await request(app).get("/api/devhub/projects")
       .set("Authorization", `Bearer ${token}`);
     expect(список.body.projects?.length, "чужая работа из общего ящика переехала").toBe(0);
+  });
+
+  test("при живой базе расход переносится РАНЬШЕ проектов", async () => {
+    // Порядок двух записей — не стиль, а выбор цены половинчатого исхода.
+    // Транзакции нет намеренно: она дала бы «оба или ни одного», и сбой в
+    // истории отнимал бы у человека проекты, которые важнее.
+    //
+    //   расход, потом проекты: упали проекты -> 500, витрина отметку не ставит
+    //     и повторит; на повторе расход уже перенесён — состояние выправляется.
+    //   проекты, потом расход: упал расход -> 200, отметка встала, повтора
+    //     НЕ БУДЕТ. Человек навсегда с проектами без истории трат.
+    //
+    // Комментарий в коде это объясняет, но комментарий — не проверка:
+    // порядок легко «починить» обратно при следующей правке.
+    режим.бдГотова = true;
+    const app = приложение();
+    const token = jwt.sign({ sub: "user-77" }, SECRET);
+    await request(app).post("/api/devhub/studio/adopt-guest")
+      .set("x-devhub-guest", "guest-order-0001")
+      .set("Authorization", `Bearer ${token}`);
+
+    const обновления = режим.запросы.filter((s) => s.includes('SET "userId"'));
+    // Контроль прибора: обе записи обязаны дойти до базы, иначе утверждения
+    // ниже прошли бы на пустом списке — самый частый вид ложного зелёного.
+    expect(
+      обновления.length,
+      `перенос не дошёл до базы, записано запросов: ${режим.запросы.length}`,
+    ).toBe(2);
+    expect(обновления[0], "первым идёт не расход — половинчатый сбой станет вечным")
+      .toContain("smart_run_log");
+    expect(обновления[1], "вторыми идут не проекты").toContain("DevHubProject");
   });
 
   test("поток попыток упирается в предел", async () => {

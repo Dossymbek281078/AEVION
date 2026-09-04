@@ -289,6 +289,27 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
     // console.error, and the success URL was returned either way — including
     // when no email was given at all, in which case nothing was provisioned
     // and the customer still landed on the "success" page with no plan.
+    // СПИСОК модулей, а не первый из них.
+    //
+    // Замер 04.09.2026: в кассу уезжал `(body.modules ?? [])[0]` и только для
+    // Lite, а цена считается по ВСЕМ выбранным (сторож
+    // liteIncludesOneModuleInThePrice закрепляет, что модуль сверх слота
+    // прибавляет к сумме). На paybox и paypal, где сумма действительно
+    // списывается, это уже не расхождение учёта, а ОПЛАЧЕНО И НЕ ВЫДАНО:
+    // planGate пускает к модулю Lite только если тот записан выбранным.
+    //
+    // ⚠ Та же граница, что у мест: только эти две кассы. У Lemon Squeezy и
+    // Gumroad наша сумма до кассы не доезжает, там платят цену товара —
+    // запись одного модуля там соответствует оплате.
+    //
+    // ⚠ И отдельно: у medium докупленный модуль вне `includedIn` не
+    // откроется, даже будучи записанным — `isModuleEntitled` спрашивает
+    // выбранные модули ТОЛЬКО у lite. Это вопрос о продукте, не правка;
+    // запись всё равно обязана отражать оплаченное.
+    const выбранныеМодули = модулиДляКассы(body.modules);
+    const модулиДляЗаписи: Record<string, string> =
+      выбранныеМодули.length > 0 ? { modules: выбранныеМодули.join(",") } : {};
+
     if (totalCents <= 0) {
       if (!body.email) {
         return res.status(400).json({
@@ -299,7 +320,11 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
       try {
         await provisionSubscription({
           email: body.email, tierId: tier.id, period, seats,
-          modules: body.modules ?? [], trialDays, amountUsd: 0,
+          // ТОТ ЖЕ список, что и на платном пути: отфильтрованный,
+          // без повторов и ограниченный. Одинаковый вход обязан давать
+          // одинаковую запись — иначе бесплатный тариф хранит сырое тело
+          // запроса, а платный очищенное, и сравнить их станет нельзя.
+          modules: выбранныеМодули, trialDays, amountUsd: 0,
           promoCode: body.promoCode, source: "gumroad_zero",
         });
       } catch (e) {
@@ -337,26 +362,6 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
     // решён пункт 8 записки основателя — не копировать.
     const местаДляКассы: Record<string, string> = seats > 1 ? { seats: String(seats) } : {};
 
-    // СПИСОК модулей, а не первый из них.
-    //
-    // Замер 04.09.2026: в кассу уезжал `(body.modules ?? [])[0]` и только для
-    // Lite, а цена считается по ВСЕМ выбранным (сторож
-    // liteIncludesOneModuleInThePrice закрепляет, что модуль сверх слота
-    // прибавляет к сумме). На paybox и paypal, где сумма действительно
-    // списывается, это уже не расхождение учёта, а ОПЛАЧЕНО И НЕ ВЫДАНО:
-    // planGate пускает к модулю Lite только если тот записан выбранным.
-    //
-    // ⚠ Та же граница, что у мест: только эти две кассы. У Lemon Squeezy и
-    // Gumroad наша сумма до кассы не доезжает, там платят цену товара —
-    // запись одного модуля там соответствует оплате.
-    //
-    // ⚠ И отдельно: у medium докупленный модуль вне `includedIn` не
-    // откроется, даже будучи записанным — `isModuleEntitled` спрашивает
-    // выбранные модули ТОЛЬКО у lite. Это вопрос о продукте, не правка;
-    // запись всё равно обязана отражать оплаченное.
-    const выбранныеМодули = модулиДляКассы(body.modules);
-    const модулиДляЗаписи: Record<string, string> =
-      выбранныеМодули.length > 0 ? { modules: выбранныеМодули.join(",") } : {};
 
     if (body.currency === "KZT" && isPayboxConfigured()) {
       try {

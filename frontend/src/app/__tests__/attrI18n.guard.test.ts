@@ -52,7 +52,12 @@ type Hit = { file: string; attr: string; text: string };
  */
 const KNOWN: Hit[] = [
   { file: "app/bank/page.tsx", attr: "title", text: "Конституция Bank" },
-  { file: "app/cyberchess/AiPersonalityPicker.tsx", attr: "aria-label", text: "Выбор стиля AI" },
+  // 04.09.2026: подпись переименована шахматным окном в "Выбор стиля соперника"
+  // (ветка deploy/launch-2026-08-30-chess). Дефект ТОТ ЖЕ — кириллица в атрибуте
+  // мимо словаря; сменился только текст. Их ветка была красной на этом стороже
+  // ещё до сборки выкаточной: компонент переименован, а исключение здесь нет.
+  // Правку компонента оставляю им — файл занят (aevion-claim: 1 коммит их ветки).
+  { file: "app/cyberchess/AiPersonalityPicker.tsx", attr: "aria-label", text: "Выбор стиля соперника" },
   { file: "app/cyberchess/AntiCheatPanel.tsx", attr: "aria-label", text: "Закрыть" },
   { file: "app/cyberchess/FideCalibrationPanel.tsx", attr: "aria-label", text: "Закрыть" },
   { file: "app/cyberchess/matchmaking/page.tsx", attr: "placeholder", text: "Игрок" },

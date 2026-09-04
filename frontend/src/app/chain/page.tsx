@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useI18n } from "@/lib/i18n";
 import { apiUrl } from "@/lib/apiBase";
@@ -45,7 +45,7 @@ function разобратьШаги(raw: string | null): string[] {
     .slice(0, 12);
 }
 
-export default function ChainReceiptPage() {
+function ChainReceiptContent() {
   const { t } = useI18n();
   const params = useSearchParams();
   const ids = разобратьШаги(params.get("steps"));
@@ -191,6 +191,45 @@ export default function ChainReceiptPage() {
           );
         })}
       </ol>
+    </main>
+  );
+}
+
+/**
+ * Граница ожидания обязательна, а не украшение.
+ *
+ * `useSearchParams()` в клиентском компоненте отключает статическую сборку
+ * страницы, и Next ТРЕБУЕТ объявить это явно. В режиме разработки правило
+ * не применяется: страница открывается и работает, поэтому дефект невидим
+ * ровно там, где его ищут. Ловится только боевой сборкой — соседнее окно
+ * поймало его у себя, собрав мою страницу: `useSearchParams() should be
+ * wrapped in a suspense boundary at page "/chain"`, код 1.
+ *
+ * Запасной вид НЕ пустой: по ссылке на чек человек приходит проверять
+ * чужую работу, и пустой экран в первый миг читается как «ничего нет».
+ */
+export default function ChainReceiptPage() {
+  return (
+    <Suspense fallback={<ChainReceiptSkeleton />}>
+      <ChainReceiptContent />
+    </Suspense>
+  );
+}
+
+/**
+ * Первый кадр: заголовок и подзаголовок настоящие, из словаря.
+ *
+ * Пустой запасной вид читался бы как «чек не найден» — а человек приходит
+ * сюда по ссылке проверять чужую работу, и первые полсекунды решают, верит
+ * он странице или закрывает её. Новых ключей не заводим: берём те же, что
+ * покажет готовая страница, поэтому текст не «мигнёт» при подстановке.
+ */
+function ChainReceiptSkeleton() {
+  const { t } = useI18n();
+  return (
+    <main style={{ maxWidth: 820, margin: "0 auto", padding: "32px 20px 64px" }}>
+      <h1 style={{ fontSize: 28, fontWeight: 900, margin: "0 0 8px" }}>{t("chain.title")}</h1>
+      <p style={{ color: "#5a6472", margin: 0, maxWidth: "42em" }}>{t("chain.lead")}</p>
     </main>
   );
 }

@@ -153,6 +153,7 @@ export default function IdeaMarket() {
                 <td className="vtx-num">
                   <button
                     type="button"
+                    aria-label={`${voted[i.id] ? "Голос отдан" : "Отметить интерес"}: ${i.name}`}
                     onClick={() => vote(i.id)}
                     disabled={Boolean(voted[i.id]) || pending === i.id}
                     style={btnStyle(Boolean(voted[i.id]))}

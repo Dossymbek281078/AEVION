@@ -51,7 +51,9 @@ describe("Библиотека мультичата", () => {
     expect(screen.queryByText(/Войдите, чтобы увидеть/i)).toBeNull();
 
     // И запрос ушёл ПОДПИСАННЫМ — иначе сервер отдал бы чужой/пустой список.
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    // Через unknown: у мока аргументы не типизированы, и прямое приведение
+    // пустого кортежа к паре TypeScript справедливо запрещает.
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer jwt-test");
   });
 

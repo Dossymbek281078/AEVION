@@ -13,7 +13,9 @@ function lsr(positions: SmetaPosition[], sections2: SmetaPosition[] = []): Lsr {
     indexQuarter: "q", indexRegion: "r",
     sections: [
       { id: "s1", title: "Раздел 1", category: "земляные", positions },
-      { id: "s2", title: "Раздел 2", category: "бетонные", positions: sections2 },
+      // Категория берётся из WorkCategory. Было "бетонные" — такой в типе нет,
+      // и продукт её не создаёт, то есть фикстура проверяла невозможный раздел.
+      { id: "s2", title: "Раздел 2", category: "общестроительные", positions: sections2 },
     ],
     createdAt: "", updatedAt: "",
   };

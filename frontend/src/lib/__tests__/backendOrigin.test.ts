@@ -25,12 +25,16 @@ async function freshOrigin(): Promise<string> {
 
 describe("getBackendOrigin — наружу только публичный адрес", () => {
   afterEach(() => {
+    // vi.stubEnv нужно снимать своим вызовом: восстановление process.env
+    // целиком его НЕ отменяет — подмена живёт в самом vitest, а не в объекте.
+    // Иначе NODE_ENV протечёт в соседние файлы прогона.
+    vi.unstubAllEnvs();
     process.env = { ...ORIGINAL };
     vi.resetModules();
   });
 
   test("прод без публичной переменной: публичный адрес, а не внутренний хост", async () => {
-    process.env.NODE_ENV = "production";
+    vi.stubEnv("NODE_ENV", "production");
     delete process.env.NEXT_PUBLIC_API_BASE_URL;
     process.env.API_INTERNAL_BASE_URL = "https://aevion-production-a70c.up.railway.app";
 
@@ -41,14 +45,14 @@ describe("getBackendOrigin — наружу только публичный ад
   });
 
   test("публичная переменная, если задана, сильнее умолчания", async () => {
-    process.env.NODE_ENV = "production";
+    vi.stubEnv("NODE_ENV", "production");
     process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.aevion.app";
 
     expect(await freshOrigin()).toBe("https://api.aevion.app");
   });
 
   test("вне прода служебный адрес по-прежнему доступен — им работают локально", async () => {
-    process.env.NODE_ENV = "development";
+    vi.stubEnv("NODE_ENV", "development");
     delete process.env.NEXT_PUBLIC_API_BASE_URL;
     process.env.API_INTERNAL_BASE_URL = "http://127.0.0.1:4001";
 
@@ -56,7 +60,7 @@ describe("getBackendOrigin — наружу только публичный ад
   });
 
   test("ни одной переменной — локальный бэкенд, а не пустая строка", async () => {
-    process.env.NODE_ENV = "development";
+    vi.stubEnv("NODE_ENV", "development");
     delete process.env.NEXT_PUBLIC_API_BASE_URL;
     delete process.env.API_INTERNAL_BASE_URL;
 

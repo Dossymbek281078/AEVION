@@ -189,6 +189,7 @@ export default function SchedulePage() {
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
+              aria-label="Название расписания"
               placeholder="Daily market summary"
               style={{ width: "100%", padding: "7px 10px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 12, outline: "none", marginBottom: 10, boxSizing: "border-box" }}
             />
@@ -197,6 +198,7 @@ export default function SchedulePage() {
             <textarea
               value={inputsText}
               onChange={(e) => setInputsText(e.target.value)}
+              aria-label="Текст задания"
               placeholder={"Summarise today's AI news\nWhat are the top risks in crypto today?"}
               rows={5}
               style={{ width: "100%", padding: "7px 10px", borderRadius: 8, border: "1px solid #cbd5e1", fontSize: 12, resize: "vertical", fontFamily: "inherit", outline: "none", marginBottom: 6, boxSizing: "border-box", background: "#f8fafc" }}

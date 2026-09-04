@@ -462,6 +462,7 @@ export default function TimelinePage() {
                     <td className="px-2 py-1">
                       <input
                         type="text"
+                        aria-label={`Название этапа ${s.id}`}
                         value={s.name}
                         onChange={e => updateStage(s.id, { name: e.target.value })}
                         className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-zinc-100"
@@ -471,6 +472,7 @@ export default function TimelinePage() {
                       <input
                         type="number"
                         min={1}
+                        aria-label={`Длительность этапа ${s.id}, дней`}
                         value={s.duration}
                         onChange={e => updateStage(s.id, { duration: Math.max(0, parseInt(e.target.value || "0", 10)) })}
                         className="w-20 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-zinc-100 text-center"
@@ -479,6 +481,7 @@ export default function TimelinePage() {
                     <td className="px-2 py-1">
                       <input
                         type="text"
+                        aria-label={`Зависимости этапа ${s.id}`}
                         value={s.dependsOn.join(",")}
                         onChange={e => {
                           const ids = e.target.value
@@ -487,13 +490,14 @@ export default function TimelinePage() {
                             .filter(x => !isNaN(x) && x !== s.id);
                           updateStage(s.id, { dependsOn: ids });
                         }}
-                        aria-label="Ответ, —" placeholder="—"
+                        placeholder="—"
                         className="w-full bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-zinc-100"
                       />
                     </td>
                     <td className="px-2 py-1 text-center">
                       <button
                         onClick={() => removeStage(s.id)}
+                        aria-label={`Удалить этап ${s.id}`}
                         className="px-2 py-0.5 text-xs rounded border border-red-700 text-red-300 hover:bg-red-900/40"
                         title="Удалить этап"
                       >

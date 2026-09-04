@@ -630,6 +630,7 @@ export default function ExpertiseDocsPage() {
                 <li key={i} className="flex items-start gap-3">
                   <input
                     type="checkbox"
+                    aria-label={item}
                     checked={checklist[i]}
                     onChange={() => toggleCheck(i)}
                     className="mt-1 accent-purple-500 w-4 h-4 cursor-pointer"

@@ -17,6 +17,20 @@ import path from "node:path";
 let текущийПуть = "/qright";
 vi.mock("next/navigation", () => ({ usePathname: () => текущийПуть }));
 
+// Словарь подменяем: компонент обязан брать имя комнаты ОТТУДА, а не из
+// зашитой строки. Значения намеренно английские — так видно, что объявление
+// идёт на языке интерфейса, а не на языке автора кода.
+let словарь: Record<string, string> = {
+  "chain.room.qright": "Authorship record",
+  "chain.room.qcontract": "Contract",
+  "chain.room.qsign": "Signature",
+  "chain.room.qpaynet": "Payout",
+  "chain.step": "Step {n} of {m}",
+};
+vi.mock("@/lib/i18n", () => ({
+  useI18n: () => ({ t: (k: string) => словарь[k] ?? k }),
+}));
+
 import RouteAnnouncer from "../RouteAnnouncer";
 
 async function подождать(мс = 220) {
@@ -25,9 +39,25 @@ async function подождать(мс = 220) {
   });
 }
 
+/*
+ * ⚠️ ЕСЛИ ВЫ ГОНИТЕ ЗДЕСЬ МУТАЦИИ — прочтите сперва.
+ *
+ * Замер 04.09.2026: мутация «убрать заголовок.focus({ preventScroll: true })»
+ * НЕ ловится, и это НЕ значит, что сторож пустой. После починки удержания в
+ * компоненте два пути к фокусу: первичный вызов и цикл удержания, который
+ * поднимает фокус, если тот потерян. Снятие ОДНОГО пути поведения не меняет —
+ * второй доводит дело до конца, и тесты справедливо зелёные.
+ *
+ * Решающая мутация, которая обязана ловиться: «убрать попробовать();» — она
+ * снимает ОБА пути сразу, потому что цикл удержания заводится внутри. Проверено
+ * в тот же день: ловится (код 0).
+ *
+ * То есть у выжившей мутации здесь третий исход из трёх: не «сторож пустой» и
+ * не «сторож про другое», а «сценарий недостижим — код имеет запас».
+ */
 describe("переход между комнатами не теряет человека", () => {
   beforeEach(() => {
-    текущийПуть = "/qright";
+    текущийПуть = "/";
     document.body.innerHTML = "";
   });
 
@@ -86,6 +116,178 @@ describe("переход между комнатами не теряет чел�
     await подождать();
 
     expect(document.activeElement).toBe(main);
+  });
+
+  it("фокус удерживается, если страница дорисовалась ПОСЛЕ перехода", async () => {
+    // Дефект, найденный 03.09.2026 РЕНДЕРОМ, а не тестами: на переходе
+    // /qcontract -> /qsign объявление срабатывало, а фокус слетал на body.
+    // Причина — React заменял узел заголовка уже после нашего вызова.
+    // Здесь это воспроизведено: подменяем h1 сразу после перехода.
+    const первый = document.createElement("h1");
+    первый.textContent = "Подпись";
+    document.body.appendChild(первый);
+
+    const { rerender } = render(<RouteAnnouncer />);
+    await подождать(50);
+
+    текущийПуть = "/qsign";
+    rerender(<RouteAnnouncer />);
+    await подождать(80);
+
+    // страница дорисовалась: узел заменён новым
+    первый.remove();
+    const второй = document.createElement("h1");
+    второй.textContent = "Подпись";
+    document.body.appendChild(второй);
+
+    await подождать(400);
+    expect(document.activeElement).toBe(второй);
+  });
+
+  it("фокус удерживается и при ПОЗДНЕЙ дорисовке, а не только первой попыткой", async () => {
+    // Мутация вскрыла, что прошлый тест доказывал лишь ОДНУ попытку: подмена
+    // узла случалась раньше первой проверки. Здесь страница дорисовывается
+    // поздно — вернуть фокус может только повторение.
+    const первый = document.createElement("h1");
+    первый.textContent = "Выплата";
+    document.body.appendChild(первый);
+
+    const { rerender } = render(<RouteAnnouncer />);
+    await подождать(50);
+
+    текущийПуть = "/qpaynet";
+    rerender(<RouteAnnouncer />);
+    await подождать(400);
+
+    первый.remove();
+    const поздний = document.createElement("h1");
+    поздний.textContent = "Выплата";
+    document.body.appendChild(поздний);
+
+    await подождать(500);
+    expect(document.activeElement).toBe(поздний);
+  });
+
+  it("НЕ отнимает фокус у человека, ушедшего дальше по странице", async () => {
+    // Риск, введённый самой починкой: механизм, возвращающий фокус целую
+    // секунду, легко превращается в механизм, который его ОТНИМАЕТ. Человек
+    // нажал Tab и ушёл на кнопку — фокус обязан остаться у него.
+    const h1 = document.createElement("h1");
+    h1.textContent = "Договор";
+    const кнопка = document.createElement("button");
+    кнопка.textContent = "Дальше";
+    document.body.append(h1, кнопка);
+
+    const { rerender } = render(<RouteAnnouncer />);
+    await подождать(50);
+
+    текущийПуть = "/qcontract";
+    rerender(<RouteAnnouncer />);
+    await подождать(150);
+
+    кнопка.focus();
+    await подождать(500);
+
+    expect(document.activeElement).toBe(кнопка);
+  });
+
+  it("перенос строки в заголовке не склеивает слова", async () => {
+    // Замер 03.09.2026 на проде: у /qpaynet заголовок «Платёжная
+    // инфраструктура<br>встроенная в AEVION». textContent игнорирует <br> и
+    // даёт «инфраструктуравстроенная» — слово, которого нет. Страница при
+    // этом ВЕРНА: врало чтение. innerText уважает перенос.
+    const h1 = document.createElement("h1");
+    h1.textContent = "Платёжная инфраструктуравстроенная в AEVION";
+    // jsdom не реализует innerText — подставляем то, что дал бы браузер
+    Object.defineProperty(h1, "innerText", {
+      value: "Платёжная инфраструктура\nвстроенная в AEVION",
+      configurable: true,
+    });
+    document.body.appendChild(h1);
+
+    const { rerender, container } = render(<RouteAnnouncer />);
+    await подождать(50);
+
+    текущийПуть = "/qpaynet";
+    rerender(<RouteAnnouncer />);
+    await подождать();
+
+    const сказано = container.querySelector("[role=status]")?.textContent || "";
+    expect(сказано).toContain("инфраструктура встроенная");
+    expect(сказано).not.toContain("инфраструктуравстроенная");
+  });
+
+  it("комната и шаг звучат на языке интерфейса, а не автора кода", async () => {
+    // Дефект найден 03.09.2026 в МОЕЙ ЖЕ работе: имя комнаты было зашито
+    // по-русски, и на английской странице человек услышал бы смесь —
+    // «Отметка авторства. Шаг 1 из 4. Protect Your Work».
+    const h1 = document.createElement("h1");
+    h1.textContent = "Protect Your Work";
+    document.body.appendChild(h1);
+
+    const { rerender, container } = render(<RouteAnnouncer />);
+    await подождать(50);
+
+    текущийПуть = "/qright";
+    rerender(<RouteAnnouncer />);
+    await подождать();
+
+    const сказано = container.querySelector("[role=status]")?.textContent || "";
+    expect(сказано).toContain("Authorship record");
+    expect(сказано).toContain("Step 1 of 4");
+    expect(сказано).not.toContain("Отметка авторства");
+  });
+
+  it("ключа нет в словаре — берём запасное имя, а не произносим ключ", async () => {
+    const прежний = словарь;
+    словарь = {};
+    try {
+      const h1 = document.createElement("h1");
+      h1.textContent = "Договор";
+      document.body.appendChild(h1);
+
+      const { rerender, container } = render(<RouteAnnouncer />);
+      await подождать(50);
+
+      текущийПуть = "/qcontract";
+      rerender(<RouteAnnouncer />);
+      await подождать();
+
+      const сказано = container.querySelector("[role=status]")?.textContent || "";
+      // молчать или произносить «chain.room.qcontract» — оба хуже
+      expect(сказано).toContain("Договор");
+      expect(сказано).not.toContain("chain.room");
+      expect(сказано).not.toContain("chain.step");
+    } finally {
+      словарь = прежний;
+    }
+  });
+
+  it("смена языка не забирает фокус: адрес не менялся", async () => {
+    // Эффект зависит от словаря, и смена языка человеком его перезапускает.
+    // Объявить заново уместно, забрать фокус — нет: человек никуда не
+    // переходил и мог работать в середине формы. Найдено ВЫЧИТКОЙ, тесты
+    // этого не показывали.
+    const h1 = document.createElement("h1");
+    h1.textContent = "Договор";
+    const поле = document.createElement("input");
+    document.body.append(h1, поле);
+
+    const { rerender } = render(<RouteAnnouncer />);
+    await подождать(50);
+
+    текущийПуть = "/qcontract";
+    rerender(<RouteAnnouncer />);
+    await подождать();
+    expect(document.activeElement).toBe(h1);
+
+    // человек ушёл в поле и переключил язык — адрес тот же
+    поле.focus();
+    словарь = { ...словарь, "chain.room.qcontract": "Contract (en)" };
+    rerender(<RouteAnnouncer />);
+    await подождать();
+
+    expect(document.activeElement).toBe(поле);
   });
 
   it("живая область объявлена вежливой и читается целиком", () => {

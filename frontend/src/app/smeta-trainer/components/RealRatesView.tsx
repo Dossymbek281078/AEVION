@@ -192,6 +192,7 @@ export function RealRatesView({
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              aria-label="Поиск расценки по коду или наименованию"
               placeholder="Код или наименование работы"
               className="w-full border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
             />

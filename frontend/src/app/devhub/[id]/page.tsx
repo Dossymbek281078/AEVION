@@ -37,6 +37,34 @@ async function writeOrThrow(input: string, init?: RequestInit): Promise<Response
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
+/** Вкладки рабочего окна. Список один — из него же берутся подписи. */
+const VKLADKI = ["chat", "visual", "agent", "templates", "github", "media", "env", "deployments", "settings"] as const;
+type Vkladka = (typeof VKLADKI)[number];
+
+/**
+ * Подписи вкладок. КАРТА, а не цепочка условий с запасной веткой.
+ *
+ * Прежде подпись собиралась цепочкой `tab === "chat" ? … : …`, а в конце
+ * стояло `tab.charAt(0).toUpperCase() + tab.slice(1)` — то есть при промахе
+ * человеку печатался САМ ИДЕНТИФИКАТОР. Три вкладки в цепочку не попали, и
+ * платящий видел «Templates», «Deployments», «Settings» посреди русского окна.
+ *
+ * Тип Record<Vkladka, string> делает пропуск невозможным: добавите вкладку в
+ * VKLADKI и не добавите подпись — проверка типов не пройдёт. Запасной ветки
+ * здесь нет намеренно: она превращает недосмотр в тихую утечку имени.
+ */
+const PODPIS_VKLADKI: Record<Vkladka, string> = {
+  chat: "Генерация ИИ",
+  visual: "🖱️ Правка на экране",
+  agent: "🤖 Агент",
+  templates: "Шаблоны",
+  github: "GitHub",
+  media: "Медиа",
+  env: "Переменные",
+  deployments: "Выкатки",
+  settings: "Настройки",
+};
+
 function timeAgo(iso: string): string {
   const diffSec = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
   if (diffSec < 60) return "just now";
@@ -3159,7 +3187,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       {/* Top bar */}
       <div style={{ background: "#fff", borderBottom: "1px solid rgba(15,23,42,0.1)", padding: "10px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <Link href="/devhub" style={{ color: "#0d9488", fontWeight: 700, fontSize: 14, textDecoration: "none" }}>Back</Link>
+        <Link href="/devhub" style={{ color: "#0d9488", fontWeight: 700, fontSize: 14, textDecoration: "none" }}>Назад</Link>
         <Wave1Nav />
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <span style={{ fontWeight: 800, fontSize: 16, color: "#0f172a" }}>{project.name}</span>
@@ -3197,7 +3225,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           )}
           <button
             onClick={() => setActiveTab("github")}
-            title={project.repoUrl ? `GitHub: ${project.repoUrl}` : "Push to GitHub"}
+            title={project.repoUrl ? `GitHub: ${project.repoUrl}` : "Отправить в GitHub"}
             style={{
               padding: "8px 14px", background: project.repoUrl ? "#f0fdf4" : "#f8fafc",
               color: project.repoUrl ? "#166534" : "#374151",
@@ -3304,7 +3332,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
             </div>
           )}
           <div style={{ padding: "12px 14px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>Files</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>Файлы</span>
             <div style={{ display: "flex", gap: 4 }}>
               <input ref={zipInputRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" style={{ display: "none" }} onChange={onZipInputChange} />
               <button
@@ -3340,7 +3368,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           )}
           <label style={{ padding: "4px 14px 6px", fontSize: 10, color: "#94a3b8", display: "flex", alignItems: "center", gap: 4 }}>
             <input type="checkbox" checked={zipOverwrite} onChange={(e) => setZipOverwrite(e.target.checked)} style={{ width: 11, height: 11 }} />
-            ZIP overwrite existing
+            ZIP: заменять существующие
           </label>
 
           {showNewFile && (
@@ -3364,7 +3392,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           <div style={{ flex: 1, overflowY: "auto" }}>
             {files.length === 0 ? (
               <div style={{ padding: 16, fontSize: 12, color: "#94a3b8", textAlign: "center" }}>
-                No files yet.<br />Use AI to generate code or create a file.
+                Файлов пока нет.<br />Попросите ИИ сгенерировать код или создайте файл.
               </div>
             ) : (
               files.map((f) => {
@@ -3535,7 +3563,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                 announced nine unrelated controls instead of a set of tabs, and
                 arrow keys did nothing. */}
             <div role="tablist" aria-label="Панели DevHub" style={{ display: "flex", borderBottom: "1px solid #f1f5f9", gap: 0, overflowX: "auto" }}>
-              {(["chat", "visual", "agent", "templates", "github", "media", "env", "deployments", "settings"] as const).map((tab, idx, all) => (
+              {VKLADKI.map((tab, idx, all) => (
                 <button
                   key={tab}
                   role="tab"
@@ -3564,13 +3592,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     borderBottom: activeTab === tab ? "2px solid #0d9488" : "2px solid transparent",
                   }}
                 >
-                  {tab === "chat" ? "AI Generate"
-                  : tab === "visual" ? "🖱️ Visual Edit"
-                  : tab === "env" ? "Env Vars"
-                  : tab === "github" ? "GitHub"
-                  : tab === "media" ? "Media"
-                  : tab === "agent" ? "🤖 Agent"
-                  : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  {PODPIS_VKLADKI[tab]}
                 </button>
               ))}
             </div>
@@ -3709,7 +3731,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       onClick={() => setShowPlanner((s) => !s)}
                       style={{ width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#0f172a", padding: 0 }}
                     >
-                      {showPlanner ? "▾" : "▸"} Have a rough idea? Plan it first
+                      {showPlanner ? "▾" : "▸"} Есть только замысел? Сначала спланируйте
                     </button>
                     {showPlanner && (
                       <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -3783,7 +3805,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   <textarea
                     value={aiPrompt}
                     onChange={(e) => setAiPrompt(e.target.value)}
-                    placeholder={`Describe what you want to build...\nExample: "Create a REST API with user authentication and a products endpoint"`}
+                    placeholder={`Опишите, что нужно построить…\nНапример: «REST API с входом пользователей и ручкой товаров»`}
                     style={{
                       width: "100%", padding: "10px 14px", border: "1px solid #e2e8f0", borderRadius: 10,
                       fontSize: 13, resize: "none", fontFamily: "inherit", boxSizing: "border-box", height: 90,
@@ -3815,7 +3837,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       title="Приложите скриншот или макет — ИИ воссоздаст его кодом"
                       style={{ padding: "6px 12px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 13, cursor: "pointer", color: "#475569", fontWeight: 600 }}
                     >
-                      📎 Screenshot
+                      📎 Снимок экрана
                     </button>
                     {aiImage && (
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 8px", background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 8, fontSize: 12, color: "#0f766e" }}>
@@ -3835,7 +3857,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       cursor: generating ? "not-allowed" : "pointer",
                     }}
                   >
-                    {generating ? "Generating..." : "Generate Code (Ctrl+Enter)"}
+                    {generating ? "Генерируем…" : "Сгенерировать код (Ctrl+Enter)"}
                   </button>
                   {generating && genStage && (
                     <div style={{ fontSize: 12, color: "#0f766e", textAlign: "center" }}>
@@ -3858,7 +3880,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         cursor: undoing ? "not-allowed" : "pointer",
                       }}
                     >
-                      {undoing ? "Undoing..." : "↩ Undo last AI change"}
+                      {undoing ? "Отменяем…" : "↩ Отменить последнюю правку ИИ"}
                     </button>
                     <button
                       onClick={() => { const next = !showHistory; setShowHistory(next); if (next) loadCheckpointHistory(); }}
@@ -3868,7 +3890,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         color: "#64748b", borderRadius: 10, fontWeight: 600, fontSize: 12, cursor: "pointer",
                       }}
                     >
-                      {showHistory ? "▾" : "▸"} History
+                      {showHistory ? "▾" : "▸"} История
                     </button>
                   </div>
                   {showHistory && (
@@ -4082,7 +4104,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         cursor: undoing ? "not-allowed" : "pointer",
                       }}
                     >
-                      {undoing ? "Undoing..." : "↩ Undo last AI change"}
+                      {undoing ? "Отменяем…" : "↩ Отменить последнюю правку ИИ"}
                     </button>
                   )}
                 </div>
@@ -4376,7 +4398,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         cursor: githubPushing ? "not-allowed" : "pointer",
                       }}
                     >
-                      {githubPushing ? "Pushing..." : project?.repoUrl ? "Push (update repo)" : "Push to GitHub (create repo)"}
+                      {githubPushing ? "Pushing..." : project?.repoUrl ? "Отправить (обновить репозиторий)" : "Отправить в GitHub (создать репозиторий)"}
                     </button>
                     {project?.repoUrl && (
                       <button
@@ -4455,7 +4477,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         : sub === "translate" ? "DeepL"
                         : sub === "bulk" ? "Bulk i18n"
                         : sub === "email" ? "Email"
-                        : sub === "templates" ? "Templates"
+                        : sub === "templates" ? "Шаблоны"
                         : sub === "builder" ? "Tpl Builder"
                         : sub === "sms" ? "SMS"
                         : sub === "whatsapp" ? "WhatsApp"

@@ -26,6 +26,7 @@ export interface NoFlyZone {
    * screen said so. Where a real rule is known, it is named here.
    */
   realityNote?: string;
+  realityNoteEn?: string;
 }
 
 export interface WindConfig {
@@ -45,6 +46,12 @@ export const NOFLY: Record<string, NoFlyZone[]> = {
         "(AIP KZ ENR 5.1): круг радиусом 4.5 км, от земли до 4800 ft, круглосуточно — он накрывает 100% " +
         "твина, то есть в 14 раз шире по радиусу, чем эта фигура. Демо-круг оставлен, чтобы показать " +
         "механику обхода; за реальным ограничением см. блок airspace.permission.",
+      realityNoteEn:
+        "This is OUR demo circle, not a published zone. The real restriction is prohibited "
+        + "area UAP28 (AIP KZ ENR 5.1): a circle of 4.5 km radius, ground to 4800 ft, H24 - it "
+        + "covers 100% of the twin, i.e. 14 times wider in radius than this figure. The demo "
+        + "circle is kept to show the avoidance mechanics; for the real restriction see the "
+        + "airspace.permission block.",
     },
     { id: "nfz-event", name: "Массовое мероприятие", kind: "temporary", center: [71.4270, 51.1240], radiusM: 240, until: "2026-07-13T20:00:00Z" },
   ],

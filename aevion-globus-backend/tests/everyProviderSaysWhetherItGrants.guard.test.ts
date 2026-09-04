@@ -51,6 +51,39 @@ describe("каждая касса говорит, выдаст ли куплен
     ).toEqual([]);
   });
 
+  it("тестовый режим кассы ВИДЕН снаружи", async () => {
+    // 🔴 Ловушка запуска. Тестовый режим у PayBox стоит ПО УМОЛЧАНИЮ: пока не
+    // задано `PAYBOX_TESTING=0`, провайдер шлёт `pg_testing_mode: "1"`.
+    // Умолчание правильное — случайно взять настоящие деньги хуже, чем
+    // случайно не взять.
+    //
+    // Но при включении кассы это ловушка: задать два секрета выглядит
+    // достаточным, `configured` станет true, покупки пойдут — и ни одна не
+    // будет настоящей. Снаружи «касса работает» и «касса в песочнице»
+    // выглядели одинаково.
+    //
+    // Замер 04.09.2026: PAYBOX_TESTING на проде не задана.
+    const было = process.env.PAYBOX_TESTING;
+    try {
+      delete process.env.PAYBOX_TESTING;
+      const поумолчанию = await request(app()).get("/api/pricing/checkout/healthz");
+      expect(
+        поумолчанию.body.providers.paybox.testMode,
+        "песочница подана как рабочая касса",
+      ).toBe(true);
+
+      process.env.PAYBOX_TESTING = "0";
+      const боевой = await request(app()).get("/api/pricing/checkout/healthz");
+      expect(
+        боевой.body.providers.paybox.testMode,
+        "боевой режим показан как тестовый — тревога на исправном месте",
+      ).toBe(false);
+    } finally {
+      if (было === undefined) delete process.env.PAYBOX_TESTING;
+      else process.env.PAYBOX_TESTING = было;
+    }
+  });
+
   it("контроль: признак различает заданный секрет и пустой", async () => {
     // Иначе «поле есть» могло бы значить «поле всегда true».
     const было = process.env.PAYBOX_SECRET;

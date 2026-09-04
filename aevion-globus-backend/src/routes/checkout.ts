@@ -425,6 +425,20 @@ checkoutRouter.get("/healthz", (_req, res) => {
       paybox: {
         configured: isPayboxConfigured(),
         webhookConfigured: Boolean(process.env.PAYBOX_SECRET?.trim()),
+        // 🔴 ЛОВУШКА ЗАПУСКА, сделанная видимой 04.09.2026.
+        //
+        // Тестовый режим у PayBox стоит ПО УМОЛЧАНИЮ: провайдер шлёт
+        // `pg_testing_mode: "1"`, пока не задано `PAYBOX_TESTING=0`. Умолчание
+        // безопасное и правильное — случайно взять настоящие деньги хуже, чем
+        // случайно не взять.
+        //
+        // Но при включении кассы это ловушка: задать два секрета выглядит
+        // достаточным, `configured` станет true, покупки пойдут — и ни одна
+        // не будет настоящей. Снаружи «касса работает» и «касса играет в
+        // песочнице» выглядели одинаково.
+        //
+        // Замер 04.09.2026: PAYBOX_TESTING на проде не задана.
+        testMode: process.env.PAYBOX_TESTING !== "0",
         trigger: "currency=KZT",
         webhook: "/api/paybox/webhook",
       },

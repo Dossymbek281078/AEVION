@@ -143,12 +143,26 @@ interface AnalyticsEvent {
  * Канал приезжает в `meta.channel` из метки `?c=` (lib/products withChannel
  * + components/BuyLink). Ключи нейтральные: дашборд открывают и в EN/KK.
  */
+/*
+ * Накопители сводок создаются БЕЗ ПРОТОТИПА (`Object.create(null)`), а не как
+ * обычные объекты. Ключ здесь свободный: он приходит из поля события, то есть
+ * в конечном счёте из адреса, который открыл посторонний.
+ *
+ * У обычного объекта `byX["constructor"]` возвращает функцию, а
+ * `byX["__proto__"]` — прототип. Строка не заводится, число уходит в
+ * наследство, и в отчёте её просто НЕТ, а сумма выглядит целой. Соседнее окно
+ * замерило это 04.09 на отчёте о выручке: подали три канала — в ответе остался
+ * один.
+ *
+ * Где ключ ЗАКРЫТЫЙ (сверяется со списком), правильнее hasOwnProperty — имя
+ * тогда честно отбрасывается. Здесь имя надо сохранить, поэтому без прототипа.
+ */
 export function summarizeCheckoutStarts(events: Array<Pick<AnalyticsEvent, "type" | "source" | "meta">>): {
   bySource: Record<string, number>;
   byChannel: Record<string, number>;
 } {
-  const bySource: Record<string, number> = {};
-  const byChannel: Record<string, number> = {};
+  const bySource = Object.create(null) as Record<string, number>;
+  const byChannel = Object.create(null) as Record<string, number>;
   for (const ev of events) {
     if (ev.type !== "checkout_start") continue;
     const src = ev.source?.trim() || "unknown";
@@ -187,7 +201,7 @@ export function summarizeCheckoutReturns(
   успехов: number;
   отказов: number;
 } {
-  const byProvider: Record<string, { успехов: number; отказов: number }> = {};
+  const byProvider = Object.create(null) as Record<string, { успехов: number; отказов: number }>;
   let успехов = 0;
   let отказов = 0;
 
@@ -237,7 +251,7 @@ export function summarizePurchases(
   total: number;
   сКоторыхИзвестнаСумма: number;
 } {
-  const byChannel: Record<string, number> = {};
+  const byChannel = Object.create(null) as Record<string, number>;
   const revenueByChannel: Record<string, number> = {};
   let total = 0;
   let сКоторыхИзвестнаСумма = 0;
@@ -460,10 +474,10 @@ eventsRouter.get("/summary", (req, res) => {
   const обрезано = упёрлисьВПредохранитель;
   const tail = отобранные.reverse();
 
-  const byType: Record<string, number> = {};
-  const bySource: Record<string, number> = {};
-  const byTier: Record<string, number> = {};
-  const byIndustry: Record<string, number> = {};
+  const byType = Object.create(null) as Record<string, number>;
+  const bySource = Object.create(null) as Record<string, number>;
+  const byTier = Object.create(null) as Record<string, number>;
+  const byIndustry = Object.create(null) as Record<string, number>;
   /** Разбивку по ним считает summarizeCheckoutStarts — см. её комментарий. */
   const checkoutEvents: AnalyticsEvent[] = [];
   const purchaseEvents: AnalyticsEvent[] = [];
@@ -471,10 +485,10 @@ eventsRouter.get("/summary", (req, res) => {
   // Канал (tt / ig / yt …) — единственный ответ на вопрос «какая раздача
   // принесла людей». Он приезжает в meta, а сводка до 13.08.2026 считала
   // только поля верхнего уровня: метка доезжала и НЕ показывалась никому.
-  const byChannel: Record<string, number> = {};
+  const byChannel = Object.create(null) as Record<string, number>;
   // Товар, по которому нажали «купить». Без него видно «клики были», но не
   // видно, что именно хотели купить.
-  const byProduct: Record<string, number> = {};
+  const byProduct = Object.create(null) as Record<string, number>;
   const sids = new Set<string>();
   let total = 0;
 

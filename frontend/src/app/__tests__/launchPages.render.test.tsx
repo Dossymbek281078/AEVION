@@ -371,7 +371,16 @@ describe("неподтверждённая дата запуска не попа
     expect(MONTHS.test("напишем в день запуска")).toBe(false);
   });
 
-  for (const mod of ["devhub", "multichat"] as const) {
+  // 🔴 ЗДЕСЬ БЫЛО "multichat" — идентификатора с таким именем нет, есть
+  // "multichat-engine". Функция сравнивает строку, не находит совпадения и
+  // уходит в ветку «иначе», где грузит страницу DEVHUB. То есть две проверки
+  // с именем «multichat» дважды смотрели devhub, а посадочная multichat-engine
+  // на обещание месяца не проверялась ВООБЩЕ.
+  //
+  // Нашлось замером 04.09.2026: тесты исключены из проверки типов
+  // (tsconfig), и несовпадение с типом параметра никто не заметил. С
+  // включённой проверкой это ошибка TS2345 в одну строку.
+  for (const mod of ["devhub", "multichat-engine"] as const) {
     test(`${mod}: в разметке нет обещания месяца`, async () => {
       vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ status: 400, ok: false } as Response)));
       const html = await renderLaunch(mod, {});

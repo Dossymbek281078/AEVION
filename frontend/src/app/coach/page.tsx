@@ -561,7 +561,7 @@ export default function CoachPage() {
                 <button
                   type="button"
                   onClick={() => deleteGoal(g.id)}
-                  aria-label="Delete goal"
+                  aria-label={`Удалить цель: ${g.title}`}
                   className="rounded-md p-1 text-slate-500 transition hover:bg-slate-800 hover:text-rose-400"
                 >
                   <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">

@@ -520,10 +520,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   // Agent workflow state
   type AgentStep = { type: "code" | "image" | "tts" | "sfx" | "music"; prompt?: string; text?: string; voice?: string; size?: string; durationSeconds?: number; lengthSeconds?: number; saveAs?: string; stack?: string };
+  // Стартовые шаги — ПРИМЕР для человека, а не отладочный набор автора:
+  // цельный мини-сценарий «страница + картинка к ней + приветствие голосом».
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([
-    { type: "code", prompt: "Landing page for an AI startup with hero, headline, CTA", saveAs: "pages/index.tsx" },
-    { type: "image", prompt: "AI startup hero — futuristic, vivid colors, abstract", saveAs: "public/hero.url.txt" },
-    { type: "tts", text: "Добро пожаловать на нашу ИИ-платформу", voice: "Rachel", saveAs: "public/welcome.mp3.b64" },
+    { type: "code", prompt: "Страница кофейни: шапка с названием, меню из шести позиций с ценами, кнопка «Забронировать столик»", saveAs: "pages/index.tsx" },
+    { type: "image", prompt: "Уютная кофейня, тёплый свет, латте-арт, фотореалистично", saveAs: "public/hero.url.txt" },
+    { type: "tts", text: "Добро пожаловать в нашу кофейню — столик уже ждёт вас", voice: "Rachel", saveAs: "public/welcome.mp3.b64" },
   ]);
   const [agentRunning, setAgentRunning] = useState(false);
   const [agentResults, setAgentResults] = useState<Array<{ step: number; type: string; ok: boolean; output?: any; error?: string; savedAs?: string }>>([]);
@@ -4133,7 +4135,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: visualEditSaving ? "not-allowed" : "pointer",
                         }}
                       >
-                        {visualEditSaving ? "Saving..." : "Save"}
+                        {visualEditSaving ? "Сохраняю..." : "Сохранить"}
                       </button>
                       )}
                       <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -5287,7 +5289,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: (trLoading || !trText.trim()) ? "not-allowed" : "pointer",
                         }}
                       >
-                        {trLoading ? "Translating..." : "Translate"}
+                        {trLoading ? "Перевожу..." : "Перевести"}
                       </button>
 
                       {/* File translate */}
@@ -5411,7 +5413,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
                           cursor: bulkLoading ? "not-allowed" : "pointer",
                         }}>
-                        {bulkLoading ? "Translating..." : `Translate ${bulkPaths.length} × ${bulkLangs.length}`}
+                        {bulkLoading ? "Перевожу..." : `Перевести ${bulkPaths.length} × ${bulkLangs.length}`}
                       </button>
 
                       {bulkSummary && (
@@ -5765,7 +5767,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: (sttLoading || !sttFile) ? "not-allowed" : "pointer",
                         }}
                       >
-                        {sttLoading ? "Transcribing..." : "Transcribe"}
+                        {sttLoading ? "Расшифровываю..." : "Расшифровать"}
                       </button>
                     </div>
                   )}
@@ -5801,7 +5803,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                 disabled={driveImporting === f.id}
                                 style={{ padding: "4px 10px", background: "#4285f4", color: "#fff",
                                   border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-                                {driveImporting === f.id ? "..." : "Import"}
+                                {driveImporting === f.id ? "..." : "Импортировать"}
                               </button>
                             </div>
                           ))}
@@ -5881,14 +5883,14 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           </span>
                           <select value={step.type} onChange={(e) => updateAgentStep(i, { type: e.target.value as AgentStep["type"] })}
                             style={{ padding: "4px 8px", border: "1px solid #e2e8f0", borderRadius: 5, fontSize: 12, fontWeight: 700 }}>
-                            <option value="code">Code</option>
-                            <option value="image">Image (DALL-E)</option>
-                            <option value="tts">Voice (TTS)</option>
-                            <option value="sfx">SFX</option>
-                            <option value="music">Music</option>
+                            <option value="code">Код</option>
+                            <option value="image">Картинка</option>
+                            <option value="tts">Озвучка</option>
+                            <option value="sfx">Звук</option>
+                            <option value="music">Музыка</option>
                           </select>
                           <input value={step.saveAs || ""} onChange={(e) => updateAgentStep(i, { saveAs: e.target.value })}
-                            placeholder="saveAs (path)"
+                            placeholder="куда сохранить (путь файла)"
                             style={{ flex: 1, padding: "4px 8px", border: "1px solid #e2e8f0", borderRadius: 5, fontSize: 11, fontFamily: "monospace" }} />
                           <button onClick={() => removeAgentStep(i)}
                             style={{ padding: "4px 8px", background: "none", border: "1px solid #fca5a5", borderRadius: 5, fontSize: 11, color: "#ef4444", cursor: "pointer" }}>
@@ -5897,11 +5899,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         </div>
                         {(step.type === "code" || step.type === "image" || step.type === "music") ? (
                           <input value={step.prompt || ""} onChange={(e) => updateAgentStep(i, { prompt: e.target.value })}
-                            placeholder={step.type === "code" ? "Describe what to build..." : step.type === "image" ? "Describe the image..." : "Describe the music (genre, mood, instruments)..."}
+                            placeholder={step.type === "code" ? "Опишите, что построить..." : step.type === "image" ? "Опишите картинку..." : "Опишите музыку (жанр, настроение, инструменты)..."}
                             style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 12, boxSizing: "border-box" }} />
                         ) : (
                           <input value={step.text || ""} onChange={(e) => updateAgentStep(i, { text: e.target.value })}
-                            placeholder={step.type === "tts" ? "Text to speak..." : "Sound effect description..."}
+                            placeholder={step.type === "tts" ? "Текст для озвучки..." : "Описание звукового эффекта..."}
                             style={{ width: "100%", padding: "6px 10px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 12, boxSizing: "border-box" }} />
                         )}
                         {step.type === "music" && (
@@ -5939,7 +5941,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       <button key={t} onClick={() => addAgentStep(t)}
                         style={{ padding: "4px 10px", background: "#f1f5f9", border: "1px dashed #94a3b8",
                           borderRadius: 6, fontSize: 11, fontWeight: 600, color: "#64748b", cursor: "pointer" }}>
-                        + {t === "code" ? "Code" : t === "image" ? "Image" : t === "tts" ? "Voice" : t === "sfx" ? "SFX" : "Music"}
+                        + {t === "code" ? "Код" : t === "image" ? "Картинка" : t === "tts" ? "Озвучка" : t === "sfx" ? "Звук" : "Музыка"}
                       </button>
                     ))}
                   </div>
@@ -5962,7 +5964,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       cursor: (agentRunning || agentSteps.length === 0) ? "not-allowed" : "pointer",
                     }}
                   >
-                    {agentRunning ? "Running workflow..." : `🤖 Run ${agentSteps.length}-step Workflow`}
+                    {agentRunning ? "Выполняю сценарий..." : `🤖 Запустить сценарий из ${agentSteps.length} шагов`}
                   </button>
                 </div>
               )}
@@ -6038,7 +6040,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           }}
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M14.97 16.95L10 13.87V7h2v5.76l4.03 2.49-1.06 1.7zM12 3a9 9 0 109 9 9 9 0 00-9-9z"/></svg>
-                          {domainSetupLoading ? "Configuring..." : "Auto-setup DNS (Cloudflare)"}
+                          {domainSetupLoading ? "Настраиваю..." : "Настроить DNS автоматически (Cloudflare)"}
                         </button>
                         {domainSetupMsg && (
                           <div style={{
@@ -6058,7 +6060,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     disabled={savingSettings}
                     style={{ padding: "9px 18px", background: savingSettings ? "#99f6e4" : "#0d9488", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: savingSettings ? "not-allowed" : "pointer", alignSelf: "flex-start" }}
                   >
-                    {savingSettings ? "Saving..." : "Save Settings"}
+                    {savingSettings ? "Сохраняю..." : "Сохранить настройки"}
                   </button>
 
                   {/* Collaborators — Studio Pro */}
@@ -6109,7 +6111,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </button>
                     </div>
                     <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>
-                      Editors can write files · Viewers are read-only · Studio Pro required
+                      Редакторы правят файлы · наблюдатели только читают · нужен Studio Pro
                     </div>
                   </div>
                 </div>

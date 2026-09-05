@@ -17,6 +17,22 @@ interface Props {
 
 const BANNER_W = 240;
 
+/**
+ * Высота полосы у нижнего края экрана, которую занимает общий контейнер
+ * всплывашек (bottom:16 + сама всплывашка). Ниже этой отметки любой орган
+ * управления рискует оказаться под всплывашкой и перестать нажиматься.
+ * Замер 01.09.2026: так были накрыты цена, «Купить» и «Все тарифы →».
+ */
+export const POLOSA_VSPLYVASHEK = 96;
+
+/**
+ * Отступ рейки сверху. Переключатель языка платформы («RU ▼») стоит в потоке
+ * у правого края и занимает по вертикали 16..46px — замер 01.09.2026 на 1280
+ * и 1920. Рейка закреплена и накрывала его нижнюю половину: кнопка смены
+ * языка не нажималась ни на одной десктопной ширине. 56 = 46 + запас.
+ */
+export const OTSTUP_SVERHU = 56;
+
 export default function AevionProjectsBanner({ onHide }: Props) {
   // Панель фиксированная и лежит ПОВЕРХ страницы: без компенсации она срезает
   // правый край контента — на лаунчпаде под неё уходил край кнопки «Играть».
@@ -25,12 +41,20 @@ export default function AevionProjectsBanner({ onHide }: Props) {
   React.useEffect(() => {
     const prev = document.body.style.paddingRight;
     document.body.style.paddingRight = `${BANNER_W}px`;
-    return () => { document.body.style.paddingRight = prev; };
+    // Отступ у body двигает только поток. ЗАКРЕПЛЁННЫЕ соседи его не видят и
+    // ложатся поверх рейки — 01.09.2026 плашка стрима так накрыла «Купить»,
+    // цену и «Все тарифы →», то есть весь путь покупки на странице шахмат.
+    // Публикуем ширину, чтобы закреплённые элементы могли посторониться.
+    document.documentElement.style.setProperty("--aevion-projects-w", `${BANNER_W}px`);
+    return () => {
+      document.body.style.paddingRight = prev;
+      document.documentElement.style.removeProperty("--aevion-projects-w");
+    };
   }, []);
 
   return (
     <div style={{
-      position: "fixed", right: 0, top: 28, bottom: 0, width: BANNER_W,
+      position: "fixed", right: 0, top: OTSTUP_SVERHU, bottom: 0, width: BANNER_W,
       background: "#1e1c19", borderLeft: "1px solid #3d3b39",
       display: "flex", flexDirection: "column", zIndex: 150,
       overflow: "hidden",
@@ -91,7 +115,12 @@ export default function AevionProjectsBanner({ onHide }: Props) {
 
       {/* CyberChess pricing — live from /api/pricing via ModulePricingChip */}
       <div style={{
-        margin: "8px", padding: "10px 12px", flexShrink: 0,
+        // Нижние 96px рейки отдаём всплывашкам: общий контейнер прижат к низу
+        // экрана (bottom:16, z-index 9999) и ловит касания. 01.09.2026 он
+        // накрывал здесь цену, «Купить» и «Все тарифы →» — весь путь покупки.
+        // Поднимаем блок над этой полосой, а не спорим со слоями: контейнер
+        // общий для платформы, двигать его ради одного модуля нельзя.
+        margin: "8px", marginBottom: POLOSA_VSPLYVASHEK, padding: "10px 12px", flexShrink: 0,
         border: "1px solid #3d3b39", borderRadius: 6,
         background: "#262421",
       }}>

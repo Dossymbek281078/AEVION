@@ -64,7 +64,7 @@ export const AI_PERSONALITIES: AiPersonality[] = [
     },
     quirks: [
       "Любит выжимать ничейные эндшпили",
-      "Часто переходит в endgame через ранний размен ферзей",
+      "Часто уводит партию в эндшпиль ранним разменом ферзей",
       "Редко жертвует, но идеально считает технику",
     ],
   },
@@ -87,7 +87,7 @@ export const AI_PERSONALITIES: AiPersonality[] = [
     },
     quirks: [
       "Резко ускоряется в цейтноте",
-      "Любит h-pawn-pushes в королевской атаке",
+      "Любит атаку пешкой «h» на короля",
       "Часто провоцирует противника на ошибку в осложнениях",
     ],
   },
@@ -156,7 +156,7 @@ export const AI_PERSONALITIES: AiPersonality[] = [
     },
     quirks: [
       "Готовится дома на 25 ходов вперёд",
-      "Любит pawn-storm на королевском фланге",
+      "Любит пешечный штурм на королевском фланге",
       "Жертвует материал за инициативу, если позиция требует",
     ],
   },
@@ -179,7 +179,7 @@ export const AI_PERSONALITIES: AiPersonality[] = [
     },
     quirks: [
       "Стремится к простой позиции с лёгким преимуществом",
-      "Идеальная техника rook endgames",
+      "Безупречно играет ладейные окончания",
       "Не тратит время на ненужный расчёт — играет «по позиции»",
     ],
   },
@@ -189,7 +189,7 @@ export const AI_PERSONALITIES: AiPersonality[] = [
     realName: "Bobby Fischer",
     emoji: "⚔",
     description:
-      "Энергичная игра, глубокая дебютная подготовка. Любит ясные планы и exchange-варианты.",
+      "Энергичная игра, глубокая дебютная подготовка. Любит ясные планы и разменные варианты.",
     eloRange: [2650, 2850],
     style: {
       aggressiveness: 0.7,
@@ -202,7 +202,7 @@ export const AI_PERSONALITIES: AiPersonality[] = [
     },
     quirks: [
       "Прибит к 1.e4 как символу веры",
-      "Любит exchange variation в Испанской",
+      "Любит разменный вариант Испанской партии",
       "Доводит малейшее преимущество до победы",
     ],
   },
@@ -212,7 +212,7 @@ export const AI_PERSONALITIES: AiPersonality[] = [
     realName: "Levon Aronian",
     emoji: "✨",
     description:
-      "Креатив, неожиданные ходы, sharp openings. Любит оригинальные планы, не боится риска.",
+      "Креатив, неожиданные ходы, острые дебюты. Любит оригинальные планы, не боится риска.",
     eloRange: [2700, 2820],
     style: {
       aggressiveness: 0.72,
@@ -235,7 +235,7 @@ export const AI_PERSONALITIES: AiPersonality[] = [
     realName: "Fabiano Caruana",
     emoji: "📚",
     description:
-      "Глубокая теория, точные mainline-варианты. Корректность во всём, без авантюр.",
+      "Глубокая теория, точные главные варианты. Корректность во всём, без авантюр.",
     eloRange: [2700, 2850],
     style: {
       aggressiveness: 0.55,
@@ -247,7 +247,7 @@ export const AI_PERSONALITIES: AiPersonality[] = [
       preferredOpenings: ["Petroff (C42-C43)", "Najdorf (B90-B99)", "Berlin (C65-C67)"],
     },
     quirks: [
-      "Помнит mainline на 30 ходов",
+      "Помнит главный вариант на 30 ходов вперёд",
       "Не отступает от теории, пока теория не отступит от него",
       "Долго думает в ключевых моментах, экономит время в типовых",
     ],
@@ -570,7 +570,7 @@ const COMMENT_LIBRARY: Record<string, CommentBank> = {
       "Точность во всём.",
     ],
     capture: ["Размен по теории."],
-    check: ["Шах. Mainline."],
+    check: ["Шах. По главной линии."],
   },
   nepo: {
     generic: [

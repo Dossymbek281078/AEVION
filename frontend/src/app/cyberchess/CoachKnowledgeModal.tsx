@@ -10,15 +10,15 @@ type FactorKey = "E" | "T" | "O" | "B1" | "B2" | "B3" | "M1" | "M2" | "M3" | "H"
 const FACTOR_RECS: Record<FactorKey, { name: string; emoji: string; rec: string; targetMod: string }> = {
   E:  { name: "Точность ходов",       emoji: "🎯",   rec: "Замедли темп — играй с большим контролем времени",          targetMod: "rapid" },
   T:  { name: "Управление временем",  emoji: "⏱",   rec: "Тренируй блиц 3+0 — учись распределять время",                targetMod: "blitz" },
-  O:  { name: "Дебютная теория",      emoji: "📖",   rec: "Coach Knowledge → Дебюты-каталог (14 тем)",                   targetMod: "openings" },
-  B1: { name: "Лучшая линия",         emoji: "①",   rec: "Анализ всех партий — Studio где отклонился от engine #1",     targetMod: "analysis" },
-  B2: { name: "Глубина расчёта",      emoji: "②",   rec: "Решай задачи на 2-3 хода вперёд — пазлы средней сложности",   targetMod: "puzzles-medium" },
+  O:  { name: "Дебютная теория",      emoji: "📖",   rec: "База знаний → «Дебюты — каталог» (14 тем)",                   targetMod: "openings" },
+  B1: { name: "Лучшая линия",         emoji: "①",   rec: "Разбери партии в Студии: где ты отошёл от лучшего хода",     targetMod: "analysis" },
+  B2: { name: "Глубина расчёта",      emoji: "②",   rec: "Решай задачи на 2-3 хода вперёд — задачи средней сложности",   targetMod: "puzzles-medium" },
   B3: { name: "Альтернативы",         emoji: "③",   rec: "Рассматривай несколько кандидатов на каждом ходу",            targetMod: "puzzles" },
-  M1: { name: "Мат в 1",              emoji: "💀",   rec: "Пазлы 'mate in 1' — базовая комбинационная зоркость",         targetMod: "mate1" },
-  M2: { name: "Мат в 2",              emoji: "💀💀", rec: "Пазлы 'mate in 2' — найди жертву + завершение",               targetMod: "mate2" },
-  M3: { name: "Мат в 3",              emoji: "💀💀💀", rec: "Пазлы 'mate in 3' — комбинационное зрение",                 targetMod: "mate3" },
+  M1: { name: "Мат в 1",              emoji: "💀",   rec: "Задачи «мат в 1» — базовая зоркость на комбинации",         targetMod: "mate1" },
+  M2: { name: "Мат в 2",              emoji: "💀💀", rec: "Задачи «мат в 2» — найди жертву и завершение",               targetMod: "mate2" },
+  M3: { name: "Мат в 3",              emoji: "💀💀💀", rec: "Задачи «мат в 3» — комбинационное зрение",                 targetMod: "mate3" },
   H:  { name: "Зевки фигур",          emoji: "💥",   rec: "После каждого хода — спроси 'Какая моя фигура под боем?'",    targetMod: "blunders" },
-  Br: { name: "Бриллиантовые ходы",   emoji: "💎",   rec: "Изучай шедевры (Morphy, Tal, Fischer) в Masters tab",         targetMod: "masters" },
+  Br: { name: "Бриллиантовые ходы",   emoji: "💎",   rec: "Изучай шедевры (Морфи, Таль, Фишер) — раздел «Изучение партий мастеров»",         targetMod: "masters" },
 };
 
 const FACTOR_KEYS: FactorKey[] = ["E", "T", "O", "B1", "B2", "B3", "M1", "M2", "M3", "H", "Br"];
@@ -273,7 +273,7 @@ export default function CoachKnowledge({ visible, onClose, onLoadPosition }: Pro
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 18 }}>📚</span>
             <div>
-              <div style={{ fontSize: 14, fontWeight: 900 }}>База знаний — AI Coach</div>
+              <div style={{ fontSize: 14, fontWeight: 900 }}>База знаний — ИИ-коуч</div>
               <div style={{ fontSize: 10, opacity: 0.85, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                 <span>Тактика · Эндшпиль · Дебюты · Миттельшпиль · Стратегия · Время · Память · Roadmap</span>
                 {totalAll > 0 && <span style={{ padding: "1px 8px", borderRadius: 999, background: "rgba(255,255,255,0.18)", fontWeight: 800 }}>

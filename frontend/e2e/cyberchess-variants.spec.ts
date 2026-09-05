@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { VARIANTS as VARIANTS_SRC } from "../src/app/cyberchess/variants";
 
 /**
  * CyberChess — 12 variants smoke + load tests.
@@ -14,21 +15,9 @@ import { test, expect } from "@playwright/test";
  * separately via variants.ts pure functions.
  */
 
-const VARIANTS = [
-  { id: "standard",       name: "Стандарт",         emoji: "♟" },
-  { id: "fischer960",     name: "Fischer 960",      emoji: "🎲" },
-  { id: "asymmetric",     name: "Asymmetric Armies", emoji: "⚔" },
-  { id: "twinkings",      name: "Twin Kings",       emoji: "👑" },
-  { id: "diceblade",      name: "Diceblade",        emoji: "🎲" },
-  { id: "reinforcement",  name: "Reinforcement",    emoji: "🔄" },
-  { id: "atomic",         name: "Atomic",           emoji: "💥" },
-  { id: "kingofthehill",  name: "King of the Hill", emoji: "⛰" },
-  { id: "threecheck",     name: "Three-Check",      emoji: "⚡" },
-  { id: "knightriders",   name: "Knight Riders",    emoji: "🐎" },
-  { id: "pawnapocalypse", name: "Pawn Apocalypse",  emoji: "💀" },
-  { id: "powerdrop",      name: "Power Drop",       emoji: "⚡" },
-  { id: "crazyhouse",     name: "Crazyhouse",       emoji: "🏚" },
-];
+// Источник названий ОДИН — variants.ts. Своя копия таблицы здесь уже расходилась
+// с продуктом: после перевода названий тест искал бы на экране английские слова.
+const VARIANTS = VARIANTS_SRC.map((v) => ({ id: v.id, name: v.name, emoji: v.emoji }));
 
 test.describe("CyberChess — page load + variants surface", () => {
   test.beforeEach(async ({ page }) => {
@@ -85,7 +74,7 @@ test.describe("CyberChess — page load + variants surface", () => {
   test("Variant HUD shows for non-standard variant (via tile click)", async ({ page }) => {
     await page.goto("/cyberchess", { waitUntil: "domcontentloaded" });
     // Click the Atomic tile in the quick-variant strip.
-    const atomicTile = page.getByText("Atomic").first();
+    const atomicTile = page.getByText(VARIANTS.find((v) => v.id === "atomic")!.name).first();
     await atomicTile.scrollIntoViewIfNeeded();
     await atomicTile.click({ timeout: 10_000 });
     // After clicking a variant tile, the page state moves toward "play mode"

@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { ReplayFetchError, kodOtveta, tekstOtkaza } from "./otkaz";
 
 // ----- Types -----
 
@@ -145,7 +146,7 @@ async function fetchReplay(gameId: string): Promise<ReplayGame> {
   const res = await fetch(`${API_BASE}/replays/${encodeURIComponent(gameId)}`, {
     cache: "no-store",
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) throw new ReplayFetchError(res.status);
   const data = (await res.json()) as { ok: boolean; replay: ReplayGame };
   if (!data.ok) throw new Error("API returned ok=false");
   return data.replay;
@@ -193,7 +194,7 @@ export default function ReplayViewerPage() {
         // человек не понимает ни что случилось, ни что делать.
         if (!alive) return;
         console.warn("[replay] не удалось загрузить партию:", e);
-        setError("Не удалось загрузить партию. Попробуйте обновить страницу.");
+        setError(tekstOtkaza(kodOtveta(e)));
       });
     return () => {
       alive = false;
@@ -313,7 +314,7 @@ export default function ReplayViewerPage() {
       <main className="planet-root">
         <div className="planet-wrap" style={{ paddingTop: 36, paddingBottom: 48, maxWidth: 640 }}>
           <div className="planet-card" style={{ padding: 24 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--pl-danger)" }}>Replay недоступен</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--pl-danger)" }}>Повтор недоступен</div>
             <div className="planet-muted" style={{ marginTop: 6, fontSize: 12 }}>{error}</div>
             <div style={{ marginTop: 16 }}>
               <Link href="/cyberchess/replays" className="planet-btn">← Назад к архиву</Link>
@@ -357,7 +358,7 @@ export default function ReplayViewerPage() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
             <button onClick={onShare} className="planet-btn active">
-              {copied ? "Скопировано ✓" : "Поделиться replay"}
+              {copied ? "Скопировано ✓" : "Поделиться повтором"}
             </button>
             <Link href="/cyberchess/replays" className="planet-btn">← Архив</Link>
           </div>
@@ -365,7 +366,7 @@ export default function ReplayViewerPage() {
 
         {/* Main grid */}
         <div style={{ display: "grid", gap: 20, gridTemplateColumns: "1fr", alignItems: "start" }}>
-          <div style={{ display: "grid", gap: 20, gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", alignItems: "start" }}>
+          <div style={{ display: "grid", gap: 20, gridTemplateColumns: "repeat(auto-fit,minmax(min(320px,100%),1fr))", alignItems: "start" }}>
             {/* Board + eval bar + controls */}
             <section style={{ display: "flex", flexDirection: "column" }}>
               <div style={{ display: "flex", gap: 12 }}>

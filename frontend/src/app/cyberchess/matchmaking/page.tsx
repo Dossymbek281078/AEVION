@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import { useCcI18n } from "../i18n";
 import { loadEstimateFromStorage } from "../ratingCalibration";
 import { tournamentUserId } from "../tournaments/playerIdentity";
+import { svyazPoteryana } from "./svyaz";
 
 type TimeControl = "60+0" | "180+0" | "300+5" | "600+10" | "1800+0";
 
@@ -101,6 +102,8 @@ export default function CyberChessMatchmakingPage() {
   const [state, setState] = useState<QueueState>({ phase: "idle" });
   const userIdRef = useRef<string>("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const oshibkiPodryadRef = useRef(0);
+  const [netSvyazi, setNetSvyazi] = useState(false);
   const sseRef = useRef<EventSource | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startedAtRef = useRef<number>(0);
@@ -211,7 +214,10 @@ export default function CyberChessMatchmakingPage() {
         `/api-backend/api/cyberchess/matchmaking/queue/status?userId=${encodeURIComponent(userId)}`,
         { cache: "no-store" },
       );
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = await r.json();
+      oshibkiPodryadRef.current = 0;
+      setNetSvyazi(false);
       if (!data?.ok) return;
       if (data.status === "matched" && data.matchId) {
         handleMatched({
@@ -233,7 +239,11 @@ export default function CyberChessMatchmakingPage() {
         });
       }
     } catch {
-      // network blip — keep polling
+      // Одиночный сбой сети — обычное дело, опрос продолжается. Но если
+      // подряд не отвечает несколько раз, молчать нельзя: экран показывает
+      // бегущий счётчик и уверяет, что поиск идёт.
+      oshibkiPodryadRef.current += 1;
+      setNetSvyazi(svyazPoteryana(oshibkiPodryadRef.current));
     }
   }, [handleMatched]);
 
@@ -438,7 +448,7 @@ export default function CyberChessMatchmakingPage() {
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 {serverRating && (
                   <span
-                    title={`Рейтинг ${speedOf(timeControl)} · ${serverRating.games} партий${serverRating.provisional ? " · провизорный (мало партий)" : ""}`}
+                    title={`Рейтинг ${speedOf(timeControl)} · ${serverRating.games} партий${serverRating.provisional ? " · неточный (мало партий)" : ""}`}
                     className="planet-badge cyan"
                   >
                     {speedOf(timeControl)} {serverRating.rating}
@@ -512,6 +522,14 @@ export default function CyberChessMatchmakingPage() {
                 <p className="planet-muted" style={{ fontSize: 13 }}>
                   Прошло: {formatDuration(state.elapsedMs)} · Ожидание ≈ {formatDuration(state.estimatedWaitMs)}
                 </p>
+                {netSvyazi && (
+                  <p
+                    role="status"
+                    style={{ fontSize: 13, color: "var(--pl-danger)", textAlign: "center", margin: 0 }}
+                  >
+                    Сервер не отвечает — поиск продолжается, но очередь сейчас не обновляется.
+                  </p>
+                )}
               </div>
 
               {/* Queue visualization */}
@@ -577,8 +595,15 @@ export default function CyberChessMatchmakingPage() {
           )}
         </section>
 
+        {/* Сказано последствием для человека, а не устройством системы.
+            Было: «Очередь и матчи живут в памяти бэкенда. Без активности
+            5 минут — выкинет из очереди.» Посетитель не знает, что такое
+            «память бэкенда», и не может по этой фразе ничего решить.
+            Найдено 27.08.2026 чтением того, что реально написано на экране:
+            вёрстка цела, ошибок нет, тесты зелёные — заметно только глазом. */}
         <footer className="planet-muted" style={{ textAlign: "center", fontSize: 11.5 }}>
-          Очередь и матчи живут в памяти бэкенда. Без активности 5 минут — выкинет из очереди.
+          Очередь не сохраняется: если перезагрузить страницу, поиск начнётся заново.
+          Через 5 минут без действий мы выведем вас из очереди.
         </footer>
       </div>
     </main>

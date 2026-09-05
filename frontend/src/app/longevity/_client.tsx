@@ -33,6 +33,18 @@ const PROTOCOL_PDF = productById("oijxmq");
  */
 const ALL_ACCESS = productById("xpxzam");
 
+/**
+ * Книга, из которой вырос протокол: «Gratitude ∞ Forever Young» — тот же
+ * бренд ForeverYoung, та же тема долголетия. Замер 29.08.2026: книга
+ * продавалась, а эта страница не упоминала её НИ РАЗУ, и своей страницы у
+ * книги нет вовсе (/book отвечает 404). То есть человек, пришедший читать
+ * про антиэйдж, о нашей книге про антиэйдж не узнавал.
+ *
+ * Позиция каталога, а не хардкод — по той же причине, что и выше: цену
+ * называет чекаут, проза устаревает молча.
+ */
+const BOOK = productById("ghvzq");
+
 interface AField { key: string; label: string; unit: string; placeholder: string; }
 const ASSESS_FIELDS: AField[] = [
   { key: "vitD", label: "Витамин D", unit: "нг/мл", placeholder: "35" },
@@ -370,6 +382,32 @@ export default function LongevityClient({ channel = null }: { channel?: string |
             <div style={styles.buyRight}>
               <div style={styles.buyPrice}>${PROTOCOL_PDF.priceUsd}</div>
               <div style={styles.buyBtn}>Купить&nbsp;→</div>
+            </div>
+          </BuyLink>
+        )}
+
+        {/* Книга той же темы — см. комментарий у BOOK. */}
+        {BOOK && (
+          <BuyLink
+            href={withChannel(BOOK.href, channel, "longevity-book")}
+            source="longevity-book"
+            productId={BOOK.id}
+            priceUsd={BOOK.priceUsd}
+            channel={channel}
+            style={styles.buyCard}
+          >
+            <div style={styles.buyLeft}>
+              <div style={styles.buyKicker}>{BOOK.format}</div>
+              <div style={styles.buyTitle}>Книга, из которой вырос этот протокол</div>
+              <p style={styles.buyDesc}>
+                «{BOOK.title.split(" — ")[0]}» — то же направление целиком: почему старение
+                считают управляемым процессом и что из этого следует на практике.
+                Протокол выше — короткая выжимка из неё.
+              </p>
+            </div>
+            <div style={styles.buyRight}>
+              <div style={styles.buyPrice}>${BOOK.priceUsd}</div>
+              <div style={styles.buyBtn}>Книга&nbsp;→</div>
             </div>
           </BuyLink>
         )}

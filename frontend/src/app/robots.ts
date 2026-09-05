@@ -42,8 +42,15 @@ export const DISALLOWED_PATHS = [
   "/tt",
   "/ig",
   "/yt",
+  // dz/vk/tg заведены 29.08.2026 — те же короткие входы, та же причина.
+  // Без этой строки они попадают в карту сайта: проверено на проде,
+  // dz/vk/tg были там по одной записи, а tt/ig/yt отсутствовали.
+  "/dz",
+  "/vk",
+  "/tg",
   "/en/tt",
   "/en/ig",
+  "/en/yt",
 ] as const;
 
 export default function robots(): MetadataRoute.Robots {

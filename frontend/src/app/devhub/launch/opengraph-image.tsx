@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "AEVION DevHub — открываем 13 сентября: приложение по описанию словами";
+export const alt = "AEVION DevHub — открываем 10 сентября: приложение по описанию словами";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -38,7 +38,7 @@ export default function DevHubLaunchOg() {
             AEVION · DevHub Studio
           </div>
           <div style={{ fontSize: 72, fontWeight: 800, lineHeight: 1.06, letterSpacing: -2, display: "flex" }}>
-            Открываем 13 сентября
+            Открываем 10 сентября
           </div>
           <div style={{ fontSize: 30, color: MUTED, lineHeight: 1.35, maxWidth: 940, display: "flex" }}>
             Опишите приложение словами — DevHub соберёт проект: код, страницы, картинки и озвучку.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -55,11 +55,53 @@ describe("карточки страниц воронки", () => {
     }
   });
 
+  // Короткие входы ищутся ОБХОДОМ, а не по списку в тесте.
+  //
+  // Замер 29.08.2026: список здесь был зашит — ["tt","ig","yt","en/tt","en/ig"].
+  // Я завёл /dz, /vk, /tg, в список их не внёс, и сторож их не проверял вовсе.
+  // Тем же заходом они попали в sitemap.xml вопреки noindex — ровно то, от чего
+  // этот файл и охраняет. Список, который ведут руками, защищает только то, что
+  // в него не забыли добавить.
+  const shortRedirects = (() => {
+    const found: string[] = [];
+    const walk = (dir: string, segs: string[]) => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        if (e.isDirectory()) {
+          if (e.name.startsWith("[") || e.name.startsWith("_") || e.name.startsWith("(")) continue;
+          if (segs.length === 0 && (e.name === "api" || e.name === "__tests__")) continue;
+          walk(join(dir, e.name), [...segs, e.name]);
+        } else if (e.name === "page.tsx" && segs.length > 0) {
+          const src = readFileSync(join(dir, e.name), "utf8");
+          // Признак короткого входа: перенаправление на /go с меткой канала.
+          if (/redirect\(\s*["`]\/(en\/)?go\?c=/.test(src)) found.push(segs.join("/"));
+        }
+      }
+    };
+    walk(APP, []);
+    return found;
+  })();
+
+  it("обход вообще находит короткие входы — иначе две проверки ниже пусты", () => {
+    // Без этого утверждения любая поломка обхода делает сторожа зелёным и
+    // бессмысленным: он проверит пустой список и промолчит.
+    expect(shortRedirects.length).toBeGreaterThanOrEqual(6);
+  });
+
   it("у коротких адресов карточки НЕТ — они только перенаправляют", () => {
-    // Иначе они начнут соревноваться в выдаче с той страницей, на которую ведут.
-    for (const route of ["tt", "ig", "yt", "en/tt", "en/ig"]) {
+    // Иначе они начнут соревноваться в выдаче с той страницей, куда ведут.
+    for (const route of shortRedirects) {
       const file = join(APP, ...route.split("/"), "opengraph-image.tsx");
       expect(existsSync(file), `/${route}: у редиректа появилась карточка`).toBe(false);
+    }
+  });
+
+  it("каждый короткий адрес запрещён в robots — иначе он попадёт в карту сайта", () => {
+    // Карта берёт исключения из DISALLOWED_PATHS. Пропуск в ОБОИХ местах сразу
+    // (нет в запретах, есть в карте) прежний сторож карты не ловил: он сверяет
+    // списки в одну сторону. Проверено мутацией 29.08.2026.
+    const robots = readFileSync(join(APP, "robots.ts"), "utf8");
+    for (const route of shortRedirects) {
+      expect(robots.includes(`"/${route}"`), `/${route}: нет в DISALLOWED_PATHS robots.ts`).toBe(true);
     }
   });
 });

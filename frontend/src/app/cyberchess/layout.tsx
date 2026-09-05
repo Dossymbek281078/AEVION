@@ -1,10 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import SwRegister from "./SwRegister";
 import PwaInstall from "./PwaInstall";
+import RussianOnlyNotice from "./RussianOnlyNotice";
 export const metadata: Metadata = {
-  title: "CyberChess — AI-тренер и пазлы",
+  title: "CyberChess — шахматы с ИИ-тренером и полумиллионом задач",
   description:
-    "Шахматы нового поколения: AI-коуч Алексей, Blunder Rewind, Puzzle Rush с time-bonus, Game DNA, голосовой ввод. От AEVION.",
+    "Играйте с ИИ любого уровня, решайте задачи и разбирайте партии: тренер объяснит каждый ход, покажет ошибки и подберёт упражнения под вашу слабую сторону. От AEVION.",
   manifest: "/cyberchess-manifest.webmanifest",
   appleWebApp: {
     capable: true,
@@ -19,16 +20,16 @@ export const metadata: Metadata = {
     apple: [{ url: "/cyberchess-icon-192.svg" }],
   },
   openGraph: {
-    title: "CyberChess — AI-коуч, CPI рейтинг, 12 вариантов",
+    title: "CyberChess — ИИ-коуч, CPI рейтинг, 12 вариантов",
     description:
-      "AI-коуч Алексей · Composite Performance Index (11 факторов) · Stockfish multiPV · Chessy currency · стрим-в-приложении. AEVION CyberChess.",
+      "ИИ-коуч Алексей · Composite Performance Index (11 факторов) · Stockfish multiPV · Chessy currency · стрим-в-приложении. AEVION CyberChess.",
     type: "website",
     siteName: "AEVION CyberChess",
     url: "/cyberchess",
   },
   twitter: {
     card: "summary_large_image",
-    title: "CyberChess — лучший AI-коуч в шахматах",
+    title: "CyberChess — лучший ИИ-коуч в шахматах",
     description:
       // 5800+ было верно, когда банк собирали вручную. Живой замер 20.08.2026:
       // 502 584 задачи (GET /api/cyberchess-puzzles). Занижение в 86 раз стояло
@@ -50,6 +51,7 @@ export default function CyberChessLayout({ children }: { children: React.ReactNo
   return (
     <>
       <SwRegister />
+      <RussianOnlyNotice />
       {children}
       <PwaInstall />
     </>

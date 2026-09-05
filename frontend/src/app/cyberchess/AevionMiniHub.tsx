@@ -17,7 +17,7 @@ const PRODUCTS: Product[] = [
   { id: "qright",   href: "/qright",         emoji: "⚖",  name: "QRight",     desc: "Права + Shamir SSS",              color: "#7c3aed" },
   { id: "qpaynet",  href: "/qpaynet",        emoji: "💳", name: "QPayNet",    desc: "Wallets · transfers · merchant",   color: "#d97706" },
   { id: "qtrade",   href: "/qtrade",         emoji: "📈", name: "QTrade",     desc: "AEV trading · offline",            color: "#dc2626" },
-  { id: "smeta",    href: "/smeta-trainer",  emoji: "📐", name: "Смета",      desc: "AI сметный тренажёр РК",          color: "#f59e0b" },
+  { id: "smeta",    href: "/smeta-trainer",  emoji: "📐", name: "Смета",      desc: "ИИ сметный тренажёр РК",          color: "#f59e0b" },
   { id: "globus",   href: "/globus",         emoji: "🌍", name: "Globus",     desc: "3D экосистема AEVION",            color: "#06b6d4" },
   { id: "gtm",      href: "/gtm",            emoji: "🚀", name: "GTM",        desc: "Pricing · go-to-market",          color: "#ec4899" },
 ];

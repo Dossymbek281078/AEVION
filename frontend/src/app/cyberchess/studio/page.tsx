@@ -369,7 +369,7 @@ function SourcePicker({ open, onClose, onPick }: {
           <div style={{ display: "flex", gap: SPACE[2], marginBottom: SPACE[2], alignItems: "center" }}>
             <input aria-label="Поиск"
               value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="🔍 По имени, языку или title (GM/IM)…"
+              placeholder="🔍 По имени, языку или званию (GM/IM)…"
               style={{ flex: 1, padding: "8px 12px", border: `1px solid ${CC.border}`, borderRadius: RADIUS.md, fontSize: 13 }}
             />
             <button onClick={() => sLiveLastFetch(0)} className="cc-focus-ring"
@@ -472,7 +472,7 @@ function SourcePicker({ open, onClose, onPick }: {
             <a href={tab === "twitch-presets" ? "https://www.twitch.tv/directory/category/chess" : "https://www.youtube.com/results?search_query=chess+live"}
               target="_blank" rel="noopener"
               style={{ fontSize: 11, color: CC.accent, textDecoration: "none", fontWeight: 700, padding: "4px 8px" }}>
-              {tab === "twitch-presets" ? "Все live на Twitch ↗" : "Поиск на YouTube ↗"}
+              {tab === "twitch-presets" ? "Все эфиры на Twitch ↗" : "Поиск на YouTube ↗"}
             </a>
           </div>
           <div style={{ fontSize: 11, color: CC.textDim, marginBottom: SPACE[2] }}>
@@ -561,7 +561,7 @@ function SourcePicker({ open, onClose, onPick }: {
       {tab === "youtube" && (
         <div style={{ display: "flex", flexDirection: "column", gap: SPACE[4] }}>
           <div>
-            <div style={{ fontSize: 12, fontWeight: 800, color: CC.text, marginBottom: SPACE[2] }}>📡 Live-стрим канала</div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: CC.text, marginBottom: SPACE[2] }}>📡 Прямой эфир канала</div>
             <div style={{ fontSize: 11, color: CC.textDim, marginBottom: SPACE[2] }}>
               Channel ID (например, <code>UCQHX6ViZmPsWiYSFAyS0a3Q</code>) — найдёшь в URL канала на youtube.com
             </div>
@@ -742,7 +742,7 @@ function Pane({ src, area, onChangeSource, onMute, onClose, onMaximize, onPicker
         {isOnlyChessApp && (
           <Tooltip label="Это единственная панель CyberChess — нельзя убрать">
             <span style={{ background: "rgba(124,58,237,0.3)", color: "#a78bfa", borderRadius: 4, padding: "3px 7px", fontSize: 10, fontWeight: 800, letterSpacing: 0.4 }}>
-              🔒 LOCK
+              🔒 Закрепить
             </span>
           </Tooltip>
         )}
@@ -932,10 +932,10 @@ function PipChess({ pip, onChange, onClose }: {
           display: "flex", alignItems: "center", gap: 6, cursor: "move",
           borderBottom: "1px solid #2a2d34", userSelect: "none",
         }}>
-        <span>♞ PiP CyberChess</span>
+        <span>♞ Мини-доска CyberChess</span>
         <span style={{ flex: 1 }} />
         <a href="/cyberchess" target="_blank" rel="noopener"
-          title="Открыть полный CyberChess (Stockfish, AI Coach)"
+          title="Открыть полный CyberChess (Stockfish, ИИ-коуч)"
           style={{ color: "#a78bfa", textDecoration: "none", padding: "1px 6px", borderRadius: 4, background: "rgba(124,58,237,0.18)", fontSize: 10, fontWeight: 800 }}>↗</a>
         <button aria-label="Закрыть" onClick={onClose}
           style={{ background: "rgba(255,255,255,0.12)", border: "none", color: "#fff", borderRadius: 4, padding: "2px 7px", fontSize: 11, cursor: "pointer", fontWeight: 800 }}>✕</button>
@@ -1104,13 +1104,18 @@ export default function StudioPage() {
           borderRadius: RADIUS.md, background: "#1f2229", border: "1px solid #2a2d34",
         }}>← CyberChess</Link>
 
-        <div style={{
+        {/* Заголовок первого уровня и по-русски. Было «🎬 STUDIO MODE» в
+            обычном блоке: для экранного диктора страница безымянна, а
+            английские слова на русской странице человек читает как чужие.
+            Размеры и цвета прежние — вид не меняется. */}
+        <h1 style={{
           display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px",
           borderRadius: RADIUS.full, background: "linear-gradient(135deg,#7c3aed20,#059669 20)",
           border: "1px solid #7c3aed", color: "#a78bfa", fontSize: 11, fontWeight: 900, letterSpacing: 0.5,
+          margin: 0,
         }}>
-          🎬 STUDIO MODE
-        </div>
+          🎬 Студия
+        </h1>
 
         <div style={{ flex: 1 }} />
 
@@ -1135,7 +1140,12 @@ export default function StudioPage() {
         </div>
 
         {/* Presets */}
-        <div style={{ display: "inline-flex", gap: 4 }}>
+        {/* Перенос: четыре пресета в один ряд не помещаются на узком телефоне.
+            Замер 28.08.2026 на ширине 320 — ряд «Игра + Стрим · Турнирный штаб
+            · Игра + 2 стрима · Только игра» шириной 342 при окне 305, страница
+            уезжала вбок на 42 пикселя. Сторож указывал на последнюю кнопку,
+            но переполнял сам ряд. */}
+        <div style={{ display: "inline-flex", gap: 4, flexWrap: "wrap" }}>
           {PRESET_LAYOUTS.map(p => (
             <Tooltip key={p.id} label={p.label}>
               <button onClick={() => applyPreset(p.id)} className="cc-focus-ring"
@@ -1151,22 +1161,22 @@ export default function StudioPage() {
         </div>
 
         {/* Mute / unmute all */}
-        <Tooltip label="Mute все стримы">
+        <Tooltip label="Выключить звук у всех трансляций">
           <button onClick={() => muteAll(true)} className="cc-focus-ring"
             style={{ padding: "5px 10px", borderRadius: RADIUS.md, border: "1px solid #2a2d34", background: "#1f2229", color: "#e5e7eb", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-            🔇 mute
+            🔇 без звука
           </button>
         </Tooltip>
-        <Tooltip label="Unmute все">
+        <Tooltip label="Включить звук у всех трансляций">
           <button onClick={() => muteAll(false)} className="cc-focus-ring"
             style={{ padding: "5px 10px", borderRadius: RADIUS.md, border: "1px solid #2a2d34", background: "#1f2229", color: "#e5e7eb", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
-            🔊 unmute
+            🔊 со звуком
           </button>
         </Tooltip>
-        <Tooltip label={pip.open ? "Скрыть PiP мини-шахматы" : "Показать плавающую мини-шахматную доску — играй пока смотришь стрим"}>
+        <Tooltip label={pip.open ? "Скрыть мини-доску" : "Показать плавающую мини-шахматную доску — играй пока смотришь стрим"}>
           <button onClick={() => setPip(p => ({ ...p, open: !p.open }))} className="cc-focus-ring"
             style={{ padding: "5px 10px", borderRadius: RADIUS.md, border: `1px solid ${pip.open ? "#7c3aed" : "#2a2d34"}`, background: pip.open ? "#3b1d6a" : "#1f2229", color: pip.open ? "#a78bfa" : "#e5e7eb", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>
-            ♞ PiP
+            ♞ Мини-доска
           </button>
         </Tooltip>
         <Tooltip label={topBarPinned ? "Скрыть верхнюю панель — появится при наведении на верх экрана" : "Закрепить верхнюю панель"}>

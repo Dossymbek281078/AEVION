@@ -302,7 +302,14 @@ router.post('/comment', async (req: Request, res: Response) => {
         temperature: body.temperature,
         timeoutMs: 6500, // opus-4-8 isn't instant; give the GM разбор room before fallback
       });
-      if (llmText && llmText !== fallback) {
+      // Провайдер не настроен — QCoreAI не бросает, а возвращает 200 с
+      // текстом «[QCoreAI — no AI provider configured] Your question: "…"»,
+      // куда подставлен весь наш промпт. Без этой проверки он уходил в
+      // комментарий и ПРОИЗНОСИЛСЯ вслух. Замер 02.09.2026 на локальном
+      // бэкенде без ключа. Здесь, в отличие от /ask, есть хороший запасной
+      // путь — правиловый комментарий, поэтому падаем в него, а не в отказ.
+      const otkazProvaydera = typeof llmText === 'string' && /no ai provider configured/i.test(llmText);
+      if (llmText && llmText !== fallback && !otkazProvaydera) {
         text = llmText;
         source = 'llm';
       }
@@ -393,6 +400,24 @@ router.post('/ask', async (req: Request, res: Response) => {
       return res.status(502).json({
         error: 'llm_unavailable',
         reason: upstreamErrorKind(err),
+        sessionId: sid,
+      });
+    }
+
+    // Провайдер ИИ не настроен — это ОТКАЗ, а не ответ тренера.
+    //
+    // QCoreAI в таком случае не бросает, а возвращает 200 с текстом
+    // «[QCoreAI — no AI provider configured] Your question: "…"» и ЭХОМ всего
+    // внутреннего промпта. Раньше эта строка уходила человеку как ответ
+    // тренера: английская служебная метка и наша же инженерия промпта на
+    // экране. Замер 02.09.2026 на локальном бэкенде без ключа — ответ 200.
+    //
+    // Соседний модуль (psyappDeps) этот случай уже различает и отвечает 503
+    // по-человечески; делаем так же.
+    if (/no ai provider configured/i.test(text)) {
+      return res.status(503).json({
+        error: 'llm_not_configured',
+        text: 'Тренер сейчас недоступен — разбор позиции не подключён. Партия и задачи работают как обычно.',
         sessionId: sid,
       });
     }

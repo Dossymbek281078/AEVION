@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "AEVION IP Bureau — открываем 6 сентября: реестр, подпись, сертификат с публичной проверкой";
+export const alt = "AEVION IP Bureau — открываем 10 сентября: реестр, подпись, сертификат с публичной проверкой";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -38,7 +38,7 @@ export default function BureauLaunchOg() {
             AEVION · IP Bureau
           </div>
           <div style={{ fontSize: 72, fontWeight: 800, lineHeight: 1.06, letterSpacing: -2, display: "flex" }}>
-            Открываем 6 сентября
+            Открываем 10 сентября
           </div>
           <div style={{ fontSize: 30, color: MUTED, lineHeight: 1.35, maxWidth: 940, display: "flex" }}>
             Хеш содержимого в реестре, криптографическая подпись и сертификат с проверкой по ссылке.

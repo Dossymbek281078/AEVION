@@ -60,6 +60,15 @@ const variantStyle = (v: BtnVariant, active: boolean): React.CSSProperties => {
   return base;
 };
 
+/*
+ * Класса cc-focus-ring здесь НЕТ намеренно.
+ *
+ * Он снимает контур и рисует кольцо ТЕНЬЮ, а у этих кнопок своя тень задана
+ * строчным стилем — строчное сильнее, и кольцо не рисуется вовсе. Замер
+ * 04.09.2026 обходом с клавиатуры: у кнопок БЕЗ класса кольцо видно в 23
+ * случаях из 23, с классом — в 14 из 16. Работает общее правило контура из
+ * globals.css: оно рисуется поверх строчных стилей.
+ */
 export function Btn({ variant = "secondary", size = "md", full, loading, disabled,
   icon, iconRight, active, onClick, type = "button", title, ariaLabel, style, className, children }: BtnProps) {
   const sz = BTN_SIZE[size];
@@ -70,7 +79,7 @@ export function Btn({ variant = "secondary", size = "md", full, loading, disable
       disabled={disabled || loading}
       title={title}
       aria-label={ariaLabel}
-      className={`cc-focus-ring cc-touch${className ? ` ${className}` : ""}`}
+      className={`cc-touch${className ? ` ${className}` : ""}`}
       style={{
         display: "inline-flex", alignItems: "center", justifyContent: "center",
         gap: sz.gap, padding: sz.pad, fontSize: sz.fs, fontWeight: 700,
@@ -212,7 +221,7 @@ export function Tabs<V extends string>({ value, onChange, tabs, variant = "pill"
             aria-selected={active}
             onClick={() => onChange(t.value)}
             title={t.hint}
-            className="cc-focus-ring cc-touch"
+            className="cc-touch"
             style={{
               display: "inline-flex", alignItems: "center", gap: 6,
               padding: pad, fontSize: fs, fontWeight: active ? 800 : 700,

@@ -1,3 +1,4 @@
+import { ccPlural } from "./ccPlural";
 // Position Whisperer — голосовой объяснитель позиции.
 // Принимает FEN + опц. eval (centipawns/mate) → возвращает короткую фразу
 // для TTS на ru-RU. Использует heuristics: материал, безопасность короля,
@@ -130,7 +131,7 @@ export function whisperPosition(fen: string, evalCp = 0, mate = 0): string {
 
   // Eval-based opening
   if (mate !== 0) {
-    insights.push({ text: `Мат через ${Math.abs(mate)} ход${Math.abs(mate) === 1 ? "" : "ов"} в пользу ${mate > 0 ? "белых" : "чёрных"}.`, weight: 100 });
+    insights.push({ text: `Мат через ${Math.abs(mate)} ${ccPlural(Math.abs(mate), "ход", "хода", "ходов")} в пользу ${mate > 0 ? "белых" : "чёрных"}.`, weight: 100 });
   } else if (Math.abs(evalCp) >= 300) {
     insights.push({ text: `Позиция выиграна для ${evalCp > 0 ? "белых" : "чёрных"} — преимущество ${(Math.abs(evalCp) / 100).toFixed(1)} пешки.`, weight: 90 });
   } else if (Math.abs(evalCp) >= 100) {

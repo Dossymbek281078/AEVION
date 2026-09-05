@@ -24,7 +24,11 @@ type LeaderEntry = {
 
 type HintLevel = 0 | 1 | 2 | 3;
 
-// 30 mock puzzles. FEN is illustrative; full validation via chess.js.
+// Десять встроенных задач — РЕЗЕРВ на случай, когда банк не ответил:
+// показываются мгновенно, затем их заменяет настоящая задача дня.
+// Раньше здесь стояло «30 mock puzzles» при десяти — счёт в комментарии
+// стареет молча, а читатель верит ему, а не коду.
+// Легальность ходов проверена chess.js: 10 из 10 (01.09.2026).
 const POOL: Puzzle[] = [
   { fen: 'r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 1', sol: ['f3e5', 'c6e5', 'c4f7'], theme: 'Fork', rating: 1200 },
   { fen: 'r3k2r/ppp2ppp/2n1bn2/2bqp3/2B1P3/2NP1N2/PPPQ1PPP/R1B1K2R w KQkq - 0 1', sol: ['c3d5', 'f6d5', 'e4d5'], theme: 'Pin', rating: 1450 },
@@ -182,7 +186,7 @@ export default function DailyPuzzlePage() {
   // а это разные вещи для человека, который решает, стоит ли играть.
   useEffect(() => {
     let alive = true;
-    fetch('/api-backend/api/cyberchess-daily/leaderboard?limit=100')
+    fetch('/api-backend/api/cyberchess-daily/leaderboard?limit=100', { signal: AbortSignal.timeout(10_000) })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((j) => {
         if (!alive) return;
@@ -210,7 +214,7 @@ export default function DailyPuzzlePage() {
   // честно скажет, что задача резервная.
   useEffect(() => {
     let alive = true;
-    fetch('/api-backend/api/cyberchess-daily/puzzle')
+    fetch('/api-backend/api/cyberchess-daily/puzzle', { signal: AbortSignal.timeout(10_000) })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         if (!alive) return;
@@ -233,8 +237,22 @@ export default function DailyPuzzlePage() {
           rating: Number(p.rating) || 1200,
         });
         // Признак берётся из ответа сервера, а не угадывается: сервер сам знает,
-        // ответил ли банк, и говорит это полем source.
-        setFromBank(typeof j?.source === 'string' && j.source.includes('банк'));
+        // ответил ли банк.
+        //
+        // Раньше здесь стояла проверка ПОДСТРОКИ в source — и она давала
+        // обратный ответ: строка отказа «резервный пул из 30 задач: банк не
+        // ответил» содержит слово «банк», поэтому страница писала «задача из
+        // общего банка, одна и та же у всех» ровно в тот момент, когда банк
+        // не ответил. Замер 02.09.2026: сервер сказал «банк не ответил»,
+        // экран сказал обратное.
+        //
+        // Теперь читаем машинный признак. Старый разбор оставлен запасным на
+        // случай сервера прежней версии, но точным сравнением, а не подстрокой.
+        setFromBank(
+          typeof j?.fromBank === 'boolean'
+            ? j.fromBank
+            : j?.source === 'ChessPuzzle — настоящий банк задач',
+        );
       })
       .catch(() => {
         /* остаёмся на встроенной задаче */
@@ -497,7 +515,7 @@ export default function DailyPuzzlePage() {
       chessRef.current = c2;
       refreshBoard();
       setLastMove(null);
-      setMessage(`Не тот ход для пазла. Ожидался другой. Попробуй ещё раз.`);
+      setMessage(`Не тот ход для этой задачи. Ожидался другой. Попробуй ещё раз.`);
       return;
     }
 
@@ -677,7 +695,7 @@ export default function DailyPuzzlePage() {
           🧩 Задача дня
         </h1>
         <p style={{ color: '#9aa0b4', margin: '0 0 24px 0', fontSize: 14 }}>
-          Один пазл в день. Решай каждый день — держи серию. Многоходовые пазлы: бот отвечает за противника.
+          Одна задача в день. Решай каждый день — держи серию. Многоходовые задачи: бот отвечает за противника.
         </p>
 
         {/* Перенос вместо сетки: жёсткие 360px боковой колонки плюс отступ 24 не
@@ -875,7 +893,7 @@ export default function DailyPuzzlePage() {
                     cursor: solved || hintLevel === 3 ? 'not-allowed' : 'pointer',
                     fontSize: 14,
                   }}
-                  title="3 уровня подсказки: район → клетка-начало → полный ход. Каждая снимает +1 hint и блокирует +1 streak за пазл."
+                  title="3 уровня подсказки: район → клетка-начало → полный ход. Каждая тратит одну подсказку и снимает прибавку к серии за эту задачу."
                 >
                   💡 Подсказка ({hintLevel}/3)
                 </button>

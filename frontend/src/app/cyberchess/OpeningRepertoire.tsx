@@ -306,16 +306,22 @@ function Header({ onClose, fullPage }: { onClose: () => void; fullPage: boolean 
       }}
     >
       <div>
-        <div
+        {/* Заголовок первого уровня, а не просто крупный текст. Замер
+            27.08.2026: на странице репертуара НЕ БЫЛО НИ ОДНОГО заголовка —
+            экранный диктор не мог понять её устройство, а поиск не видел, о
+            чём страница. Единственная такая среди пятнадцати страниц модуля.
+            Внешний вид не меняется: размеры и цвета заданы явно. */}
+        <h1
           style={{
             fontSize: 24,
             fontWeight: 700,
             color: COLORS.accentBright,
             letterSpacing: 0.4,
+            margin: 0,
           }}
         >
           Дебютный репертуар
-        </div>
+        </h1>
         <div style={{ fontSize: 13, color: COLORS.textDim, marginTop: 4 }}>
           Сохраняй свои ветки, тренируй по памяти, изучай реальную статистику Lichess.
         </div>
@@ -641,7 +647,7 @@ function AddBranchPanel({
       }}
     >
       <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: COLORS.accentBright }}>
-        Выбери дебют из пресетов
+        Выбери дебют из готовых
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
         <div>
@@ -1121,7 +1127,8 @@ function StatsTab({ branches }: { branches: RepertoireBranch[] }) {
         Книжная статистика
       </div>
       <div style={{ fontSize: 11, color: COLORS.textDim, marginBottom: 14 }}>
-        Источник: Lichess Opening Explorer (community DB). Кэш по TTL из настроек.
+        Данные о ходах — из открытой базы партий Lichess. Мы держим их у себя
+        и обновляем по расписанию из настроек ниже.
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -1245,7 +1252,7 @@ function BranchStatsRow({ branch }: { branch: RepertoireBranch }) {
               fontWeight: 600,
             }}
           >
-            {source === "lichess" ? "LICHESS" : "MOCK (нет UCI)"}
+            {source === "lichess" ? "ДАННЫЕ LICHESS" : "ОБРАЗЕЦ, НЕ РЕАЛЬНАЯ СТАТИСТИКА"}
           </span>
         </div>
         <div style={{ display: "flex", gap: 3 }}>
@@ -1578,11 +1585,12 @@ function SettingsTab() {
   return (
     <div>
       <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: COLORS.accentBright }}>
-        Кэш статистики Lichess
+        Как часто обновлять данные Lichess
       </div>
       <div style={{ fontSize: 12, color: COLORS.textDim, marginBottom: 16 }}>
-        Lichess Explorer limit ~60 запросов/мин. Кэшируй агрессивно, обновляй вручную при
-        необходимости.
+        Lichess отвечает не чаще шестидесяти раз в минуту, поэтому мы держим
+        данные у себя и переспрашиваем реже. Если нужны свежие цифры прямо
+        сейчас — обновите вручную.
       </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
@@ -1633,7 +1641,7 @@ function SettingsTab() {
           fontSize: 13,
         }}
       >
-        Очистить кэш сейчас
+        Обновить данные сейчас
       </button>
     </div>
   );

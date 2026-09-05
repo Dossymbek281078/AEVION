@@ -116,7 +116,7 @@ export function generateShareSVG(opts: ShareOpts): string {
 
   <!-- header brand -->
   <text x="${W / 2}" y="80" text-anchor="middle" font-size="46" fill="url(#brandG)" font-weight="900" font-family="system-ui, -apple-system, sans-serif" letter-spacing="3">AEVION CYBERCHESS</text>
-  <text x="${W / 2}" y="115" text-anchor="middle" font-size="20" fill="#94a3b8" font-family="system-ui, sans-serif" letter-spacing="2">aevion.app · AI-powered chess</text>
+  <text x="${W / 2}" y="115" text-anchor="middle" font-size="20" fill="#94a3b8" font-family="system-ui, sans-serif" letter-spacing="2">aevion.app · шахматы с ИИ</text>
 
   <!-- result hero -->
   <text x="${W / 2}" y="220" text-anchor="middle" font-size="100" font-family="serif">${heroEmoji}</text>

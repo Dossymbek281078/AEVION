@@ -88,7 +88,7 @@ const API_BASE = "/api-backend/api/cyberchess-spectator";
 
 async function fetchReplays(limit = 50): Promise<ReplayItem[]> {
   const res = await fetch(`${API_BASE}/replays?limit=${limit}`, {
-    cache: "no-store",
+    cache: "no-store", signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = (await res.json()) as { ok: boolean; replays: ReplayItem[] };
@@ -208,7 +208,11 @@ export default function ReplayHubPage() {
             })}
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {/* flexWrap — чтобы ряд переносился на узком телефоне. Замер
+              28.08.2026 на ширине 320: подпись, выпадающий список и кнопка
+              «Обновить» вместе шире экрана, и страница уезжала вбок на 20
+              пикселей. На 375 ряд помещается, поэтому дефекта не видно. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <label htmlFor="rp-sort" className="planet-muted" style={{ fontSize: 11.5 }}>Сортировка:</label>
             <select id="rp-sort"
               value={sort}
@@ -229,7 +233,8 @@ export default function ReplayHubPage() {
         {/* List */}
         {error && (
           <div className="planet-card" style={{ padding: 16, fontSize: 13.5, color: "var(--pl-danger)" }}>
-            Не удалось загрузить архив: {error}
+            Не удалось загрузить архив трансляций. Проверьте связь и обновите
+            страницу — записи никуда не делись.
           </div>
         )}
 

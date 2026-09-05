@@ -1,0 +1,88 @@
+import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+/**
+ * Правая рейка «Проекты АЕВИОН» закреплена (fixed, right:0, ширина 240) и
+ * занимает всю высоту. Отступ, который она ставит у body, двигает только
+ * ПОТОК — закреплённые соседи его не видят и ложатся поверх.
+ *
+ * Замер 01.09.2026 на 1280×900: плашка стрима накрыла «Купить», строку цены
+ * «$19/мес · Lite·Medium $29·Full $49» и «Все тарифы →» — то есть весь путь
+ * покупки на странице шахмат. Ни один тест этого не видел и не мог: каждый
+ * компонент отрисован верно, перекрытие существует только когда они вместе.
+ *
+ * Здесь закреплено правило: закреплённый элемент, прижатый к ПРАВОМУ краю в
+ * нижней половине экрана, обязан отступать на ширину рейки.
+ */
+
+const КОД = () => readFileSync(join(__dirname, "..", "page.tsx"), "utf8");
+const ПЕРЕМЕННАЯ = "var(--aevion-projects-w, 0px)";
+
+// Строка объявляет закреплённый элемент, прижатый к правому краю и к низу.
+function правыйНижний(строка: string): boolean {
+  const без = строка.replace(/\s/g, "");
+  // right: бывает и числом, и строкой calc(...) — после починки все стали
+  // строками, и предикат «right:<цифра>» перестал их видеть вовсе. Проверка
+  // тогда охраняла ПУСТОТУ: нарушителей ноль, потому что искать было негде.
+  return без.includes('position:"fixed"') && без.includes("right:") && /bottom:\d/.test(без);
+}
+
+describe("закреплённые элементы и правая рейка", () => {
+  it("каждый правый нижний закреплённый элемент отступает на ширину рейки", () => {
+    const строки = КОД().split("\n");
+    const нарушители = строки
+      .map((s, i) => ({ n: i + 1, s }))
+      .filter((x) => правыйНижний(x.s) && !x.s.includes(ПЕРЕМЕННАЯ))
+      .map((x) => `${x.n}: ${x.s.trim().slice(0, 70)}`);
+    expect(нарушители).toEqual([]);
+  });
+
+  it("контроль охвата: такие элементы вообще есть, правило не про пустоту", () => {
+    const строки = КОД().split("\n").filter(правыйНижний);
+    expect(строки.length).toBeGreaterThanOrEqual(3);
+    // и все они уже используют переменную — иначе первый тест был бы красным
+    expect(строки.every((s) => s.includes(ПЕРЕМЕННАЯ))).toBe(true);
+  });
+
+  it("рейка публикует свою ширину — иначе отступать не от чего", () => {
+    const баннер = readFileSync(join(__dirname, "..", "AevionProjectsBanner.tsx"), "utf8");
+    // Проверять просто наличие имени переменной НЕЛЬЗЯ: оно встречается и в
+    // комментарии, и в removeProperty. Мутация «убрать публикацию» такую
+    // проверку переживала. Требуем именно ЗАПИСЬ значения.
+    expect(баннер).toMatch(/setProperty\(\s*"--aevion-projects-w"/);
+    expect(баннер).toMatch(/removeProperty\(\s*"--aevion-projects-w"/);
+  });
+});
+
+describe("блок покупки в рейке", () => {
+  it("поднят над полосой всплывашек", async () => {
+    const { POLOSA_VSPLYVASHEK } = await import("../AevionProjectsBanner");
+    // 16px отступ контейнера + высота типичной всплывашки. Меньше 90 —
+    // и «Купить» снова уедет под всплывашку, как 01.09.2026.
+    expect(POLOSA_VSPLYVASHEK).toBeGreaterThanOrEqual(90);
+    const баннер = readFileSync(join(__dirname, "..", "AevionProjectsBanner.tsx"), "utf8");
+    expect(баннер).toContain("marginBottom: POLOSA_VSPLYVASHEK");
+  });
+});
+
+describe("рейка и чужие закреплённые соседи", () => {
+  it("рейка начинается НИЖЕ переключателя языка платформы", async () => {
+    const { OTSTUP_SVERHU } = await import("../AevionProjectsBanner");
+    // Переключатель «RU ▼» занимает 16..46px по вертикали (замер 01.09.2026
+    // на 1280 и 1920). Рейка выше 46 накрывает его нижнюю половину, и кнопка
+    // смены языка перестаёт нажиматься на всех десктопных ширинах.
+    expect(OTSTUP_SVERHU).toBeGreaterThan(46);
+    const баннер = readFileSync(join(__dirname, "..", "AevionProjectsBanner.tsx"), "utf8");
+    expect(баннер).toContain("top: OTSTUP_SVERHU");
+  });
+
+  it("плашка стрима поднята над полосой всплывашек", () => {
+    const код = readFileSync(join(__dirname, "..", "page.tsx"), "utf8");
+    const i = код.indexOf("zIndex:7900");
+    expect(i, "плашка стрима пропала — проверку переписать").toBeGreaterThan(0);
+    const строка = код.slice(Math.max(0, i - 200), i + 40);
+    // иначе две наши закреплённые панели встают друг на друга у одного края
+    expect(строка).toContain("bottom:POLOSA_VSPLYVASHEK");
+  });
+});

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { BuyLink } from "@/components/BuyLink";
+import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 import {
   SUBSCRIPTIONS,
   GUIDES,
@@ -160,6 +161,8 @@ export default async function ShopPage({
           items={MODULES}
           channel={channel}
         />
+
+        <PaymentReachNotice style={styles.foot} />
 
         <p style={styles.foot}>
           Материалы о здоровье и долголетии — образовательные и wellness-материалы. Не предназначены

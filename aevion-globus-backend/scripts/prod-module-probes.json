@@ -50,6 +50,11 @@
   "expect": 200
  },
  {
+  "base": "/api/build",
+  "url": "/api/build/health",
+  "expect": 200
+ },
+ {
   "base": "/api/build/jobs",
   "url": "/api/build/jobs/health",
   "expect": 200
@@ -72,6 +77,11 @@
  {
   "base": "/api/constitution",
   "url": "/api/constitution/me/plan",
+  "expect": 200
+ },
+ {
+  "base": "/api/constitution/checkout",
+  "url": "/api/constitution/checkout/go/probe",
   "expect": 200
  },
  {

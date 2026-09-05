@@ -15,8 +15,8 @@ const PRESET_DESC: Record<WorkspacePreset, string> = {
   focus:    "Только доска — никакого шума",
   standard: "Доска + информационная панель справа",
   stream:   "Доска + медиа-панель (YouTube/Twitch)",
-  study:    "Анализ + AI-коуч рядом",
-  coach:    "Доска + AI-коуч справа",
+  study:    "Анализ + ИИ-коуч рядом",
+  coach:    "Доска + ИИ-коуч справа",
 };
 
 type Props = {
@@ -32,7 +32,7 @@ export default function WorkspaceToolbar({ preset, onChange }: Props) {
     <div style={{ position: "relative" }}>
       <button
         onClick={() => setOpen(o => !o)}
-        title="Сменить layout (Ctrl+1–5)"
+        title="Сменить раскладку (Ctrl+1–5)"
         style={{
           display: "inline-flex", alignItems: "center", gap: 5,
           padding: "5px 10px", borderRadius: 8,

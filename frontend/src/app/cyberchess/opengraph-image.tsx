@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "AEVION CyberChess — AI-коуч, CPI рейтинг, 12 вариантов";
+export const alt = "AEVION CyberChess — ИИ-коуч, CPI рейтинг, 12 вариантов";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -39,7 +39,7 @@ export default function Image() {
         каждый ход считается
       </div>
       <div style={{ fontSize: 22, color: "#94a3b8", textAlign: "center", marginBottom: 48, maxWidth: 980, lineHeight: 1.4 }}>
-        AI-коуч Алексей · Composite Performance Index по 11 факторам · Game DNA · 500 000+ задач · live-комментарии
+        ИИ-коуч Алексей · Composite Performance Index по 11 факторам · Game DNA · 500 000+ задач · live-комментарии
       </div>
 
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", justifyContent: "center" }}>

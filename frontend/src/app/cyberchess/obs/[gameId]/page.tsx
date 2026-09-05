@@ -106,7 +106,23 @@ export default function ObsOverlayPage() {
   // SSE state
   const [state, setState] = useState<SSEState>({});
   const [connected, setConnected] = useState(false);
+  // «Ещё не подключились» и «связь оборвалась» — РАЗНЫЕ состояния, и на эфире
+  // разница видна: в первом случае данных ещё нет, во втором на экране висит
+  // устаревшая позиция. Тот же флаг и по той же причине есть у страницы зрителя.
+  const [byloSoedinenie, setByloSoedinenie] = useState(false);
   const [voiceMsg, setVoiceMsg] = useState<VoiceMsg | null>(null);
+
+  // OBS накладывает страницу поверх видео, поэтому фон обязан быть прозрачным,
+  // а прокрутка скрыта. Раньше это делала собственная разметка <body>; теперь
+  // ставим на настоящий body и возвращаем как было при уходе со страницы.
+  useEffect(() => {
+    const b = document.body;
+    const былФон = b.style.background;
+    const былаПрокрутка = b.style.overflow;
+    b.style.background = "transparent";
+    b.style.overflow = "hidden";
+    return () => { b.style.background = былФон; b.style.overflow = былаПрокрутка; };
+  }, []);
   const voiceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -114,7 +130,7 @@ export default function ObsOverlayPage() {
     if (!gameId) return;
     const es = new EventSource(`/api-backend/api/cyberchess-spectator/${gameId}`);
 
-    es.onopen = () => setConnected(true);
+    es.onopen = () => { setConnected(true); setByloSoedinenie(true); };
     es.onmessage = (e) => {
       try {
         const d = JSON.parse(e.data) as SSEState;
@@ -138,7 +154,7 @@ export default function ObsOverlayPage() {
         }
       } catch {}
     });
-    es.addEventListener("ended", () => setState(prev => ({ ...prev, result: prev.result ?? "Game ended" })));
+    es.addEventListener("ended", () => setState(prev => ({ ...prev, result: prev.result ?? "Партия завершена" })));
     es.onerror = () => setConnected(false);
 
     return () => { es.close(); if (voiceTimerRef.current) clearTimeout(voiceTimerRef.current); };
@@ -169,10 +185,15 @@ export default function ObsOverlayPage() {
   const evalRatio = evalWhiteRatio(state.evalCp, state.evalMate ?? undefined);
 
   return (
-    <html>
-      <head>
-        <meta name="viewport" content="width=device-width,initial-scale=1" />
-        <style>{`
+    <>
+      {/* Здесь стояли <html>, <head> и <body>. В App Router их рисует ТОЛЬКО
+          корневой layout: страница внутри него давала вложенные html/body,
+          гидратация падала с React #418, и оверлей показывал ПУСТОЙ экран —
+          для любого gameId, а не только для несуществующего. Замер 02.09.2026:
+          на странице оставалось 4 символа текста и одна ошибка в консоли.
+          Прозрачный фон, который задавала та разметка, теперь ставится
+          эффектом ниже — он нужен OBS, чтобы оверлей ложился поверх видео. */}
+      <style>{`
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { background: transparent !important; overflow: hidden; }
           @keyframes obs-voice-in {
@@ -182,9 +203,8 @@ export default function ObsOverlayPage() {
           @keyframes obs-blink {
             0%,100% { opacity: 1; } 50% { opacity: 0.4; }
           }
-        `}</style>
-      </head>
-      <body style={{ ...bgStyle, display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 0 }}>
+      `}</style>
+      <div style={{ ...bgStyle, display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 0 }}>
         <audio ref={audioRef} style={{ display: "none" }} />
 
         {/* Info bar — top */}
@@ -209,14 +229,19 @@ export default function ObsOverlayPage() {
               {state.result
                 ? `🏁 ${state.result}`
                 : (<>
+                    {/* Точка ЗЕЛЁНАЯ только при живом потоке. Прежде она была
+                        зелёной всегда, менялось лишь мигание: при обрыве на
+                        эфир уходил «живой» индикатор рядом с застывшей
+                        позицией — зритель видел старый ход как текущий. */}
                     <span style={{
                       width: 8, height: 8, borderRadius: "50%",
-                      background: "#10b981",
+                      background: connected ? "#10b981" : "#9ca3af",
                       animation: connected ? "obs-blink 2s ease-in-out infinite" : "none",
                       display: "inline-block",
                     }}/>
-                    {whiteToMove ? "Ход белых" : "Ход чёрных"}
-                    {` · ${state.hist?.length ?? 0} ходов`}
+                    {connected
+                      ? <>{whiteToMove ? "Ход белых" : "Ход чёрных"}{` · ${state.hist?.length ?? 0} ходов`}</>
+                      : (byloSoedinenie ? "Связь потеряна" : "Подключаемся…")}
                   </>)
               }
             </span>
@@ -331,7 +356,7 @@ export default function ObsOverlayPage() {
             🎙 {voiceMsg.text}
           </div>
         )}
-      </body>
-    </html>
+      </div>
+    </>
   );
 }

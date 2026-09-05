@@ -5058,7 +5058,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {mediaTab === "email" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>To</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Кому</label>
                         <input
                           type="email"
                           value={emailTo}
@@ -5078,7 +5078,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         />
                       </div>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Body (HTML)</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Тело письма (HTML)</label>
                         <textarea
                           value={emailBody}
                           onChange={(e) => setEmailBody(e.target.value)}
@@ -5180,7 +5180,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             </div>
                           </div>
                           <div>
-                            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Description (optional)</label>
+                            <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Описание (необязательно)</label>
                             <input
                               type="text"
                               value={payDesc}
@@ -5536,7 +5536,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>HTML body</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Тело шаблона (HTML)</label>
                         <textarea value={tplBuilderHtml} onChange={(e) => setTplBuilderHtml(e.target.value)} rows={10}
                           style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 12, fontFamily: "monospace", resize: "vertical", boxSizing: "border-box" }} />
                         <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>
@@ -5575,12 +5575,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {mediaTab === "sms" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Recipient (E.164, e.g. +14155552671)</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Получатель (E.164, напр. +77011234567)</label>
                         <input value={smsRecipient} onChange={(e) => setSmsRecipient(e.target.value)} placeholder="+14155552671"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} />
                       </div>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Sender (alphanumeric, max 11 chars)</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Отправитель (латиница/цифры, до 11 знаков)</label>
                         <input value={smsSender} onChange={(e) => setSmsSender(e.target.value)} placeholder="AEVION"
                           maxLength={11}
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
@@ -5618,12 +5618,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {mediaTab === "whatsapp" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Contact Number (E.164)</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Номер получателя (E.164)</label>
                         <input value={waContact} onChange={(e) => setWaContact(e.target.value)} placeholder="+14155552671"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} />
                       </div>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Template ID (approved WABA template)</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>ID шаблона (одобренный WABA)</label>
                         <input value={waTemplateId} onChange={(e) => setWaTemplateId(e.target.value)} placeholder="42"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, fontFamily: "monospace", boxSizing: "border-box" }} />
                       </div>
@@ -5668,7 +5668,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Description (optional)</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Описание (необязательно)</label>
                         <input value={voiceCloneDesc} onChange={(e) => setVoiceCloneDesc(e.target.value)} placeholder="Мужской, спокойный, повествовательный"
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>

@@ -5242,7 +5242,22 @@ devhubRouter.post("/media/gumroad-checkout", dhCostlyLimit("dhgumroad"), async (
   const url = email
     ? `https://app.gumroad.com/l/${slug}?wanted_email=${encodeURIComponent(String(email).trim())}`
     : `https://app.gumroad.com/l/${slug}`;
-  res.json({ ok: true, url, provider: "gumroad" });
+
+  // До 05.09.2026 ручка отвечала ok:true на ЛЮБОЙ слаг: при опечатке человек
+  // получал «успех» и ссылку на 404 Gumroad, а вёл он на неё покупателей.
+  // Проверяем существование товара одним запросом. Сетевой сбой НЕ блокирует
+  // (ссылка на свой товар важнее нашего мигнувшего DNS) — но честно помечается.
+  let verified: boolean | null = null;
+  try {
+    const probe = await fetch(url, { method: "HEAD", redirect: "follow", signal: AbortSignal.timeout(5000) });
+    if (probe.status === 404) {
+      return res.status(404).json({ error: `Gumroad product "${slug}" not found — check the permalink` });
+    }
+    verified = probe.ok || (probe.status >= 300 && probe.status < 400);
+  } catch {
+    verified = null; // не дозвонились — ссылку отдаём, но не клянёмся
+  }
+  res.json({ ok: true, url, provider: "gumroad", ...(verified === null ? { verified: false, note: "existence check unreachable" } : { verified }) });
 });
 
 // POST /api/devhub/media/upload-image — upload image to Cloudflare Images (permanent CDN URL)

@@ -472,6 +472,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   // Live phase of the current generation (SSE) — honest states only, each
   // corresponds to something the backend is actually doing right now.
   const [genStage, setGenStage] = useState<string | null>(null);
+  // «Остановить генерацию»: до 05.09.2026 начатую генерацию нельзя было
+  // отменить вовсе — человек смотрел на спиннер 1-3 минуты без выбора.
+  const genAbortRef = useRef<AbortController | null>(null);
   const [undoing, setUndoing] = useState(false);
 
   // AI-change history (checkpoints) — undo one step, or jump to any past point
@@ -543,6 +546,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   // Templates
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [templatesLoadFailed, setTemplatesLoadFailed] = useState(false);
   const [applyingTemplate, setApplyingTemplate] = useState<string | null>(null);
 
   // Env vars
@@ -900,7 +904,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     fetch(apiUrl("/api/devhub/templates"), { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => setTemplates(d.templates || []))
-      .catch(() => {});
+      // Раньше ошибка глоталась молча, и вкладка «Шаблоны» оставалась
+      // ПОЛНОСТЬЮ пустой без единой строки объяснения.
+      .catch(() => setTemplatesLoadFailed(true));
   }, []);
 
   useEffect(() => {
@@ -1176,6 +1182,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     if (!userText || !project) return;
     setGenerating(true);
     setGeneratedFiles([]);
+    const genCtrl = new AbortController();
+    genAbortRef.current = genCtrl;
     const sentImage = aiImage;
     setAiImage(null);
     setChatHistory((h) => [...h, { role: "user", text: (sentImage ? "🖼 " : "") + userText, at: new Date().toISOString() }]);
@@ -1202,6 +1210,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           method: "POST",
           headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
           body: generateBody,
+          signal: genCtrl.signal,
         });
         if (streamR.ok && streamR.body && (streamR.headers.get("content-type") || "").includes("text/event-stream")) {
           const reader = streamR.body.getReader();
@@ -1223,6 +1232,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           }
         }
       } catch (streamErr) {
+        // Отмена — решение человека, а не сбой: запасной запрос не запускаем.
+        if (genCtrl.signal.aborted) throw new Error("Генерация остановлена. Сервер мог успеть доделать её — если файлы появятся, их видно в списке слева.");
         if (streamErr instanceof Error && data === null && streamErr.message && !/fetch|network/i.test(streamErr.message)) throw streamErr;
         // Поток оборвался — уходим на обычный запрос. Человеку это НАДО сказать:
         // иначе он видит замерший индикатор и ждёт вдвое дольше, не понимая,
@@ -1234,7 +1245,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       if (data === null) {
         const r = await fetchWithRedeployRetry(
           apiUrl(`/api/devhub/projects/${project.id}/generate`),
-          { method: "POST", headers: { "Content-Type": "application/json" }, body: generateBody },
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: generateBody, signal: genCtrl.signal },
           { onRetry: () => showToast("Бэкенд перевыкатывается — повторю через 20 с…", "info") }
         );
         data = await r.json();
@@ -1300,9 +1311,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       applyFileList(listData);
       setAiPrompt("");
     } catch (e: any) {
-      setChatHistory((h) => [...h, { role: "assistant", at: new Date().toISOString(), files: [], note: e.message || "Генерация не удалась" }]);
-      showToast(e.message || "Генерация не удалась", "error");
+      // Отмена во время запасного запроса приходит английским AbortError —
+      // подменяем тем же честным текстом, что и при отмене стрима.
+      const msg = genCtrl.signal.aborted
+        ? "Генерация остановлена. Сервер мог успеть доделать её — если файлы появятся, их видно в списке слева."
+        : (e.message || "Генерация не удалась");
+      setChatHistory((h) => [...h, { role: "assistant", at: new Date().toISOString(), files: [], note: msg }]);
+      showToast(msg, genCtrl.signal.aborted ? "info" : "error");
     } finally {
+      genAbortRef.current = null;
       setGenerating(false);
       setGenStage(null);
     }
@@ -1834,6 +1851,23 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   useEffect(() => {
     if (activeTab === "deployments" && project) fetchDeployments();
   }, [activeTab, fetchDeployments, project]);
+
+  // Карточка «База данных» в настройках была мёртвой: состояние объявлено,
+  // разметка читает его — а setDbUsage не звался НИГДЕ, хотя ручка
+  // GET /projects/:id/database давно существует. Подключено 05.09.2026.
+  useEffect(() => {
+    if (activeTab !== "settings" || !project) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/database`), { cache: "no-store" });
+        const d = await r.json().catch(() => null);
+        if (cancelled || !d) return;
+        if (r.ok || typeof d.provisioned === "boolean") setDbUsage(d);
+      } catch { /* карточка просто не покажется — состояние останется null */ }
+    })();
+    return () => { cancelled = true; };
+  }, [activeTab, project]);
 
   const fetchEnv = useCallback(async () => {
     if (!project) return;
@@ -3883,13 +3917,21 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     {generating ? "Генерируем…" : "Сгенерировать код (Ctrl+Enter)"}
                   </button>
                   {generating && genStage && (
-                    <div style={{ fontSize: 12, color: "#0f766e", textAlign: "center" }}>
-                      {genStage === "calling_model" ? "⚙ Вызываю модель…"
-                        : genStage === "continuation" ? "✍ Ответ обрезался — дописываю недостающие файлы…"
-                        : genStage === "syntax_check" ? "🔍 Проверяю синтаксис…"
-                        : genStage === "self_correcting" ? "🔧 Правлю синтаксические ошибки…"
-                        : genStage === "saving" ? "💾 Сохраняю файлы…"
-                        : genStage}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+                      <div style={{ fontSize: 12, color: "#0f766e", textAlign: "center" }}>
+                        {genStage === "calling_model" ? "⚙ Вызываю модель…"
+                          : genStage === "continuation" ? "✍ Ответ обрезался — дописываю недостающие файлы…"
+                          : genStage === "syntax_check" ? "🔍 Проверяю синтаксис…"
+                          : genStage === "self_correcting" ? "🔧 Правлю синтаксические ошибки…"
+                          : genStage === "saving" ? "💾 Сохраняю файлы…"
+                          : genStage}
+                      </div>
+                      <button
+                        onClick={() => genAbortRef.current?.abort()}
+                        style={{ padding: "3px 10px", background: "#fff", border: "1px solid #fca5a5", borderRadius: 6, fontSize: 11.5, color: "#b91c1c", cursor: "pointer", whiteSpace: "nowrap" }}
+                      >
+                        Остановить
+                      </button>
                     </div>
                   )}
                   <div style={{ display: "flex", gap: 6 }}>
@@ -4136,6 +4178,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
               {/* Templates Tab */}
               {activeTab === "templates" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {templates.length === 0 && (
+                    <div style={{ padding: "14px 16px", border: "1px dashed #e2e8f0", borderRadius: 10, fontSize: 13, color: "#64748b" }}>
+                      {templatesLoadFailed
+                        ? "Шаблоны не загрузились — обновите страницу или зайдите через минуту."
+                        : "Загружаем шаблоны…"}
+                    </div>
+                  )}
                   {templates.map((t) => (
                     <div key={t.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", border: "1px solid #e2e8f0", borderRadius: 10, gap: 10 }}>
                       <div>

@@ -828,6 +828,26 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     if (!toastTimer.current) drainToasts();
   };
 
+  /**
+   * Предупредить, если сервер разрешил трату, но не смог прочитать расход.
+   *
+   * Проверка кредита падает ОТКРЫТО — платящего не блокируют из-за икоты базы,
+   * и это правильно. Но тогда ответ помечается `creditUnverified`, и пометка
+   * доезжала до витрины и умирала здесь: её читали не все.
+   *
+   * Замер 04.09.2026: признак ставят СЕМЬ ручек, читали его ДВЕ — картинка и
+   * видео. Озвучка-в-текст, перевод текста, перевод файлов (поштучный и
+   * пакетный) и генерация проекта молчали, хотя списание там такое же.
+   *
+   * Текст жил в двух копиях. Теперь в одной: разойдутся копии — человек
+   * получит разные объяснения одного и того же события.
+   */
+  const предупредитьЕслиНеСверили = (d: unknown) => {
+    if (d && typeof d === "object" && (d as { creditUnverified?: unknown }).creditUnverified) {
+      showToast("Готово, но расход не удалось сверить: счётчик мог отстать.", "warning");
+    }
+  };
+
   const fetchProject = useCallback(async () => {
     setLoading(true);
     try {
@@ -1195,6 +1215,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         if (!r.ok) throw new Error(devhubServerError(data.error, "Генерация не удалась"));
       }
       const newGenerated = data.files || [];
+      предупредитьЕслиНеСверили(data);
       setGeneratedFiles(newGenerated.map((f: any) => ({ path: f.path, language: f.language })));
       // Diffs are computed against the files as they were BEFORE this
       // generation (still in state here — the list reload happens below).
@@ -1665,6 +1686,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           "success"
         );
       }
+      предупредитьЕслиНеСверили(data);
       setVisualEditAiPrompt("");
       // Refreshing the file list retriggers the preview rebuild effect.
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
@@ -2562,6 +2584,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         setTrError(devhubServerError(d.error, "Не удалось перевести"));
       } else {
         setTrResult({ text: d.text, detectedSource: d.detectedSource });
+            предупредитьЕслиНеСверили(d);
       }
     } catch (e: any) {
       setTrError(e?.message || "Translation failed");
@@ -2585,6 +2608,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         setTrFileMsg({ ok: false, text: devhubServerError(d.error, "Не удалось перевести") });
       } else {
         setTrFileMsg({ ok: true, text: `Переведено в ${d.path} (${d.bytes} bytes)` });
+            предупредитьЕслиНеСверили(d);
         // Reload file tree
         const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
         const listData = await listR.json();
@@ -2697,6 +2721,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         ),
       );
       setBulkSummary({ total: d.total, successCount: d.successCount, failureCount: d.failureCount });
+          предупредитьЕслиНеСверили(d);
       if (d.successCount > 0) {
         // Перевод платный: результат в памяти исчезнет при перезапуске, а деньги
         // уже потрачены. Молчать тут дороже всего.
@@ -3038,6 +3063,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         setSttError(devhubServerError(d.error, "Не удалось расшифровать запись"));
       } else {
         setSttResult({ text: d.text, language: d.language, confidence: d.confidence });
+            предупредитьЕслиНеСверили(d);
       }
     } catch (e: any) {
       setSttError(e?.message || "STT failed");

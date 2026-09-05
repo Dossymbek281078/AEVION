@@ -60,20 +60,22 @@ const STACK_COLORS: Record<Stack, { bg: string; fg: string }> = {
   python: { bg: "#b45309", fg: "#fff" },
 };
 
-const STATUS_STYLES: Record<ProjectStatus, { bg: string; fg: string; label: string }> = {
-  draft: { bg: "#f1f5f9", fg: "#64748b", label: "Draft" },
-  building: { bg: "#fef3c7", fg: "#92400e", label: "Building..." },
-  live: { bg: "#d1fae5", fg: "#065f46", label: "Live" },
-  error: { bg: "#fee2e2", fg: "#991b1b", label: "Error" },
+// label — ключ словаря, а не текст: константа живёт вне компонента, где t()
+// недоступен; перевод происходит на рендере.
+const STATUS_STYLES: Record<ProjectStatus, { bg: string; fg: string; label: "status.draft" | "status.building" | "status.live" | "status.failed" }> = {
+  draft: { bg: "#f1f5f9", fg: "#64748b", label: "status.draft" },
+  building: { bg: "#fef3c7", fg: "#92400e", label: "status.building" },
+  live: { bg: "#d1fae5", fg: "#065f46", label: "status.live" },
+  error: { bg: "#fee2e2", fg: "#991b1b", label: "status.failed" },
 };
 
-const STACKS: Array<{ id: Stack; label: string; desc: string }> = [
-  { id: "next", label: "Next.js", desc: "Full-stack React" },
-  { id: "express", label: "Express", desc: "REST API" },
-  { id: "static", label: "Static", desc: "HTML/CSS/JS" },
-  { id: "react", label: "React SPA", desc: "Vite + React" },
-  { id: "python", label: "Python", desc: "FastAPI / Flask" },
-];
+const STACKS = [
+  { id: "next", label: "Next.js", desc: "stack.next" },
+  { id: "express", label: "Express", desc: "stack.express" },
+  { id: "static", label: "Static", desc: "stack.static" },
+  { id: "react", label: "React SPA", desc: "stack.react" },
+  { id: "python", label: "Python", desc: "stack.python" },
+] as const;
 
 function formatDate(iso: string) {
   const d = new Date(iso);
@@ -157,10 +159,19 @@ export default function DevHubPage() {
     setIdeaStarting(true);
     try {
       const name = idea.replace(/[^\p{L}\p{N} ]/gu, "").split(/\s+/).slice(0, 5).join(" ").slice(0, 40) || "My app";
+      // Раньше главный вход ВСЕГДА создавал react — а правка кликами (Visual
+      // Edit), которую витрина обещает тремя формулировками, отрисовывается
+      // только на static. Человек с «лендингом кофейни» попадал в проект, где
+      // обещанная панель не появлялась никогда. Страничные идеи без данных и
+      // логики теперь создаются статикой: превью мгновенное, правка кликами
+      // работает сразу. Идеи с базой, аккаунтами или API получают react.
+      const NEEDS_APP = /баз[ае]|данн|трекер|database|api|логин|auth|аккаунт|регистрац|заказ|корзин|оплат|статус|канбан|доск[аи]/i;
+      const PAGE_LIKE = /лендинг|landing|портфолио|portfolio|визитк|страниц|галере|меню|резюме|приглашени|invitation|афиш|постер|промо|презентац/i;
+      const stack = PAGE_LIKE.test(idea) && !NEEDS_APP.test(idea) ? "static" : "react";
       const r = await fetch(apiUrl("/api/devhub/projects"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, description: idea, stack: "react" }),
+        body: JSON.stringify({ name, description: idea, stack }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(devhubServerError(data.error, t("err.create")));
@@ -188,7 +199,7 @@ export default function DevHubPage() {
       const data = await r.json();
       setProjects(data.projects || []);
     } catch {
-      setError("Failed to load projects");
+      setError(t("err.projLoad"));
     } finally {
       setLoading(false);
     }
@@ -303,7 +314,7 @@ export default function DevHubPage() {
           : [];
       setSnippets(list);
     } catch {
-      setSnippetError("Failed to load snippets");
+      setSnippetError(t("err.snipLoad"));
     } finally {
       setSnippetsLoading(false);
     }
@@ -329,7 +340,7 @@ export default function DevHubPage() {
       setSnippetForm({ title: "", language: "javascript", content: "", tags: "" });
       await fetchSnippets();
     } catch (e: any) {
-      setSnippetError(e?.message || "Failed to share snippet");
+      setSnippetError(e?.message || t("err.snipShare"));
     } finally {
       setSnippetSubmitting(false);
     }
@@ -341,7 +352,7 @@ export default function DevHubPage() {
       setCopiedId(s.id);
       setTimeout(() => setCopiedId((c) => (c === s.id ? null : c)), 1600);
     } catch {
-      setSnippetError("Clipboard unavailable");
+      setSnippetError(t("err.clipboard"));
     }
   };
 
@@ -505,8 +516,13 @@ export default function DevHubPage() {
           </div>
         )}
 
-        {/* Studio Pro upgrade banner */}
-        {userTier === "free" && (
+        {/* Studio Pro upgrade banner.
+            Показывается и при НЕИЗВЕСТНОМ тарифе (ручка кредитов не ответила):
+            раньше условие было строго `=== "free"`, и один упавший запрос
+            прятал единственный денежный экран модуля — ни цены, ни кнопки,
+            ни входа в подключение покупки. Плативший увидит баннер на долю
+            секунды до ответа ручки — это дешевле, чем гость без кассы. */}
+        {userTier !== "pro" && userTier !== "enterprise" && (
           <div style={{
             background: "linear-gradient(135deg, #0d9488 0%, #7c3aed 100%)",
             borderRadius: 12, padding: "16px 20px", marginBottom: 20,
@@ -790,14 +806,14 @@ export default function DevHubPage() {
                       {STACK_LABELS[p.stack] ?? p.stack}
                     </span>
                     <span style={{ padding: "3px 10px", borderRadius: 6, background: statusStyle.bg, color: statusStyle.fg, fontSize: 12, fontWeight: 600 }}>
-                      {statusStyle.label}
+                      {t(statusStyle.label)}
                     </span>
                     {p.needsRedeploy && (
                       <span
                         title={t("proj.stale")}
                         style={{ padding: "3px 10px", borderRadius: 6, background: "#fef3c7", color: "#92400e", fontSize: 12, fontWeight: 700 }}
                       >
-                        ⟳ Redeploy needed
+                        {t("proj.redeploy")}
                       </span>
                     )}
                   </div>
@@ -831,13 +847,13 @@ export default function DevHubPage() {
                         href={`/devhub/${p.id}`}
                         style={{ padding: "5px 14px", background: "#f1f5f9", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 12, fontWeight: 600, color: "#0f172a", textDecoration: "none" }}
                       >
-                        Open IDE
+                        {t("proj.openIde")}
                       </Link>
                       <button
                         onClick={() => deleteProject(p.id)}
                         style={{ padding: "5px 10px", background: "none", border: "1px solid #fca5a5", borderRadius: 7, fontSize: 12, color: "#ef4444", cursor: "pointer" }}
                       >
-                        Delete
+                        {t("proj.delete")}
                       </button>
                     </div>
                   </div>
@@ -862,7 +878,7 @@ export default function DevHubPage() {
               onClick={fetchSnippets}
               className="self-start sm:self-auto px-3 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700"
             >
-              Refresh
+              {t("snip.refresh")}
             </button>
           </div>
 
@@ -948,7 +964,7 @@ export default function DevHubPage() {
                             : "bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200")
                         }
                       >
-                        {copiedId === s.id ? "Copied!" : "Copy"}
+                        {copiedId === s.id ? t("snip.copied") : t("snip.copy")}
                       </button>
                     </div>
                   </div>
@@ -1047,7 +1063,7 @@ export default function DevHubPage() {
 
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
-                Project Name *
+                {t("modal.name")}
               </label>
               <input
                 type="text"
@@ -1061,7 +1077,7 @@ export default function DevHubPage() {
 
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
-                Description
+                {t("modal.desc")}
               </label>
               <input
                 type="text"
@@ -1074,7 +1090,7 @@ export default function DevHubPage() {
 
             <div style={{ marginBottom: 24 }}>
               <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 8 }}>
-                Stack
+                {t("modal.stack")}
               </label>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 {STACKS.map((s) => {
@@ -1091,7 +1107,7 @@ export default function DevHubPage() {
                       }}
                     >
                       <div style={{ fontWeight: 700, fontSize: 13, color: selected ? c.bg : "#374151" }}>{s.label}</div>
-                      <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{s.desc}</div>
+                      <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{t(s.desc)}</div>
                     </button>
                   );
                 })}
@@ -1103,7 +1119,7 @@ export default function DevHubPage() {
                 onClick={() => setShowModal(false)}
                 style={{ padding: "9px 18px", background: "#f1f5f9", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", color: "#374151" }}
               >
-                Cancel
+                {t("modal.cancel")}
               </button>
               <button
                 onClick={createProject}
@@ -1113,7 +1129,7 @@ export default function DevHubPage() {
                   color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, cursor: creating ? "not-allowed" : "pointer",
                 }}
               >
-                {creating ? "Creating..." : "Create Project"}
+                {creating ? t("modal.creating") : t("modal.create")}
               </button>
             </div>
           </div>

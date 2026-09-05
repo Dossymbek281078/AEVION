@@ -13,6 +13,8 @@ import { indexCapabilities, isCapabilityBlocked, isCapabilityConfirmed, capabili
 import { assetSnippet, appendSnippet, type AssetKind } from "@/lib/devhubAssetSnippet";
 import { newFilePathError, renamePathError, normalizeFilePath } from "@/lib/devhubFilePaths";
 import { devhubServerError } from "@/lib/devhubServerError";
+import { track } from "@/lib/track";
+import { productById } from "@/lib/products";
 
 /**
  * A write whose result the UI is about to act on.
@@ -36,6 +38,11 @@ async function writeOrThrow(input: string, init?: RequestInit): Promise<Response
 }
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
+
+// Цена и касса — только из каталога товаров (он сверяется с живыми панелями
+// оплат). Нет записи — плашка покажет путь через подключение покупки, но
+// не выдумает цену.
+const STUDIO_PRO = productById("devhub");
 
 /** Вкладки рабочего окна. Список один — из него же берутся подписи. */
 const VKLADKI = ["chat", "visual", "agent", "templates", "github", "media", "env", "deployments", "settings"] as const;
@@ -67,10 +74,10 @@ const PODPIS_VKLADKI: Record<Vkladka, string> = {
 
 function timeAgo(iso: string): string {
   const diffSec = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
-  if (diffSec < 60) return "just now";
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
-  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
-  return `${Math.floor(diffSec / 86400)}d ago`;
+  if (diffSec < 60) return "только что";
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)} мин назад`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)} ч назад`;
+  return `${Math.floor(diffSec / 86400)} дн. назад`;
 }
 
 // Visual Edit — bridges clicks inside the sandboxed preview iframe back to
@@ -453,6 +460,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deploying, setDeploying] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" | "warning" } | null>(null);
+  // Исчерпанная квота приходила ТОСТОМ на 4 секунды — человек в момент
+  // максимальной готовности заплатить не имел куда нажать. Плашка не исчезает
+  // сама и несёт кассу; заполняется перехватом в showToast.
+  const [upgradeNudge, setUpgradeNudge] = useState<string | null>(null);
 
   // AI Chat state
   const [activeTab, setActiveTab] = useState<"chat" | "visual" | "templates" | "env" | "deployments" | "github" | "media" | "agent" | "settings">("chat");
@@ -843,6 +854,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   }, []);
 
   const showToast = (message: string, type: "success" | "error" | "info" | "warning" = "success") => {
+    // Денежные отказы (402 «месячная норма», «нужен платный тариф», отказ по
+    // соавторам) не имеют права жить 4 секунды: поверх тоста поднимается
+    // несмываемая плашка с кассой. Перехват здесь — единственное общее место:
+    // своих фетчеров у окна 50, а тексты все проходят через showToast.
+    if (/Месячная норма исчерпана|Нужен платный тариф|Studio Pro/.test(message)) {
+      setUpgradeNudge(message);
+    }
     const queue = toastQueue.current;
     // Saying the same thing twice in a row is noise, not information.
     if (queue.length > 0 && queue[queue.length - 1].message === message) return;
@@ -1171,7 +1189,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           .map((m) =>
             m.role === "user"
               ? { role: "user", text: m.text }
-              : { role: "assistant", text: m.files.length ? `Изменённые файлы: ${m.files.map((fc) => fc.path).join(", ")}` : (m.note || "No changes") }
+              : { role: "assistant", text: m.files.length ? `Изменённые файлы: ${m.files.map((fc) => fc.path).join(", ")}` : (m.note || "Без изменений") }
           ),
         ...(sentImage ? { imageBase64: sentImage.dataBase64, imageMediaType: sentImage.mediaType } : {}),
       });
@@ -1756,6 +1774,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     };
     es.onerror = () => {
       es.close();
+      // Обрыв стрима раньше выглядел как вечная сборка: панель замирала,
+      // «Live» не наступало, и человек ждал неизвестно чего. Обрыв — не
+      // приговор сборке (она идёт на сервере), но молчать о нём нельзя.
+      setBuildLog((prev) => [...prev, "⚠ Связь с журналом оборвалась. Сборка продолжается на сервере — обновите страницу или загляните во вкладку «Выкатки» через минуту."]);
+      setBuildDone(true);
     };
   }, []);
 
@@ -3220,7 +3243,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           )}
           {project.deployUrl && (
             <a href={fixDoubledScheme(project.deployUrl)} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: "#0d9488", textDecoration: "none", fontWeight: 600 }}>
-              View live
+              Открыть живой сайт
             </a>
           )}
           <button
@@ -3250,7 +3273,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
               opacity: isCapabilityBlocked(caps, "railway") ? 0.45 : 1,
             }}
           >
-            {deploying ? "Deploying..." : "Deploy"}
+            {deploying ? "Выкатываю..." : "Выкатить"}
           </button>
           <button
             onClick={deployToVercel}
@@ -3631,7 +3654,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           ) : msg.kind === "manifest" ? (
                             <div key={mi} style={{ alignSelf: "flex-start", maxWidth: "95%", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>
                               <div style={{ color: "#92400e", marginBottom: 8, lineHeight: 1.45 }}>
-                                📦 This project has no <span style={{ fontFamily: "monospace" }}>package.json</span> — the live preview works, but an export can&apos;t be installed or run. Generate one from what the code actually imports?
+                                📦 У проекта нет <span style={{ fontFamily: "monospace" }}>package.json</span> — превью работает, но скачанный проект не установится и не запустится. Собрать его из того, что код реально импортирует?
                               </div>
                               <button
                                 onClick={() => {
@@ -3654,7 +3677,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                     card promised an address that failed DNS. */}
                                 🚀 Готовы показать людям? Одна кнопка — и проект публикуется на Cloudflare{domainCapabilityWorks
                                   ? <> по вашему адресу <span style={{ fontFamily: "monospace" }}>*.aevion.build</span></>
-                                  : <> — вы получите общедоступный адрес <span style={{ fontFamily: "monospace" }}>*.pages.dev</span></>} — marked live only after the page actually serves.
+                                  : <> — вы получите общедоступный адрес <span style={{ fontFamily: "monospace" }}>*.pages.dev</span></>} — «живым» деплой считается только после того, как страница реально ответила.
                               </div>
                               <button
                                 onClick={() => { setChatHistory((h) => h.filter((m) => !(m.role === "hint" && m.kind === "deploy"))); deployToPages(); setActiveTab("deployments"); }}
@@ -3666,7 +3689,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           ) : (
                           <div key={mi} style={{ alignSelf: "flex-start", maxWidth: "95%", background: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>
                             <div style={{ color: "#4c1d95", marginBottom: 8, lineHeight: 1.45 }}>
-                              🗄 Looks like this app stores data. Want a database designed for it — schema + typed client, wired to DATABASE_URL?
+                              🗄 Похоже, приложение хранит данные. Спроектировать под него базу — схема и типизированный клиент, подключённые через DATABASE_URL?
                             </div>
                             <button
                               onClick={() => designDbFromHint(msg.description)}
@@ -3680,7 +3703,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         ) : (
                           <div key={mi} style={{ alignSelf: "flex-start", maxWidth: "95%", width: "95%", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px 12px 12px 2px", padding: "10px 12px", fontSize: 13 }}>
                             {msg.files.length === 0 ? (
-                              <div style={{ color: "#991b1b" }}>{msg.note || "No changes"}</div>
+                              <div style={{ color: "#991b1b" }}>{msg.note || "Без изменений"}</div>
                             ) : (
                               <>
                                 {msg.note && <div style={{ color: "#92400e", fontSize: 12, marginBottom: 6 }}>⚠ {msg.note}</div>}
@@ -3715,7 +3738,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                     disabled={restoringId !== null}
                                     style={{ marginTop: 4, padding: "4px 10px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 11, fontWeight: 600, color: "#475569", cursor: "pointer" }}
                                   >
-                                    ↩ Revert to before this
+                                    ↩ Откатить к состоянию до этого
                                   </button>
                                 )}
                               </>
@@ -3753,7 +3776,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             cursor: planning ? "not-allowed" : "pointer",
                           }}
                         >
-                          {planning ? "Planning..." : "Plan my idea"}
+                          {planning ? "Продумываю..." : "Продумать замысел"}
                         </button>
                         {plan && (
                           <div style={{ background: "#f8fafc", borderRadius: 8, padding: 10 }}>
@@ -3771,7 +3794,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             )}
                             {plan.laterFeatures.length > 0 && (
                               <>
-                                <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginTop: 10, textTransform: "uppercase", letterSpacing: 0.4 }}>Later — deferred on purpose</div>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginTop: 10, textTransform: "uppercase", letterSpacing: 0.4 }}>Отложено осознанно — на потом</div>
                                 <ul style={{ margin: "4px 0 0", paddingLeft: 18, fontSize: 12, color: "#94a3b8" }}>
                                   {plan.laterFeatures.map((f) => <li key={f}>{f}</li>)}
                                 </ul>
@@ -3788,7 +3811,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                         onClick={() => { setAiPrompt(m.prompt); setShowPlanner(false); }}
                                         style={{ padding: "3px 10px", background: "#fff", border: "1px solid #0d9488", color: "#0d9488", borderRadius: 6, fontWeight: 700, fontSize: 11, cursor: "pointer", flexShrink: 0 }}
                                       >
-                                        Use prompt
+                                        Взять как запрос
                                       </button>
                                     </div>
                                   ))}
@@ -3915,7 +3938,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                   borderRadius: 6, fontWeight: 700, fontSize: 11, cursor: restoringId !== null ? "not-allowed" : "pointer", flexShrink: 0,
                                 }}
                               >
-                                {restoringId === cp.id ? "Restoring..." : i === 0 ? "Revert" : "Revert to here"}
+                                {restoringId === cp.id ? "Восстанавливаю..." : i === 0 ? "Откатить" : "Откатить сюда"}
                               </button>
                             </div>
                           ))}
@@ -3941,7 +3964,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   ) : (
                     <>
                       <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", fontSize: 12 }}>
-                        <span style={{ fontWeight: 700, color: "#0f172a" }}>Selected:</span>
+                        <span style={{ fontWeight: 700, color: "#0f172a" }}>Выбрано:</span>
                         {[...(visualEditSelected.ancestors || [])].reverse().map((a) => (
                           <span key={a.vid} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                             <button
@@ -3973,8 +3996,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
                       {project?.stack !== "static" ? (
                         <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>
-                          Proxied preview of the deployed page — direct text/style editing needs source mapping, so
-                          describe the change below and AI will apply it to the right source file.
+                          Прямое редактирование текста и стилей работает на статических проектах.
+                          Здесь опишите изменение словами ниже — ИИ внесёт его в нужный исходный файл.
                         </div>
                       ) : visualEditSelected.tagName === "IMG" ? (
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -4002,7 +4025,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               cursor: visualEditImgBusy || !visualEditImgPrompt.trim() ? "not-allowed" : "pointer",
                             }}
                           >
-                            {visualEditImgBusy ? "Generating..." : "🎨 Generate & replace image"}
+                            {visualEditImgBusy ? "Генерирую..." : "🎨 Сгенерировать и заменить картинку"}
                           </button>
                         </div>
                       ) : (
@@ -4072,7 +4095,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </button>
                       )}
                       <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>✨ Describe a change for this element</div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>✨ Опишите, что изменить в этом элементе</div>
                         <textarea
                           value={visualEditAiPrompt}
                           onChange={(e) => setVisualEditAiPrompt(e.target.value)}
@@ -4088,7 +4111,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             cursor: visualEditAiBusy || !visualEditAiPrompt.trim() ? "not-allowed" : "pointer",
                           }}
                         >
-                          {visualEditAiBusy ? "Applying AI edit..." : "AI Edit"}
+                          {visualEditAiBusy ? "Применяю..." : "Применить через ИИ"}
                         </button>
                       </div>
                     </>
@@ -4132,7 +4155,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             as "Откликнуться", the word for answering a job ad.
                             A Russian visitor was offered "Откликнуться" on a
                             project template. */}
-                        {applyingTemplate === t.id ? "Applying..." : "Apply template"}
+                        {applyingTemplate === t.id ? "Применяю..." : "Применить шаблон"}
                       </button>
                     </div>
                   ))}
@@ -4186,7 +4209,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       <span style={{ fontSize: 18 }}>☁️</span>
                       <div>
                         <div style={{ fontSize: 13, fontWeight: 800, color: "#9a3412" }}>Cloudflare Pages</div>
-                        <div style={{ fontSize: 11, color: "#c2410c" }}>Free · Auto-SSL · Global CDN{domainCapabilityWorks ? " · aevion.build domain included" : " · публичный адрес *.pages.dev"}</div>
+                        <div style={{ fontSize: 11, color: "#c2410c" }}>Бесплатно · SSL сам · мировой CDN{domainCapabilityWorks ? " · aevion.build domain included" : " · публичный адрес *.pages.dev"}</div>
                       </div>
                     </div>
 
@@ -4254,7 +4277,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         cursor: vercelDeploying ? "not-allowed" : "pointer",
                       }}
                     >
-                      {vercelDeploying ? "Deploying..." : "Deploy to Vercel"}
+                      {vercelDeploying ? "Выкатываю..." : "Выкатить на Vercel"}
                     </button>
                   </div>
 
@@ -4266,13 +4289,18 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   )}
                   {deployments.length > 0 && (
                     <div>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 6 }}>ИСТОРИЯ</div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b" }}>ИСТОРИЯ</span>
+                        <Link href={`/devhub/${id}/deploy`} style={{ fontSize: 11, color: "#0d9488", textDecoration: "underline" }}>
+                          Вся история и журналы сборки →
+                        </Link>
+                      </div>
                       {deployments.map((d) => {
                         const dStatusStyle = d.status === "live" ? { bg: "#d1fae5", fg: "#065f46" } : d.status === "failed" ? { bg: "#fee2e2", fg: "#991b1b" } : { bg: "#fef3c7", fg: "#92400e" };
                         return (
                           <div key={d.id} style={{ padding: "8px 12px", border: "1px solid #e2e8f0", borderRadius: 8, marginBottom: 6 }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                              <span style={{ padding: "2px 7px", borderRadius: 5, background: dStatusStyle.bg, color: dStatusStyle.fg, fontSize: 11, fontWeight: 600 }}>{d.status}</span>
+                              <span style={{ padding: "2px 7px", borderRadius: 5, background: dStatusStyle.bg, color: dStatusStyle.fg, fontSize: 11, fontWeight: 600 }}>{d.status === "live" ? "живой" : d.status === "failed" ? "не удался" : "собирается"}</span>
                               <span style={{ fontSize: 11, color: "#94a3b8" }}>{new Date(d.triggeredAt).toLocaleString()}</span>
                             </div>
                             {d.deployUrl && (
@@ -4389,16 +4417,22 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
                   {/* Actions */}
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {/* Раньше кнопка была активна ВСЕГДА, а строкой ниже стояло
+                        «связь не подключена» — человек нажимал и получал отказ.
+                        Кнопка и записка теперь читают один источник: возможность
+                        github из /studio/capabilities. */}
                     <button
                       onClick={pushToGithub}
-                      disabled={githubPushing}
+                      disabled={githubPushing || isCapabilityBlocked(caps, "github")}
+                      title={capabilityHint(caps, "github", "Отправка в GitHub")}
                       style={{
                         padding: "9px 18px", background: githubPushing ? "#99f6e4" : "#0f172a",
                         color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
-                        cursor: githubPushing ? "not-allowed" : "pointer",
+                        cursor: githubPushing || isCapabilityBlocked(caps, "github") ? "not-allowed" : "pointer",
+                        opacity: isCapabilityBlocked(caps, "github") ? 0.45 : 1,
                       }}
                     >
-                      {githubPushing ? "Pushing..." : project?.repoUrl ? "Отправить (обновить репозиторий)" : "Отправить в GitHub (создать репозиторий)"}
+                      {githubPushing ? "Отправляю..." : project?.repoUrl ? "Отправить (обновить репозиторий)" : "Отправить в GitHub (создать репозиторий)"}
                     </button>
                     {project?.repoUrl && (
                       <button
@@ -4410,15 +4444,16 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: githubSyncing ? "not-allowed" : "pointer",
                         }}
                       >
-                        {githubSyncing ? "Syncing..." : "Sync branches"}
+                        {githubSyncing ? "Синхронизирую..." : "Синхронизировать ветки"}
                       </button>
                     )}
                   </div>
 
-                  <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                    Связь с GitHub пока не подключена на нашей стороне.
-                    Token needs <em>repo</em> scope.
-                  </div>
+                  {isCapabilityBlocked(caps, "github") && (
+                    <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+                      Связь с GitHub пока не подключена на нашей стороне — кнопка отправки заработает после настройки.
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -4520,7 +4555,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
                       <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
                         <div style={{ flex: 1 }}>
-                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Duration (sec)</label>
+                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Длительность (сек)</label>
                           <select value={videoDuration} onChange={(e) => setVideoDuration(e.target.value)} style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}>
                             <option value="3">3s</option>
                             <option value="5">5s</option>
@@ -4575,7 +4610,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           title={capabilityHint(caps, "video", "Генерация видео")}
                           style={{ padding: "8px 20px", background: videoLoading ? "#94a3b8" : "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: videoLoading ? "default" : "pointer", whiteSpace: "nowrap", opacity: isCapabilityBlocked(caps, "video") ? 0.45 : 1 }}
                         >
-                          {videoLoading ? `${videoStatus || "generating..."}` : "Generate Video"}
+                          {videoLoading ? `${videoStatus || "генерирую..."}` : "Сделать видео"}
                         </button>
                       </div>
                       {videoError && <div style={{ background: "#fee2e2", color: "#991b1b", padding: "8px 12px", borderRadius: 7, fontSize: 13 }}>{videoError}</div>}
@@ -4667,7 +4702,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         }}
                         disabled={threeDLoading || !threeDImageUrl.trim()}
                         title={capabilityHint(caps, "3d", "Сгенерировать 3D")}
-                        style={{ padding: "8px 20px", background: threeDLoading ? "#94a3b8" : "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: threeDLoading ? "default" : "pointer", opacity: isCapabilityBlocked(caps, "video") ? 0.45 : 1 }}
+                        style={{ padding: "8px 20px", background: threeDLoading ? "#94a3b8" : "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: threeDLoading ? "default" : "pointer", opacity: isCapabilityBlocked(caps, "3d") ? 0.45 : 1 }}
                       >
                         {threeDLoading ? (threeDStatus || "generating…") : "Сделать 3D-модель"}
                       </button>
@@ -4693,7 +4728,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {mediaTab === "tts" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Voice</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Голос</label>
                         <div style={{ display: "flex", gap: 6 }}>
                           <select
                             value={mediaTtsVoice}
@@ -4721,7 +4756,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         </div>
                       </div>
                       <div>
-                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Text</label>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Текст</label>
                         <textarea
                           value={mediaTtsText}
                           onChange={(e) => setMediaTtsText(e.target.value)}
@@ -4742,7 +4777,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           <audio controls src={mediaTtsUrl} style={{ width: "100%" }} />
                           <a href={mediaTtsUrl} download="tts-output.mp3" style={{ fontSize: 13, color: "#0d9488", fontWeight: 600 }}>
-                            Download MP3
+                            Скачать MP3
                           </a>
                         </div>
                       )}
@@ -4755,11 +4790,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: (mediaTtsLoading || !mediaTtsText.trim()) ? "not-allowed" : "pointer",
                         }}
                       >
-                        {mediaTtsLoading ? "Generating..." : "Generate Speech"}
+                        {mediaTtsLoading ? "Генерирую..." : "Озвучить"}
                       </button>
-                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        
-                      </div>
                     </div>
                   )}
 
@@ -4781,7 +4813,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         <div style={{ flex: 2, minWidth: 140 }}>
-                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Size</label>
+                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Размер</label>
                           <select value={imgSize} onChange={(e) => setImgSize(e.target.value)}
                             style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}>
                             <option value="1024x1024">Square (1024)</option>
@@ -4798,10 +4830,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           </select>
                         </div>
                         <div style={{ flex: 1, minWidth: 100 }}>
-                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Style</label>
+                          <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Стиль</label>
                           <select value={imgStyle} onChange={(e) => setImgStyle(e.target.value as "vivid" | "natural")}
                             style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}>
-                            <option value="vivid">Vivid</option>
+                            <option value="vivid">Яркий</option>
                             <option value="natural">Естественный</option>
                           </select>
                         </div>
@@ -4817,13 +4849,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           <img src={cfImgPermanentUrl || imgResult.url} alt="сгенерированная картинка" style={{ width: "100%", borderRadius: 8, border: "1px solid #e2e8f0" }} />
                           {imgResult.revisedPrompt && (
                             <div style={{ fontSize: 11, color: "#64748b", fontStyle: "italic" }}>
-                              Revised prompt: {imgResult.revisedPrompt}
+                              Уточнённый запрос: {imgResult.revisedPrompt}
                             </div>
                           )}
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                             <a href={cfImgPermanentUrl || imgResult.url} target="_blank" rel="noopener noreferrer"
                               style={{ fontSize: 13, color: "#0d9488", fontWeight: 600 }}>
-                              Open full size →
+                              Открыть в полном размере →
                             </a>
                             {!cfImgPermanentUrl && (
                               <button
@@ -4843,7 +4875,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               title="Добавит тег картинки в открытый файл"
                               style={{ padding: "4px 10px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}
                             >
-                              Insert into file
+                              Вставить в файл
                             </button>
                             {cfImgPermanentUrl && (
                               <span style={{ fontSize: 11, color: "#065f46", fontWeight: 700 }}>
@@ -4862,11 +4894,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: (imgLoading || !imgPrompt.trim()) ? "not-allowed" : "pointer",
                         }}
                       >
-                        {imgLoading ? "Generating..." : "Generate Image"}
+                        {imgLoading ? "Генерирую..." : "Сделать картинку"}
                       </button>
-                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                         Powered by DALL-E 3.
-                      </div>
+                      <span />
                     </div>
                   )}
 
@@ -4916,11 +4946,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: (sfxLoading || !sfxText.trim()) ? "not-allowed" : "pointer",
                         }}
                       >
-                        {sfxLoading ? "Generating..." : "Generate SFX"}
+                        {sfxLoading ? "Генерирую..." : "Сделать звук"}
                       </button>
-                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        
-                      </div>
                     </div>
                   )}
 
@@ -4970,11 +4997,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: (musicLoading || !musicPrompt.trim()) ? "not-allowed" : "pointer",
                         }}
                       >
-                        {musicLoading ? "Composing..." : "Compose Music"}
+                        {musicLoading ? "Сочиняю..." : "Сочинить музыку"}
                       </button>
-                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                         Max 5 min.
-                      </div>
+                      <span />
                     </div>
                   )}
 
@@ -5032,11 +5057,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: (emailLoading || !emailTo.trim() || !emailSubject.trim() || !emailBody.trim()) ? "not-allowed" : "pointer",
                         }}
                       >
-                        {emailLoading ? "Sending..." : "Send Email"}
+                        {emailLoading ? "Отправляю..." : "Отправить письмо"}
                       </button>
-                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        
-                      </div>
                     </div>
                   )}
 
@@ -5250,9 +5272,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         )}
                       </div>
 
-                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        (use :fx suffix for Free tier)
-                      </div>
+                      <span />
                     </div>
                   )}
 
@@ -5373,9 +5393,6 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         </div>
                       )}
 
-                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        
-                      </div>
                     </div>
                   )}
 
@@ -5500,9 +5517,6 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         }}>
                         {tplBuilderLoading ? "Creating..." : "Create template"}
                       </button>
-                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        
-                      </div>
                     </div>
                   )}
 
@@ -5544,11 +5558,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: (smsLoading || !smsRecipient.trim() || !smsContent.trim()) ? "not-allowed" : "pointer",
                         }}
                       >
-                        {smsLoading ? "Sending..." : "Send SMS"}
+                        {smsLoading ? "Отправляю..." : "Отправить SMS"}
                       </button>
-                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        
-                      </div>
                     </div>
                   )}
 
@@ -5589,10 +5600,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         }}
                       >
                         <span style={{ fontSize: 14 }}>💬</span>
-                        {waLoading ? "Sending..." : "Send WhatsApp"}
+                        {waLoading ? "Отправляю..." : "Отправить в WhatsApp"}
                       </button>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                         Template must be pre-approved by WhatsApp.
+                         Шаблон должен быть заранее одобрен WhatsApp.
                       </div>
                     </div>
                   )}
@@ -5661,8 +5672,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         </button>
                       </div>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        Preview clones temporarily, renders TTS sample, then deletes the temp voice — no slot is consumed.
-                         Premium tier required.
+                        Предпросмотр клонирует голос временно: озвучивает образец и удаляет временный голос — слот не расходуется.
                       </div>
                     </div>
                   )}
@@ -5748,9 +5758,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           ))}
                         </div>
                       )}
-                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
-                        (OAuth Bearer)
-                      </div>
+                      <span />
                     </div>
                   )}
                 </div>
@@ -6007,11 +6015,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {/* Collaborators — Studio Pro */}
                   <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 16 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Соучастники</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>Соавторы</span>
                       <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 5, background: "#fef3c7", color: "#92400e", fontWeight: 700 }}>Studio Pro</span>
                     </div>
                     {(project.collaborators || []).length === 0 && (
-                      <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 8 }}>Соучастников пока нет. Добавьте по адресу почты или идентификатору.</div>
+                      <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 8 }}>Соавторов пока нет. Добавьте по адресу почты или идентификатору.</div>
                     )}
                     {(project.collaborators || []).map((c) => (
                       <div key={c.userId} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid #f8fafc" }}>
@@ -6077,6 +6085,54 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       )}
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      {/* Несмываемая плашка кассы: появляется при денежном отказе (перехват в
+          showToast) и живёт, пока человек её не закроет. До неё исчерпанная
+          квота показывалась тостом на 4 секунды — и в момент, когда человек
+          готов платить, нажать было некуда. */}
+      {upgradeNudge && (
+        <div
+          role="status"
+          style={{
+            position: "fixed", left: "50%", transform: "translateX(-50%)",
+            bottom: 18, zIndex: 60, maxWidth: 560, width: "calc(100% - 32px)",
+            background: "linear-gradient(135deg, #0d9488 0%, #7c3aed 100%)",
+            borderRadius: 12, padding: "12px 16px", color: "#fff",
+            boxShadow: "0 8px 30px rgba(15, 23, 42, 0.35)",
+            display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+          }}
+        >
+          <span style={{ fontSize: 13, lineHeight: 1.45, flex: "1 1 260px" }}>{upgradeNudge}</span>
+          {STUDIO_PRO && (
+            <a
+              href={STUDIO_PRO.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => track({ type: "checkout_start", tier: "studio-pro", source: "devhub-ide", meta: { processor: "lemonsqueezy" } })}
+              style={{
+                padding: "8px 16px", background: "#fff", color: "#0d9488",
+                borderRadius: 8, fontWeight: 700, fontSize: 13, textDecoration: "none",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Оформить Pro — ${STUDIO_PRO.priceUsd}/мес
+            </a>
+          )}
+          <Link href="/devhub/link" style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, textDecoration: "underline", whiteSpace: "nowrap" }}>
+            Уже оплатили?
+          </Link>
+          <button
+            onClick={() => setUpgradeNudge(null)}
+            aria-label="Закрыть"
+            style={{
+              background: "transparent", border: "none", color: "rgba(255,255,255,0.85)",
+              fontSize: 18, cursor: "pointer", lineHeight: 1, padding: 4,
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
     </div>
   );
 }

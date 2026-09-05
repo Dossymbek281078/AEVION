@@ -66,7 +66,10 @@ export async function generateMetadata({
   const url = `${SITE}/startup-exchange/${id}`;
   const fallback: Metadata = {
     title: "Заявка на бирже стартапов · AEVION",
-    alternates: { canonical: url },
+    // canonical записан литералом, а не переменной: сторож
+    // layoutCanonicalDoesNotHideChildren читает исходник текстом и
+    // переменную не видит — страница числилась бы спрятанной.
+    alternates: { canonical: `${SITE}/startup-exchange/${id}` },
     robots: { index: true, follow: true },
   };
 
@@ -100,7 +103,7 @@ export async function generateMetadata({
     return {
       title,
       description,
-      alternates: { canonical: url },
+      alternates: { canonical: `${SITE}/startup-exchange/${id}` },
       openGraph: { type: "article", url, title, description, siteName: "AEVION" },
       robots: { index: true, follow: true },
     };

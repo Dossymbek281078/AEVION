@@ -3646,14 +3646,25 @@ function publicSnippet(s: DevHubSnippet, viewerId: string) {
   return { ...rest, mine: userId === viewerId };
 }
 
+// Служебные сниппеты смоук-задач помечены тегом `smoke` и не должны попадать
+// на публичную полку витрины: замер 05.09.2026 — все 22 записи выдачи были
+// «console.log hello from smoke test». Явный запрос ?tag= или ?user= их
+// по-прежнему находит, поэтому сами смоук-проверки не ломаются.
+function isServiceSnippet(s: DevHubSnippet): boolean {
+  return s.tags.some((t) => t.toLowerCase() === "smoke" || t.toLowerCase().startsWith("smoke-"));
+}
+
 // GET /api/devhub/snippets — public list, optional ?tag=X&user=Y&limit=N
 devhubRouter.get("/snippets", async (req, res) => {
   const viewerId = requesterId(req, verifyBearerOptional(req)?.sub);
   const tag = req.query.tag ? String(req.query.tag).trim() : undefined;
   const userId = req.query.user ? String(req.query.user).trim() : undefined;
   const limit = req.query.limit ? Math.min(Math.max(parseInt(String(req.query.limit), 10) || 50, 1), 200) : 50;
+  const hideService = !tag && !userId;
   try {
-    const snippets = await dbListSnippets({ tag, userId, limit });
+    // Запрашиваем с запасом: после отсева служебных должно остаться до limit.
+    const fetched = await dbListSnippets({ tag, userId, limit: hideService ? Math.min(limit + 50, 250) : limit });
+    const snippets = (hideService ? fetched.filter((s) => !isServiceSnippet(s)) : fetched).slice(0, limit);
     res.json({ snippets: snippets.map((s) => publicSnippet(s, viewerId)), total: snippets.length });
   } catch {
     let arr = [...memSnippets.values()];
@@ -3662,6 +3673,7 @@ devhubRouter.get("/snippets", async (req, res) => {
       const t = tag.toLowerCase();
       arr = arr.filter((s) => s.tags.some((tg) => tg.toLowerCase() === t));
     }
+    if (hideService) arr = arr.filter((s) => !isServiceSnippet(s));
     const snippets = arr.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
     // Пустая память при УПАВШЕМ чтении — это не «полка пуста», а «полку не
     // прочитали». Замер 28.08 (роутер с нечитаемой базой) показал, что ручка

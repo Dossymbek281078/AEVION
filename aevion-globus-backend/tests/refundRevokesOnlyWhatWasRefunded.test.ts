@@ -1,8 +1,8 @@
 import { describe, test, expect, vi, beforeEach, afterAll } from "vitest";
 import express from "express";
 import request from "supertest";
-import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 /**
@@ -151,5 +151,82 @@ describe("возврат отзывает только оплаченное эт
     writeFileSync(файл, "", "utf8");
     await возвратPaybox(email, "pay-any-55556666");
     expect(последнийТариф()).toBe("free");
+  });
+});
+
+describe("правило одно на все кассы", () => {
+  const РОУТЫ = resolve(__dirname, "../src/routes");
+  const КАССЫ = [
+    "payboxWebhook.ts",
+    "paypalWebhook.ts",
+    "gumroadWebhook.ts",
+    "lemonSqueezyWebhook.ts",
+  ];
+
+  test("КОНТРОЛЬ: файлы касс на месте и читаются", () => {
+    // Иначе «все зовут правило» удовлетворялось бы пустым списком файлов.
+    const есть = readdirSync(РОУТЫ);
+    for (const к of КАССЫ) expect(есть, `нет файла ${к}`).toContain(к);
+  });
+
+  test("правило объявлено ОДИН раз и его зовут ВСЕ четыре кассы", async () => {
+    // Сперва я написал этого помощника дважды — в paybox и paypal — то есть
+    // повторил ровно ту ошибку, из-за которой годовой период у одной кассы
+    // из четырёх зашивался месячным: пока копий несколько, отставшая ничем
+    // себя не выдаёт.
+    // Только файлы: readdirSync отдаёт и подкаталоги, а readFileSync на
+    // каталоге бросает EISDIR — поймал этим же прогоном.
+    const объявления = readdirSync(РОУТЫ)
+      .filter((f) => f.endsWith(".ts"))
+      .filter((f) =>
+        readFileSync(join(РОУТЫ, f), "utf8").includes("function возвратКасаетсяДействующей")
+      );
+    expect(объявления, "правило объявлено не в одном месте").toEqual(["provisioning.ts"]);
+
+    // Мало ПОЗВАТЬ правило — запись понижения должна быть им ЗАКРЫТА.
+    // Первая версия требовала только вызова, и мутация «убрать `if (отзываем)`
+    // у gumroad» её пережила: вызов на месте, а понижение пишется всё равно.
+    const безПравила = КАССЫ.filter((к) => {
+      const текст = readFileSync(join(РОУТЫ, к), "utf8");
+      return (
+        !текст.includes("возвратКасаетсяДействующей(") ||
+        !текст.includes("if (отзываем) writeSubscription(downgrade);")
+      );
+    });
+    expect(
+      безПравила,
+      `эти кассы отзывают ЛЮБУЮ подписку, а не оплаченную этим платежом: ${безПравила.join(", ")}`
+    ).toEqual([]);
+  });
+
+  test("само правило: чужой платёж не трогает действующую, свой — трогает", async () => {
+    const { возвратКасаетсяДействующей } = await import("../src/routes/provisioning");
+    const платная = {
+      id: "sub_paybox_pay-new-87654321",
+      ts: "", email: "a@b.c", tierId: "medium", period: "monthly",
+      seats: 1, modules: [], trialDays: 0,
+      providerPaymentId: "pay-new-87654321",
+    } as never;
+    expect(возвратКасаетсяДействующей(платная, "pay-new-87654321"), "свой платёж не отзывает").toBe(true);
+    expect(возвратКасаетсяДействующей(платная, "pay-old-11112222"), "чужой платёж отзывает").toBe(false);
+    // Сомневаемся — отзываем.
+    expect(возвратКасаетсяДействующей(null, "что угодно")).toBe(true);
+    expect(возвратКасаетсяДействующей({ ...(платная as object), tierId: "free" } as never, "x")).toBe(true);
+    expect(возвратКасаетсяДействующей(платная, ""), "без идентификатора отзываем").toBe(true);
+
+    // РАЗВОДИМ два пути. У этой записи поле `providerPaymentId` говорит одно,
+    // а номер подписки — другое: запасной путь (по номеру) ответил бы
+    // «отзывать», основной (по полю) — «не трогать». Без такого случая
+    // мутация «не сравнивать поле вовсе» проходит незамеченной: оба пути
+    // дают одинаковый ответ на обычных данных. Поймано мутацией 05.09.2026.
+    const спорная = {
+      ...(платная as object),
+      id: "sub_paybox_pay-old-11112222",
+      providerPaymentId: "pay-new-87654321",
+    } as never;
+    expect(
+      возвратКасаетсяДействующей(спорная, "pay-old-11112222"),
+      "решает НОМЕР подписки вместо поля платежа — основное сравнение выключено"
+    ).toBe(false);
   });
 });

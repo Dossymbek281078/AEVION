@@ -39,7 +39,13 @@
 
 import { Router } from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
+import {
+  provisionSubscription,
+  writeSubscription,
+  readLatestSubscription,
+  возвратКасаетсяДействующей,
+  type Subscription,
+} from "./provisioning";
 import { periodForReference } from "../lib/payment/billingPeriod";
 import {
   referenceForVariantId,
@@ -331,6 +337,24 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
     }
 
     if (DEACTIVATE_EVENTS.has(event)) {
+      // Отзываем ТУ подписку, за которую пришло событие, а не любую.
+      // Правило общее на все кассы — provisioning.возвратКасаетсяДействующей.
+      // У Lemon Squeezy это отмена/истечение конкретной подписки: если у
+      // человека уже есть НОВАЯ платная, отмена старой не должна её гасить.
+      const действующая = readLatestSubscription(email);
+      const отзываем = возвратКасаетсяДействующей(действующая, lsSubId ?? "");
+      if (!отзываем) {
+        console.warn(
+          `[ls/webhook] ${event} относится к ДРУГОЙ подписке: действующая ` +
+            `${действующая?.tierId} не тронута`
+        );
+        capture(new Error("refund_for_older_purchase_kept_current_subscription"), {
+          route: "ls/webhook/deactivate",
+          email,
+          event,
+          currentTier: действующая?.tierId,
+        });
+      }
       const downgrade: Subscription = {
         id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         ts: new Date().toISOString(),
@@ -342,7 +366,7 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         trialDays: 0,
         source: "lemonsqueezy:cancel",
       };
-      writeSubscription(downgrade);
+      if (отзываем) writeSubscription(downgrade);
       console.log(`[ls/webhook] ${event} → downgraded ${email} to free`);
       return res.json({ ok: true, action: "downgraded" });
     }

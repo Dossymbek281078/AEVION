@@ -22,6 +22,7 @@ import {
   provisionSubscription,
   writeSubscription,
   readLatestSubscription,
+  возвратКасаетсяДействующей,
   type Subscription,
 } from "./provisioning";
 import type { TierId, BillingPeriod } from "../data/pricing";
@@ -33,42 +34,6 @@ import { upsertAppSubscription } from "../lib/appEntitlements";
 
 const capture = makeServiceCapture("payboxWebhook");
 
-/**
- * Возврат отзывает ТУ подписку, за которую вернули деньги, а не любую.
- *
- * Ворота платного доступа спрашивают `readLatestSubscription` — она берёт
- * ПОСЛЕДНЮЮ ЗАПИСАННУЮ строку по адресу. А ветка возврата писала понижение
- * до `free` безусловно. Отсюда сценарий, бьющий по заплатившему:
- *
- *   купил Lite -> обновился до Medium (новая платная запись)
- *   -> пришёл возврат за ПЕРВЫЙ платёж -> понижение легло последним
- *   -> человек потерял Medium, за который заплатил и который не возвращали.
- *
- * Отзыв при возврате намеренный и правильный; неправильно было отзывать
- * ЛЮБУЮ подписку вместо той, за которую вернули деньги.
- *
- * Различить есть чем, и это проверено по разборщикам (04.09.2026): у PayBox
- * возврат приходит тем же уведомлением с `pg_refund=1`, сохраняя
- * `pg_payment_id` исходного платежа; у PayPal идентификатор берётся из
- * `supplementary_data.related_ids.order_id`, одинакового у списания и
- * возврата. Поле `providerPaymentId` в записях появилось 04.09 утром.
- *
- * НАПРАВЛЕНИЕ ОТКАЗА выбрано осознанно: сомневаемся — ОТЗЫВАЕМ. Не отозвать
- * возвращённое хуже, чем понизить лишний раз: первое отдаёт платное даром и
- * не видно никому, второе человек заметит и напишет.
- */
-function возвратКасаетсяДействующей(
-  действующая: Subscription | null,
-  paymentId: string
-): boolean {
-  if (!действующая) return true;                      // отзывать нечего
-  if (действующая.tierId === "free") return true;     // уже бесплатная
-  if (!paymentId) return true;                         // не знаем, за что возврат
-  if (действующая.providerPaymentId) return действующая.providerPaymentId === paymentId;
-  // Давние записи без поля: идентификатор зашит в номер подписки. Длину
-  // требуем, иначе короткий идентификатор совпал бы с чужой записью.
-  return paymentId.length >= 8 ? (действующая.id ?? "").endsWith(`_${paymentId}`) : true;
-}
 
 export const payboxWebhookRouter = Router();
 

@@ -24,7 +24,13 @@
 
 import { Router, type Request, type Response } from "express";
 import { gumroadPaymentProvider, verifyGumroadSaleDetailed } from "../lib/payment/gumroadProvider";
-import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
+import {
+  provisionSubscription,
+  writeSubscription,
+  readLatestSubscription,
+  возвратКасаетсяДействующей,
+  type Subscription,
+} from "./provisioning";
 import { periodForReference } from "../lib/payment/billingPeriod";
 import type { TierId } from "../data/pricing";
 import { getPool } from "../lib/dbPool";
@@ -496,6 +502,21 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
 
     if (refunded || failed) {
       // Downgrade to free
+      // Отзываем ТУ подписку, за которую вернули деньги, а не любую.
+      // Правило общее на все кассы — provisioning.возвратКасаетсяДействующей.
+      const действующая = readLatestSubscription(email);
+      const отзываем = возвратКасаетсяДействующей(действующая, saleId);
+      if (!отзываем) {
+        console.warn(
+          `[gumroad/webhook] событие возврата за ДРУГУЮ покупку: действующая ` +
+            `подписка ${действующая?.tierId} не тронута`
+        );
+        capture(new Error("refund_for_older_purchase_kept_current_subscription"), {
+          route: "gumroad/webhook/refund",
+          email,
+          currentTier: действующая?.tierId,
+        });
+      }
       const downgrade: Subscription = {
         id: `sub_gumroad_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         ts: new Date().toISOString(),
@@ -507,7 +528,7 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         trialDays: 0,
         source: `gumroad:${result.status}`,
       };
-      writeSubscription(downgrade);
+      if (отзываем) writeSubscription(downgrade);
       console.log(`[gumroad/webhook] ${result.status} → downgraded ${email} to free`);
       return res.json({ ok: true, action: "downgraded", email });
     }

@@ -293,11 +293,17 @@ type PVLine = {pv:number;cp:number;mate:number;depth:number;moves:string[]};
 // поэтому конкурентные вызовы из разных эффектов больше не обнуляют колбэки
 // друг друга и каждый запрос доходит до bestmove. См. _submit/_pump/_finish.
 type SFJob={kind:"go"|"eval"|"multiPV";srochno?:boolean;cmds:string[];cb:((f:string,t:string,p?:string)=>void)|null;ecb:((cp:number,mate:number,depth?:number)=>void)|null;mpvCb:((lines:PVLine[])=>void)|null};
-class SF{private w:Worker|null=null;private ok=false;oshibka:string|null=null;private cb:((f:string,t:string,p?:string)=>void)|null=null;private ecb:((cp:number,mate:number,depth?:number)=>void)|null=null;private mpvCb:((lines:PVLine[])=>void)|null=null;private mpvLines:PVLine[]=[];private q:SFJob[]=[];private cur:SFJob|null=null;
+class SF{private w:Worker|null=null;private ok=false;oshibka:string|null=null;
+  // Движок может умереть и ПОСЛЕ удачного старта (на телефоне это чаще всего
+  // нехватка памяти под hash). Раньше об этом узнавал только сам класс: флаг
+  // на экране включался один раз и обратно не выключался, поэтому панель
+  // продолжала уверять «Stockfish 18 · d22», пока ход считал запасной расчёт.
+  naSostoyanie:((ok:boolean)=>void)|null=null;
+  private cb:((f:string,t:string,p?:string)=>void)|null=null;private ecb:((cp:number,mate:number,depth?:number)=>void)|null=null;private mpvCb:((lines:PVLine[])=>void)|null=null;private mpvLines:PVLine[]=[];private q:SFJob[]=[];private cur:SFJob|null=null;
   // Throttle eval-bar updates: Stockfish стримит десятки `info score` в секунду; без троттла
   // каждый = setState → ре-рендер всего компонента → дёрганье анимации хода. Обновляем ~8/сек.
   private ecbTimer:ReturnType<typeof setTimeout>|null=null;private pendingEval:{cp:number;mate:number;depth:number}|null=null;
-  init(){if(this.w)return;try{this.w=new Worker("/stockfish-18-lite.js");this.w.onerror=e=>{e.preventDefault();this.ok=false;this.oshibka=(e as ErrorEvent).message||"движок не запустился";try{console.warn("[CyberChess] движок Stockfish не поднялся:",this.oshibka)}catch{}};this.w.onmessage=e=>{const l=String(e.data||"");
+  init(){if(this.w)return;try{this.w=new Worker("/stockfish-18-lite.js");this.w.onerror=e=>{e.preventDefault();this.ok=false;this.naSostoyanie?.(false);this.oshibka=(e as ErrorEvent).message||"движок не запустился";try{console.warn("[CyberChess] движок Stockfish не поднялся:",this.oshibka)}catch{}};this.w.onmessage=e=>{const l=String(e.data||"");
     // Diagnostic: log Stockfish init/feature lines so we can verify NNUE + threads in DevTools.
     // Look for: "info string NNUE evaluation using ..." and "info string Using N threads".
     if(l.startsWith("info string")||l==="readyok"||l==="uciok")try{console.log("[SF]",l)}catch{}
@@ -345,7 +351,7 @@ class SF{private w:Worker|null=null;private ok=false;oshibka:string|null=null;pr
         // Skill 20 = max strength — no internal handicap.
         this.w!.postMessage("setoption name Skill Level value 20");
       }catch{}
-      this.ok=true;this.w!.postMessage("isready");
+      this.ok=true;this.naSostoyanie?.(true);this.w!.postMessage("isready");
     }};this.w.postMessage("uci")}catch{this.w=null}}
   ready(){return this.ok&&!!this.w}
   // ── Очередь запросов ──────────────────────────────────────────────────────
@@ -3053,7 +3059,10 @@ export default function CyberChessPage(){
   // открывает Analysis/Coach. На setup screen Stockfish не нужен.
   function ensureSF(){
     if(sfR.current)return;
-    const s=new SF();s.init();sfR.current=s;
+    const s=new SF();
+    // Подписка ДО init(): между запуском и присвоением уже мог прийти uciok.
+    s.naSostoyanie=(ok:boolean)=>sSfOk(ok);
+    s.init();sfR.current=s;
     const c=setInterval(()=>{if(s.ready()){sSfOk(true);clearInterval(c)}},200);
     setTimeout(()=>clearInterval(c),15000);
   }

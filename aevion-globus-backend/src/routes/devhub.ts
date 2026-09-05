@@ -2639,119 +2639,12 @@ Built, but ${url} did not answer 2xx in time`;
     });
   }
 
-  if (railwayToken && railwayProjectId && railwayServiceId) {
-    // Real Railway API deployment via GraphQL mutation
-    (async () => {
-      try {
-        const gqlResp = await fetch("https://backboard.railway.app/graphql/v2", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${railwayToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            query: `mutation { deploymentCreate(input: { projectId: "${railwayProjectId}", serviceId: "${railwayServiceId}" }) { id status } }`,
-          }),
-        });
-        const gqlData = await gqlResp.json() as any;
-        const railwayDeploymentId = gqlData?.data?.deploymentCreate?.id as string | undefined;
-        const railwayErrors = Array.isArray(gqlData?.errors) ? gqlData.errors : null;
-
-        // GraphQL returns HTTP 200 even when the mutation itself failed — errors
-        // (or a missing deployment id) ride in the body, not the status code.
-        // Without this check a broken/expired Railway token or bad project/service
-        // id would still flip the deployment to "building" then "live" on a
-        // fabricated *.up.railway.app URL that never actually deployed anything.
-        if (!gqlResp.ok || railwayErrors || !railwayDeploymentId) {
-          const errMsg = railwayErrors?.map((e: any) => e?.message).filter(Boolean).join("; ")
-            || `Railway API returned no deployment id (HTTP ${gqlResp.status})`;
-          deployment.status = "failed";
-          deployment.buildLog = `Railway deploy failed: ${errMsg}`;
-          deployment.completedAt = now();
-          try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
-          captureException(new Error(`Railway deploymentCreate failed: ${errMsg}`), { route: "devhub/deploy:railway", projectId: project!.id });
-          return;
-        }
-
-        const railwayDeployUrl = `https://${deploySlug}.up.railway.app`;
-
-        deployment.status = "building";
-        deployment.deployUrl = railwayDeployUrl;
-        deployment.buildLog = railwayDeploymentId ?? null;
-        try {
-          await dbSaveDeployment(deployment);
-        } catch {
-          memDeployments.set(deployment.id, deployment);
-        }
-
-        // Verify the page actually serves before calling it live — same
-        // honesty rule as the CF Pages / Vercel paths.
-        deferred(async () => {
-          const d = memDeployments.get(deployment.id) ?? deployment;
-          const serves = await verifyDeploymentServes(railwayDeployUrl);
-          if (serves) {
-            d.status = "live";
-          } else {
-            d.status = "failed";
-            d.buildLog = (d.buildLog || "") + " | verify: deployed page is not serving (non-2xx after retries)";
-          }
-          d.completedAt = now();
-          try {
-            await dbSaveDeployment(d);
-          } catch {
-            memDeployments.set(d.id, d);
-          }
-          if (project && serves) {
-            project.status = "live";
-            project.deployUrl = railwayDeployUrl;
-            project.updatedAt = now();
-            try {
-              await dbSaveProject(project);
-            } catch {
-              memProjects.set(project.id, project);
-            }
-          }
-        }, 5000);
-      } catch (e: any) {
-        // Railway API unreachable. This used to SIMULATE a successful build
-        // on a fabricated URL — a deploy that never happened reported as
-        // live. Honest now: the deployment failed, with the reason.
-        deployment.status = "failed";
-        deployment.buildLog = `Railway API unreachable: ${e?.message || "network error"}`;
-        deployment.completedAt = now();
-        try {
-          await dbSaveDeployment(deployment);
-        } catch {
-          memDeployments.set(deployment.id, deployment);
-        }
-      }
-    })();
-  } else {
-    // Simulate build asynchronously — no Railway token
-    deferred(async () => {
-      deployment.status = "live";
-      deployment.deployUrl = deployUrl;
-      deployment.buildLog = `Build started at ${deployment.triggeredAt}\nInstalling dependencies...\nBuilding...\nDeployment complete!\nLive at: ${deployUrl}`;
-      deployment.completedAt = now();
-      try {
-        await dbSaveDeployment(deployment);
-      } catch {
-        memDeployments.set(deployment.id, deployment);
-      }
-      if (project) {
-        project.status = "live";
-        project.deployUrl = deployUrl;
-        project.updatedAt = now();
-        try {
-          await dbSaveProject(project);
-        } catch {
-          memProjects.set(project.id, project);
-        }
-      }
-    }, 3000);
-  }
-
-  res.json({ deploymentId, status: "building", deployUrl, message: "Deployment started" });
+  // Дальше этой точки управление не доходит НИКОГДА: без DEVHUB_RAILWAY_PER_PROJECT
+  // выше отвечает 501, с флагом — ветка per-project возвращается раньше. Здесь
+  // лежали сырой Railway GraphQL по общему RAILWAY_SERVICE_ID и «симуляция сборки»,
+  // ставившая status=live с выдуманным URL, — ровно тот класс, который §10
+  // объявляет убитым. Мёртвый опасный код удалён 05.09.2026, чтобы один неверный
+  // if при будущей правке не вернул фальшивые зелёные выкатки.
 });
 
 // GET /api/devhub/projects/:id/deployments/:deployId/log — SSE build log stream
@@ -2761,39 +2654,63 @@ devhubRouter.get("/projects/:id/deployments/:deployId/log", async (req, res) => 
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
 
-  const deploySlug = slugify(project.name) + "-" + project.id.slice(0, 8);
-  const deployUrl = `https://${deploySlug}.aevion.app`;
+  // До 05.09.2026 здесь жили ПЯТЬ ВЫДУМАННЫХ строк по таймеру 500 мс и
+  // сочинённый из имени проекта URL — ни deployId, ни настоящий статус не
+  // читались вовсе. Ровно тот класс «журнал сборки, который врёт», который
+  // CLAUDE.md §10 объявляет убитым. Теперь стрим читает НАСТОЯЩУЮ запись
+  // выкатки: отдаёт строки её buildLog по мере появления и завершается
+  // настоящим статусом с настоящим адресом.
+  const deployId = String(req.params.deployId);
 
-  // SSE headers
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no");
   res.flushHeaders();
 
-  const LOG_STEPS = [
-    "[1/5] Installing dependencies...",
-    "[2/5] Type checking...",
-    "[3/5] Building application...",
-    "[4/5] Deploying to edge...",
-    "[5/5] Health check passed",
-  ];
+  const send = (event: Record<string, unknown>) => {
+    try { res.write(`data: ${JSON.stringify(event)}\n\n`); } catch { /* socket closed */ }
+  };
 
-  let step = 0;
-  const interval = setInterval(() => {
-    if (step < LOG_STEPS.length) {
-      res.write(`data: ${JSON.stringify({ line: LOG_STEPS[step] })}\n\n`);
-      step++;
-    } else {
-      res.write(`data: ${JSON.stringify({ done: true, deployUrl })}\n\n`);
-      clearInterval(interval);
-      res.end();
+  async function readDeployment(): Promise<DevHubDeployment | null> {
+    try {
+      const all = await dbListDeployments(project!.id, 50);
+      return all.find((d) => d.id === deployId) ?? null;
+    } catch {
+      return memDeployments.get(deployId) ?? null;
     }
-  }, 500);
+  }
 
-  req.on("close", () => {
-    clearInterval(interval);
-  });
+  let sentLines = 0;
+  let closed = false;
+  req.on("close", () => { closed = true; });
+
+  const startedAt = Date.now();
+  const TIMEOUT_MS = 5 * 60_000;
+
+  const tick = async () => {
+    if (closed) return;
+    const d = await readDeployment();
+    if (!d || d.projectId !== project!.id) {
+      send({ line: "Выкатка не найдена — журнала нет.", done: true, failed: true });
+      res.end();
+      return;
+    }
+    const lines = (d.buildLog || "").split("\n").filter(Boolean);
+    for (; sentLines < lines.length; sentLines++) send({ line: lines[sentLines] });
+    if (d.status !== "pending" && d.status !== "building") {
+      send({ done: true, failed: d.status !== "live", deployUrl: d.deployUrl ?? null });
+      res.end();
+      return;
+    }
+    if (Date.now() - startedAt > TIMEOUT_MS) {
+      send({ line: "Журнал ждал 5 минут — сборка всё ещё не завершилась. Загляните во вкладку «Выкатки» позже.", done: true, failed: false, deployUrl: null });
+      res.end();
+      return;
+    }
+    setTimeout(() => { tick().catch(() => { try { res.end(); } catch { /* closed */ } }); }, 2000);
+  };
+  tick().catch(() => { try { res.end(); } catch { /* closed */ } });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════

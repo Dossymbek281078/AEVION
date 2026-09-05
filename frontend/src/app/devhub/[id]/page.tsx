@@ -2064,7 +2064,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         await fetchGithubStatus();
         await fetchGithubBranches();
       } else if (d.ok) {
-        setGithubMsg(`Pushed ${d.pushedFiles} files to GitHub: ${d.repoUrl}`);
+        setGithubMsg(`Отправлено файлов: ${d.pushedFiles}. Репозиторий: ${d.repoUrl}`);
         setGithubMsgTone("success");
         setProject((p) => p ? { ...p, repoUrl: d.repoUrl } : p);
         await fetchGithubStatus();

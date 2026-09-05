@@ -13,6 +13,7 @@ import { track } from "@/lib/track";
 import { productById } from "@/lib/products";
 import { PageTracking } from "@/components/PageTracking";
 import { devhubServerError } from "@/lib/devhubServerError";
+import { stackForIdea } from "@/lib/devhubStackChoice";
 
 type Stack = "next" | "express" | "static" | "react" | "python";
 type ProjectStatus = "draft" | "building" | "live" | "error";
@@ -160,15 +161,9 @@ export default function DevHubPage() {
     setIdeaStarting(true);
     try {
       const name = idea.replace(/[^\p{L}\p{N} ]/gu, "").split(/\s+/).slice(0, 5).join(" ").slice(0, 40) || "My app";
-      // Раньше главный вход ВСЕГДА создавал react — а правка кликами (Visual
-      // Edit), которую витрина обещает тремя формулировками, отрисовывается
-      // только на static. Человек с «лендингом кофейни» попадал в проект, где
-      // обещанная панель не появлялась никогда. Страничные идеи без данных и
-      // логики теперь создаются статикой: превью мгновенное, правка кликами
-      // работает сразу. Идеи с базой, аккаунтами или API получают react.
-      const NEEDS_APP = /баз[ае]|данн|трекер|database|api|логин|auth|аккаунт|регистрац|заказ|корзин|оплат|статус|канбан|доск[аи]/i;
-      const PAGE_LIKE = /лендинг|landing|портфолио|portfolio|визитк|страниц|галере|меню|резюме|приглашени|invitation|афиш|постер|промо|презентац/i;
-      const stack = PAGE_LIKE.test(idea) && !NEEDS_APP.test(idea) ? "static" : "react";
+      // Выбор стека вынесен в lib/devhubStackChoice (там сторож): на нём
+      // держится обещание «правьте кликами» с витрины.
+      const stack = stackForIdea(idea);
       const r = await fetch(apiUrl("/api/devhub/projects"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },

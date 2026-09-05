@@ -760,7 +760,9 @@ export default function ExamTaskPage({
                                 : "Сделать этой строкой получателя передач из инструментов"
                             }
                             aria-label={
-                              isSelected ? "Активная позиция" : "Выбрать как активную"
+                              isSelected
+                                ? `Активная позиция: ${p.rateCode}`
+                                : `Выбрать как активную: ${p.rateCode}`
                             }
                           >
                             {isSelected && (

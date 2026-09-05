@@ -187,7 +187,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               </div>
               <button
                 onClick={() => removeToast(t.id)}
-                aria-label="Закрыть"
+                aria-label={`Закрыть: ${t.message}`}
                 style={{
                   position: "absolute",
                   top: 8,

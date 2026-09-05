@@ -105,7 +105,7 @@ export function AchievementToast() {
           <button
             onClick={() => setQueue((prev) => prev.filter((x) => x.uid !== q.uid))}
             className="text-slate-300 hover:text-slate-700 text-xs shrink-0"
-            aria-label="Закрыть"
+            aria-label={`Закрыть: ${q.achievement.title}`}
           >
             ✕
           </button>

@@ -346,17 +346,20 @@ const memSnippets = new Map<string, DevHubSnippet>();
 const memCheckpoints = new Map<string, DevHubCheckpoint>();
 
 // ── Credit metering ───────────────────────────────────────────────────────────
-type CapabilityKey = "video" | "image" | "tts" | "music" | "deploy";
+type CapabilityKey = "video" | "image" | "tts" | "music" | "deploy" | "generate";
 type StudioTier = "free" | "pro" | "enterprise";
 
 // tts — в ЗНАКАХ за месяц. До 05.09.2026 у free стояло 100000 при 30000 у
 // pro: покупка Pro снижала лимит озвучки втрое, а бесплатный тариф стоил нам
 // до ~$22/чел в месяц одного ElevenLabs. Лишний ноль у free убран; тарифы
 // обязаны быть монотонными (сторож рядом в tests/).
+// generate — генерации кода (мультифайловая, с vision-входом). До 05.09.2026
+// самая дорогая возможность модуля не учитывалась вовсе и не отличала free от
+// enterprise.
 const TIER_LIMITS: Record<StudioTier, Record<CapabilityKey, number>> = {
-  free:       { video: 3,   image: 10,  tts: 10000,  music: 5,   deploy: 10 },
-  pro:        { video: 50,  image: 200, tts: 200000, music: 100, deploy: -1 },
-  enterprise: { video: -1,  image: -1,  tts: -1,     music: -1,  deploy: -1 },
+  free:       { video: 3,   image: 10,  tts: 10000,  music: 5,   deploy: 10, generate: 30 },
+  pro:        { video: 50,  image: 200, tts: 200000, music: 100, deploy: -1, generate: 1000 },
+  enterprise: { video: -1,  image: -1,  tts: -1,     music: -1,  deploy: -1, generate: -1 },
 };
 
 // In-memory fallback: "userId:month:capability" → count
@@ -535,7 +538,7 @@ type UsageCell = { used: number; limit: number; usedKnown?: false };
 async function getAllMonthUsage(userId: string): Promise<{ tier: StudioTier; tierKnown: boolean; month: string; usage: Record<CapabilityKey, UsageCell>; anyUnknown: boolean }> {
   const { tier, tierKnown } = await getUserTierChecked(userId);
   const month = creditMonth();
-  const caps: CapabilityKey[] = ["video", "image", "tts", "music", "deploy"];
+  const caps: CapabilityKey[] = ["video", "image", "tts", "music", "deploy", "generate"];
   const usage: Record<string, UsageCell> = {};
   let anyUnknown = false;
   for (const cap of caps) {
@@ -2048,6 +2051,14 @@ devhubRouter.post("/projects/:id/generate", dhCostlyLimit("dhgenerate"), async (
     ? targetFilesRaw.filter((f: unknown): f is string => typeof f === "string" && f.trim().length > 0).map((f: string) => f.trim())
     : (typeof targetFile === "string" && targetFile.trim() ? [targetFile.trim()] : []);
   const resolvedStack = stack || project.stack;
+  const genCredit = await checkCredit(userId, "generate");
+  if (!genCredit.allowed) {
+    return res.status(402).json({
+      error: "Monthly generate limit reached",
+      tier: genCredit.tier, used: genCredit.used, limit: genCredit.limit,
+      upgrade: "/studio#upgrade",
+    });
+  }
   try {
     res.json(await runProjectGeneration(project, userId, prompt, resolvedStack, targetFiles, images, history));
   } catch (e: any) {
@@ -2062,6 +2073,10 @@ devhubRouter.post("/projects/:id/generate", dhCostlyLimit("dhgenerate"), async (
 async function runProjectGeneration(project: DevHubProject, userId: string, prompt: string, stack: string, targetFiles: string[], images?: ChatImage[], history?: ChatTurn[], onProgress?: (stage: string) => void) {
   const existingFiles = await dbListFiles(project.id);
   const { files: generatedFiles, aiGenerated, continued, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history, onProgress);
+  // Модель отработала — вот теперь генерация потрачена. Списание здесь, в
+  // общем помощнике, покрывает все точки генерации разом: обычную, потоковую
+  // и проектирование базы.
+  await debitQuietly(userId, "generate");
   onProgress?.("saving");
   let storage: "db" | "memory" = "db";
   const cpRes = await createCheckpoint(project.id, userId, `AI: ${prompt.slice(0, 80)}`, generatedFiles.map((f) => f.path), existingFiles);
@@ -2148,6 +2163,17 @@ devhubRouter.post("/projects/:id/generate/stream", dhCostlyLimit("dhgenerate"), 
     ? targetFilesRaw.filter((f: unknown): f is string => typeof f === "string" && f.trim().length > 0).map((f: string) => f.trim())
     : (typeof targetFile === "string" && targetFile.trim() ? [targetFile.trim()] : []);
 
+  // Проверка квоты ДО открытия SSE: после flushHeaders статус уже не сменить,
+  // и отказ пришлось бы маскировать событием.
+  const genCredit = await checkCredit(userId, "generate");
+  if (!genCredit.allowed) {
+    return res.status(402).json({
+      error: "Monthly generate limit reached",
+      tier: genCredit.tier, used: genCredit.used, limit: genCredit.limit,
+      upgrade: "/studio#upgrade",
+    });
+  }
+
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
@@ -2200,6 +2226,14 @@ devhubRouter.post("/projects/:id/database/design", dhCostlyLimit("dhdbdesign"), 
     `2. ${clientFile} — a minimal typed data-access helper that reads the connection string from ` +
     `process.env.DATABASE_URL (or os.environ for Python), creates one shared pool, exports a function ` +
     `to apply schema.sql, and one example CRUD function per table. No ORM — plain parameterized queries.`;
+  const genCredit = await checkCredit(userId, "generate");
+  if (!genCredit.allowed) {
+    return res.status(402).json({
+      error: "Monthly generate limit reached",
+      tier: genCredit.tier, used: genCredit.used, limit: genCredit.limit,
+      upgrade: "/studio#upgrade",
+    });
+  }
   try {
     const result = await runProjectGeneration(project, userId, prompt, project.stack, ["db/schema.sql", clientFile]);
     const canProvision = !!process.env.DEVHUB_DB_ADMIN_URL;
@@ -4822,7 +4856,40 @@ type WorkflowStepResult = { step: number; type: string; ok: boolean; output?: an
  * so one failed save no longer passes for a success and no longer takes the
  * rest of the run down with it.
  */
+/** Какая возможность тратится каждым видом шага. Шаги вне списка (email и
+ *  прочие рассыльные) закрыты своими ограничителями. */
+const WORKFLOW_STEP_CAPABILITY: Partial<Record<string, CapabilityKey>> = {
+  code: "generate", image: "image", tts: "tts", music: "music",
+};
+
 async function executeWorkflowStep(
+  project: DevHubProject,
+  userId: string,
+  step: any,
+  i: number
+): Promise<WorkflowStepResult> {
+  // До 05.09.2026 шаги workflow звали те же платные генерации МИМО квот:
+  // месячный предел на image/tts/music обходился простой пересылкой той же
+  // просьбы как шага workflow — до 20 штук за один запрос.
+  const stepType = String(step?.type || "");
+  const stepCap = WORKFLOW_STEP_CAPABILITY[stepType];
+  if (stepCap) {
+    const amount = stepCap === "tts" ? Math.max(1, String(step?.text || "").length) : 1;
+    const credit = await checkCredit(userId, stepCap, amount);
+    if (!credit.allowed) {
+      return {
+        step: i, type: stepType, ok: false,
+        error: `Monthly ${stepCap} limit reached (${credit.used}/${credit.limit}) — the paid tier lifts the ceiling`,
+      };
+    }
+    const result = await executeWorkflowStepInner(project, userId, step, i);
+    if (result.ok) await debitQuietly(userId, stepCap, amount);
+    return result;
+  }
+  return executeWorkflowStepInner(project, userId, step, i);
+}
+
+async function executeWorkflowStepInner(
   project: DevHubProject,
   userId: string,
   step: any,

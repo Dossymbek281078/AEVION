@@ -80,6 +80,31 @@ describe("платные ручки DevHub стоят за ограничите�
     });
   }
 
+  test("генерация кода метрируется: проверка на входе, списание в помощнике", () => {
+    // 05.09.2026: самая дорогая возможность модуля (мультифайловая генерация
+    // с vision-входом) не учитывалась вовсе и не отличала free от enterprise.
+    expect((src.match(/checkCredit\(userId, "generate"\)/g) || []).length,
+      "квота generate не проверяется на всех трёх точках генерации (generate, stream, database/design)")
+      .toBeGreaterThanOrEqual(3);
+    const helper = src.slice(src.indexOf("async function runProjectGeneration"), src.indexOf("async function runProjectGeneration") + 2500);
+    expect(helper.includes('debitQuietly(userId, "generate")'),
+      "runProjectGeneration не списывает generate — генерации снова бесплатны").toBe(true);
+    expect(src.includes('generate: 30') && src.includes('generate: 1000'),
+      "тарифные числа generate пропали из TIER_LIMITS").toBe(true);
+  });
+
+  test("шаги workflow не обходят квоты", () => {
+    // Те же генерации, отправленные шагами workflow, шли МИМО квот целиком:
+    // до 20 генераций/картинок/озвучек за один запрос без единого списания.
+    for (const pair of ['code: "generate"', 'image: "image"', 'tts: "tts"', 'music: "music"']) {
+      expect(src.includes(pair), `шаг workflow выпал из карты квот: ${pair}`).toBe(true);
+    }
+    const at = src.indexOf("async function executeWorkflowStep(");
+    const wrapper = src.slice(at, at + 1600);
+    expect(wrapper.includes("checkCredit(userId, stepCap"), "обёртка шага не проверяет квоту").toBe(true);
+    expect(wrapper.includes("debitQuietly(userId, stepCap"), "обёртка шага не списывает квоту").toBe(true);
+  });
+
   test("рассыльные ручки закрыты dhSendLimit списком", () => {
     // email/sms/whatsapp закрываются не по месту регистрации, а общим
     // devhubRouter.use([...], dhSendLimit()) — проверяем список.

@@ -110,6 +110,7 @@ const USAGE_LABEL: Record<string, string> = {
   tts: "знаков озвучки",
   music: "музыка",
   deploy: "выкаток",
+  generate: "генераций ИИ",
 };
 
 function capabilityOffReason(status: string | undefined): string {

@@ -349,10 +349,14 @@ const memCheckpoints = new Map<string, DevHubCheckpoint>();
 type CapabilityKey = "video" | "image" | "tts" | "music" | "deploy";
 type StudioTier = "free" | "pro" | "enterprise";
 
+// tts — в ЗНАКАХ за месяц. До 05.09.2026 у free стояло 100000 при 30000 у
+// pro: покупка Pro снижала лимит озвучки втрое, а бесплатный тариф стоил нам
+// до ~$22/чел в месяц одного ElevenLabs. Лишний ноль у free убран; тарифы
+// обязаны быть монотонными (сторож рядом в tests/).
 const TIER_LIMITS: Record<StudioTier, Record<CapabilityKey, number>> = {
-  free:       { video: 3,   image: 10,  tts: 100000, music: 5,   deploy: 10 },
-  pro:        { video: 50,  image: 200, tts: 30000, music: 100, deploy: -1 },
-  enterprise: { video: -1,  image: -1,  tts: -1,    music: -1,  deploy: -1 },
+  free:       { video: 3,   image: 10,  tts: 10000,  music: 5,   deploy: 10 },
+  pro:        { video: 50,  image: 200, tts: 200000, music: 100, deploy: -1 },
+  enterprise: { video: -1,  image: -1,  tts: -1,     music: -1,  deploy: -1 },
 };
 
 // In-memory fallback: "userId:month:capability" → count
@@ -2107,10 +2111,10 @@ async function runProjectGeneration(project: DevHubProject, userId: string, prom
 // saving), then {type:"result", ...same payload as /generate} or
 // {type:"error", error}. Honest stages only — every event corresponds to
 // something actually happening, never a fake progress animation.
-devhubRouter.post("/projects/:id/generate/stream", async (req, res) => {
+devhubRouter.post("/projects/:id/generate/stream", dhCostlyLimit("dhgenerate"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
-  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  const project = await loadOwnedProjectOrReply(String(req.params.id), userId, res);
   if (!project) return;
   const { prompt, targetFile, targetFiles: targetFilesRaw, stack, imageBase64, imageMediaType, history: historyRaw } = req.body || {};
   if (!prompt || typeof prompt !== "string") {
@@ -2174,10 +2178,10 @@ devhubRouter.post("/projects/:id/generate/stream", async (req, res) => {
 // provision a live database — hosting needs a real isolation design and is a
 // separate feature; generating files that pretend otherwise would be the same
 // class of lie the deploy paths just got cured of.
-devhubRouter.post("/projects/:id/database/design", async (req, res) => {
+devhubRouter.post("/projects/:id/database/design", dhCostlyLimit("dhdbdesign"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
-  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  const project = await loadOwnedProjectOrReply(String(req.params.id), userId, res);
   if (!project) return;
   const { description } = req.body || {};
   if (!description || typeof description !== "string" || !description.trim()) {
@@ -2436,7 +2440,7 @@ devhubRouter.post("/projects/:id/checkpoints/:checkpointId/restore", async (req,
 // project-scoped (no /projects/:id/ prefix): works standalone for someone
 // who hasn't created a project yet, and optionally accounts for an existing
 // project's files when `projectId` is given in the body.
-devhubRouter.post("/plan", async (req, res) => {
+devhubRouter.post("/plan", dhCostlyLimit("dhplan"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
   const { idea, projectId } = req.body || {};
@@ -2484,7 +2488,10 @@ devhubRouter.post("/projects/:id/deploy", async (req, res) => {
       upgrade: "/studio#upgrade",
     });
   }
-  await debitQuietly(userId, "deploy");
+  // Списание — только когда выкатка реально стартовала (ниже, в ветке
+  // per-project). Раньше квота списывалась здесь, а без
+  // DEVHUB_RAILWAY_PER_PROJECT обработчик дальше отказывал 501-м: free-тариф
+  // сжигал все 10 деплоев месяца, не получив ни одного.
 
   const deploymentId = crypto.randomUUID();
   const deploySlug = slugify(project.name) + "-" + project.id.slice(0, 8);
@@ -2528,6 +2535,9 @@ devhubRouter.post("/projects/:id/deploy", async (req, res) => {
       try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
       return res.status(502).json({ error: result.error, deploymentId: deployment.id });
     }
+
+    // Выкатка реально стартовала — вот теперь квота потрачена честно.
+    await debitQuietly(userId, "deploy");
 
     // Remember the service so a redeploy reuses it instead of creating a new
     // billable container on every click.
@@ -4222,7 +4232,7 @@ devhubRouter.post("/media/image", async (req, res) => {
 });
 
 // POST /api/devhub/media/sfx — ElevenLabs sound effect
-devhubRouter.post("/media/sfx", async (req, res) => {
+devhubRouter.post("/media/sfx", dhCostlyLimit("dhsfx"), async (req, res) => {
   const { text, durationSeconds, promptInfluence } = req.body || {};
   if (!text || typeof text !== "string" || !text.trim()) {
     return res.status(400).json({ error: "text (sfx description) required" });
@@ -4449,7 +4459,7 @@ function buildVoiceCloneMultipart(opts: { name: string; description?: string; mi
 }
 
 // POST /api/devhub/media/voice-clone — ElevenLabs custom voice from sample (requires confirm:true after preview)
-devhubRouter.post("/media/voice-clone", async (req, res) => {
+devhubRouter.post("/media/voice-clone", dhCostlyLimit("dhvoiceclone"), async (req, res) => {
   const { name, description, sampleBase64, mimeType = "audio/mpeg", confirm } = req.body || {};
   if (!name || typeof name !== "string" || !name.trim()) return res.status(400).json({ error: "name required" });
   if (!sampleBase64 || typeof sampleBase64 !== "string") return res.status(400).json({ error: "sampleBase64 (audio file) required" });
@@ -4487,7 +4497,7 @@ devhubRouter.post("/media/voice-clone", async (req, res) => {
 // POST /api/devhub/media/voice-clone/preview — clone temp voice → TTS sample → delete voice
 // Body: { sampleBase64, mimeType?, previewText? }
 // Response: audio/mpeg of `previewText` rendered with the cloned voice
-devhubRouter.post("/media/voice-clone/preview", async (req, res) => {
+devhubRouter.post("/media/voice-clone/preview", dhCostlyLimit("dhvoiceclone"), async (req, res) => {
   const { sampleBase64, mimeType = "audio/mpeg", previewText } = req.body || {};
   if (!sampleBase64 || typeof sampleBase64 !== "string") return res.status(400).json({ error: "sampleBase64 (audio file) required" });
   if (sampleBase64.length > 12_000_000) return res.status(400).json({ error: "sample too large (max ~9 MB base64)" });
@@ -4552,7 +4562,7 @@ devhubRouter.post("/media/voice-clone/preview", async (req, res) => {
 });
 
 // POST /api/devhub/media/stt — ElevenLabs Speech-to-Text (scribe-v1)
-devhubRouter.post("/media/stt", async (req, res) => {
+devhubRouter.post("/media/stt", dhCostlyLimit("dhstt"), async (req, res) => {
   const { audioBase64, mimeType = "audio/mpeg", language } = req.body || {};
   if (!audioBase64 || typeof audioBase64 !== "string") return res.status(400).json({ error: "audioBase64 required" });
   if (audioBase64.length > 30_000_000) return res.status(400).json({ error: "audio too large (max ~22 MB base64)" });
@@ -4620,10 +4630,10 @@ devhubRouter.post("/media/drive-search", dhCostlyLimit("dhdrive"), async (req, r
 });
 
 // POST /api/devhub/projects/:id/drive/import — import Drive file into project files
-devhubRouter.post("/projects/:id/drive/import", async (req, res) => {
+devhubRouter.post("/projects/:id/drive/import", dhCostlyLimit("dhdrive"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
-  const read = await readProject(req.params.id);
+  const read = await readProject(String(req.params.id));
   if (!read.project && read.failed) return replyStorageUnavailable(res);
   const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
@@ -5003,10 +5013,10 @@ function groupWorkflowSteps(steps: any[]): number[][] {
 }
 
 // POST /api/devhub/projects/:id/agent/workflow — orchestrate multi-step AI workflow
-devhubRouter.post("/projects/:id/agent/workflow", async (req, res) => {
+devhubRouter.post("/projects/:id/agent/workflow", dhCostlyLimit("dhworkflow"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
-  const read = await readProject(req.params.id);
+  const read = await readProject(String(req.params.id));
   if (!read.project && read.failed) return replyStorageUnavailable(res);
   const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
@@ -5081,10 +5091,10 @@ devhubRouter.get("/agent/templates", (_req, res) => {
 });
 
 // POST /api/devhub/projects/:id/agent/workflow/stream — SSE per-step progress
-devhubRouter.post("/projects/:id/agent/workflow/stream", async (req, res) => {
+devhubRouter.post("/projects/:id/agent/workflow/stream", dhCostlyLimit("dhworkflow"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
-  const read = await readProject(req.params.id);
+  const read = await readProject(String(req.params.id));
   if (!read.project && read.failed) return replyStorageUnavailable(res);
   const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
@@ -5378,7 +5388,7 @@ async function tryAutoUploadToCloudflare(sourceUrl: string): Promise<string | nu
 }
 
 // POST /api/devhub/media/translate — DeepL text translation
-devhubRouter.post("/media/translate", async (req, res) => {
+devhubRouter.post("/media/translate", dhCostlyLimit("dhtranslate"), async (req, res) => {
   const { text, targetLang, sourceLang, formality } = req.body || {};
   if (!text || typeof text !== "string" || !text.trim()) return res.status(400).json({ error: "text required" });
   if (!targetLang || typeof targetLang !== "string") return res.status(400).json({ error: "targetLang required (e.g. EN, RU, DE, ES, FR)" });
@@ -5447,10 +5457,10 @@ devhubRouter.post("/media/translate", async (req, res) => {
 });
 
 // POST /api/devhub/projects/:id/files/translate — translate project file → save as new file
-devhubRouter.post("/projects/:id/files/translate", async (req, res) => {
+devhubRouter.post("/projects/:id/files/translate", dhCostlyLimit("dhtranslate"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
-  const read = await readProject(req.params.id);
+  const read = await readProject(String(req.params.id));
   if (!read.project && read.failed) return replyStorageUnavailable(res);
   const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
@@ -5659,12 +5669,12 @@ devhubRouter.get("/projects/:id/file-binary", async (req, res) => {
 // Bulk DeepL translate (multi-file × multi-lang)
 // ═════════════════════════════════════════════════════════════════════════════
 
-devhubRouter.post("/projects/:id/files/translate-bulk", async (req, res) => {
+devhubRouter.post("/projects/:id/files/translate-bulk", dhCostlyLimit("dhtranslate"), async (req, res) => {
   // Массовый перевод — ПЛАТНЫЙ. Файлы в памяти исчезнут при перезапуске.
   let storageFallback = false;
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
-  const read = await readProject(req.params.id);
+  const read = await readProject(String(req.params.id));
   if (!read.project && read.failed) return replyStorageUnavailable(res);
   const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
@@ -6516,7 +6526,7 @@ devhubRouter.post("/media/upload-audio", dhCostlyLimit("dhupaudio"), async (req,
 // Brevo: create SMTP email template
 // ═════════════════════════════════════════════════════════════════════════════
 
-devhubRouter.post("/media/email-template-create", async (req, res) => {
+devhubRouter.post("/media/email-template-create", dhCostlyLimit("dhemailtpl"), async (req, res) => {
   const { name, subject, htmlContent, senderEmail, senderName, replyTo, tag, isActive } = req.body || {};
   if (!name || typeof name !== "string") return res.status(400).json({ error: "name required" });
   if (!subject || typeof subject !== "string") return res.status(400).json({ error: "subject required" });

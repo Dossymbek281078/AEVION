@@ -53,6 +53,25 @@ export function effectiveCanonical(appRoot: string, segments: string[]): string 
   return null;
 }
 
+/**
+ * Страница, чей БЛИЖАЙШИЙ layout сам просит noindex, — не находка: canonical
+ * не может «спрятать из поиска» то, чему в поиске быть нельзя по замыслу.
+ * Живой пример — startup-exchange/[id]/offers: в её адресе секретный токен,
+ * и layout нарочно ставит index: false (мерж 05.09 поднял её как «спрятанную»,
+ * хотя прятать её и требуется). Смотрим только ближайший объявленный robots,
+ * как и с canonical: родительский index: true не отменяет свой index: false.
+ */
+function nearestDeclaredNoindex(appRoot: string, segments: string[]): boolean {
+  for (let i = segments.length; i >= 0; i--) {
+    const f = join(appRoot, ...segments.slice(0, i), "layout.tsx");
+    if (!existsSync(f)) continue;
+    const src = readFileSync(f, "utf8");
+    const m = /robots:\s*\{[^}]*index:\s*(false|true)/.exec(src);
+    if (m) return m[1] === "false";
+  }
+  return false;
+}
+
 /** Все страницы (каталоги с page.tsx) как массивы сегментов. */
 function allPages(root: string): string[][] {
   const out: string[][] = [];
@@ -139,6 +158,7 @@ function forma(p: string): string {
 describe("страница в карте сайта не уводит canonical на другой адрес", () => {
   const pages = allPages(APP);
   const away = pages
+    .filter((segs) => !nearestDeclaredNoindex(APP, segs))
     .map((segs) => ({ url: toUrl(segs), canon: effectiveCanonical(APP, segs) }))
     .filter((x) => x.canon !== null)
     .map((x) => ({ url: x.url, canon: (x.canon as string).replace("${SITE}", "").replace(SITE, "") }))

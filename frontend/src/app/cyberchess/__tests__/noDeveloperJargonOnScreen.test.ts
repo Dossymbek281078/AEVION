@@ -37,7 +37,7 @@ const ZHARGON_RU =
 // /api/cyberchess-tournaments/leaderboard (live, с фоллбэком на демо)» —
 // три таких места на одной странице. Ни одно не ловилось: в списке были
 // отдельные слова, а не эти формы.
-const ТЕХСЛЕД = /(Powered by|GET \/api\/|POST \/api\/|\/api\/[a-z-]+\/|[a-zA-Z][a-zA-Z0-9]*\.tsx?)/;
+const ТЕХСЛЕД = /(Powered by|GET \/api\/|POST \/api\/|\/api\/[a-z-]+\/|\b[a-zA-Z][a-zA-Z0-9]*\.tsx?\b)/;
 
 function zhargon(t: string): boolean {
   return ZHARGON.test(t) || ZHARGON_RU.test(t) || ТЕХСЛЕД.test(t);

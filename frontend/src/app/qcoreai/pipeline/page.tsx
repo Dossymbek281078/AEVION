@@ -197,7 +197,7 @@ export default function PipelinePage() {
                           {ROLE_OPTIONS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
                         </select>
                         <input value={step.name || ""} onChange={(e) => updateStep(i, { name: e.target.value })}
-                          aria-label="Своё название шага" placeholder="Custom name (opt.)"
+                          aria-label={`Своё название шага ${i + 1}`} placeholder="Custom name (opt.)"
                           style={{ flex: 1, padding: "4px 8px", borderRadius: 6, border: "1px solid #e2e8f0", fontSize: 12, outline: "none" }} />
                         <button onClick={() => setExpandedStep(expanded ? null : i)} style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 12, color: "#94a3b8" }}>
                           {expanded ? "▴" : "▾"} Config

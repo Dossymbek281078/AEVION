@@ -9,7 +9,28 @@ import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
 import { useI18n } from "@/lib/i18n";
 
-type TierId = "free" | "lite" | "medium" | "full" | "enterprise";
+type TierId = "free" | "lite" | "medium" | "full" | "pro" | "enterprise";
+
+/**
+ * Тарифы, которые человек может ВЫБРАТЬ в форме, в порядке цены.
+ *
+ * Список один на два места — на выпадающий список и на разбор ссылки. Раньше
+ * их было два, и они уже разошлись: ссылка принимала `free`, а в выборе его не
+ * было. Пока списка два, расхождение неизбежно и молчаливо.
+ *
+ * Замер 04.09.2026: тарифа `pro` (149 в месяц, самый дорогой покупаемый) здесь
+ * не было НИ В ОДНОМ из двух списков. Клиент, платящий больше всех, не мог
+ * указать свой тариф ни ссылкой, ни руками — обращение приходило в поддержку
+ * обезличенным. Проверено по трём веткам: ни в одной не починено.
+ */
+const ВЫБОР_ТАРИФА = ["lite", "medium", "full", "pro", "enterprise"] as const;
+
+/**
+ * Что принимается из ссылки. Шире выбора на `free`: с бесплатного тарифа к нам
+ * приходят по ссылке, но предлагать его в списке незачем — форма про платящих
+ * и собирающихся платить.
+ */
+const ТАРИФ_ИЗ_ССЫЛКИ: readonly string[] = ["free", ...ВЫБОР_ТАРИФА];
 
 interface LeadForm {
   name: string;
@@ -64,7 +85,7 @@ function ContactInner() {
     const industry = sp.get("industry");
     setForm((f) => ({
       ...f,
-      tier: tier && ["free", "lite", "medium", "full", "enterprise"].includes(tier) ? tier : f.tier,
+      tier: tier && ТАРИФ_ИЗ_ССЫЛКИ.includes(tier) ? tier : f.tier,
       industry: industry ?? f.industry,
     }));
   }, [sp]);
@@ -291,10 +312,12 @@ function ContactInner() {
               style={inputStyle}
             >
               <option value="">{tp("contact.placeholder.tier")}</option>
-              <option value="lite">Lite</option>
-              <option value="medium">Medium</option>
-              <option value="full">Full</option>
-              <option value="enterprise">Enterprise</option>
+              {/* Список ОДИН на форму и на разбор ссылки: два расходятся молча. */}
+              {ВЫБОР_ТАРИФА.map((id) => (
+                <option key={id} value={id}>
+                  {id.charAt(0).toUpperCase() + id.slice(1)}
+                </option>
+              ))}
             </select>
           </Field>
           <Field label={tp("contact.field.seats")}>

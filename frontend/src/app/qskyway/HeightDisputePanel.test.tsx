@@ -1,4 +1,4 @@
-import { describe, test, expect } from "vitest";
+import { describe, it, test, expect } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { I18nProvider } from "@/lib/i18n";
 

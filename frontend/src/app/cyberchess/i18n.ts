@@ -145,6 +145,7 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "fide.calib.tooltip_floor":    "Спец-модель высокого уровня",
     // AI personality picker
     "ai.title":                    "Стиль ИИ",
+    "ai.picker_label":             "Выбор стиля соперника",
     "ai.subtitle":                 "Выбери личность — каждая играет по-своему",
     "ai.play_with":                "Играть с",
     "ai.selected":                 "ВЫБРАНО",
@@ -321,6 +322,7 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "fide.calib.tooltip_r2":       "Explained variance R²",
     "fide.calib.tooltip_floor":    "High-Elo specialist",
     "ai.title":                    "AI style",
+    "ai.picker_label":             "Choose opponent style",
     "ai.subtitle":                 "Pick a personality — each plays differently",
     "ai.play_with":                "Play with",
     "ai.selected":                 "SELECTED",
@@ -495,6 +497,7 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "fide.calib.tooltip_r2":       "Түсіндірілген дисперсия R²",
     "fide.calib.tooltip_floor":    "Жоғары деңгей мамандандырылған",
     "ai.title":                    "AI стилі",
+    "ai.picker_label":             "Қарсылас стилін таңдау",
     "ai.subtitle":                 "Бейнені таңда — әрқайсы өзінше ойнайды",
     "ai.play_with":                "Бейнемен ойнау:",
     "ai.selected":                 "ТАҢДАЛҒАН",

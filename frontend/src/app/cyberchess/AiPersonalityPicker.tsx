@@ -84,7 +84,7 @@ export default function AiPersonalityPicker(props: Props) {
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Выбор стиля соперника"
+      aria-label={t("ai.picker_label")}
       onClick={onClose}
       style={{
         position: "fixed", inset: 0, zIndex: 320,

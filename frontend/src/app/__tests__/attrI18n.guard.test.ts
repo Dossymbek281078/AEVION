@@ -52,7 +52,6 @@ type Hit = { file: string; attr: string; text: string };
  */
 const KNOWN: Hit[] = [
   { file: "app/bank/page.tsx", attr: "title", text: "Конституция Bank" },
-  { file: "app/cyberchess/AiPersonalityPicker.tsx", attr: "aria-label", text: "Выбор стиля AI" },
   { file: "app/cyberchess/AntiCheatPanel.tsx", attr: "aria-label", text: "Закрыть" },
   { file: "app/cyberchess/FideCalibrationPanel.tsx", attr: "aria-label", text: "Закрыть" },
   { file: "app/cyberchess/matchmaking/page.tsx", attr: "placeholder", text: "Игрок" },

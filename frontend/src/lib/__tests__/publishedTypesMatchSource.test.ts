@@ -38,7 +38,11 @@ function polyaInterfeysa(tekst: string, imya: string): string[] | null {
   const klyuch = "interface " + imya;
   let poz = -1;
   for (let k = tekst.indexOf(klyuch); k !== -1; k = tekst.indexOf(klyuch, k + 1)) {
-    const sled = tekst.slice(k + klyuch.length).match(/^[\s]*\{/);
+    // `extends` допускается: без этого интерфейс-наследник не имеет `{`
+    // сразу после имени, выпадает из сверки МОЛЧА, и контроль охвата
+    // (сверено > 60) потери одного не заметит. Сегодня таких в исходнике
+    // нет — закрываю пробел заранее, пока он пустой.
+    const sled = tekst.slice(k + klyuch.length).match(/^(?:\s+extends[^{]*)?\s*\{/);
     if (sled) {
       poz = k + klyuch.length + sled[0].length;
       break;
@@ -77,7 +81,7 @@ function polyaInterfeysa(tekst: string, imya: string): string[] | null {
 }
 
 function imenaInterfeysov(tekst: string): string[] {
-  return [...new Set([...tekst.matchAll(/interface ([A-Za-z_][A-Za-z0-9_]*)\s*\{/g)].map((m) => m[1]))];
+  return [...new Set([...tekst.matchAll(/interface ([A-Za-z_][A-Za-z0-9_]*)(?:\s+extends[^{]*)?\s*\{/g)].map((m) => m[1]))];
 }
 
 describe("опубликованные типы каталог-клиента", () => {

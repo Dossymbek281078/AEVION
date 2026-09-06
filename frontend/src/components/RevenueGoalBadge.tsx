@@ -5,13 +5,18 @@
 // New Year targets stay visible from any module, not just the dashboard.
 import Link from "next/link";
 import { useRevenueGoal } from "@/lib/useRevenueGoal";
+import { useI18nOptional } from "@/lib/i18n";
+import { revenueTip } from "@/lib/revenueTip";
 
 export default function RevenueGoalBadge() {
   const { goals, summary, pct, days } = useRevenueGoal();
+  const lang = useI18nOptional()?.lang ?? "ru";
 
   if (!goals || !summary || pct === null || days === null) return null;
 
-  const tip = `$${summary.grossUsd.toLocaleString("ru-RU", { maximumFractionDigits: 0 })} собрано из $1M · ${days} дн. до срока ($20M stretch goal)`;
+  // Строка — из общего revenueTip: двойник в AppShellRevenueBadge уже начал
+  // расходиться с этой копией, и доводчик атрибуты не переводит (06.09.2026).
+  const tip = revenueTip(lang, summary.grossUsd, days);
 
   return (
     <Link

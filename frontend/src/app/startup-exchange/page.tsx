@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useI18nOptional } from "@/lib/i18n";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import ModulePricingChip from "@/components/ModulePricingChip";
@@ -37,7 +38,37 @@ interface Stats {
   avgScore?: number;
 }
 
+/**
+ * АТРИБУТЫ — ПО ЯЗЫКУ ЧИТАТЕЛЯ, отдельным мини-словарём (класс «атрибут
+ * против доводчика», 06.09.2026): AutoTranslate переводит EN-визитёру
+ * видимый текст, но НЕ placeholder/aria — страница была английской, а
+ * подсказка ГЛАВНОГО поля поиска оставалась русской. Замер живой пробой
+ * прода (en-US), рецепт №2 из разбора, образец — GEN_UI в devhub/[id].
+ */
+const SX_UI: Record<string, { searchAria: string; searchPh: string; ideaPh: string; rationalePh: string }> = {
+  ru: {
+    searchAria: "Поиск по заявкам",
+    searchPh: "Поиск по словам из заявки: логистика, юристы, подписка…",
+    ideaPh: "напр.: эскроу для сделок по выкупу",
+    rationalePh: "Что не дают существующие площадки",
+  },
+  en: {
+    searchAria: "Search listings",
+    searchPh: "Search by words from the listing: logistics, lawyers, subscription…",
+    ideaPh: "e.g. escrow for buyout deals",
+    rationalePh: "What existing marketplaces don't give you",
+  },
+  kk: {
+    searchAria: "Өтінімдер бойынша іздеу",
+    searchPh: "Өтінім сөздері бойынша іздеу: логистика, заңгерлер, жазылым…",
+    ideaPh: "мыс.: сатып алу мәмілелеріне эскроу",
+    rationalePh: "Бар алаңдар нені бермейді",
+  },
+};
+
 export default function StartupExchangePage() {
+  const sxLang = useI18nOptional()?.lang ?? "ru";
+  const SX = SX_UI[sxLang] ?? SX_UI.ru;
   const [tiers, setTiers] = useState<TierSpec[]>([]);
   const [sectors, setSectors] = useState<Array<{ id: string; label: string }>>([]);
   const [listings, setListings] = useState<Listing[]>([]);
@@ -252,8 +283,8 @@ export default function StartupExchangePage() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              aria-label="Поиск по заявкам"
-              placeholder="Поиск по словам из заявки: логистика, юристы, подписка…"
+              aria-label={SX.searchAria}
+              placeholder={SX.searchPh}
               style={{
                 flex: 1,
                 minWidth: 0,
@@ -439,8 +470,8 @@ export default function StartupExchangePage() {
             titleField="idea"
             summaryField="rationale"
             fields={[
-              { key: "idea", label: "Идея / фича", placeholder: "напр.: эскроу для сделок по выкупу", required: true },
-              { key: "rationale", label: "Какую дыру это закрывает", type: "textarea", placeholder: "Что не дают существующие площадки" },
+              { key: "idea", label: "Идея / фича", placeholder: SX.ideaPh, required: true },
+              { key: "rationale", label: "Какую дыру это закрывает", type: "textarea", placeholder: SX.rationalePh },
               { key: "author", label: "Псевдоним (необязательно)", placeholder: "anon" },
             ]}
           />

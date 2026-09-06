@@ -2,7 +2,27 @@
 
 **Дата:** 2026-05-12 · **Зона:** aevion-core/main · CyberChess
 
-Текущее состояние: Stockfish 18 (nmrugg/Chess.com port), **NON-NNUE**, **NON-SIMD**, single binary in `/public/stockfish.{js,wasm}`. Depth 22 уже тормозит UI.
+> ⚠️ **Сверено с кодом 06.09.2026 — имена файлов в доке УСТАРЕЛИ.**
+> Док писался под `/public/stockfish.{js,wasm}`, но таких файлов НЕТ. Реально
+> в `frontend/public/` лежат `stockfish-18-lite.{js,wasm}` и
+> `stockfish-classic.{js,wasm}`, а приложение грузит именно
+> `new Worker("/stockfish-18-lite.js")` (`page.tsx`). Пойдя по шагам Уровня 2
+> буквально, заменили бы несуществующий файл — и апгрейд молча не применился
+> бы. Ниже имена уже поправлены на реальные.
+>
+> Ещё два факта из сверки: `stockfish-18-lite.wasm` и `stockfish-classic.wasm`
+> **побайтно ИДЕНТИЧНЫ** (7 093 151 б) — то есть «classic» это не другая
+> сборка, а копия того же бинаря; заявленный в тесте «второй движок» отдельной
+> силы не даёт. Класс `SF` теперь на `page.tsx:296` (в доке был `:92`).
+>
+> 🔧 **06.09.2026 добавлено само-восстановление движка** (коммит на ветке
+> `deploy/frontend-2026-09-05`): раньше при падении воркера (`e.trim is not a
+> function` в lite-сборке после смены партии/задачи) движок не пересоздавался
+> и сила падала на запасной расчёт до конца сессии. Теперь `onDead()` убивает
+> дохлый воркер и переинициализирует (bounded). Это лечит СИМПТОМ; корень —
+> хрупкая lite-сборка, и его закрывает Уровень 2/3 ниже.
+
+Текущее состояние: Stockfish 18 (nmrugg/Chess.com port), **NON-NNUE**, **NON-SIMD**, файлы `frontend/public/stockfish-18-lite.{js,wasm}` (+ идентичная копия `stockfish-classic.{js,wasm}`). Depth 22 уже тормозит UI.
 
 Цель: depth 40+ за 2-3 секунды, как на lichess.org.
 
@@ -10,7 +30,7 @@
 
 ## Уровень 1 — ✅ Применено в `page.tsx` коммитом
 
-В классе `SF` (`page.tsx:92`):
+В классе `SF` (`page.tsx:296`):
 - Hash bumped 256 → **1024 MB** (4× больше TT-hits)
 - Contempt 0 (балансная оценка)
 - Skill 20 (полная сила)
@@ -22,9 +42,36 @@
 
 ---
 
+## Готовность к Уровню 2 (подготовлено 06.09.2026 — основателю осталось скачать файл)
+
+Проверено к моменту записи, чтобы swap не сорвался на мелочах:
+
+- **crossOriginIsolation на проде ВКЛЮЧЁН** — `Cross-Origin-Embedder-Policy: credentialless` +
+  `Cross-Origin-Opener-Policy: same-origin` (curl по `aevion.app/cyberchess`). Значит
+  SharedArrayBuffer доступен → **качать МНОГОпоточную NNUE-сборку** (single — запасной вариант).
+- **Приложение грузит `/stockfish-18-lite.js`** — новые файлы должны лечь под ЭТИМ именем.
+- **Лимит `Threads value 1`** в `page.tsx` (класс `SF`, ~стр. 343) поставлен под ХРУПКУЮ lite-сборку;
+  для многопоточной NNUE его надо сделать условным (код в чеклисте установщика).
+
+**Установщик готов:** `cyberchess-install-nnue.sh` в корне репозитория. Он делает бэкап
+в `/public/stockfish-legacy/`, кладёт новые файлы под правильными именами, проверяет их
+(сигнатура wasm, размер) и печатает два оставшихся шага (условный Threads + проверка в
+DevTools). Откат — `bash cyberchess-install-nnue.sh --restore`. Самопроверен на отрицательных
+контролях (отказ без аргументов и на не-wasm, боевые файлы при отказе не трогаются).
+
+Порядок для основателя:
+```bash
+# 1. скачать stockfish-nnue-16.zip с https://github.com/nmrugg/stockfish.js/releases/latest, распаковать
+# 2. из корня репозитория:
+bash cyberchess-install-nnue.sh путь/stockfish-nnue-16.js путь/stockfish-nnue-16.wasm [путь/...worker.js]
+# 3. следовать двум напечатанным шагам, затем выкатить фронт
+```
+
+---
+
 ## Уровень 2 — Drop-in NNUE binary swap (30 мин)
 
-**Что:** заменить `/public/stockfish.{js,wasm}` на NNUE-вариант от nmrugg.
+**Что:** заменить `frontend/public/stockfish-18-lite.{js,wasm}` (файл, который грузит приложение) на NNUE-вариант от nmrugg.
 
 **Выгода:** **3-5× быстрее** + значительно точнее оценка позиции.
 
@@ -37,10 +84,10 @@
    - `stockfish-nnue-16-single.js`
    - `stockfish-nnue-16-single.wasm`
    - `stockfish-nnue-16-single.worker.js` (для multi-threaded)
-4. Замени `frontend/public/stockfish.js` и `frontend/public/stockfish.wasm` на новые.
-5. Если многопоточный — также положи `.worker.js` в `/public/`.
+4. Замени `frontend/public/stockfish-18-lite.js` и `frontend/public/stockfish-18-lite.wasm` на новые (сохранив ИМЕНА — их ждёт `new Worker("/stockfish-18-lite.js")`; либо переименуй новые файлы под них, либо поправь путь в `page.tsx`).
+5. Если многопоточный — также положи `.worker.js` в `/public/` и убедись, что имя совпадает с тем, что ищет js-обёртка движка.
 6. Backup старых файлов в `/public/stockfish-legacy/` на всякий случай.
-7. `git add frontend/public/stockfish.*` + commit.
+7. `git add frontend/public/stockfish-18-lite.*` + commit.
 
 ### Проверка после деплоя
 
@@ -53,8 +100,8 @@
 Если NNUE-бинарник сломается:
 ```bash
 cd frontend/public
-cp stockfish-legacy/stockfish.js stockfish.js
-cp stockfish-legacy/stockfish.wasm stockfish.wasm
+cp stockfish-legacy/stockfish-18-lite.js stockfish-18-lite.js
+cp stockfish-legacy/stockfish-18-lite.wasm stockfish-18-lite.wasm
 ```
 
 ---

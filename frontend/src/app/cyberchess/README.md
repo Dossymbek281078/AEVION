@@ -42,10 +42,10 @@ The composite score better reflects skill growth than any result-only system.
 | 12 chess variants (Atomic, KotH, Twin Kings, ...)  | partial  | partial   | ✅                |
 | Game DNA / Game Insights AI cards                  | ❌       | partial   | ✅                |
 | Ghost Duel (vs your past-self)                     | ❌       | ❌        | ✅                |
-| Multiverse mode (parallel alt-history)             | ❌       | ❌        | ✅                |
+| ~~Multiverse mode (parallel alt-history)~~         | ❌       | ❌        | ⚠️ вырезан (dead code) |
 | Stockfish 18 NNUE multi-threaded (open-source)     | ✅       | ✅        | ✅                |
 
-**9 unique killer features** that don't exist on the other two.
+**Unique killer features** (see the ✅-only rows above) that don't exist on the other two. Multiverse больше не в счёте — вырезан (dead code).
 
 ---
 

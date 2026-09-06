@@ -60,7 +60,6 @@ import {
   validateWebhookUrl,
 } from "../services/qcoreai/userWebhooks";
 import {
-  updateRun,
   applyRefinement,
   buildHistoryContext,
   buildThreadContext,
@@ -3649,7 +3648,11 @@ async function runBatchItem(opts: {
       const why = "Месячная квота токенов исчерпана — элемент batch не запускался";
       try {
         await insertMessage({ runId: opts.runId, role: "system", content: why, ordering: 1 });
-        await updateRun(opts.runId, { status: "error", error: why });
+        // finishRun, а не несуществующий updateRun: тем же вызовом завершают
+        // run все соседние ветки (см. штатный выход этого же помощника ниже).
+        // Мерж 06.09: updateRun не экспортировался нигде — vitest это не
+        // ловит (транспиляция без типов, а ветка ошибочная), поймал tsc.
+        await finishRun(opts.runId, "error", { error: why });
       } catch { /* след важнее падения; статус останется видимым по сообщению */ }
       return { costUsd: 0, status: "error" };
     }

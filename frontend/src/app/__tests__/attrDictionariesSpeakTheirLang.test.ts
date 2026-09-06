@@ -67,3 +67,22 @@ describe("словари атрибутов говорят своим языко
     expect(/[А-Яа-яЁё]/.test(revenueTip("de", 10, 1))).toBe(false);
   });
 });
+
+describe("qventure открыт доводчику (обёртка notranslate снята с модуля)", () => {
+  // 06.09.2026: ветка attrs-wave добавила точечный опт-аут в ResultView, но
+  // модульную обёртку в layout снять забыла — доводчик не трогал /qventure
+  // ВООБЩЕ, и EN-гость видел русскую страницу целиком (замер user-05:
+  // RU-доля 76% не сдвинулась после посадки). Две половины контракта:
+  // модуль открыт, а опт-аут живёт ТОЛЬКО там, где проза родится английской.
+  it("layout не оборачивает модуль в notranslate", () => {
+    const s = readFileSync(join(APP, "qventure", "layout.tsx"), "utf8");
+    expect(/translate="no"|notranslate/.test(s.replace(/\/\/[^\n]*/g, "")),
+      "в layout вернулась обёртка notranslate — доводчик снова слеп ко всему модулю",
+    ).toBe(false);
+  });
+  it("точечный опт-аут на ResultView остался", () => {
+    const s = readFileSync(join(APP, "qventure", "_result.tsx"), "utf8");
+    expect(s, "ResultView потерял notranslate — мемо поедет рунглишем")
+      .toContain('translate="no"');
+  });
+});

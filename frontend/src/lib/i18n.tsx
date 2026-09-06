@@ -208,6 +208,25 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
         return;
       }
     } catch {}
+    // Кука — РАВНОПРАВНЫЙ источник выбора, а не только зеркало для SSR.
+    // Живой замер 06.09.2026: пре-гидрационный скрипт корневого макета
+    // честно ставил lang=ru из куки (след data-lang-src=cookie оставался),
+    // а этот эффект, не найдя localStorage, звал detectBrowserLang() и
+    // ПЕРЕБИВАЛ выбор догадкой — html возвращался в en. У одного выбора
+    // было два хранилища с разными читателями (класс «два ключа одной
+    // личности»): SSR и пре-скрипт верили куке, клиент — только localStorage.
+    // Кука переживает чистку storage и приходит с других вкладок — выбор
+    // старше догадки.
+    try {
+      const m = document.cookie.match(new RegExp(`(?:^|; )${LANG_COOKIE}=([^;]*)`));
+      const fromCookie = m ? decodeURIComponent(m[1]) : null;
+      if (isLang(fromCookie)) {
+        setLangState(fromCookie);
+        try { localStorage.setItem(STORAGE_KEY, fromCookie); } catch {}
+        setLangReady(true);
+        return;
+      }
+    } catch {}
     setLangState(detectBrowserLang());
     setLangReady(true);
   }, []);

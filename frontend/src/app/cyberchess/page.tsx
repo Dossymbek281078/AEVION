@@ -2164,7 +2164,14 @@ export default function CyberChessPage(){
     fetch("/api-backend/api/cyberchess-spectator/publish",{
       method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify(payload),
-    }).then(r=>r.ok?r.json():null).then(d=>{
+    }).then(r=>{
+      // Трансляцию включили без входа: публиковать нельзя (401/403). Раньше
+      // запрос бил на КАЖДЫЙ ход и сыпал 403 в консоль бесконечно. Гасим
+      // тумблер — эффект «на выключении» отзовёт стрим, и человек увидит, что
+      // трансляция выключена (для неё нужен вход), вместо немого потока ошибок.
+      if(r.status===401||r.status===403){sSpectatorPublish(false);return null;}
+      return r.ok?r.json():null;
+    }).then(d=>{
       if(d?.gameId)spectatorGameIdRef.current=d.gameId;
       // Best-effort AI VoiceCoach broadcast — only when game is live, has a
       // last move, and isn't already finished. Backend throttles per gameId

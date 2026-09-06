@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import { useCcI18n } from "../i18n";
 import { loadEstimateFromStorage } from "../ratingCalibration";
 import { tournamentUserId } from "../tournaments/playerIdentity";
+import { svyazPoteryana } from "./svyaz";
 
 type TimeControl = "60+0" | "180+0" | "300+5" | "600+10" | "1800+0";
 
@@ -101,6 +102,8 @@ export default function CyberChessMatchmakingPage() {
   const [state, setState] = useState<QueueState>({ phase: "idle" });
   const userIdRef = useRef<string>("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const oshibkiPodryadRef = useRef(0);
+  const [netSvyazi, setNetSvyazi] = useState(false);
   const sseRef = useRef<EventSource | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startedAtRef = useRef<number>(0);
@@ -211,7 +214,10 @@ export default function CyberChessMatchmakingPage() {
         `/api-backend/api/cyberchess/matchmaking/queue/status?userId=${encodeURIComponent(userId)}`,
         { cache: "no-store" },
       );
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data = await r.json();
+      oshibkiPodryadRef.current = 0;
+      setNetSvyazi(false);
       if (!data?.ok) return;
       if (data.status === "matched" && data.matchId) {
         handleMatched({
@@ -233,7 +239,11 @@ export default function CyberChessMatchmakingPage() {
         });
       }
     } catch {
-      // network blip — keep polling
+      // Одиночный сбой сети — обычное дело, опрос продолжается. Но если
+      // подряд не отвечает несколько раз, молчать нельзя: экран показывает
+      // бегущий счётчик и уверяет, что поиск идёт.
+      oshibkiPodryadRef.current += 1;
+      setNetSvyazi(svyazPoteryana(oshibkiPodryadRef.current));
     }
   }, [handleMatched]);
 
@@ -512,6 +522,14 @@ export default function CyberChessMatchmakingPage() {
                 <p className="planet-muted" style={{ fontSize: 13 }}>
                   Прошло: {formatDuration(state.elapsedMs)} · Ожидание ≈ {formatDuration(state.estimatedWaitMs)}
                 </p>
+                {netSvyazi && (
+                  <p
+                    role="status"
+                    style={{ fontSize: 13, color: "var(--pl-danger)", textAlign: "center", margin: 0 }}
+                  >
+                    Сервер не отвечает — поиск продолжается, но очередь сейчас не обновляется.
+                  </p>
+                )}
               </div>
 
               {/* Queue visualization */}

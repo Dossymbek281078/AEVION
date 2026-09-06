@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import type { Lsr, Resource, SmetaPosition, AppliedCoefficient, Rate } from "../../types";
+import type { Lsr, Resource, SmetaPosition, AppliedCoefficient, Rate, AiNotice } from "../../types";
 import { registerRuntimeRate, clearRuntimeRates } from "../../corpus";
 import { checkDuplicateMaterial } from "./duplicateMaterial";
 import { checkMaterialPriceUnjustified } from "./materialPriceUnjustified";

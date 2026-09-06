@@ -131,7 +131,7 @@ export default function CyberChessOfflinePage() {
               lineHeight: 1.7,
             }}
           >
-            <li>Игра против AI (Stockfish, любой уровень)</li>
+            <li>Игра против ИИ (Stockfish, любой уровень)</li>
             <li>Задачи, загруженные заранее</li>
             <li>Анализ позиции локальным движком</li>
             <li>Просмотр истории партий из локального хранилища</li>

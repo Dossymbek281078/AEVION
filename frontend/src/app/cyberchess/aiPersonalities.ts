@@ -189,7 +189,7 @@ export const AI_PERSONALITIES: AiPersonality[] = [
     realName: "Bobby Fischer",
     emoji: "⚔",
     description:
-      "Энергичная игра, глубокая дебютная подготовка. Любит ясные планы и разменные.",
+      "Энергичная игра, глубокая дебютная подготовка. Любит ясные планы и разменные варианты.",
     eloRange: [2650, 2850],
     style: {
       aggressiveness: 0.7,

@@ -25,6 +25,11 @@ export type LensId = "scientist" | "data_analyst" | "economist" | "lawyer";
 
 export interface LensOutput {
   lens: LensId;
+  /**
+   * Ответила ли МОДЕЛЬ по этой линзе. Отсутствует у записей, сделанных до
+   * 03.09.2026 — там ответа на этот вопрос нет, и подставлять его нельзя.
+   */
+  live?: boolean;
   role: string;
   headline: string;
   points: string[];
@@ -36,6 +41,10 @@ export interface MemoOutput {
   memo: string;
   aiProvider: string;
   aiUsed: boolean;
+  /** Сколько из aiTotal частей пришло ОТ МОДЕЛИ. Отсутствует у старых записей. */
+  aiLive?: number;
+  /** Всего частей: четыре линзы плюс сведение. */
+  aiTotal?: number;
 }
 
 const ROLE_META: Record<LensId, { role: string; brief: string }> = {
@@ -188,6 +197,7 @@ async function runLens(
       headline: String(parsed.headline || fallback.headline).slice(0, 200),
       points: sanitizeList(parsed.points, fallback.points),
       risks: sanitizeList(parsed.risks, fallback.risks),
+      live: true,
     };
   } catch {
     return fallback;
@@ -308,9 +318,11 @@ async function runSynthesis(
   input: AnalysisInput,
   result: AnalysisResult,
   lenses: LensOutput[]
-): Promise<string> {
+  // Возвращаем ПАРУ: текст и признак «это ответ модели». Раньше возвращалась
+  // одна строка, и отличить ответ от заготовки было нельзя — обе просто строки.
+): Promise<{ text: string; live: boolean }> {
   const fallback = deterministicMemo(result, input);
-  if (provider === "stub") return fallback;
+  if (provider === "stub") return { text: fallback, live: false };
 
   const system: ChatMessage = {
     role: "system",
@@ -333,9 +345,11 @@ async function runSynthesis(
     const model = providerDefaultModel(provider);
     const { reply } = await callProvider(provider, [system, user], model, 0.5);
     const text = reply.trim();
-    return text.length > 40 ? text : fallback;
+    // Слишком короткий ответ — это тоже НЕ ответ модели: дальше идёт
+    // заготовка, и признак обязан это отражать.
+    return text.length > 40 ? { text, live: true } : { text: fallback, live: false };
   } catch {
-    return fallback;
+    return { text: fallback, live: false };
   }
 }
 
@@ -345,5 +359,19 @@ export async function runCouncil(input: AnalysisInput, result: AnalysisResult): 
   const lensIds: LensId[] = ["scientist", "data_analyst", "economist", "lawyer"];
   const lenses = await Promise.all(lensIds.map((id) => runLens(id, provider, input, result)));
   const memo = await runSynthesis(provider, input, result, lenses);
-  return { lenses, memo, aiProvider: provider, aiUsed: provider !== "stub" };
+  // 🔴 ЗДЕСЬ БЫЛО `aiUsed: provider !== "stub"` — признак считался по НАСТРОЙКЕ,
+  // а не по тому, ответила ли модель. Если поставщик настроен, но вызовы
+  // падают (кончилась квота, битый ключ, провайдер лежит), все четыре линзы и
+  // записка подставлялись заготовкой — а ответ говорил «разбор ИИ», и экран
+  // печатал платящему «Текст собран: живая модель». Замер 03.09.2026.
+  const liveLinz = lenses.filter((l) => l.live === true).length;
+  const aiLive = liveLinz + (memo.live ? 1 : 0);
+  return {
+    lenses,
+    memo: memo.text,
+    aiProvider: provider,
+    aiUsed: aiLive > 0,
+    aiLive,
+    aiTotal: lenses.length + 1,
+  };
 }

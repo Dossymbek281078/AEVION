@@ -31,7 +31,11 @@ describe("AutoTranslate — fragmented text nodes", () => {
   });
 
   it("translates a phrase split across sibling text nodes as one unit", async () => {
-    const n = 3;
+    // Тип ЯВНЫЙ: без него TypeScript сужает n до литерала 3, и проверка
+    // множественного числа ниже становится заведомо ложной (TS2367). Тест при
+    // этом работает верно — жалоба на уровне типов, но она про настоящее:
+    // в разметке остаётся мёртвая ветка, повторяющая логику продукта.
+    const n: number = 3;
     const { container } = await act(async () =>
       render(
         <I18nProvider>

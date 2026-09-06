@@ -402,20 +402,19 @@ const VOICE_IDS: Record<string, string> = {
 // против 50 и 200» выглядит щедро. На деле это было втрое МЕНЬШЕ, чем у
 // бесплатного тарифа. Правя любое число здесь, сперва посмотрите на его
 // единицу, а не на соседей по строке.
+// tts — в ЗНАКАХ за месяц. До 05.09.2026 у free стояло 100000 при 30000 у
+// pro: покупка Pro снижала лимит озвучки втрое, а бесплатный тариф стоил нам
+// до ~$22/чел в месяц одного ElevenLabs. Лишний ноль у free убран; тарифы
+// обязаны быть монотонными (сторож рядом в tests/). Числа вынесены основателю:
+// Desktop\АЕВИОН\05-DevHub\2026-09-05-DevHub-доведение-что-сделано.md.
+// generate — генерации кода (мультифайловая, с vision-входом). До 02.09.2026
+// самая дорогая возможность модуля не имела потолка вовсе; 05.09 числа
+// уточнены (30/1000), потолок у pro поставлен намеренно — safety, не упаковка.
+// speech и translate заведены 02.09.2026 вместе со своими квотами.
 const TIER_LIMITS: Record<StudioTier, Record<CapabilityKey, number>> = {
-  free:       { video: 3,   image: 10,  tts: 100000, music: 5,   deploy: 10, speech: 5,    translate: 50, generate: 20 },
-  // tts у платного тарифа поднят до уровня бесплатного 01.09.2026. Было 30000
-  // против 100000 у free — то есть ЗАПЛАТИВШИЙ получал втрое МЕНЬШЕ. Единица у
-  // обоих одна (символы текста: и проверка, и списание считают text.trim()),
-  // так что это не разные меры, а инверсия.
-  //
-  // 100000 здесь — ПОЛ, а не ответ. Настоящее число ждёт основателя: у всех
-  // прочих возможностей платный даёт в 17–20 раз больше бесплатного, и по этой
-  // закономерности озвучке причиталось бы около 2 000 000. Ставлю ровно
-  // столько же, сколько у free, потому что «платный не может давать меньше
-  // бесплатного» — не решение об упаковке, а отказ продавать ухудшение.
-  pro:        { video: 50,  image: 200, tts: 100000, music: 100, deploy: -1, speech: 100,  translate: 1000, generate: -1 },
-  enterprise: { video: -1,  image: -1,  tts: -1,    music: -1,  deploy: -1, speech: -1,   translate: -1, generate: -1 },
+  free:       { video: 3,   image: 10,  tts: 10000,  music: 5,   deploy: 10, speech: 5,    translate: 50,   generate: 30 },
+  pro:        { video: 50,  image: 200, tts: 200000, music: 100, deploy: -1, speech: 100,  translate: 1000, generate: 1000 },
+  enterprise: { video: -1,  image: -1,  tts: -1,     music: -1,  deploy: -1, speech: -1,   translate: -1,   generate: -1 },
 };
 
 // In-memory fallback: "userId:month:capability" → count
@@ -2308,11 +2307,7 @@ devhubRouter.post("/projects/:id/generate", dhCostlyLimit("dhgenerate"), async (
   // предел частоты, а он ограничивает темп, а не сумму. Арифметика потолка
   // 02.09.2026: одна генерация до $0.84 на claude-opus-4-8 (модель на проде
   // задана умолчанием), при 30/мин это $36 тысяч в сутки с одного адреса.
-  //
-  // Платному тарифу поставлен БЕЗЛИМИТ намеренно: генерация и есть то, за
-  // что он платит. Число 20 у бесплатного — не решение об упаковке, а
-  // отказ держать поверхность без верхней границы; меняется одной строкой
-  // в таблице тарифов, когда основатель назовёт своё.
+  // Числа тарифов см. в TIER_LIMITS — уточнены 05.09.2026.
   const genCredit = await checkCredit(userId, "generate");
   if (!genCredit.allowed) {
     return res.status(402).json({
@@ -2323,8 +2318,10 @@ devhubRouter.post("/projects/:id/generate", dhCostlyLimit("dhgenerate"), async (
   }
 
   try {
+    // Списание НЕ здесь: оно живёт внутри runProjectGeneration и покрывает
+    // все точки генерации разом (обычную, потоковую, проектирование базы).
+    // Второе списание тут брало бы с человека дважды за одну генерацию.
     const генерация = await runProjectGeneration(project, userId, prompt, resolvedStack, targetFiles, images, history);
-    await debitQuietly(userId, "generate");
     res.json({ ...генерация, ...creditNote(genCredit) });
   } catch (e: any) {
     if (typeof e?.message === "string" && e.message.startsWith("NO_VISION_PROVIDER")) {
@@ -2339,6 +2336,10 @@ async function runProjectGeneration(project: DevHubProject, userId: string, prom
   const existingFiles = await dbListFiles(project.id);
   const { files: generatedFiles, aiGenerated, continued, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history, onProgress,
       меткаГенерации(userId), userId);
+  // Модель отработала — вот теперь генерация потрачена. Списание здесь, в
+  // общем помощнике, покрывает все точки генерации разом: обычную, потоковую
+  // и проектирование базы. Вызывающие ручки НЕ списывают сами — иначе дважды.
+  await debitQuietly(userId, "generate");
   onProgress?.("saving");
   let storage: "db" | "memory" = "db";
   const cpRes = await createCheckpoint(project.id, userId, `AI: ${prompt.slice(0, 80)}`, generatedFiles.map((f) => f.path), existingFiles);
@@ -2388,10 +2389,10 @@ async function runProjectGeneration(project: DevHubProject, userId: string, prom
 // saving), then {type:"result", ...same payload as /generate} or
 // {type:"error", error}. Honest stages only — every event corresponds to
 // something actually happening, never a fake progress animation.
-devhubRouter.post("/projects/:id/generate/stream", async (req, res) => {
+devhubRouter.post("/projects/:id/generate/stream", dhCostlyLimit("dhgenerate"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
-  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  const project = await loadOwnedProjectOrReply(String(req.params.id), userId, res);
   if (!project) return;
   const { prompt, targetFile, targetFiles: targetFilesRaw, stack, imageBase64, imageMediaType, history: historyRaw } = req.body || {};
   if (!prompt || typeof prompt !== "string") {
@@ -2425,6 +2426,17 @@ devhubRouter.post("/projects/:id/generate/stream", async (req, res) => {
     ? targetFilesRaw.filter((f: unknown): f is string => typeof f === "string" && f.trim().length > 0).map((f: string) => f.trim())
     : (typeof targetFile === "string" && targetFile.trim() ? [targetFile.trim()] : []);
 
+  // Проверка квоты ДО открытия SSE: после flushHeaders статус уже не сменить,
+  // и отказ пришлось бы маскировать событием.
+  const genCredit = await checkCredit(userId, "generate");
+  if (!genCredit.allowed) {
+    return res.status(402).json({
+      error: "Monthly generate limit reached",
+      tier: genCredit.tier, used: genCredit.used, limit: genCredit.limit,
+      upgrade: "/studio#upgrade",
+    });
+  }
+
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
@@ -2455,10 +2467,10 @@ devhubRouter.post("/projects/:id/generate/stream", async (req, res) => {
 // provision a live database — hosting needs a real isolation design and is a
 // separate feature; generating files that pretend otherwise would be the same
 // class of lie the deploy paths just got cured of.
-devhubRouter.post("/projects/:id/database/design", async (req, res) => {
+devhubRouter.post("/projects/:id/database/design", dhCostlyLimit("dhdbdesign"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
-  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  const project = await loadOwnedProjectOrReply(String(req.params.id), userId, res);
   if (!project) return;
   const { description } = req.body || {};
   if (!description || typeof description !== "string" || !description.trim()) {
@@ -2477,6 +2489,14 @@ devhubRouter.post("/projects/:id/database/design", async (req, res) => {
     `2. ${clientFile} — a minimal typed data-access helper that reads the connection string from ` +
     `process.env.DATABASE_URL (or os.environ for Python), creates one shared pool, exports a function ` +
     `to apply schema.sql, and one example CRUD function per table. No ORM — plain parameterized queries.`;
+  const genCredit = await checkCredit(userId, "generate");
+  if (!genCredit.allowed) {
+    return res.status(402).json({
+      error: "Monthly generate limit reached",
+      tier: genCredit.tier, used: genCredit.used, limit: genCredit.limit,
+      upgrade: "/studio#upgrade",
+    });
+  }
   try {
     const result = await runProjectGeneration(project, userId, prompt, project.stack, ["db/schema.sql", clientFile]);
     const canProvision = !!process.env.DEVHUB_DB_ADMIN_URL;
@@ -2783,7 +2803,10 @@ devhubRouter.post("/projects/:id/deploy", async (req, res) => {
       upgrade: "/studio#upgrade",
     });
   }
-  await debitQuietly(userId, "deploy");
+  // Списание — только когда выкатка реально стартовала (ниже, в ветке
+  // per-project). Раньше квота списывалась здесь, а без
+  // DEVHUB_RAILWAY_PER_PROJECT обработчик дальше отказывал 501-м: free-тариф
+  // сжигал все 10 деплоев месяца, не получив ни одного.
 
   const deploymentId = crypto.randomUUID();
   const deploySlug = slugify(project.name) + "-" + project.id.slice(0, 8);
@@ -2827,6 +2850,9 @@ devhubRouter.post("/projects/:id/deploy", async (req, res) => {
       try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
       return res.status(502).json({ error: result.error, deploymentId: deployment.id });
     }
+
+    // Выкатка реально стартовала — вот теперь квота потрачена честно.
+    await debitQuietly(userId, "deploy");
 
     // Remember the service so a redeploy reuses it instead of creating a new
     // billable container on every click.
@@ -2894,119 +2920,12 @@ Built, but ${url} did not answer 2xx in time`;
     });
   }
 
-  if (railwayToken && railwayProjectId && railwayServiceId) {
-    // Real Railway API deployment via GraphQL mutation
-    (async () => {
-      try {
-        const gqlResp = await fetch("https://backboard.railway.app/graphql/v2", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${railwayToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            query: `mutation { deploymentCreate(input: { projectId: "${railwayProjectId}", serviceId: "${railwayServiceId}" }) { id status } }`,
-          }),
-        });
-        const gqlData = await gqlResp.json() as any;
-        const railwayDeploymentId = gqlData?.data?.deploymentCreate?.id as string | undefined;
-        const railwayErrors = Array.isArray(gqlData?.errors) ? gqlData.errors : null;
-
-        // GraphQL returns HTTP 200 even when the mutation itself failed — errors
-        // (or a missing deployment id) ride in the body, not the status code.
-        // Without this check a broken/expired Railway token or bad project/service
-        // id would still flip the deployment to "building" then "live" on a
-        // fabricated *.up.railway.app URL that never actually deployed anything.
-        if (!gqlResp.ok || railwayErrors || !railwayDeploymentId) {
-          const errMsg = railwayErrors?.map((e: any) => e?.message).filter(Boolean).join("; ")
-            || `Railway API returned no deployment id (HTTP ${gqlResp.status})`;
-          deployment.status = "failed";
-          deployment.buildLog = `Railway deploy failed: ${errMsg}`;
-          deployment.completedAt = now();
-          try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
-          captureException(new Error(`Railway deploymentCreate failed: ${errMsg}`), { route: "devhub/deploy:railway", projectId: project!.id });
-          return;
-        }
-
-        const railwayDeployUrl = `https://${deploySlug}.up.railway.app`;
-
-        deployment.status = "building";
-        deployment.deployUrl = railwayDeployUrl;
-        deployment.buildLog = railwayDeploymentId ?? null;
-        try {
-          await dbSaveDeployment(deployment);
-        } catch {
-          memDeployments.set(deployment.id, deployment);
-        }
-
-        // Verify the page actually serves before calling it live — same
-        // honesty rule as the CF Pages / Vercel paths.
-        deferred(async () => {
-          const d = memDeployments.get(deployment.id) ?? deployment;
-          const serves = await verifyDeploymentServes(railwayDeployUrl);
-          if (serves) {
-            d.status = "live";
-          } else {
-            d.status = "failed";
-            d.buildLog = (d.buildLog || "") + " | verify: deployed page is not serving (non-2xx after retries)";
-          }
-          d.completedAt = now();
-          try {
-            await dbSaveDeployment(d);
-          } catch {
-            memDeployments.set(d.id, d);
-          }
-          if (project && serves) {
-            project.status = "live";
-            project.deployUrl = railwayDeployUrl;
-            project.updatedAt = now();
-            try {
-              await dbSaveProject(project);
-            } catch {
-              memProjects.set(project.id, project);
-            }
-          }
-        }, 5000);
-      } catch (e: any) {
-        // Railway API unreachable. This used to SIMULATE a successful build
-        // on a fabricated URL — a deploy that never happened reported as
-        // live. Honest now: the deployment failed, with the reason.
-        deployment.status = "failed";
-        deployment.buildLog = `Railway API unreachable: ${e?.message || "network error"}`;
-        deployment.completedAt = now();
-        try {
-          await dbSaveDeployment(deployment);
-        } catch {
-          memDeployments.set(deployment.id, deployment);
-        }
-      }
-    })();
-  } else {
-    // Simulate build asynchronously — no Railway token
-    deferred(async () => {
-      deployment.status = "live";
-      deployment.deployUrl = deployUrl;
-      deployment.buildLog = `Build started at ${deployment.triggeredAt}\nInstalling dependencies...\nBuilding...\nDeployment complete!\nLive at: ${deployUrl}`;
-      deployment.completedAt = now();
-      try {
-        await dbSaveDeployment(deployment);
-      } catch {
-        memDeployments.set(deployment.id, deployment);
-      }
-      if (project) {
-        project.status = "live";
-        project.deployUrl = deployUrl;
-        project.updatedAt = now();
-        try {
-          await dbSaveProject(project);
-        } catch {
-          memProjects.set(project.id, project);
-        }
-      }
-    }, 3000);
-  }
-
-  res.json({ deploymentId, status: "building", deployUrl, message: "Deployment started" });
+  // Дальше этой точки управление не доходит НИКОГДА: без DEVHUB_RAILWAY_PER_PROJECT
+  // выше отвечает 501, с флагом — ветка per-project возвращается раньше. Здесь
+  // лежали сырой Railway GraphQL по общему RAILWAY_SERVICE_ID и «симуляция сборки»,
+  // ставившая status=live с выдуманным URL, — ровно тот класс, который §10
+  // объявляет убитым. Мёртвый опасный код удалён 05.09.2026, чтобы один неверный
+  // if при будущей правке не вернул фальшивые зелёные выкатки.
 });
 
 // GET /api/devhub/projects/:id/deployments/:deployId/log — SSE build log stream
@@ -3016,39 +2935,63 @@ devhubRouter.get("/projects/:id/deployments/:deployId/log", async (req, res) => 
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
 
-  const deploySlug = slugify(project.name) + "-" + project.id.slice(0, 8);
-  const deployUrl = `https://${deploySlug}.aevion.app`;
+  // До 05.09.2026 здесь жили ПЯТЬ ВЫДУМАННЫХ строк по таймеру 500 мс и
+  // сочинённый из имени проекта URL — ни deployId, ни настоящий статус не
+  // читались вовсе. Ровно тот класс «журнал сборки, который врёт», который
+  // CLAUDE.md §10 объявляет убитым. Теперь стрим читает НАСТОЯЩУЮ запись
+  // выкатки: отдаёт строки её buildLog по мере появления и завершается
+  // настоящим статусом с настоящим адресом.
+  const deployId = String(req.params.deployId);
 
-  // SSE headers
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no");
   res.flushHeaders();
 
-  const LOG_STEPS = [
-    "[1/5] Installing dependencies...",
-    "[2/5] Type checking...",
-    "[3/5] Building application...",
-    "[4/5] Deploying to edge...",
-    "[5/5] Health check passed",
-  ];
+  const send = (event: Record<string, unknown>) => {
+    try { res.write(`data: ${JSON.stringify(event)}\n\n`); } catch { /* socket closed */ }
+  };
 
-  let step = 0;
-  const interval = setInterval(() => {
-    if (step < LOG_STEPS.length) {
-      res.write(`data: ${JSON.stringify({ line: LOG_STEPS[step] })}\n\n`);
-      step++;
-    } else {
-      res.write(`data: ${JSON.stringify({ done: true, deployUrl })}\n\n`);
-      clearInterval(interval);
-      res.end();
+  async function readDeployment(): Promise<DevHubDeployment | null> {
+    try {
+      const all = await dbListDeployments(project!.id, 50);
+      return all.find((d) => d.id === deployId) ?? null;
+    } catch {
+      return memDeployments.get(deployId) ?? null;
     }
-  }, 500);
+  }
 
-  req.on("close", () => {
-    clearInterval(interval);
-  });
+  let sentLines = 0;
+  let closed = false;
+  req.on("close", () => { closed = true; });
+
+  const startedAt = Date.now();
+  const TIMEOUT_MS = 5 * 60_000;
+
+  const tick = async () => {
+    if (closed) return;
+    const d = await readDeployment();
+    if (!d || d.projectId !== project!.id) {
+      send({ line: "Выкатка не найдена — журнала нет.", done: true, failed: true });
+      res.end();
+      return;
+    }
+    const lines = (d.buildLog || "").split("\n").filter(Boolean);
+    for (; sentLines < lines.length; sentLines++) send({ line: lines[sentLines] });
+    if (d.status !== "pending" && d.status !== "building") {
+      send({ done: true, failed: d.status !== "live", deployUrl: d.deployUrl ?? null });
+      res.end();
+      return;
+    }
+    if (Date.now() - startedAt > TIMEOUT_MS) {
+      send({ line: "Журнал ждал 5 минут — сборка всё ещё не завершилась. Загляните во вкладку «Выкатки» позже.", done: true, failed: false, deployUrl: null });
+      res.end();
+      return;
+    }
+    setTimeout(() => { tick().catch(() => { try { res.end(); } catch { /* closed */ } }); }, 2000);
+  };
+  tick().catch(() => { try { res.end(); } catch { /* closed */ } });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -3945,14 +3888,25 @@ function publicSnippet(s: DevHubSnippet, viewerId: string) {
   return { ...rest, mine: userId === viewerId };
 }
 
+// Служебные сниппеты смоук-задач помечены тегом `smoke` и не должны попадать
+// на публичную полку витрины: замер 05.09.2026 — все 22 записи выдачи были
+// «console.log hello from smoke test». Явный запрос ?tag= или ?user= их
+// по-прежнему находит, поэтому сами смоук-проверки не ломаются.
+function isServiceSnippet(s: DevHubSnippet): boolean {
+  return s.tags.some((t) => t.toLowerCase() === "smoke" || t.toLowerCase().startsWith("smoke-"));
+}
+
 // GET /api/devhub/snippets — public list, optional ?tag=X&user=Y&limit=N
 devhubRouter.get("/snippets", async (req, res) => {
   const viewerId = requesterId(req, verifyBearerOptional(req)?.sub);
   const tag = req.query.tag ? String(req.query.tag).trim() : undefined;
   const userId = req.query.user ? String(req.query.user).trim() : undefined;
   const limit = req.query.limit ? Math.min(Math.max(parseInt(String(req.query.limit), 10) || 50, 1), 200) : 50;
+  const hideService = !tag && !userId;
   try {
-    const snippets = await dbListSnippets({ tag, userId, limit });
+    // Запрашиваем с запасом: после отсева служебных должно остаться до limit.
+    const fetched = await dbListSnippets({ tag, userId, limit: hideService ? Math.min(limit + 50, 250) : limit });
+    const snippets = (hideService ? fetched.filter((s) => !isServiceSnippet(s)) : fetched).slice(0, limit);
     res.json({ snippets: snippets.map((s) => publicSnippet(s, viewerId)), total: snippets.length });
   } catch {
     let arr = [...memSnippets.values()];
@@ -3961,6 +3915,7 @@ devhubRouter.get("/snippets", async (req, res) => {
       const t = tag.toLowerCase();
       arr = arr.filter((s) => s.tags.some((tg) => tg.toLowerCase() === t));
     }
+    if (hideService) arr = arr.filter((s) => !isServiceSnippet(s));
     const snippets = arr.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit);
     // Пустая память при УПАВШЕМ чтении — это не «полка пуста», а «полку не
     // прочитали». Замер 28.08 (роутер с нечитаемой базой) показал, что ручка
@@ -4258,7 +4213,7 @@ devhubRouter.post("/media/email", async (req, res) => {
 });
 
 // POST /api/devhub/media/payment-link — create Lemon Squeezy checkout link
-devhubRouter.post("/media/payment-link", async (req, res) => {
+devhubRouter.post("/media/payment-link", dhCostlyLimit("dhpaylink"), async (req, res) => {
   const { name, amountCents, description, successUrl } = req.body || {};
   if (!name || typeof name !== "string") return res.status(400).json({ error: "name required" });
   const amt = Number(amountCents);
@@ -4744,7 +4699,7 @@ function buildVoiceCloneMultipart(opts: { name: string; description?: string; mi
 }
 
 // POST /api/devhub/media/voice-clone — ElevenLabs custom voice from sample (requires confirm:true after preview)
-devhubRouter.post("/media/voice-clone", dhCostlyLimit("dhvclone"), async (req, res) => {
+devhubRouter.post("/media/voice-clone", dhCostlyLimit("dhvoiceclone"), async (req, res) => {
   const { name, description, sampleBase64, mimeType = "audio/mpeg", confirm } = req.body || {};
   if (!name || typeof name !== "string" || !name.trim()) return res.status(400).json({ error: "name required" });
   if (!sampleBase64 || typeof sampleBase64 !== "string") return res.status(400).json({ error: "sampleBase64 (audio file) required" });
@@ -4795,7 +4750,7 @@ devhubRouter.post("/media/voice-clone", dhCostlyLimit("dhvclone"), async (req, r
 // POST /api/devhub/media/voice-clone/preview — clone temp voice → TTS sample → delete voice
 // Body: { sampleBase64, mimeType?, previewText? }
 // Response: audio/mpeg of `previewText` rendered with the cloned voice
-devhubRouter.post("/media/voice-clone/preview", dhCostlyLimit("dhvcprev"), async (req, res) => {
+devhubRouter.post("/media/voice-clone/preview", dhCostlyLimit("dhvoiceclone"), async (req, res) => {
   const { sampleBase64, mimeType = "audio/mpeg", previewText } = req.body || {};
   if (!sampleBase64 || typeof sampleBase64 !== "string") return res.status(400).json({ error: "sampleBase64 (audio file) required" });
   if (sampleBase64.length > 12_000_000) return res.status(400).json({ error: "sample too large (max ~9 MB base64)" });
@@ -4927,7 +4882,7 @@ devhubRouter.post("/media/stt", dhCostlyLimit("dhstt"), async (req, res) => {
 });
 
 // POST /api/devhub/media/drive-search — Google Drive file search
-devhubRouter.post("/media/drive-search", async (req, res) => {
+devhubRouter.post("/media/drive-search", dhCostlyLimit("dhdrive"), async (req, res) => {
   const { query = "", limit = 20 } = req.body || {};
   const token = process.env.GOOGLE_DRIVE_ACCESS_TOKEN;
   if (!token) {
@@ -4959,10 +4914,10 @@ devhubRouter.post("/media/drive-search", async (req, res) => {
 });
 
 // POST /api/devhub/projects/:id/drive/import — import Drive file into project files
-devhubRouter.post("/projects/:id/drive/import", async (req, res) => {
+devhubRouter.post("/projects/:id/drive/import", dhCostlyLimit("dhdrive"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
-  const read = await readProject(req.params.id);
+  const read = await readProject(String(req.params.id));
   if (!read.project && read.failed) return replyStorageUnavailable(res);
   const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
@@ -5151,7 +5106,40 @@ type WorkflowStepResult = { step: number; type: string; ok: boolean; output?: an
  * so one failed save no longer passes for a success and no longer takes the
  * rest of the run down with it.
  */
+/** Какая возможность тратится каждым видом шага. Шаги вне списка (email и
+ *  прочие рассыльные) закрыты своими ограничителями. */
+const WORKFLOW_STEP_CAPABILITY: Partial<Record<string, CapabilityKey>> = {
+  code: "generate", image: "image", tts: "tts", music: "music",
+};
+
 async function executeWorkflowStep(
+  project: DevHubProject,
+  userId: string,
+  step: any,
+  i: number
+): Promise<WorkflowStepResult> {
+  // До 05.09.2026 шаги workflow звали те же платные генерации МИМО квот:
+  // месячный предел на image/tts/music обходился простой пересылкой той же
+  // просьбы как шага workflow — до 20 штук за один запрос.
+  const stepType = String(step?.type || "");
+  const stepCap = WORKFLOW_STEP_CAPABILITY[stepType];
+  if (stepCap) {
+    const amount = stepCap === "tts" ? Math.max(1, String(step?.text || "").length) : 1;
+    const credit = await checkCredit(userId, stepCap, amount);
+    if (!credit.allowed) {
+      return {
+        step: i, type: stepType, ok: false,
+        error: `Monthly ${stepCap} limit reached (${credit.used}/${credit.limit}) — the paid tier lifts the ceiling`,
+      };
+    }
+    const result = await executeWorkflowStepInner(project, userId, step, i);
+    if (result.ok) await debitQuietly(userId, stepCap, amount);
+    return result;
+  }
+  return executeWorkflowStepInner(project, userId, step, i);
+}
+
+async function executeWorkflowStepInner(
   project: DevHubProject,
   userId: string,
   step: any,
@@ -5352,10 +5340,10 @@ function groupWorkflowSteps(steps: any[]): number[][] {
 }
 
 // POST /api/devhub/projects/:id/agent/workflow — orchestrate multi-step AI workflow
-devhubRouter.post("/projects/:id/agent/workflow", dhCostlyLimit("dhwf"), async (req, res) => {
+devhubRouter.post("/projects/:id/agent/workflow", dhCostlyLimit("dhworkflow"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
-  const read = await readProject(String(req.params.id));   // как у /projects/:id/generate: с промежуточным слоем тип параметра шире
+  const read = await readProject(String(req.params.id));
   if (!read.project && read.failed) return replyStorageUnavailable(res);
   const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
@@ -5430,10 +5418,10 @@ devhubRouter.get("/agent/templates", (_req, res) => {
 });
 
 // POST /api/devhub/projects/:id/agent/workflow/stream — SSE per-step progress
-devhubRouter.post("/projects/:id/agent/workflow/stream", dhCostlyLimit("dhwfs"), async (req, res) => {
+devhubRouter.post("/projects/:id/agent/workflow/stream", dhCostlyLimit("dhworkflow"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
-  const read = await readProject(String(req.params.id));   // как у /projects/:id/generate: с промежуточным слоем тип параметра шире
+  const read = await readProject(String(req.params.id));
   if (!read.project && read.failed) return replyStorageUnavailable(res);
   const project = read.project;
   if (!project || project.userId !== userId) return res.status(404).json({ error: "project not found" });
@@ -5586,7 +5574,7 @@ devhubRouter.post("/media/whatsapp", async (req, res) => {
 // here — same public-URL scheme as lib/payment/gumroadProvider. No API key needed
 // to generate the link (the URL is a public product page).
 // Body: { permalink: string (slug or full Gumroad URL), email?: string }
-devhubRouter.post("/media/gumroad-checkout", async (req, res) => {
+devhubRouter.post("/media/gumroad-checkout", dhCostlyLimit("dhgumroad"), async (req, res) => {
   const { permalink, email } = req.body || {};
   if (!permalink || typeof permalink !== "string" || !permalink.trim()) return res.status(400).json({ error: "permalink required (Gumroad product slug, e.g. 'my-product')" });
   // Accept a raw slug or a full https://app.gumroad.com/l/<slug> URL.
@@ -5597,7 +5585,22 @@ devhubRouter.post("/media/gumroad-checkout", async (req, res) => {
   const url = email
     ? `https://app.gumroad.com/l/${slug}?wanted_email=${encodeURIComponent(String(email).trim())}`
     : `https://app.gumroad.com/l/${slug}`;
-  res.json({ ok: true, url, provider: "gumroad" });
+
+  // До 05.09.2026 ручка отвечала ok:true на ЛЮБОЙ слаг: при опечатке человек
+  // получал «успех» и ссылку на 404 Gumroad, а вёл он на неё покупателей.
+  // Проверяем существование товара одним запросом. Сетевой сбой НЕ блокирует
+  // (ссылка на свой товар важнее нашего мигнувшего DNS) — но честно помечается.
+  let verified: boolean | null = null;
+  try {
+    const probe = await fetch(url, { method: "HEAD", redirect: "follow", signal: AbortSignal.timeout(5000) });
+    if (probe.status === 404) {
+      return res.status(404).json({ error: `Gumroad product "${slug}" not found — check the permalink` });
+    }
+    verified = probe.ok || (probe.status >= 300 && probe.status < 400);
+  } catch {
+    verified = null; // не дозвонились — ссылку отдаём, но не клянёмся
+  }
+  res.json({ ok: true, url, provider: "gumroad", ...(verified === null ? { verified: false, note: "existence check unreachable" } : { verified }) });
 });
 
 // POST /api/devhub/media/upload-image — upload image to Cloudflare Images (permanent CDN URL)
@@ -5727,7 +5730,7 @@ async function tryAutoUploadToCloudflare(sourceUrl: string): Promise<string | nu
 }
 
 // POST /api/devhub/media/translate — DeepL text translation
-devhubRouter.post("/media/translate", dhCostlyLimit("dhtr"), async (req, res) => {
+devhubRouter.post("/media/translate", dhCostlyLimit("dhtranslate"), async (req, res) => {
   const { text, targetLang, sourceLang, formality } = req.body || {};
   if (!text || typeof text !== "string" || !text.trim()) return res.status(400).json({ error: "text required" });
   if (!targetLang || typeof targetLang !== "string") return res.status(400).json({ error: "targetLang required (e.g. EN, RU, DE, ES, FR)" });
@@ -5810,7 +5813,7 @@ devhubRouter.post("/media/translate", dhCostlyLimit("dhtr"), async (req, res) =>
 });
 
 // POST /api/devhub/projects/:id/files/translate — translate project file → save as new file
-devhubRouter.post("/projects/:id/files/translate", dhCostlyLimit("dhftr"), async (req, res) => {
+devhubRouter.post("/projects/:id/files/translate", dhCostlyLimit("dhtranslate"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
   const read = await readProject(String(req.params.id));
@@ -6034,7 +6037,7 @@ devhubRouter.get("/projects/:id/file-binary", async (req, res) => {
 // Bulk DeepL translate (multi-file × multi-lang)
 // ═════════════════════════════════════════════════════════════════════════════
 
-devhubRouter.post("/projects/:id/files/translate-bulk", dhCostlyLimit("dhftrb"), async (req, res) => {
+devhubRouter.post("/projects/:id/files/translate-bulk", dhCostlyLimit("dhtranslate"), async (req, res) => {
   // Массовый перевод — ПЛАТНЫЙ. Файлы в памяти исчезнут при перезапуске.
   let storageFallback = false;
   const auth = verifyBearerOptional(req);
@@ -6865,7 +6868,7 @@ async function tryAutoUploadAudioToR2(buf: Buffer, contentType: string, key: str
 
 // POST /api/devhub/media/upload-audio — upload audio to Cloudflare R2 (permanent CDN URL)
 // Body: { sourceUrl?: string } OR { base64: string, mimeType?: string, key?: string }
-devhubRouter.post("/media/upload-audio", async (req, res) => {
+devhubRouter.post("/media/upload-audio", dhCostlyLimit("dhupaudio"), async (req, res) => {
   const { sourceUrl, base64, mimeType = "audio/mpeg", key } = req.body || {};
   if (!sourceUrl && !base64) return res.status(400).json({ error: "sourceUrl or base64 required" });
   if (!r2Configured()) {
@@ -6912,7 +6915,7 @@ devhubRouter.post("/media/upload-audio", async (req, res) => {
 // Brevo: create SMTP email template
 // ═════════════════════════════════════════════════════════════════════════════
 
-devhubRouter.post("/media/email-template-create", dhCostlyLimit("dhmail"), async (req, res) => {
+devhubRouter.post("/media/email-template-create", dhCostlyLimit("dhemailtpl"), async (req, res) => {
   const { name, subject, htmlContent, senderEmail, senderName, replyTo, tag, isActive } = req.body || {};
   if (!name || typeof name !== "string") return res.status(400).json({ error: "name required" });
   if (!subject || typeof subject !== "string") return res.status(400).json({ error: "subject required" });

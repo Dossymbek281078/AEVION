@@ -1,0 +1,91 @@
+{
+  // Проверка типов для tests/ — каталог НЕ входит в основной конфиг.
+  //
+  // Замер 04.09.2026: 419 файлов тестов бэкенда не проверялись типами НИ РАЗУ.
+  // `include` основного конфига — только `src/**`, а сборка берёт его. То есть
+  // у 2514 проверок не было страховки, которой пользуется весь рабочий код.
+  // Тот же дефект нашли раньше у scripts/ — см. tsconfig.scripts.json, этот
+  // файл сделан по его образцу.
+  //
+  // Запуск: npm run check:tests
+  //
+  // ПОЧЕМУ ОТДЕЛЬНЫЙ ФАЙЛ, а не расширение include. Основной конфиг
+  // используется сборкой (`tsc` в npm run build) — включение тестов туда
+  // отправило бы их в dist и уронило бы сборку от чужой опечатки в тесте.
+  "extends": "./tsconfig.json",
+  // vitest.config, vitest.setup и prisma.config — тоже код, и тоже были вне
+  // всех конфигов. Ломается такой файл громко (прогон или prisma просто не
+  // стартуют), поэтому риск меньше, но проверка бесплатна: ошибок 0.
+  "include": [
+    "tests/**/*.ts",
+    "src/**/*.ts",
+    "vitest.config.ts",
+    "vitest.setup.ts",
+    "prisma.config.ts"
+  ],
+
+  // ХРАПОВИК, а не разрешение. Список может только УКОРАЧИВАТЬСЯ: починили
+  // файл — убрали строку. 15 файлов из 419, то есть проверяются 404.
+  // Ошибки не сегодняшние — их просто никто не видел, потому что каталог был
+  // вне проверки. Файлы в чужих зонах, поэтому не правлю; но и держать
+  // проверку красной нельзя — красную перестают запускать через неделю.
+  //
+  // Классы, чтобы владельцу было понятно, что чинить:
+  //   * шесть qskyway* — импорт scripts/lib/*.js без типов (TS7016). Лечится
+  //     объявлением .d.ts рядом с модулем. ВНИМАНИЕ: "allowJs": true эту
+  //     ошибку убирает, но даёт 13 ЛОЖНЫХ: TS выводит тип из одной ветки
+  //     JS-функции, а она возвращает разные формы. Проверено, не помогает.
+  //   * apiNotFoundIsJson, buildEmailSilentSkip, planningEmailSilentSkip,
+  //     qrealSaveFailureIsVisible, webhookDeliveryBookkeeping — один и тот же
+  //     приём `warn.mock.calls.map((c) => ...)`: параметр без типа (TS7006).
+  //     Правка на один токен, но в пяти чужих файлах.
+  //   * bureauSecurityHardening — SignOptions у jsonwebtoken импортируется
+  //     как член namespace, которого там нет (TS2694).
+  //   * buildEmailTransports — спред в аргумент без кортежного типа (TS2556).
+  //   * devhub-integrations — `.at()` при target ES2020 (TS2550). На Node
+  //     метод есть, то есть тест работает; вопрос к target, а не к тесту.
+  //   * cyberchessDailySolveBounds — дублированный ключ `day` (TS2783). НЕ
+  //     дефект: спред стоит последним и настоящее значение и уезжает.
+  //     Проверено чтением строки; лечится удалением `day: undefined`.
+  "exclude": [
+    "node_modules",
+    "tests/apiNotFoundIsJson.test.ts",
+    "tests/buildEmailSilentSkip.test.ts",
+    "tests/buildEmailTransports.test.ts",
+    "tests/bureauSecurityHardening.test.ts",
+    "tests/cyberchessDailySolveBounds.test.ts",
+    "tests/devhub-integrations.test.ts",
+    // Приходит С ПРОДОМ, на этой ветке файла нет. Замер пробным мержем
+    // 04.09: без этой строки шаг CI краснеет НА МЕРЖЕ — то есть ровно тогда,
+    // когда проверка нужна, она бы заблокировала слияние чужой работой.
+    // Не дефект: `dates()` отдаёт результат match с запасным пустым массивом,
+    // отсюда параметр типа never у includes. На исполнении массив заполняется.
+    // Лечится одним токеном: `?? ([] as string[])`.
+    "tests/launchDateIsOneNumber.test.ts",
+    "tests/planningEmailSilentSkip.test.ts",
+    "tests/qrealSaveFailureIsVisible.test.ts",
+    "tests/qskywayAirspaceCellId.test.ts",
+    "tests/qskywayCityTwin.test.ts",
+    "tests/qskywayMeasuredOutlines.test.ts",
+    "tests/qskywayNycOpenData.test.ts",
+    "tests/qskywayPlateauHeights.test.ts",
+    "tests/qskywayWikiInfobox.test.ts",
+    "tests/webhookDeliveryBookkeeping.test.ts"
+  ],
+  "compilerOptions": {
+    "noEmit": true,
+    // rootDir основного конфига — src, и он не вмещает tests. Взят корень
+    // РЕПОЗИТОРИЯ, а не бэкенда: tests/gumroadPermalinkGuard.test.ts проверяет
+    // ссылки кассы по исходнику САЙТА, то есть выходит за пределы бэкенда.
+    // Выхода всё равно нет (noEmit), значит ограничение безвредно.
+    "rootDir": "..",
+    // Тесты исполняет vitest, а он ESM. Основной конфиг объявляет commonjs, и
+    // от этого расхождения было 35 ошибок из 55: import.meta и await на
+    // верхнем уровне. Здесь описана РЕАЛЬНОСТЬ, а не желание.
+    "module": "esnext",
+    "moduleResolution": "bundler"
+    // "lib" НЕ задавать: поле не дополняет список, а заменяет. Попытка
+    // поставить ["ES2022"] ради `.at()` выбросила DOM и дала 57 ошибок
+    // вместо 20 — fetch, Response и Headers перестали существовать.
+  }
+}

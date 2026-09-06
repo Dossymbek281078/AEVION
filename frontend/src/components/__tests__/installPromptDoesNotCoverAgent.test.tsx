@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, act, cleanup } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -49,8 +49,15 @@ describe("баннер установки не накрывает кнопку �
   });
 
   it("показанный баннер публикует свою высоту", () => {
+    // После мержа 05.09 баннер выходит не сразу: 20 секунд на осмотреться
+    // и только без открытого диалога на странице. Проматываем это время.
+    vi.useFakeTimers();
     render(<InstallPrompt />);
     fireInstallPrompt();
+    act(() => {
+      vi.advanceTimersByTime(20_000);
+    });
+    vi.useRealTimers();
     const v = document.documentElement.style.getPropertyValue("--aevion-install-h");
     // В jsdom высота элемента равна нулю, поэтому проверяем не число, а САМ
     // ФАКТ публикации: переменная задана и в пикселях. Величину проверяет

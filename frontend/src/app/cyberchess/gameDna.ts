@@ -191,7 +191,7 @@ export function computeGameDNA(games: SavedGameLike[]): GameDNA {
     insights.push(streakType === "W"
       ? `🏆 Серия ${streakCount} побед подряд — не расслабляйся!`
       : streakType === "L"
-      ? `😤 ${streakCount} проигрышей подряд. Сделай паузу или смени уровень AI.`
+      ? `😤 ${streakCount} проигрышей подряд. Сделай паузу или смени уровень ИИ.`
       : `🤝 ${streakCount} ничьих — попробуй быть острее в дебюте.`);
   }
 
@@ -215,7 +215,7 @@ export function computeGameDNA(games: SavedGameLike[]): GameDNA {
   else if (tacticalPhaseLoss === "middlegame") insights.push(`🎯 Поражения в середине партии — работай над позиционной игрой.`);
 
   if (ratingGrowth > 50) insights.push(`📈 Рейтинг вырос на +${ratingGrowth} очков за ${total} партий. Отличный прогресс!`);
-  else if (ratingGrowth < -50) insights.push(`📊 Рейтинг упал на ${ratingGrowth}. Возможно, стоит немного снизить уровень AI.`);
+  else if (ratingGrowth < -50) insights.push(`📊 Рейтинг упал на ${ratingGrowth}. Возможно, стоит немного снизить уровень ИИ.`);
 
   if (avgLengthWin > 0 && avgLengthLoss > 0 && avgLengthWin < avgLengthLoss * 0.7)
     insights.push(`⚡ Твои победы быстрые (${avgLengthWin} полуходов), а проигрыши затянутые (${avgLengthLoss}) — ты агрессивен, но устаёшь.`);

@@ -5,16 +5,25 @@ import type { Metadata } from "next";
 // supplies it. The dynamic /qventure/a/[id] route overrides with its own
 // generateMetadata (per-report title + OG image).
 
-const TITLE = "QVenture — AI Investment Analyst for Any Business";
+// Метаданные — на языке СТРАНИЦЫ. Их читает человек в поисковой выдаче и в
+// предпросмотре ссылки в мессенджере, то есть ВСТРЕЧАЕТ модуль ещё до того,
+// как открыл его. Английское описание у русской страницы означает, что первое
+// впечатление — на чужом языке. Замер 04.09.2026.
+const TITLE = "QVenture — ИИ-аналитик инвестиций для любого бизнеса";
 const DESCRIPTION =
-  "Fund-grade due diligence in seconds. A transparent 0–100 quant score across 8 factors, "
-  + "a four-role expert council (scientist, data analyst, economist, lawyer), and a concrete "
-  + "entry strategy — ticket size, valuation band, staged tranches, risk-adjusted return.";
+  "Проверка сделки уровня фонда за секунды. Прозрачная оценка 0–100 по восьми факторам, "
+  + "совет из четырёх ролей (учёный, аналитик данных, экономист, юрист) и конкретная "
+  + "стратегия входа — размер чека, диапазон оценки, этапы траншей, доходность с поправкой на риск.";
 
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
   keywords: [
+    // Русские ключи идут первыми: страница русская, и ищут её по-русски.
+    // Английские оставлены намеренно — модуль ищут и на английском, а
+    // удаление ключей это решение о продвижении, а не о языке интерфейса.
+    "ИИ-аналитик инвестиций", "проверка стартапа", "разбор венчурной сделки",
+    "оценка сделки", "бизнес-ангел", "инвестиционная записка",
     "AI investment analyst", "startup due diligence", "venture screening",
     "deal scoring", "angel investing", "micro VC", "investment memo", "AEVION",
   ],

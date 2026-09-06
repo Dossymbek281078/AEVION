@@ -27,7 +27,9 @@ const pos = (over: Partial<PositionDiff>): PositionDiff => ({
 });
 
 const notice = (over: Partial<AiNotice>): AiNotice => ({
-  id: "n1", severity: "warning", scenario: "s", title: "Замечание",
+  // context у AiNotice обязателен. Пустой объект — не выдумка: так поступает
+  // сценарий indexMismatch, когда замечание относится ко всей смете.
+  id: "n1", severity: "warning", scenario: "s", context: {}, title: "Замечание",
   message: "текст", ...over,
 });
 

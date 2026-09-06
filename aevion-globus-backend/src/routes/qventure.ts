@@ -155,6 +155,24 @@ async function backfillDedupeHashes(): Promise<void> {
 const generalLimiter = rateLimit({ windowMs: 60_000, max: 40, keyPrefix: "qventure:general", message: "rate_limited" });
 // 6/min left no room: an investor screening a handful of deals in one sitting hit
 // the wall, and the smoke suite sat exactly at the ceiling so any retry failed it.
+// ЦЕНА ОДНОГО ЗАПРОСА, чтобы следующий менял предел с открытыми глазами.
+// Один /analyze = ПЯТЬ вызовов платной модели: четыре линзы разом (runCouncil)
+// плюс сведение. То есть 15/мин это до 75 вызовов в минуту с одного ключа —
+// вдвое с лишним выше платформенной нормы для дорогих ручек (30/мин на ОДИН
+// вызов у dhCostlyLimit в devhub).
+//
+// Почему это НЕ повод понижать сгоряча: 6/мин уже пробовали и вернули, причина
+// строкой ниже. И наивное повторение денег не стоит — одинаковый вход отдаёт
+// готовый разбор через dedupeHash, не считая заново. Чтобы жечь, надо
+// намеренно менять вход каждый раз.
+//
+// Чего здесь НЕТ и что было бы настоящей защитой: суточного или месячного
+// потолка. Поминутный предел сверен с человеческим темпом, а не с жёсткой
+// квотой поставщика — 15/мин это 21 600 разборов в сутки с одного адреса.
+// Сделать это правильно значит завести учёт как у DevHub (таблица расхода,
+// checkCredit), а не второй ограничитель в памяти: он обнуляется при каждой
+// выкатке, то есть даёт видимость потолка вместо потолка.
+// Замер 03.09.2026.
 const analyzeLimiter = rateLimit({ windowMs: 60_000, max: 15, keyPrefix: "qventure:analyze", message: "rate_limited" });
 
 export const qventureRouter = Router();
@@ -296,6 +314,20 @@ async function countAnalyses(): Promise<number | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Откуда взят текст записки — по ФАКТУ ответа модели, не по настройке.
+ * До 03.09.2026 признак считался от настройки поставщика: при упавших вызовах
+ * документ утверждал «live model», хотя внутри была заготовка.
+ */
+function narrativeSource(c: { aiUsed: boolean; aiProvider: string; aiLive?: number; aiTotal?: number }): string {
+  if (typeof c.aiLive !== "number" || typeof c.aiTotal !== "number") {
+    return c.aiUsed ? `model ${c.aiProvider} (per-part source not recorded)` : "deterministic (no model)";
+  }
+  if (c.aiLive === 0) return "deterministic — model did not answer";
+  if (c.aiLive === c.aiTotal) return `live model (${c.aiProvider})`;
+  return `partial: ${c.aiLive} of ${c.aiTotal} parts from ${c.aiProvider}, rest deterministic`;
 }
 
 qventureRouter.get("/health", async (_req: Request, res: Response) => {
@@ -588,7 +620,11 @@ qventureRouter.get("/analyses/:id/pdf", async (req: Request, res: Response) => {
     doc.moveDown(0.2);
     doc.fontSize(10).font("Helvetica").fillColor("#1e293b").text(r.council.memo, { width: W, align: "left" });
     doc.fontSize(8).fillColor("#94a3b8")
-      .text(`Narrative engine: ${r.council.aiUsed ? `live model (${r.council.aiProvider})` : "deterministic (no AI key)"}`);
+      // Тот же признак, что на экране, и та же честность: partial —
+      // отдельное состояние. Документ покупатель пересылает инвесткомитету,
+      // и «live model» на заготовке было бы утверждением, а не пометкой.
+      // Записи до 03.09.2026 полей не имеют — для них честно «not recorded».
+      .text(`Narrative engine: ${narrativeSource(r.council)}`, { width: W })
     doc.moveDown(0.8);
 
     // Entry strategy

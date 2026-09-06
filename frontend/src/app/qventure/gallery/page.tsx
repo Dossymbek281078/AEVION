@@ -3,7 +3,7 @@ import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
-import { VERDICT_COLOR, VERDICT_LABEL, type Verdict } from "../_result";
+import { VERDICT_COLOR, VERDICT_LABEL, STAGE_LABEL, type Verdict } from "../_result";
 
 export const dynamic = "force-dynamic";
 
@@ -30,11 +30,23 @@ interface ExampleSummary {
 }
 
 const SECTOR_LABEL: Record<string, string> = {
-  fintech: "Fintech", healthtech: "Healthtech", biotech: "Biotech", climate: "Climate",
-  ai_infra: "AI Infra", ai_app: "AI App", saas: "SaaS", marketplace: "Marketplace",
+  // Отрасли по-русски там, где в русской речи так и говорят. SaaS и AI
+  // остаются латиницей: их не переводят, и «ИИ-приложение» звучало бы хуже.
+  fintech: "Финтех", healthtech: "Медтех", biotech: "Биотех", climate: "Климат",
+  ai_infra: "AI-инфраструктура", ai_app: "AI-приложение", saas: "SaaS", marketplace: "Маркетплейс",
 };
+// 🔴 ЗДЕСЬ БЫЛО `s.replace(/-/g, " ")` — стадия собиралась из машинного
+// идентификатора заменой дефисов на пробелы, и человек читал «pre seed»,
+// «series a». При этом карта STAGE_LABEL с русскими подписями существует и
+// экспортируется из ../_result — галерея даже импортирует оттуда вердикты.
+// То есть правильная функция была, её просто не позвали. Замер 04.09.2026.
+//
+// Запасная ветка возвращает сам идентификатор осознанно: у примеров данные
+// приходят с сервера, и новая стадия лучше покажется как есть, чем исчезнет.
+// Но она видна — то есть заметна, а не тиха.
 const sectorLabel = (id: string) => SECTOR_LABEL[id] ?? id;
-const stageLabel = (s: string) => s.replace(/-/g, " ");
+const stageLabel = (s: string) =>
+  (STAGE_LABEL as Record<string, string>)[s] ?? s.replace(/-/g, " ");
 
 async function loadExamples(): Promise<ExampleSummary[]> {
   try {

@@ -53,7 +53,7 @@ const LABEL: React.CSSProperties = { display: "block", fontSize: 11.5, fontWeigh
 // Pure request helper — returns the analysis or an error string, no state.
 async function analyzeReq(data: FormShape): Promise<{ ok: true; data: AnalysisResult } | { ok: false; error: string; upgradeUrl?: string | null }> {
   if (!data.name.trim()) return { ok: false, error: "Укажите название компании или продукта." };
-  if (data.description.trim().length < 12) return { ok: false, error: "Add a longer description (min 12 characters)." };
+  if (data.description.trim().length < 12) return { ok: false, error: "Добавьте описание подробнее — не меньше 12 знаков." };
   try {
     const payload: Record<string, unknown> = {
       name: data.name.trim(), sector: data.sector, stage: data.stage,
@@ -141,16 +141,16 @@ export default function QVenturePage() {
             ИИ-аналитик инвестиций для любого бизнеса
           </h1>
           <p style={{ margin: 0, fontSize: 15.5, color: "var(--ink-soft, #45474c)", maxWidth: 760, lineHeight: 1.55 }}>
-            Fund-grade due diligence in seconds. A transparent quant score, a four-role expert council
-            (scientist · data analyst · economist · lawyer), and a concrete entry strategy — how much to
-            invest, at what valuation, staged over which milestones, for what risk-adjusted return.
+            Проверка сделки уровня фонда за секунды. Прозрачная количественная оценка, совет из четырёх ролей
+            (учёный · аналитик данных · экономист · юрист) и конкретная стратегия входа — сколько
+            вложить, по какой оценке, какими этапами и с какой доходностью с поправкой на риск.
           </p>
           <Link href="/qventure/a/demo-neurodx" style={{
             display: "inline-flex", alignItems: "center", gap: 6, marginTop: 12,
             fontSize: 14, fontWeight: 700, color: "var(--teal-deep, #075b53)", textDecoration: "none",
             borderBottom: "1px solid color-mix(in srgb, var(--teal, #0a7d72) 45%, transparent)",
           }}>
-            Живой пример → <span style={{ fontWeight: 400, color: "var(--ink-faint, #74767c)" }}>(NeuroDx report)</span>
+            Живой пример → <span style={{ fontWeight: 400, color: "var(--ink-faint, #74767c)" }}>(разбор NeuroDx)</span>
           </Link>
         </div>
 
@@ -171,13 +171,13 @@ export default function QVenturePage() {
           </div>
           <div style={{ display: "flex", gap: 16 }}>
             <Link href="/qventure/batch" style={{ fontSize: 13.5, fontWeight: 700, color: "var(--teal-deep, #075b53)", textDecoration: "none" }}>
-              ☰ Batch funnel →
+              ☰ Разбор пачкой →
             </Link>
             <Link href="/qventure/gallery" style={{ fontSize: 13.5, fontWeight: 700, color: "var(--teal-deep, #075b53)", textDecoration: "none" }}>
-              ▦ Examples →
+              ▦ Примеры →
             </Link>
             <Link href="/qventure/watchlist" style={{ fontSize: 13.5, fontWeight: 700, color: "var(--teal-deep, #075b53)", textDecoration: "none" }}>
-              ★ Watchlist →
+              ★ Список наблюдения →
             </Link>
           </div>
         </div>
@@ -197,21 +197,21 @@ export default function QVenturePage() {
 
 function MarketingSections() {
   const steps = [
-    { icon: "📝", title: "Опишите сделку", body: "Company, sector, stage, and a paragraph on what it does. Traction is optional but sharpens the execution score." },
-    { icon: "🧠", title: "ИИ проводит разбор", body: "A deterministic 0–100 quant score across 8 factors, then a four-role expert council writes the memo and entry strategy." },
-    { icon: "📊", title: "Действуйте по записке", body: "Verdict, ticket size, valuation band, staged tranches, and risk-adjusted return — export to PDF, save, or share." },
+    { icon: "📝", title: "Опишите сделку", body: "Компания, отрасль, стадия и абзац о том, что она делает. Показатели роста необязательны, но уточняют оценку исполнения." },
+    { icon: "🧠", title: "ИИ проводит разбор", body: "Детерминированная оценка 0–100 по восьми факторам, затем совет из четырёх ролей пишет записку и стратегию входа." },
+    { icon: "📊", title: "Действуйте по записке", body: "Вердикт, размер чека, диапазон оценки, этапы траншей и доходность с поправкой на риск — выгрузка в PDF, сохранение, ссылка." },
   ];
   const audience = [
-    { icon: "👼", label: "Бизнес-ангелы", body: "Screen inbound in seconds; write with conviction, not vibes." },
-    { icon: "🏦", label: "Микрофонды и одиночные управляющие", body: "A repeatable rubric across every deal in the pipeline." },
-    { icon: "🔭", label: "Скауты", body: "Turn a founder chat into a shareable, fund-grade memo." },
-    { icon: "🤝", label: "Синдикаты", body: "Align the group with one transparent score and strategy." },
+    { icon: "👼", label: "Бизнес-ангелы", body: "Отсеивайте входящий поток за секунды и пишите по существу, а не по ощущениям." },
+    { icon: "🏦", label: "Микрофонды и одиночные управляющие", body: "Одна повторяемая рубрика на все сделки в работе." },
+    { icon: "🔭", label: "Скауты", body: "Превратите разговор с основателем в записку уровня фонда, которой можно поделиться." },
+    { icon: "🤝", label: "Синдикаты", body: "Сведите группу к одной прозрачной оценке и стратегии." },
   ];
   const trust = [
-    ["Deterministic", "The score is reproducible math, not a black box."],
-    ["18 sectors", "Grounded in a curated market knowledge base."],
-    ["4 experts", "Scientist · data analyst · economist · lawyer."],
-    ["Transparent", "Every factor shows its weight and rationale."],
+    ["Детерминированно", "Оценка — воспроизводимый расчёт, а не чёрный ящик."],
+    ["18 отраслей", "Опирается на выверенную базу знаний о рынке."],
+    ["4 эксперта", "Учёный · аналитик данных · экономист · юрист."],
+    ["Прозрачно", "У каждого фактора виден его вес и обоснование."],
   ];
   return (
     <div style={{ marginTop: 28 }}>
@@ -252,7 +252,7 @@ function MarketingSections() {
           ))}
         </div>
         <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,0.12)", fontSize: 11.5, color: "#94a3b8" }}>
-          QVenture is an AI screening tool for research purposes — not investment advice, an offer, or a solicitation. Figures are model estimates, not guarantees.
+          QVenture — инструмент ИИ-отбора для исследовательских целей: это не инвестиционный совет, не оферта и не предложение. Числа — оценки модели, а не гарантии.
           {" "}
           {/* Доступ выдаётся по почте подписки: planGate спрашивает
               hasActiveAppSubscription(plan.email, "qventure"), а plan.email берётся
@@ -263,8 +263,8 @@ function MarketingSections() {
               Строка на языке окружающего блока: язык интерфейса модуля —
               открытый вопрос к основателю, и вводить второй язык внутри
               одного абзаца хуже, чем следовать соседнему тексту. */}
-          Paid access is tied to the email on your subscription — sign in with that
-          same email after paying, or the analyses stay on the free tier.
+          Платный доступ привязан к адресу почты в подписке — после оплаты входите с тем же
+          адресом, иначе разборы останутся на бесплатном тарифе.
         </div>
       </div>
     </div>
@@ -308,7 +308,7 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
     e.target.value = ""; // let the same file be re-selected later
     if (!file) return;
     if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-      setExtractNote("Please upload a PDF pitch deck."); return;
+      setExtractNote("Загрузите презентацию в формате PDF."); return;
     }
     setExtracting(true); setError(null); setExtractNote(null);
     try {
@@ -316,7 +316,7 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
         method: "POST", headers: { "Content-Type": "application/pdf" }, body: file,
       });
       const j = await res.json();
-      if (!res.ok || !j?.ok) { setExtractNote(j?.hint || j?.error || "Could not read that deck — enter the details manually."); return; }
+      if (!res.ok || !j?.ok) { setExtractNote(j?.hint || j?.error || "Не удалось разобрать презентацию — заполните поля вручную."); return; }
       const d = j.data;
       const fin = d.financials || {};
       const num = (v: unknown) => (typeof v === "number" && isFinite(v) && v > 0 ? String(v) : "");
@@ -348,12 +348,12 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
       const gotExact = Object.values(fin).some((v) => typeof v === "number" && v) || proj.length > 0;
       setExtractNote(
         (d.aiUsed
-          ? "✓ Pre-filled from your deck (AI-parsed). "
-          : "✓ Pre-filled from your deck (text-parsed). ") +
-          (gotExact ? "Exact financials filled in below — review and run the analysis." : "Review the fields and run the analysis."),
+          ? "✓ Заполнено по вашей презентации (разобрано ИИ). "
+          : "✓ Заполнено по вашей презентации (разобрано по тексту). ") +
+          (gotExact ? "Точные финансовые данные заполнены ниже — проверьте и запускайте разбор." : "Проверьте поля и запускайте разбор."),
       );
     } catch {
-      setExtractNote("Upload failed — check your connection and try again.");
+      setExtractNote("Загрузить не удалось — проверьте связь и попробуйте ещё раз.");
     } finally {
       setExtracting(false);
     }
@@ -369,10 +369,10 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
             padding: "10px 18px", background: extracting ? "var(--teal, #0a7d72)" : "var(--teal-deep, #075b53)", color: "#fff", border: "none",
             borderRadius: 9, fontSize: 14, fontWeight: 700, cursor: extracting ? "wait" : "pointer", whiteSpace: "nowrap",
           }}>
-            {extracting ? "Reading deck…" : "📄 Upload pitch deck (PDF)"}
+            {extracting ? "Читаем презентацию…" : "📄 Загрузить презентацию (PDF)"}
           </button>
           <span style={{ fontSize: 12.5, color: extractNote ? "var(--teal-deep, #075b53)" : "#94a3b8", fontWeight: extractNote ? 600 : 400 }}>
-            {extractNote || "We extract the fields and pre-fill the form — you review, then run."}
+            {extractNote || "Мы вытащим поля и заполним форму — вы проверяете и запускаете."}
           </span>
         </div>
         <FormFields form={form} set={set} sectors={sectors} full />
@@ -410,8 +410,8 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
 // ─── Compare two ──────────────────────────────────────────────────────────────
 
 function ComparePanel({ sectors }: { sectors: SectorOption[] }) {
-  const [a, setA] = useState<FormShape>(() => ({ ...emptyForm(), name: "Company A" }));
-  const [b, setB] = useState<FormShape>(() => ({ ...emptyForm(), name: "Company B" }));
+  const [a, setA] = useState<FormShape>(() => ({ ...emptyForm(), name: "Компания А" }));
+  const [b, setB] = useState<FormShape>(() => ({ ...emptyForm(), name: "Компания Б" }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Своё состояние: это отдельный компонент, у него нет доступа к первому.
@@ -441,7 +441,7 @@ function ComparePanel({ sectors }: { sectors: SectorOption[] }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16 }}>
         {([["a", a], ["b", b]] as const).map(([which, f]) => (
           <div key={which} style={SECTION}>
-            <h2 style={H2}>{which === "a" ? "Company A" : "Company B"}</h2>
+            <h2 style={H2}>{which === "a" ? "Компания А" : "Компания Б"}</h2>
             <FormFields form={f} set={setter(which)} sectors={sectors} />
           </div>
         ))}
@@ -479,7 +479,7 @@ function CompareResult({ a, b }: { a: AnalysisResult; b: AnalysisResult }) {
         <div>
           <h2 style={{ ...H2, marginBottom: 4 }}>{r.name}</h2>
           <div style={{ fontSize: 13, color: "#64748b" }}>{r.result.sector.label} · {r.result.stage}</div>
-          {winner === side && <div style={{ fontSize: 12, fontWeight: 800, color: "var(--teal-deep, #075b53)", marginTop: 6 }}>◆ Higher score</div>}
+          {winner === side && <div style={{ fontSize: 12, fontWeight: 800, color: "var(--teal-deep, #075b53)", marginTop: 6 }}>◆ Оценка выше</div>}
         </div>
       </div>
       <div style={{ marginTop: 12 }}><ScoreGauge score={r.composite} verdict={r.verdict} size={104} /></div>
@@ -636,9 +636,10 @@ function FormFields({ form, set, sectors, full = false }: {
               marginTop: 6, fontSize: 12, lineHeight: 1.5, color: "#92400e",
               background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "8px 11px",
             }}>
-              Leaving this empty caps the score at about 58 — no submission without metrics has
-              ever reached &ldquo;invest&rdquo;. Execution is 28% of the total and counts as unproven,
-              not neutral. Any real figure moves it: revenue, customers, growth, retention.
+              Оставите пустым — оценка упрётся примерно в 58: ни одна заявка без показателей
+              ещё не доходила до вердикта «invest». Исполнение это 28% итога, и без данных оно
+              считается недоказанным, а не нейтральным. Сдвигает любая настоящая цифра:
+              выручка, клиенты, рост, удержание.
             </div>
           )}
         </div>
@@ -646,7 +647,7 @@ function FormFields({ form, set, sectors, full = false }: {
       {full && (
         <details style={{ marginBottom: 16, border: "1px solid #e2e8f0", borderRadius: 10, padding: "10px 14px", background: "#f8fafc" }}>
           <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#334155" }}>
-            Exact financials & projections (optional — precise numbers beat parsing the text)
+            Точные финансы и прогноз (необязательно — точные числа лучше разбора текста)
           </summary>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginTop: 12 }}>
             <div><label style={LABEL}>ARR (USD)</label><input aria-label="ARR (USD)" style={INPUT} value={form.finArr} onChange={set("finArr")} placeholder="3,000,000" inputMode="numeric" /></div>
@@ -657,10 +658,10 @@ function FormFields({ form, set, sectors, full = false }: {
               <div style={{ display: "flex", gap: 6 }}>
                 <input aria-label="Отток (%)" style={{ ...INPUT, flex: 1 }} value={form.finChurn} onChange={set("finChurn")} placeholder="3" inputMode="numeric" />
                 <select style={{ ...INPUT, width: 104 }} value={form.finChurnPeriod} onChange={set("finChurnPeriod")} aria-label="Период оттока">
-                  <option value="weekly">/ week</option>
-                  <option value="monthly">/ month</option>
-                  <option value="quarterly">/ quarter</option>
-                  <option value="annual">/ year</option>
+                  <option value="weekly">/ неделя</option>
+                  <option value="monthly">/ месяц</option>
+                  <option value="quarterly">/ квартал</option>
+                  <option value="annual">/ год</option>
                 </select>
               </div>
             </div>
@@ -679,7 +680,7 @@ function FormFields({ form, set, sectors, full = false }: {
             <div><label style={LABEL}>TAM снизу вверх (USD)</label><input aria-label="TAM снизу вверх (USD)" style={INPUT} value={form.finTam} onChange={set("finTam")} placeholder="12,000,000,000" inputMode="numeric" /></div>
           </div>
           <div style={{ marginTop: 14 }}>
-            <label style={LABEL}>Projected revenue (USD) — this year / +1yr / +2yr (for the hockey-stick check)</label>
+            <label style={LABEL}>Прогноз выручки (USD) — этот год / +1 год / +2 года (проверка на «хоккейную клюшку»)</label>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
               <input aria-label="Выручка, год 0" style={INPUT} value={form.projY0} onChange={set("projY0")} placeholder="Год 0: 2,000,000" inputMode="numeric" />
               <input aria-label="Выручка, год 1" style={INPUT} value={form.projY1} onChange={set("projY1")} placeholder="Год 1: 5,000,000" inputMode="numeric" />

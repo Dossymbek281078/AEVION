@@ -123,7 +123,7 @@ function TerminalPanel({ logs, label }: { logs: string; label?: string }) {
           background: "transparent",
         }}
       >
-        {logs || "— no logs yet —"}
+        {logs || "— журнала пока нет —"}
       </pre>
     </div>
   );
@@ -286,7 +286,7 @@ export default function DevHubDeployPage({ params }: { params: Promise<{ id: str
       <div style={{ minHeight: "100vh", background: "#020617", display: "flex", flexDirection: "column" }}>
         <Wave1Nav />
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b", fontSize: 14 }}>
-          Loading…
+          Загружаем…
         </div>
       </div>
     );
@@ -368,7 +368,7 @@ export default function DevHubDeployPage({ params }: { params: Promise<{ id: str
                   }}
                 >
                   <span style={{ fontSize: 10 }}>&#9679;</span>
-                  View Live
+                  Открыть
                 </a>
               )}
 
@@ -438,7 +438,7 @@ export default function DevHubDeployPage({ params }: { params: Promise<{ id: str
             {/* ── Left: deployment history ── */}
             <div>
               <div style={{ fontSize: 11, color: "#475569", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>
-                Deployment History
+                История выкаток
               </div>
 
               {deployments.length === 0 ? (
@@ -486,11 +486,11 @@ export default function DevHubDeployPage({ params }: { params: Promise<{ id: str
                     </div>
                     <div style={{ display: "flex", gap: 20, fontSize: 12, color: "#64748b" }}>
                       <span>
-                        Started: <span style={{ color: "#94a3b8" }}>{relativeTime(selectedDeployment.triggeredAt)}</span>
+                        Начата: <span style={{ color: "#94a3b8" }}>{relativeTime(selectedDeployment.triggeredAt)}</span>
                       </span>
                       {selectedDeployment.completedAt && (
                         <span>
-                          Duration:{" "}
+                          Длительность:{" "}
                           <span style={{ color: "#94a3b8" }}>
                             {durationStr(selectedDeployment.triggeredAt, selectedDeployment.completedAt)}
                           </span>
@@ -521,7 +521,7 @@ export default function DevHubDeployPage({ params }: { params: Promise<{ id: str
 
                   {/* Build log terminal */}
                   <div style={{ fontSize: 11, color: "#475569", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>
-                    Build Log
+                    Журнал сборки
                   </div>
                   <TerminalPanel
                     logs={selectedDeployment.buildLog || ""}

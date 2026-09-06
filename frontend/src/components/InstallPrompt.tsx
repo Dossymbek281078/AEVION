@@ -63,7 +63,7 @@ export function InstallPrompt() {
   // компоненты напрямую не нужно, и без баннера переменной просто нет —
   // поведение остаётся прежним.
   const boxRef = useRef<HTMLDivElement | null>(null);
-  const visible = Boolean(deferred) && !hidden;
+  const visible = Boolean(deferred) && !hidden && ready;
   useEffect(() => {
     const root = document.documentElement;
     if (!visible) {

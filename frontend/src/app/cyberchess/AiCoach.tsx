@@ -672,7 +672,7 @@ ${quality === "blunder" || quality === "mistake"
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontSize: 16 }}>♟</span>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 900 }}>AI Тренер v35</div>
+            <div style={{ fontSize: 13, fontWeight: 900 }}>ИИ-тренер v35</div>
             <div style={{ fontSize: 9, opacity: 0.8 }}>Sonnet 4.6 + Stockfish 18</div>
           </div>
         </div>

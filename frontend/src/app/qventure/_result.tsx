@@ -64,7 +64,7 @@ export interface AnalysisResult {
     assumptions: string[];
     sector: { id?: string; label: string; sources?: SectorSource[] };
     stage: string;
-    council: { lenses: Lens[]; memo: string; aiUsed: boolean; aiProvider: string };
+    council: { lenses: Lens[]; memo: string; aiUsed: boolean; aiProvider: string; aiLive?: number; aiTotal?: number };
     // Company-specific scoring (added 2026-07; optional for older persisted records).
     signalCoverage?: number;
     redFlags?: string[];
@@ -203,6 +203,22 @@ const BASIS_TAG: Record<NonNullable<ScoreFactor["basis"]>, { text: string; bg: s
   "no-evidence": { text: "не указано", bg: "#fef2f2", fg: "#b91c1c", title: "По этому фактору ничего не прислали, поэтому оценка низкая, а не нейтральная. Добавьте показатели роста, чтобы её поднять." },
 };
 
+/**
+ * Откуда взялся текст записки — по ФАКТУ, а не по настройке.
+ *
+ * Полей aiLive/aiTotal нет у разборов, сделанных до 03.09.2026: тогда признак
+ * считался от настройки поставщика и ответа на этот вопрос просто не * существовало. Для них говорим «источник не записан» — это честнее, чем
+ * повторить прежнее утверждение как факт.
+ */
+export function istochnikTeksta(c: { aiUsed: boolean; aiProvider: string; aiLive?: number; aiTotal?: number }): string {
+  if (typeof c.aiLive !== "number" || typeof c.aiTotal !== "number") {
+    return c.aiUsed ? `модель ${c.aiProvider} (источник частей не записан)` : "детерминированный разбор";
+  }
+  if (c.aiLive === 0) return "детерминированный разбор — модель не ответила";
+  if (c.aiLive === c.aiTotal) return `живая модель (${c.aiProvider})`;
+  return `частично: ${c.aiLive} из ${c.aiTotal} частей от модели ${c.aiProvider}, остальное — заготовка`;
+}
+
 export function FactorBar({ f }: { f: ScoreFactor }) {
   const color = f.score >= 70 ? "var(--teal, #0a7d72)" : f.score >= 50 ? "var(--amber, #b7791f)" : "var(--red, #b5241b)";
   const tag = f.basis ? BASIS_TAG[f.basis] : null;
@@ -250,7 +266,7 @@ export function FactorBreakdown({ factors }: { factors: ScoreFactor[] }) {
   return (
     <div>
       <div style={{ fontSize: 12, fontWeight: 700, color: "var(--ink, #17181a)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>
-        О самой компании · {100 - sectorWeight}% of the score
+        О самой компании · {100 - sectorWeight}% оценки
       </div>
       {company.map((f) => <FactorBar key={f.key} f={f} />)}
 
@@ -263,9 +279,9 @@ export function FactorBreakdown({ factors }: { factors: ScoreFactor[] }) {
           fontSize: 12.5, fontWeight: 600, color: "var(--ink-soft, #45474c)", textAlign: "left",
         }}
       >
-        {showSector ? "▾" : "▸"} Sector context · {sectorWeight}% of the score ·{" "}
+        {showSector ? "▾" : "▸"} Контекст отрасли · {sectorWeight}% оценки ·{" "}
         <span style={{ fontWeight: 400 }}>
-          {sector.length} factors identical for every company in this sector
+          {sector.length} факторов, одинаковых для каждой company in this sector
         </span>
       </button>
       {showSector && (
@@ -299,6 +315,13 @@ export function LensCard({ lens }: { lens: Lens }) {
   );
 }
 
+/** Уверенность — машинное значение из движка; человеку показываем словом. */
+const UVERENNOST: Record<"high" | "medium" | "low", string> = {
+  high: "высокая",
+  medium: "средняя",
+  low: "низкая",
+};
+
 export function StrategyPanel({ s }: { s: Strategy }) {
   const r = s.returns;
   const cell = (label: string, value: string, sub?: string) => (
@@ -329,11 +352,11 @@ export function StrategyPanel({ s }: { s: Strategy }) {
         </div>
       )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, marginBottom: 14, opacity: isPass ? 0.62 : 1 }}>
-        {cell(isPass ? "Чек (ориентировочно)" : "Лид-чек", usd(s.ticketUsd.target), `range ${usd(s.ticketUsd.min)}–${usd(s.ticketUsd.max)}`)}
-        {cell("Целевая доля", s.ownershipTargetPct + "%", `${s.conviction} conviction`)}
+        {cell(isPass ? "Чек (ориентировочно)" : "Лид-чек", usd(s.ticketUsd.target), `диапазон ${usd(s.ticketUsd.min)}–${usd(s.ticketUsd.max)}`)}
+        {cell("Целевая доля", s.ownershipTargetPct + "%", `уверенность: ${UVERENNOST[s.conviction]}`)}
         {cell("Оценка до раунда", mm(s.valuationBandUsd.base), `${mm(s.valuationBandUsd.low)}–${mm(s.valuationBandUsd.high)}`)}
-        {cell("Ожидаемая доходность", r.expectedMoic + "x", `base ${r.baseMoic}x · ${Math.round(r.lossProbability * 100)}% loss rate`)}
-        {cell("Целевой IRR", r.targetIrrPct + "%", `${r.horizonYears}yr horizon`)}
+        {cell("Ожидаемая доходность", r.expectedMoic + "x", `база ${r.baseMoic}x · вероятность потери ${Math.round(r.lossProbability * 100)}%`)}
+        {cell("Целевой IRR", r.targetIrrPct + "%", `горизонт ${r.horizonYears} лет`)}
       </div>
       <div style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink, #17181a)", marginBottom: 6 }}>График вложений</div>
@@ -612,9 +635,9 @@ function BenchmarkBlock({ sectorId, sectorLabel, stage, score }: { sectorId: str
       </div>
 
       <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontSize: 12, color: "var(--ink-faint, #74767c)", marginTop: 10 }}>
-        {data.p25 != null && <span>25th pct: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.p25)}</b></span>}
+        {data.p25 != null && <span>25-й процентиль: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.p25)}</b></span>}
         {data.median != null && <span>медиана: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.median)}</b></span>}
-        {data.p75 != null && <span>75th pct: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.p75)}</b></span>}
+        {data.p75 != null && <span>75-й процентиль: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.p75)}</b></span>}
         {data.best != null && <span>лучшее из виденного: <b style={{ color: "var(--ink-soft, #45474c)" }}>{Math.round(data.best)}</b></span>}
       </div>
       <div style={{ fontSize: 11.5, color: "var(--ink-faint, #74767c)", marginTop: 10 }}>{data.disclaimer}</div>
@@ -744,7 +767,7 @@ function StressPanel({ stress }: { stress: NonNullable<AnalysisResult["result"][
 function SignalCoverageChip({ coverage, fields }: { coverage: number; fields: number }) {
   const pct = Math.round(coverage * 100);
   const color = pct >= 40 ? "var(--teal, #0a7d72)" : pct >= 15 ? "var(--amber, #b7791f)" : "var(--ink-faint, #74767c)";
-  const label = pct >= 40 ? "company-specific" : pct >= 15 ? "partly company-specific" : "sector-based";
+  const label = pct >= 40 ? "company-specific" : pct >= 15 ? "частично по этой компании" : "sector-based";
   return (
     <div
       title="Доля итоговой оценки, опирающаяся на показатели из самой заявки (выручка, рост, маржа, LTV/CAC…), а не на средние по отрасли. Добавьте финансовые данные, чтобы её поднять."
@@ -821,7 +844,12 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
         <h2 style={H2}>Инвестиционное резюме</h2>
         <p style={{ whiteSpace: "pre-wrap", fontSize: 14, color: "var(--ink, #17181a)", lineHeight: 1.6, margin: 0 }}>{result.result.council.memo}</p>
         <div style={{ fontSize: 11.5, color: "var(--ink-faint, #74767c)", marginTop: 10 }}>
-          Текст собран: {result.result.council.aiUsed ? `живая модель (${result.result.council.aiProvider})` : "детерминированно, без модели (ключ ИИ не настроен)"}
+          {/* ТРИ состояния, а не два. Прежняя строка печатала «живая модель»,
+              когда поставщик всего лишь НАСТРОЕН: при упавших вызовах человек
+              видел заготовку и читал, что это разбор модели. Теперь считаем
+              по факту ответа. У записей до 03.09.2026 полей нет — там честнее
+              сказать «не знаю», чем додумать. */}
+          Текст собран: {istochnikTeksta(result.result.council)}
           {result.result.rubricVersion ? ` · оценка по рубрике v${result.result.rubricVersion} — оценки сравнимы только внутри одной версии` : ""}
         </div>
       </div>

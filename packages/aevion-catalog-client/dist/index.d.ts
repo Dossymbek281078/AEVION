@@ -357,17 +357,40 @@ export interface QCoreAIChatResponse {
     };
     [key: string]: unknown;
 }
+/**
+ * Поставщик в ответе `/api/multichat/provider-status`.
+ *
+ * Тип приведён к тому, что сервер РЕАЛЬНО отдаёт (проверено 12.08.2026). До
+ * этого здесь стояли `status: "online" | "offline" | "degraded"` и
+ * `lastCheckedAt`, которых в ответе не было никогда: интегратор, написавший
+ * `if (p.status === "online")`, получал undefined и ветку, которая не
+ * выполняется. Тест пакета это не ловил, потому что проверял выдуманный
+ * ответ, а не форму настоящего.
+ */
 export interface MultichatProvider {
     id: string;
     name: string;
-    status: "online" | "offline" | "degraded" | string;
-    latencyMs?: number;
-    lastCheckedAt?: string;
+    /** Задан ли ключ этого поставщика на бэкенде. Единственный проверенный факт. */
+    configured: boolean;
+    defaultModel?: string | null;
+    /**
+     * @deprecated Повторяет `configured` и оставлено ради совместимости.
+     * Доступность поставщика НЕ проверяется: каталог читает переменные
+     * окружения и никого не опрашивает. См. `probed` в ответе.
+     */
+    reachable?: boolean;
+    /** @deprecated Всегда `null`: задержка до поставщика не измеряется. */
+    latencyMs?: number | null;
     [key: string]: unknown;
 }
 export interface MultichatProviderStatus {
     providers: MultichatProvider[];
-    generatedAt?: string;
+    /** Опрашивались ли сами поставщики. Сейчас всегда `false`. */
+    probed?: boolean;
+    /** Время ответа НАШЕГО каталога, не поставщика. */
+    catalogLatencyMs?: number;
+    cachedAt?: string;
+    fresh?: boolean;
     [key: string]: unknown;
 }
 export interface MultichatPreset {

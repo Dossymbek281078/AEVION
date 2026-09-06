@@ -33,7 +33,7 @@ const LAYOUT = join(dirname(fileURLToPath(import.meta.url)), "..", "layout.tsx")
  * обратных слэшей, а они на этой машине теряются на границе вызова — правка
  * приезжает уже испорченной, и тест падает разбором, а не по делу.
  */
-function inlineScripts(src) {
+function inlineScripts(src: string): string[] {
   const BACKSLASH = String.fromCharCode(92);
   const MARK = '__html: "';
   const out = [];

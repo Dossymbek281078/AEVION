@@ -517,13 +517,16 @@ describe("GET /api/devhub/projects/:id/preview-proxy (Visual Edit for deployed s
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe("Credit gating on metered routes", () => {
-  test("TTS: free tier (100k chars/mo) is denied with 402 once exhausted", async () => {
+  test("TTS: free tier (10k chars/mo) is denied with 402 once exhausted", async () => {
+    // 05.09.2026: у free стояло 100000 при 30000 у pro — покупка Pro снижала
+    // лимит озвучки. Лишний ноль убран (free 10000, pro 200000); монотонность
+    // тарифов закрепляет devhub-tier-monotonic-and-limits.test.ts.
     process.env.ELEVENLABS_API_KEY = "fake";
     const app = makeApp();
     fetchMock.mockResolvedValue(audioResp(200, 100));
 
-    // 20 * 5000 = 100000 == free-tier limit, each call individually valid (<=5000)
-    for (let i = 0; i < 20; i++) {
+    // 2 * 5000 = 10000 == free-tier limit, each call individually valid (<=5000)
+    for (let i = 0; i < 2; i++) {
       const r = await request(app).post("/api/devhub/media/tts").send({ text: "x".repeat(5000) });
       expect(r.status).toBe(200);
     }
@@ -531,7 +534,7 @@ describe("Credit gating on metered routes", () => {
     const over = await request(app).post("/api/devhub/media/tts").send({ text: "one more char" });
     expect(over.status).toBe(402);
     expect(over.body.error).toMatch(/TTS character limit/);
-    expect(over.body.limit).toBe(100000);
+    expect(over.body.limit).toBe(10000);
   });
 
   test("Music: free tier (5 tracks/mo) is denied with 402 on the 6th track", async () => {

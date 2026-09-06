@@ -34,7 +34,20 @@ describe("поломка движка видна, а не проглочена",
   it("состояние поломки где-то живёт, а не исчезает в обработчике", () => {
     const s = KOD();
     expect(s).toContain("oshibka:string|null=null;");
-    expect(s).toContain("this.ok=false;this.oshibka=");
+
+    // Раньше здесь стояло дословное соседство "this.ok=false;this.oshibka=".
+    // 05.09.2026 между ними появился вызов naSostoyanie(false) — падение
+    // движка стало доходить до экрана, — и проверка покраснела на ПОЛЕЗНОЙ
+    // правке. Дословное соседство и было её слабым местом: оно закрепляло
+    // порядок символов, а бережём мы другое — что обе записи стоят ВНУТРИ
+    // обработчика ошибки, а не потерялись по дороге.
+    const nachalo = s.indexOf("this.w.onerror=");
+    const konec = s.indexOf("this.w.onmessage=", nachalo);
+    expect(nachalo).toBeGreaterThan(0);
+    expect(konec).toBeGreaterThan(nachalo);
+    const obrabotchik = s.slice(nachalo, konec);
+    expect(obrabotchik).toContain("this.ok=false");
+    expect(obrabotchik).toContain("this.oshibka=");
   });
 
   it("полоса состояния не называет движок, которого нет", () => {

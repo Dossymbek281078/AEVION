@@ -293,11 +293,17 @@ type PVLine = {pv:number;cp:number;mate:number;depth:number;moves:string[]};
 // поэтому конкурентные вызовы из разных эффектов больше не обнуляют колбэки
 // друг друга и каждый запрос доходит до bestmove. См. _submit/_pump/_finish.
 type SFJob={kind:"go"|"eval"|"multiPV";srochno?:boolean;cmds:string[];cb:((f:string,t:string,p?:string)=>void)|null;ecb:((cp:number,mate:number,depth?:number)=>void)|null;mpvCb:((lines:PVLine[])=>void)|null};
-class SF{private w:Worker|null=null;private ok=false;oshibka:string|null=null;private cb:((f:string,t:string,p?:string)=>void)|null=null;private ecb:((cp:number,mate:number,depth?:number)=>void)|null=null;private mpvCb:((lines:PVLine[])=>void)|null=null;private mpvLines:PVLine[]=[];private q:SFJob[]=[];private cur:SFJob|null=null;
+class SF{private w:Worker|null=null;private ok=false;oshibka:string|null=null;
+  // Движок может умереть и ПОСЛЕ удачного старта (на телефоне это чаще всего
+  // нехватка памяти под hash). Раньше об этом узнавал только сам класс: флаг
+  // на экране включался один раз и обратно не выключался, поэтому панель
+  // продолжала уверять «Stockfish 18 · d22», пока ход считал запасной расчёт.
+  naSostoyanie:((ok:boolean)=>void)|null=null;
+  private cb:((f:string,t:string,p?:string)=>void)|null=null;private ecb:((cp:number,mate:number,depth?:number)=>void)|null=null;private mpvCb:((lines:PVLine[])=>void)|null=null;private mpvLines:PVLine[]=[];private q:SFJob[]=[];private cur:SFJob|null=null;
   // Throttle eval-bar updates: Stockfish стримит десятки `info score` в секунду; без троттла
   // каждый = setState → ре-рендер всего компонента → дёрганье анимации хода. Обновляем ~8/сек.
   private ecbTimer:ReturnType<typeof setTimeout>|null=null;private pendingEval:{cp:number;mate:number;depth:number}|null=null;
-  init(){if(this.w)return;try{this.w=new Worker("/stockfish-18-lite.js");this.w.onerror=e=>{e.preventDefault();this.ok=false;this.oshibka=(e as ErrorEvent).message||"движок не запустился";try{console.warn("[CyberChess] движок Stockfish не поднялся:",this.oshibka)}catch{}};this.w.onmessage=e=>{const l=String(e.data||"");
+  init(){if(this.w)return;try{this.w=new Worker("/stockfish-18-lite.js");this.w.onerror=e=>{e.preventDefault();this.ok=false;this.naSostoyanie?.(false);this.oshibka=(e as ErrorEvent).message||"движок не запустился";try{console.warn("[CyberChess] движок Stockfish не поднялся:",this.oshibka)}catch{}};this.w.onmessage=e=>{const l=String(e.data||"");
     // Diagnostic: log Stockfish init/feature lines so we can verify NNUE + threads in DevTools.
     // Look for: "info string NNUE evaluation using ..." and "info string Using N threads".
     if(l.startsWith("info string")||l==="readyok"||l==="uciok")try{console.log("[SF]",l)}catch{}
@@ -345,7 +351,7 @@ class SF{private w:Worker|null=null;private ok=false;oshibka:string|null=null;pr
         // Skill 20 = max strength — no internal handicap.
         this.w!.postMessage("setoption name Skill Level value 20");
       }catch{}
-      this.ok=true;this.w!.postMessage("isready");
+      this.ok=true;this.naSostoyanie?.(true);this.w!.postMessage("isready");
     }};this.w.postMessage("uci")}catch{this.w=null}}
   ready(){return this.ok&&!!this.w}
   // ── Очередь запросов ──────────────────────────────────────────────────────
@@ -3053,7 +3059,10 @@ export default function CyberChessPage(){
   // открывает Analysis/Coach. На setup screen Stockfish не нужен.
   function ensureSF(){
     if(sfR.current)return;
-    const s=new SF();s.init();sfR.current=s;
+    const s=new SF();
+    // Подписка ДО init(): между запуском и присвоением уже мог прийти uciok.
+    s.naSostoyanie=(ok:boolean)=>sSfOk(ok);
+    s.init();sfR.current=s;
     const c=setInterval(()=>{if(s.ready()){sSfOk(true);clearInterval(c)}},200);
     setTimeout(()=>clearInterval(c),15000);
   }
@@ -4863,7 +4872,7 @@ export default function CyberChessPage(){
             try{
               const parts=fenAtTrigger.split(" ");parts[1]=parts[1]==="w"?"b":"w";parts[3]="-";
               const ng=new Chess(parts.join(" "));setGame(ng);sBk(k=>k+1);
-              showToast(`🎲 AI пропускает ход (${diceLabel})`,"info");
+              showToast(`🎲 ИИ пропускает ход (${diceLabel})`,"info");
             }catch{}
           }else{
             // Pick random-ish best from allowed (mini search not worth it here)
@@ -5968,7 +5977,7 @@ export default function CyberChessPage(){
           </span>}
 
         {/* Active variant indicator (sticky, visible always) */}
-        {variant!=="standard"&&<button onClick={()=>sShowVariants(true)} className="cc-focus-ring"
+        {variant!=="standard"&&<button onClick={()=>sShowVariants(true)} 
           style={{
             display:"inline-flex",alignItems:"center",gap:6,padding:"4px 10px",
             background:"linear-gradient(135deg,#fef3c7,#fed7aa)",
@@ -6107,7 +6116,7 @@ export default function CyberChessPage(){
             onClick={()=>sShowShop(true)}
             title={`Chessy за задачи, уроки и достижения · баланс ${chessy.balance} · всего заработано ${chessy.lifetime} · клик → магазин`}
             aria-label="Магазин Chessy"
-            className="cc-focus-ring cc-touch"
+            className="cc-touch"
             style={{
               display:"inline-flex",alignItems:"center",gap:6,padding:"6px 14px",
               borderRadius:`${RADIUS.full}px 0 0 ${RADIUS.full}px`,
@@ -6153,7 +6162,7 @@ export default function CyberChessPage(){
             onClick={()=>sShowChessyInfo(true)}
             title="Что такое Chessy?"
             aria-label="Что такое Chessy"
-            className="cc-focus-ring cc-touch"
+            className="cc-touch"
             style={{
               display:"inline-flex",alignItems:"center",justifyContent:"center",
               width:28,height:32,
@@ -6448,7 +6457,7 @@ export default function CyberChessPage(){
                       sUseCustom(false);
                       const first=TCS.findIndex(t=>t.cat===c);
                       if(first>=0)sTcI(first);
-                    }} className="cc-focus-ring" style={{
+                    }} style={{
                       display:"inline-flex",alignItems:"center",gap:5,
                       padding:"5px 12px",borderRadius:RADIUS.full,
                       border:"none",
@@ -6512,7 +6521,7 @@ export default function CyberChessPage(){
                 <div style={{display:"inline-flex",gap:2,padding:2,borderRadius:RADIUS.full,background:CC.surface2,border:`1px solid ${CC.border}`}}>
                   {([["w","♔","Белые"],["b","♚","Чёрные"]] as const).map(([v,ic,name])=>{
                     const selected=pCol===v;
-                    return <button key={v} onClick={()=>sPCol(v as ChessColor)} className="cc-focus-ring"
+                    return <button key={v} onClick={()=>sPCol(v as ChessColor)} 
                       style={{display:"inline-flex",alignItems:"center",gap:5,
                         padding:"4px 12px",borderRadius:RADIUS.full,border:"none",
                         background:selected?"#fff":"transparent",
@@ -6545,9 +6554,9 @@ export default function CyberChessPage(){
               <div>
                 <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
                   <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>ИИ</span>
-                  <input type="range" aria-label="Уровень соперника ИИ" min={0} max={(chessy.owned.master_ai||isPro)?6:4}
+                  <input type="range" aria-label="Сила соперника" min={0} max={(chessy.owned.master_ai||isPro)?6:4}
                     value={Math.min(aiI,(chessy.owned.master_ai||isPro)?6:4)}
-                    onChange={e=>{const v=+e.target.value;if(v>=5&&!(chessy.owned.master_ai||isPro)){showToast("Master/Stockfish AI — premium. Купи в Chessy-магазине","info");sShowShop(true);return}sAiI(v)}}
+                    onChange={e=>{const v=+e.target.value;if(v>=5&&!(chessy.owned.master_ai||isPro)){showToast("Master/Stockfish — платный уровень. Купи в Chessy-магазине","info");sShowShop(true);return}sAiI(v)}}
                     style={{flex:1,accentColor:lv.color}}/>
                   <span style={{fontSize:11,fontWeight:800,color:lv.color,whiteSpace:"nowrap"}}>{lv.ru} · {lv.elo}{aiI>=5&&!(chessy.owned.master_ai||isPro)?" 🔒":""}</span>
                 </div>
@@ -6580,7 +6589,7 @@ export default function CyberChessPage(){
             <div style={{marginTop:SPACE[3],display:"flex",flexDirection:"column",gap:SPACE[2]}}>
               {/* Primary CTA «ИГРАТЬ» — доминирует: полная ширина, крупнее вторичных режимов.
                   (Раньше был одной ячейкой grid 2fr/1fr/1fr — не выигрывал по вниманию.) */}
-                <button onClick={()=>{sHotseat(false);sRivalMode(false);newG()}} className="cc-focus-ring cc-touch"
+                <button onClick={()=>{sHotseat(false);sRivalMode(false);newG()}} className="cc-touch"
                   style={{width:"100%",padding:"22px 26px",borderRadius:RADIUS.lg,border:"none",
                     background:`linear-gradient(135deg,${CC.brand},#10b981 55%,#14b8a6)`,color:"#fff",
                     fontWeight:900,fontSize:20,cursor:"pointer",
@@ -6806,7 +6815,7 @@ export default function CyberChessPage(){
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:SPACE[2]}}>
                 {dashes.map(d=>{
                   const open=isOpen(d.id);
-                  return <button key={d.id} onClick={()=>toggle(d.id)} className="cc-focus-ring" style={{
+                  return <button key={d.id} onClick={()=>toggle(d.id)}  style={{
                     position:"relative",overflow:"hidden",
                     padding:"16px 18px",
                     border:`1px solid ${open?d.ring:"transparent"}`,
@@ -6885,7 +6894,7 @@ export default function CyberChessPage(){
                   </button>
                   <button onClick={()=>{sHotseat(v=>!v);showToast(hotseat?"Режим «вдвоём» выключен":"Играете вдвоём за одной доской","info")}} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${hotseat?"#3b82f6":CC.border}`,background:hotseat?"linear-gradient(135deg,#dbeafe,#bfdbfe)":CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>👥</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>За одним экраном</span><span style={{marginLeft:"auto",fontSize:10,fontWeight:900,padding:"2px 7px",borderRadius:10,background:hotseat?"#3b82f6":"#e5e7eb",color:hotseat?"#fff":CC.textDim}}>{hotseat?"ON":"OFF"}</span></div>
-                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>Без AI — оба игрока ходят на одном устройстве.</div>
+                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>Без ИИ — оба игрока ходят на одном устройстве.</div>
                   </button>
                   {/* P2P — play with friend online via WebRTC */}
                   <button onClick={()=>{
@@ -6901,7 +6910,7 @@ export default function CyberChessPage(){
                   </button>
                   <button onClick={()=>sShowTournament(true)} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>🏆</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Турниры</span></div>
-                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>Свисс / Round-Robin против AI разных рейтингов.</div>
+                    <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4}}>Швейцарка / круговая против ИИ разных рейтингов.</div>
                   </button>
                   <button onClick={()=>sShowVariantStats(true)} style={{padding:"14px 16px",borderRadius:RADIUS.md,border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:4}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:20}}>📈</span><span style={{fontSize:13,fontWeight:900,color:CC.text}}>Статы по режимам</span></div>
@@ -6977,7 +6986,7 @@ export default function CyberChessPage(){
               маленькие pill-кнопки прямо под главной кнопкой партии. */}
           {false&&(()=>{
             const hero=[
-              {sym:SYM.play,title:"Сыграть прямо сейчас",sub:"AI любого уровня · 5 секунд до старта",cta:"Начать партию",onClick:()=>{sSetup(true);sTab("play")}},
+              {sym:SYM.play,title:"Сыграть прямо сейчас",sub:"ИИ любого уровня · 5 секунд до старта",cta:"Начать партию",onClick:()=>{sSetup(true);sTab("play")}},
               {sym:SYM.puzzle,title:"Решить задачу",sub:`Случайная из ${pzCountLabel} тактических`,cta:"Попробовать",onClick:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
               {sym:SYM.masters,title:"Изучить классику",sub:"Партии чемпионов · режим «угадай ход»",cta:"Открыть",onClick:()=>{sShowMasters(true);sMasterCurrent(null);sMasterMode("replay")}},
             ];
@@ -8378,7 +8387,7 @@ export default function CyberChessPage(){
             <Btn size="md" variant="gold" className="cc-game-btn" onClick={()=>{if(!confirm("Предложить ничью?"))return;if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("ИИ отклонил ничью","error")}}>½ Ничья</Btn>
             <Btn size="md" variant="secondary" className="cc-game-btn" icon={<Icon.Undo width={14} height={14}/>} onClick={()=>{
               if(hist.length<2){showToast("Ходов нет","error");return}
-              if(think){showToast("AI думает — подожди","error");return}
+              if(think){showToast("ИИ думает — подожди","error");return}
               if(!hotseat){
                 // Probability-based AI acceptance: Beginner=100% ... Master=0%
                 const prob=Math.max(0,(5-aiI)/5);
@@ -8481,7 +8490,7 @@ export default function CyberChessPage(){
                   background:game.turn()===pCol?CC.brand:CC.textDim,
                   animation:game.turn()===pCol&&on&&!over?"cc-pulse-glow 1.5s infinite":undefined,
                 }}/>
-                {over?"Партия завершена":game.turn()===pCol?"Твой ход":"Ход AI"}
+                {over?"Партия завершена":game.turn()===pCol?"Твой ход":"Ход ИИ"}
               </div>
               {/* Move count + TC */}
               <div style={{fontSize:10,color:CC.textMute,marginTop:1}}>
@@ -9157,7 +9166,7 @@ export default function CyberChessPage(){
                 sCinematicMoment({label:"🎬 CINEMATIC REPLAY",color:"#0f172a",sub:`${hist.length} ходов · режиссёр AEVION`});
                 setTimeout(()=>sCinematicMoment(null),1800);
               }}
-              className="cc-focus-ring"
+              
               style={{flex:"1 1 220px",padding:"12px 16px",borderRadius:10,
                 border:"none",background:"linear-gradient(90deg,#0c0a09,#1e1b4b,#831843,#1e1b4b,#0c0a09)",
                 backgroundSize:"200% 100%",
@@ -9169,7 +9178,7 @@ export default function CyberChessPage(){
             </button>
             <button
               onClick={()=>{const txt=generateStory();sStoryText(txt);sShowStory(true);setTimeout(()=>speakStory(txt),300)}}
-              className="cc-focus-ring"
+              
               style={{flex:"1 1 220px",padding:"12px 16px",borderRadius:10,
                 border:"none",background:"linear-gradient(90deg,#7c2d12,#c2410c,#f59e0b,#c2410c,#7c2d12)",
                 backgroundSize:"200% 100%",
@@ -10763,7 +10772,7 @@ export default function CyberChessPage(){
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:4}}>
                   <span style={{fontSize:14,color:T.dim,fontWeight:700}}>Глубина</span>
-                  <input type="range" min={8} max={22} value={mpvDepth} onChange={e=>sMpvDepth(+e.target.value)} style={{width:80,accentColor:T.purple}}/>
+                  <input type="range" aria-label="Глубина расчёта" min={8} max={22} value={mpvDepth} onChange={e=>sMpvDepth(+e.target.value)} style={{width:80,accentColor:T.purple}}/>
                   <span style={{fontSize:13,fontWeight:900,color:T.purple,minWidth:20}}>{mpvDepth}</span>
                 </div>
                 <button onClick={runMultiPV} style={{padding:"6px 14px",borderRadius:7,border:"none",background:T.purple,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer"}}>{mpvRunning?"Analyzing...":"▶ Analyze"}</button>
@@ -11313,7 +11322,7 @@ ${question.trim()}`;
                     {modeBtn("🤖","Против ИИ","играй с ботом, тренер комментирует",()=>{
                       sCoachAIEnabled(true);sEditorMode(false);
                       const cl=pCol;setGame(new Chess());sBk(k=>k+1);sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([new Chess().fen()]);sCapW([]);sCapB([]);sPromo(null);sThink(false);sPms([]);sPmSel(null);sPCol(cl);sFlip(cl==="b");sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);sCurrentOpening(null);pT.reset();aT.reset();
-                      showToast("Новая игра против AI","success");
+                      showToast("Новая игра против ИИ","success");
                     },isVsAI)}
                     {modeBtn("✋","За обоих","двигай сам обе стороны",()=>{
                       sCoachAIEnabled(false);sEditorMode(false);
@@ -11618,7 +11627,7 @@ ${question.trim()}`;
             {(["q","r","b","n"] as const).map(pt=>{
               const labels:Record<string,string>={q:"Ферзь",r:"Ладья",b:"Слон",n:"Конь"};
               const hot:Record<string,string>={q:"Q",r:"R",b:"B",n:"N"};
-              return <button key={pt} onClick={()=>{exec(promo.from,promo.to,pt);sPromo(null)}} className="cc-focus-ring"
+              return <button key={pt} onClick={()=>{exec(promo.from,promo.to,pt);sPromo(null)}} 
                 style={{
                   display:"flex",flexDirection:"column",alignItems:"center",gap:4,
                   padding:`${SPACE[2]}px ${SPACE[1]}px`,
@@ -12194,7 +12203,7 @@ ${question.trim()}`;
         {ENDGAMES.map((eg,i)=>{
           const gTone:"brand"|"info"=eg.goal==="Win"?"brand":"info";
           return <button key={i} onClick={()=>loadEndgame(eg)}
-            className="cc-focus-ring"
+            
             style={{padding:`${SPACE[3]}px ${SPACE[4]}px`,borderRadius:RADIUS.lg,
               border:`1px solid ${CC.border}`,background:CC.surface1,cursor:"pointer",
               textAlign:"left",display:"flex",flexDirection:"column",gap:SPACE[1],
@@ -12404,7 +12413,7 @@ ${question.trim()}`;
           <p style={{margin:"0 0 10px",lineHeight:1.6}}><b>Тайм-режимы</b> — 3мин / 5мин / свой: авто-переход после каждого решения, итоговый экран с WR%.</p>
           <p style={{margin:0,color:CC.textDim,fontSize:13}}>Нажми <b>Задачи</b> в верхней навигации → Выбери режим → Вперёд!</p>
         </>},
-        {icon:"🎓",title:"AI Coach с Anthropic Claude",body:<>
+        {icon:"🎓",title:"ИИ-коуч на Anthropic Claude",body:<>
           <p style={{margin:"0 0 10px",lineHeight:1.6}}>Задай вопрос во вкладке Coach — тренер видит текущую позицию, оценку движка и историю ходов.</p>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:10}}>
             {["🔍 Объясни позицию","📋 Найди план","🎯 Где тактика","🛡 Слабости"].map(a=><div key={a} style={{fontSize:11,padding:"5px 8px",background:"rgba(124,58,237,0.08)",borderRadius:6,color:"#6d28d9",fontWeight:700,textAlign:"center"}}>{a}</div>)}
@@ -12550,7 +12559,7 @@ ${question.trim()}`;
           ["🤝 Друг онлайн","P2P без сервера — отправь другу ссылку"],
           ["Декор доски в настройках","Шанырак, Волна, Klimt…"],
           ["?? / !! тосты","Авто-обнаружение блунда/брилланта"],
-          ["WhatIf в Analysis","AI объяснит любую кандидатную линию"],
+          ["WhatIf в Analysis","ИИ объяснит любую кандидатную линию"],
         ]},
       ] as const).map(grp=><div key={grp.title} style={{marginBottom:SPACE[3]}}>
         <div style={{fontSize:10,fontWeight:900,letterSpacing:1.2,textTransform:"uppercase" as const,color:CC.textMute,marginBottom:6}}>{grp.title}</div>
@@ -13640,7 +13649,7 @@ ${question.trim()}`;
           </div>
           <div style={{padding:SPACE[2],borderRadius:RADIUS.md,background:CC.surface1,border:`1px solid ${CC.border}`}}>
             <label style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:0.5,textTransform:"uppercase" as const,display:"block"}}>Скорость хода</label>
-            <input type="range" min={150} max={800} step={50} value={reelSpeed} onChange={e=>sReelSpeed(+e.target.value)}
+            <input type="range" aria-label="Скорость ролика" min={150} max={800} step={50} value={reelSpeed} onChange={e=>sReelSpeed(+e.target.value)}
               style={{width:"100%",accentColor:CC.brand}}/>
             <div style={{fontSize:12,color:CC.text,marginTop:2}}>{reelSpeed} мс / ход</div>
             <div style={{fontSize:10,color:CC.textDim}}>{reelSpeed<300?"быстро":reelSpeed<500?"средне":"медленно"}</div>
@@ -13692,7 +13701,7 @@ ${question.trim()}`;
           <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.brandSoft,border:`1px solid ${CC.brand}`}}>
             <div style={{fontSize:12,fontWeight:900,color:CC.brand,letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:SPACE[2]}}>💰 Как заработать</div>
             <ul style={{margin:0,paddingLeft:18,fontSize:12,color:CC.text,lineHeight:1.8}}>
-              <li><b>Победа</b> 5–160 (зависит от силы AI и времени)</li>
+              <li><b>Победа</b> 5–160 (зависит от силы ИИ и времени)</li>
               <li><b>Задача</b> 2–15 (по рейтингу задачи)</li>
               <li><b>Задача дня</b> +50 за первое решение в день</li>
               <li><b>Ежедневный бонус</b> +5 / +30 (серия 3) / +100 (серия 7)</li>
@@ -13706,13 +13715,13 @@ ${question.trim()}`;
           <div style={{padding:SPACE[3],borderRadius:RADIUS.md,background:CC.dangerSoft,border:`1px solid ${CC.danger}`}}>
             <div style={{fontSize:12,fontWeight:900,color:CC.danger,letterSpacing:0.5,textTransform:"uppercase" as const,marginBottom:SPACE[2]}}>🛒 На что тратить</div>
             <ul style={{margin:0,paddingLeft:18,fontSize:12,color:CC.text,lineHeight:1.8}}>
-              <li><b>Отмена хода</b> 3 (откат хода в партии vs AI)</li>
+              <li><b>Отмена хода</b> 3 (откат хода в партии vs ИИ)</li>
               <li><b>Подсказка в задаче</b> 5</li>
               <li><b>Ghost-подсказка</b> 15 (стрелка лучшего хода)</li>
               <li><b>Глубокий разбор</b> 20 (коуч)</li>
               <li><b>Открытие уровня «Мастер»</b> 30 (2400 ELO)</li>
               <li><b>Premium-тема</b> 50 (Neon / Obsidian / Sakura)</li>
-              <li><b>AI Rival Алексей</b> 100 (бета)</li>
+              <li><b>ИИ-соперник Алексей</b> 100 (бета)</li>
             </ul>
           </div>
         </div>
@@ -14434,7 +14443,7 @@ ${question.trim()}`;
             <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:1,textTransform:"uppercase" as const,marginTop:SPACE[3],marginBottom:SPACE[1]}}>⚡ Очередь премувов</div>
             <label style={{display:"flex",alignItems:"center",gap:SPACE[2],fontSize:12,color:CC.textDim,fontWeight:600}}>
               <span>Лимит: <b style={{color:CC.text}}>{pmLim}</b></span>
-              <input type="range" min={1} max={50} value={pmLim} onChange={e=>sPmLim(+e.target.value)} style={{flex:1,accentColor:CC.brand}}/>
+              <input type="range" aria-label="Предел премувов" min={1} max={50} value={pmLim} onChange={e=>sPmLim(+e.target.value)} style={{flex:1,accentColor:CC.brand}}/>
             </label>
           </div>
           <div>
@@ -15337,7 +15346,7 @@ ${question.trim()}`;
       const cmds:PaletteCommand[]=[
         // ── PLAY ──
         {id:"play-quick",   icon:"▶",  group:"Play", label:"Быстрая игра",        hint:"Быстрый старт с текущими настройками",       hotkey:"N", run:()=>{sHotseat(false);sRivalMode(false);sTab("play");newG()}},
-        {id:"play-matchme", icon:"⚡", group:"Play", label:"Соперник по рейтингу",             hint:"AI под мой рейтинг",                        run:()=>{const ti=rat<600?0:rat<900?1:rat<1300?2:rat<1700?3:rat<2100?4:5;const c=(chessy.owned.master_ai||isPro)?ti:Math.min(ti,4);sAiI(c);sHotseat(false);sRivalMode(false);sTab("play");setTimeout(()=>newG(),50)}},
+        {id:"play-matchme", icon:"⚡", group:"Play", label:"Соперник по рейтингу",             hint:"ИИ под мой рейтинг",                        run:()=>{const ti=rat<600?0:rat<900?1:rat<1300?2:rat<1700?3:rat<2100?4:5;const c=(chessy.owned.master_ai||isPro)?ti:Math.min(ti,4);sAiI(c);sHotseat(false);sRivalMode(false);sTab("play");setTimeout(()=>newG(),50)}},
         {id:"play-hotseat", icon:"👥", group:"Play", label:"Вдвоём за одним экраном", hint:"Один экран · два игрока",                   run:()=>{sHotseat(true);sRivalMode(false);sTab("play");setTimeout(()=>newG(),50)}},
         {id:"play-variants",icon:"🎲", group:"Play", label:"Выбрать вариант шахмат",hint:"Fischer 960 / Atomic / Crazyhouse / +9",   run:()=>sShowVariants(true)},
         {id:"play-tournament",icon:"🏆",group:"Play",label:"Турнир",                hint:"Свисс / Round-Robin",                       run:()=>sShowTournament(true)},
@@ -15391,7 +15400,7 @@ ${question.trim()}`;
         {id:"ws-standard",  icon:"▦", group:"Workspace", label:"Стандарт — доска + панель", hotkey:"2", run:()=>{sWsPreset("standard");showToast(wsToast("standard"),"info")}},
         {id:"ws-stream",    icon:"▶", group:"Workspace", label:"Стрим — + YouTube/Twitch", hotkey:"3", run:()=>{sWsPreset("stream");showToast(wsToast("stream"),"info")}},
         {id:"ws-study",     icon:"✎", group:"Workspace", label:"Обучение — + multipv",     hotkey:"4", run:()=>{sWsPreset("study");showToast(wsToast("study"),"info")}},
-        {id:"ws-coach",     icon:"🎓",group:"Workspace", label:"Коуч — + предсказания AI", hotkey:"5", run:()=>{sWsPreset("coach");showToast(wsToast("coach"),"info")}},
+        {id:"ws-coach",     icon:"🎓",group:"Workspace", label:"Коуч — + предсказания ИИ", hotkey:"5", run:()=>{sWsPreset("coach");showToast(wsToast("coach"),"info")}},
 
         // ── BOARD / GAME ──
         {id:"flip",         icon:"⇅", group:"Board", label:"Перевернуть доску",   hotkey:"F", run:()=>sFlip(v=>!v)},

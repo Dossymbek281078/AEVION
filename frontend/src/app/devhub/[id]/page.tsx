@@ -14,6 +14,7 @@ import { assetSnippet, appendSnippet, type AssetKind } from "@/lib/devhubAssetSn
 import { newFilePathError, renamePathError, normalizeFilePath } from "@/lib/devhubFilePaths";
 import { devhubServerError } from "@/lib/devhubServerError";
 import { track } from "@/lib/track";
+import { useI18nOptional } from "@/lib/i18n";
 import { productById } from "@/lib/products";
 
 /**
@@ -70,6 +71,36 @@ const PODPIS_VKLADKI: Record<Vkladka, string> = {
   env: "Переменные",
   deployments: "Выкатки",
   settings: "Настройки",
+};
+
+// Гостевой EN-путь генерации: эти строки визитёр видит ДО и СРАЗУ ПОСЛЕ
+// генерации, а машинный доводчик (AutoTranslate) не переводит атрибуты
+// (placeholder) и не успевает за тостами — они живут секунды. Полный
+// словарь IDE (~400 строк) ждёт языкового решения основателя; здесь
+// НАМЕРЕННО только замеренный поимённо остаток пути новичка (проба
+// en-newcomer-probe, 06.09.2026: 66 знаков до генерации + тосты после).
+const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; syntaxWarn: string; memoryWarn: string }> = {
+  ru: {
+    ph: "Опишите, что нужно построить…\nНапример: «REST API с входом пользователей и ручкой товаров»",
+    created: "Создано файлов",
+    noChanges: "Без изменений",
+    syntaxWarn: "не прошли проверку синтаксиса — просмотрите перед выкаткой",
+    memoryWarn: "но база была недоступна — они пока в памяти и могут пропасть при перезапуске. Сохраните копию.",
+  },
+  en: {
+    ph: "Describe what to build…\nFor example: \"a REST API with user sign-in and a products endpoint\"",
+    created: "Files created",
+    noChanges: "No changes",
+    syntaxWarn: "failed the syntax check — review before deploying",
+    memoryWarn: "but the database was unavailable — they live in memory for now and may vanish on restart. Save a copy.",
+  },
+  kk: {
+    ph: "Не құру керегін сипаттаңыз…\nМысалы: «пайдаланушы кірісі мен тауарлар жолы бар REST API»",
+    created: "Жасалған файлдар",
+    noChanges: "Өзгеріс жоқ",
+    syntaxWarn: "синтаксис тексеруінен өтпеді — жариялау алдында қараңыз",
+    memoryWarn: "бірақ дерекқор қолжетімсіз болды — олар әзірге жадта және қайта іске қосқанда жоғалуы мүмкін. Көшірмесін сақтаңыз.",
+  },
 };
 
 function timeAgo(iso: string): string {
@@ -451,6 +482,9 @@ function FileContextMenu({
 // types (build-only error — see the note in src/app/[id]/page.tsx).
 export default function DevHubProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  // Вне провайдера языка (тесты) — русский, как и раньше.
+  const uiLang = useI18nOptional()?.lang ?? "ru";
+  const GL = GEN_UI[uiLang] ?? GEN_UI.ru;
   const [project, setProject] = useState<Project | null>(null);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
@@ -1306,15 +1340,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       } else if (Array.isArray(data.syntaxErrors) && data.syntaxErrors.length > 0) {
         const paths = data.syntaxErrors.map((s: { path: string }) => s.path).join(", ");
         note = `Syntax check failed: ${paths}`;
-        showToast(`Создано файлов: ${newGenerated.length}, но ${paths} не прошли проверку синтаксиса — просмотрите перед выкаткой`, "warning");
+        showToast(`${GL.created}: ${newGenerated.length}, ${paths} ${GL.syntaxWarn}`, "warning");
       } else if (data.storage === "memory") {
         // Генерация — платный шаг. Сервер говорит, куда легли файлы; "memory"
         // значит, что база была недоступна и результат живёт в памяти
         // процесса: при перезапуске он исчезнет, а человек уже заплатил.
         // Зелёный тост «Создано файлов: N» это скрывал.
-        showToast(`Создано файлов: ${newGenerated.length}, но база была недоступна — они пока в памяти и могут пропасть при перезапуске. Сохраните копию.`, "error");
+        showToast(`${GL.created}: ${newGenerated.length}, ${GL.memoryWarn}`, "error");
       } else {
-        showToast(`Создано файлов: ${newGenerated.length}`, "success");
+        showToast(`${GL.created}: ${newGenerated.length}`, "success");
       }
       if (data.aiGenerated) {
         // «Дошёл до первого результата» — главный шаг воронки между заходом
@@ -3815,7 +3849,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         ) : (
                           <div key={mi} style={{ alignSelf: "flex-start", maxWidth: "95%", width: "95%", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px 12px 12px 2px", padding: "10px 12px", fontSize: 13 }}>
                             {msg.files.length === 0 ? (
-                              <div style={{ color: "#991b1b" }}>{msg.note || "Без изменений"}</div>
+                              <div style={{ color: "#991b1b" }}>{msg.note || GL.noChanges}</div>
                             ) : (
                               <>
                                 {msg.note && <div style={{ color: "#92400e", fontSize: 12, marginBottom: 6 }}>⚠ {msg.note}</div>}
@@ -3951,7 +3985,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   <textarea
                     value={aiPrompt}
                     onChange={(e) => setAiPrompt(e.target.value)}
-                    placeholder={`Опишите, что нужно построить…\nНапример: «REST API с входом пользователей и ручкой товаров»`}
+                    placeholder={GL.ph}
                     style={{
                       width: "100%", padding: "10px 14px", border: "1px solid #e2e8f0", borderRadius: 10,
                       fontSize: 13, resize: "none", fontFamily: "inherit", boxSizing: "border-box", height: 90,

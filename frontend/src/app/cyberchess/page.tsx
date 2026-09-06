@@ -47,6 +47,7 @@ import { COLOR as CC_LIGHT, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
 import { PV, ev, mm, best } from "./chessEngine";
 import { classifyDrop } from "./moveQuality";
 import PostGameCard from "./PostGameCard";
+import DeepAnalysisPanel from "./DeepAnalysisPanel";
 import { temaZadachiRu, fazaRu } from "./puzzleLabels";
 import { tochnostSohranennoy } from "./postGameSummary";
 import { RANKS, gRank } from "./rating";
@@ -9707,6 +9708,11 @@ export default function CyberChessPage(){
               </div>}
             </>}
           </div>}
+
+          {/* Глубокий анализ (opt-in): Stockfish 17.1 + полный NNUE, сила уровня
+              lichess. Лёгкий игровой движок не трогает; сети (~75МБ) грузятся по
+              кнопке и кэшируются. См. NNUE-DEEP-ANALYSIS.md. */}
+          {tab==="analysis"&&<div style={{marginTop:8}}><DeepAnalysisPanel fen={game.fen()} /></div>}
 
           {/* Analyze Game button - when game has history */}
           {tab==="analysis"&&hist.length>0&&!showAnal&&!analyzing&&<button onClick={()=>runAnalysis()} style={{padding:"10px 14px",borderRadius:10,border:"none",background:T.purple,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",boxShadow:"0 2px 6px rgba(124,58,237,0.2)"}}>

@@ -1387,7 +1387,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const data = await r.json();
       setCheckpointHistory(data.checkpoints || []);
     } catch {
-      // leave whatever history was already loaded — a stale list beats a blank one here
+      // leave whatever history was already loaded — a stale list beats a blank one here.
+      // Но если истории ещё НЕ БЫЛО, молчание оставляло пустой список без
+      // причины: человек решал, что правок не было вовсе. Тост — вне
+      // setState-апдейтера: React зовёт апдейтеры дважды (известный класс).
+      if (checkpointHistory.length === 0) {
+        showToast("История правок не загрузилась — обновите страницу", "warning");
+      }
     } finally {
       setLoadingHistory(false);
     }

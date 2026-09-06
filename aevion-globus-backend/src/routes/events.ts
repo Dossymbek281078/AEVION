@@ -143,12 +143,26 @@ interface AnalyticsEvent {
  * Канал приезжает в `meta.channel` из метки `?c=` (lib/products withChannel
  * + components/BuyLink). Ключи нейтральные: дашборд открывают и в EN/KK.
  */
+/*
+ * Накопители сводок создаются БЕЗ ПРОТОТИПА (`Object.create(null)`), а не как
+ * обычные объекты. Ключ здесь свободный: он приходит из поля события, то есть
+ * в конечном счёте из адреса, который открыл посторонний.
+ *
+ * У обычного объекта `byX["constructor"]` возвращает функцию, а
+ * `byX["__proto__"]` — прототип. Строка не заводится, число уходит в
+ * наследство, и в отчёте её просто НЕТ, а сумма выглядит целой. Соседнее окно
+ * замерило это 04.09 на отчёте о выручке: подали три канала — в ответе остался
+ * один.
+ *
+ * Где ключ ЗАКРЫТЫЙ (сверяется со списком), правильнее hasOwnProperty — имя
+ * тогда честно отбрасывается. Здесь имя надо сохранить, поэтому без прототипа.
+ */
 export function summarizeCheckoutStarts(events: Array<Pick<AnalyticsEvent, "type" | "source" | "meta">>): {
   bySource: Record<string, number>;
   byChannel: Record<string, number>;
 } {
-  const bySource: Record<string, number> = {};
-  const byChannel: Record<string, number> = {};
+  const bySource = Object.create(null) as Record<string, number>;
+  const byChannel = Object.create(null) as Record<string, number>;
   for (const ev of events) {
     if (ev.type !== "checkout_start") continue;
     const src = ev.source?.trim() || "unknown";
@@ -158,6 +172,62 @@ export function summarizeCheckoutStarts(events: Array<Pick<AnalyticsEvent, "type
     byChannel[chKey] = (byChannel[chKey] ?? 0) + 1;
   }
   return { bySource, byChannel };
+}
+
+/**
+ * Возвраты из касс: сколько дошло до оплаты и сколько отвалилось, ПО КАССАМ.
+ *
+ * Зачем. Отказ мы записываем с 01.09 (`checkout_cancel` с кассой в мете), но не
+ * читает его никто: ни сводка, ни панель. Событие пишется в журнал и умирает
+ * там — то есть мы платим за сбор данных и не получаем ответа на вопрос «у
+ * какой кассы люди отваливаются», а это разные починки: у одной чинят форму
+ * карты, у другой — валюту, у третьей вообще ничего не чинят.
+ *
+ * Считаем ПАРУ, а не отказы отдельно. Голое «41 отказ у PayBox» не значит
+ * ничего: у кассы с большим потоком отказов будет больше просто потому, что
+ * через неё идут все. Пара «успехи и отказы» сравнима, потому что оба события
+ * приходят одинаково — с нашего же экрана возврата.
+ *
+ * ЧЕГО ЭТА ПАРА НЕ ЗНАЕТ, и это надо читать вместе с числами. Адрес отмены
+ * задают только PayBox и PayPal; у LemonSqueezy и Gumroad он не настроен, и их
+ * отказ до нашего экрана НЕ ДОХОДИТ вовсе. Ноль отказов у них означает «мы не
+ * узнаём», а не «никто не отваливается» — прочитать это как хороший показатель
+ * значит выбрать худшую кассу за лучшую.
+ */
+export function summarizeCheckoutReturns(
+  events: Array<Pick<AnalyticsEvent, "type"> & { meta?: Record<string, unknown> }>,
+): {
+  byProvider: Record<string, { успехов: number; отказов: number }>;
+  успехов: number;
+  отказов: number;
+} {
+  const byProvider = Object.create(null) as Record<string, { успехов: number; отказов: number }>;
+  let успехов = 0;
+  let отказов = 0;
+
+  for (const ev of events) {
+    const успех = ev.type === "checkout_success";
+    const отказ = ev.type === "checkout_cancel";
+    if (!успех && !отказ) continue;
+    // Заглушка — не покупка и не отказ: она вообще не про деньги.
+    if (ev.meta?.stub === true) continue;
+
+    const p = ev.meta?.provider;
+    // Касса неизвестна — своя корзина, а не приписывание к чужой: приписанное
+    // число выглядит достовернее, чем оно есть.
+    const key = typeof p === "string" && p.trim() ? p.trim() : "unknown";
+    const строка = byProvider[key] ?? { успехов: 0, отказов: 0 };
+    if (успех) {
+      строка.успехов += 1;
+      успехов += 1;
+    } else {
+      строка.отказов += 1;
+      отказов += 1;
+    }
+    byProvider[key] = строка;
+  }
+
+  return { byProvider, успехов, отказов };
 }
 
 /**
@@ -181,7 +251,7 @@ export function summarizePurchases(
   total: number;
   сКоторыхИзвестнаСумма: number;
 } {
-  const byChannel: Record<string, number> = {};
+  const byChannel = Object.create(null) as Record<string, number>;
   const revenueByChannel: Record<string, number> = {};
   let total = 0;
   let сКоторыхИзвестнаСумма = 0;
@@ -404,20 +474,21 @@ eventsRouter.get("/summary", (req, res) => {
   const обрезано = упёрлисьВПредохранитель;
   const tail = отобранные.reverse();
 
-  const byType: Record<string, number> = {};
-  const bySource: Record<string, number> = {};
-  const byTier: Record<string, number> = {};
-  const byIndustry: Record<string, number> = {};
+  const byType = Object.create(null) as Record<string, number>;
+  const bySource = Object.create(null) as Record<string, number>;
+  const byTier = Object.create(null) as Record<string, number>;
+  const byIndustry = Object.create(null) as Record<string, number>;
   /** Разбивку по ним считает summarizeCheckoutStarts — см. её комментарий. */
   const checkoutEvents: AnalyticsEvent[] = [];
   const purchaseEvents: AnalyticsEvent[] = [];
+  const returnEvents: AnalyticsEvent[] = [];
   // Канал (tt / ig / yt …) — единственный ответ на вопрос «какая раздача
   // принесла людей». Он приезжает в meta, а сводка до 13.08.2026 считала
   // только поля верхнего уровня: метка доезжала и НЕ показывалась никому.
-  const byChannel: Record<string, number> = {};
+  const byChannel = Object.create(null) as Record<string, number>;
   // Товар, по которому нажали «купить». Без него видно «клики были», но не
   // видно, что именно хотели купить.
-  const byProduct: Record<string, number> = {};
+  const byProduct = Object.create(null) as Record<string, number>;
   const sids = new Set<string>();
   let total = 0;
 
@@ -438,6 +509,7 @@ eventsRouter.get("/summary", (req, res) => {
       if (ev.sid) sids.add(ev.sid);
       if (ev.type === "checkout_start") checkoutEvents.push(ev);
       if (ev.type === "checkout_success") purchaseEvents.push(ev);
+      if (ev.type === "checkout_success" || ev.type === "checkout_cancel") returnEvents.push(ev);
     } catch {
       // skip malformed line
     }
@@ -445,6 +517,7 @@ eventsRouter.get("/summary", (req, res) => {
 
   const checkoutSummary = summarizeCheckoutStarts(checkoutEvents);
   const purchases = summarizePurchases(purchaseEvents);
+  const returns = summarizeCheckoutReturns(returnEvents);
 
   res.json({
     total,
@@ -458,6 +531,9 @@ eventsRouter.get("/summary", (req, res) => {
     purchaseRevenueByChannel: purchases.revenueByChannel,
     purchaseCount: purchases.total,
     purchaseWithKnownAmount: purchases.сКоторыхИзвестнаСумма,
+    returnsByProvider: returns.byProvider,
+    returnsSuccess: returns.успехов,
+    returnsCancel: returns.отказов,
     byChannel,
     byProduct,
     sessionCount: sids.size,

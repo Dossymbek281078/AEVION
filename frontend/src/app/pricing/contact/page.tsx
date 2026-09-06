@@ -9,7 +9,28 @@ import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
 import { useI18n } from "@/lib/i18n";
 
-type TierId = "free" | "lite" | "medium" | "full" | "enterprise";
+type TierId = "free" | "lite" | "medium" | "full" | "pro" | "enterprise";
+
+/**
+ * Тарифы, которые человек может ВЫБРАТЬ в форме, в порядке цены.
+ *
+ * Список один на два места — на выпадающий список и на разбор ссылки. Раньше
+ * их было два, и они уже разошлись: ссылка принимала `free`, а в выборе его не
+ * было. Пока списка два, расхождение неизбежно и молчаливо.
+ *
+ * Замер 04.09.2026: тарифа `pro` (149 в месяц, самый дорогой покупаемый) здесь
+ * не было НИ В ОДНОМ из двух списков. Клиент, платящий больше всех, не мог
+ * указать свой тариф ни ссылкой, ни руками — обращение приходило в поддержку
+ * обезличенным. Проверено по трём веткам: ни в одной не починено.
+ */
+const ВЫБОР_ТАРИФА = ["lite", "medium", "full", "pro", "enterprise"] as const;
+
+/**
+ * Что принимается из ссылки. Шире выбора на `free`: с бесплатного тарифа к нам
+ * приходят по ссылке, но предлагать его в списке незачем — форма про платящих
+ * и собирающихся платить.
+ */
+const ТАРИФ_ИЗ_ССЫЛКИ: readonly string[] = ["free", ...ВЫБОР_ТАРИФА];
 
 interface LeadForm {
   name: string;
@@ -38,6 +59,21 @@ function ContactInner() {
   const tp = usePricingT();
   const { t } = useI18n();
   const sp = useSearchParams();
+  /*
+   * Тема обращения из адреса: `?topic=purchase`.
+   *
+   * Соседнее окно уже ставит такие ссылки со страниц (glossary, affiliate), а
+   * письмо о покупке ведёт сюда с `topic=purchase`. Без чтения параметра все
+   * обращения выглядят одинаково, и письмо ЗАПЛАТИВШЕГО теряется среди
+   * прочих — а это тот, кому мы уже должны.
+   *
+   * Отдельное поле не заводим: `source` уже сохраняется в записи обращения и
+   * виден в админке. Второе поле про то же самое разъехалось бы с ним.
+   *
+   * Значение из адреса НЕ доверяем: оставляем только строчные буквы и дефис,
+   * не длиннее двадцати. Иначе в запись уедет что угодно из чужой ссылки.
+   */
+  const темаИзАдреса = (sp.get("topic") ?? "").toLowerCase().replace(/[^a-z-]/g, "").slice(0, 20);
   const [form, setForm] = useState<LeadForm>(INITIAL);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
@@ -49,7 +85,7 @@ function ContactInner() {
     const industry = sp.get("industry");
     setForm((f) => ({
       ...f,
-      tier: tier && ["free", "lite", "medium", "full", "enterprise"].includes(tier) ? tier : f.tier,
+      tier: tier && ТАРИФ_ИЗ_ССЫЛКИ.includes(tier) ? tier : f.tier,
       industry: industry ?? f.industry,
     }));
   }, [sp]);
@@ -75,7 +111,7 @@ function ContactInner() {
           tier: form.tier || undefined,
           seats: form.seats,
           message: form.message || undefined,
-          source: "pricing/contact",
+          source: темаИзАдреса ? `pricing/contact:${темаИзАдреса}` : "pricing/contact",
         }),
       });
       const j = await r.json();
@@ -87,11 +123,36 @@ function ContactInner() {
         tier: form.tier || undefined,
         industry: form.industry || undefined,
         source: "pricing/contact",
-        meta: { hasCompany: !!form.company, hasMessage: !!form.message, seats: form.seats },
+        // Источник события намеренно ОСТАЁТСЯ прежним: сводка считает `bySource`
+        // по точному совпадению строки, и метка в нём расщепила бы один
+        // показатель на три — прежние числа «упали» бы на ровном месте.
+        // Тема живёт в meta: там она видна и ничего не ломает.
+        meta: {
+          hasCompany: !!form.company,
+          hasMessage: !!form.message,
+          seats: form.seats,
+          ...(темаИзАдреса ? { topic: темаИзАдреса } : {}),
+        },
       });
       setSuccess(j.id);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
+      /*
+       * Человеку — понятная фраза, подробность — в журнал браузера.
+       *
+       * Здесь стояло `setError(e.message)`, и на экран уезжало сообщение
+       * движка: внутренний адрес ручки, «Failed to parse URL», текст сетевой
+       * ошибки. Соседнее окно 02.09 нашло тот же класс на странице цен — там
+       * покупателю показывали адрес API и инструкцию запустить бэкенд.
+       *
+       * Место особенно неудачное: эта форма — единственный работающий канал
+       * поддержки (у домена нет записи MX), и сюда пишет тот, у кого уже что-то
+       * пошло не так. Технический текст здесь читается как «сломалось у них
+       * совсем» и отваливает человека окончательно.
+       *
+       * Подробность не теряем: она нужна для разбора, но её место в журнале.
+       */
+      console.warn("[contact] отправка обращения не удалась:", e);
+      setError(t("pricing.contact.errorGeneric"));
     } finally {
       setSubmitting(false);
     }
@@ -251,10 +312,12 @@ function ContactInner() {
               style={inputStyle}
             >
               <option value="">{tp("contact.placeholder.tier")}</option>
-              <option value="lite">Lite</option>
-              <option value="medium">Medium</option>
-              <option value="full">Full</option>
-              <option value="enterprise">Enterprise</option>
+              {/* Список ОДИН на форму и на разбор ссылки: два расходятся молча. */}
+              {ВЫБОР_ТАРИФА.map((id) => (
+                <option key={id} value={id}>
+                  {id.charAt(0).toUpperCase() + id.slice(1)}
+                </option>
+              ))}
             </select>
           </Field>
           <Field label={tp("contact.field.seats")}>

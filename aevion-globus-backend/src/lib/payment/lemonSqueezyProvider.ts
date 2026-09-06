@@ -133,7 +133,29 @@ export const lemonSqueezyPaymentProvider: PaymentProvider = {
     // Reference-based mapping first ("bundle:fintech", "all-access" → published
     // variant), env DEFAULT acts as the catch-all when the slot isn't filled
     // yet OR when reference doesn't match any known bundle.
-    const variantId = resolveLemonSqueezyVariant(input.reference) ?? requiredEnv("LEMON_SQUEEZY_DEFAULT_VARIANT_ID");
+    /*
+     * ЗАПАС МОЛЧАЛ, А ЭТО ДЕНЬГИ.
+     *
+     * Неизвестная ссылка уходит в товар по умолчанию — и покупатель платит цену
+     * ТОГО товара, а не ту, что мы ему назвали. Соседнее окно замерило это на
+     * витрине 02.09: наборы показывают $29/$33/$39, касса берёт $59.
+     *
+     * Отказывать нельзя: `bureau.ts` передаёт сюда идентификатор проверки,
+     * который не сопоставлен НАМЕРЕННО и живёт на товаре по умолчанию. Запрет
+     * сломал бы работающую оплату — то есть лечение было бы хуже болезни.
+     *
+     * Поэтому не меняем поведение, а прекращаем молчать: в журнале остаётся,
+     * КАКАЯ ссылка не нашлась и КАКУЮ сумму мы при этом назвали. Расхождение
+     * этих двух чисел и есть дефект, и теперь его видно без покупки.
+     */
+    const сопоставленный = resolveLemonSqueezyVariant(input.reference);
+    if (!сопоставленный) {
+      console.warn(
+        `[lemonsqueezy] ссылка "${input.reference}" не сопоставлена товару — берём товар по умолчанию; ` +
+          `названная нами сумма ${input.amountCents} ${input.currency} может не совпасть с ценой товара`,
+      );
+    }
+    const variantId = сопоставленный ?? requiredEnv("LEMON_SQUEEZY_DEFAULT_VARIANT_ID");
     const intentId = randomUUID();
     const base = publicBaseUrl();
 

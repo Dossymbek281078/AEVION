@@ -52,20 +52,56 @@ function publicBase(): string {
   return (process.env.AEVION_PUBLIC_BASE_URL ?? "https://aevion.app").replace(/\/+$/, "");
 }
 
+// Мерж 06.09.2026: объединены ДВЕ починки. Из deploy/all — параметр
+// `explicit` (переданная ссылка перебивает всё: без этого общая запасная
+// ссылка уводила покупателя на чужой продукт, см. PaymentIntentInput).
+// Из feat/funnel-upsell-allaccess — чтение двух написаний переменной и
+// предупреждение, когда не настроено ни одно.
 function resolvePermalink(reference: string, explicit?: string): string {
-  // Явно переданная ссылка перебивает всё: её знает вызывающая сторона, у
-  // которой у каждого тарифа свой товар. Без этого общая запасная ссылка
-  // (GUMROAD_DEFAULT_PERMALINK) стояла выше переданного значения и уводила
-  // покупателя на чужой продукт — см. `permalink` в PaymentIntentInput.
   if (explicit && explicit.trim()) return explicit.trim();
-  // GUMROAD_PERMALINK_<UPPER_REFERENCE> → specific product
-  // GUMROAD_DEFAULT_PERMALINK → catch-all
-  const envKey = `GUMROAD_PERMALINK_${reference.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
-  return (
-    process.env[envKey] ??
-    process.env.GUMROAD_DEFAULT_PERMALINK ??
-    reference
-  );
+  const ключ = reference.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+
+  /*
+   * ДВЕ ЗАПИСИ ОДНОГО ИМЕНИ, и ворота с действием читали разные.
+   *
+   * Маршрут Конституции решает «есть ли у нас пермалинк», спрашивая
+   * `GUMROAD_CONSTITUTION_PRO_PERMALINK` — она и задана на проде. Сюда же
+   * приходит ссылка `constitution-pro`, и искали мы
+   * `GUMROAD_PERMALINK_CONSTITUTION_PRO` — другую переменную, не заданную
+   * нигде. Ворота говорили «есть», действие не находило.
+   *
+   * Сегодня расхождение скрыто: ключ LemonSqueezy задан, и до ветки Gumroad
+   * дело не доходит. Уберут его — и покупатель уедет по ссылке, собранной из
+   * САМОЙ ссылки (`gumroad.com/l/constitution-pro`), то есть на товар,
+   * которого может не быть. Ошибка проявится ровно тогда, когда откажет
+   * первый провайдер, — в момент, когда запас и нужен.
+   *
+   * Обе записи читаем здесь, а не переименовываем переменную: имя живёт в
+   * настройках сервиса, и переименование сломало бы работающие ворота.
+   */
+  const порядок = [
+    process.env[`GUMROAD_PERMALINK_${ключ}`],
+    process.env[`GUMROAD_${ключ}_PERMALINK`],
+    process.env.GUMROAD_DEFAULT_PERMALINK,
+  ];
+  const найденный = порядок.find((v) => typeof v === "string" && v.trim() !== "")?.trim();
+  if (!найденный) {
+    /*
+     * Ни одного сопоставления и нет товара по умолчанию — адрес соберётся из
+     * САМОЙ ссылки, а такого товара у Gumroad может не быть. Прежде это
+     * происходило молча: покупатель нажимал «купить» и попадал на страницу
+     * несуществующего товара, а у нас не оставалось ни следа.
+     *
+     * Поведение не меняем — вернуть отказ отсюда значило бы сломать вызовы, где
+     * ссылка И ЕСТЬ пермалинк. Но молчать перестаём.
+     */
+    console.warn(
+      `[gumroad] пермалинк для "${reference}" не настроен ни одним именем ` +
+        `(GUMROAD_PERMALINK_${ключ}, GUMROAD_${ключ}_PERMALINK, GUMROAD_DEFAULT_PERMALINK) — ` +
+        `адрес кассы соберётся из самой ссылки`,
+    );
+  }
+  return найденный ?? reference;
 }
 
 function gumroadCheckoutUrl(

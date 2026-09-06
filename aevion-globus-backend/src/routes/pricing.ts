@@ -743,15 +743,68 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/**
+ * Отправка письма, у которой отказ ВИДЕН.
+ *
+ * Здесь было пять вызовов вида `sendEmail({...}).catch((e) => console.error(...))`.
+ * Выглядит как полноценная обработка отказа, а сработать не может ни разу:
+ * `sendEmail` не бросает НИ ПРИ КАКОМ исходе — отказ поставщика, обрыв сети и
+ * даже собственное исключение она возвращает объектом `{ok: false}`. Правда об
+ * отправке живёт только в признаке `ok`, и его не читал никто.
+ *
+ * Следствие было дороже падения: заявка сохранена, ссылка выдана, ответ 200 — а
+ * письмо не ушло, и в журнале на месте отказа НЕТ строки от того, кто письмо
+ * заказывал. Сам `sendEmail` при этом пишет о себе, но не знает, ЧТО именно не
+ * доехало: вход в дашборд, подтверждение заявки или уведомление о сделке.
+ *
+ * Что НЕ меняется: письмо по-прежнему не роняет операцию, ради которой шлётся.
+ * Меняется одно — отказ перестаёт быть невидимым.
+ *
+ * Адрес получателя целиком в журнал не пишем: это персональные данные, а для
+ * разбора хватает домена и темы. То же решение принято в `sendEmail`, и держать
+ * их одинаковыми важнее, чем каждое по отдельности.
+ *
+ * Факт, на котором держится весь этот помощник, закреплён отдельным тестом:
+ * `tests/sendEmailNeverThrowsSoCatchIsDead.test.ts`. Начнёт `sendEmail` бросать —
+ * тест покраснеет, и правило надо будет пересматривать вместе с ним.
+ */
+async function отправитьПисьмо(
+  метка: string,
+  payload: { to: string; subject: string; html: string; text: string },
+): Promise<void> {
+  try {
+    const r = await sendEmail(payload);
+    if (!r.ok) {
+      const домен = String(payload.to).split("@").pop() ?? "?";
+      console.error(
+        `[${метка}] письмо НЕ отправлено: получатель @${домен}, тема "${payload.subject}" — ` +
+          `${r.error ?? "причина не названа"}`,
+      );
+      return;
+    }
+    if (r.degraded) {
+      console.warn(
+        `[${метка}] отправка вырожденная, доставка не подтверждена: ` +
+          `${r.degradedReason ?? "причина не названа"}`,
+      );
+    }
+  } catch (e) {
+    // Сегодня недостижимо (см. тест выше), но вызов обёрнут намеренно: если
+    // sendEmail когда-нибудь начнёт бросать, письмо всё равно не должно
+    // ронять денежный путь.
+    console.error(`[${метка}] отправка упала исключением`, e);
+  }
+}
+
 async function notifyApplication(app: ProgramApplication): Promise<void> {
   const meta = PROGRAM_LABELS[app.kind];
   // Auto-reply заявителю
-  sendEmail({
+  void отправитьПисьмо(`apply/${app.kind} -> заявителю`, {
     to: app.email,
     subject: meta.subject,
     html: applicantHtml(app),
     text: applicantText(app),
-  }).catch((e) => console.error(`[apply/${app.kind}] applicant email failed`, e));
+  });
   // Внутреннее уведомление — только если адрес настроен (см. комментарий у
   // NOTIFY_EMAIL: запасной вёл в чужую компанию).
   if (!NOTIFY_EMAIL) {
@@ -761,12 +814,12 @@ async function notifyApplication(app: ProgramApplication): Promise<void> {
     );
     return;
   }
-  sendEmail({
+  void отправитьПисьмо(`apply/${app.kind} -> внутреннее уведомление`, {
     to: NOTIFY_EMAIL,
     subject: `[${app.kind}] ${app.name} · ${app.organization ?? "—"}`,
     html: notifyHtml(app),
     text: `New ${app.kind} application: ${app.name} (${app.email}) · ${app.organization ?? "—"}\nID: ${app.id}\nDetails: ${app.details ?? "—"}`,
-  }).catch((e) => console.error(`[apply/${app.kind}] notify email failed`, e));
+  });
 }
 
 /**
@@ -1101,12 +1154,12 @@ pricingRouter.post("/affiliate/magic-link", (req, res) => {
   if (found) {
     const token = dashboardToken(email, "affiliate");
     const link = `${SITE_BASE}/pricing/affiliate-dashboard?email=${encodeURIComponent(email)}&token=${token}`;
-    sendEmail({
+    void отправитьПисьмо("affiliate/magic-link", {
       to: email,
       subject: "AEVION Affiliate — вход в дашборд",
       html: magicLinkHtml(found.name, link, "Affiliate"),
       text: `Здравствуйте, ${found.name}.\n\nСсылка для входа в Affiliate-дашборд:\n${link}\n\n— AEVION`,
-    }).catch((e) => console.error("[affiliate/magic-link] email failed", e));
+    });
   }
 
   // Always 204, don't leak existence.
@@ -1185,12 +1238,12 @@ pricingRouter.post("/partners/magic-link", (req, res) => {
   if (found) {
     const token = dashboardToken(email, "partners");
     const link = `${SITE_BASE}/pricing/partners-portal?email=${encodeURIComponent(email)}&token=${token}`;
-    sendEmail({
+    void отправитьПисьмо("partners/magic-link", {
       to: email,
       subject: "AEVION Partner — вход в портал",
       html: magicLinkHtml(found.name, link, "Partner"),
       text: `Здравствуйте, ${found.name}.\n\nСсылка для входа в Partner-портал:\n${link}\n\n— AEVION`,
-    }).catch((e) => console.error("[partners/magic-link] email failed", e));
+    });
   }
   res.status(204).end();
 });
@@ -1316,7 +1369,7 @@ pricingRouter.post("/partners/deals", (req, res) => {
   }
 
   // Notify channel team
-  sendEmail({
+  void отправитьПисьмо("partners/deals", {
     to: NOTIFY_EMAIL,
     subject: `[partner-deal] ${customer} · $${dealSizeUsd.toLocaleString("en-US")}`,
     html: `<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:20px">
@@ -1331,7 +1384,7 @@ pricingRouter.post("/partners/deals", (req, res) => {
       <div style="margin-top:14px;font-size:11px;color:#94a3b8;font-family:ui-monospace,monospace">ID: ${escapeHtml(deal.id)} · ${escapeHtml(deal.ts)}</div>
     </body></html>`,
     text: `New deal: ${customer} · $${dealSizeUsd}\nPartner: ${email}\nModules: ${modules.join(", ")}\nExpected close: ${expectedClose ?? "—"}\nNotes: ${notes ?? "—"}\nID: ${deal.id}`,
-  }).catch((e) => console.error("[partners/deals] notify failed", e));
+  });
 
   res.status(201).json({ ok: true, deal });
 });

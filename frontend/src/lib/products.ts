@@ -404,7 +404,25 @@ export const CHANNELS: Record<string, string> = {
 export function channelFrom(raw: string | string[] | undefined): string | null {
   const v = Array.isArray(raw) ? raw[0] : raw;
   if (!v) return null;
-  return CHANNELS[v.trim().toLowerCase()] ?? null;
+  const ключ = v.trim().toLowerCase();
+
+  /*
+   * Прямая индексация находит и УНАСЛЕДОВАННОЕ, а `?? null` этого не ловит:
+   * оператор отсеивает только null и undefined, а `CHANNELS["constructor"]` —
+   * функция Object, она вполне себе значение.
+   *
+   * Замерено 02.09.2026 пробой: channelFrom("constructor") возвращал ФУНКЦИЮ.
+   * Дальше она уезжала как «канал»: в meta события учёта (там JSON.stringify
+   * молча выбрасывает функции, и канал исчезал вовсе) и в withChannel(), где
+   * подставлялась в адрес кассы строкой «function Object() { [native code] }».
+   * То есть достаточно было зайти на страницу с `?c=constructor`, чтобы
+   * испортить атрибуцию покупки — своей или чужой.
+   *
+   * Тот же класс платформа уже ловила у ссылок Gumroad и у вариантов
+   * LemonSqueezy; там стоит ровно эта проверка.
+   */
+  if (!Object.prototype.hasOwnProperty.call(CHANNELS, ключ)) return null;
+  return CHANNELS[ключ] ?? null;
 }
 
 /** Тип трафика для `utm_medium`. Все метки из CHANNELS — соцсети, кроме

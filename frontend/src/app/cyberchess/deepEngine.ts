@@ -15,20 +15,13 @@
 // Next/Turbopack (в пробе — простой статический сервер). (3) UI-кнопка и провод
 // к eval-бару.
 
-// Типы модуля (из lila-stockfish-web/stockfishWeb.d.ts).
-interface StockfishWeb {
-  uci(command: string): void;
-  listen: (line: string) => void;
-  setNnueBuffer(data: Uint8Array, index?: number): void;
-  getRecommendedNnue(index?: number): string;
-  onError: (msg: string) => void;
-}
-
-// Откуда брать движок и сети. Движок — из нашего /public (кладётся в сборку,
-// ~0.5 МБ). Сети — из NET_BASE: ЗАМЕНИТЬ на наш self-host перед продом (сейчас
-// плейсхолдер; дистрибутив Stockfish без CORS для рантайм-фетча не годится).
-const ENGINE_URL = "/sf171-79.js";
-const NET_BASE = process.env.NEXT_PUBLIC_NNUE_BASE || "/nnue"; // /nnue/<name> — self-host
+// Загрузка движка — через worker-мост public/deep-engine-worker.js (см. его
+// шапку и NNUE-DEEP-ANALYSIS.md): под Turbopack прямой import(url) ненадёжен,
+// а воркер с type:"module" отдаётся статикой и импортирует движок сам.
+const WORKER_URL = "/deep-engine-worker.js";
+// Сети — из NET_BASE: ЗАМЕНИТЬ на наш self-host перед продом (дистрибутив
+// Stockfish без CORS для рантайм-фетча не годится). /nnue/<name>.
+const NET_BASE = process.env.NEXT_PUBLIC_NNUE_BASE || "/nnue";
 
 const DB_NAME = "cyberchess-nnue";
 const STORE = "nets";
@@ -107,8 +100,10 @@ async function loadNet(name: string, onProgress?: (frac: number) => void): Promi
 export type DeepEngineState = "idle" | "loading-engine" | "loading-nets" | "ready" | "error";
 
 export class DeepEngine {
-  private sf: StockfishWeb | null = null;
+  private w: Worker | null = null;
+  private ready = false;
   private cb: ((line: string) => void) | null = null;
+  private recResolve: ((name: string) => void) | null = null;
   state: DeepEngineState = "idle";
   error: string | null = null;
   onState: ((s: DeepEngineState, netFrac?: number) => void) | null = null;
@@ -118,29 +113,48 @@ export class DeepEngine {
     this.onState?.(s, frac);
   }
 
+  private uci(cmd: string) {
+    this.w?.postMessage({ type: "uci", cmd });
+  }
+
+  private recommend(index: number): Promise<string> {
+    return new Promise((res) => {
+      this.recResolve = res;
+      this.w?.postMessage({ type: "recommend", index });
+    });
+  }
+
   /** Грузит движок + обе сети (с кэшем). Идемпотентно: повторный вызов — no-op. */
   async init(): Promise<void> {
-    if (this.sf) return;
+    if (this.w) return;
     try {
       this.set("loading-engine");
-      // ⚠️ Next 16 = Turbopack, а webpackIgnore — вебпаковская директива, её
-      // Turbopack может НЕ уважать → этот import(url) под текущей сборкой не
-      // проверен и может не собраться. Рекомендованный путь — worker-мост
-      // (см. NNUE-DEEP-ANALYSIS.md, п.2): public/deep-engine-worker.js делает
-      // import сам, главный поток берёт его как new Worker(url,{type:"module"}).
-      // Здесь оставлен прямой import как доказанный в пробе; переключить на мост
-      // при интеграции, проверив реальной сборкой.
-      const url = ENGINE_URL;
-      const mod = (await import(/* webpackIgnore: true */ /* @vite-ignore */ url)) as {
-        default: (arg?: Record<string, unknown>) => Promise<StockfishWeb>;
+      const w = new Worker(WORKER_URL, { type: "module" });
+      this.w = w;
+      w.onmessage = (e: MessageEvent) => {
+        const m = e.data || {};
+        if (m.type === "line") this.cb?.(m.line);
+        else if (m.type === "error") {
+          this.error = m.error;
+          this.set("error");
+        } else if (m.type === "recommend") this.recResolve?.(m.name);
       };
-      const sf = await mod.default();
-      sf.onError = (m) => {
-        this.error = m;
-        this.set("error");
-      };
-      sf.listen = (line) => this.cb?.(line);
-      // ждём uciok, затем грузим рекомендованные сети
+      // ждём готовности моста, затем uciok
+      await new Promise<void>((res, rej) => {
+        const to = setTimeout(() => rej(new Error("мост движка не поднялся за 20с")), 20000);
+        const onMsg = (e: MessageEvent) => {
+          if (e.data?.type === "ready") {
+            clearTimeout(to);
+            w.removeEventListener("message", onMsg);
+            res();
+          } else if (e.data?.type === "error") {
+            clearTimeout(to);
+            rej(new Error(e.data.error));
+          }
+        };
+        w.addEventListener("message", onMsg);
+        w.postMessage({ type: "init" });
+      });
       await new Promise<void>((res, rej) => {
         const to = setTimeout(() => rej(new Error("движок не ответил uciok за 20с")), 20000);
         this.cb = (line) => {
@@ -149,19 +163,20 @@ export class DeepEngine {
             res();
           }
         };
-        sf.uci("uci");
+        this.uci("uci");
       });
-      this.sf = sf;
       this.set("loading-nets");
-      const big = sf.getRecommendedNnue(0);
-      const small = sf.getRecommendedNnue(1);
+      const big = await this.recommend(0);
+      const small = await this.recommend(1);
       const bigBuf = await loadNet(big, (f) => this.set("loading-nets", f));
       const smallBuf = await loadNet(small);
-      sf.setNnueBuffer(bigBuf, 0);
-      sf.setNnueBuffer(smallBuf, 1);
-      sf.uci("setoption name Threads value 1");
-      sf.uci("setoption name Hash value 128");
-      sf.uci("isready");
+      // buf передаётся transfer'ом (без копии): дальше в этом потоке он не нужен
+      w.postMessage({ type: "nnue", index: 0, buf: bigBuf }, [bigBuf.buffer]);
+      w.postMessage({ type: "nnue", index: 1, buf: smallBuf }, [smallBuf.buffer]);
+      this.uci("setoption name Threads value 1");
+      this.uci("setoption name Hash value 128");
+      this.uci("isready");
+      this.ready = true;
       this.set("ready");
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
@@ -172,7 +187,7 @@ export class DeepEngine {
 
   /** Оценка позиции до глубины d. onEval — на каждый info, done — по bestmove. */
   evaluate(fen: string, d: number, onEval: EvalCb, done: (best?: string) => void): void {
-    if (!this.sf) {
+    if (!this.ready) {
       done();
       return;
     }
@@ -185,12 +200,12 @@ export class DeepEngine {
       }
       if (line.startsWith("bestmove")) done(line.split(" ")[1]);
     };
-    this.sf.uci("stop");
-    this.sf.uci(`position fen ${fen}`);
-    this.sf.uci(`go depth ${d}`);
+    this.uci("stop");
+    this.uci(`position fen ${fen}`);
+    this.uci(`go depth ${d}`);
   }
 
   stop(): void {
-    this.sf?.uci("stop");
+    this.uci("stop");
   }
 }

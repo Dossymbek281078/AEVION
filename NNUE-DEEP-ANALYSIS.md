@@ -16,6 +16,8 @@ nodes 50495 nps 91976`. То есть настоящий SF 17.1 NNUE работ
 
 ## Что уже сделано (в этой ветке)
 
+- ✅ **Worker-мост ВЕРИФИЦИРОВАН end-to-end** (06.09): new Worker("/deep-engine-worker.js",{type:"module"}) → import внутри воркера → setNnueBuffer transferable → поиск bestmove e2e4 depth 12 462k nps. Риск Turbopack снят.
+
 - `frontend/public/sf171-79.{js,wasm}` — движок (~0.5 МБ, часть сборки).
 - `frontend/src/app/cyberchess/deepEngine.ts` — обёртка `DeepEngine`:
   - `init()` — грузит модуль (dynamic import из /public) + обе сети (с кэшем

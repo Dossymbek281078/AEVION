@@ -19,7 +19,8 @@ nodes 50495 nps 91976`. То есть настоящий SF 17.1 NNUE работ
 - ✅ **Worker-мост ВЕРИФИЦИРОВАН end-to-end** (06.09): new Worker("/deep-engine-worker.js",{type:"module"}) → import внутри воркера → setNnueBuffer transferable → поиск bestmove e2e4 depth 12 462k nps. Риск Turbopack снят.
 
 - `frontend/public/sf171-79.{js,wasm}` — движок (~0.5 МБ, часть сборки).
-- `frontend/src/app/cyberchess/deepEngine.ts` — обёртка `DeepEngine`:
+- `frontend/public/deep-engine-worker.js` — worker-мост (обходит Turbopack, проверен).
+- `frontend/src/app/cyberchess/deepEngine.ts` — обёртка `DeepEngine` (через мост):
   - `init()` — грузит модуль (dynamic import из /public) + обе сети (с кэшем
     IndexedDB, потоковый прогресс на большой сети);
   - `evaluate(fen, d, onEval, done)` — оценка под интерфейс анализа;
@@ -35,22 +36,7 @@ nodes 50495 nps 91976`. То есть настоящий SF 17.1 NNUE работ
    можно переопределить `NEXT_PUBLIC_NNUE_BASE`). Варианты хоста:
    - НЕ в git (75 МБ бинарей — плохо для репо/деплоя);
    - бэкенд Railway как статика, или asset-bucket/CDN. Решение за инфрой.
-2. **Загрузка ESM-модуля под Next 16 = Turbopack (проверено 06.09).**
-   ⚠️ Проект на Next `^16.2.12` с `turbopack: {}` в next.config — значит бандлер
-   **Turbopack**, а `webpackIgnore` — ВЕБПАКОВСКАЯ директива, Turbopack её может
-   не уважать. То есть `import(/* webpackIgnore */ url)` в `deepEngine.ts` —
-   РИСКОВАННЫЙ путь под этой сборкой. Прецедент в проекте — загрузка движка через
-   `new Worker("/stockfish-...js")`, а НЕ через `import()`; строковых
-   `import("/...")` в коде больше нет.
-   **РЕКОМЕНДАЦИЯ:** грузить sf171-79 не через `import()` в главном потоке, а
-   через **worker-мост**: маленький файл `public/deep-engine-worker.js`
-   (`type:"module"`), который сам делает `import("/sf171-79.js")`, вызывает
-   фабрику и мостит uci/listen/setNnueBuffer через `postMessage`. Главный поток —
-   `new Worker("/deep-engine-worker.js", {type:"module"})`. Это (а) совпадает с
-   существующим прецедентом загрузки движка, (б) обходит статический анализ
-   Turbopack (файл отдаётся статикой), (в) уводит тяжёлый движок с main-потока.
-   Проверять всё равно реальной сборкой (`next build` + `next start`).
-3. **UI:** кнопка «🧠 Глубокий анализ» во вкладке Анализ, индикатор загрузки
+2. **UI:** кнопка «🧠 Глубокий анализ» во вкладке Анализ, индикатор загрузки
    сетей (прогресс 0..1 уже отдаётся из `init`), провод `evaluate` к eval-бару.
 
 ## Проверка после интеграции

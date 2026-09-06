@@ -366,9 +366,11 @@ export function readLatestSubscription(email: string): Subscription | null {
   } catch (err) {
     // Файл ЕСТЬ, а прочитать не вышло: права, порча, диск. Поведение НЕ
     // меняем (null = ворота считают «подписки нет»); меняем видимость.
-    // Мерж 06.09: обе ветки закрыли это молчание независимо — оставлен
-    // след раз-на-процесс в консоль (иначе журнал забьётся) + capture в
-    // Sentry, где смотрят.
+    // Мерж 06.09, две видимости с РАЗНЫМ периодом: консоль — раз-на-процесс
+    // (иначе журнал забьётся и предупреждение потеряется), Sentry — КАЖДЫЙ
+    // сбой (дедупликацию делает сам Sentry, а флаг тут прятал бы длящуюся
+    // поломку: один след при часах отказов; это охраняет
+    // gateReadFailureLeavesATrace).
     if (!warnedUnreadableStore) {
       warnedUnreadableStore = true;
       console.error(
@@ -376,8 +378,8 @@ export function readLatestSubscription(email: string): Subscription | null {
           err instanceof Error ? err.message : String(err)
         }. Пока так, каждый заплативший отвечает как бесплатный.`,
       );
-      capture(err, { route: "provisioning/readLatestSubscription", email: target });
     }
+    capture(err, { route: "provisioning/readLatestSubscription", email: target });
     return null;
   }
 }

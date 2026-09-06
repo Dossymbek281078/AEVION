@@ -55,22 +55,20 @@ const PRIZNAKI = ["canEdit", "userId !==", ".userId ===", "requireAuth", "verify
  * `/media/voice-clone/preview`) найдены разбором и пробой не проверялись —
  * их поведение не утверждается, они здесь только чтобы список был полным.
  */
+// 06.09.2026, мерж полной выкатки: список СОКРАТИЛСЯ 17 → 11. Шесть ручек
+// получили проверку прав из влитых веток: /ask, /media/sfx, /media/stt,
+// /media/translate, /media/voice-clone, /media/voice-clone/preview.
+// Строки удалены по требованию самого сторожа («список ровно тот же»).
 const IZVESTNYE = [
-  "/ask",
   "/media/drive-search", // 503 «не настроено» — то есть ВХОД не спрашивают
   "/media/email",
   "/media/email-template-create",
   "/media/email-template-send",
   "/media/gumroad-checkout",
   "/media/payment-link",
-  "/media/sfx",
   "/media/sms",
-  "/media/stt",
-  "/media/translate",
   "/media/upload-audio",
   "/media/upload-image",
-  "/media/voice-clone",
-  "/media/voice-clone/preview",
   "/media/whatsapp",
   "/snippets/:id/star", // пробой НЕ проверял: ручка меняет состояние
 ];

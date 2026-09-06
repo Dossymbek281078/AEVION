@@ -58,7 +58,20 @@ describe("журнал действий бюро не теряется молч�
   });
 
   test("отказ уходит и в Sentry", () => {
-    expect(code()).toMatch(/captureException\(e, \{\s*route: "bureau\/logBureauAudit"/);
+    // Мерж 06.09: прямой captureException заменён сервисной обёрткой
+    // captureBureauError (makeServiceCapture("bureau")) — она помечает
+    // службу и зовёт Sentry внутри. Проверяем ОБА звена цепочки: вызов у
+    // журнала и то, что обёртка действительно доводит до captureException, —
+    // иначе признак стал бы именем без дела.
+    expect(code()).toMatch(/captureBureauError\(e, \{\s*route: "bureau\/logBureauAudit"/);
+    const обёртка = fs.readFileSync(
+      path.join(__dirname, "..", "src", "lib", "sentry", "platform.ts"),
+      "utf8",
+    );
+    expect(
+      обёртка,
+      "makeServiceCapture больше не зовёт Sentry.captureException — цепочка тревоги разорвана",
+    ).toMatch(/Sentry\.captureException\(/);
   });
 
   test("молчаливыми остались ровно три, и это откаты и счётчик обращений", () => {

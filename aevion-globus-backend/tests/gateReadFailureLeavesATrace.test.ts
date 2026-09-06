@@ -31,6 +31,11 @@ vi.mock("node:fs", async (real) => {
     existsSync: (p: string) => (про(p) ? true : fs.existsSync(p)),
     readFileSync: (p: string, ...a: unknown[]) => {
       if (про(p) && режим.сломано) throw new Error("диск недоступен");
+      // Исправный режим обязан ЧИТАТЬСЯ: existsSync выше принудительно
+      // отвечает true, а настоящего файла нет — без этой ветки контроль
+      // падал бы на ENOENT от реальной fs, то есть на артефакте мока, а
+      // не на поведении ворот. Пустой файл = подписок нет, это законно.
+      if (про(p)) return "";
       return (fs.readFileSync as (...x: unknown[]) => unknown)(p, ...a);
     },
   };

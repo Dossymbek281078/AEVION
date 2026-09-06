@@ -432,8 +432,12 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
       // Консоль Railway пролистывается и никем не читается; смотрят Sentry.
       // Пока эта ветка там молчит, всплеск выдач без подтверждения выглядит
       // ровно как обычный день.
-      capture(new Error(`gumroad_sale_unverifiable_provisioned:${saleId}`), {
+      // Текст ошибки ПОСТОЯННЫЙ, saleId — в контексте: приклеенный к тексту
+      // идентификатор дробил бы группировку Sentry (каждая продажа — свой
+      // issue), и всплеск из ста выдач выглядел бы как сто разных мелочей.
+      capture(new Error("gumroad_sale_unverifiable_provisioned"), {
         route: "gumroad/webhook",
+        saleId,
       });
     }
 

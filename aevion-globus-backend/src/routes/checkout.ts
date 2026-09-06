@@ -157,7 +157,12 @@ const statusLimiter = rateLimit({
 
 checkoutRouter.get("/status", statusLimiter, (req, res) => {
   const intentId = typeof req.query.intentId === "string" ? req.query.intentId.trim() : "";
-  if (!intentId) return res.status(400).json({ error: "intent_required" });
+  if (!intentId) {
+    return res.status(400).json({
+      error: "intent_required",
+      message: "В адресе не хватает номера оплаты. Откройте страницу по ссылке из письма об оплате — или напишите нам, доступ не потерян.",
+    });
+  }
   try {
     const итог = findSubscriptionByPaymentId(intentId);
     if (!итог.найдено) return res.json({ ready: false });

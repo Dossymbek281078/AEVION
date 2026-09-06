@@ -18,7 +18,7 @@ import { buildQuote } from "../src/data/pricing";
  * Проверка ДВУСТОРОННЯЯ: без второй половины «повтор бесплатен»
  * удовлетворялось бы кодом, который перестал брать деньги за модули вовсе.
  */
-const q = (modules: string[], tierId = "lite") =>
+const q = (modules: string[], tierId: Parameters<typeof buildQuote>[0]["tierId"] = "lite") =>
   buildQuote({ tierId, period: "monthly", seats: 1, modules, currency: "USD" }).total;
 
 describe("повтор модуля не продаётся дважды", () => {

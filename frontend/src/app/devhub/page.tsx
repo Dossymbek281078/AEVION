@@ -183,6 +183,7 @@ export default function DevHubPage() {
       // а не обнаружить пропажу завтра.
       if (data.storage === "memory") setError(t("proj.savedToMemory"));
       try { localStorage.setItem(`devhub_autoprompt_${data.project.id}`, idea); } catch { /* quota */ }
+      track({ type: "feature_use", source: "devhub", meta: { feature: "build_from_idea", stack } });
       router.push(`/devhub/${data.project.id}`);
     } catch (e: any) {
       setError(e.message);

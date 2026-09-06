@@ -60,7 +60,6 @@ import {
   validateWebhookUrl,
 } from "../services/qcoreai/userWebhooks";
 import {
-  updateRun,
   applyRefinement,
   buildHistoryContext,
   buildThreadContext,
@@ -3649,7 +3648,7 @@ async function runBatchItem(opts: {
       const why = "Месячная квота токенов исчерпана — элемент batch не запускался";
       try {
         await insertMessage({ runId: opts.runId, role: "system", content: why, ordering: 1 });
-        await updateRun(opts.runId, { status: "error", error: why });
+        await finishRun(opts.runId, "error", { error: why });
       } catch { /* след важнее падения; статус останется видимым по сообщению */ }
       return { costUsd: 0, status: "error" };
     }

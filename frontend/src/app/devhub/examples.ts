@@ -19,4 +19,23 @@ export type DevhubExample = {
   url: string;
 };
 
-export const DEVHUB_EXAMPLES: DevhubExample[] = [];
+// Все три собраны 06.09.2026 через ЖИВОЙ прод как обычный пользователь
+// (гость → фраза → генерация → Pages), адреса проверены на 200 и на
+// соответствие теме. Ежедневный смоук страниц держит их под наблюдением.
+export const DEVHUB_EXAMPLES: DevhubExample[] = [
+  {
+    title: "Кофейня у моста",
+    prompt: "лендинг кофейни с меню и формой брони",
+    url: "https://465693ea.aevion-project-7760cf.pages.dev",
+  },
+  {
+    title: "Портфолио фотографа",
+    prompt: "портфолио фотографа с галереей и тёмной темой",
+    url: "https://909ef2a1.aevion-project-af430e.pages.dev",
+  },
+  {
+    title: "Афиша концерта",
+    prompt: "афиша концерта с программой и картой проезда",
+    url: "https://75d87932.aevion-project-b85b54.pages.dev",
+  },
+];

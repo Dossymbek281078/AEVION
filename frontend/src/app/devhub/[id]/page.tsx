@@ -537,7 +537,6 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [agentStreaming, setAgentStreaming] = useState(true);
   const [agentLiveStep, setAgentLiveStep] = useState<number | null>(null);
   const [agentTemplates, setAgentTemplates] = useState<Array<{ id: string; name: string; description: string; steps: AgentStep[] }>>([]);
-  const [generatedFiles, setGeneratedFiles] = useState<Array<{ path: string; language: string }>>([]);
   type ChatFileChange = { path: string; language: string; isNew: boolean; added: number; removed: number; diff: string | null };
   type ChatMsg =
     | { role: "user"; text: string; at: string }
@@ -626,7 +625,6 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [videoStatus, setVideoStatus] = useState<string | null>(null);
 
   // Domain provision state
-  const [domainStatus, setDomainStatus] = useState<{ customDomain?: string; url?: string } | null>(null);
 
   // DeepL bulk translate state (N files × M langs)
   const BULK_LANG_OPTIONS = [
@@ -1213,7 +1211,6 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     if (generating) return;
     if (!userText || !project) return;
     setGenerating(true);
-    setGeneratedFiles([]);
     const genCtrl = new AbortController();
     genAbortRef.current = genCtrl;
     const sentImage = aiImage;
@@ -1285,7 +1282,6 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       }
       const newGenerated = data.files || [];
       предупредитьЕслиНеСверили(data);
-      setGeneratedFiles(newGenerated.map((f: any) => ({ path: f.path, language: f.language })));
       // Diffs are computed against the files as they were BEFORE this
       // generation (still in state here — the list reload happens below).
       const changes = newGenerated.map((gf: { path: string; language?: string; content: string }) => {

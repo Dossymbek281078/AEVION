@@ -60,6 +60,7 @@ import {
   validateWebhookUrl,
 } from "../services/qcoreai/userWebhooks";
 import {
+  updateRun,
   applyRefinement,
   buildHistoryContext,
   buildThreadContext,

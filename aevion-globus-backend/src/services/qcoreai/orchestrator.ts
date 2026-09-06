@@ -120,7 +120,11 @@ export type OrchestratorInput = {
    */
   premiumGate?: (
     provider: string,
-    model: string
+    model: string,
+    // Размер параллельной группы: слой из N премиум-стримов проверяется с
+    // запасом на всех (гонка 06.09.2026). Необязателен — одиночные вызовы
+    // и старые затворы работают как раньше.
+    projectedCalls?: number
   ) => Promise<{ usedTokens: number; limitTokens: number } | null>;
 };
 

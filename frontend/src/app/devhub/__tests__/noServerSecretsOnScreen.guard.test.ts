@@ -123,7 +123,7 @@ describe("значение сервера не остаётся сырым", () 
     for (const f of files) {
       const lines = fs.readFileSync(f, "utf8").split(String.fromCharCode(10));
       lines.forEach((l, i) => {
-        if (l.includes("devhubServerError")) { wrapped++; return; }
+        if (l.includes("devhubServerError") || l.includes("serverError(")) { wrapped++; return; }
         if (!l.includes(".error")) return;
         if (l.includes("e.error") || l.includes("err.error")) return;
         if (ALLOWED.some(([frag]) => l.includes(frag))) return;

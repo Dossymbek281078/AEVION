@@ -12,7 +12,7 @@ import { buildReactPreviewSrcdoc, isClientPreviewStack } from "@/lib/reactPrevie
 import { indexCapabilities, isCapabilityBlocked, isCapabilityConfirmed, capabilityHint, type CapabilityIndex } from "@/lib/devhubCapabilities";
 import { assetSnippet, appendSnippet, type AssetKind } from "@/lib/devhubAssetSnippet";
 import { newFilePathError, renamePathError, normalizeFilePath } from "@/lib/devhubFilePaths";
-import { devhubServerError } from "@/lib/devhubServerError";
+import { devhubServerError, useDevhubServerError } from "@/lib/devhubServerError";
 import { track } from "@/lib/track";
 import { useI18nOptional } from "@/lib/i18n";
 import { productById } from "@/lib/products";
@@ -32,7 +32,10 @@ async function writeOrThrow(input: string, init?: RequestInit): Promise<Response
     // берём его и переводим тем же помощником, что и остальные показы.
     const body = await r.json().catch(() => null);
     throw new Error(
-      devhubServerError(body?.error, `Не удалось сохранить — сервер ответил ${r.status}`),
+      // Модульный помощник — хука здесь нет; язык честно читается из атрибута,
+      // который ставит I18nProvider (вне браузера/провайдера — русский).
+      devhubServerError(body?.error, `Не удалось сохранить — сервер ответил ${r.status}`,
+        typeof document === "undefined" ? "ru" : document.documentElement.lang || "ru"),
     );
   }
   return r;
@@ -102,6 +105,311 @@ const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; s
     memoryWarn: "бірақ дерекқор қолжетімсіз болды — олар әзірге жадта және қайта іске қосқанда жоғалуы мүмкін. Көшірмесін сақтаңыз.",
   },
 };
+
+// Атрибуты IDE (подсказки, aria, placeholder) — их машинный доводчик
+// AutoTranslate НЕ переводит (живой замер 06.09.2026: страница английская,
+// атрибуты русские). Ключи покрывает сторож newcomerPathAttrs… косвенно;
+// казахский написан без носителя, как и словарь витрины.
+const ATTR_UI: Record<string, Record<string, string>> = {
+  ru: {
+    closeNote: "Закрыть уведомление",
+    dlEditor: "Скачать то, что сейчас в редакторе — до того, как вкладка закроется",
+    upZip: "Загрузить ZIP — обратное действие к скачиванию",
+    dlZip: "Скачать весь проект одним архивом ZIP",
+    newFile: "Новый файл",
+    renameFile: "Переименовать файл",
+    deleteFile: "Удалить файл",
+    vePreview: "Превью визуальной правки",
+    panels: "Панели DevHub",
+    provStamped: "Хеш результата и время зафиксированы в реестре QRight — страница проверки открывается без входа",
+    attachShot: "Приложите скриншот или макет — ИИ воссоздаст его кодом",
+    provInfo: "После генерации хеш результата, модель и время фиксируются в публичном реестре QRight (промпт не публикуется — только его хеш). Проверяемое происхождение ИИ-кода — то, чего требует EU AI Act.",
+    undoAiFiles: "Вернуть файлы, которых коснулась последняя правка ИИ",
+    aiHistory: "Посмотреть все прошлые правки ИИ и вернуться к любой",
+    selParent: "Выбрать родительский элемент",
+    selChild: "Выбрать дочерний элемент",
+    textColor: "Цвет текста",
+    fontSizePx: "Размер шрифта, px",
+    bold: "Полужирный",
+    undoAi: "Отменить последнюю правку ИИ (та же отмена, что на вкладке генерации)",
+    valuePh: "значение",
+    pullRepo: "Забрать в проект текущие файлы основной ветки репозитория (сначала делается точка возврата — отмена вернёт состояние до синхронизации)",
+    mediaTools: "Медиа-инструменты",
+    exVideo: "напр.: A futuristic city skyline at sunset, cinematic, 4K",
+    addVideoTag: "Добавит тег видео в открытый файл",
+    imgUrlPh: "https://... (png или jpg с одним предметом)",
+    addModelLink: "Дописывает ссылку на модель в файл, открытый в редакторе",
+    voiceSample: "Послушать голос на коротком примере",
+    ttsText: "Введите текст для озвучки…",
+    exImage: "напр.: A serene mountain landscape at golden hour, photorealistic",
+    genImage: "сгенерированная картинка",
+    imgTtl: "Ссылка OpenAI на картинку живёт около часа. Загрузите в Cloudflare Images, чтобы получить постоянный адрес.",
+    addImgTag: "Добавит тег картинки в открытый файл",
+    exSfx: "напр.: Heavy rain on a metal roof with distant thunder",
+    exMusic: "напр.: Lo-fi hip-hop, mellow piano, soft beats, 80 BPM",
+    welcomeTitle: "Добро пожаловать в наше приложение",
+    welcomeHtml: "<h1>Здравствуйте!</h1><p>Спасибо, что подписались.</p>",
+    gumroadId: "my-product (или полный адрес app.gumroad.com/l/…)",
+    proSub: "Подписка Pro",
+    proDesc: "Месячный доступ ко всем возможностям",
+    translateText: "Текст для перевода…",
+    welcomeParam: "Добро пожаловать в AEVION, {{params.name}}!",
+    confirmCode: "Ваш код подтверждения: 1234",
+    myVoice: "Мой голос",
+    voiceDesc: "Мужской, спокойный, повествовательный",
+    voiceReady: "Пример голоса AEVION — ваш голос готов",
+    autoDetect: "оставьте пустым — определим сами",
+    driveSearch: "Поиск по Drive…",
+    savePath: "куда сохранить (путь файла)",
+    shortDescPh: "Краткое описание…",
+    removeCollab: "Удалить соавтора",
+    collabId: "адрес почты или id пользователя",
+    close: "Закрыть",
+  },
+  en: {
+    closeNote: "Dismiss notification",
+    dlEditor: "Download what is in the editor now — before the tab closes",
+    upZip: "Upload a ZIP — the reverse of downloading",
+    dlZip: "Download the whole project as one ZIP archive",
+    newFile: "New file",
+    renameFile: "Rename file",
+    deleteFile: "Delete file",
+    vePreview: "Visual Edit preview",
+    panels: "DevHub panels",
+    provStamped: "The result hash and time are recorded in the QRight registry — the verification page opens without signing in",
+    attachShot: "Attach a screenshot or mockup — AI will recreate it in code",
+    provInfo: "After generation the result hash, model and time are recorded in the public QRight registry (the prompt is not published — only its hash). Verifiable provenance of AI code — what the EU AI Act asks teams to show.",
+    undoAiFiles: "Restore the files touched by the last AI edit",
+    aiHistory: "See all past AI edits and return to any of them",
+    selParent: "Select the parent element",
+    selChild: "Select the child element",
+    textColor: "Text color",
+    fontSizePx: "Font size, px",
+    bold: "Bold",
+    undoAi: "Undo the last AI edit (the same undo as on the generation tab)",
+    valuePh: "value",
+    pullRepo: "Pull the current files of the repo's main branch into the project (a restore point is made first — undo returns the pre-sync state)",
+    mediaTools: "Media tools",
+    exVideo: "e.g.: A futuristic city skyline at sunset, cinematic, 4K",
+    addVideoTag: "Adds a video tag to the open file",
+    imgUrlPh: "https://... (png or jpg with a single object)",
+    addModelLink: "Appends the model link to the file open in the editor",
+    voiceSample: "Hear the voice on a short sample",
+    ttsText: "Enter text to voice…",
+    exImage: "e.g.: A serene mountain landscape at golden hour, photorealistic",
+    genImage: "generated image",
+    imgTtl: "The OpenAI image link lives about an hour. Upload to Cloudflare Images to get a permanent address.",
+    addImgTag: "Adds an image tag to the open file",
+    exSfx: "e.g.: Heavy rain on a metal roof with distant thunder",
+    exMusic: "e.g.: Lo-fi hip-hop, mellow piano, soft beats, 80 BPM",
+    welcomeTitle: "Welcome to our app",
+    welcomeHtml: "<h1>Hello!</h1><p>Thanks for subscribing.</p>",
+    gumroadId: "my-product (or the full app.gumroad.com/l/… address)",
+    proSub: "Pro subscription",
+    proDesc: "Monthly access to everything",
+    translateText: "Text to translate…",
+    welcomeParam: "Welcome to AEVION, {{params.name}}!",
+    confirmCode: "Your confirmation code: 1234",
+    myVoice: "My voice",
+    voiceDesc: "Male, calm, narrative",
+    voiceReady: "AEVION voice sample — your voice is ready",
+    autoDetect: "leave empty — we will detect it",
+    driveSearch: "Search Drive…",
+    savePath: "where to save (file path)",
+    shortDescPh: "Short description…",
+    removeCollab: "Remove collaborator",
+    collabId: "email address or user id",
+    close: "Close",
+  },
+  kk: {
+    closeNote: "Хабарламаны жабу",
+    dlEditor: "Қазір өңдегіштегіні жүктеп алу — қойынды жабылғанша",
+    upZip: "ZIP жүктеу — жүктеп алудың кері әрекеті",
+    dlZip: "Бүкіл жобаны бір ZIP архивімен жүктеп алу",
+    newFile: "Жаңа файл",
+    renameFile: "Файл атын өзгерту",
+    deleteFile: "Файлды жою",
+    vePreview: "Көрнекі түзету алдын ала қарауы",
+    panels: "DevHub панельдері",
+    provStamped: "Нәтиже хеші мен уақыты QRight тізілімінде тіркелген — тексеру беті кірусіз ашылады",
+    attachShot: "Скриншот немесе макет тіркеңіз — ЖИ оны кодпен қайта жасайды",
+    provInfo: "Генерациядан кейін нәтиже хеші, модель мен уақыт жария QRight тізілімінде тіркеледі (промпт жарияланбайды — тек оның хеші). ЖИ кодының тексерілетін шығу тегі — EU AI Act талап ететін нәрсе.",
+    undoAiFiles: "Соңғы ЖИ түзетуі қозғаған файлдарды қайтару",
+    aiHistory: "Барлық өткен ЖИ түзетулерін көріп, кез келгеніне оралу",
+    selParent: "Ата элементті таңдау",
+    selChild: "Бала элементті таңдау",
+    textColor: "Мәтін түсі",
+    fontSizePx: "Қаріп өлшемі, px",
+    bold: "Жартылай қалың",
+    undoAi: "Соңғы ЖИ түзетуін болдырмау (генерация қойындысындағы болдырмаумен бірдей)",
+    valuePh: "мән",
+    pullRepo: "Репозиторийдің негізгі тармағының ағымдағы файлдарын жобаға алу (алдымен қайтару нүктесі жасалады — болдырмау синхрондауға дейінгі күйді қайтарады)",
+    mediaTools: "Медиа құралдары",
+    exVideo: "мыс.: A futuristic city skyline at sunset, cinematic, 4K",
+    addVideoTag: "Ашық файлға бейне тегін қосады",
+    imgUrlPh: "https://... (бір зат бейнеленген png немесе jpg)",
+    addModelLink: "Өңдегіште ашық файлға модель сілтемесін қосады",
+    voiceSample: "Дауысты қысқа мысалда тыңдау",
+    ttsText: "Дыбыстауға мәтін енгізіңіз…",
+    exImage: "мыс.: A serene mountain landscape at golden hour, photorealistic",
+    genImage: "жасалған сурет",
+    imgTtl: "OpenAI сурет сілтемесі шамамен бір сағат жасайды. Тұрақты мекенжай алу үшін Cloudflare Images-ке жүктеңіз.",
+    addImgTag: "Ашық файлға сурет тегін қосады",
+    exSfx: "мыс.: Heavy rain on a metal roof with distant thunder",
+    exMusic: "мыс.: Lo-fi hip-hop, mellow piano, soft beats, 80 BPM",
+    welcomeTitle: "Қосымшамызға қош келдіңіз",
+    welcomeHtml: "<h1>Сәлеметсіз бе!</h1><p>Жазылғаныңызға рахмет.</p>",
+    gumroadId: "my-product (немесе толық app.gumroad.com/l/… мекенжайы)",
+    proSub: "Pro жазылымы",
+    proDesc: "Барлық мүмкіндіктерге айлық қолжетімділік",
+    translateText: "Аударылатын мәтін…",
+    welcomeParam: "AEVION-ға қош келдіңіз, {{params.name}}!",
+    confirmCode: "Растау кодыңыз: 1234",
+    myVoice: "Менің дауысым",
+    voiceDesc: "Ер, сабырлы, баяндау",
+    voiceReady: "AEVION дауыс үлгісі — дауысыңыз дайын",
+    autoDetect: "бос қалдырыңыз — өзіміз анықтаймыз",
+    driveSearch: "Drive бойынша іздеу…",
+    savePath: "қайда сақтау (файл жолы)",
+    shortDescPh: "Қысқаша сипаттама…",
+    removeCollab: "Тең авторды жою",
+    collabId: "пошта мекенжайы немесе пайдаланушы id",
+    close: "Жабу",
+  },
+};
+
+// Тосты IDE: живут секунды — машинный доводчик перевести их НЕ УСПЕВАЕТ
+// (тот же замер 06.09, что у атрибутов). Русские строки остаются здесь же,
+// в ru-блоке: сторожа storageMarker/workspaceSpeaksOneLanguage читают их
+// по ключам через разбор этого словаря.
+const TOAST_UI: Record<string, Record<string, string>> = {
+  ru: {
+    listRefreshFail: "Не удалось обновить список файлов — показан прежний",
+    costUnverified: "Готово, но расход не удалось сверить: счётчик мог отстать.",
+    projLoadFail: "Не удалось загрузить проект",
+    notSavedOffline: "Не сохранено — нет связи с сервером",
+    fileCreateFail: "Не удалось создать файл",
+    fileRenamed: "Файл переименован",
+    renameFail: "Переименовать не удалось",
+    midStreamRetry: "Связь оборвалась на середине — повторяем запрос. Это займёт ещё столько же.",
+    backendRedeploy: "Бэкенд перевыкатывается — повторю через 20 с…",
+    stubCode: "Провайдер ИИ не подключён — вместо настоящего кода вставлена заготовка",
+    historyLoadFail: "История правок не загрузилась — обновите страницу",
+    nothingToUndo: "Отменять нечего — правок ИИ не было",
+    undoneMemory: "Отменено, но база была недоступна: восстановление пока в памяти и может откатиться назад при перезапуске.",
+    checkpointGone: "Эта контрольная точка больше недоступна",
+    restoredMemory: "Вернулись, но база была недоступна: восстановление пока в памяти и может откатиться назад при перезапуске.",
+    stubPlan: "Провайдер ИИ не подключён — показан общий план вместо составленного под задачу",
+    dbDesigned: "База спроектирована — db/schema.sql и клиент лежат в дереве файлов",
+    noOpenFileLink: "Нет открытого файла — ссылка скопирована в буфер",
+    stubVisual: "Провайдер ИИ не подключён — страница настоящей правкой ИИ не менялась",
+    veSyntaxFail: "Правка ИИ применена, но результат не прошёл проверку синтаксиса — просмотрите перед выкаткой",
+    building: "Собираю…",
+    envSavedMemory: "Сохранено, но база была недоступна: переменная пока в памяти и может пропасть при перезапуске. Повторите через минуту.",
+    envSaved: "Переменная сохранена",
+    envRemovedMemory: "База была недоступна: переменная убрана только из памяти и может вернуться после перезапуска.",
+    tplMemory: "Шаблон применён, но база была недоступна: результат пока в памяти и может пропасть при перезапуске.",
+    settingsSaved: "Настройки сохранены",
+    collabProOnly: "Соавторы доступны в Studio Pro — оформите, чтобы добавлять",
+    collabAddFail: "Не удалось добавить соавтора",
+    accessRevoked: "Доступ отозван",
+    repoPartial: "Часть файлов не попала в репозиторий",
+    publishingCf: "Публикую на Cloudflare Pages…",
+    deployingVercel: "Выкатываю на Vercel…",
+    pickOneFile: "Выберите хотя бы один файл",
+    pickOneLang: "Выберите хотя бы один язык перевода",
+    translateCap: "За раз не больше 50 переводов (файлы × языки)",
+    importedMemory: "Файлы импортированы, но база была недоступна: результат пока в памяти и может пропасть при перезапуске.",
+    imgPermanent: "Картинка загружена на постоянный адрес",
+    imgTooBig: "Картинка слишком большая (не больше 5 МБ)",
+  },
+  en: {
+    listRefreshFail: "Could not refresh the file list — showing the previous one",
+    costUnverified: "Done, but the spend could not be verified: the counter may lag.",
+    projLoadFail: "Could not load the project",
+    notSavedOffline: "Not saved — no connection to the server",
+    fileCreateFail: "Could not create the file",
+    fileRenamed: "File renamed",
+    renameFail: "Rename failed",
+    midStreamRetry: "The connection dropped midway — retrying. This will take about as long again.",
+    backendRedeploy: "The backend is redeploying — retrying in 20 s…",
+    stubCode: "The AI provider is not connected — a stub was inserted instead of real code",
+    historyLoadFail: "Edit history did not load — refresh the page",
+    nothingToUndo: "Nothing to undo — there were no AI edits",
+    undoneMemory: "Undone, but the database was unavailable: the restore lives in memory for now and may roll back on restart.",
+    checkpointGone: "This checkpoint is no longer available",
+    restoredMemory: "Restored, but the database was unavailable: the restore lives in memory for now and may roll back on restart.",
+    stubPlan: "The AI provider is not connected — showing a generic plan instead of one built for your task",
+    dbDesigned: "Database designed — db/schema.sql and the client are in the file tree",
+    noOpenFileLink: "No open file — the link was copied to the clipboard",
+    stubVisual: "The AI provider is not connected — the page was not changed by a real AI edit",
+    veSyntaxFail: "The AI edit was applied, but the result failed the syntax check — review before deploying",
+    building: "Building…",
+    envSavedMemory: "Saved, but the database was unavailable: the variable lives in memory for now and may vanish on restart. Try again in a minute.",
+    envSaved: "Variable saved",
+    envRemovedMemory: "The database was unavailable: the variable was removed only from memory and may come back after a restart.",
+    tplMemory: "The template was applied, but the database was unavailable: the result lives in memory for now and may vanish on restart.",
+    settingsSaved: "Settings saved",
+    collabProOnly: "Collaborators are available in Studio Pro — subscribe to add them",
+    collabAddFail: "Could not add the collaborator",
+    accessRevoked: "Access revoked",
+    repoPartial: "Some files did not make it into the repository",
+    publishingCf: "Publishing to Cloudflare Pages…",
+    deployingVercel: "Deploying to Vercel…",
+    pickOneFile: "Pick at least one file",
+    pickOneLang: "Pick at least one target language",
+    translateCap: "No more than 50 translations at once (files × languages)",
+    importedMemory: "Files imported, but the database was unavailable: the result lives in memory for now and may vanish on restart.",
+    imgPermanent: "The image was uploaded to a permanent address",
+    imgTooBig: "The image is too large (5 MB max)",
+  },
+  kk: {
+    listRefreshFail: "Файлдар тізімін жаңарту мүмкін болмады — алдыңғысы көрсетілген",
+    costUnverified: "Дайын, бірақ шығынды салыстыру мүмкін болмады: есептегіш артта қалуы мүмкін.",
+    projLoadFail: "Жобаны жүктеу мүмкін болмады",
+    notSavedOffline: "Сақталмады — сервермен байланыс жоқ",
+    fileCreateFail: "Файлды жасау мүмкін болмады",
+    fileRenamed: "Файл аты өзгертілді",
+    renameFail: "Атын өзгерту мүмкін болмады",
+    midStreamRetry: "Байланыс ортасында үзілді — сұрауды қайталаймыз. Бұл тағы сонша уақыт алады.",
+    backendRedeploy: "Бэкенд қайта жарияланып жатыр — 20 с кейін қайталаймын…",
+    stubCode: "ЖИ провайдері қосылмаған — нағыз кодтың орнына дайындама қойылды",
+    historyLoadFail: "Түзетулер тарихы жүктелмеді — бетті жаңартыңыз",
+    nothingToUndo: "Болдырмайтын ештеңе жоқ — ЖИ түзетулері болған жоқ",
+    undoneMemory: "Болдырылмады, бірақ дерекқор қолжетімсіз болды: қалпына келтіру әзірге жадта және қайта іске қосқанда кері кетуі мүмкін.",
+    checkpointGone: "Бұл бақылау нүктесі енді қолжетімсіз",
+    restoredMemory: "Қайтарылды, бірақ дерекқор қолжетімсіз болды: қалпына келтіру әзірге жадта және қайта іске қосқанда кері кетуі мүмкін.",
+    stubPlan: "ЖИ провайдері қосылмаған — тапсырмаға арналғанның орнына жалпы жоспар көрсетілген",
+    dbDesigned: "Дерекқор жобаланды — db/schema.sql мен клиент файлдар ағашында жатыр",
+    noOpenFileLink: "Ашық файл жоқ — сілтеме алмасу буферіне көшірілді",
+    stubVisual: "ЖИ провайдері қосылмаған — бет нағыз ЖИ түзетуімен өзгерген жоқ",
+    veSyntaxFail: "ЖИ түзетуі қолданылды, бірақ нәтиже синтаксис тексеруінен өтпеді — жариялау алдында қараңыз",
+    building: "Жинап жатырмын…",
+    envSavedMemory: "Сақталды, бірақ дерекқор қолжетімсіз болды: айнымалы әзірге жадта және қайта іске қосқанда жоғалуы мүмкін. Бір минуттан кейін қайталаңыз.",
+    envSaved: "Айнымалы сақталды",
+    envRemovedMemory: "Дерекқор қолжетімсіз болды: айнымалы тек жадтан жойылды және қайта іске қосқаннан кейін қайтып келуі мүмкін.",
+    tplMemory: "Үлгі қолданылды, бірақ дерекқор қолжетімсіз болды: нәтиже әзірге жадта және қайта іске қосқанда жоғалуы мүмкін.",
+    settingsSaved: "Баптаулар сақталды",
+    collabProOnly: "Тең авторлар Studio Pro-да қолжетімді — қосу үшін жазылыңыз",
+    collabAddFail: "Тең авторды қосу мүмкін болмады",
+    accessRevoked: "Қолжетімділік қайтарып алынды",
+    repoPartial: "Файлдардың бір бөлігі репозиторийге түспеді",
+    publishingCf: "Cloudflare Pages-ке жариялап жатырмын…",
+    deployingVercel: "Vercel-ге жариялап жатырмын…",
+    pickOneFile: "Кемінде бір файл таңдаңыз",
+    pickOneLang: "Кемінде бір аударма тілін таңдаңыз",
+    translateCap: "Бір ретте 50 аудармадан артық емес (файлдар × тілдер)",
+    importedMemory: "Файлдар импортталды, бірақ дерекқор қолжетімсіз болды: нәтиже әзірге жадта және қайта іске қосқанда жоғалуы мүмкін.",
+    imgPermanent: "Сурет тұрақты мекенжайға жүктелді",
+    imgTooBig: "Сурет тым үлкен (5 МБ-тан аспау керек)",
+  },
+};
+
+// Один источник для главного компонента и подкомпонентов (Toast).
+function useAttrL(): Record<string, string> {
+  const lang = useI18nOptional()?.lang ?? "ru";
+  return ATTR_UI[lang] ?? ATTR_UI.ru;
+}
 
 function timeAgo(iso: string): string {
   const diffSec = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
@@ -412,6 +720,7 @@ function CodeEditor({ value, onChange, language }: { value: string; onChange: (v
 }
 
 function Toast({ message, type, onClose }: { message: string; type: "success" | "error" | "info" | "warning"; onClose: () => void }) {
+  const AL = useAttrL();
   const bg = type === "success" ? "#d1fae5" : type === "error" ? "#fee2e2" : type === "warning" ? "#fef3c7" : "#dbeafe";
   const fg = type === "success" ? "#065f46" : type === "error" ? "#991b1b" : type === "warning" ? "#92400e" : "#1e40af";
   return (
@@ -431,7 +740,7 @@ function Toast({ message, type, onClose }: { message: string; type: "success" | 
       }}
     >
       <span>{message}</span>
-      <button onClick={onClose} aria-label="Закрыть уведомление" style={{ background: "none", border: "none", cursor: "pointer", color: fg, fontWeight: 800 }}>x</button>
+      <button onClick={onClose} aria-label={AL.closeNote} style={{ background: "none", border: "none", cursor: "pointer", color: fg, fontWeight: 800 }}>x</button>
     </div>
   );
 }
@@ -485,6 +794,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   // Вне провайдера языка (тесты) — русский, как и раньше.
   const uiLang = useI18nOptional()?.lang ?? "ru";
   const GL = GEN_UI[uiLang] ?? GEN_UI.ru;
+  const AL = useAttrL();
+  const TL = TOAST_UI[uiLang] ?? TOAST_UI.ru;
+  const serverError = useDevhubServerError();
   const [project, setProject] = useState<Project | null>(null);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
@@ -859,7 +1171,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const applyFileList = (listData: unknown) => {
     const next = (listData as { files?: FileItem[] } | null | undefined)?.files;
     if (!Array.isArray(next)) {
-      showToast("Не удалось обновить список файлов — показан прежний", "warning");
+      showToast(TL.listRefreshFail, "warning");
       return;
     }
     setFiles(next);
@@ -908,7 +1220,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     // соавторам) не имеют права жить 4 секунды: поверх тоста поднимается
     // несмываемая плашка с кассой. Перехват здесь — единственное общее место:
     // своих фетчеров у окна 50, а тексты все проходят через showToast.
-    if (/Месячная норма исчерпана|Нужен платный тариф|Studio Pro/.test(message)) {
+    // Английские формы добавлены 06.09: для en тексты сервера показываются
+    // как есть (см. devhubServerError), и русские триггеры их не ловили бы —
+    // денежный отказ у EN-визитёра снова жил бы 4 секунды.
+    if (/Месячная норма исчерпана|Нужен платный тариф|Studio Pro|monthly [\w ]+ limit reached|payment required/i.test(message)) {
       setUpgradeNudge(message);
     }
     const queue = toastQueue.current;
@@ -940,7 +1255,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
    */
   const предупредитьЕслиНеСверили = (d: unknown) => {
     if (d && typeof d === "object" && (d as { creditUnverified?: unknown }).creditUnverified) {
-      showToast("Готово, но расход не удалось сверить: счётчик мог отстать.", "warning");
+      showToast(TL.costUnverified, "warning");
     }
   };
 
@@ -958,7 +1273,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         setEditorContent(first.content);
       }
     } catch {
-      showToast("Не удалось загрузить проект", "error");
+      showToast(TL.projLoadFail, "error");
     } finally {
       setLoading(false);
     }
@@ -1055,7 +1370,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       setFiles((fs) => fs.map((f) => f.path === path ? { ...f, content, updatedAt: new Date().toISOString() } : f));
     } catch {
       setSaveError(`${path} НЕ сохранён — нет связи с сервером`);
-      showToast("Не сохранено — нет связи с сервером", "error");
+      showToast(TL.notSavedOffline, "error");
     } finally {
       setSaving(false);
     }
@@ -1125,7 +1440,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       setShowNewFile(false);
       setNewFileName("");
     } catch {
-      showToast("Не удалось создать файл", "error");
+      showToast(TL.fileCreateFail, "error");
     }
   };
 
@@ -1202,9 +1517,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       if (selectedFile?.path === oldPath) {
         setSelectedFile((sf) => sf ? { ...sf, path: target } : null);
       }
-      showToast("Файл переименован", "success");
+      showToast(TL.fileRenamed, "success");
     } catch {
-      showToast("Переименовать не удалось", "error");
+      showToast(TL.renameFail, "error");
     } finally {
       setRenamingFile(null);
     }
@@ -1297,7 +1612,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
               const evt = JSON.parse(e.slice(6));
               if (evt.type === "status") setGenStage(evt.stage);
               else if (evt.type === "result") data = evt;
-              else if (evt.type === "error") throw new Error(devhubServerError(evt.error, "Генерация прервалась"));
+              else if (evt.type === "error") throw new Error(serverError(evt.error, "Генерация прервалась"));
             }
           }
         }
@@ -1309,17 +1624,17 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         // иначе он видит замерший индикатор и ждёт вдвое дольше, не понимая,
         // сломалось что-то или так задумано. Денег это не стоит: генерация кода
         // ограничена по темпу, а не по квоте, — но время его стоит.
-        showToast("Связь оборвалась на середине — повторяем запрос. Это займёт ещё столько же.", "error");
+        showToast(TL.midStreamRetry, "error");
         data = null;
       }
       if (data === null) {
         const r = await fetchWithRedeployRetry(
           apiUrl(`/api/devhub/projects/${project.id}/generate`),
           { method: "POST", headers: { "Content-Type": "application/json" }, body: generateBody, signal: genCtrl.signal },
-          { onRetry: () => showToast("Бэкенд перевыкатывается — повторю через 20 с…", "info") }
+          { onRetry: () => showToast(TL.backendRedeploy, "info") }
         );
         data = await r.json();
-        if (!r.ok) throw new Error(devhubServerError(data.error, "Генерация не удалась"));
+        if (!r.ok) throw new Error(serverError(data.error, "Генерация не удалась"));
       }
       const newGenerated = data.files || [];
       предупредитьЕслиНеСверили(data);
@@ -1336,7 +1651,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       }
       if (data.aiGenerated === false) {
         note = "No AI provider configured — placeholder inserted instead of real code";
-        showToast("Провайдер ИИ не подключён — вместо настоящего кода вставлена заготовка", "error");
+        showToast(TL.stubCode, "error");
       } else if (Array.isArray(data.syntaxErrors) && data.syntaxErrors.length > 0) {
         const paths = data.syntaxErrors.map((s: { path: string }) => s.path).join(", ");
         note = `Syntax check failed: ${paths}`;
@@ -1438,7 +1753,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       // причины: человек решал, что правок не было вовсе. Тост — вне
       // setState-апдейтера: React зовёт апдейтеры дважды (известный класс).
       if (checkpointHistory.length === 0) {
-        showToast("История правок не загрузилась — обновите страницу", "warning");
+        showToast(TL.historyLoadFail, "warning");
       }
     } finally {
       setLoadingHistory(false);
@@ -1451,9 +1766,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/generate/undo`), { method: "POST" });
       const data = await r.json();
-      if (!r.ok) throw new Error(devhubServerError(data.error, "Отменить не удалось"));
+      if (!r.ok) throw new Error(serverError(data.error, "Отменить не удалось"));
       if (data.ok === false) {
-        showToast("Отменять нечего — правок ИИ не было", "info");
+        showToast(TL.nothingToUndo, "info");
         return;
       }
       await reloadAfterRevert(Array.isArray(data.revertedFiles) ? data.revertedFiles : []);
@@ -1462,7 +1777,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       // живёт в памяти процесса и правки ВЕРНУТСЯ при перезапуске — а зелёный
       // тост говорил, что всё отменено насовсем.
       if (data.storage === "memory") {
-        showToast("Отменено, но база была недоступна: восстановление пока в памяти и может откатиться назад при перезапуске.", "error");
+        showToast(TL.undoneMemory, "error");
       } else {
         showToast(`Отменено: ${data.label || "последняя правка ИИ"}`, "success");
       }
@@ -1479,16 +1794,16 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/checkpoints/${checkpointId}/restore`), { method: "POST" });
       const data = await r.json();
-      if (!r.ok) throw new Error(devhubServerError(data.error, "Восстановить не удалось"));
+      if (!r.ok) throw new Error(serverError(data.error, "Восстановить не удалось"));
       if (data.ok === false) {
-        showToast("Эта контрольная точка больше недоступна", "info");
+        showToast(TL.checkpointGone, "info");
         loadCheckpointHistory();
         return;
       }
       await reloadAfterRevert(Array.isArray(data.revertedFiles) ? data.revertedFiles : []);
       loadCheckpointHistory();
       if (data.storage === "memory") {
-        showToast("Вернулись, но база была недоступна: восстановление пока в памяти и может откатиться назад при перезапуске.", "error");
+        showToast(TL.restoredMemory, "error");
       } else {
         showToast(`Вернулись к: ${data.restoredToLabel} (шагов назад: ${data.stepsApplied})`, "success");
       }
@@ -1510,10 +1825,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({ idea: planIdea, ...(project ? { projectId: project.id } : {}) }),
       });
       const data = await r.json();
-      if (!r.ok || data.ok === false) throw new Error(devhubServerError(data.error, "Не удалось составить план"));
+      if (!r.ok || data.ok === false) throw new Error(serverError(data.error, "Не удалось составить план"));
       setPlan(data);
       if (data.aiGenerated === false) {
-        showToast("Провайдер ИИ не подключён — показан общий план вместо составленного под задачу", "warning");
+        showToast(TL.stubPlan, "warning");
       }
     } catch (e: any) {
       showToast(e.message || "Не удалось составить план", "error");
@@ -1551,7 +1866,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       REACT_PREVIEW_OVERLAY_SCRIPT
     ).then((r) => {
       if (cancelled) return;
-      if ("error" in r) { setReactPreviewSrcdoc(null); setReactPreviewError(devhubServerError(r.error, "Превью не собралось")); }
+      if ("error" in r) { setReactPreviewSrcdoc(null); setReactPreviewError(serverError(r.error, "Превью не собралось")); }
       else { setReactPreviewSrcdoc(r.srcdoc); }
       setVisualEditSelected(null);
     });
@@ -1635,7 +1950,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({ prompt: visualEditImgPrompt.trim() }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(devhubServerError(data.error, "Не удалось создать картинку"));
+      if (!r.ok) throw new Error(serverError(data.error, "Не удалось создать картинку"));
       const doc = visualEditSourceDocRef.current;
       const el = doc.querySelector(`[data-vid="${visualEditSelected.vid}"]`);
       if (!el) throw new Error("Element no longer in the preview — it was rebuilt, click it again");
@@ -1680,10 +1995,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetchWithRedeployRetry(
         apiUrl(`/api/devhub/projects/${project.id}/database/design`),
         { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ description }) },
-        { onRetry: () => showToast("Бэкенд перевыкатывается — повторю через 20 с…", "info") }
+        { onRetry: () => showToast(TL.backendRedeploy, "info") }
       );
       const data = await r.json();
-      if (!r.ok) throw new Error(devhubServerError(data.error, "Не удалось спроектировать базу"));
+      if (!r.ok) throw new Error(serverError(data.error, "Не удалось спроектировать базу"));
       const changes = (data.files || []).map((gf: { path: string; language?: string; content: string }) => {
         const before = files.find((ff) => ff.path === gf.path)?.content ?? "";
         const d = diffLines(before, gf.content ?? "");
@@ -1696,7 +2011,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
       applyFileList(listData);
-      showToast("База спроектирована — db/schema.sql и клиент лежат в дереве файлов", "success");
+      showToast(TL.dbDesigned, "success");
       // Schema on disk is only half the job; offer to create the real database
       // right here when the server can (capability "database" is live).
       if (data.canProvision) {
@@ -1722,7 +2037,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const appendAssetToFile = (url: string, kind: AssetKind) => {
     if (!selectedFile) {
       navigator.clipboard?.writeText(url).catch(() => {});
-      showToast("Нет открытого файла — ссылка скопирована в буфер", "info");
+      showToast(TL.noOpenFileLink, "info");
       return;
     }
     const next = appendSnippet(editorContent, assetSnippet(selectedFile.path, url, kind));
@@ -1748,10 +2063,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetchWithRedeployRetry(
         apiUrl(`/api/devhub/projects/${project.id}/database/provision`),
         { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
-        { onRetry: () => showToast("Бэкенд перевыкатывается — повторю через 20 с…", "info") }
+        { onRetry: () => showToast(TL.backendRedeploy, "info") }
       );
       const data = await r.json();
-      if (!r.ok || !data.ok) throw new Error(devhubServerError(data.error, "Не удалось выделить ресурсы"));
+      if (!r.ok || !data.ok) throw new Error(serverError(data.error, "Не удалось выделить ресурсы"));
       setChatHistory((h) => [
         ...h.filter((m) => !(m.role === "hint" && m.kind === "provision_db")),
         {
@@ -1800,11 +2115,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({ prompt, stack: project.stack, ...(visualEditHtmlPath ? { targetFiles: [visualEditHtmlPath] } : {}) }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(devhubServerError(data.error, "Правка ИИ не удалась"));
+      if (!r.ok) throw new Error(serverError(data.error, "Правка ИИ не удалась"));
       if (data.aiGenerated === false) {
-        showToast("Провайдер ИИ не подключён — страница настоящей правкой ИИ не менялась", "error");
+        showToast(TL.stubVisual, "error");
       } else if (Array.isArray(data.syntaxErrors) && data.syntaxErrors.length > 0) {
-        showToast("Правка ИИ применена, но результат не прошёл проверку синтаксиса — просмотрите перед выкаткой", "warning");
+        showToast(TL.veSyntaxFail, "warning");
       } else {
         showToast(
           visualEditHtmlPath
@@ -1834,7 +2149,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/github/sync`), { method: "POST" });
       const data = await r.json();
-      if (!r.ok || data.ok === false) throw new Error(devhubServerError(data.error, "Синхронизация не удалась"));
+      if (!r.ok || data.ok === false) throw new Error(serverError(data.error, "Синхронизация не удалась"));
       // A sync that could not read some files leaves the project part-new and
       // part-stale — and that mixture is what a later push or deploy builds
       // from. A green toast over that reads as "all of it arrived".
@@ -1893,11 +2208,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     }
     deployPollGenRef.current += 1;
     setDeploying(true);
-    showToast("Собираю…", "info");
+    showToast(TL.building, "info");
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy`), { method: "POST" });
       const data = await r.json();
-      if (!r.ok) throw new Error(devhubServerError(data.error, "Выкатка не удалась"));
+      if (!r.ok) throw new Error(serverError(data.error, "Выкатка не удалась"));
       const deploymentId: string = data.deploymentId;
       // Start streaming build log
       streamBuildLog(project.id, deploymentId);
@@ -1943,7 +2258,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         // берём его и переводим тем же помощником, что и остальные показы.
         const body = await r.json().catch(() => null);
         throw new Error(
-          devhubServerError(body?.error, `Не удалось сохранить — сервер ответил ${r.status}`),
+          serverError(body?.error, `Не удалось сохранить — сервер ответил ${r.status}`),
         );
       }
       const data = await r.json();
@@ -1984,7 +2299,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         // берём его и переводим тем же помощником, что и остальные показы.
         const body = await r.json().catch(() => null);
         throw new Error(
-          devhubServerError(body?.error, `Не удалось сохранить — сервер ответил ${r.status}`),
+          serverError(body?.error, `Не удалось сохранить — сервер ответил ${r.status}`),
         );
       }
       const data = await r.json();
@@ -2015,9 +2330,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       // в своём коде. Безусловный зелёный тост это скрывал.
       const saved = await r.json().catch(() => ({}));
       if (saved?.storage === "memory") {
-        showToast("Сохранено, но база была недоступна: переменная пока в памяти и может пропасть при перезапуске. Повторите через минуту.", "error");
+        showToast(TL.envSavedMemory, "error");
       } else {
-        showToast("Переменная сохранена", "success");
+        showToast(TL.envSaved, "success");
       }
     } catch (e: any) { showToast(`Переменная НЕ сохранена — ${e?.message || "нет связи"}`, "error"); }
   };
@@ -2032,7 +2347,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       // здесь читается как успех.
       const done = await r.json().catch(() => ({}));
       if (done?.storage === "memory") {
-        showToast("База была недоступна: переменная убрана только из памяти и может вернуться после перезапуска.", "error");
+        showToast(TL.envRemovedMemory, "error");
       }
     } catch (e: any) {
       // The list is re-read either way: a variable that is still on the server
@@ -2052,12 +2367,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({ templateId }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(devhubServerError(data.error, "Не удалось выполнить действие"));
+      if (!r.ok) throw new Error(serverError(data.error, "Не удалось выполнить действие"));
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
       applyFileList(listData);
       if (data.storage === "memory") {
-        showToast("Шаблон применён, но база была недоступна: результат пока в памяти и может пропасть при перезапуске.", "error");
+        showToast(TL.tplMemory, "error");
       } else {
         showToast(`Шаблон применён — файлов: ${(data.files || []).length}`, "success");
       }
@@ -2082,7 +2397,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         }),
       });
       setProject((p) => p ? { ...p, name: settingsName, description: settingsDesc || null, customDomain: settingsDomain || null } : p);
-      showToast("Настройки сохранены", "success");
+      showToast(TL.settingsSaved, "success");
     } catch (e: any) {
       showToast(`Настройки НЕ сохранены — ${e?.message || "нет связи"}`, "error");
     } finally {
@@ -2099,7 +2414,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({ userId: settingsCollab.trim(), role: collabRole }),
       });
       if (resp.status === 403) {
-        showToast("Соавторы доступны в Studio Pro — оформите, чтобы добавлять", "error");
+        showToast(TL.collabProOnly, "error");
         return;
       }
       const data = await resp.json().catch(() => null);
@@ -2114,7 +2429,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       setSettingsCollab("");
       showToast(`Соавтор добавлен (${collabRole})`, "success");
     } catch {
-      showToast("Не удалось добавить соавтора", "error");
+      showToast(TL.collabAddFail, "error");
     }
   };
 
@@ -2123,7 +2438,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     try {
       await writeOrThrow(apiUrl(`/api/devhub/projects/${project.id}/collaborators/${encodeURIComponent(collabUserId)}`), { method: "DELETE" });
       setProject((p) => p ? { ...p, collaborators: p.collaborators.filter((c) => c.userId !== collabUserId) } : p);
-      showToast("Доступ отозван", "success");
+      showToast(TL.accessRevoked, "success");
     } catch (e: any) {
       // Leave them in the list. Access is still live, and a list that hides
       // that is worse than the error.
@@ -2164,7 +2479,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         // иначе третий показ снова окажется сырым.
         const issue = {
           errorKind: d.errorKind as string | undefined,
-          error: devhubServerError(d.error, "Не удалось загрузить список веток"),
+          error: serverError(d.error, "Не удалось загрузить список веток"),
         };
         setGithubIssue(issue);
         return issue;
@@ -2199,7 +2514,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         // deploy would build from.
         setGithubMsg(`⚠ Отправлено ${d.pushedFiles} из ${d.pushedFiles + (d.failedFiles?.length ?? 0)} файлов. ${d.degradedReason}`);
         setGithubMsgTone("warning");
-        showToast("Часть файлов не попала в репозиторий", "warning");
+        showToast(TL.repoPartial, "warning");
         setProject((p) => p ? { ...p, repoUrl: d.repoUrl } : p);
         await fetchGithubStatus();
         await fetchGithubBranches();
@@ -2255,11 +2570,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     }
     setPagesDeploying(true);
     setPagesResult(null);
-    showToast("Публикую на Cloudflare Pages…", "info");
+    showToast(TL.publishingCf, "info");
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy/pages`), { method: "POST" });
       const d = await r.json();
-      if (!r.ok || !d.ok) throw new Error(devhubServerError(d.error, "Не удалось опубликовать на Cloudflare Pages"));
+      if (!r.ok || !d.ok) throw new Error(serverError(d.error, "Не удалось опубликовать на Cloudflare Pages"));
       setPagesResult({ liveUrl: d.liveUrl, domain: d.domain, pagesUrl: d.pagesUrl, domainReady: !!d.domainReady });
       // Шаг воронки «опубликовал» — до 06.09 не измерялся.
       track({ type: "feature_use", source: "devhub", meta: { feature: "deploy_pages" } });
@@ -2301,12 +2616,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       return;
     }
     setVercelDeploying(true);
-    showToast("Выкатываю на Vercel…", "info");
+    showToast(TL.deployingVercel, "info");
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy/vercel`), { method: "POST" });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        throw new Error(devhubServerError(d.error, "Выкатка на Vercel не удалась"));
+        throw new Error(serverError(d.error, "Выкатка на Vercel не удалась"));
       }
       showToast(`Vercel: ${d.deployUrl}`, "success");
       setTimeout(async () => {
@@ -2335,7 +2650,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setEmailMsg({ ok: false, text: devhubServerError(d.error, "Не удалось отправить") });
+        setEmailMsg({ ok: false, text: serverError(d.error, "Не удалось отправить") });
       } else if (d.degraded) {
         setEmailMsg({ ok: true, degraded: true, text: `Sent to ${emailTo}, but Brevo didn't confirm a messageId — ${d.degradedReason || "delivery not confirmed"}` });
         setEmailTo(""); setEmailSubject(""); setEmailBody("");
@@ -2375,7 +2690,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setPayError(devhubServerError(d.error, "Не удалось создать ссылку на оплату"));
+        setPayError(serverError(d.error, "Не удалось создать ссылку на оплату"));
       } else {
         setPayResult({ url: d.url });
       }
@@ -2402,7 +2717,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setPayError(devhubServerError(d.error, "Не удалось создать оплату Gumroad"));
+        setPayError(serverError(d.error, "Не удалось создать оплату Gumroad"));
       } else {
         setPayResult({ url: d.url });
       }
@@ -2433,7 +2748,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setImgError(devhubServerError(d.error, "Не удалось создать картинку"));
+        setImgError(serverError(d.error, "Не удалось создать картинку"));
       } else {
         setImgResult({ url: d.url, revisedPrompt: d.revisedPrompt });
               // Сервер помечает ответ, когда РАЗРЕШИЛ трату, не сумев
@@ -2474,7 +2789,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       if (!r.ok) {
         const d = await r.json().catch(() => null);
-        throw new Error(devhubServerError(d?.error, `Не удалось создать звук — сервер ответил ${r.status}`));
+        throw new Error(serverError(d?.error, `Не удалось создать звук — сервер ответил ${r.status}`));
       }
       const blob = await r.blob();
       setSfxUrl(URL.createObjectURL(blob));
@@ -2508,7 +2823,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       if (!r.ok) {
         const d = await r.json().catch(() => null);
-        throw new Error(devhubServerError(d?.error, `Не удалось создать музыку — сервер ответил ${r.status}`));
+        throw new Error(serverError(d?.error, `Не удалось создать музыку — сервер ответил ${r.status}`));
       }
       const blob = await r.blob();
       setMusicUrl(URL.createObjectURL(blob));
@@ -2529,7 +2844,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/domain/setup`), { method: "POST" });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setDomainSetupMsg({ ok: false, text: devhubServerError(d.error, "Не удалось настроить домен") });
+        setDomainSetupMsg({ ok: false, text: serverError(d.error, "Не удалось настроить домен") });
       } else {
         setDomainSetupMsg({ ok: true, text: `✓ ${d.domain} → ${d.url}` });
         setProject((p) => p ? { ...p, customDomain: d.domain } : p);
@@ -2606,7 +2921,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                 const step = agentSteps[evt.index];
                 accumulated.push({
                   step: evt.index, type: step?.type || "unknown",
-                  ok: !!evt.ok, output: evt.output, error: evt.error ? devhubServerError(evt.error, "Шаг не выполнен") : evt.error, savedAs: evt.savedAs,
+                  ok: !!evt.ok, output: evt.output, error: evt.error ? serverError(evt.error, "Шаг не выполнен") : evt.error, savedAs: evt.savedAs,
                 });
                 setAgentResults([...accumulated]);
               } else if (evt.type === "complete") {
@@ -2645,7 +2960,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({ steps: agentSteps }),
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(devhubServerError(d.error, "Сценарий не выполнился"));
+      if (!r.ok) throw new Error(serverError(d.error, "Сценарий не выполнился"));
       setAgentResults(d.results || []);
       setAgentSummary({ totalSteps: d.totalSteps, successCount: d.successCount, failureCount: d.failureCount });
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
@@ -2677,7 +2992,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setSmsMsg({ ok: false, text: devhubServerError(d.error, "Не удалось отправить") });
+        setSmsMsg({ ok: false, text: serverError(d.error, "Не удалось отправить") });
       } else if (d.degraded) {
         setSmsMsg({ ok: true, degraded: true, text: `Brevo accepted the SMS, but didn't confirm a messageId — ${d.degradedReason || "delivery not confirmed"}` });
         setSmsRecipient(""); setSmsContent("");
@@ -2718,7 +3033,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setWaMsg({ ok: false, text: devhubServerError(d.error, "Не удалось отправить") });
+        setWaMsg({ ok: false, text: serverError(d.error, "Не удалось отправить") });
       } else if (d.degraded) {
         setWaMsg({ ok: true, degraded: true, text: `Brevo accepted the WhatsApp message, but didn't confirm a messageId — ${d.degradedReason || "delivery not confirmed"}` });
         setWaContact(""); setWaTemplateId(""); setWaParams("");
@@ -2752,7 +3067,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setTrError(devhubServerError(d.error, "Не удалось перевести"));
+        setTrError(serverError(d.error, "Не удалось перевести"));
       } else {
         setTrResult({ text: d.text, detectedSource: d.detectedSource });
             предупредитьЕслиНеСверили(d);
@@ -2776,7 +3091,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setTrFileMsg({ ok: false, text: devhubServerError(d.error, "Не удалось перевести") });
+        setTrFileMsg({ ok: false, text: serverError(d.error, "Не удалось перевести") });
       } else {
         setTrFileMsg({ ok: true, text: `Переведено в ${d.path} (${d.bytes} bytes)` });
             предупредитьЕслиНеСверили(d);
@@ -2801,7 +3116,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetch(apiUrl("/api/devhub/media/email-templates?limit=50"), { cache: "no-store" });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setEmailTemplatesError(devhubServerError(d.error, "Не удалось загрузить шаблоны"));
+        setEmailTemplatesError(serverError(d.error, "Не удалось загрузить шаблоны"));
         setEmailTemplates([]);
       } else {
         setEmailTemplates(d.templates || []);
@@ -2842,7 +3157,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setTplSendMsg({ ok: false, text: devhubServerError(d.error, "Не удалось отправить") });
+        setTplSendMsg({ ok: false, text: serverError(d.error, "Не удалось отправить") });
       } else {
         setTplSendMsg({ ok: true, text: `Отправлен шаблон №${templateId} (msg ${d.messageId})` });
       }
@@ -2858,15 +3173,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const runBulkTranslate = async () => {
     if (!project) return;
     if (bulkPaths.length === 0) {
-      showToast("Выберите хотя бы один файл", "error");
+      showToast(TL.pickOneFile, "error");
       return;
     }
     if (bulkLangs.length === 0) {
-      showToast("Выберите хотя бы один язык перевода", "error");
+      showToast(TL.pickOneLang, "error");
       return;
     }
     if (bulkPaths.length * bulkLangs.length > 50) {
-      showToast("За раз не больше 50 переводов (файлы × языки)", "error");
+      showToast(TL.translateCap, "error");
       return;
     }
     setBulkLoading(true);
@@ -2880,7 +3195,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok) {
-        showToast(devhubServerError(d.error, "Пакетный перевод не удался"), "error");
+        showToast(serverError(d.error, "Пакетный перевод не удался"), "error");
         return;
       }
       // У каждой строки результата свой текст ошибки от сервера, и он
@@ -2888,7 +3203,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         // в разметке легко забыть, а сюда всё приходит одним местом.
       setBulkResults(
         (d.results || []).map((row: { error?: string }) =>
-          row?.error ? { ...row, error: devhubServerError(row.error, "Не удалось перевести") } : row,
+          row?.error ? { ...row, error: serverError(row.error, "Не удалось перевести") } : row,
         ),
       );
       setBulkSummary({ total: d.total, successCount: d.successCount, failureCount: d.failureCount });
@@ -2950,7 +3265,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setTplBuilderMsg({ ok: false, text: devhubServerError(d.error, "Не удалось создать шаблон") });
+        setTplBuilderMsg({ ok: false, text: serverError(d.error, "Не удалось создать шаблон") });
         return;
       }
       setTplBuilderMsg({ ok: true, text: `Создан шаблон №${d.id} — "${d.name}"` });
@@ -2990,7 +3305,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok) {
-        setZipResult({ ok: false, text: devhubServerError(d.error, "Импорт не удался") });
+        setZipResult({ ok: false, text: serverError(d.error, "Импорт не удался") });
         return;
       }
       setZipResult({
@@ -2998,7 +3313,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         text: `Imported ${d.importedCount} file(s), skipped ${d.skippedCount}`,
       });
       if (d.storage === "memory") {
-        showToast("Файлы импортированы, но база была недоступна: результат пока в памяти и может пропасть при перезапуске.", "error");
+        showToast(TL.importedMemory, "error");
       } else {
         showToast(`Из ${file.name} импортировано файлов: ${d.importedCount}`, "success");
       }
@@ -3068,7 +3383,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       if (!r.ok) {
         const d = await r.json().catch(() => null);
-        throw new Error(devhubServerError(d?.error, `Не удалось получить пример — сервер ответил ${r.status}`));
+        throw new Error(serverError(d?.error, `Не удалось получить пример — сервер ответил ${r.status}`));
       }
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
@@ -3095,10 +3410,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        showToast(devhubServerError(d.error, "Загрузка в Cloudflare не удалась"), "error");
+        showToast(serverError(d.error, "Загрузка в Cloudflare не удалась"), "error");
       } else {
         setCfImgPermanentUrl(d.url);
-        showToast("Картинка загружена на постоянный адрес", "success");
+        showToast(TL.imgPermanent, "success");
       }
     } catch (e: any) {
       showToast(e?.message || "Загрузка не удалась", "error");
@@ -3158,7 +3473,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
-        setVoiceCloneMsg({ ok: false, text: devhubServerError(d.error, "Превью не открылось") });
+        setVoiceCloneMsg({ ok: false, text: serverError(d.error, "Превью не открылось") });
         return;
       }
       const blob = await r.blob();
@@ -3196,7 +3511,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setVoiceCloneMsg({ ok: false, text: devhubServerError(d.error, "Не удалось клонировать голос") });
+        setVoiceCloneMsg({ ok: false, text: serverError(d.error, "Не удалось клонировать голос") });
       } else {
         setVoiceCloneMsg({ ok: true, text: `Voice cloned: ${d.voiceId}${d.requiresVerification ? " (verification required)" : ""}` });
         setVoiceCloneName(""); setVoiceCloneDesc(""); setVoiceCloneFile(null);
@@ -3231,7 +3546,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setSttError(devhubServerError(d.error, "Не удалось расшифровать запись"));
+        setSttError(serverError(d.error, "Не удалось расшифровать запись"));
       } else {
         setSttResult({ text: d.text, language: d.language, confidence: d.confidence });
             предупредитьЕслиНеСверили(d);
@@ -3256,7 +3571,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setDriveError(devhubServerError(d.error, "Не удалось найти в Google Drive"));
+        setDriveError(serverError(d.error, "Не удалось найти в Google Drive"));
         setDriveFiles([]);
       } else {
         setDriveFiles(d.files || []);
@@ -3279,7 +3594,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        showToast(devhubServerError(d.error, "Импорт не удался"), "error");
+        showToast(serverError(d.error, "Импорт не удался"), "error");
       } else {
         showToast(`Импортирован ${d.path} (${d.bytes} байт)`, "success");
         const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
@@ -3312,7 +3627,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       if (!r.ok) {
         const d = await r.json().catch(() => null);
-        throw new Error(devhubServerError(d?.error, `Не удалось озвучить — сервер ответил ${r.status}`));
+        throw new Error(serverError(d?.error, `Не удалось озвучить — сервер ответил ${r.status}`));
       }
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
@@ -3380,7 +3695,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   loss visible — this gets it onto their disk in one click. */}
               <button
                 onClick={downloadEditorBuffer}
-                title="Скачать то, что сейчас в редакторе — до того, как вкладка закроется"
+                title={AL.dlEditor}
                 style={{ background: "#991b1b", color: "#fff", border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, padding: "3px 8px", cursor: "pointer", flexShrink: 0 }}
               >
                 ⬇ Скачать копию
@@ -3508,18 +3823,18 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                 onClick={() => zipInputRef.current?.click()}
                 disabled={zipImporting || !project}
                 style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 6, height: 24, padding: "0 6px", cursor: zipImporting ? "wait" : "pointer", color: "#64748b", fontSize: 11, fontWeight: 700 }}
-                title="Загрузить ZIP — обратное действие к скачиванию"
+                title={AL.upZip}
               >{zipImporting ? "..." : "📦"}</button>
               <button
                 onClick={() => { if (project) window.open(apiUrl(`/api/devhub/projects/${project.id}/export`), "_blank"); }}
                 disabled={!project || files.length === 0}
                 style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 6, height: 24, padding: "0 6px", cursor: "pointer", color: "#64748b", fontSize: 11, fontWeight: 700 }}
-                title="Скачать весь проект одним архивом ZIP"
+                title={AL.dlZip}
               >⬇</button>
               <button
                 onClick={() => setShowNewFile(true)}
                 style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 6, width: 24, height: 24, cursor: "pointer", color: "#64748b", fontWeight: 700, fontSize: 16, lineHeight: 1 }}
-                title="Новый файл"
+                title={AL.newFile}
               >+</button>
             </div>
           </div>
@@ -3625,13 +3940,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       <button
                         onClick={(e) => { e.stopPropagation(); setRenamingFile(f); setRenameValue(f.path); }}
                         style={{ background: "none", border: "none", cursor: "pointer", color: "#cbd5e1", fontSize: 12, padding: 2, flexShrink: 0 }}
-                        title="Переименовать файл"
+                        title={AL.renameFile}
                       >✎</button>
                     )}
                     <button
                       onClick={(e) => { e.stopPropagation(); deleteFile(f.path); }}
                       style={{ background: "none", border: "none", cursor: "pointer", color: "#cbd5e1", fontSize: 14, padding: 2, flexShrink: 0 }}
-                      title="Удалить файл"
+                      title={AL.deleteFile}
                     >x</button>
                   </div>
                 );
@@ -3652,7 +3967,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     srcDoc={reactPreviewSrcdoc}
                     sandbox="allow-scripts"
                     style={{ flex: 1, width: "100%", border: "none", background: "#fff" }}
-                    title="Превью визуальной правки"
+                    title={AL.vePreview}
                   />
                 ) : isClientPreviewStack(project?.stack) && (!reactPreviewError || !project?.deployUrl) ? (
                   <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#1e293b", color: "#94a3b8", textAlign: "center", padding: 24 }}>
@@ -3671,7 +3986,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     src={apiUrl(`/api/devhub/projects/${project.id}/preview-proxy`)}
                     sandbox="allow-scripts"
                     style={{ flex: 1, width: "100%", border: "none", background: "#fff" }}
-                    title="Превью визуальной правки"
+                    title={AL.vePreview}
                   />
                 ) : (
                 <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#1e293b", color: "#94a3b8", textAlign: "center", padding: 24 }}>
@@ -3696,7 +4011,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   srcDoc={visualEditSrcdoc}
                   sandbox="allow-scripts"
                   style={{ flex: 1, width: "100%", border: "none", background: "#fff" }}
-                  title="Превью визуальной правки"
+                  title={AL.vePreview}
                 />
               )
             ) : selectedFile ? (
@@ -3731,7 +4046,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
             {/* A real tab strip: these were plain buttons, so a screen reader
                 announced nine unrelated controls instead of a set of tabs, and
                 arrow keys did nothing. */}
-            <div role="tablist" aria-label="Панели DevHub" style={{ display: "flex", borderBottom: "1px solid #f1f5f9", gap: 0, overflowX: "auto" }}>
+            <div role="tablist" aria-label={AL.panels} style={{ display: "flex", borderBottom: "1px solid #f1f5f9", gap: 0, overflowX: "auto" }}>
               {VKLADKI.map((tab, idx, all) => (
                 <button
                   key={tab}
@@ -3883,7 +4198,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                     href={msg.provenance.verifyUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    title="Хеш результата и время зафиксированы в реестре QRight — страница проверки открывается без входа"
+                                    title={AL.provStamped}
                                     style={{ display: "inline-block", marginTop: 4, marginRight: 8, padding: "4px 10px", background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: 6, fontSize: 11, fontWeight: 600, color: "#065f46", textDecoration: "none" }}
                                   >
                                     ✔ Происхождение зафиксировано
@@ -4001,7 +4316,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       onChange={(e) => {
                         const f = e.target.files?.[0];
                         if (!f) return;
-                        if (f.size > 5 * 1024 * 1024) { showToast("Картинка слишком большая (не больше 5 МБ)", "error"); return; }
+                        if (f.size > 5 * 1024 * 1024) { showToast(TL.imgTooBig, "error"); return; }
                         const reader = new FileReader();
                         reader.onload = () => {
                           const url = String(reader.result || "");
@@ -4014,7 +4329,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     />
                     <button
                       onClick={() => aiImageInputRef.current?.click()}
-                      title="Приложите скриншот или макет — ИИ воссоздаст его кодом"
+                      title={AL.attachShot}
                       style={{ padding: "6px 12px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 13, cursor: "pointer", color: "#475569", fontWeight: 600 }}
                     >
                       📎 Снимок экрана
@@ -4040,7 +4355,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     {generating ? "Генерируем…" : "Сгенерировать код (Ctrl+Enter)"}
                   </button>
                   <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "#475569", cursor: "pointer" }}
-                    title="После генерации хеш результата, модель и время фиксируются в публичном реестре QRight (промпт не публикуется — только его хеш). Проверяемое происхождение ИИ-кода — то, чего требует EU AI Act.">
+                    title={AL.provInfo}>
                     <input
                       type="checkbox"
                       checked={stampProvenance}
@@ -4073,7 +4388,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     <button
                       onClick={undoLastGeneration}
                       disabled={undoing}
-                      title="Вернуть файлы, которых коснулась последняя правка ИИ"
+                      title={AL.undoAiFiles}
                       style={{
                         flex: 1, padding: "8px 0", background: "#fff", border: "1px solid #e2e8f0",
                         color: "#64748b", borderRadius: 10, fontWeight: 600, fontSize: 12,
@@ -4084,7 +4399,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     </button>
                     <button
                       onClick={() => { const next = !showHistory; setShowHistory(next); if (next) loadCheckpointHistory(); }}
-                      title="Посмотреть все прошлые правки ИИ и вернуться к любой"
+                      title={AL.aiHistory}
                       style={{
                         padding: "8px 12px", background: "#fff", border: "1px solid #e2e8f0",
                         color: "#64748b", borderRadius: 10, fontWeight: 600, fontSize: 12, cursor: "pointer",
@@ -4146,7 +4461,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           <span key={a.vid} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                             <button
                               onClick={() => retargetVisualSelection(a.vid)}
-                              title="Выбрать родительский элемент"
+                              title={AL.selParent}
                               style={{ fontFamily: "monospace", fontSize: 12, color: "#64748b", background: "none", border: "none", padding: 0, cursor: "pointer", textDecoration: "underline dotted" }}
                             >
                               {"<" + a.tagName.toLowerCase() + ">"}
@@ -4162,7 +4477,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               <button
                                 key={c.vid}
                                 onClick={() => retargetVisualSelection(c.vid)}
-                                title="Выбрать дочерний элемент"
+                                title={AL.selChild}
                                 style={{ fontFamily: "monospace", fontSize: 12, color: "#64748b", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 4, padding: "1px 5px", cursor: "pointer" }}
                               >
                                 {"<" + c.tagName.toLowerCase() + ">"}
@@ -4218,7 +4533,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             type="color"
                             value={cssColorToHex(visualEditStyleEdits.color ?? visualEditStyleBase.color)}
                             onChange={(e) => setVisualStyle("color", e.target.value)}
-                            title="Цвет текста"
+                            title={AL.textColor}
                             style={{ width: 34, height: 30, padding: 2, border: "1px solid #e2e8f0", borderRadius: 6, cursor: "pointer", background: "#fff" }}
                           />
                           <input
@@ -4227,12 +4542,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             max={120}
                             value={parseInt(visualEditStyleEdits.fontSize ?? visualEditStyleBase.fontSize, 10) || 16}
                             onChange={(e) => setVisualStyle("fontSize", `${e.target.value}px`)}
-                            title="Размер шрифта, px"
+                            title={AL.fontSizePx}
                             style={{ width: 62, height: 30, padding: "0 6px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 13, boxSizing: "border-box" }}
                           />
                           <button
                             onClick={() => setVisualStyle("fontWeight", parseInt(visualEditStyleEdits.fontWeight ?? visualEditStyleBase.fontWeight, 10) >= 600 ? "400" : "700")}
-                            title="Полужирный"
+                            title={AL.bold}
                             style={{
                               width: 30, height: 30, border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 14, cursor: "pointer",
                               fontWeight: 800,
@@ -4297,7 +4612,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     <button
                       onClick={undoLastGeneration}
                       disabled={undoing}
-                      title="Отменить последнюю правку ИИ (та же отмена, что на вкладке генерации)"
+                      title={AL.undoAi}
                       style={{
                         padding: "7px 0", background: "#fff", color: undoing ? "#94a3b8" : "#475569",
                         border: "1px solid #e2e8f0", borderRadius: 8, fontWeight: 600, fontSize: 12,
@@ -4373,7 +4688,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       type="text"
                       value={newEnvVal}
                       onChange={(e) => setNewEnvVal(e.target.value)}
-                      placeholder="значение"
+                      placeholder={AL.valuePh}
                       style={{ flex: 2, minWidth: 150, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}
                     />
                     <button onClick={addEnvVar} style={{ padding: "7px 16px", background: "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, cursor: "pointer" }}>
@@ -4556,7 +4871,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     <button
                       onClick={syncFromGithub}
                       disabled={repoPulling}
-                      title="Забрать в проект текущие файлы основной ветки репозитория (сначала делается точка возврата — отмена вернёт состояние до синхронизации)"
+                      title={AL.pullRepo}
                       style={{
                         padding: "9px 0", background: "#fff", border: "1px solid #0d9488", color: "#0d9488",
                         borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: repoPulling ? "not-allowed" : "pointer",
@@ -4648,7 +4963,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       were seventeen plain buttons in a row, so a screen reader
                       announced seventeen unrelated controls, arrow keys did
                       nothing, and Tab stopped on every single one of them. */}
-                  <div role="tablist" aria-label="Медиа-инструменты" style={{ display: "flex", gap: 4, padding: 4, background: "#f1f5f9", borderRadius: 8, flexWrap: "wrap" }}>
+                  <div role="tablist" aria-label={AL.mediaTools} style={{ display: "flex", gap: 4, padding: 4, background: "#f1f5f9", borderRadius: 8, flexWrap: "wrap" }}>
                     {(["video", "3d", "tts", "image", "sfx", "music", "clone", "stt", "drive", "translate", "bulk", "email", "templates", "builder", "sms", "whatsapp", "payment"] as const).map((sub, subIdx, allSubs) => (
                       <button
                         key={sub}
@@ -4732,7 +5047,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <textarea
                           value={videoPrompt}
                           onChange={(e) => setVideoPrompt(e.target.value)}
-                          placeholder="напр.: A futuristic city skyline at sunset, cinematic, 4K"
+                          placeholder={AL.exVideo}
                           rows={3}
                           style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, resize: "vertical", boxSizing: "border-box" }}
                         />
@@ -4762,7 +5077,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                 body: JSON.stringify({ prompt: videoPrompt, model: videoModel, duration: Number(videoDuration) }),
                               });
                               const d = await r.json();
-                              if (!d.ok) { setVideoError(devhubServerError(d.error, "Не удалось создать видео")); setVideoLoading(false); return; }
+                              if (!d.ok) { setVideoError(serverError(d.error, "Не удалось создать видео")); setVideoLoading(false); return; }
                               setVideoPredictionId(d.predictionId);
                               setVideoStatus("generating...");
                               // Poll for completion
@@ -4782,7 +5097,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   }
                                   setVideoUrl(sd.videoUrl); setVideoLoading(false);
                                 } else if (sd.status === "failed") {
-                                  setVideoError(devhubServerError(sd.error, "Генерация не удалась")); setVideoLoading(false);
+                                  setVideoError(serverError(sd.error, "Генерация не удалась")); setVideoLoading(false);
                                 } else {
                                   setTimeout(() => pollFn(id, attempts + 1), 3000);
                                 }
@@ -4803,7 +5118,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           <video src={videoUrl} controls style={{ width: "100%", borderRadius: 8, border: "1px solid #e2e8f0", maxHeight: 360 }} />
                           <div style={{ display: "flex", gap: 8 }}>
                             <a href={videoUrl} download target="_blank" rel="noreferrer" style={{ flex: 1, padding: "8px 0", background: "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer", textAlign: "center", textDecoration: "none" }}>Скачать</a>
-                            <button onClick={() => appendAssetToFile(videoUrl, "video")} title="Добавит тег видео в открытый файл" style={{ flex: 1, padding: "8px 0", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Вставить в файл</button>
+                            <button onClick={() => appendAssetToFile(videoUrl, "video")} title={AL.addVideoTag} style={{ flex: 1, padding: "8px 0", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Вставить в файл</button>
                           </div>
                         </div>
                       )}
@@ -4843,7 +5158,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <input
                           value={threeDImageUrl}
                           onChange={(e) => setThreeDImageUrl(e.target.value)}
-                          placeholder="https://... (png или jpg с одним предметом)"
+                          placeholder={AL.imgUrlPh}
                           style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                         />
                       </div>
@@ -4861,7 +5176,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             const d = await r.json();
                             if (!r.ok || !d.ok) {
                               // 402 means the provider has no balance — say that, not "failed".
-                              setThreeDError(d.topUpUrl ? `${d.error} → ${d.topUpUrl}` : (devhubServerError(d.error, "Не удалось сгенерировать 3D")));
+                              setThreeDError(d.topUpUrl ? `${d.error} → ${d.topUpUrl}` : (serverError(d.error, "Не удалось сгенерировать 3D")));
                               setThreeDLoading(false);
                               return;
                             }
@@ -4876,7 +5191,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                 if (typeof url === "string") { setThreeDUrl(url); } else { setThreeDError("Модель готова, но ссылка не распознана"); }
                                 setThreeDLoading(false);
                               } else if (sd.status === "failed") {
-                                setThreeDError(devhubServerError(sd.error, "Генерация не удалась")); setThreeDLoading(false);
+                                setThreeDError(serverError(sd.error, "Генерация не удалась")); setThreeDLoading(false);
                               } else {
                                 setTimeout(() => poll(id, attempts + 1), 3000);
                               }
@@ -4900,7 +5215,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             <a href={threeDUrl} download target="_blank" rel="noreferrer" style={{ flex: 1, padding: "8px 0", background: "#0d9488", color: "#fff", borderRadius: 7, fontWeight: 700, fontSize: 13, textAlign: "center", textDecoration: "none" }}>Скачать GLB</a>
                             <button
                               onClick={() => appendAssetToFile(threeDUrl, "model")}
-                              title="Дописывает ссылку на модель в файл, открытый в редакторе"
+                              title={AL.addModelLink}
                               style={{ flex: 1, padding: "8px 0", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}
                             >Вставить в файл</button>
                           </div>
@@ -4927,7 +5242,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             type="button"
                             onClick={() => previewVoice(mediaTtsVoice)}
                             disabled={!!previewingVoice}
-                            title="Послушать голос на коротком примере"
+                            title={AL.voiceSample}
                             style={{
                               padding: "7px 12px", background: previewingVoice === mediaTtsVoice ? "#a5b4fc" : "#7c3aed",
                               color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 700,
@@ -4944,7 +5259,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <textarea
                           value={mediaTtsText}
                           onChange={(e) => setMediaTtsText(e.target.value)}
-                          placeholder="Введите текст для озвучки…"
+                          placeholder={AL.ttsText}
                           rows={4}
                           style={{
                             width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0",
@@ -4987,7 +5302,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <textarea
                           value={imgPrompt}
                           onChange={(e) => setImgPrompt(e.target.value)}
-                          placeholder="напр.: A serene mountain landscape at golden hour, photorealistic"
+                          placeholder={AL.exImage}
                           rows={3}
                           style={{
                             width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0",
@@ -5030,7 +5345,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       {imgResult && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={cfImgPermanentUrl || imgResult.url} alt="сгенерированная картинка" style={{ width: "100%", borderRadius: 8, border: "1px solid #e2e8f0" }} />
+                          <img src={cfImgPermanentUrl || imgResult.url} alt={AL.genImage} style={{ width: "100%", borderRadius: 8, border: "1px solid #e2e8f0" }} />
                           {imgResult.revisedPrompt && (
                             <div style={{ fontSize: 11, color: "#64748b", fontStyle: "italic" }}>
                               Уточнённый запрос: {imgResult.revisedPrompt}
@@ -5045,7 +5360,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               <button
                                 onClick={() => uploadImageToCloudflare(imgResult.url)}
                                 disabled={cfImgUploading}
-                                title="Ссылка OpenAI на картинку живёт около часа. Загрузите в Cloudflare Images, чтобы получить постоянный адрес."
+                                title={AL.imgTtl}
                                 style={{
                                   padding: "4px 10px", background: "#f59e0b", color: "#fff",
                                   border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer",
@@ -5056,7 +5371,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             )}
                             <button
                               onClick={() => appendAssetToFile(cfImgPermanentUrl || imgResult.url, "image")}
-                              title="Добавит тег картинки в открытый файл"
+                              title={AL.addImgTag}
                               style={{ padding: "4px 10px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}
                             >
                               Вставить в файл
@@ -5092,7 +5407,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <textarea
                           value={sfxText}
                           onChange={(e) => setSfxText(e.target.value)}
-                          placeholder="напр.: Heavy rain on a metal roof with distant thunder"
+                          placeholder={AL.exSfx}
                           rows={3}
                           style={{
                             width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0",
@@ -5143,7 +5458,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <textarea
                           value={musicPrompt}
                           onChange={(e) => setMusicPrompt(e.target.value)}
-                          placeholder="напр.: Lo-fi hip-hop, mellow piano, soft beats, 80 BPM"
+                          placeholder={AL.exMusic}
                           rows={3}
                           style={{
                             width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0",
@@ -5206,7 +5521,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           type="text"
                           value={emailSubject}
                           onChange={(e) => setEmailSubject(e.target.value)}
-                          placeholder="Добро пожаловать в наше приложение"
+                          placeholder={AL.welcomeTitle}
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                         />
                       </div>
@@ -5215,7 +5530,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <textarea
                           value={emailBody}
                           onChange={(e) => setEmailBody(e.target.value)}
-                          placeholder="<h1>Здравствуйте!</h1><p>Спасибо, что подписались.</p>"
+                          placeholder={AL.welcomeHtml}
                           rows={6}
                           style={{
                             width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0",
@@ -5272,7 +5587,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             type="text"
                             value={payPermalink}
                             onChange={(e) => setPayPermalink(e.target.value)}
-                            placeholder="my-product (или полный адрес app.gumroad.com/l/…)"
+                            placeholder={AL.gumroadId}
                             style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                           />
                           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>Price is set in the Gumroad product itself — create it in your Gumroad dashboard, paste its permalink here.</div>
@@ -5285,7 +5600,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               type="text"
                               value={payName}
                               onChange={(e) => setPayName(e.target.value)}
-                              placeholder="Подписка Pro"
+                              placeholder={AL.proSub}
                               style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                             />
                           </div>
@@ -5318,7 +5633,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               type="text"
                               value={payDesc}
                               onChange={(e) => setPayDesc(e.target.value)}
-                              placeholder="Месячный доступ ко всем возможностям"
+                              placeholder={AL.proDesc}
                               style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                             />
                           </div>
@@ -5376,7 +5691,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                       <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>Перевести текст</div>
                       <div>
-                        <textarea value={trText} onChange={(e) => setTrText(e.target.value)} placeholder="Текст для перевода…"
+                        <textarea value={trText} onChange={(e) => setTrText(e.target.value)} placeholder={AL.translateText}
                           rows={4}
                           style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
                       </div>
@@ -5660,7 +5975,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Тема</label>
-                        <input value={tplBuilderSubject} onChange={(e) => setTplBuilderSubject(e.target.value)} placeholder="Добро пожаловать в AEVION, {{params.name}}!"
+                        <input value={tplBuilderSubject} onChange={(e) => setTplBuilderSubject(e.target.value)} placeholder={AL.welcomeParam}
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       <div>
@@ -5722,7 +6037,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>
                           Content ({smsContent.length}/612 chars, ~{Math.ceil(smsContent.length / 160)} segments)
                         </label>
-                        <textarea value={smsContent} onChange={(e) => setSmsContent(e.target.value)} placeholder="Ваш код подтверждения: 1234"
+                        <textarea value={smsContent} onChange={(e) => setSmsContent(e.target.value)} placeholder={AL.confirmCode}
                           rows={4} maxLength={612}
                           style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
                       </div>
@@ -5797,12 +6112,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Название голоса</label>
-                        <input value={voiceCloneName} onChange={(e) => setVoiceCloneName(e.target.value)} placeholder="Мой голос"
+                        <input value={voiceCloneName} onChange={(e) => setVoiceCloneName(e.target.value)} placeholder={AL.myVoice}
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Описание (необязательно)</label>
-                        <input value={voiceCloneDesc} onChange={(e) => setVoiceCloneDesc(e.target.value)} placeholder="Мужской, спокойный, повествовательный"
+                        <input value={voiceCloneDesc} onChange={(e) => setVoiceCloneDesc(e.target.value)} placeholder={AL.voiceDesc}
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       <div>
@@ -5814,7 +6129,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Текст для примера</label>
                         <input value={voicePreviewText} onChange={(e) => setVoicePreviewText(e.target.value)}
-                          placeholder="Пример голоса AEVION — ваш голос готов"
+                          placeholder={AL.voiceReady}
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       {voiceCloneMsg && (
@@ -5872,7 +6187,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Language hint (optional, e.g. en, ru)</label>
-                        <input value={sttLanguage} onChange={(e) => setSttLanguage(e.target.value)} placeholder="оставьте пустым — определим сами"
+                        <input value={sttLanguage} onChange={(e) => setSttLanguage(e.target.value)} placeholder={AL.autoDetect}
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       {sttError && (
@@ -5909,7 +6224,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {mediaTab === "drive" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div style={{ display: "flex", gap: 8 }}>
-                        <input value={driveQuery} onChange={(e) => setDriveQuery(e.target.value)} placeholder="Поиск по Drive…"
+                        <input value={driveQuery} onChange={(e) => setDriveQuery(e.target.value)} placeholder={AL.driveSearch}
                           onKeyDown={(e) => { if (e.key === "Enter") searchDrive(); }}
                           style={{ flex: 1, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                         <button onClick={searchDrive} disabled={driveLoading}
@@ -6023,7 +6338,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             <option value="music">Музыка</option>
                           </select>
                           <input value={step.saveAs || ""} onChange={(e) => updateAgentStep(i, { saveAs: e.target.value })}
-                            placeholder="куда сохранить (путь файла)"
+                            placeholder={AL.savePath}
                             style={{ flex: 1, padding: "4px 8px", border: "1px solid #e2e8f0", borderRadius: 5, fontSize: 11, fontFamily: "monospace" }} />
                           <button onClick={() => removeAgentStep(i)}
                             style={{ padding: "4px 8px", background: "none", border: "1px solid #fca5a5", borderRadius: 5, fontSize: 11, color: "#ef4444", cursor: "pointer" }}>
@@ -6146,7 +6461,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       type="text"
                       value={settingsDesc}
                       onChange={(e) => setSettingsDesc(e.target.value)}
-                      placeholder="Краткое описание…"
+                      placeholder={AL.shortDescPh}
                       style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                     />
                   </div>
@@ -6214,7 +6529,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 5, background: c.role === "editor" ? "#d1fae5" : "#f1f5f9", color: c.role === "editor" ? "#065f46" : "#64748b", fontWeight: 600, flexShrink: 0 }}>{c.role}</span>
                         <button
                           onClick={() => removeCollaborator(c.userId)}
-                          title="Удалить соавтора"
+                          title={AL.removeCollab}
                           style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444", fontSize: 14, fontWeight: 700, padding: "0 2px", flexShrink: 0 }}
                         >×</button>
                       </div>
@@ -6224,7 +6539,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         type="text"
                         value={settingsCollab}
                         onChange={(e) => setSettingsCollab(e.target.value)}
-                        placeholder="адрес почты или id пользователя"
+                        placeholder={AL.collabId}
                         style={{ flex: "1 1 140px", minWidth: 0, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                         onKeyDown={(e) => { if (e.key === "Enter") addCollaborator(); }}
                       />
@@ -6307,7 +6622,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           </Link>
           <button
             onClick={() => setUpgradeNudge(null)}
-            aria-label="Закрыть"
+            aria-label={AL.close}
             style={{
               background: "transparent", border: "none", color: "rgba(255,255,255,0.85)",
               fontSize: 18, cursor: "pointer", lineHeight: 1, padding: 4,

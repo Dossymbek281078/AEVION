@@ -1,3 +1,6 @@
+import { useCallback } from "react";
+import { useI18nOptional } from "@/lib/i18n";
+
 /**
  * Текст серверной ошибки — на языке человека, а не сервера.
  *
@@ -112,13 +115,32 @@ const RULES: Array<[RegExp, string]> = [
 
 ];
 
+// Сообщение, называющее переменную окружения или панель поставщика, написано
+// для НАС, а не для покупателя — прячется на любом языке (см. ниже).
+const INFRA = /[A-Z][A-Z0-9]{3,}_[A-Z0-9_]{2,}|in Railway|dash.cloudflare/;
+
 /**
  * @param raw   текст из поля `error` ответа сервера (может отсутствовать)
  * @param fallback русский текст на случай, когда сервер не сказал ничего
+ * @param lang  язык читателя. Для en КАРТА НЕ ПРИМЕНЯЕТСЯ: тексты сервера —
+ *   контракт на английском, для EN-читателя они родные, а русская замена
+ *   была бы шагом назад (замер 06.09.2026: EN-визитёр в момент решения
+ *   «платить ли» читал русское сообщение о квоте; тосты — слепая зона
+ *   машинного доводчика, живут секунды). kk идёт по русской карте, как и
+ *   весь модуль (fallback ru).
  */
-export function devhubServerError(raw: unknown, fallback: string): string {
-  if (typeof raw !== "string") return fallback;
-  const s = raw.trim();
+export function devhubServerError(raw: unknown, fallback: string, lang: string = "ru"): string {
+  const s = typeof raw === "string" ? raw.trim() : "";
+  if (lang !== "ru" && lang !== "kk") {
+    if (!s) return "The request failed. Please try again.";
+    if (INFRA.test(s)) {
+      if (typeof console !== "undefined" && console.warn) {
+        console.warn("devhub: техническое сообщение сервера не показано покупателю:", s);
+      }
+      return "This capability is not set up on our side yet. We know about it — please try again later.";
+    }
+    return s;
+  }
   if (!s) return fallback;
 
   // Сервер уже говорит по-русски (таких семь) — не трогаем.
@@ -141,7 +163,6 @@ export function devhubServerError(raw: unknown, fallback: string): string {
   // Текст при этом НЕ теряется — он уходит в консоль. Спрятать его
   // совсем значило бы обменять одну беду на другую: разбирать отказ
   // стало бы не по чему.
-  const INFRA = /[A-Z][A-Z0-9]{3,}_[A-Z0-9_]{2,}|in Railway|dash.cloudflare/;
   if (INFRA.test(s)) {
     if (typeof console !== "undefined" && console.warn) {
       console.warn("devhub: техническое сообщение сервера не показано покупателю:", s);
@@ -150,4 +171,15 @@ export function devhubServerError(raw: unknown, fallback: string): string {
   }
 
   return `${fallback} (${s})`;
+}
+
+/**
+ * Языковая обёртка: язык берётся из общего контекста сайта, вне провайдера —
+ * русский (прежнее поведение, тесты рисуют без провайдера). Компоненты зовут
+ * ЕЁ, а не голую функцию, — иначе язык пришлось бы протаскивать через 54
+ * вызова руками.
+ */
+export function useDevhubServerError(): (raw: unknown, fallback: string) => string {
+  const lang = useI18nOptional()?.lang ?? "ru";
+  return useCallback((raw: unknown, fallback: string) => devhubServerError(raw, fallback, lang), [lang]);
 }

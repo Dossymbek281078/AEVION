@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useI18nOptional } from "@/lib/i18n";
 import { setAuthToken } from "@/lib/auth";
 import { useEffect, useMemo, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -131,7 +132,19 @@ const OAUTH_META: Record<string, { brand: string; gradient: string; envHint: str
   },
 };
 
+// Атрибуты формы входа (aria/placeholder) — слепая зона машинного
+// доводчика AutoTranslate: он переводит текст, но не атрибуты. Живой
+// замер 06.09.2026 (en-US): страница английская, подсказки полей русские —
+// и это ФОРМА РЕГИСТРАЦИИ, первое, что заполняет западный визитёр.
+// Тот же образец, что GEN_UI/ATTR_UI в devhub; вне провайдера — русский.
+const AUTH_A11Y: Record<string, { name: string; namePh: string; email: string; password: string; passwordPh: string }> = {
+  ru: { name: "Имя", namePh: "Как к вам обращаться", email: "Почта", password: "Пароль", passwordPh: "Не короче 6 знаков" },
+  en: { name: "Name", namePh: "What should we call you", email: "Email", password: "Password", passwordPh: "At least 6 characters" },
+  kk: { name: "Аты", namePh: "Сізге қалай жүгінейік", email: "Пошта", password: "Құпиясөз", passwordPh: "Кемінде 6 таңба" },
+};
+
 export default function AuthPage() {
+  const AA = AUTH_A11Y[useI18nOptional()?.lang ?? "ru"] ?? AUTH_A11Y.ru;
   const { showToast } = useToast();
   const [mode, setMode] = useState<"login" | "register">("register");
   const [name, setName] = useState("");
@@ -529,12 +542,12 @@ export default function AuthPage() {
               {mode === "register" ? (
                 <div>
                   <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Имя</div>
-                  <input aria-label="Имя" value={name} onChange={(e) => setName(e.target.value)} placeholder="Как к вам обращаться" style={inputStyle} disabled={busy} />
+                  <input aria-label={AA.name} value={name} onChange={(e) => setName(e.target.value)} placeholder={AA.namePh} style={inputStyle} disabled={busy} />
                 </div>
               ) : null}
               <div>
                 <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Почта</div>
-                <input aria-label="Почта"
+                <input aria-label={AA.email}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="user@example.com"
@@ -563,7 +576,7 @@ export default function AuthPage() {
               </div>
               <div>
                 <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13, color: "#334155" }}>Пароль</div>
-                <input aria-label="Пароль" value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Не короче 6 знаков" style={inputStyle} disabled={busy} />
+                <input aria-label={AA.password} value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder={AA.passwordPh} style={inputStyle} disabled={busy} />
                 {password ? (
                   <div style={{ marginTop: 8 }}>
                     {/* Strength bar — 4 segments, fills left→right by score. */}

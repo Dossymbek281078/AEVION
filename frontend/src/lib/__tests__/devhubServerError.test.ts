@@ -178,3 +178,28 @@ describe("правила, добавленные по замеру 29.08", () =>
     expect(out).not.toContain("Replicate");
   });
 });
+
+describe("язык читателя (06.09.2026)", () => {
+  it("для en русская карта НЕ применяется — текст сервера показывается как есть", () => {
+    const out = devhubServerError("Monthly video limit reached", "Не получилось.", "en");
+    expect(out).toBe("Monthly video limit reached");
+    expect(/[а-яё]/i.test(out)).toBe(false);
+  });
+
+  it("для en пустой ответ сервера даёт английский запасной текст, а не русский", () => {
+    const out = devhubServerError(undefined, "Не получилось.", "en");
+    expect(/[а-яё]/i.test(out), "русский запасной текст у EN-читателя").toBe(false);
+    expect(out.length).toBeGreaterThan(10);
+  });
+
+  it("для en инфраструктурное сообщение прячется по-английски", () => {
+    const out = devhubServerError("set CLOUDFLARE_API_TOKEN in Railway", "Не получилось.", "en");
+    expect(out).not.toContain("CLOUDFLARE_API_TOKEN");
+    expect(/[а-яё]/i.test(out)).toBe(false);
+  });
+
+  it("без языка поведение прежнее — русская карта (все старые тесты выше)", () => {
+    const out = devhubServerError("Monthly video limit reached", "Не получилось.");
+    expect(out).toContain("Месячная норма исчерпана");
+  });
+});

@@ -14,7 +14,7 @@ import { fixDoubledScheme } from "@/lib/urls";
 import { track } from "@/lib/track";
 import { productById } from "@/lib/products";
 import { PageTracking } from "@/components/PageTracking";
-import { devhubServerError } from "@/lib/devhubServerError";
+import { devhubServerError, useDevhubServerError } from "@/lib/devhubServerError";
 import { stackForIdea } from "@/lib/devhubStackChoice";
 import { DEVHUB_EXAMPLES, exampleText } from "./examples";
 
@@ -139,6 +139,7 @@ function capabilityOffReason(status: string | undefined): string {
 export default function DevHubPage() {
   const t = useDevhubT();
   const { lang } = useI18n();
+  const serverError = useDevhubServerError();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [userTier, setUserTier] = useState<"free" | "pro" | "enterprise" | null>(null);
@@ -175,7 +176,7 @@ export default function DevHubPage() {
         body: JSON.stringify({ name, description: idea, stack }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(devhubServerError(data.error, t("err.create")));
+      if (!r.ok) throw new Error(serverError(data.error, t("err.create")));
       // Сервер честно говорит, КУДА лёг проект, и до сегодня это поле никто не
       // читал: правда доезжала до ответа и останавливалась на границе API.
       // «memory» значит, что база была недоступна и запись живёт в памяти
@@ -244,7 +245,7 @@ export default function DevHubPage() {
         body: JSON.stringify({ name: form.name, description: form.description, stack: form.stack }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(devhubServerError(data.error, "Не удалось создать проект"));
+      if (!r.ok) throw new Error(serverError(data.error, "Не удалось создать проект"));
       setProjects((ps) => [data.project, ...ps]);
       setShowModal(false);
       setForm({ name: "", description: "", stack: "next" });
@@ -265,7 +266,7 @@ export default function DevHubPage() {
         // would hide a schema, a login role and a billable container that are
         // all still live, with nothing left pointing at them.
         const d = await r.json().catch(() => null);
-        setError(devhubServerError(d?.error, `Проект не удалён — сервер ответил ${r.status}`));
+        setError(serverError(d?.error, `Проект не удалён — сервер ответил ${r.status}`));
         return;
       }
       setProjects((ps) => ps.filter((p) => p.id !== id));

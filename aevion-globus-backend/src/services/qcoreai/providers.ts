@@ -842,7 +842,12 @@ async function* streamAnthropic(
   const chatMsgs = messages.filter((m) => m.role !== "system");
   const body: any = {
     model,
-    max_tokens: 4096,
+    // 8192 — как у НЕ-потокового callAnthropic. #842 (22.07) поднимал предел,
+    // чиня обрезанные ответы, и поднял только одну ветвь из двух: потоковый
+    // близнец остался на 4096, то есть тот же вопрос тому же провайдеру в
+    // стриме обрывался вдвое раньше. Равенство ветвей держит сторож
+    // (tests/streamCapsMatchNonStream.guard.test.ts).
+    max_tokens: 8192,
     stream: true,
     messages: chatMsgs.map((m) => ({ role: m.role, content: m.content })),
   };
@@ -992,6 +997,13 @@ async function* streamGemini(
 /**
  * Stream a provider. Yields { kind: "text", text } chunks as they arrive,
  * then a single { kind: "done", tokensIn?, tokensOut? } event at the end.
+ *
+ * ⚠️ Метра здесь НЕТ НАМЕРЕННО — это проверенный честный ноль (06.09.2026),
+ * а не хвост учёта. Оба вызывающих записывают расход САМИ из события done:
+ * /chat/stream пишет QCoreTokenLedger (routes/qcoreai.ts, addTokenUsage по
+ * ledgerIn/Out), агенты — в QCoreMessage.tokensIn/Out, и getMonthlyTokens
+ * суммирует ОБА источника. Добавить сюда meterCall — значит посчитать те же
+ * токены дважды; дубль опаснее пропуска: он выглядит как рост честности.
  */
 export async function* streamProvider(
   providerId: string,

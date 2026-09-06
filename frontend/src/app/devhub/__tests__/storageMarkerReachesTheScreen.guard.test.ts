@@ -24,6 +24,22 @@ const DIR = path.resolve(__dirname, "..");
 const STOREFRONT = fs.readFileSync(path.join(DIR, "page.tsx"), "utf8");
 const WORKSPACE = fs.readFileSync(path.join(DIR, "[id]", "page.tsx"), "utf8");
 
+// Тосты 06.09 переехали в словарь TOAST_UI (доводчик не успевает за ними,
+// нужен ru/en/kk). Сторож резолвит showToast(TL.key) в русскую строку из
+// ru-блока ТОГО ЖЕ файла — косвенность закреплена, а не прощена: пропади
+// ключ или слово из словаря, счёт упадёт и сторож покраснеет.
+function resolveToastKeys(ws: string): string {
+  const m = ws.match(/const TOAST_UI[^=]*= \{\s*ru: \{([\s\S]*?)\n  \},/);
+  const map: Record<string, string> = {};
+  if (m) {
+    for (const line of m[1].split(String.fromCharCode(10))) {
+      const km = line.match(/^\s*([A-Za-z0-9_]+): "(.*)",\s*$/);
+      if (km) map[km[1]] = km[2];
+    }
+  }
+  return ws.replace(/TL\.([A-Za-z0-9_]+)/g, (_, k) => '"' + (map[k] ?? '') + '"');
+}
+
 describe("признак хранилища доходит до экрана", () => {
   test("прибор исправен: файлы прочитаны и не пусты", () => {
     // Без этого пустой файл сделал бы любую проверку ниже бессмысленной,
@@ -68,7 +84,7 @@ describe("признак хранилища доходит до экрана", (
     // Модуль говорит по-русски; английский текст в тосте — отдельный класс,
     // за которым следит workspaceSpeaksOneLanguage. Здесь проверяем только,
     // что новые строки не появились на латинице.
-    const warns = WORKSPACE.match(/showToast\("[^"]*(память|памяти)[^"]*"/g) ?? [];
+    const warns = resolveToastKeys(WORKSPACE).match(/showToast\("[^"]*(память|памяти)[^"]*"/g) ?? [];
     expect(warns.length, "предупреждений о памяти не найдено вовсе").toBeGreaterThanOrEqual(2);
   });
 
@@ -92,7 +108,7 @@ describe("признак хранилища доходит до экрана", (
     // строка обязана говорить про перезапуск — иначе ссылка на неё не считается.
     expect(WORKSPACE, "GEN_UI.ru.memoryWarn больше не предупреждает про перезапуск")
       .toMatch(/memoryWarn: "[^"]*перезапуск/);
-    const warns = WORKSPACE.split(nl2).filter(
+    const warns = resolveToastKeys(WORKSPACE).split(nl2).filter(
       (s) => s.includes("showToast(") && (s.includes("перезапуск") || s.includes("GL.memoryWarn")),
     ).length;
     expect(warns, "условие есть, а предупреждения нет").toBeGreaterThanOrEqual(uses);

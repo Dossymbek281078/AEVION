@@ -34,8 +34,16 @@ describe("серверная ошибка доходит до человека �
   });
 
   test("показ идёт через переводчик, и мест не меньше девяти", () => {
-    // Храповик, а не точное число: девять — замер дня, а мест станет больше.
-    const uses = WORKSPACE.split("devhubServerError(data.error").length - 1;
+    // 06.09 вызовы переехали на языковую обёртку serverError(...) из
+    // useDevhubServerError (для en показывается текст сервера как есть).
+    // Сторож принимает обе формы, но ТОЛЬКО при живой привязке хука —
+    // иначе любое одноимённое `serverError` считалось бы переводчиком.
+    expect(WORKSPACE, "привязка useDevhubServerError исчезла из окна")
+      .toContain("const serverError = useDevhubServerError();");
+    // «erverError(» покрывает обе формы: devhubServerError и обёртку
+    // serverError — вторая является суффиксом первой, считать их порознь
+    // значило бы посчитать первую дважды.
+    const uses = WORKSPACE.split("erverError(data.error").length - 1;
     expect(uses).toBeGreaterThanOrEqual(9);
   });
 

@@ -325,7 +325,7 @@ class SF{private w:Worker|null=null;private ok=false;oshibka:string|null=null;
     this.w=null;
     if(this.retries<SF.MAX_RETRIES){this.retries++;setTimeout(()=>{try{this.init()}catch{}},800);}
   }
-  init(){if(this.w)return;try{this.w=new Worker("/stockfish-18-lite.js");this.w.onerror=e=>{e.preventDefault();this.onDead((e as ErrorEvent).message)};this.w.onmessage=e=>{const l=String(e.data||"");
+  init(){if(this.w)return;try{this.w=new Worker("/stockfish-18-lite-single.js");this.w.onerror=e=>{e.preventDefault();this.onDead((e as ErrorEvent).message)};this.w.onmessage=e=>{const l=String(e.data||"");
     // Diagnostic: log Stockfish init/feature lines so we can verify NNUE + threads in DevTools.
     // Look for: "info string NNUE evaluation using ..." and "info string Using N threads".
     if(l.startsWith("info string")||l==="readyok"||l==="uciok")try{console.log("[SF]",l)}catch{}

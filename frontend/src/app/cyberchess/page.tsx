@@ -303,7 +303,29 @@ class SF{private w:Worker|null=null;private ok=false;oshibka:string|null=null;
   // Throttle eval-bar updates: Stockfish стримит десятки `info score` в секунду; без троттла
   // каждый = setState → ре-рендер всего компонента → дёрганье анимации хода. Обновляем ~8/сек.
   private ecbTimer:ReturnType<typeof setTimeout>|null=null;private pendingEval:{cp:number;mate:number;depth:number}|null=null;
-  init(){if(this.w)return;try{this.w=new Worker("/stockfish-18-lite.js");this.w.onerror=e=>{e.preventDefault();this.ok=false;this.naSostoyanie?.(false);this.oshibka=(e as ErrorEvent).message||"движок не запустился";try{console.warn("[CyberChess] движок Stockfish не поднялся:",this.oshibka)}catch{}};this.w.onmessage=e=>{const l=String(e.data||"");
+  // Само-восстановление воркера. Раньше onerror только гасил флаг: мёртвый
+  // воркер оставался в this.w, init() выходил по `if(this.w)return`, ensureSF —
+  // по `if(sfR.current)return`, и один сбой Stockfish (в консоли это бывает
+  // «e.trim is not a function» из lite-сборки после смены партии/задачи) ронял
+  // силу движка на запасной расчёт до КОНЦА сессии — лечила только перезагрузка.
+  // Теперь дохлый воркер убивается и пересоздаётся с ограничением попыток,
+  // а счётчик обнуляется при удачном uciok, чтобы редкие сбои за долгую партию
+  // не исчерпали бюджет.
+  private retries=0;private static readonly MAX_RETRIES=3;
+  private onDead(msg?:string){
+    this.ok=false;this.naSostoyanie?.(false);
+    this.oshibka=msg||"движок не запустился";
+    try{console.warn("[CyberChess] движок Stockfish не поднялся:",this.oshibka)}catch{}
+    // Провалить незавершённый запрос, иначе ход соперника («go») повиснет:
+    // сообщаем «хода нет», приложение подхватит запасной расчёт для этого хода.
+    if(this.ecbTimer){clearTimeout(this.ecbTimer);this.ecbTimer=null;}
+    const j=this.cur;this.cur=null;const cb=this.cb;this.cb=null;this.ecb=null;this.mpvCb=null;this.mpvLines=[];this.pendingEval=null;
+    if(j){try{cb?.("","")}catch{}}
+    try{this.w?.terminate()}catch{}
+    this.w=null;
+    if(this.retries<SF.MAX_RETRIES){this.retries++;setTimeout(()=>{try{this.init()}catch{}},800);}
+  }
+  init(){if(this.w)return;try{this.w=new Worker("/stockfish-18-lite.js");this.w.onerror=e=>{e.preventDefault();this.onDead((e as ErrorEvent).message)};this.w.onmessage=e=>{const l=String(e.data||"");
     // Diagnostic: log Stockfish init/feature lines so we can verify NNUE + threads in DevTools.
     // Look for: "info string NNUE evaluation using ..." and "info string Using N threads".
     if(l.startsWith("info string")||l==="readyok"||l==="uciok")try{console.log("[SF]",l)}catch{}
@@ -351,7 +373,7 @@ class SF{private w:Worker|null=null;private ok=false;oshibka:string|null=null;
         // Skill 20 = max strength — no internal handicap.
         this.w!.postMessage("setoption name Skill Level value 20");
       }catch{}
-      this.ok=true;this.naSostoyanie?.(true);this.w!.postMessage("isready");
+      this.ok=true;this.retries=0;this.naSostoyanie?.(true);this.w!.postMessage("isready");
     }};this.w.postMessage("uci")}catch{this.w=null}}
   ready(){return this.ok&&!!this.w}
   // ── Очередь запросов ──────────────────────────────────────────────────────

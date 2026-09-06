@@ -992,6 +992,13 @@ async function* streamGemini(
 /**
  * Stream a provider. Yields { kind: "text", text } chunks as they arrive,
  * then a single { kind: "done", tokensIn?, tokensOut? } event at the end.
+ *
+ * ⚠️ Метра здесь НЕТ НАМЕРЕННО — это проверенный честный ноль (06.09.2026),
+ * а не хвост учёта. Оба вызывающих записывают расход САМИ из события done:
+ * /chat/stream пишет QCoreTokenLedger (routes/qcoreai.ts, addTokenUsage по
+ * ledgerIn/Out), агенты — в QCoreMessage.tokensIn/Out, и getMonthlyTokens
+ * суммирует ОБА источника. Добавить сюда meterCall — значит посчитать те же
+ * токены дважды; дубль опаснее пропуска: он выглядит как рост честности.
  */
 export async function* streamProvider(
   providerId: string,

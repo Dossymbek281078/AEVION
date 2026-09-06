@@ -658,6 +658,28 @@ export default function DevHubPage() {
           </span>
         </div>
 
+        {/* Провенанс ИИ-генераций — продающая особинка $149 (спека Монетизации
+            06.09, EU AI Act): обещание едет В ОДНОЙ ветке с механизмом и
+            закреплено сторожем devhubClaims — витрина не обещает того, чего
+            нет в коде. */}
+        <div style={{
+          border: "1px solid #a7f3d0", background: "#ecfdf5", borderRadius: 12,
+          padding: "16px 20px", marginBottom: 20,
+          display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12,
+        }}>
+          <div style={{ maxWidth: 640 }}>
+            <p style={{ fontWeight: 800, fontSize: 15, margin: 0, color: "#0f172a" }}>
+              {t("prov.title")}
+            </p>
+            <p style={{ fontSize: 13, color: "#475569", margin: "4px 0 0", lineHeight: 1.5 }}>
+              {t("prov.body")}
+            </p>
+          </div>
+          <span style={{ padding: "6px 12px", background: "#059669", color: "#fff", borderRadius: 8, fontWeight: 700, fontSize: 12, whiteSpace: "nowrap" }}>
+            {t("prov.where")}
+          </span>
+        </div>
+
         {/* Live capability strip — honest state on the way in, not after the
             user has typed an idea and hit a dead button. Only rendered once
             the server has answered; silence is better than a guess. */}

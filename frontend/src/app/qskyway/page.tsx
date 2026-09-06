@@ -4,9 +4,11 @@ import { PaywallScreen } from "@/components/PaywallScreen";
 import QSkywayClient from "./_client";
 import { PageTracking } from "@/components/PageTracking";
 
-const TITLE = "QSkyway — navigation layer for the urban sky";
+const TITLE = "QSkyway — navigation layer for the urban sky · навигация городского неба";
 const DESCRIPTION =
-  "Provider-independent 3D air corridors + rules for air taxis, live on real buildings in "
+  "Навигационный слой городского неба: 3D-коридоры аэротакси по правилам, которые "
+  + "регуляторы реально публикуют. "
+  + "Provider-independent 3D air corridors + rules for air taxis, live on real buildings in "
   + "Astana, NYC & Tokyo. Routed against what the regulators actually publish: FAA airspace "
   + "ceilings over Manhattan, Japan's MLIT permission regime over Tokyo, and Kazakhstan's "
   + "published prohibited area UAP28 covering all of the Astana twin. Live METAR wind, "

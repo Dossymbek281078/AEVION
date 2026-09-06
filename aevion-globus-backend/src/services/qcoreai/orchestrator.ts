@@ -241,12 +241,17 @@ async function* streamAgent(
   agent: AgentConfig,
   stage: AgentStage,
   messages: ChatMessage[],
-  instance?: string
+  instance?: string,
+  // Размер ПАРАЛЛЕЛЬНОЙ группы, в которой стартует этот стрим. Гонка
+  // 06.09.2026: N одновременных проверок премиум-квоты читали одно used до
+  // первой записи в леджер — слой из 8 моделей переливал подлимит ×8. Затвор
+  // теперь требует запас на всю группу (см. qcoreQuota.projectedCalls).
+  projectedCalls = 1
 ): AsyncGenerator<OrchestratorEvent, string, unknown> {
   if (input.premiumGate) {
     let hit: { usedTokens: number; limitTokens: number } | null = null;
     try {
-      hit = await input.premiumGate(agent.provider, agent.model);
+      hit = await input.premiumGate(agent.provider, agent.model, projectedCalls);
     } catch {
       hit = null; // gate failure fails open — never blocks a run on a metering hiccup
     }
@@ -586,8 +591,8 @@ async function* runParallel(
     { role: "user", content: writerUserPrompt },
   ];
 
-  const streamA = streamAgent(input, writerA, "draft", writerAMessages, "a");
-  const streamB = streamAgent(input, writerB, "draft", writerBMessages, "b");
+  const streamA = streamAgent(input, writerA, "draft", writerAMessages, "a", 2);
+  const streamB = streamAgent(input, writerB, "draft", writerBMessages, "b", 2);
 
   let draftA = "";
   let draftB = "";
@@ -688,8 +693,8 @@ async function* runDebate(
     { role: "user", content: debateUser },
   ];
 
-  const streamPro = streamAgent(input, pro, "draft", proMessages, "pro");
-  const streamCon = streamAgent(input, con, "draft", conMessages, "con");
+  const streamPro = streamAgent(input, pro, "draft", proMessages, "pro", 2);
+  const streamCon = streamAgent(input, con, "draft", conMessages, "con", 2);
 
   let proArg = "";
   let conArg = "";
@@ -809,7 +814,8 @@ async function* runCouncil(
           m,
           "draft",
           [{ role: "system", content: m.systemPrompt }, ...history, { role: "user", content: memberUser }],
-          m.persona
+          m.persona,
+          members.length
         ),
         m.persona
       )
@@ -836,7 +842,12 @@ async function* runCouncil(
      now seeing ALL of the previous layer's responses, using the AGGREGATOR
      prompt. Free models do this refinement; a layer that goes fully dark keeps
      the previous layer's answers rather than losing everything. */
-  for (let layer = 1; layer < layers && totalCost <= budget; layer++) {
+  // Бюджет проверялся только МЕЖДУ слоями: слой из 8 моделей выносил его
+  // разом (та же гонка, но по деньгам). Слой стоит примерно как предыдущий —
+  // требуем запас на него ДО старта.
+  let lastLayerCost = totalCost; // цена слоя 0
+  for (let layer = 1; layer < layers && totalCost + lastLayerCost <= budget; layer++) {
+    const costBeforeLayer = totalCost;
     const aggUser = buildAggregatorPrompt(input.userInput, answered.map((x) => x.draft));
     const streams = members.map((m) =>
       safeMemberStream(
@@ -845,7 +856,8 @@ async function* runCouncil(
           m,
           "draft",
           [{ role: "system", content: AGGREGATOR_PROMPT }, ...history, { role: "user", content: aggUser }],
-          `${m.persona}·L${layer}`
+          `${m.persona}·L${layer}`,
+          members.length
         ),
         m.persona
       )
@@ -862,6 +874,7 @@ async function* runCouncil(
       .map((m, i) => ({ member: m, draft: refined[i] }))
       .filter((x) => x.draft.trim().length > 0);
     if (nextAnswered.length > 0) answered = nextAnswered;
+    lastLayerCost = Math.max(totalCost - costBeforeLayer, 0.000001);
   }
 
   if (totalCost > budget) {

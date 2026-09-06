@@ -76,7 +76,21 @@ function coverage(probes) {
 
 async function probe(p) {
   try {
-    const r = await fetch(BASE + p.url, { signal: AbortSignal.timeout(15000) });
+    // 06.09.2026: у части модулей нет НИ ОДНОЙ GET-ручки без параметров —
+    // их монтирование доказывает только POST. Проба шлёт ПУСТОЕ тело {}:
+    // живой роутер отвечает своим 4xx (400 «нет полей» / 401 «нет подписи»)
+    // ДО какой-либо работы, несмонтированный — 404. Данных не создаёт:
+    // это проверено на каждом добавленном адресе. Битый JSON для этого
+    // НЕ годится — body-parser бьёт его 400 ГЛОБАЛЬНО, до маршрутизации
+    // (поймано отрицательным контролем на выдуманном пути); OPTIONS не
+    // годится тоже — CORS отвечает 204 на что угодно.
+    const init = { signal: AbortSignal.timeout(15000) };
+    if (p.method && p.method !== "GET") {
+      init.method = p.method;
+      init.headers = { "Content-Type": "application/json" };
+      init.body = "{}";
+    }
+    const r = await fetch(BASE + p.url, init);
     return { ...p, status: r.status };
   } catch (e) {
     return { ...p, status: 0, error: e.message || String(e) };

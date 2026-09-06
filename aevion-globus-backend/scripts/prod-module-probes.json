@@ -478,5 +478,38 @@
   "base": "/api/ztide",
   "url": "/api/ztide/health",
   "expect": 200
+ },
+ {
+  "base": "/api/health",
+  "url": "/api/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/help",
+  "url": "/api/help/contact/health",
+  "expect": 200
+ },
+ {
+  "base": "/api/lemonsqueezy",
+  "url": "/api/lemonsqueezy/webhook",
+  "expect": 200
+ },
+ {
+  "base": "/api/bank",
+  "url": "/api/bank/hmac-self-test",
+  "method": "POST",
+  "expect": 401
+ },
+ {
+  "base": "/api/constitution/funnel",
+  "url": "/api/constitution/funnel/track",
+  "method": "POST",
+  "expect": 400
+ },
+ {
+  "base": "/api/constitution/waitlist",
+  "url": "/api/constitution/waitlist/subscribe",
+  "method": "POST",
+  "expect": 400
  }
 ]

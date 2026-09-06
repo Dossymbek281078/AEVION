@@ -842,7 +842,12 @@ async function* streamAnthropic(
   const chatMsgs = messages.filter((m) => m.role !== "system");
   const body: any = {
     model,
-    max_tokens: 4096,
+    // 8192 — как у НЕ-потокового callAnthropic. #842 (22.07) поднимал предел,
+    // чиня обрезанные ответы, и поднял только одну ветвь из двух: потоковый
+    // близнец остался на 4096, то есть тот же вопрос тому же провайдеру в
+    // стриме обрывался вдвое раньше. Равенство ветвей держит сторож
+    // (tests/streamCapsMatchNonStream.guard.test.ts).
+    max_tokens: 8192,
     stream: true,
     messages: chatMsgs.map((m) => ({ role: m.role, content: m.content })),
   };

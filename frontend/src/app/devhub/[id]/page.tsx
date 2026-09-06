@@ -12,7 +12,7 @@ import { buildReactPreviewSrcdoc, isClientPreviewStack } from "@/lib/reactPrevie
 import { indexCapabilities, isCapabilityBlocked, isCapabilityConfirmed, capabilityHint, type CapabilityIndex } from "@/lib/devhubCapabilities";
 import { assetSnippet, appendSnippet, type AssetKind } from "@/lib/devhubAssetSnippet";
 import { newFilePathError, renamePathError, normalizeFilePath } from "@/lib/devhubFilePaths";
-import { devhubServerError } from "@/lib/devhubServerError";
+import { devhubServerError, useDevhubServerError } from "@/lib/devhubServerError";
 import { track } from "@/lib/track";
 import { useI18nOptional } from "@/lib/i18n";
 import { productById } from "@/lib/products";
@@ -32,7 +32,10 @@ async function writeOrThrow(input: string, init?: RequestInit): Promise<Response
     // берём его и переводим тем же помощником, что и остальные показы.
     const body = await r.json().catch(() => null);
     throw new Error(
-      devhubServerError(body?.error, `Не удалось сохранить — сервер ответил ${r.status}`),
+      // Модульный помощник — хука здесь нет; язык честно читается из атрибута,
+      // который ставит I18nProvider (вне браузера/провайдера — русский).
+      devhubServerError(body?.error, `Не удалось сохранить — сервер ответил ${r.status}`,
+        typeof document === "undefined" ? "ru" : document.documentElement.lang || "ru"),
     );
   }
   return r;
@@ -793,6 +796,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const GL = GEN_UI[uiLang] ?? GEN_UI.ru;
   const AL = useAttrL();
   const TL = TOAST_UI[uiLang] ?? TOAST_UI.ru;
+  const serverError = useDevhubServerError();
   const [project, setProject] = useState<Project | null>(null);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
@@ -1216,7 +1220,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     // соавторам) не имеют права жить 4 секунды: поверх тоста поднимается
     // несмываемая плашка с кассой. Перехват здесь — единственное общее место:
     // своих фетчеров у окна 50, а тексты все проходят через showToast.
-    if (/Месячная норма исчерпана|Нужен платный тариф|Studio Pro/.test(message)) {
+    // Английские формы добавлены 06.09: для en тексты сервера показываются
+    // как есть (см. devhubServerError), и русские триггеры их не ловили бы —
+    // денежный отказ у EN-визитёра снова жил бы 4 секунды.
+    if (/Месячная норма исчерпана|Нужен платный тариф|Studio Pro|monthly [\w ]+ limit reached|payment required/i.test(message)) {
       setUpgradeNudge(message);
     }
     const queue = toastQueue.current;
@@ -1605,7 +1612,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
               const evt = JSON.parse(e.slice(6));
               if (evt.type === "status") setGenStage(evt.stage);
               else if (evt.type === "result") data = evt;
-              else if (evt.type === "error") throw new Error(devhubServerError(evt.error, "Генерация прервалась"));
+              else if (evt.type === "error") throw new Error(serverError(evt.error, "Генерация прервалась"));
             }
           }
         }
@@ -1627,7 +1634,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           { onRetry: () => showToast(TL.backendRedeploy, "info") }
         );
         data = await r.json();
-        if (!r.ok) throw new Error(devhubServerError(data.error, "Генерация не удалась"));
+        if (!r.ok) throw new Error(serverError(data.error, "Генерация не удалась"));
       }
       const newGenerated = data.files || [];
       предупредитьЕслиНеСверили(data);
@@ -1759,7 +1766,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/generate/undo`), { method: "POST" });
       const data = await r.json();
-      if (!r.ok) throw new Error(devhubServerError(data.error, "Отменить не удалось"));
+      if (!r.ok) throw new Error(serverError(data.error, "Отменить не удалось"));
       if (data.ok === false) {
         showToast(TL.nothingToUndo, "info");
         return;
@@ -1787,7 +1794,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/checkpoints/${checkpointId}/restore`), { method: "POST" });
       const data = await r.json();
-      if (!r.ok) throw new Error(devhubServerError(data.error, "Восстановить не удалось"));
+      if (!r.ok) throw new Error(serverError(data.error, "Восстановить не удалось"));
       if (data.ok === false) {
         showToast(TL.checkpointGone, "info");
         loadCheckpointHistory();
@@ -1818,7 +1825,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({ idea: planIdea, ...(project ? { projectId: project.id } : {}) }),
       });
       const data = await r.json();
-      if (!r.ok || data.ok === false) throw new Error(devhubServerError(data.error, "Не удалось составить план"));
+      if (!r.ok || data.ok === false) throw new Error(serverError(data.error, "Не удалось составить план"));
       setPlan(data);
       if (data.aiGenerated === false) {
         showToast(TL.stubPlan, "warning");
@@ -1859,7 +1866,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       REACT_PREVIEW_OVERLAY_SCRIPT
     ).then((r) => {
       if (cancelled) return;
-      if ("error" in r) { setReactPreviewSrcdoc(null); setReactPreviewError(devhubServerError(r.error, "Превью не собралось")); }
+      if ("error" in r) { setReactPreviewSrcdoc(null); setReactPreviewError(serverError(r.error, "Превью не собралось")); }
       else { setReactPreviewSrcdoc(r.srcdoc); }
       setVisualEditSelected(null);
     });
@@ -1943,7 +1950,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({ prompt: visualEditImgPrompt.trim() }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(devhubServerError(data.error, "Не удалось создать картинку"));
+      if (!r.ok) throw new Error(serverError(data.error, "Не удалось создать картинку"));
       const doc = visualEditSourceDocRef.current;
       const el = doc.querySelector(`[data-vid="${visualEditSelected.vid}"]`);
       if (!el) throw new Error("Element no longer in the preview — it was rebuilt, click it again");
@@ -1991,7 +1998,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         { onRetry: () => showToast(TL.backendRedeploy, "info") }
       );
       const data = await r.json();
-      if (!r.ok) throw new Error(devhubServerError(data.error, "Не удалось спроектировать базу"));
+      if (!r.ok) throw new Error(serverError(data.error, "Не удалось спроектировать базу"));
       const changes = (data.files || []).map((gf: { path: string; language?: string; content: string }) => {
         const before = files.find((ff) => ff.path === gf.path)?.content ?? "";
         const d = diffLines(before, gf.content ?? "");
@@ -2059,7 +2066,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         { onRetry: () => showToast(TL.backendRedeploy, "info") }
       );
       const data = await r.json();
-      if (!r.ok || !data.ok) throw new Error(devhubServerError(data.error, "Не удалось выделить ресурсы"));
+      if (!r.ok || !data.ok) throw new Error(serverError(data.error, "Не удалось выделить ресурсы"));
       setChatHistory((h) => [
         ...h.filter((m) => !(m.role === "hint" && m.kind === "provision_db")),
         {
@@ -2108,7 +2115,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({ prompt, stack: project.stack, ...(visualEditHtmlPath ? { targetFiles: [visualEditHtmlPath] } : {}) }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(devhubServerError(data.error, "Правка ИИ не удалась"));
+      if (!r.ok) throw new Error(serverError(data.error, "Правка ИИ не удалась"));
       if (data.aiGenerated === false) {
         showToast(TL.stubVisual, "error");
       } else if (Array.isArray(data.syntaxErrors) && data.syntaxErrors.length > 0) {
@@ -2142,7 +2149,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/github/sync`), { method: "POST" });
       const data = await r.json();
-      if (!r.ok || data.ok === false) throw new Error(devhubServerError(data.error, "Синхронизация не удалась"));
+      if (!r.ok || data.ok === false) throw new Error(serverError(data.error, "Синхронизация не удалась"));
       // A sync that could not read some files leaves the project part-new and
       // part-stale — and that mixture is what a later push or deploy builds
       // from. A green toast over that reads as "all of it arrived".
@@ -2205,7 +2212,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy`), { method: "POST" });
       const data = await r.json();
-      if (!r.ok) throw new Error(devhubServerError(data.error, "Выкатка не удалась"));
+      if (!r.ok) throw new Error(serverError(data.error, "Выкатка не удалась"));
       const deploymentId: string = data.deploymentId;
       // Start streaming build log
       streamBuildLog(project.id, deploymentId);
@@ -2251,7 +2258,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         // берём его и переводим тем же помощником, что и остальные показы.
         const body = await r.json().catch(() => null);
         throw new Error(
-          devhubServerError(body?.error, `Не удалось сохранить — сервер ответил ${r.status}`),
+          serverError(body?.error, `Не удалось сохранить — сервер ответил ${r.status}`),
         );
       }
       const data = await r.json();
@@ -2292,7 +2299,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         // берём его и переводим тем же помощником, что и остальные показы.
         const body = await r.json().catch(() => null);
         throw new Error(
-          devhubServerError(body?.error, `Не удалось сохранить — сервер ответил ${r.status}`),
+          serverError(body?.error, `Не удалось сохранить — сервер ответил ${r.status}`),
         );
       }
       const data = await r.json();
@@ -2360,7 +2367,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({ templateId }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(devhubServerError(data.error, "Не удалось выполнить действие"));
+      if (!r.ok) throw new Error(serverError(data.error, "Не удалось выполнить действие"));
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
       applyFileList(listData);
@@ -2472,7 +2479,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         // иначе третий показ снова окажется сырым.
         const issue = {
           errorKind: d.errorKind as string | undefined,
-          error: devhubServerError(d.error, "Не удалось загрузить список веток"),
+          error: serverError(d.error, "Не удалось загрузить список веток"),
         };
         setGithubIssue(issue);
         return issue;
@@ -2567,7 +2574,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy/pages`), { method: "POST" });
       const d = await r.json();
-      if (!r.ok || !d.ok) throw new Error(devhubServerError(d.error, "Не удалось опубликовать на Cloudflare Pages"));
+      if (!r.ok || !d.ok) throw new Error(serverError(d.error, "Не удалось опубликовать на Cloudflare Pages"));
       setPagesResult({ liveUrl: d.liveUrl, domain: d.domain, pagesUrl: d.pagesUrl, domainReady: !!d.domainReady });
       // Шаг воронки «опубликовал» — до 06.09 не измерялся.
       track({ type: "feature_use", source: "devhub", meta: { feature: "deploy_pages" } });
@@ -2614,7 +2621,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy/vercel`), { method: "POST" });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        throw new Error(devhubServerError(d.error, "Выкатка на Vercel не удалась"));
+        throw new Error(serverError(d.error, "Выкатка на Vercel не удалась"));
       }
       showToast(`Vercel: ${d.deployUrl}`, "success");
       setTimeout(async () => {
@@ -2643,7 +2650,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setEmailMsg({ ok: false, text: devhubServerError(d.error, "Не удалось отправить") });
+        setEmailMsg({ ok: false, text: serverError(d.error, "Не удалось отправить") });
       } else if (d.degraded) {
         setEmailMsg({ ok: true, degraded: true, text: `Sent to ${emailTo}, but Brevo didn't confirm a messageId — ${d.degradedReason || "delivery not confirmed"}` });
         setEmailTo(""); setEmailSubject(""); setEmailBody("");
@@ -2683,7 +2690,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setPayError(devhubServerError(d.error, "Не удалось создать ссылку на оплату"));
+        setPayError(serverError(d.error, "Не удалось создать ссылку на оплату"));
       } else {
         setPayResult({ url: d.url });
       }
@@ -2710,7 +2717,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setPayError(devhubServerError(d.error, "Не удалось создать оплату Gumroad"));
+        setPayError(serverError(d.error, "Не удалось создать оплату Gumroad"));
       } else {
         setPayResult({ url: d.url });
       }
@@ -2741,7 +2748,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setImgError(devhubServerError(d.error, "Не удалось создать картинку"));
+        setImgError(serverError(d.error, "Не удалось создать картинку"));
       } else {
         setImgResult({ url: d.url, revisedPrompt: d.revisedPrompt });
               // Сервер помечает ответ, когда РАЗРЕШИЛ трату, не сумев
@@ -2782,7 +2789,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       if (!r.ok) {
         const d = await r.json().catch(() => null);
-        throw new Error(devhubServerError(d?.error, `Не удалось создать звук — сервер ответил ${r.status}`));
+        throw new Error(serverError(d?.error, `Не удалось создать звук — сервер ответил ${r.status}`));
       }
       const blob = await r.blob();
       setSfxUrl(URL.createObjectURL(blob));
@@ -2816,7 +2823,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       if (!r.ok) {
         const d = await r.json().catch(() => null);
-        throw new Error(devhubServerError(d?.error, `Не удалось создать музыку — сервер ответил ${r.status}`));
+        throw new Error(serverError(d?.error, `Не удалось создать музыку — сервер ответил ${r.status}`));
       }
       const blob = await r.blob();
       setMusicUrl(URL.createObjectURL(blob));
@@ -2837,7 +2844,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/domain/setup`), { method: "POST" });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setDomainSetupMsg({ ok: false, text: devhubServerError(d.error, "Не удалось настроить домен") });
+        setDomainSetupMsg({ ok: false, text: serverError(d.error, "Не удалось настроить домен") });
       } else {
         setDomainSetupMsg({ ok: true, text: `✓ ${d.domain} → ${d.url}` });
         setProject((p) => p ? { ...p, customDomain: d.domain } : p);
@@ -2914,7 +2921,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                 const step = agentSteps[evt.index];
                 accumulated.push({
                   step: evt.index, type: step?.type || "unknown",
-                  ok: !!evt.ok, output: evt.output, error: evt.error ? devhubServerError(evt.error, "Шаг не выполнен") : evt.error, savedAs: evt.savedAs,
+                  ok: !!evt.ok, output: evt.output, error: evt.error ? serverError(evt.error, "Шаг не выполнен") : evt.error, savedAs: evt.savedAs,
                 });
                 setAgentResults([...accumulated]);
               } else if (evt.type === "complete") {
@@ -2953,7 +2960,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({ steps: agentSteps }),
       });
       const d = await r.json();
-      if (!r.ok) throw new Error(devhubServerError(d.error, "Сценарий не выполнился"));
+      if (!r.ok) throw new Error(serverError(d.error, "Сценарий не выполнился"));
       setAgentResults(d.results || []);
       setAgentSummary({ totalSteps: d.totalSteps, successCount: d.successCount, failureCount: d.failureCount });
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
@@ -2985,7 +2992,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setSmsMsg({ ok: false, text: devhubServerError(d.error, "Не удалось отправить") });
+        setSmsMsg({ ok: false, text: serverError(d.error, "Не удалось отправить") });
       } else if (d.degraded) {
         setSmsMsg({ ok: true, degraded: true, text: `Brevo accepted the SMS, but didn't confirm a messageId — ${d.degradedReason || "delivery not confirmed"}` });
         setSmsRecipient(""); setSmsContent("");
@@ -3026,7 +3033,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setWaMsg({ ok: false, text: devhubServerError(d.error, "Не удалось отправить") });
+        setWaMsg({ ok: false, text: serverError(d.error, "Не удалось отправить") });
       } else if (d.degraded) {
         setWaMsg({ ok: true, degraded: true, text: `Brevo accepted the WhatsApp message, but didn't confirm a messageId — ${d.degradedReason || "delivery not confirmed"}` });
         setWaContact(""); setWaTemplateId(""); setWaParams("");
@@ -3060,7 +3067,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setTrError(devhubServerError(d.error, "Не удалось перевести"));
+        setTrError(serverError(d.error, "Не удалось перевести"));
       } else {
         setTrResult({ text: d.text, detectedSource: d.detectedSource });
             предупредитьЕслиНеСверили(d);
@@ -3084,7 +3091,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setTrFileMsg({ ok: false, text: devhubServerError(d.error, "Не удалось перевести") });
+        setTrFileMsg({ ok: false, text: serverError(d.error, "Не удалось перевести") });
       } else {
         setTrFileMsg({ ok: true, text: `Переведено в ${d.path} (${d.bytes} bytes)` });
             предупредитьЕслиНеСверили(d);
@@ -3109,7 +3116,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetch(apiUrl("/api/devhub/media/email-templates?limit=50"), { cache: "no-store" });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setEmailTemplatesError(devhubServerError(d.error, "Не удалось загрузить шаблоны"));
+        setEmailTemplatesError(serverError(d.error, "Не удалось загрузить шаблоны"));
         setEmailTemplates([]);
       } else {
         setEmailTemplates(d.templates || []);
@@ -3150,7 +3157,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setTplSendMsg({ ok: false, text: devhubServerError(d.error, "Не удалось отправить") });
+        setTplSendMsg({ ok: false, text: serverError(d.error, "Не удалось отправить") });
       } else {
         setTplSendMsg({ ok: true, text: `Отправлен шаблон №${templateId} (msg ${d.messageId})` });
       }
@@ -3188,7 +3195,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok) {
-        showToast(devhubServerError(d.error, "Пакетный перевод не удался"), "error");
+        showToast(serverError(d.error, "Пакетный перевод не удался"), "error");
         return;
       }
       // У каждой строки результата свой текст ошибки от сервера, и он
@@ -3196,7 +3203,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         // в разметке легко забыть, а сюда всё приходит одним местом.
       setBulkResults(
         (d.results || []).map((row: { error?: string }) =>
-          row?.error ? { ...row, error: devhubServerError(row.error, "Не удалось перевести") } : row,
+          row?.error ? { ...row, error: serverError(row.error, "Не удалось перевести") } : row,
         ),
       );
       setBulkSummary({ total: d.total, successCount: d.successCount, failureCount: d.failureCount });
@@ -3258,7 +3265,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setTplBuilderMsg({ ok: false, text: devhubServerError(d.error, "Не удалось создать шаблон") });
+        setTplBuilderMsg({ ok: false, text: serverError(d.error, "Не удалось создать шаблон") });
         return;
       }
       setTplBuilderMsg({ ok: true, text: `Создан шаблон №${d.id} — "${d.name}"` });
@@ -3298,7 +3305,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok) {
-        setZipResult({ ok: false, text: devhubServerError(d.error, "Импорт не удался") });
+        setZipResult({ ok: false, text: serverError(d.error, "Импорт не удался") });
         return;
       }
       setZipResult({
@@ -3376,7 +3383,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       if (!r.ok) {
         const d = await r.json().catch(() => null);
-        throw new Error(devhubServerError(d?.error, `Не удалось получить пример — сервер ответил ${r.status}`));
+        throw new Error(serverError(d?.error, `Не удалось получить пример — сервер ответил ${r.status}`));
       }
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
@@ -3403,7 +3410,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        showToast(devhubServerError(d.error, "Загрузка в Cloudflare не удалась"), "error");
+        showToast(serverError(d.error, "Загрузка в Cloudflare не удалась"), "error");
       } else {
         setCfImgPermanentUrl(d.url);
         showToast(TL.imgPermanent, "success");
@@ -3466,7 +3473,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
-        setVoiceCloneMsg({ ok: false, text: devhubServerError(d.error, "Превью не открылось") });
+        setVoiceCloneMsg({ ok: false, text: serverError(d.error, "Превью не открылось") });
         return;
       }
       const blob = await r.blob();
@@ -3504,7 +3511,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setVoiceCloneMsg({ ok: false, text: devhubServerError(d.error, "Не удалось клонировать голос") });
+        setVoiceCloneMsg({ ok: false, text: serverError(d.error, "Не удалось клонировать голос") });
       } else {
         setVoiceCloneMsg({ ok: true, text: `Voice cloned: ${d.voiceId}${d.requiresVerification ? " (verification required)" : ""}` });
         setVoiceCloneName(""); setVoiceCloneDesc(""); setVoiceCloneFile(null);
@@ -3539,7 +3546,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setSttError(devhubServerError(d.error, "Не удалось расшифровать запись"));
+        setSttError(serverError(d.error, "Не удалось расшифровать запись"));
       } else {
         setSttResult({ text: d.text, language: d.language, confidence: d.confidence });
             предупредитьЕслиНеСверили(d);
@@ -3564,7 +3571,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        setDriveError(devhubServerError(d.error, "Не удалось найти в Google Drive"));
+        setDriveError(serverError(d.error, "Не удалось найти в Google Drive"));
         setDriveFiles([]);
       } else {
         setDriveFiles(d.files || []);
@@ -3587,7 +3594,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       const d = await r.json();
       if (!r.ok || !d.ok) {
-        showToast(devhubServerError(d.error, "Импорт не удался"), "error");
+        showToast(serverError(d.error, "Импорт не удался"), "error");
       } else {
         showToast(`Импортирован ${d.path} (${d.bytes} байт)`, "success");
         const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
@@ -3620,7 +3627,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       });
       if (!r.ok) {
         const d = await r.json().catch(() => null);
-        throw new Error(devhubServerError(d?.error, `Не удалось озвучить — сервер ответил ${r.status}`));
+        throw new Error(serverError(d?.error, `Не удалось озвучить — сервер ответил ${r.status}`));
       }
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
@@ -5070,7 +5077,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                 body: JSON.stringify({ prompt: videoPrompt, model: videoModel, duration: Number(videoDuration) }),
                               });
                               const d = await r.json();
-                              if (!d.ok) { setVideoError(devhubServerError(d.error, "Не удалось создать видео")); setVideoLoading(false); return; }
+                              if (!d.ok) { setVideoError(serverError(d.error, "Не удалось создать видео")); setVideoLoading(false); return; }
                               setVideoPredictionId(d.predictionId);
                               setVideoStatus("generating...");
                               // Poll for completion
@@ -5090,7 +5097,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   }
                                   setVideoUrl(sd.videoUrl); setVideoLoading(false);
                                 } else if (sd.status === "failed") {
-                                  setVideoError(devhubServerError(sd.error, "Генерация не удалась")); setVideoLoading(false);
+                                  setVideoError(serverError(sd.error, "Генерация не удалась")); setVideoLoading(false);
                                 } else {
                                   setTimeout(() => pollFn(id, attempts + 1), 3000);
                                 }
@@ -5169,7 +5176,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             const d = await r.json();
                             if (!r.ok || !d.ok) {
                               // 402 means the provider has no balance — say that, not "failed".
-                              setThreeDError(d.topUpUrl ? `${d.error} → ${d.topUpUrl}` : (devhubServerError(d.error, "Не удалось сгенерировать 3D")));
+                              setThreeDError(d.topUpUrl ? `${d.error} → ${d.topUpUrl}` : (serverError(d.error, "Не удалось сгенерировать 3D")));
                               setThreeDLoading(false);
                               return;
                             }
@@ -5184,7 +5191,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                 if (typeof url === "string") { setThreeDUrl(url); } else { setThreeDError("Модель готова, но ссылка не распознана"); }
                                 setThreeDLoading(false);
                               } else if (sd.status === "failed") {
-                                setThreeDError(devhubServerError(sd.error, "Генерация не удалась")); setThreeDLoading(false);
+                                setThreeDError(serverError(sd.error, "Генерация не удалась")); setThreeDLoading(false);
                               } else {
                                 setTimeout(() => poll(id, attempts + 1), 3000);
                               }

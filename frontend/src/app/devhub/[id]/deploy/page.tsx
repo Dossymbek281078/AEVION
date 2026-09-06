@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, use } from "react";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
-import { devhubServerError } from "@/lib/devhubServerError";
+import { devhubServerError, useDevhubServerError } from "@/lib/devhubServerError";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -181,6 +181,7 @@ function DeploymentRow({
 
 // Next 16: params — Promise (см. заметку в src/app/[id]/page.tsx).
 export default function DevHubDeployPage({ params }: { params: Promise<{ id: string }> }) {
+  const serverError = useDevhubServerError();
   const { id } = use(params);
 
   const [project, setProject] = useState<Project | null>(null);
@@ -268,7 +269,7 @@ export default function DevHubDeployPage({ params }: { params: Promise<{ id: str
       });
       if (!r.ok) {
         const body = await r.json().catch(() => ({}));
-        throw new Error(devhubServerError(body.error, "Выкатка не удалась."));
+        throw new Error(serverError(body.error, "Выкатка не удалась."));
       }
       showToast("Deployment started", true);
       // Immediately refresh so the new pending deployment appears

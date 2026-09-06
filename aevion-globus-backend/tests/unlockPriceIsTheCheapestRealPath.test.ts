@@ -41,7 +41,7 @@ describe("цена разблокировки — минимум по покуп
   it("у модуля с ПОКУПАЕМОЙ добавкой дешевле её цена, а не тарифная", () => {
     // Берём предмет по данным, а не по имени: любой модуль, у которого есть
     // касса добавки и добавка дешевле дешевейшего тарифа.
-    const tierPrice = new Map(TIERS.map((t) => [t.id, t.priceMonthly]));
+    const tierPrice = new Map<string, number | null>(TIERS.map((t) => [t.id, t.priceMonthly]));
     const кандидаты = MODULES_PRICING.filter((m) => {
       if (!appSlugForModuleId(m.id)) return false;
       const a = m.addonMonthly;

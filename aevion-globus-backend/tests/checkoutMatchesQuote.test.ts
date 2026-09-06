@@ -134,7 +134,7 @@ describe("канал привлечения доезжает до кассы", (
       .post("/api/pricing/checkout/session")
       .send({ tierId: "lite", period: "monthly", channel: "tt" });
     expect(r.status, "чекаут не отдал сессию — дальше мерить нечего").toBe(200);
-    expect(charged.customData?.channel, "канал не доехал до кассы").toBe("tt");
+    expect((charged.customData as Record<string, string> | undefined)?.channel, "канал не доехал до кассы").toBe("tt");
   });
 
   test("без канала лишнего поля не появляется", async () => {
@@ -145,7 +145,7 @@ describe("канал привлечения доезжает до кассы", (
       .post("/api/pricing/checkout/session")
       .send({ tierId: "lite", period: "monthly" });
     expect(r.status).toBe(200);
-    expect(charged.customData?.channel, "канал придуман на пустом месте").toBeUndefined();
+    expect((charged.customData as Record<string, string> | undefined)?.channel, "канал придуман на пустом месте").toBeUndefined();
   });
 
   test("слишком длинный канал обрезается, а не уходит целиком", async () => {
@@ -154,6 +154,6 @@ describe("канал привлечения доезжает до кассы", (
     await request(app())
       .post("/api/pricing/checkout/session")
       .send({ tierId: "lite", period: "monthly", channel: "x".repeat(200) });
-    expect(charged.customData?.channel?.length, "длина не ограничена").toBe(40);
+    expect((charged.customData as Record<string, string> | undefined)?.channel?.length, "длина не ограничена").toBe(40);
   });
 });

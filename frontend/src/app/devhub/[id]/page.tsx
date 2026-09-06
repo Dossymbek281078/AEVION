@@ -103,6 +103,184 @@ const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; s
   },
 };
 
+// Атрибуты IDE (подсказки, aria, placeholder) — их машинный доводчик
+// AutoTranslate НЕ переводит (живой замер 06.09.2026: страница английская,
+// атрибуты русские). Ключи покрывает сторож newcomerPathAttrs… косвенно;
+// казахский написан без носителя, как и словарь витрины.
+const ATTR_UI: Record<string, Record<string, string>> = {
+  ru: {
+    closeNote: "Закрыть уведомление",
+    dlEditor: "Скачать то, что сейчас в редакторе — до того, как вкладка закроется",
+    upZip: "Загрузить ZIP — обратное действие к скачиванию",
+    dlZip: "Скачать весь проект одним архивом ZIP",
+    newFile: "Новый файл",
+    renameFile: "Переименовать файл",
+    deleteFile: "Удалить файл",
+    vePreview: "Превью визуальной правки",
+    panels: "Панели DevHub",
+    provStamped: "Хеш результата и время зафиксированы в реестре QRight — страница проверки открывается без входа",
+    attachShot: "Приложите скриншот или макет — ИИ воссоздаст его кодом",
+    provInfo: "После генерации хеш результата, модель и время фиксируются в публичном реестре QRight (промпт не публикуется — только его хеш). Проверяемое происхождение ИИ-кода — то, чего требует EU AI Act.",
+    undoAiFiles: "Вернуть файлы, которых коснулась последняя правка ИИ",
+    aiHistory: "Посмотреть все прошлые правки ИИ и вернуться к любой",
+    selParent: "Выбрать родительский элемент",
+    selChild: "Выбрать дочерний элемент",
+    textColor: "Цвет текста",
+    fontSizePx: "Размер шрифта, px",
+    bold: "Полужирный",
+    undoAi: "Отменить последнюю правку ИИ (та же отмена, что на вкладке генерации)",
+    valuePh: "значение",
+    pullRepo: "Забрать в проект текущие файлы основной ветки репозитория (сначала делается точка возврата — отмена вернёт состояние до синхронизации)",
+    mediaTools: "Медиа-инструменты",
+    exVideo: "напр.: A futuristic city skyline at sunset, cinematic, 4K",
+    addVideoTag: "Добавит тег видео в открытый файл",
+    imgUrlPh: "https://... (png или jpg с одним предметом)",
+    addModelLink: "Дописывает ссылку на модель в файл, открытый в редакторе",
+    voiceSample: "Послушать голос на коротком примере",
+    ttsText: "Введите текст для озвучки…",
+    exImage: "напр.: A serene mountain landscape at golden hour, photorealistic",
+    genImage: "сгенерированная картинка",
+    imgTtl: "Ссылка OpenAI на картинку живёт около часа. Загрузите в Cloudflare Images, чтобы получить постоянный адрес.",
+    addImgTag: "Добавит тег картинки в открытый файл",
+    exSfx: "напр.: Heavy rain on a metal roof with distant thunder",
+    exMusic: "напр.: Lo-fi hip-hop, mellow piano, soft beats, 80 BPM",
+    welcomeTitle: "Добро пожаловать в наше приложение",
+    welcomeHtml: "<h1>Здравствуйте!</h1><p>Спасибо, что подписались.</p>",
+    gumroadId: "my-product (или полный адрес app.gumroad.com/l/…)",
+    proSub: "Подписка Pro",
+    proDesc: "Месячный доступ ко всем возможностям",
+    translateText: "Текст для перевода…",
+    welcomeParam: "Добро пожаловать в AEVION, {{params.name}}!",
+    confirmCode: "Ваш код подтверждения: 1234",
+    myVoice: "Мой голос",
+    voiceDesc: "Мужской, спокойный, повествовательный",
+    voiceReady: "Пример голоса AEVION — ваш голос готов",
+    autoDetect: "оставьте пустым — определим сами",
+    driveSearch: "Поиск по Drive…",
+    savePath: "куда сохранить (путь файла)",
+    shortDescPh: "Краткое описание…",
+    removeCollab: "Удалить соавтора",
+    collabId: "адрес почты или id пользователя",
+    close: "Закрыть",
+  },
+  en: {
+    closeNote: "Dismiss notification",
+    dlEditor: "Download what is in the editor now — before the tab closes",
+    upZip: "Upload a ZIP — the reverse of downloading",
+    dlZip: "Download the whole project as one ZIP archive",
+    newFile: "New file",
+    renameFile: "Rename file",
+    deleteFile: "Delete file",
+    vePreview: "Visual Edit preview",
+    panels: "DevHub panels",
+    provStamped: "The result hash and time are recorded in the QRight registry — the verification page opens without signing in",
+    attachShot: "Attach a screenshot or mockup — AI will recreate it in code",
+    provInfo: "After generation the result hash, model and time are recorded in the public QRight registry (the prompt is not published — only its hash). Verifiable provenance of AI code — what the EU AI Act asks teams to show.",
+    undoAiFiles: "Restore the files touched by the last AI edit",
+    aiHistory: "See all past AI edits and return to any of them",
+    selParent: "Select the parent element",
+    selChild: "Select the child element",
+    textColor: "Text color",
+    fontSizePx: "Font size, px",
+    bold: "Bold",
+    undoAi: "Undo the last AI edit (the same undo as on the generation tab)",
+    valuePh: "value",
+    pullRepo: "Pull the current files of the repo's main branch into the project (a restore point is made first — undo returns the pre-sync state)",
+    mediaTools: "Media tools",
+    exVideo: "e.g.: A futuristic city skyline at sunset, cinematic, 4K",
+    addVideoTag: "Adds a video tag to the open file",
+    imgUrlPh: "https://... (png or jpg with a single object)",
+    addModelLink: "Appends the model link to the file open in the editor",
+    voiceSample: "Hear the voice on a short sample",
+    ttsText: "Enter text to voice…",
+    exImage: "e.g.: A serene mountain landscape at golden hour, photorealistic",
+    genImage: "generated image",
+    imgTtl: "The OpenAI image link lives about an hour. Upload to Cloudflare Images to get a permanent address.",
+    addImgTag: "Adds an image tag to the open file",
+    exSfx: "e.g.: Heavy rain on a metal roof with distant thunder",
+    exMusic: "e.g.: Lo-fi hip-hop, mellow piano, soft beats, 80 BPM",
+    welcomeTitle: "Welcome to our app",
+    welcomeHtml: "<h1>Hello!</h1><p>Thanks for subscribing.</p>",
+    gumroadId: "my-product (or the full app.gumroad.com/l/… address)",
+    proSub: "Pro subscription",
+    proDesc: "Monthly access to everything",
+    translateText: "Text to translate…",
+    welcomeParam: "Welcome to AEVION, {{params.name}}!",
+    confirmCode: "Your confirmation code: 1234",
+    myVoice: "My voice",
+    voiceDesc: "Male, calm, narrative",
+    voiceReady: "AEVION voice sample — your voice is ready",
+    autoDetect: "leave empty — we will detect it",
+    driveSearch: "Search Drive…",
+    savePath: "where to save (file path)",
+    shortDescPh: "Short description…",
+    removeCollab: "Remove collaborator",
+    collabId: "email address or user id",
+    close: "Close",
+  },
+  kk: {
+    closeNote: "Хабарламаны жабу",
+    dlEditor: "Қазір өңдегіштегіні жүктеп алу — қойынды жабылғанша",
+    upZip: "ZIP жүктеу — жүктеп алудың кері әрекеті",
+    dlZip: "Бүкіл жобаны бір ZIP архивімен жүктеп алу",
+    newFile: "Жаңа файл",
+    renameFile: "Файл атын өзгерту",
+    deleteFile: "Файлды жою",
+    vePreview: "Көрнекі түзету алдын ала қарауы",
+    panels: "DevHub панельдері",
+    provStamped: "Нәтиже хеші мен уақыты QRight тізілімінде тіркелген — тексеру беті кірусіз ашылады",
+    attachShot: "Скриншот немесе макет тіркеңіз — ЖИ оны кодпен қайта жасайды",
+    provInfo: "Генерациядан кейін нәтиже хеші, модель мен уақыт жария QRight тізілімінде тіркеледі (промпт жарияланбайды — тек оның хеші). ЖИ кодының тексерілетін шығу тегі — EU AI Act талап ететін нәрсе.",
+    undoAiFiles: "Соңғы ЖИ түзетуі қозғаған файлдарды қайтару",
+    aiHistory: "Барлық өткен ЖИ түзетулерін көріп, кез келгеніне оралу",
+    selParent: "Ата элементті таңдау",
+    selChild: "Бала элементті таңдау",
+    textColor: "Мәтін түсі",
+    fontSizePx: "Қаріп өлшемі, px",
+    bold: "Жартылай қалың",
+    undoAi: "Соңғы ЖИ түзетуін болдырмау (генерация қойындысындағы болдырмаумен бірдей)",
+    valuePh: "мән",
+    pullRepo: "Репозиторийдің негізгі тармағының ағымдағы файлдарын жобаға алу (алдымен қайтару нүктесі жасалады — болдырмау синхрондауға дейінгі күйді қайтарады)",
+    mediaTools: "Медиа құралдары",
+    exVideo: "мыс.: A futuristic city skyline at sunset, cinematic, 4K",
+    addVideoTag: "Ашық файлға бейне тегін қосады",
+    imgUrlPh: "https://... (бір зат бейнеленген png немесе jpg)",
+    addModelLink: "Өңдегіште ашық файлға модель сілтемесін қосады",
+    voiceSample: "Дауысты қысқа мысалда тыңдау",
+    ttsText: "Дыбыстауға мәтін енгізіңіз…",
+    exImage: "мыс.: A serene mountain landscape at golden hour, photorealistic",
+    genImage: "жасалған сурет",
+    imgTtl: "OpenAI сурет сілтемесі шамамен бір сағат жасайды. Тұрақты мекенжай алу үшін Cloudflare Images-ке жүктеңіз.",
+    addImgTag: "Ашық файлға сурет тегін қосады",
+    exSfx: "мыс.: Heavy rain on a metal roof with distant thunder",
+    exMusic: "мыс.: Lo-fi hip-hop, mellow piano, soft beats, 80 BPM",
+    welcomeTitle: "Қосымшамызға қош келдіңіз",
+    welcomeHtml: "<h1>Сәлеметсіз бе!</h1><p>Жазылғаныңызға рахмет.</p>",
+    gumroadId: "my-product (немесе толық app.gumroad.com/l/… мекенжайы)",
+    proSub: "Pro жазылымы",
+    proDesc: "Барлық мүмкіндіктерге айлық қолжетімділік",
+    translateText: "Аударылатын мәтін…",
+    welcomeParam: "AEVION-ға қош келдіңіз, {{params.name}}!",
+    confirmCode: "Растау кодыңыз: 1234",
+    myVoice: "Менің дауысым",
+    voiceDesc: "Ер, сабырлы, баяндау",
+    voiceReady: "AEVION дауыс үлгісі — дауысыңыз дайын",
+    autoDetect: "бос қалдырыңыз — өзіміз анықтаймыз",
+    driveSearch: "Drive бойынша іздеу…",
+    savePath: "қайда сақтау (файл жолы)",
+    shortDescPh: "Қысқаша сипаттама…",
+    removeCollab: "Тең авторды жою",
+    collabId: "пошта мекенжайы немесе пайдаланушы id",
+    close: "Жабу",
+  },
+};
+
+// Один источник для главного компонента и подкомпонентов (Toast).
+function useAttrL(): Record<string, string> {
+  const lang = useI18nOptional()?.lang ?? "ru";
+  return ATTR_UI[lang] ?? ATTR_UI.ru;
+}
+
 function timeAgo(iso: string): string {
   const diffSec = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
   if (diffSec < 60) return "только что";
@@ -412,6 +590,7 @@ function CodeEditor({ value, onChange, language }: { value: string; onChange: (v
 }
 
 function Toast({ message, type, onClose }: { message: string; type: "success" | "error" | "info" | "warning"; onClose: () => void }) {
+  const AL = useAttrL();
   const bg = type === "success" ? "#d1fae5" : type === "error" ? "#fee2e2" : type === "warning" ? "#fef3c7" : "#dbeafe";
   const fg = type === "success" ? "#065f46" : type === "error" ? "#991b1b" : type === "warning" ? "#92400e" : "#1e40af";
   return (
@@ -431,7 +610,7 @@ function Toast({ message, type, onClose }: { message: string; type: "success" | 
       }}
     >
       <span>{message}</span>
-      <button onClick={onClose} aria-label="Закрыть уведомление" style={{ background: "none", border: "none", cursor: "pointer", color: fg, fontWeight: 800 }}>x</button>
+      <button onClick={onClose} aria-label={AL.closeNote} style={{ background: "none", border: "none", cursor: "pointer", color: fg, fontWeight: 800 }}>x</button>
     </div>
   );
 }
@@ -485,6 +664,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   // Вне провайдера языка (тесты) — русский, как и раньше.
   const uiLang = useI18nOptional()?.lang ?? "ru";
   const GL = GEN_UI[uiLang] ?? GEN_UI.ru;
+  const AL = useAttrL();
   const [project, setProject] = useState<Project | null>(null);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
@@ -3380,7 +3560,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   loss visible — this gets it onto their disk in one click. */}
               <button
                 onClick={downloadEditorBuffer}
-                title="Скачать то, что сейчас в редакторе — до того, как вкладка закроется"
+                title={AL.dlEditor}
                 style={{ background: "#991b1b", color: "#fff", border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, padding: "3px 8px", cursor: "pointer", flexShrink: 0 }}
               >
                 ⬇ Скачать копию
@@ -3508,18 +3688,18 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                 onClick={() => zipInputRef.current?.click()}
                 disabled={zipImporting || !project}
                 style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 6, height: 24, padding: "0 6px", cursor: zipImporting ? "wait" : "pointer", color: "#64748b", fontSize: 11, fontWeight: 700 }}
-                title="Загрузить ZIP — обратное действие к скачиванию"
+                title={AL.upZip}
               >{zipImporting ? "..." : "📦"}</button>
               <button
                 onClick={() => { if (project) window.open(apiUrl(`/api/devhub/projects/${project.id}/export`), "_blank"); }}
                 disabled={!project || files.length === 0}
                 style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 6, height: 24, padding: "0 6px", cursor: "pointer", color: "#64748b", fontSize: 11, fontWeight: 700 }}
-                title="Скачать весь проект одним архивом ZIP"
+                title={AL.dlZip}
               >⬇</button>
               <button
                 onClick={() => setShowNewFile(true)}
                 style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 6, width: 24, height: 24, cursor: "pointer", color: "#64748b", fontWeight: 700, fontSize: 16, lineHeight: 1 }}
-                title="Новый файл"
+                title={AL.newFile}
               >+</button>
             </div>
           </div>
@@ -3625,13 +3805,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       <button
                         onClick={(e) => { e.stopPropagation(); setRenamingFile(f); setRenameValue(f.path); }}
                         style={{ background: "none", border: "none", cursor: "pointer", color: "#cbd5e1", fontSize: 12, padding: 2, flexShrink: 0 }}
-                        title="Переименовать файл"
+                        title={AL.renameFile}
                       >✎</button>
                     )}
                     <button
                       onClick={(e) => { e.stopPropagation(); deleteFile(f.path); }}
                       style={{ background: "none", border: "none", cursor: "pointer", color: "#cbd5e1", fontSize: 14, padding: 2, flexShrink: 0 }}
-                      title="Удалить файл"
+                      title={AL.deleteFile}
                     >x</button>
                   </div>
                 );
@@ -3652,7 +3832,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     srcDoc={reactPreviewSrcdoc}
                     sandbox="allow-scripts"
                     style={{ flex: 1, width: "100%", border: "none", background: "#fff" }}
-                    title="Превью визуальной правки"
+                    title={AL.vePreview}
                   />
                 ) : isClientPreviewStack(project?.stack) && (!reactPreviewError || !project?.deployUrl) ? (
                   <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#1e293b", color: "#94a3b8", textAlign: "center", padding: 24 }}>
@@ -3671,7 +3851,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     src={apiUrl(`/api/devhub/projects/${project.id}/preview-proxy`)}
                     sandbox="allow-scripts"
                     style={{ flex: 1, width: "100%", border: "none", background: "#fff" }}
-                    title="Превью визуальной правки"
+                    title={AL.vePreview}
                   />
                 ) : (
                 <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#1e293b", color: "#94a3b8", textAlign: "center", padding: 24 }}>
@@ -3696,7 +3876,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   srcDoc={visualEditSrcdoc}
                   sandbox="allow-scripts"
                   style={{ flex: 1, width: "100%", border: "none", background: "#fff" }}
-                  title="Превью визуальной правки"
+                  title={AL.vePreview}
                 />
               )
             ) : selectedFile ? (
@@ -3731,7 +3911,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
             {/* A real tab strip: these were plain buttons, so a screen reader
                 announced nine unrelated controls instead of a set of tabs, and
                 arrow keys did nothing. */}
-            <div role="tablist" aria-label="Панели DevHub" style={{ display: "flex", borderBottom: "1px solid #f1f5f9", gap: 0, overflowX: "auto" }}>
+            <div role="tablist" aria-label={AL.panels} style={{ display: "flex", borderBottom: "1px solid #f1f5f9", gap: 0, overflowX: "auto" }}>
               {VKLADKI.map((tab, idx, all) => (
                 <button
                   key={tab}
@@ -3883,7 +4063,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                     href={msg.provenance.verifyUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    title="Хеш результата и время зафиксированы в реестре QRight — страница проверки открывается без входа"
+                                    title={AL.provStamped}
                                     style={{ display: "inline-block", marginTop: 4, marginRight: 8, padding: "4px 10px", background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: 6, fontSize: 11, fontWeight: 600, color: "#065f46", textDecoration: "none" }}
                                   >
                                     ✔ Происхождение зафиксировано
@@ -4014,7 +4194,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     />
                     <button
                       onClick={() => aiImageInputRef.current?.click()}
-                      title="Приложите скриншот или макет — ИИ воссоздаст его кодом"
+                      title={AL.attachShot}
                       style={{ padding: "6px 12px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 13, cursor: "pointer", color: "#475569", fontWeight: 600 }}
                     >
                       📎 Снимок экрана
@@ -4040,7 +4220,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     {generating ? "Генерируем…" : "Сгенерировать код (Ctrl+Enter)"}
                   </button>
                   <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "#475569", cursor: "pointer" }}
-                    title="После генерации хеш результата, модель и время фиксируются в публичном реестре QRight (промпт не публикуется — только его хеш). Проверяемое происхождение ИИ-кода — то, чего требует EU AI Act.">
+                    title={AL.provInfo}>
                     <input
                       type="checkbox"
                       checked={stampProvenance}
@@ -4073,7 +4253,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     <button
                       onClick={undoLastGeneration}
                       disabled={undoing}
-                      title="Вернуть файлы, которых коснулась последняя правка ИИ"
+                      title={AL.undoAiFiles}
                       style={{
                         flex: 1, padding: "8px 0", background: "#fff", border: "1px solid #e2e8f0",
                         color: "#64748b", borderRadius: 10, fontWeight: 600, fontSize: 12,
@@ -4084,7 +4264,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     </button>
                     <button
                       onClick={() => { const next = !showHistory; setShowHistory(next); if (next) loadCheckpointHistory(); }}
-                      title="Посмотреть все прошлые правки ИИ и вернуться к любой"
+                      title={AL.aiHistory}
                       style={{
                         padding: "8px 12px", background: "#fff", border: "1px solid #e2e8f0",
                         color: "#64748b", borderRadius: 10, fontWeight: 600, fontSize: 12, cursor: "pointer",
@@ -4146,7 +4326,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           <span key={a.vid} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                             <button
                               onClick={() => retargetVisualSelection(a.vid)}
-                              title="Выбрать родительский элемент"
+                              title={AL.selParent}
                               style={{ fontFamily: "monospace", fontSize: 12, color: "#64748b", background: "none", border: "none", padding: 0, cursor: "pointer", textDecoration: "underline dotted" }}
                             >
                               {"<" + a.tagName.toLowerCase() + ">"}
@@ -4162,7 +4342,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               <button
                                 key={c.vid}
                                 onClick={() => retargetVisualSelection(c.vid)}
-                                title="Выбрать дочерний элемент"
+                                title={AL.selChild}
                                 style={{ fontFamily: "monospace", fontSize: 12, color: "#64748b", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 4, padding: "1px 5px", cursor: "pointer" }}
                               >
                                 {"<" + c.tagName.toLowerCase() + ">"}
@@ -4218,7 +4398,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             type="color"
                             value={cssColorToHex(visualEditStyleEdits.color ?? visualEditStyleBase.color)}
                             onChange={(e) => setVisualStyle("color", e.target.value)}
-                            title="Цвет текста"
+                            title={AL.textColor}
                             style={{ width: 34, height: 30, padding: 2, border: "1px solid #e2e8f0", borderRadius: 6, cursor: "pointer", background: "#fff" }}
                           />
                           <input
@@ -4227,12 +4407,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             max={120}
                             value={parseInt(visualEditStyleEdits.fontSize ?? visualEditStyleBase.fontSize, 10) || 16}
                             onChange={(e) => setVisualStyle("fontSize", `${e.target.value}px`)}
-                            title="Размер шрифта, px"
+                            title={AL.fontSizePx}
                             style={{ width: 62, height: 30, padding: "0 6px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 13, boxSizing: "border-box" }}
                           />
                           <button
                             onClick={() => setVisualStyle("fontWeight", parseInt(visualEditStyleEdits.fontWeight ?? visualEditStyleBase.fontWeight, 10) >= 600 ? "400" : "700")}
-                            title="Полужирный"
+                            title={AL.bold}
                             style={{
                               width: 30, height: 30, border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 14, cursor: "pointer",
                               fontWeight: 800,
@@ -4297,7 +4477,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     <button
                       onClick={undoLastGeneration}
                       disabled={undoing}
-                      title="Отменить последнюю правку ИИ (та же отмена, что на вкладке генерации)"
+                      title={AL.undoAi}
                       style={{
                         padding: "7px 0", background: "#fff", color: undoing ? "#94a3b8" : "#475569",
                         border: "1px solid #e2e8f0", borderRadius: 8, fontWeight: 600, fontSize: 12,
@@ -4373,7 +4553,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       type="text"
                       value={newEnvVal}
                       onChange={(e) => setNewEnvVal(e.target.value)}
-                      placeholder="значение"
+                      placeholder={AL.valuePh}
                       style={{ flex: 2, minWidth: 150, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}
                     />
                     <button onClick={addEnvVar} style={{ padding: "7px 16px", background: "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, cursor: "pointer" }}>
@@ -4556,7 +4736,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     <button
                       onClick={syncFromGithub}
                       disabled={repoPulling}
-                      title="Забрать в проект текущие файлы основной ветки репозитория (сначала делается точка возврата — отмена вернёт состояние до синхронизации)"
+                      title={AL.pullRepo}
                       style={{
                         padding: "9px 0", background: "#fff", border: "1px solid #0d9488", color: "#0d9488",
                         borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: repoPulling ? "not-allowed" : "pointer",
@@ -4648,7 +4828,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       were seventeen plain buttons in a row, so a screen reader
                       announced seventeen unrelated controls, arrow keys did
                       nothing, and Tab stopped on every single one of them. */}
-                  <div role="tablist" aria-label="Медиа-инструменты" style={{ display: "flex", gap: 4, padding: 4, background: "#f1f5f9", borderRadius: 8, flexWrap: "wrap" }}>
+                  <div role="tablist" aria-label={AL.mediaTools} style={{ display: "flex", gap: 4, padding: 4, background: "#f1f5f9", borderRadius: 8, flexWrap: "wrap" }}>
                     {(["video", "3d", "tts", "image", "sfx", "music", "clone", "stt", "drive", "translate", "bulk", "email", "templates", "builder", "sms", "whatsapp", "payment"] as const).map((sub, subIdx, allSubs) => (
                       <button
                         key={sub}
@@ -4732,7 +4912,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <textarea
                           value={videoPrompt}
                           onChange={(e) => setVideoPrompt(e.target.value)}
-                          placeholder="напр.: A futuristic city skyline at sunset, cinematic, 4K"
+                          placeholder={AL.exVideo}
                           rows={3}
                           style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, resize: "vertical", boxSizing: "border-box" }}
                         />
@@ -4803,7 +4983,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           <video src={videoUrl} controls style={{ width: "100%", borderRadius: 8, border: "1px solid #e2e8f0", maxHeight: 360 }} />
                           <div style={{ display: "flex", gap: 8 }}>
                             <a href={videoUrl} download target="_blank" rel="noreferrer" style={{ flex: 1, padding: "8px 0", background: "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer", textAlign: "center", textDecoration: "none" }}>Скачать</a>
-                            <button onClick={() => appendAssetToFile(videoUrl, "video")} title="Добавит тег видео в открытый файл" style={{ flex: 1, padding: "8px 0", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Вставить в файл</button>
+                            <button onClick={() => appendAssetToFile(videoUrl, "video")} title={AL.addVideoTag} style={{ flex: 1, padding: "8px 0", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>Вставить в файл</button>
                           </div>
                         </div>
                       )}
@@ -4843,7 +5023,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <input
                           value={threeDImageUrl}
                           onChange={(e) => setThreeDImageUrl(e.target.value)}
-                          placeholder="https://... (png или jpg с одним предметом)"
+                          placeholder={AL.imgUrlPh}
                           style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                         />
                       </div>
@@ -4900,7 +5080,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             <a href={threeDUrl} download target="_blank" rel="noreferrer" style={{ flex: 1, padding: "8px 0", background: "#0d9488", color: "#fff", borderRadius: 7, fontWeight: 700, fontSize: 13, textAlign: "center", textDecoration: "none" }}>Скачать GLB</a>
                             <button
                               onClick={() => appendAssetToFile(threeDUrl, "model")}
-                              title="Дописывает ссылку на модель в файл, открытый в редакторе"
+                              title={AL.addModelLink}
                               style={{ flex: 1, padding: "8px 0", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: "pointer" }}
                             >Вставить в файл</button>
                           </div>
@@ -4927,7 +5107,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             type="button"
                             onClick={() => previewVoice(mediaTtsVoice)}
                             disabled={!!previewingVoice}
-                            title="Послушать голос на коротком примере"
+                            title={AL.voiceSample}
                             style={{
                               padding: "7px 12px", background: previewingVoice === mediaTtsVoice ? "#a5b4fc" : "#7c3aed",
                               color: "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 700,
@@ -4944,7 +5124,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <textarea
                           value={mediaTtsText}
                           onChange={(e) => setMediaTtsText(e.target.value)}
-                          placeholder="Введите текст для озвучки…"
+                          placeholder={AL.ttsText}
                           rows={4}
                           style={{
                             width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0",
@@ -4987,7 +5167,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <textarea
                           value={imgPrompt}
                           onChange={(e) => setImgPrompt(e.target.value)}
-                          placeholder="напр.: A serene mountain landscape at golden hour, photorealistic"
+                          placeholder={AL.exImage}
                           rows={3}
                           style={{
                             width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0",
@@ -5030,7 +5210,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       {imgResult && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={cfImgPermanentUrl || imgResult.url} alt="сгенерированная картинка" style={{ width: "100%", borderRadius: 8, border: "1px solid #e2e8f0" }} />
+                          <img src={cfImgPermanentUrl || imgResult.url} alt={AL.genImage} style={{ width: "100%", borderRadius: 8, border: "1px solid #e2e8f0" }} />
                           {imgResult.revisedPrompt && (
                             <div style={{ fontSize: 11, color: "#64748b", fontStyle: "italic" }}>
                               Уточнённый запрос: {imgResult.revisedPrompt}
@@ -5045,7 +5225,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               <button
                                 onClick={() => uploadImageToCloudflare(imgResult.url)}
                                 disabled={cfImgUploading}
-                                title="Ссылка OpenAI на картинку живёт около часа. Загрузите в Cloudflare Images, чтобы получить постоянный адрес."
+                                title={AL.imgTtl}
                                 style={{
                                   padding: "4px 10px", background: "#f59e0b", color: "#fff",
                                   border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer",
@@ -5056,7 +5236,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             )}
                             <button
                               onClick={() => appendAssetToFile(cfImgPermanentUrl || imgResult.url, "image")}
-                              title="Добавит тег картинки в открытый файл"
+                              title={AL.addImgTag}
                               style={{ padding: "4px 10px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}
                             >
                               Вставить в файл
@@ -5092,7 +5272,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <textarea
                           value={sfxText}
                           onChange={(e) => setSfxText(e.target.value)}
-                          placeholder="напр.: Heavy rain on a metal roof with distant thunder"
+                          placeholder={AL.exSfx}
                           rows={3}
                           style={{
                             width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0",
@@ -5143,7 +5323,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <textarea
                           value={musicPrompt}
                           onChange={(e) => setMusicPrompt(e.target.value)}
-                          placeholder="напр.: Lo-fi hip-hop, mellow piano, soft beats, 80 BPM"
+                          placeholder={AL.exMusic}
                           rows={3}
                           style={{
                             width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0",
@@ -5206,7 +5386,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           type="text"
                           value={emailSubject}
                           onChange={(e) => setEmailSubject(e.target.value)}
-                          placeholder="Добро пожаловать в наше приложение"
+                          placeholder={AL.welcomeTitle}
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                         />
                       </div>
@@ -5215,7 +5395,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <textarea
                           value={emailBody}
                           onChange={(e) => setEmailBody(e.target.value)}
-                          placeholder="<h1>Здравствуйте!</h1><p>Спасибо, что подписались.</p>"
+                          placeholder={AL.welcomeHtml}
                           rows={6}
                           style={{
                             width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0",
@@ -5272,7 +5452,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             type="text"
                             value={payPermalink}
                             onChange={(e) => setPayPermalink(e.target.value)}
-                            placeholder="my-product (или полный адрес app.gumroad.com/l/…)"
+                            placeholder={AL.gumroadId}
                             style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                           />
                           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>Price is set in the Gumroad product itself — create it in your Gumroad dashboard, paste its permalink here.</div>
@@ -5285,7 +5465,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               type="text"
                               value={payName}
                               onChange={(e) => setPayName(e.target.value)}
-                              placeholder="Подписка Pro"
+                              placeholder={AL.proSub}
                               style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                             />
                           </div>
@@ -5318,7 +5498,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               type="text"
                               value={payDesc}
                               onChange={(e) => setPayDesc(e.target.value)}
-                              placeholder="Месячный доступ ко всем возможностям"
+                              placeholder={AL.proDesc}
                               style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                             />
                           </div>
@@ -5376,7 +5556,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                       <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 }}>Перевести текст</div>
                       <div>
-                        <textarea value={trText} onChange={(e) => setTrText(e.target.value)} placeholder="Текст для перевода…"
+                        <textarea value={trText} onChange={(e) => setTrText(e.target.value)} placeholder={AL.translateText}
                           rows={4}
                           style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
                       </div>
@@ -5660,7 +5840,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Тема</label>
-                        <input value={tplBuilderSubject} onChange={(e) => setTplBuilderSubject(e.target.value)} placeholder="Добро пожаловать в AEVION, {{params.name}}!"
+                        <input value={tplBuilderSubject} onChange={(e) => setTplBuilderSubject(e.target.value)} placeholder={AL.welcomeParam}
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       <div>
@@ -5722,7 +5902,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>
                           Content ({smsContent.length}/612 chars, ~{Math.ceil(smsContent.length / 160)} segments)
                         </label>
-                        <textarea value={smsContent} onChange={(e) => setSmsContent(e.target.value)} placeholder="Ваш код подтверждения: 1234"
+                        <textarea value={smsContent} onChange={(e) => setSmsContent(e.target.value)} placeholder={AL.confirmCode}
                           rows={4} maxLength={612}
                           style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
                       </div>
@@ -5797,12 +5977,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Название голоса</label>
-                        <input value={voiceCloneName} onChange={(e) => setVoiceCloneName(e.target.value)} placeholder="Мой голос"
+                        <input value={voiceCloneName} onChange={(e) => setVoiceCloneName(e.target.value)} placeholder={AL.myVoice}
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Описание (необязательно)</label>
-                        <input value={voiceCloneDesc} onChange={(e) => setVoiceCloneDesc(e.target.value)} placeholder="Мужской, спокойный, повествовательный"
+                        <input value={voiceCloneDesc} onChange={(e) => setVoiceCloneDesc(e.target.value)} placeholder={AL.voiceDesc}
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       <div>
@@ -5814,7 +5994,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Текст для примера</label>
                         <input value={voicePreviewText} onChange={(e) => setVoicePreviewText(e.target.value)}
-                          placeholder="Пример голоса AEVION — ваш голос готов"
+                          placeholder={AL.voiceReady}
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       {voiceCloneMsg && (
@@ -5872,7 +6052,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
                       <div>
                         <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Language hint (optional, e.g. en, ru)</label>
-                        <input value={sttLanguage} onChange={(e) => setSttLanguage(e.target.value)} placeholder="оставьте пустым — определим сами"
+                        <input value={sttLanguage} onChange={(e) => setSttLanguage(e.target.value)} placeholder={AL.autoDetect}
                           style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                       </div>
                       {sttError && (
@@ -5909,7 +6089,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {mediaTab === "drive" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       <div style={{ display: "flex", gap: 8 }}>
-                        <input value={driveQuery} onChange={(e) => setDriveQuery(e.target.value)} placeholder="Поиск по Drive…"
+                        <input value={driveQuery} onChange={(e) => setDriveQuery(e.target.value)} placeholder={AL.driveSearch}
                           onKeyDown={(e) => { if (e.key === "Enter") searchDrive(); }}
                           style={{ flex: 1, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }} />
                         <button onClick={searchDrive} disabled={driveLoading}
@@ -6023,7 +6203,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             <option value="music">Музыка</option>
                           </select>
                           <input value={step.saveAs || ""} onChange={(e) => updateAgentStep(i, { saveAs: e.target.value })}
-                            placeholder="куда сохранить (путь файла)"
+                            placeholder={AL.savePath}
                             style={{ flex: 1, padding: "4px 8px", border: "1px solid #e2e8f0", borderRadius: 5, fontSize: 11, fontFamily: "monospace" }} />
                           <button onClick={() => removeAgentStep(i)}
                             style={{ padding: "4px 8px", background: "none", border: "1px solid #fca5a5", borderRadius: 5, fontSize: 11, color: "#ef4444", cursor: "pointer" }}>
@@ -6146,7 +6326,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       type="text"
                       value={settingsDesc}
                       onChange={(e) => setSettingsDesc(e.target.value)}
-                      placeholder="Краткое описание…"
+                      placeholder={AL.shortDescPh}
                       style={{ width: "100%", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                     />
                   </div>
@@ -6214,7 +6394,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         <span style={{ fontSize: 10, padding: "2px 7px", borderRadius: 5, background: c.role === "editor" ? "#d1fae5" : "#f1f5f9", color: c.role === "editor" ? "#065f46" : "#64748b", fontWeight: 600, flexShrink: 0 }}>{c.role}</span>
                         <button
                           onClick={() => removeCollaborator(c.userId)}
-                          title="Удалить соавтора"
+                          title={AL.removeCollab}
                           style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444", fontSize: 14, fontWeight: 700, padding: "0 2px", flexShrink: 0 }}
                         >×</button>
                       </div>
@@ -6224,7 +6404,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         type="text"
                         value={settingsCollab}
                         onChange={(e) => setSettingsCollab(e.target.value)}
-                        placeholder="адрес почты или id пользователя"
+                        placeholder={AL.collabId}
                         style={{ flex: "1 1 140px", minWidth: 0, padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}
                         onKeyDown={(e) => { if (e.key === "Enter") addCollaborator(); }}
                       />
@@ -6307,7 +6487,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           </Link>
           <button
             onClick={() => setUpgradeNudge(null)}
-            aria-label="Закрыть"
+            aria-label={AL.close}
             style={{
               background: "transparent", border: "none", color: "rgba(255,255,255,0.85)",
               fontSize: 18, cursor: "pointer", lineHeight: 1, padding: 4,

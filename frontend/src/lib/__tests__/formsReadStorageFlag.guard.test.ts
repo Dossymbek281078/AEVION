@@ -111,6 +111,12 @@ function posters(): { all: string[]; unread: string[] } {
  * Добавлять сюда новое НЕЛЬЗЯ; новая форма обязана читать признак сразу.
  */
 const KNOWN_UNREAD = new Set([
+  // ПРОВЕРЕНО ВРУЧНУЮ окном DevHub 06.09.2026, НЕ дефект: guest/link-request и
+  // link-confirm при отказе хранилища отвечают 503 {ok:false,error:"link_unavailable"},
+  // при негодной ссылке — 400; запасного пути «легло в память» у них НЕТ вовсе,
+  // маскировать нечему, страница честно показывает отказ (аудит 05.09).
+  // Компонент пришёл мержем 06.09 — строка не нарушает «список только тает».
+  "components/DevHubGuestIdentity.tsx",
   "app/admin/planet/page.tsx",
   "app/bank/api/page.tsx",
   "app/bank/diagnostics/page.tsx",

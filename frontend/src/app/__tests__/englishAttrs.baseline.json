@@ -55,6 +55,7 @@
   "app/payments/dashboard/page.tsx": 4,
   "app/payments/disputes/page.tsx": 6,
   "app/payments/links/page.tsx": 6,
+  "app/payments/page.tsx": 29,
   "app/pilot/page.tsx": 2,
   "app/pitch/page.tsx": 17,
   "app/planet/artifact/[id]/layout.tsx": 2,

@@ -9930,7 +9930,7 @@ export default function CyberChessPage(){
                     </span>
                     {/* Inline comment editor — spans full grid row when active */}
                     {tab==="analysis"&&(commentEditPly===wIdx||commentEditPly===bIdx)&&<div style={{gridColumn:"1 / -1",padding:"4px 8px",background:"#f0f0ff",borderBottom:"1px solid #c7d2fe",display:"flex",gap:4,alignItems:"flex-start"}}>
-                      <textarea aria-label="Комментарий к ходу" autoFocus value={commentEditVal} onChange={e=>sCommentEditVal(e.target.value)}
+                      <textarea aria-label={`Комментарий к ходу ${Math.floor(wIdx/2)+1}`} autoFocus value={commentEditVal} onChange={e=>sCommentEditVal(e.target.value)}
                         onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();const ply=commentEditPly!;if(commentEditVal.trim()){sMoveComments(p=>({...p,[ply]:commentEditVal.trim()}))}else{sMoveComments(p=>{const n={...p};delete n[ply];return n})}sCommentEditPly(null);}else if(e.key==="Escape"){sCommentEditPly(null);}}}
                         placeholder="Заметка к ходу… Enter — сохранить, Esc — отмена"
                         rows={2} style={{flex:1,fontSize:11,padding:"4px 6px",borderRadius:4,border:"1px solid #a5b4fc",resize:"vertical",background:"#ffffff",color:"#312e81",outline:"none"}}/>

@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { getApiBase } from "@/lib/apiBase";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
@@ -172,9 +174,23 @@ export default async function GoPage({
   // Метка канала из адреса: /go?c=ig в шапке Instagram, ?c=tt в TikTok и т.д.
   // Она доезжает до чекаута и возвращается в вебхуке рядом с продажей — иначе
   // «какой канал принёс деньги» остаётся без ответа.
-  const liveModules = await fetchLiveModules();
   const rawChannel = (await searchParams).c;
   const channel = channelFrom(rawChannel);
+
+  // Языковая маршрутизация — тот же приём, что у /longevity (ветка
+  // feat/lang-aware-longevity, сторож с пойманными мутациями). Замер
+  // 06.09.2026 ночью: /go под cookie en отдавала 95 % кириллицы — ГЛАВНЫЙ
+  // вход воронки (единственная ссылка в шапках соцсетей) показывал
+  // англоязычному гостю русскую страницу при живой /en/go. Редирект ДО
+  // fetchLiveModules (незачем ходить в API ради страницы, которую не
+  // покажем) и до LandingView/PageTracking — просмотр считается один раз,
+  // там, где человек оказался. Канал едет с собой.
+  const язык = (await cookies()).get("aevion_lang_v1")?.value;
+  if (язык === "en") {
+    redirect(channel ? `/en/go?c=${encodeURIComponent(channel)}` : "/en/go");
+  }
+
+  const liveModules = await fetchLiveModules();
   // Внутренние переходы тоже несут метку: человек с /go часто уходит сначала в
   // /shop или /longevity и покупает уже оттуда. Без проброса канал терялся бы
   // ровно на том переходе, ради которого страница и сделана.

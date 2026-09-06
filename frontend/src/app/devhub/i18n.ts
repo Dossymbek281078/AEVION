@@ -139,6 +139,10 @@ const EN = {
   "err.snipShare": "Could not share the snippet",
   "err.clipboard": "Clipboard is unavailable in this browser",
   "err.create": "Failed to create project",
+  "ex.title": "Built in DevHub — live addresses",
+  "ex.sub": "Real apps assembled from one phrase. Open them, then build your own.",
+  "ex.build": "Build something similar",
+  "ex.open": "Open live →",
 } as const;
 
 const RU: Record<Key, string> = {
@@ -255,6 +259,10 @@ const RU: Record<Key, string> = {
   "err.snipShare": "Не удалось поделиться сниппетом",
   "err.clipboard": "Буфер обмена недоступен в этом браузере",
   "err.create": "Не удалось создать проект",
+  "ex.title": "Собрано в DevHub — живые адреса",
+  "ex.sub": "Настоящие приложения, собранные из одной фразы. Откройте — и соберите своё.",
+  "ex.build": "Собрать похожее",
+  "ex.open": "Открыть живое →",
 };
 
 const KK: Record<Key, string> = {
@@ -371,6 +379,10 @@ const KK: Record<Key, string> = {
   "err.snipShare": "Сниппетпен бөлісу мүмкін болмады",
   "err.clipboard": "Алмасу буфері бұл браузерде қолжетімсіз",
   "err.create": "Жобаны жасау мүмкін болмады",
+  "ex.title": "DevHub-та жиналған — тірі мекенжайлар",
+  "ex.sub": "Бір сөйлемнен жиналған нағыз қолданбалар. Ашыңыз да, өзіңіздікін жасаңыз.",
+  "ex.build": "Ұқсасын жинау",
+  "ex.open": "Тірісін ашу →",
 };
 
 const DICT: Partial<Record<string, Record<Key, string>>> = { en: EN, ru: RU, kk: KK };

@@ -28,8 +28,11 @@ const VISIBLE: Array<[string, string]> = [
   [">Имя</div>", ">Name</div>"],
   [">Почта</div>", ">Email</div>"],
   [">Пароль</div>", ">Password</div>"],
-  ['placeholder="Как к вам обращаться"', 'placeholder="Your name"'],
-  ['placeholder="Не короче 6 знаков"', 'placeholder="Minimum 6 characters"'],
+  // 06.09.2026: плейсхолдеры ушли в словарь AUTH_A11Y (страница стала
+  // языко-зависимой). Русская формулировка теперь живёт в ru-ветке словаря,
+  // а возврат зашитого английского placeholder ловится прежней правой частью.
+  ['namePh: "Как к вам обращаться"', 'placeholder="Your name"'],
+  ['passwordPh: "Не короче 6 знаков"', 'placeholder="Minimum 6 characters"'],
   ["Аккаунт создан", "Account created"],
   ["Не удалось войти", "Sign in error"],
   ["Введите адрес почты и пароль", "Email and password required"],

@@ -4923,7 +4923,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Размер</label>
                           <select value={imgSize} onChange={(e) => setImgSize(e.target.value)}
                             style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}>
-                            <option value="1024x1024">Square (1024)</option>
+                            <option value="1024x1024">Квадрат (1024)</option>
                             <option value="1792x1024">Landscape (1792×1024)</option>
                             <option value="1024x1792">Portrait (1024×1792)</option>
                           </select>
@@ -5305,7 +5305,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
                       <div style={{ display: "flex", gap: 8 }}>
                         <div style={{ flex: 1 }}>
-                          <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Source (auto if empty)</label>
+                          <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Исходный язык (пусто = сам определит)</label>
                           <select value={trSource} onChange={(e) => setTrSource(e.target.value)}
                             style={{ width: "100%", padding: "6px 8px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 12 }}>
                             <option value="">Определить язык</option>
@@ -5333,7 +5333,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           <div style={{ fontSize: 13, color: "#0f172a", whiteSpace: "pre-wrap" }}>{trResult.text}</div>
                           <button onClick={() => navigator.clipboard.writeText(trResult.text)}
                             style={{ alignSelf: "flex-start", padding: "4px 10px", background: "#0d9488", color: "#fff",
-                              border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Copy</button>
+                              border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Копировать</button>
                         </div>
                       )}
                       <button
@@ -5622,7 +5622,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
                           cursor: tplBuilderLoading ? "not-allowed" : "pointer",
                         }}>
-                        {tplBuilderLoading ? "Creating..." : "Create template"}
+                        {tplBuilderLoading ? "Создаю..." : "Создать шаблон"}
                       </button>
                     </div>
                   )}
@@ -5964,7 +5964,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         )}
                         {step.type === "music" && (
                           <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
-                            <label style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>Length (s):</label>
+                            <label style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>Длина (с):</label>
                             <input type="number" min={10} max={300} value={step.lengthSeconds ?? 30}
                               onChange={(e) => updateAgentStep(i, { lengthSeconds: Math.max(10, Math.min(300, Number(e.target.value) || 30)) })}
                               style={{ width: 70, padding: "3px 6px", border: "1px solid #e2e8f0", borderRadius: 5, fontSize: 11 }} />

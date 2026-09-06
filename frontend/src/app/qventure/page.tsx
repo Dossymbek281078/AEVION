@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import { useI18nOptional } from "@/lib/i18n";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -112,6 +113,56 @@ async function analyzeReq(data: FormShape): Promise<{ ok: true; data: AnalysisRe
     return { ok: false, error: "Не удалось связаться с сервером. Попробуйте ещё раз." };
   }
 }
+
+
+/**
+ * Атрибуты формы — по языку читателя (класс «атрибут против доводчика»,
+ * 06.09.2026). Модуль был notranslate ЦЕЛИКОМ; опт-аут перенесён на
+ * ResultView (мемо генерятся английской прозой — там он законен), витрина
+ * и форма вернулись доводчику, но placeholder/aria доводчик не переводит
+ * НИГДЕ — их закрывает этот словарь. Рецепт №2, образец GEN_UI.
+ */
+const QV_UI: Record<string, Record<string, string>> = {
+  ru: {
+    nameAria: "Название компании или продукта", namePh: "напр.: NeuroDx",
+    sectorAria: "Отрасль", stageAria: "Стадия",
+    geoAria: "Целевой рынок", geoPh: "США",
+    askAria: "Привлекают (USD, необязательно)",
+    descAria: "Что делает продукт?", descPh: "Один абзац: что за продукт, какую задачу решает и чем заходит на рынок.",
+    tractionAria: "Тяга и метрики", tractionPh: "напр.: $40k MRR, рост 18% в месяц, 3 корпоративных пилота, удержание 92%, LTV/CAC 4.2x",
+    marginAria: "Валовая маржа (%)", churnAria: "Отток (%)", churnPeriodAria: "Период оттока",
+    customersAria: "Клиенты", growthAria: "Рост (%)", growthPeriodAria: "Период роста",
+    tamAria: "TAM снизу вверх (USD)",
+    projY0Aria: "Выручка, год 0", projY1Aria: "Выручка, год 1", projY2Aria: "Выручка, год 2",
+    projY0Ph: "Год 0: 2,000,000", projY1Ph: "Год 1: 5,000,000", projY2Ph: "Год 2: 12,000,000",
+  },
+  en: {
+    nameAria: "Company or product name", namePh: "e.g. NeuroDx",
+    sectorAria: "Sector", stageAria: "Stage",
+    geoAria: "Target market", geoPh: "USA",
+    askAria: "Raising (USD, optional)",
+    descAria: "What does the product do?", descPh: "One paragraph: what the product is, what problem it solves and its market angle.",
+    tractionAria: "Traction and metrics", tractionPh: "e.g. $40k MRR, 18% monthly growth, 3 enterprise pilots, 92% retention, LTV/CAC 4.2x",
+    marginAria: "Gross margin (%)", churnAria: "Churn (%)", churnPeriodAria: "Churn period",
+    customersAria: "Customers", growthAria: "Growth (%)", growthPeriodAria: "Growth period",
+    tamAria: "Bottom-up TAM (USD)",
+    projY0Aria: "Revenue, year 0", projY1Aria: "Revenue, year 1", projY2Aria: "Revenue, year 2",
+    projY0Ph: "Year 0: 2,000,000", projY1Ph: "Year 1: 5,000,000", projY2Ph: "Year 2: 12,000,000",
+  },
+  kk: {
+    nameAria: "Компания немесе өнім атауы", namePh: "мыс.: NeuroDx",
+    sectorAria: "Сала", stageAria: "Кезең",
+    geoAria: "Мақсатты нарық", geoPh: "АҚШ",
+    askAria: "Тартылады (USD, міндетті емес)",
+    descAria: "Өнім не істейді?", descPh: "Бір абзац: бұл қандай өнім, қандай мәселені шешеді және нарыққа қалай кіреді.",
+    tractionAria: "Тарту және метрикалар", tractionPh: "мыс.: $40k MRR, айына 18% өсім, 3 корпоративтік пилот, 92% ұстап қалу, LTV/CAC 4.2x",
+    marginAria: "Жалпы маржа (%)", churnAria: "Кету (%)", churnPeriodAria: "Кету кезеңі",
+    customersAria: "Клиенттер", growthAria: "Өсім (%)", growthPeriodAria: "Өсім кезеңі",
+    tamAria: "Төменнен жоғары TAM (USD)",
+    projY0Aria: "Түсім, 0-жыл", projY1Aria: "Түсім, 1-жыл", projY2Aria: "Түсім, 2-жыл",
+    projY0Ph: "0-жыл: 2,000,000", projY1Ph: "1-жыл: 5,000,000", projY2Ph: "2-жыл: 12,000,000",
+  },
+};
 
 export default function QVenturePage() {
   const [sectors, setSectors] = useState<SectorOption[]>([]);
@@ -585,23 +636,25 @@ function FormFields({ form, set, sectors, full = false }: {
   sectors: SectorOption[];
   full?: boolean;
 }) {
+  const qvLang = useI18nOptional()?.lang ?? "ru";
+  const QV = QV_UI[qvLang] ?? QV_UI.ru;
   return (
     <>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 14 }}>
         <div>
           <label style={LABEL}>Название компании или продукта *</label>
-          <input aria-label="Название компании или продукта" style={INPUT} value={form.name} onChange={set("name")} placeholder="напр.: NeuroDx" />
+          <input aria-label={QV.nameAria} style={INPUT} value={form.name} onChange={set("name")} placeholder={QV.namePh} />
         </div>
         <div>
           <label style={LABEL}>Отрасль</label>
-          <select aria-label="Отрасль" style={INPUT} value={form.sector} onChange={set("sector")}>
+          <select aria-label={QV.sectorAria} style={INPUT} value={form.sector} onChange={set("sector")}>
             {sectors.length === 0 && <option value="ai_app">ИИ-приложения</option>}
             {sectors.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
         </div>
         <div>
           <label style={LABEL}>Стадия</label>
-          <select aria-label="Стадия" style={INPUT} value={form.stage} onChange={set("stage")}>
+          <select aria-label={QV.stageAria} style={INPUT} value={form.stage} onChange={set("stage")}>
             {STAGES.map((s) => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}
           </select>
         </div>
@@ -609,25 +662,25 @@ function FormFields({ form, set, sectors, full = false }: {
           <>
             <div>
               <label style={LABEL}>Целевой рынок</label>
-              <input aria-label="Целевой рынок" style={INPUT} value={form.geography} onChange={set("geography")} placeholder="США" />
+              <input aria-label={QV.geoAria} style={INPUT} value={form.geography} onChange={set("geography")} placeholder={QV.geoPh} />
             </div>
             <div>
               <label style={LABEL}>Привлекают (USD, необязательно)</label>
-              <input aria-label="Привлекают (USD, необязательно)" style={INPUT} value={form.askUsd} onChange={set("askUsd")} placeholder="5,000,000" inputMode="numeric" />
+              <input aria-label={QV.askAria} style={INPUT} value={form.askUsd} onChange={set("askUsd")} placeholder="5,000,000" inputMode="numeric" />
             </div>
           </>
         )}
       </div>
       <div style={{ marginBottom: full ? 14 : 0 }}>
         <label style={LABEL}>Что делает продукт? *</label>
-        <textarea aria-label="Что делает продукт?" style={{ ...INPUT, minHeight: 72, resize: "vertical" }} value={form.description} onChange={set("description")}
-          placeholder="Один абзац: что за продукт, какую задачу решает и чем заходит на рынок." />
+        <textarea aria-label={QV.descAria} style={{ ...INPUT, minHeight: 72, resize: "vertical" }} value={form.description} onChange={set("description")}
+          placeholder={QV.descPh} />
       </div>
       {full && (
         <div style={{ marginBottom: 16 }}>
           <label style={LABEL}>Тяга и метрики</label>
-          <textarea aria-label="Тяга и метрики" style={{ ...INPUT, minHeight: 56, resize: "vertical" }} value={form.tractionNotes} onChange={set("tractionNotes")}
-            placeholder="напр.: $40k MRR, рост 18% в месяц, 3 корпоративных пилота, удержание 92%, LTV/CAC 4.2x" />
+          <textarea aria-label={QV.tractionAria} style={{ ...INPUT, minHeight: 56, resize: "vertical" }} value={form.tractionNotes} onChange={set("tractionNotes")}
+            placeholder={QV.tractionPh} />
           {/* Execution carries 28% of the composite and scores low — not neutral — when
               nothing is submitted. Saying so here beats letting someone submit an empty
               field and be surprised by the number. */}
@@ -651,13 +704,13 @@ function FormFields({ form, set, sectors, full = false }: {
           </summary>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginTop: 12 }}>
             <div><label style={LABEL}>ARR (USD)</label><input aria-label="ARR (USD)" style={INPUT} value={form.finArr} onChange={set("finArr")} placeholder="3,000,000" inputMode="numeric" /></div>
-            <div><label style={LABEL}>Валовая маржа (%)</label><input aria-label="Валовая маржа (%)" style={INPUT} value={form.finGrossMargin} onChange={set("finGrossMargin")} placeholder="82" inputMode="numeric" /></div>
+            <div><label style={LABEL}>Валовая маржа (%)</label><input aria-label={QV.marginAria} style={INPUT} value={form.finGrossMargin} onChange={set("finGrossMargin")} placeholder="82" inputMode="numeric" /></div>
             <div><label style={LABEL}>LTV / CAC</label><input aria-label="LTV / CAC" style={INPUT} value={form.finLtvCac} onChange={set("finLtvCac")} placeholder="4" inputMode="numeric" /></div>
             <div>
               <label style={LABEL}>Отток (%)</label>
               <div style={{ display: "flex", gap: 6 }}>
-                <input aria-label="Отток (%)" style={{ ...INPUT, flex: 1 }} value={form.finChurn} onChange={set("finChurn")} placeholder="3" inputMode="numeric" />
-                <select style={{ ...INPUT, width: 104 }} value={form.finChurnPeriod} onChange={set("finChurnPeriod")} aria-label="Период оттока">
+                <input aria-label={QV.churnAria} style={{ ...INPUT, flex: 1 }} value={form.finChurn} onChange={set("finChurn")} placeholder="3" inputMode="numeric" />
+                <select style={{ ...INPUT, width: 104 }} value={form.finChurnPeriod} onChange={set("finChurnPeriod")} aria-label={QV.churnPeriodAria}>
                   <option value="weekly">/ неделя</option>
                   <option value="monthly">/ месяц</option>
                   <option value="quarterly">/ квартал</option>
@@ -665,26 +718,26 @@ function FormFields({ form, set, sectors, full = false }: {
                 </select>
               </div>
             </div>
-            <div><label style={LABEL}>Клиенты</label><input aria-label="Клиенты" style={INPUT} value={form.finCustomers} onChange={set("finCustomers")} placeholder="2,000" inputMode="numeric" /></div>
+            <div><label style={LABEL}>Клиенты</label><input aria-label={QV.customersAria} style={INPUT} value={form.finCustomers} onChange={set("finCustomers")} placeholder="2,000" inputMode="numeric" /></div>
             <div>
               <label style={LABEL}>Рост (%)</label>
               <div style={{ display: "flex", gap: 6 }}>
-                <input aria-label="Рост (%)" style={{ ...INPUT, flex: 1 }} value={form.finGrowth} onChange={set("finGrowth")} placeholder="15" inputMode="numeric" />
-                <select style={{ ...INPUT, width: 104 }} value={form.finGrowthPeriod} onChange={set("finGrowthPeriod")} aria-label="Период роста">
+                <input aria-label={QV.growthAria} style={{ ...INPUT, flex: 1 }} value={form.finGrowth} onChange={set("finGrowth")} placeholder="15" inputMode="numeric" />
+                <select style={{ ...INPUT, width: 104 }} value={form.finGrowthPeriod} onChange={set("finGrowthPeriod")} aria-label={QV.growthPeriodAria}>
                   <option value="WoW">WoW</option>
                   <option value="MoM">MoM</option>
                   <option value="YoY">YoY</option>
                 </select>
               </div>
             </div>
-            <div><label style={LABEL}>TAM снизу вверх (USD)</label><input aria-label="TAM снизу вверх (USD)" style={INPUT} value={form.finTam} onChange={set("finTam")} placeholder="12,000,000,000" inputMode="numeric" /></div>
+            <div><label style={LABEL}>TAM снизу вверх (USD)</label><input aria-label={QV.tamAria} style={INPUT} value={form.finTam} onChange={set("finTam")} placeholder="12,000,000,000" inputMode="numeric" /></div>
           </div>
           <div style={{ marginTop: 14 }}>
             <label style={LABEL}>Прогноз выручки (USD) — этот год / +1 год / +2 года (проверка на «хоккейную клюшку»)</label>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-              <input aria-label="Выручка, год 0" style={INPUT} value={form.projY0} onChange={set("projY0")} placeholder="Год 0: 2,000,000" inputMode="numeric" />
-              <input aria-label="Выручка, год 1" style={INPUT} value={form.projY1} onChange={set("projY1")} placeholder="Год 1: 5,000,000" inputMode="numeric" />
-              <input aria-label="Выручка, год 2" style={INPUT} value={form.projY2} onChange={set("projY2")} placeholder="Год 2: 12,000,000" inputMode="numeric" />
+              <input aria-label={QV.projY0Aria} style={INPUT} value={form.projY0} onChange={set("projY0")} placeholder={QV.projY0Ph} inputMode="numeric" />
+              <input aria-label={QV.projY1Aria} style={INPUT} value={form.projY1} onChange={set("projY1")} placeholder={QV.projY1Ph} inputMode="numeric" />
+              <input aria-label={QV.projY2Aria} style={INPUT} value={form.projY2} onChange={set("projY2")} placeholder={QV.projY2Ph} inputMode="numeric" />
             </div>
           </div>
         </details>

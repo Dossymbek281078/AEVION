@@ -21,6 +21,7 @@
 // Страница переведена на светлый газетный эталон AEVION 2026-07-27.
 
 import { useEffect, useState } from "react";
+import { useI18nOptional } from "@/lib/i18n";
 import { apiUrl } from "@/lib/apiBase";
 import { getAuthHeaders, isAuthenticated } from "@/lib/auth";
 import { T } from "./theme";
@@ -196,7 +197,19 @@ function buildReport(
   return L.join("\n");
 }
 
+// Атрибуты главного поля — по языку читателя (класс «атрибут против
+// доводчика», 06.09.2026): AutoTranslate переводит текст, но не
+// placeholder/aria — EN-визитёр видел английскую страницу с русской
+// подсказкой в ГЛАВНОМ поле модуля. Рецепт №2, образец GEN_UI.
+const MC_UI: Record<string, { askAria: string; askPh: string }> = {
+  ru: { askAria: "Вопрос совету", askPh: "Например: стоит ли запускать платный тариф до первой продажи?" },
+  en: { askAria: "Question for the council", askPh: "For example: should we launch a paid tier before the first sale?" },
+  kk: { askAria: "Кеңеске сұрақ", askPh: "Мысалы: алғашқы сатылымға дейін ақылы тарифті іске қосу керек пе?" },
+};
+
 export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
+  const mcLang = useI18nOptional()?.lang ?? "ru";
+  const MC = MC_UI[mcLang] ?? MC_UI.ru;
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<AgentResult[] | null>(null);
@@ -320,11 +333,11 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
       </p>
 
       <textarea
-        aria-label="Вопрос совету"
+        aria-label={MC.askAria}
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
         rows={3}
-        placeholder="Например: стоит ли запускать платный тариф до первой продажи?"
+        placeholder={MC.askPh}
         style={{
           width: "100%", background: T.surface, border: `1px solid ${T.lineSoft}`, borderRadius: 10,
           padding: 12, fontSize: 14, lineHeight: 1.6, color: T.text, fontFamily: "inherit",

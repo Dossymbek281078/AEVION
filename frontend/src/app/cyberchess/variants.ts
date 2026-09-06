@@ -253,10 +253,15 @@ export function randomArmy(seed?: number): { piecesByFile: string[]; pieces: Arm
       return { piecesByFile, pieces };
     }
   }
-  // Fallback to standard army
+  // Fallback — тоже РОВНО 39 очков, как и все случайные армии выше. Прежний
+  // запасной был стандартной расстановкой (R+N+B+Q+B+N+R = 31): если 200 попыток
+  // не давали решения хотя бы для ОДНОЙ стороны, у неё было 31 против 39 у
+  // соперника — тихий стартовый перевес в 8 очков. 39-бюджет — явное намерение
+  // функции (все валидные ветви дают 39), не балансный выбор; здесь оно
+  // соблюдается и в запасной ветви. 2Q + 3R + 1B + 1N = 18+15+3+3 = 39, король на e.
   return {
-    piecesByFile: ["R", "N", "B", "Q", "K", "B", "N", "R"],
-    pieces: [{ piece: "R", count: 2 }, { piece: "N", count: 2 }, { piece: "B", count: 2 }, { piece: "Q", count: 1 }],
+    piecesByFile: ["R", "N", "Q", "R", "K", "R", "B", "Q"],
+    pieces: [{ piece: "Q", count: 2 }, { piece: "R", count: 3 }, { piece: "B", count: 1 }, { piece: "N", count: 1 }],
   };
 }
 

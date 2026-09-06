@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "fs";
+import { join } from "path";
 import { randomArmy, asymmetricFen, buildArmyFen } from "../variants";
 
 const VAL: Record<string, number> = { Q: 9, R: 5, B: 3, N: 3, K: 0 };
@@ -11,12 +13,13 @@ const rankKings = (rank: string) => rank.split("").filter((c) => c.toUpperCase()
  * (бюджет 39 очков). Если бюджеты разойдутся — одна сторона тихо стартует с
  * перевесом, а вариант отвечает 200 и не падает. Правило чистое — без браузера.
  *
- * ⚠️ ЗАМЕЧЕНО 06.09.2026 и вынесено основателю (НЕ чинил — это баланс, решение
- * автора): случайная армия суммирует 39, а ЗАПАСНАЯ (fallback в randomArmy,
- * если 200 попыток не дали решения) — R+N+B+Q+B+N+R = 31. Практически fallback
- * почти недостижим, поэтому тест ниже его не ловит и НЕ должен: он закрепляет
- * норму (39=39), а расхождение fallback помечено словами. Чинить — только по
- * слову основателя (сделать fallback тоже 39 либо привести цель к 31).
+ * ⚠️ ИСТОРИЯ: 06.09.2026 запасная армия (fallback в randomArmy, если 200 попыток
+ * не дали решения) суммировала R+N+B+Q+B+N+R = 31, а не 39 — если бы fallback
+ * сработал для ОДНОЙ стороны, у неё было бы 31 против 39 (тихий перевес в 8
+ * очков). По слову основателя («все делай») исправлено: fallback тоже даёт 39,
+ * так как 39 — явное намерение функции (все валидные ветви дают 39), а не
+ * балансный выбор. Тест ниже закрепляет это и на happy-path, и на самом
+ * fallback-константе (читаем исходник).
  */
 
 describe("Asymmetric: обе армии — равный бюджет, разный состав", () => {
@@ -30,6 +33,22 @@ describe("Asymmetric: обе армии — равный бюджет, разн�
       for (const p of nonKing) expect(["Q", "R", "B", "N"]).toContain(p);
       expect(piecesByFile.reduce((a, p) => a + (VAL[p] ?? 0), 0), "бюджет армии обязан быть 39").toBe(39);
     }
+  });
+
+  it("запасная армия (fallback) тоже суммирует 39 — не 31, как было", () => {
+    // fallback недостижим в happy-path (200 попыток хватает), поэтому проверяем
+    // САМУ КОНСТАНТУ в исходнике: piecesByFile в ветви «Fallback ... army».
+    const src = readFileSync(join(process.cwd(), "src/app/cyberchess/variants.ts"), "utf8");
+    // Якорь структурный: fallback-армия — это единственный piecesByFile, СРАЗУ
+    // за которым идёт агрегированный pieces:[{ ... }] в return-объекте.
+    // (В generate960Backrank тоже есть слово «Fallback», но без piecesByFile,
+    // а random-путь строит piecesByFile отдельной изменяемой переменной.)
+    const m = src.match(/piecesByFile:\s*\[([^\]]+)\],\s*pieces:\s*\[\{/);
+    expect(m, "не нашёл fallback-return армии").not.toBeNull();
+    const pieces = m![1].split(",").map((s) => s.replace(/["'\s]/g, ""));
+    const budget = pieces.reduce((a, p) => a + (VAL[p.toUpperCase()] ?? 0), 0);
+    expect(budget, `fallback-армия ${pieces.join("")} = ${budget}, должно быть 39`).toBe(39);
+    expect(pieces.filter((p) => p.toUpperCase() === "K").length, "у fallback ровно один король").toBe(1);
   });
 
   it("asymmetricFen: у белых и чёрных РАВНЫЙ материал и по одному королю", () => {

@@ -317,7 +317,7 @@ export default function SewerageInternalPage() {
                     inputMode="decimal"
                     value={answers[ex.id] ?? ""}
                     onChange={(e) => setAns(ex.id, e.target.value)}
-                    aria-label="Ваш ответ" placeholder="Ваш ответ"
+                    aria-label={`Ваш ответ: ${ex.title}`} placeholder="Ваш ответ"
                     className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 w-44 focus:outline-none focus:border-sky-500"
                   />
                   <span className="text-slate-500 text-sm">{ex.unit}</span>

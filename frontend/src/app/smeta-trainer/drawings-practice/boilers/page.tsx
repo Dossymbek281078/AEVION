@@ -379,7 +379,7 @@ export default function BoilersPage() {
                       onChange={e => setInp(id, e.target.value)}
                       onKeyDown={e => e.key === "Enter" && !r && reveal(id)}
                       disabled={r && ok}
-                      aria-label="Ответ (число)..." placeholder="Ответ (число)..."
+                      aria-label={`Ответ (число)...: ${ex.title}`} placeholder="Ответ (число)..."
                       className="flex-1 border rounded px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-red-500 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200"
                     />
                     {!r && (

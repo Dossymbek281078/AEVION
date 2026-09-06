@@ -971,7 +971,7 @@ export default function DevHubPage() {
                       <button
                         onClick={() => starSnippet(s)}
                         className="flex items-center gap-1 text-xs font-semibold text-amber-300 hover:text-amber-200"
-                        aria-label={t("a11y.star")}
+                        aria-label={`${t("snip.starAria")}: ${s.title}`}
                       >
                         <span aria-hidden>★</span>
                         <span>{s.stars}</span>
@@ -980,12 +980,13 @@ export default function DevHubPage() {
                         <button
                           onClick={() => removeSnippet(s)}
                           className="text-xs font-semibold px-2.5 py-1 rounded-md border border-slate-700 bg-slate-800 hover:bg-rose-900/60 hover:border-rose-800 text-slate-300 hover:text-rose-200 transition-colors ml-auto mr-2"
-                          aria-label={t("snip.removeAria")}
+                          aria-label={`${t("snip.removeAria")}: ${s.title}`}
                         >
                           {t("snip.remove")}
                         </button>
                       )}
                       <button
+                        aria-label={`${t("snip.copyAria")}: ${s.title}`}
                         onClick={() => copySnippet(s)}
                         className={
                           "text-xs font-semibold px-2.5 py-1 rounded-md border transition-colors " +

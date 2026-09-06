@@ -279,7 +279,7 @@ export default function SafetyPage() {
                         onChange={(e) => setInp((p) => ({ ...p, [ex.id]: e.target.value }))}
                         onKeyDown={(e) => e.key === "Enter" && !rev[ex.id] && go(ex)}
                         disabled={!!rev[ex.id]}
-                        aria-label="Число" placeholder="Число..."
+                        aria-label={`Число: ${ex.title}`} placeholder="Число..."
                         className="flex-1 border rounded px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-orange-500 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200"
                       />
                       {!rev[ex.id] && (

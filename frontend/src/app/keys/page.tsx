@@ -417,7 +417,7 @@ export default function ApiKeysPage() {
                               onClick={() => setRenameDraft({ id: k.id, value: k.name })}
                               className="text-[11px] text-slate-500 hover:text-violet-400 transition-colors"
                               title="Переименовать"
-                              aria-label="Переименовать ключ"
+                              aria-label={`Переименовать ключ: ${k.name}`}
                             >
                               ✎ rename
                             </button>

@@ -143,7 +143,7 @@ export default function UtilitiesPage(){
                   <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1.5">Шаг {si+1}/{ex.ss.length}: {step.l}</label>
                   <div className="flex gap-2">
                     <input type="text" value={inp[k]??""} onChange={e=>setInp(p=>({...p,[k]:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&!rev[k]&&go()} disabled={!!rev[k]} aria-label="Число" placeholder="Число..." className="flex-1 border rounded px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-purple-500 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200"/>
-                    {!rev[k]&&<button onClick={go} aria-label="Проверить ответ" disabled={!inp[k]?.trim()} className="px-3 py-1.5 bg-purple-600 text-white text-xs font-semibold rounded hover:bg-purple-700 disabled:opacity-40">✓</button>}
+                    {!rev[k]&&<button onClick={go} aria-label={`Проверить ответ: ${ex.title}`} disabled={!inp[k]?.trim()} className="px-3 py-1.5 bg-purple-600 text-white text-xs font-semibold rounded hover:bg-purple-700 disabled:opacity-40">✓</button>}
                   </div>
                   {rev[k]&&<div className={`mt-2 text-xs leading-relaxed ${ok?"text-emerald-800 dark:text-emerald-300":"text-red-800 dark:text-red-300"}`}>{ok?"✓ ":"✗ "}{step.e}</div>}
                   {err&&<button onClick={()=>{setInp(p=>({...p,[k]:""}));setRev(r=>({...r,[k]:false}));}} className="mt-1 text-[10px] text-amber-700 underline">Попробовать снова</button>}

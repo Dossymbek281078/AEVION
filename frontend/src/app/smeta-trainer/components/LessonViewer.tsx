@@ -262,7 +262,7 @@ export function LessonViewer({ level }: Props) {
                       isFav ? "text-amber-500" : "text-slate-300 hover:text-amber-400"
                     }`}
                     title={isFav ? "Убрать из избранного" : "В избранное"}
-                    aria-label="bookmark"
+                    aria-label={isFav ? `Убрать из избранного: ${l.title}` : `В избранное: ${l.title}`}
                   >
                     {isFav ? "★" : "☆"}
                   </button>

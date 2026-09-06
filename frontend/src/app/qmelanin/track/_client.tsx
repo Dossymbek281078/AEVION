@@ -142,7 +142,7 @@ export default function QMelaninTrackClient() {
                   style={styles.input}
                 />
               </label>
-              <button onClick={() => removeEntry(i)} style={styles.remove} aria-label="Удалить">
+              <button onClick={() => removeEntry(i)} style={styles.remove} aria-label={`Удалить запись ${i + 1}`}>
                 ✕
               </button>
             </div>

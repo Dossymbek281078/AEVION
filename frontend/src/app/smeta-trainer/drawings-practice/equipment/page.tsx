@@ -480,7 +480,7 @@ export default function EquipmentPage() {
                               value={inputs[k] ?? ""}
                               onChange={(e) => setInput(k, e.target.value)}
                               disabled={isRevealed && isCorrect}
-                              aria-label="Число" placeholder="Число..."
+                              aria-label={`Число: ${f.label}`} placeholder="Число..."
                               className={`w-full px-3 py-2 rounded-md border-2 font-mono bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none transition-colors ${
                                 fieldOk
                                   ? "border-emerald-400 dark:border-emerald-600"

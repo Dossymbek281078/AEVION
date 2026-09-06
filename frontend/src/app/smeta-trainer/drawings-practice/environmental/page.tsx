@@ -521,7 +521,7 @@ export default function EnvironmentalPage() {
                                     ? "border-red-500 dark:border-red-600"
                                     : "border-slate-300 dark:border-slate-700"
                                 } text-slate-900 dark:text-slate-100`}
-                                aria-label="Введите ответ" placeholder="Введите ответ"
+                                aria-label={`Введите ответ: ${s.l}`} placeholder="Введите ответ"
                               />
                               <button
                                 onClick={() => verify(ex.id, s.id, s.a, s.tol ?? 0.05)}

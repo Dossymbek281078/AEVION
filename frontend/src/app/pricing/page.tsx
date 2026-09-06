@@ -1105,6 +1105,7 @@ export default function PricingPage() {
                       color: isHighlight ? "#5eead4" : "#0d9488",
                       marginBottom: 6,
                     }}
+                    aria-label={`${tp("tier.tryTrial")}: ${tier.id}`}
                     onClick={() =>
                       startCheckout(
                         tier.id === "lite" && liteModule
@@ -1128,6 +1129,7 @@ export default function PricingPage() {
                       color: isHighlight ? "#94a3b8" : "#64748b",
                       marginBottom: 12,
                     }}
+                    aria-label={`${tp("tier.openCalc")}: ${tier.id}`}
                     onClick={() => {
                       setCalcTier(tier.id);
                       document.getElementById("calculator")?.scrollIntoView({ behavior: "smooth" });

@@ -493,7 +493,7 @@ qfusionaiRouter.post("/route", routeLimiter, async (req: Request, res: Response)
 
   const t0 = Date.now();
   try {
-    const result = await callProvider(providerId, messages, model, temperature);
+    const result = await callProvider(providerId, messages, model, temperature, undefined, undefined, { module: "qfusionai-route" });
     const latencyMs = Date.now() - t0;
 
     const stat: StatEntry = {

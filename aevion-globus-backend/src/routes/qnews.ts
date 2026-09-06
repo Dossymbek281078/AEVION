@@ -521,6 +521,7 @@ qnewsRouter.post("/ai/summarize", aiLimiter, async (req: Request, res: Response)
       ],
       "gpt-4o-mini",
       0.3,
+      undefined, undefined, { module: "qnews-summarize" },
     );
     const raw = result.reply ?? "";
     try {

@@ -415,7 +415,7 @@ qpersonaRouter.post("/personas/:alias/ai-bio", aiLimit, async (req: Request, res
       },
     ];
 
-    const result = await callProvider(providerId, messages, modelName, 0.7);
+    const result = await callProvider(providerId, messages, modelName, 0.7, undefined, undefined, { module: "qpersona-bio" });
     const generatedBio = result.reply.trim().slice(0, 500);
 
     // Update the persona with the generated bio

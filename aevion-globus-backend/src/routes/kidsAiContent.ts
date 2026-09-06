@@ -459,6 +459,7 @@ kidsAiContentRouter.post(
         // Lower temperature than the default 0.7 — for a kids product we want
         // more deterministic, on-guardrail answers with less creative drift.
         0.4,
+        undefined, undefined, { module: "kids-ai-ask" },
       );
       // An empty reply means we served the canned fallback text, so the
       // client should treat it as a fallback, not a real AI answer.

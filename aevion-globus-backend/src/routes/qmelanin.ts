@@ -482,7 +482,7 @@ qmelaninRouter.post("/ai-plan", async (req: Request, res: Response) => {
 
   try {
     const p = providers[0];
-    const result = await callProvider(p.id, [{ role: "user", content: prompt }], p.defaultModel, 0.3);
+    const result = await callProvider(p.id, [{ role: "user", content: prompt }], p.defaultModel, 0.3, undefined, undefined, { module: "qmelanin-plan" });
     const rawReply = result.reply.trim();
     const jsonStr = rawReply.startsWith("{")
       ? rawReply

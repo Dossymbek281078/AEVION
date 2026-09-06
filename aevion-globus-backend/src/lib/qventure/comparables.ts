@@ -139,7 +139,7 @@ export async function fetchComparables(sectorLabel: string, stage: string): Prom
           `{company, amountText, amountUsd (number or null), round, date, url (the SOURCE link for that deal)}. ` +
           `Skip anything not clearly a funding round. If none qualify, return [].\n\nRESULTS:\n${corpus}` },
       ];
-      const { reply } = await callProvider(provider, messages, providerModel(provider), 0.1);
+      const { reply } = await callProvider(provider, messages, providerModel(provider), 0.1, undefined, undefined, { module: "qventure-comparables" });
       const comps = parseJsonArray(reply).map((o) => toComp(o, true)).filter((c): c is Comparable => c !== null).slice(0, 5);
       if (comps.length > 0) {
         const result: ComparablesResult = {
@@ -166,7 +166,7 @@ export async function fetchComparables(sectorLabel: string, stage: string): Prom
           `{company, amountText, amountUsd (number or null), round, date (approx year/quarter)}. ` +
           `Only include real, well-known rounds. If unsure, include fewer.` },
       ];
-      const { reply } = await callProvider(provider, messages, providerModel(provider), 0.2);
+      const { reply } = await callProvider(provider, messages, providerModel(provider), 0.2, undefined, undefined, { module: "qventure-benchmark" });
       const comps = parseJsonArray(reply).map((o) => toComp(o, false)).filter((c): c is Comparable => c !== null).slice(0, 5);
       if (comps.length > 0) {
         const result: ComparablesResult = {

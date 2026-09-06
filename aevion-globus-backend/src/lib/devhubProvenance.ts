@@ -27,7 +27,10 @@ const captureException = makeServiceCapture("devhub-provenance");
  *   владелец привязался к записи (QRight сам верит JWT, а не полям).
  */
 
-const PUBLIC_BASE = (process.env.AEVION_PUBLIC_BASE_URL ?? "https://aevion.app").replace(/\/+$/, "");
+// База ИМЕННО БЭКЕНДА: живая проба 06.09.2026 показала, что сайт aevion.app
+// НЕ проксирует /api/qright — verifyUrl на домене сайта отдавал 404 при
+// живой странице на api.aevion.app. Страницу проверки обслуживает бэкенд.
+const API_PUBLIC_BASE = (process.env.AEVION_API_PUBLIC_BASE_URL ?? "https://api.aevion.app").replace(/\/+$/, "");
 
 export type ProvenanceStamp = { certId: string; verifyUrl: string };
 
@@ -95,7 +98,7 @@ export async function stampGenerationProvenance(opts: {
         certId: body.id,
         // Публичная страница проверки: открывается без входа, называет хеш и
         // время (критерий 2 спеки) — это embed-поверхность QRight.
-        verifyUrl: `${PUBLIC_BASE}/api/qright/embed/${body.id}`,
+        verifyUrl: `${API_PUBLIC_BASE}/api/qright/embed/${body.id}`,
       },
     };
   } catch (e) {

@@ -1698,14 +1698,16 @@ qskywayRouter.get("/airspace/edition", (req: Request, res: Response) => {
       steps: [
         "1. возьмите поле payload КАК ЕСТЬ — это строка, которая идёт в хэш; не пересобирайте её",
         "2. contentHash = sha256(payload в кодировке UTF-8), в hex — обязан совпасть с полем contentHash",
-        "3. доказательство времени: GET /api/qskyway/airspace/anchor/verify с этим contentHash и otsProofB64 из /airspace/anchor",
-        "4. attestation Bitcoin проверяется любым клиентом OpenTimestamps: .ots здесь — обычный detached-таймстамп НАД ЭТИМ ДАЙДЖЕСТОМ, а не над файлом",
+        "3. авторство: возьмите signature и publicKey из GET /api/qskyway/verify?city=<город> (блок airspace) и проверьте Ed25519-verify(signature, hex-байты contentHash, publicKey)",
+        "4. доказательство времени: POST /api/qskyway/airspace/anchor/verify с этим contentHash и otsProofB64 из POST /airspace/anchor (обе ручки — POST; прежний текст говорил GET, и посторонний получал 404)",
+        "5. attestation Bitcoin проверяется любым клиентом OpenTimestamps: .ots здесь — обычный detached-таймстамп НАД ЭТИМ ДАЙДЖЕСТОМ, а не над файлом",
       ],
       stepsEn: [
         "1. take the payload field AS IS - it is the exact string that goes into the hash; do not re-serialise it",
         "2. contentHash = sha256(payload as UTF-8) in hex - must equal the contentHash field",
-        "3. for the timestamp: GET /api/qskyway/airspace/anchor/verify with this contentHash and the otsProofB64 from /airspace/anchor",
-        "4. the Bitcoin attestation checks with any OpenTimestamps client: the .ots here is a plain detached timestamp OVER THIS DIGEST, not over a file",
+        "3. authorship: take signature and publicKey from GET /api/qskyway/verify?city=<city> (airspace block) and check Ed25519-verify(signature, hex bytes of contentHash, publicKey)",
+        "4. for the timestamp: POST /api/qskyway/airspace/anchor/verify with this contentHash and the otsProofB64 from POST /airspace/anchor (both endpoints are POST; the previous text said GET and a stranger got 404)",
+        "5. the Bitcoin attestation checks with any OpenTimestamps client: the .ots here is a plain detached timestamp OVER THIS DIGEST, not over a file",
       ],
       warning: "Пересборка payload из полей ответа почти наверняка даст ДРУГОЙ хэш: значение имеют порядок ключей, отсутствие пробелов и то, как сериализованы не-ASCII символы.",
       warningEn: "Rebuilding the payload from the response fields will almost certainly yield a DIFFERENT hash: key order, absence of whitespace and non-ASCII serialisation all matter.",
@@ -2343,8 +2345,15 @@ qskywayRouter.get("/verify", (req: Request, res: Response) => {
   const sig = signCity(resolved.id, resolved.city);
   const twinValid = verifyCity(resolved.city, sig);
   const asSig = signAirspace(resolved.id);
+  // Байты подписи уходят НАРУЖУ намеренно (06.09.2026). Раньше отдавался
+  // только вердикт `valid` — а его считает наш же сервер, то есть посторонний
+  // получал самосогласованность вместо заверения (класс
+  // feedback_self_consistency_is_not_attestation). Авторство доказывают
+  // ровно три вещи вместе: signature + publicKey + contentHash; проверка —
+  // Ed25519-verify(signature, hex-байты contentHash, publicKey), полностью
+  // без доверия этому ответу.
   const airspace = asSig
-    ? { attested: true as const, valid: verifyAirspace(resolved.id, asSig), contentHash: asSig.contentHash, effective: AIRSPACE[resolved.id].effective, authority: AIRSPACE[resolved.id].authority }
+    ? { attested: true as const, valid: verifyAirspace(resolved.id, asSig), contentHash: asSig.contentHash, alg: asSig.alg, signature: asSig.signature, publicKey: asSig.publicKey, signedOver: "hex-байты contentHash", effective: AIRSPACE[resolved.id].effective, authority: AIRSPACE[resolved.id].authority }
     : { attested: false as const, valid: null, note: "Для этого города нет подключённого фида регулятора — подписывать нечего.", noteEn: "No regulator feed is connected for this city — there is nothing to sign." };
   res.json({
     city: resolved.id,
@@ -2482,6 +2491,13 @@ qskywayRouter.get("/airspace/proof", async (req: Request, res: Response) => {
   if (settled) return res.json(settled);
   const current = AIRSPACE[resolved.id] ? airspaceContentHash(AIRSPACE[resolved.id]) : null;
   const verdict = await verifyAnchoredAirspace({ city: resolved.id, contentHash: proof.contentHash, otsProofB64: proof.otsProofB64 });
+  // Авторство — рядом с целостностью и временем (06.09.2026). Пруф отвечал
+  // на «цел ли слой» и «когда существовал», но не «чей он»: подпись
+  // вычислялась signAirspace() и не отдавалась НИ ОДНОЙ поверхностью —
+  // посторонний не мог доказать, что редакция наша. Подпись покрывает
+  // ТЕКУЩУЮ редакцию: для исторического пруфа (coversCurrentEdition=false)
+  // её здесь нет — подписывать чужой хэш задним числом нельзя.
+  const sig = current === proof.contentHash ? signAirspace(resolved.id) : null;
   const payload = {
     ...proof,
     currentContentHash: current,
@@ -2490,6 +2506,9 @@ qskywayRouter.get("/airspace/proof", async (req: Request, res: Response) => {
     // record, not a broken proof.
     coversCurrentEdition: current === proof.contentHash,
     verification: verdict,
+    authorship: sig
+      ? { alg: sig.alg, signature: sig.signature, publicKey: sig.publicKey, signedOver: "hex-байты contentHash", note: sig.note }
+      : { note: "подпись покрывает только текущую редакцию; этот пруф — исторический", noteEn: "the signature covers only the current edition; this proof is historical" },
   };
   if (verdict.ots.status === "bitcoin-confirmed") proofVerdictCache.set(resolved.id, payload);
   res.json(payload);

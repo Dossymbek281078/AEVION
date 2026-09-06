@@ -30,7 +30,8 @@ describe("остаток за месяц доходит до экрана", () =
 
   test("и выводятся на экран", () => {
     expect(SRC).toContain("usage.title");
-    expect(SRC).toContain("USAGE_LABEL[k]");
+    // 06.09.2026: карта подписей стала трёхъязычной (USAGE_LABELS[lang]).
+    expect(SRC).toContain("USAGE_LABELS[lang]");
   });
 
   test("безлимитное НЕ показывается", () => {

@@ -5,6 +5,7 @@ import { verifyBearerOptional } from "../lib/authJwt";
 // Обе стороны нужны: у них шире набор из devhubGuest, у меня — devhubGuestLink.
 // Все четыре символа используются в теле файла, проверено счётом вхождений.
 import { requesterId, devhubGuestId, DEVHUB_GUEST_HEADER } from "../lib/devhubGuest";
+import { stampGenerationProvenance } from "../lib/devhubProvenance";
 import { requestGuestLink, confirmGuestLink } from "../lib/devhubGuestLink";
 import { noteEmailSent } from "../lib/brevoQuota";
 // Ограничитель дорогих ручек. Тот же помощник, что стоит на 27 соседних ручках в
@@ -1298,6 +1299,9 @@ interface GeneratedCodeResult {
   // retry fixed them — an honest "it wasn't perfect on try one" signal
   // distinct from a clean first-pass success, without being a failure either.
   selfCorrected?: number;
+  // Кто реально генерировал — для отметки происхождения (провенанс).
+  provider?: string;
+  model?: string;
 }
 
 /** Extract the {"files":[...]} shape a generation call was asked for, with
@@ -1622,6 +1626,8 @@ async function generateCodeWithAI(
   return {
     files,
     aiGenerated: true,
+    provider: provider.id,
+    model: provider.defaultModel,
     ...(wasContinued ? { continued: true } : {}),
     ...(syntaxProblems.length > 0 ? { syntaxErrors: syntaxProblems } : {}),
     ...(selfCorrected > 0 && syntaxProblems.length === 0 ? { selfCorrected } : {}),
@@ -2348,7 +2354,8 @@ devhubRouter.post("/projects/:id/generate", dhCostlyLimit("dhgenerate"), async (
     // все точки генерации разом (обычную, потоковую, проектирование базы).
     // Второе списание тут брало бы с человека дважды за одну генерацию.
     const генерация = await runProjectGeneration(project, userId, prompt, resolvedStack, targetFiles, images, history);
-    res.json({ ...генерация, ...creditNote(genCredit) });
+    const провенанс = await maybeStampProvenance(req.body?.provenance === true, project, prompt, генерация, req.headers.authorization);
+    res.json({ ...генерация, ...провенанс, ...creditNote(genCredit) });
   } catch (e: any) {
     if (typeof e?.message === "string" && e.message.startsWith("NO_VISION_PROVIDER")) {
       return res.status(503).json({ error: e.message.replace("NO_VISION_PROVIDER: ", "") });
@@ -2360,7 +2367,7 @@ devhubRouter.post("/projects/:id/generate", dhCostlyLimit("dhgenerate"), async (
 /** Shared by /generate and /database/design: generate → checkpoint → save. */
 async function runProjectGeneration(project: DevHubProject, userId: string, prompt: string, stack: string, targetFiles: string[], images?: ChatImage[], history?: ChatTurn[], onProgress?: (stage: string) => void) {
   const existingFiles = await dbListFiles(project.id);
-  const { files: generatedFiles, aiGenerated, continued, syntaxErrors, selfCorrected } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history, onProgress,
+  const { files: generatedFiles, aiGenerated, continued, syntaxErrors, selfCorrected, provider: genProvider, model: genModel } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history, onProgress,
       меткаГенерации(userId), userId);
   // Модель отработала — вот теперь генерация потрачена. Списание здесь, в
   // общем помощнике, покрывает все точки генерации разом: обычную, потоковую
@@ -2404,8 +2411,40 @@ async function runProjectGeneration(project: DevHubProject, userId: string, prom
   return {
     files: generatedFiles, aiGenerated, ...(continued ? { continued } : {}),
     ...(syntaxErrors ? { syntaxErrors } : {}), ...(selfCorrected ? { selfCorrected } : {}),
+    ...(genProvider ? { provider: genProvider, model: genModel } : {}),
     checkpointId, projectId: project.id, storage,
   };
+}
+
+/**
+ * Отметка происхождения генерации (спека Монетизации 06.09.2026).
+ * Возвращает поля для домешивания в ответ; ПУСТО, если флаг не просили.
+ * Помечаются только НАСТОЯЩИЕ ИИ-генерации: провенанс заглушки был бы
+ * фальшивкой. Отказ фиксации не роняет генерацию, но виден (§16).
+ */
+async function maybeStampProvenance(
+  want: boolean,
+  project: DevHubProject,
+  prompt: string,
+  result: { files: Array<{ path: string; content: string }>; aiGenerated: boolean; provider?: string; model?: string },
+  authHeader?: string,
+): Promise<Record<string, unknown>> {
+  if (!want) return {};
+  if (!result.aiGenerated) {
+    return { provenance: null, provenanceError: "not_ai_generated" };
+  }
+  const stamped = await stampGenerationProvenance({
+    projectId: project.id,
+    projectName: project.name,
+    prompt,
+    files: result.files,
+    provider: result.provider,
+    model: result.model,
+    authHeader,
+  });
+  return stamped.ok
+    ? { provenance: stamped.stamp }
+    : { provenance: null, provenanceError: stamped.error };
 }
 
 // POST /api/devhub/projects/:id/generate/stream — the same generation as
@@ -2476,7 +2515,8 @@ devhubRouter.post("/projects/:id/generate/stream", dhCostlyLimit("dhgenerate"), 
       project, userId, prompt, stack || project.stack, targetFiles, images, history,
       (stage) => send({ type: "status", stage })
     );
-    send({ type: "result", ...result });
+    const провенанс = await maybeStampProvenance(req.body?.provenance === true, project, prompt, result, req.headers.authorization);
+    send({ type: "result", ...result, ...провенанс });
   } catch (e: any) {
     if (typeof e?.message === "string" && e.message.startsWith("NO_VISION_PROVIDER")) {
       send({ type: "error", error: e.message.replace("NO_VISION_PROVIDER: ", "") });

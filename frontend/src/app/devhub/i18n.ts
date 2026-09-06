@@ -84,6 +84,9 @@ const EN = {
   "ve.title": "🖱️ New: Visual Edit — click the page, not the code",
   "ve.where": "In the IDE → 🖱️ Visual Edit tab",
   "dep.where": "In the IDE → Deploy",
+  "prov.title": "🔏 Verifiable provenance for every AI generation",
+  "prov.body": "Tick one checkbox — and each generation gets a public, login-free proof record in the QRight registry: result hash, model, time. Your prompt never leaves the project (only its hash is published). Exactly what the EU AI Act asks teams to show about AI-made content.",
+  "prov.where": "In the IDE → checkbox under Generate",
   "proj.loading": "Loading projects...",
   "proj.browserBound": "Projects created without signing in live in THIS browser. Clear its storage — and you lose sight of them. Sign in to keep them.",
   "proj.savedToMemory": "Saved, but the database was unavailable — this project lives in memory for now and may not survive a restart. Try again in a minute.",
@@ -139,6 +142,10 @@ const EN = {
   "err.snipShare": "Could not share the snippet",
   "err.clipboard": "Clipboard is unavailable in this browser",
   "err.create": "Failed to create project",
+  "ex.title": "Built in DevHub — live addresses",
+  "ex.sub": "Real apps assembled from one phrase. Open them, then build your own.",
+  "ex.build": "Build something similar",
+  "ex.open": "Open live →",
 } as const;
 
 const RU: Record<Key, string> = {
@@ -200,6 +207,9 @@ const RU: Record<Key, string> = {
   "ve.title": "🖱️ Новое: правка кликом — по странице, а не по коду",
   "ve.where": "В среде → вкладка 🖱️ Правка кликом",
   "dep.where": "В среде → Выкатка",
+  "prov.title": "🔏 Проверяемое происхождение каждой ИИ-генерации",
+  "prov.body": "Одна галочка — и каждая генерация получает публичную запись-доказательство в реестре QRight: хеш результата, модель, время. Промпт не покидает проект (публикуется только его хеш). Ровно то, что EU AI Act требует показывать про ИИ-контент.",
+  "prov.where": "В среде → галочка под «Сгенерировать»",
   "proj.loading": "Загружаем проекты…",
   "proj.browserBound": "Проекты, созданные без входа, живут в ЭТОМ браузере. Очистите его хранилище — и перестанете их видеть. Войдите, чтобы сохранить.",
   "proj.savedToMemory": "Сохранено, но база была недоступна: проект пока живёт в памяти и может не пережить перезапуск. Повторите через минуту.",
@@ -255,6 +265,10 @@ const RU: Record<Key, string> = {
   "err.snipShare": "Не удалось поделиться сниппетом",
   "err.clipboard": "Буфер обмена недоступен в этом браузере",
   "err.create": "Не удалось создать проект",
+  "ex.title": "Собрано в DevHub — живые адреса",
+  "ex.sub": "Настоящие приложения, собранные из одной фразы. Откройте — и соберите своё.",
+  "ex.build": "Собрать похожее",
+  "ex.open": "Открыть живое →",
 };
 
 const KK: Record<Key, string> = {
@@ -316,6 +330,9 @@ const KK: Record<Key, string> = {
   "ve.title": "🖱️ Жаңа: кодты емес, беттің өзін басып өңдеу",
   "ve.where": "Ортада → 🖱️ Басып өңдеу қойындысы",
   "dep.where": "Ортада → Жариялау",
+  "prov.title": "🔏 Әр ЖИ генерациясының тексерілетін шығу тегі",
+  "prov.body": "Бір белгі — және әр генерация QRight тізілімінде жария дәлел-жазба алады: нәтиже хеші, модель, уақыт. Промпт жобадан шықпайды (тек хеші жарияланады). EU AI Act ЖИ-контент туралы дәл осыны көрсетуді талап етеді.",
+  "prov.where": "Ортада → «Генерациялау» астындағы белгі",
   "proj.loading": "Жобалар жүктелуде…",
   "proj.browserBound": "Кірмей жасалған жобалар ОСЫ браузерде тұрады. Оның жадын тазаласаңыз, оларды енді көрмейсіз. Сақтау үшін кіріңіз.",
   "proj.savedToMemory": "Сақталды, бірақ дерекқор қолжетімсіз болды: жоба әзірге жадта тұр және қайта іске қосудан кейін жоғалуы мүмкін. Бір минуттан кейін қайталаңыз.",
@@ -371,6 +388,10 @@ const KK: Record<Key, string> = {
   "err.snipShare": "Сниппетпен бөлісу мүмкін болмады",
   "err.clipboard": "Алмасу буфері бұл браузерде қолжетімсіз",
   "err.create": "Жобаны жасау мүмкін болмады",
+  "ex.title": "DevHub-та жиналған — тірі мекенжайлар",
+  "ex.sub": "Бір сөйлемнен жиналған нағыз қолданбалар. Ашыңыз да, өзіңіздікін жасаңыз.",
+  "ex.build": "Ұқсасын жинау",
+  "ex.open": "Тірісін ашу →",
 };
 
 const DICT: Partial<Record<string, Record<Key, string>>> = { en: EN, ru: RU, kk: KK };

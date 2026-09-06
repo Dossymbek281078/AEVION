@@ -139,7 +139,7 @@ export async function extractDeckFields(text: string): Promise<DeckFields> {
       },
     ];
     const model = getProviders().find((p) => p.id === provider)?.defaultModel || "claude-opus-4-8";
-    const { reply } = await callProvider(provider, messages, model, 0.2);
+    const { reply } = await callProvider(provider, messages, model, 0.2, undefined, undefined, { module: "qventure-deck" });
 
     const start = reply.indexOf("{");
     const end = reply.lastIndexOf("}");

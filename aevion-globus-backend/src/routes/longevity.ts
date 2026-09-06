@@ -353,7 +353,7 @@ longevityRouter.post("/ai-plan", longevityAiLimit, async (req: Request, res: Res
 
   try {
     const p = providers[0];
-    const result = await callProvider(p.id, [{ role: "user", content: prompt }], p.defaultModel, 0.3);
+    const result = await callProvider(p.id, [{ role: "user", content: prompt }], p.defaultModel, 0.3, undefined, undefined, { module: "longevity-plan" });
     const raw = result.reply.trim();
     const jsonStr = raw.startsWith("{") ? raw : raw.match(/```(?:json)?\n?([\s\S]+?)```/)?.[1] ?? raw;
     const parsed = JSON.parse(jsonStr) as Record<string, unknown>;

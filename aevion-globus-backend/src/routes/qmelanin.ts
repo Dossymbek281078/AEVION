@@ -487,7 +487,7 @@ qmelaninRouter.post("/ai-plan", qmelaninAiLimit, async (req: Request, res: Respo
 
   try {
     const p = providers[0];
-    const result = await callProvider(p.id, [{ role: "user", content: prompt }], p.defaultModel, 0.3);
+    const result = await callProvider(p.id, [{ role: "user", content: prompt }], p.defaultModel, 0.3, undefined, undefined, { module: "qmelanin-plan" });
     const rawReply = result.reply.trim();
     const jsonStr = rawReply.startsWith("{")
       ? rawReply

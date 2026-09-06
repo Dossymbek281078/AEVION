@@ -546,7 +546,7 @@ psyappDepsRouter.post("/support", aiLimit, async (req: Request, res: Response) =
     ];
 
     try {
-      const result = await callProvider(providerId, messages, modelName, 0.7);
+      const result = await callProvider(providerId, messages, modelName, 0.7, undefined, undefined, { module: "psyapp-support" });
       return res.json({
         ok: true,
         reply: result.reply,

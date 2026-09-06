@@ -293,7 +293,7 @@ qaiRouter.post("/chat", qaiAiLimit, async (req: Request, res: Response) => {
   const model = reqModel ?? provider?.defaultModel ?? "gpt-4o-mini";
 
   try {
-    const result = await callProvider(resolvedProviderId, contextMessages, model, 0.7);
+    const result = await callProvider(resolvedProviderId, contextMessages, model, 0.7, undefined, undefined, { module: "qai-chat" });
 
     const assistantMsg: ChatMessage = { role: "assistant", content: result.reply };
     session.messages.push(assistantMsg);
@@ -386,7 +386,7 @@ qaiRouter.post("/chat/stream", qaiAiLimit, async (req: Request, res: Response) =
     if (!provider || !provider.configured) {
       fullReply = `[AEVION QAI — stub mode] You asked: "${message.trim().slice(0, 100)}"`;
     } else {
-      const result = await callProvider(providerId, contextMessages, model, 0.7);
+      const result = await callProvider(providerId, contextMessages, model, 0.7, undefined, undefined, { module: "qai-chat-stream" });
       fullReply = result.reply;
     }
 

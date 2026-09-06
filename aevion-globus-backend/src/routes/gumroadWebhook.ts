@@ -24,12 +24,20 @@
 
 import { Router, type Request, type Response } from "express";
 import { gumroadPaymentProvider, verifyGumroadSaleDetailed } from "../lib/payment/gumroadProvider";
-import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
+import {
+  provisionSubscription,
+  writeSubscription,
+  readLatestSubscription,
+  возвратКасаетсяДействующей,
+  type Subscription,
+} from "./provisioning";
+import { periodForReference } from "../lib/payment/billingPeriod";
 import type { TierId } from "../data/pricing";
 import { getPool } from "../lib/dbPool";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
 import { upsertAppSubscription } from "../lib/appEntitlements";
+import { logBureauAudit } from "./bureau";
 
 // DevHub Studio Pro: upgrade DevHubTier + DevHubEmailTier on purchase
 async function upgradeDevHubByEmail(email: string, tier: "free" | "pro"): Promise<void> {
@@ -296,7 +304,6 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   const productId = raw.product_id ?? raw.short_product_id ?? "";
   const refunded = result.status === "refunded";
   const failed = result.status === "failed";
-  const isMembership = raw.is_recurring_billing === "true";
 
   if (!email) {
     console.warn("[gumroad/webhook] missing email, ignoring");
@@ -397,6 +404,19 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
       return res.status(401).json({ ok: false, error: "sale_not_found" });
     }
     if (verdict === "unverifiable") {
+      // Выдаём непроверенное НАМЕРЕННО: сверка не удалась по НАШЕЙ причине
+      // (нет токена, API кассы недоступен), и наказывать за это настоящего
+      // покупателя нельзя. Поведение оставлено как было.
+      //
+      // Но след обязан быть. Замер 02.09.2026: у Gumroad подписи на проде
+      // НЕТ — пустое тело получает 200, тогда как остальные три кассы
+      // отвечают 401. Значит сверка продажи — ЕДИНСТВЕННЫЙ замок. Истеки
+      // токен — непроверяемым станет каждый вебхук, мы начнём выдавать
+      // подписки кому угодно, и узнать об этом было бы неоткуда: раньше
+      // здесь стоял только console.warn, а лог процесса живёт недолго и
+      // его никто не читает.
+      //
+      // Поэтому отказ ЗАМКА идёт в Sentry — канал, который читают.
       console.warn(
         `[gumroad/webhook] sale ${saleId} unverifiable (no token or API unavailable) — provisioning anyway`,
       );
@@ -486,21 +506,33 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   // BureauVerification row (KYC approved but payment not yet confirmed).
   if (reference === "bureau-verified") {
     if (refunded || failed) {
-      // ПОЛИТИКУ НЕ МЕНЯЮ, МЕНЯЮ ВИДИМОСТЬ.
+      // Значок НЕ отзываем: проверка личности реально проводилась, и
+      // отзывать её за денежный спор — продуктовое решение, а не моё.
+      // Оно ждёт слова основателя.
       //
-      // Verified — разовая покупка, и отдавать её обратно автоматически
-      // нельзя: возврат бывает спорным (chargeback), а автоотзыв наказал бы
-      // честного покупателя посреди разбирательства. Решение оставить статус
-      // осознанное, и оно остаётся.
+      // Но БЕЗ СЛЕДА оставлять нельзя ни при какой политике: раньше
+      // ветка возвращала ignored, не тронув запись, и "paymentStatus"
+      // навсегда оставался 'paid'. То есть деньги вернули, а наши
+      // собственные данные говорили "оплачено", и единственным следом
+      // был console.log — на проде это память процесса, то есть ничто.
       //
-      // Но след был `console.log` — строка среди тысяч. Значит человек,
-      // оплативший «Verified», вернувший деньги и сохранивший значок на
-      // сертификате, не появлялся НИГДЕ. Механизм отзыва существует
-      // (POST /api/bureau/admin/cert/:certId/revoke-verification), просто
-      // никто не узнавал, что пора им воспользоваться.
-      //
-      // Теперь это ошибка в журнале и в Sentry: решение принимает человек,
-      // но узнаёт о поводе — сразу.
+      // Поле "paymentStatus" намеренно НЕ трогаем: его читают ворота
+      // значка (bureau.ts: ready = kycStatus === "approved" &&
+      // paymentStatus === "paid"), и запись 'refunded' отозвала бы
+      // значок молча, приняв за основателя решение, которое он не принимал.
+      await logBureauAudit({
+        action: `payment_${result.status}_badge_kept`,
+        certId: null,
+        verificationId: null,
+        actor: `gumroad:${saleId}`,
+        payload: { email, saleId, status: result.status, reference },
+      });
+      // Мерж 06.09.2026: обе ветки чинили ВИДИМОСТЬ этого случая разными
+      // каналами — запись в журнал аудита (выше) и Sentry. Оставлены оба:
+      // журнал — durable-след, Sentry — то, что человек реально смотрит.
+      // Механизм отзыва существует
+      // (POST /api/bureau/admin/cert/:certId/revoke-verification), решение
+      // принимает человек — но узнаёт о поводе сразу.
       console.error(
         `[gumroad/webhook] bureau ${result.status} for ${email}: статус Verified СОХРАНЁН (разовая покупка). ` +
           "Отозвать вручную: POST /api/bureau/admin/cert/:certId/revoke-verification",
@@ -509,7 +541,7 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         new Error("bureau Verified refunded — badge kept, manual review needed"),
         { route: "gumroad/webhook", reference: "bureau-verified", status: result.status },
       );
-      return res.json({ ok: true, ignored: `bureau_${result.status}` });
+      return res.json({ ok: true, ignored: `bureau_${result.status}`, recorded: true });
     }
     if (result.status === "paid") {
       try {
@@ -580,6 +612,21 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
 
     if (refunded || failed) {
       // Downgrade to free
+      // Отзываем ТУ подписку, за которую вернули деньги, а не любую.
+      // Правило общее на все кассы — provisioning.возвратКасаетсяДействующей.
+      const действующая = readLatestSubscription(email);
+      const отзываем = возвратКасаетсяДействующей(действующая, saleId);
+      if (!отзываем) {
+        console.warn(
+          `[gumroad/webhook] событие возврата за ДРУГУЮ покупку: действующая ` +
+            `подписка ${действующая?.tierId} не тронута`
+        );
+        capture(new Error("refund_for_older_purchase_kept_current_subscription"), {
+          route: "gumroad/webhook/refund",
+          email,
+          currentTier: действующая?.tierId,
+        });
+      }
       const downgrade: Subscription = {
         id: `sub_gumroad_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         ts: new Date().toISOString(),
@@ -591,14 +638,27 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         trialDays: 0,
         source: `gumroad:${result.status}`,
       };
-      writeSubscription(downgrade);
+      if (отзываем) writeSubscription(downgrade);
       console.log(`[gumroad/webhook] ${result.status} → downgraded ${email} to free`);
       return res.json({ ok: true, action: "downgraded", email });
     }
 
     if (result.status === "paid") {
       const tierId = tierForReference(reference);
-      const period = isMembership ? "monthly" : "monthly"; // Gumroad one-time → treat as monthly for provisioning
+      // ПЕРИОД БЕРЁМ ИЗ ССЫЛКИ, а не считаем всех месячными.
+      //
+      // Здесь стоял `isMembership ? "monthly" : "monthly"` — тернарник, у
+      // которого обе ветки одинаковы, то есть флаг не влиял ни на что.
+      // Замер 03.09.2026: Gumroad продаёт ГОДОВЫЕ тарифы (tier_lite_annual,
+      // tier_medium_annual, tier_full_annual — у каждого своя переменная
+      // товара), и все они записывались как месячные. Срок доступа считается
+      // по периоду, а годовая покупка у Gumroad — РАЗОВЫЙ платёж: продления
+      // не будет. То есть человек платил за год и терял доступ через месяц,
+      // а следующего события пришлось бы ждать одиннадцать месяцев.
+      //
+      // Правило то же, что у paybox и paypal (periodForReference): решает
+      // слово в ссылке заказа.
+      const period = periodForReference(reference);
 
       const provResult = await provisionSubscription({
         email,
@@ -610,6 +670,7 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         // неизвестна или нулевая — поле не проставляем вовсе: ноль в выручке
         // хуже пустоты, по нему потом посчитают деньги.
         ...(paidUsd === undefined ? {} : { amountUsd: paidUsd }),
+        providerPaymentId: saleId,
         ...(purchaseChannel ? { channel: purchaseChannel } : {}),
       });
 

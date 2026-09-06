@@ -18,13 +18,22 @@
 
 import { Router, type Request, type Response } from "express";
 import { payboxPaymentProvider } from "../lib/payment/payboxProvider";
-import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
+import {
+  provisionSubscription,
+  writeSubscription,
+  readLatestSubscription,
+  возвратКасаетсяДействующей,
+  type Subscription,
+} from "./provisioning";
 import type { TierId, BillingPeriod } from "../data/pricing";
+import { periodForReference } from "../lib/payment/billingPeriod";
+import { местИзКассы, модулиИзКассы } from "../lib/payment/customData";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
 import { upsertAppSubscription } from "../lib/appEntitlements";
 
 const capture = makeServiceCapture("payboxWebhook");
+
 
 export const payboxWebhookRouter = Router();
 
@@ -73,11 +82,9 @@ export function tierForReference(ref: string): TierId {
   return "lite";
 }
 
-function periodForReference(ref: string): BillingPeriod {
-  return ref.toLowerCase().includes("annual") ? "annual" : "monthly";
-}
 
 // Liveness probe — PayBox шлёт только POST; GET для ручной проверки URL в ЛК.
+
 payboxWebhookRouter.get("/webhook", (_req: Request, res: Response) => {
   res.json({
     ok: true,
@@ -125,9 +132,25 @@ payboxWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
 
   const reference = referenceFromOrderId(orderId);
   const module = raw.pg_param_module || undefined;
+  const seats = местИзКассы(raw.pg_param_seats);
+  const modules = модулиИзКассы(raw.pg_param_modules, module);
 
   try {
     if (refunded || failed) {
+      const действующая = readLatestSubscription(email);
+      const отзываем = возвратКасаетсяДействующей(действующая, paymentId);
+      if (!отзываем) {
+        console.warn(
+          `[paybox/webhook] возврат за ДРУГУЮ покупку: действующая подписка ` +
+            `${действующая?.tierId} не тронута, возврат по ${paymentId}`
+        );
+        capture(new Error("refund_for_older_purchase_kept_current_subscription"), {
+          route: "paybox/webhook/refund",
+          email,
+          refundedPaymentId: paymentId,
+          currentTier: действующая?.tierId,
+        });
+      }
       const downgrade: Subscription = {
         id: `sub_paybox_${paymentId}`,
         ts: new Date().toISOString(),
@@ -139,7 +162,7 @@ payboxWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         trialDays: 0,
         source: `paybox:${result.status}`,
       };
-      writeSubscription(downgrade);
+      if (отзываем) writeSubscription(downgrade);
 
       // Возврат обязан снимать И помодульную запись. Тариф понижается в
       // файле, а строка в AppSubscription живёт отдельно — и запасной путь
@@ -203,10 +226,12 @@ payboxWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         email,
         tierId,
         period,
-        modules: module ? [module] : [],
+        seats,
+        modules,
         source: "paybox",
         ...(amountUsd === undefined ? {} : { amountUsd }),
         ...(purchaseChannel ? { channel: purchaseChannel } : {}),
+        providerPaymentId: paymentId,
       });
 
       // Помодульную покупку записываем ЕЩЁ и в базу. Тарифная запись живёт

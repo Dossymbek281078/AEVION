@@ -104,6 +104,27 @@ function resolvePermalink(reference: string, explicit?: string): string {
   return найденный ?? reference;
 }
 
+/**
+ * Из значения переменной делаем СЛАГ.
+ *
+ * Значение может быть и слагом (`pyiaz`), и полной ссылкой, скопированной со
+ * страницы товара (`https://aevion.gumroad.com/l/pyiaz`) — второе куда
+ * естественнее при настройке. До 03.09.2026 префикс приклеивался слепо, и из
+ * полной ссылки получалось `https://app.gumroad.com/l/https://aevion.gumroad.com/l/pyiaz`:
+ * ручка отвечает 200, покупатель жмёт «оплатить» и попадает на 404 у Gumroad.
+ * Тариф просто нельзя купить, и снаружи это неотличимо от исправной работы.
+ *
+ * Правило то же, что в devhub.ts (там этот случай уже предусмотрен): срезать
+ * `https://хост/l/`, ведущие косые и хвост после `/?#`.
+ */
+function permalinkSlugFromEnv(raw: string): string {
+  return raw.trim().replace(/^https?:\/\/[^/]+\/l\//i, "").replace(/^\/+|[/?#].*$/g, "");
+}
+
+// Мерж 06.09.2026: объединены обе стороны — нормализация слага (выше) и
+// канал привлечения тем же именем, которое уже читает наш вебхук
+// (`url_params[channel]`): иначе канал доезжает не всеми путями, а выручка
+// по каналам считается только там, где известны И сумма, И канал.
 function gumroadCheckoutUrl(
   permalink: string,
   email?: string | null,
@@ -111,14 +132,10 @@ function gumroadCheckoutUrl(
 ): string {
   const q = new URLSearchParams();
   if (email) q.set("wanted_email", email);
-  // Канал привлечения — тем же именем, которое УЖЕ читает наш вебхук
-  // (`url_params[channel]`). Соглашение не новое: так его кладёт витрина,
-  // собирая ссылку сама. Здесь то же для ссылок, которые собираем мы: иначе
-  // канал доезжает не всеми путями, а выручка по каналам считается только
-  // там, где известны И сумма, И канал.
   if (channel) q.set("url_params[channel]", channel);
   const qs = q.toString();
-  return qs ? `https://app.gumroad.com/l/${permalink}?${qs}` : `https://app.gumroad.com/l/${permalink}`;
+  const base = `https://app.gumroad.com/l/${permalinkSlugFromEnv(permalink)}`;
+  return qs ? `${base}?${qs}` : base;
 }
 
 export const gumroadPaymentProvider: PaymentProvider = {

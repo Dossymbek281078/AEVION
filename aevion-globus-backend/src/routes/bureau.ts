@@ -1789,7 +1789,7 @@ function isBureauAdmin(req: Request): { ok: boolean; email: string | null; reaso
   }
 }
 
-async function logBureauAudit(opts: {
+export async function logBureauAudit(opts: {
   action: string;
   certId: string | null;
   verificationId: string | null;
@@ -1817,14 +1817,17 @@ async function logBureauAudit(opts: {
       // Ронять действие нельзя: отказ журнала не должен отменять уже
       // совершённую выдачу или отзыв. Но и молчать нельзя — пропажа записи
       // снаружи неотличима от того, что действия не было.
+      // (Мерж 06.09: обе ветки закрыли этот .catch(() => {}) независимо;
+      // оставлен общий вариант — след в консоль + сервисный capture.)
       const why = e instanceof Error ? e.message : String(e);
       console.error(
         `[Bureau] ЗАПИСЬ В ЖУРНАЛ НЕ ПРОШЛА: ${opts.action} по сертификату ${opts.certId ?? "—"} от ${opts.actor ?? "—"}: ${why}`,
       );
-      captureException(e, {
+      captureBureauError(e, {
         route: "bureau/logBureauAudit",
         action: opts.action,
         certId: opts.certId,
+        verificationId: opts.verificationId,
         actor: opts.actor,
       });
     });

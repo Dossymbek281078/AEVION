@@ -26,7 +26,8 @@ import { ROADMAP, PHASE_META } from "../data/roadmap";
 import { CASE_STUDIES, getCaseStudy } from "../data/cases";
 import { CHANGELOG, type ChangelogKind } from "../data/changelog";
 import { sendEmail, purgeSubscriptions, writeSubscription, readLatestSubscription, subsFile, type Subscription } from "./provisioning";
-import { clientIp } from "../lib/rateLimit";
+import { clientIp, rateLimit } from "../lib/rateLimit";
+import { makeServiceCapture } from "../lib/sentry/platform";
 
 export const pricingRouter = Router();
 
@@ -243,7 +244,43 @@ pricingRouter.post("/quote", (req, res) => {
  *
  * Используется фронтом для отдельной проверки кода до отправки full-quote.
  */
-pricingRouter.post("/promo/validate", (req, res) => {
+
+/**
+ * Предел темпа на /promo/validate — ручку, у которой его не было (замер 02.09.2026:
+ * (замер 02.09.2026 ПОТОКОМ запросов, а не грепом: у /promo/validate
+ * предела не было ни одного, и мутация это подтверждает).
+ *
+ * ⚠️ Не ищите пределы грепом. Имён у ограничителей здесь около сорока
+ * пяти — rateLimit, isRateLimited, programRateLimited и другие. Мой свип
+ * по двум именам занизил счёт, и я поставил ограничители туда, где
+ * защита уже была; убрал поправкой. Правильный прибор — поток запросов
+ * по ручке: он не знает имён и не может в них ошибиться.
+ *
+ * Ограничитель отдельный, а не общий с соседями: общий бакет уже был
+ * находкой в этом репозитории — ручки начинают отбирать лимит друг у друга,
+ * и человек, отправивший заявку, не может проверить промокод.
+ *
+ * keyFn нигде не переопределяем: умолчание нормализует адрес, включая IPv6.
+ */
+
+// Оракул «код верен или нет». Без предела это перебор промокодов: их пять,
+// имена короткие. Ущерб ограничен (скидка не больше 50%), но и предел стоит
+// одной строки. 20 в минуту — заведомо больше, чем человек вводит руками.
+const promoLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 20,
+  message: "Слишком много проверок кода. Подождите минуту.",
+});
+
+// ВАЖНО для следующего читателя: у /lead и /newsletter предел УЖЕ ЕСТЬ —
+// isRateLimited(ip) внутри самих обработчиков (отказ 429, retryAfter 10m).
+// 02.09.2026 я этого не увидел: греп искал "rateLimit(" и другого имени не
+// знал, поэтому знаменатель свипа получился неверным. Свои ограничители
+// отсюда убраны как ВТОРОЙ способ делать то же самое. Поведение обеих ручек
+// закреплено сторожем publicPricingEndpointsAreRateLimited — он проверяет
+// способность отказать, а не конкретный механизм.
+
+pricingRouter.post("/promo/validate", promoLimiter, (req, res) => {
   const body = req.body ?? {};
   const code = typeof body.code === "string" ? body.code.trim().slice(0, 40) : "";
   const tierId = body.tierId as TierId;
@@ -829,7 +866,7 @@ async function notifyApplication(app: ProgramApplication): Promise<void> {
  */
 pricingRouter.post("/affiliate/apply", (req, res) => {
   const ip = clientIp(req);
-  if (programRateLimited(ip, "affiliate")) {
+  if (programRateLimited(ip, "affiliate_apply")) {
     return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
   }
   const body = req.body ?? {};
@@ -873,7 +910,7 @@ pricingRouter.post("/affiliate/apply", (req, res) => {
  */
 pricingRouter.post("/partners/apply", (req, res) => {
   const ip = clientIp(req);
-  if (programRateLimited(ip, "partners")) {
+  if (programRateLimited(ip, "partners_apply")) {
     return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
   }
   const body = req.body ?? {};
@@ -1073,6 +1110,9 @@ function verifyDashboardToken(email: string, scope: "affiliate" | "partners", go
   }
 }
 
+// Канал тревог у этого модуля до 02.09.2026 отсутствовал вовсе.
+const capture = makeServiceCapture("pricing");
+
 function readJsonlAll<T>(file: string): T[] {
   if (!existsSync(file)) return [];
   try {
@@ -1087,7 +1127,18 @@ function readJsonlAll<T>(file: string): T[] {
       }
     }
     return out;
-  } catch {
+  } catch (e) {
+    // Поведение прежнее — пустой список: у части вызывающих есть свой
+    // catch, и бросок они всё равно проглотят, а чинить каждую ручку
+    // программы партнёров отсюда не мой заход.
+    //
+    // Но отказ обязан быть виден. Замер 02.09.2026 пробой со сломанным
+    // хранилищем: нечитаемый файл заявок даёт партнёру 404 «вас нет», а
+    // нечитаемый файл сделок — НУЛЕВЫЕ комиссии. Оба молча, следа не
+    // оставалось вовсе.
+    const причина = e instanceof Error ? e.message : String(e);
+    console.error(`[pricing] журнал НЕ прочитан -> ${file} :: ${причина}`);
+    capture(e, { route: "pricing/readJsonlAll", file });
     return [];
   }
 }
@@ -1139,7 +1190,7 @@ function magicLinkHtml(
  */
 pricingRouter.post("/affiliate/magic-link", (req, res) => {
   const ip = clientIp(req);
-  if (programRateLimited(ip, "affiliate")) {
+  if (programRateLimited(ip, "affiliate_link")) {
     return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
   }
   const body = req.body ?? {};
@@ -1223,7 +1274,7 @@ pricingRouter.get("/affiliate/dashboard", (req, res) => {
  */
 pricingRouter.post("/partners/magic-link", (req, res) => {
   const ip = clientIp(req);
-  if (programRateLimited(ip, "partners")) {
+  if (programRateLimited(ip, "partners_link")) {
     return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
   }
   const body = req.body ?? {};

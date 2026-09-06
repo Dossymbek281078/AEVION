@@ -99,6 +99,60 @@ function statusFromOrder(orderStatus: string): PaymentResult["status"] {
   }
 }
 
+/**
+ * `custom_id` у PayPal — не более 127 символов, и обрезать его СЛЕПО нельзя.
+ *
+ * Здесь стояло `JSON.stringify({...}).slice(0, 127)`. Пока внутрь ехали только
+ * ссылка и один модуль (~80 символов), это было безвредно. 04.09.2026 я сам
+ * добавил туда места и СПИСОК модулей — и замер показал предел: на шести
+ * модулях JSON занимает 131 символ, после обрезки перестаёт разбираться, а
+ * вместе с ним теряется `reference`, то есть ТАРИФ. Разбор на той стороне
+ * уходит в catch и возвращает обрезанный мусор как ссылку.
+ *
+ * Поэтому лишнее выбрасывается ПОЛЯМИ, а не символами: результат всегда
+ * остаётся валидным JSON с целой ссылкой. Порядок жертв — от наименее
+ * ценного: сперва хвост списка модулей, затем список целиком, затем места,
+ * затем одиночный модуль. Каждая потеря пишется в журнал: молча терять
+ * оплаченное нельзя.
+ */
+export function компактныйCustomId(reference: string, custom?: Record<string, string>): string {
+  const ПРЕДЕЛ = 127;
+  const поля: Record<string, string> = { reference, ...(custom ?? {}) };
+  const потеряно: string[] = [];
+  let j = JSON.stringify(поля);
+
+  // 1) укорачиваем список модулей с хвоста, пока он есть
+  while (j.length > ПРЕДЕЛ && поля.modules && поля.modules.includes(",")) {
+    const части = поля.modules.split(",");
+    потеряно.push(части[части.length - 1]);
+    поля.modules = части.slice(0, -1).join(",");
+    j = JSON.stringify(поля);
+  }
+  // 2) затем выбрасываем поля целиком, от наименее ценного
+  for (const ключ of ["modules", "seats", "module"]) {
+    if (j.length <= ПРЕДЕЛ) break;
+    if (ключ in поля) {
+      потеряно.push(ключ);
+      delete поля[ключ];
+      j = JSON.stringify(поля);
+    }
+  }
+  // 3) крайний случай — аномально длинная ссылка: лучше валидный JSON с
+  //    укороченной ссылкой, чем синтаксический мусор.
+  if (j.length > ПРЕДЕЛ) {
+    const запас = ПРЕДЕЛ - JSON.stringify({ reference: "" }).length;
+    j = JSON.stringify({ reference: reference.slice(0, Math.max(0, запас)) });
+    потеряно.push("часть ссылки");
+  }
+  if (потеряно.length > 0) {
+    console.warn(
+      `[paypal/createIntent] custom_id не вместил всё, отброшено: ${потеряно.join(", ")} ` +
+        `(ссылка ${reference})`
+    );
+  }
+  return j;
+}
+
 export const paypalPaymentProvider: PaymentProvider = {
   id: "paypal",
 
@@ -107,7 +161,7 @@ export const paypalPaymentProvider: PaymentProvider = {
     const t = await getToken();
     const base = publicBase();
     const value = (input.amountCents / 100).toFixed(2);
-    const customId = собратьCustomId(input.reference, input.customData);
+    const customId = компактныйCustomId(input.reference, input.customData);
 
     const r = await fetch(`${apiBase()}/v2/checkout/orders`, {
       method: "POST",

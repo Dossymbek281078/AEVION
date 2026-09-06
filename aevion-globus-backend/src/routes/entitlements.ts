@@ -93,7 +93,13 @@ entitlementsRouter.get("/paywall/policy", (_req, res) => {
  *  tier counts only, никаких user ids). ?days=N clamped 1–90, default 30. */
 entitlementsRouter.get("/paywall/funnel", async (req, res) => {
   try {
-    const days = Number(req.query.days) || 30;
+    // `Number(x) || 30` не останавливает отрицательные: «zzz» даёт 30, а «-5»
+    // проходит как есть и уезжает в окно выборки. Класс известный, поэтому
+    // ограничиваем разумными пределами. Проверить ПОСЛЕДСТВИЕ в проекции
+    // выручки нечем (в тестовой среде данных нет и всё равно ноль), но само
+    // ограничение проверяемо и очевидно правильно.
+    const запрошено = Math.floor(Number(req.query.days));
+    const days = Number.isFinite(запрошено) ? Math.min(365, Math.max(1, запрошено)) : 30;
     const summary = await funnelSummary(days);
     // Enrich each module with a revenue-opportunity ceiling: how many callers
     // hit the wall × the cheapest unlock price. It's a CEILING (denies are

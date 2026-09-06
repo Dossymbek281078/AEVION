@@ -88,6 +88,17 @@ export interface Subscription {
   amountUsd?: number;
   promoCode?: string;
   stripeSessionId?: string;
+  /**
+   * Идентификатор платежа У ПРОВАЙДЕРА (sale_id у Gumroad, pg_payment_id у
+   * PayBox, id ордера у PayPal, id подписки у LemonSqueezy).
+   *
+   * Заведено 03.09.2026. До этого связать платёж с выдачей можно было только
+   * у paybox и paypal — там идентификатор зашит в номер подписки. У Gumroad
+   * (главная касса) и LemonSqueezy он не сохранялся вовсе, поэтому на вопрос
+   * «человек заплатил, выдали ли мы» ответа не было ни у поддержки, ни у
+   * страницы успеха, которая показывает тариф ИЗ АДРЕСНОЙ СТРОКИ.
+   */
+  providerPaymentId?: string;
   /** Кто провёл платёж: "gumroad" | "lemonsqueezy" | "stripe" и т.п. */
   source?: string;
   /**
@@ -248,6 +259,90 @@ export function resetSubscriptionStoreWarning(): void {
   warnedUnreadableStore = false;
 }
 
+/**
+ * Найти подписку по идентификатору платежа у провайдера.
+ *
+ * Нужна странице успеха: сразу после оплаты она должна СПРОСИТЬ, состоялась
+ * ли выдача, а не верить адресной строке.
+ *
+ * ТРИ ИСХОДА, а не два — это главное в этой функции:
+ *   • подписка найдена  → { найдено: true, подписка }
+ *   • не найдена        → { найдено: false }
+ *   • ПРОЧИТАТЬ НЕ УДАЛОСЬ → бросаем.
+ *
+ * Третий нельзя схлопывать во второй: сбой чтения, выданный за «ещё не
+ * готово», сказал бы заплатившему человеку «ждите» навсегда.
+ *
+ * Старые записи paybox и paypal идентификатора в отдельном поле не имеют —
+ * там он зашит в номер подписки (`sub_paybox_<id>`), поэтому смотрим и туда.
+ */
+export function findSubscriptionByPaymentId(
+  paymentId: string
+): { найдено: true; подписка: Subscription } | { найдено: false } {
+  const цель = paymentId.trim();
+  if (!цель) return { найдено: false };
+  const file = subsFile();
+  if (!existsSync(file)) return { найдено: false };
+  // Ошибку чтения НЕ глотаем: см. комментарий выше.
+  const content = readFileSync(file, "utf8");
+  let найденная: Subscription | null = null;
+  for (const line of content.split(String.fromCharCode(10))) {
+    if (!line.trim()) continue;
+    try {
+      const sub = JSON.parse(line) as Subscription;
+      // Точное совпадение по полю — без ограничений: это наш собственный
+      // идентификатор платежа.
+      //
+      // Запасной путь (номер подписки вида `sub_paybox_<id>`) намеренно
+      // ограничен длиной. Идентификатор приходит из АДРЕСНОЙ СТРОКИ, то есть
+      // подделывается: без ограничения запрос `?intentId=1` совпал бы с любой
+      // подпиской, чей номер кончается на `_1`, и показал бы чужой тариф.
+      // Настоящие идентификаторы платежей длинные, так что живые случаи это
+      // не задевает. Найдено вычиткой собственного дифа 04.09.2026.
+      const точное = sub.providerPaymentId === цель;
+      const поНомеру = цель.length >= 8 && (sub.id ?? "").endsWith(`_${цель}`);
+      if (точное || поНомеру) найденная = sub;
+    } catch {
+      // битую строку пропускаем: одна запись не должна прятать остальные
+    }
+  }
+  return найденная ? { найдено: true, подписка: найденная } : { найдено: false };
+}
+
+/**
+ * Касается ли возврат/отмена ДЕЙСТВУЮЩЕЙ подписки.
+ *
+ * Ворота платного доступа читают последнюю записанную строку по адресу, а
+ * ветки возврата писали понижение до `free` безусловно. Отсюда сценарий,
+ * бьющий по заплатившему: купил дешёвый тариф, обновился до дорогого,
+ * пришёл возврат за ПЕРВЫЙ платёж — и человек потерял второй, оплаченный.
+ *
+ * Место общее, потому что правило одно на все четыре кассы. Сперва я
+ * написал его дважды, в paybox и paypal, — то есть повторил ровно ту
+ * ошибку, из-за которой годовой период у одной кассы из четырёх зашивался
+ * месячным: пока копий несколько, отставшая ничем себя не выдаёт.
+ *
+ * НАПРАВЛЕНИЕ ОТКАЗА осознанное: сомневаемся — ОТЗЫВАЕМ. Не отозвать
+ * возвращённое хуже, чем понизить лишний раз: первое отдаёт платное даром и
+ * не видно никому, второе человек заметит и напишет.
+ */
+export function возвратКасаетсяДействующей(
+  действующая: Subscription | null,
+  идентификаторПлатежа: string
+): boolean {
+  if (!действующая) return true;                     // отзывать нечего
+  if (действующая.tierId === "free") return true;    // уже бесплатная
+  if (!идентификаторПлатежа) return true;            // не знаем, за что возврат
+  if (действующая.providerPaymentId) {
+    return действующая.providerPaymentId === идентификаторПлатежа;
+  }
+  // Давние записи без поля: идентификатор зашит в номер подписки. Длину
+  // требуем, иначе короткий идентификатор совпал бы с чужой записью.
+  return идентификаторПлатежа.length >= 8
+    ? (действующая.id ?? "").endsWith(`_${идентификаторПлатежа}`)
+    : true;
+}
+
 export function readLatestSubscription(email: string): Subscription | null {
   const target = email.trim().toLowerCase();
   if (!target) return null;
@@ -269,9 +364,11 @@ export function readLatestSubscription(email: string): Subscription | null {
     }
     return latest;
   } catch (err) {
-    // Файл ЕСТЬ, а прочитать не вышло: права, порча, диск. Один раз на процесс —
-    // на каждый вызов кричать незачем, а один громкий след обязателен: без него
-    // «все стали бесплатными» выглядит как обычный день.
+    // Файл ЕСТЬ, а прочитать не вышло: права, порча, диск. Поведение НЕ
+    // меняем (null = ворота считают «подписки нет»); меняем видимость.
+    // Мерж 06.09: обе ветки закрыли это молчание независимо — оставлен
+    // след раз-на-процесс в консоль (иначе журнал забьётся) + capture в
+    // Sentry, где смотрят.
     if (!warnedUnreadableStore) {
       warnedUnreadableStore = true;
       console.error(
@@ -279,6 +376,7 @@ export function readLatestSubscription(email: string): Subscription | null {
           err instanceof Error ? err.message : String(err)
         }. Пока так, каждый заплативший отвечает как бесплатный.`,
       );
+      capture(err, { route: "provisioning/readLatestSubscription", email: target });
     }
     return null;
   }
@@ -582,7 +680,7 @@ export function welcomeHtml(sub: Subscription): string {
   const cta = ctaFor(sub);
   const trialBlock = sub.trialDays > 0
     ? `<div style="margin:16px 0;padding:14px;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;color:#78350f">
-         <strong>Триал-период активен до ${new Date(Date.now() + sub.trialDays * 86400000).toLocaleDateString("ru-RU")}.</strong>
+         <strong>Триал-период активен до ${срокИзПодписки(sub).toLocaleDateString("ru-RU")}.</strong>
          Карта не списывается до окончания.
        </div>`
     : "";
@@ -641,10 +739,10 @@ export function welcomeHtml(sub: Subscription): string {
 </html>`;
 }
 
-function welcomeText(sub: Subscription): string {
+export function welcomeText(sub: Subscription): string {
   const tierName = TIER_DISPLAY[sub.tierId];
   const trial = sub.trialDays > 0
-    ? `\nТриал-период активен до ${new Date(Date.now() + sub.trialDays * 86400000).toLocaleDateString("ru-RU")}. Карта не списывается до окончания.\n`
+    ? `\nТриал-период активен до ${срокИзПодписки(sub).toLocaleDateString("ru-RU")}. Карта не списывается до окончания.\n`
     : "";
   return `Добро пожаловать в AEVION ${tierName}!
 
@@ -663,6 +761,59 @@ ID подписки: ${sub.id}
  * Главная provisioning-функция: вызывается из webhook после успешной оплаты
  * и из stub-checkout (для smoke-теста UX без реального Stripe).
  */
+/**
+ * До какого момента действует оплаченный доступ.
+ *
+ * ПОЧЕМУ НЕ «30 ДНЕЙ». Так было до 03.09.2026, и это расходилось с тем, как
+ * списывает касса: она берёт деньги в ТО ЖЕ ЧИСЛО следующего месяца. В месяцах
+ * из 31 дня доступ гас на сутки РАНЬШЕ продления — то есть заплативший человек
+ * видел «Free, оформите подписку», хотя платёж был в силе. Семь месяцев в году
+ * длиной 31 день. Отсрочки в коде нет, ни один тест это правило не закреплял.
+ *
+ * Годовой срок по той же причине не 365 дней: в високосном году это давало те
+ * же сутки разрыва.
+ *
+ * ЗАЖИМ КОНЦА МЕСЯЦА обязателен: 31 января плюс месяц — это 28 (или 29)
+ * февраля, а не 3 марта. Без зажима JS сам переносит остаток на следующий
+ * месяц и выдаёт человеку лишние дни, а на годовой границе — лишний день
+ * 29 февраля.
+ *
+ * Пробный период остаётся В ДНЯХ: он и продаётся днями, календарь тут ни при чём.
+ */
+/**
+ * Дата окончания ДЛЯ ПИСЬМА — из самой подписки, а не пересчитанная.
+ *
+ * До 03.09.2026 письмо считало её заново: `Date.now() + trialDays * 86400000`.
+ * Это второй источник правды об одном факте. Сегодня оба ответа совпадали с
+ * точностью до миллисекунд, но:
+ *   • перерисуют письмо позже (повтор, дайджест) — дата уедет вперёд, а ворота
+ *     останутся прежними, и человеку названа НЕ та дата;
+ *   • изменят правило срока — письмо молча продолжит считать по-старому.
+ *     Ровно это случилось бы сегодня: месячный срок переехал на календарь.
+ *
+ * Запасной путь оставлен намеренно: у старых записей поля может не быть, и
+ * письмо из-за этого падать не должно.
+ */
+function срокИзПодписки(sub: Subscription): Date {
+  const из = sub.validUntil ? new Date(sub.validUntil) : null;
+  if (из && !Number.isNaN(из.getTime())) return из;
+  return new Date(Date.now() + sub.trialDays * 86400000);
+}
+
+export function вычислитьСрок(от: Date, period: BillingPeriod, trialDays: number): string {
+  if (trialDays > 0) return new Date(от.getTime() + trialDays * 86400000).toISOString();
+  const месяцев = period === "annual" ? 12 : 1;
+  const год = от.getUTCFullYear();
+  const месяц = от.getUTCMonth();
+  const день = от.getUTCDate();
+  const цель = new Date(
+    Date.UTC(год, месяц + месяцев, 1, от.getUTCHours(), от.getUTCMinutes(), от.getUTCSeconds(), от.getUTCMilliseconds())
+  );
+  const последний = new Date(Date.UTC(цель.getUTCFullYear(), цель.getUTCMonth() + 1, 0)).getUTCDate();
+  цель.setUTCDate(Math.min(день, последний));
+  return цель.toISOString();
+}
+
 export async function provisionSubscription(input: {
   email: string;
   tierId: TierId;
@@ -673,13 +824,14 @@ export async function provisionSubscription(input: {
   amountUsd?: number;
   promoCode?: string;
   stripeSessionId?: string;
+  providerPaymentId?: string;
   paddleTransactionId?: string;
   source?: string;
   channel?: string;
 }): Promise<{ subscription: Subscription; emailSent: boolean; emailMode: "real" | "stub"; emailError?: string; emailDegraded?: boolean }> {
   const trialDays = input.trialDays ?? 0;
   const period: BillingPeriod = input.period ?? "monthly";
-  const validityDays = trialDays > 0 ? trialDays : period === "annual" ? 365 : 30;
+  const validUntil = вычислитьСрок(new Date(), period, trialDays);
 
   const subscription: Subscription = {
     id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -690,10 +842,11 @@ export async function provisionSubscription(input: {
     seats: input.seats ?? 1,
     modules: input.modules ?? [],
     trialDays,
-    validUntil: new Date(Date.now() + validityDays * 86400000).toISOString(),
+    validUntil,
     amountUsd: input.amountUsd,
     promoCode: input.promoCode,
     stripeSessionId: input.stripeSessionId,
+    providerPaymentId: input.providerPaymentId,
     source: input.source,
     channel: input.channel,
   };
@@ -812,12 +965,23 @@ export async function provisionSubscription(input: {
 export function readSubscriptions(filter?: { email?: string; tierId?: TierId }): Subscription[] {
   const file = subsFile();
   if (!existsSync(file)) return [];
-  let content: string;
-  try {
-    content = readFileSync(file, "utf8");
-  } catch {
-    return [];
-  }
+  // СБОЙ ЧТЕНИЯ НЕ ПРЕВРАЩАЕМ В ПУСТОЙ СПИСОК.
+  //
+  // Здесь стоял `catch { return [] }`, и это давало ровно тот дефект, от
+  // которого соседняя функция countSubscriptions защищена с прошлой правки:
+  // ноль при нечитаемом файле выглядит как «никто не купил». Замер 02.09.2026
+  // пробой со сломанным хранилищем: /stats отвечал 200 и «всего 0» по ВСЕМ
+  // тарифам — то есть панель показала бы «продаж нет» при целых продажах.
+  //
+  // Два читателя одного файла вели себя противоположно: countSubscriptions
+  // честно возвращала ok:false, а эта — пустоту. Приводим к одной дисциплине.
+  //
+  // Ронять операцию здесь безопасно: обе зовущие ручки (/stats и /history)
+  // читающие и обе уже ловят исключение, отвечая 500. «Не смогли прочитать»
+  // честнее, чем «у вас ничего нет».
+  //
+  // Отсутствие файла по-прежнему ЧЕСТНЫЙ ноль — это обработано выше.
+  const content = readFileSync(file, "utf8");
   const out: Subscription[] = [];
   const wantEmail = filter?.email?.toLowerCase().trim();
   const wantTier = filter?.tierId;

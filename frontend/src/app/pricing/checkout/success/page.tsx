@@ -116,8 +116,6 @@ function SuccessInner() {
       ? new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000).toLocaleDateString("ru-RU")
       : null;
 
-  const tierName = tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : null;
-
   /*
    * Что человек купил — знаем НЕ ВСЕГДА, и врать об этом нельзя.
    *
@@ -171,6 +169,60 @@ function SuccessInner() {
   });
 
   const [confirmed, setConfirmed] = useState<boolean | null>(null);
+
+  /*
+   * Мерж 06.09.2026: ВТОРОЙ вопрос серверу — из ветки платежей. Первый
+   * (entitlements, ниже) отвечает про АККАУНТ и требует входа; этот — про
+   * ВЫДАЧУ ПО ПЛАТЕЖУ (`/api/pricing/checkout/status?intentId=`), работает и
+   * гостю. Дефолт «Pro» их стороны НЕ взят: правило страницы — не знаем, не
+   * называем.
+   *
+   * Ручка отвечает тремя исходами, и «не смогли проверить» мы НЕ выдаём за
+   * «не выдано»: в этом случае просто оставляем то, что знали до вопроса.
+   * 400 повторять бессмысленно (идентификатора нет и не появится); прочие
+   * неудачи — в повтор: вебхук от кассы приходит за секунды, но не мгновенно.
+   */
+  const [подтверждённый, setПодтверждённый] = useState<string | null>(null);
+  const intentId = sessionId ?? saleId;
+
+  useEffect(() => {
+    if (!intentId) return;
+    let отменено = false;
+    let попыток = 0;
+    const спросить = async () => {
+      попыток += 1;
+      try {
+        const r = await fetch(apiUrl(`/api/pricing/checkout/status?intentId=${encodeURIComponent(intentId)}`));
+        if (r.status === 400) return;
+        if (!r.ok) {
+          if (!отменено && попыток < 8) setTimeout(спросить, 2500);
+          return;
+        }
+        const j = (await r.json()) as { ready?: boolean; tier?: string };
+        if (!отменено && j.ready && j.tier) {
+          setПодтверждённый(j.tier);
+          // Выдача по ЭТОМУ платежу состоялась — это и есть подтверждение,
+          // более сильное, чем совпадение тарифа аккаунта.
+          setConfirmed(true);
+          return;
+        }
+      } catch {
+        // Сеть недоступна — это НЕ «не выдано». Молча пробуем ещё раз.
+      }
+      if (!отменено && попыток < 8) setTimeout(спросить, 2500);
+    };
+    void спросить();
+    return () => {
+      отменено = true;
+    };
+  }, [intentId]);
+
+  // Имя тарифа: подтверждённое сервером сильнее адресной строки; ничего не
+  // знаем — не называем (никакого дефолта).
+  const источникТарифа = подтверждённый ?? tier;
+  const tierName = источникТарифа
+    ? источникТарифа.charAt(0).toUpperCase() + источникТарифа.slice(1)
+    : null;
 
   useEffect(() => {
     if (stub) return;

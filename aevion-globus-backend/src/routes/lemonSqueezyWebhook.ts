@@ -39,7 +39,14 @@
 
 import { Router } from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
+import {
+  provisionSubscription,
+  writeSubscription,
+  readLatestSubscription,
+  возвратКасаетсяДействующей,
+  type Subscription,
+} from "./provisioning";
+import { periodForReference } from "../lib/payment/billingPeriod";
 import {
   referenceForVariantId,
   resolveLemonSqueezyVariant,
@@ -422,10 +429,22 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
       // Значит `source` — это «через какую кассу прошли деньги», а канал —
       // другая ось, и складывать их в одно поле нельзя ни там, ни здесь.
       const channel = payload.meta?.custom_data?.channel?.trim().slice(0, 40);
+      // ПЕРИОД БЕРЁМ ИЗ ССЫЛКИ. Здесь было зашито "monthly", а магазин
+      // продаёт годовые тарифы (LEMON_SQUEEZY_VARIANT_{LITE,MEDIUM,FULL,
+      // PLANET}_ANNUAL — см. data/lemonSqueezyVariants.ts), и витрина
+      // строит ссылку `tier_${id}_annual`. То есть годовая покупка
+      // записывалась месячной, срок доступа считался на месяц, а
+      // следующее событие от кассы пришло бы через одиннадцать.
+      //
+      // Тот же дефект был у gumroad и починен 03.09.2026; у paybox и
+      // paypal правило было изначально. Четвёртая касса отстала молча,
+      // потому что правило жило тремя копиями — теперь оно одно
+      // (lib/payment/billingPeriod).
+      const period = periodForReference(ref ?? "");
       const result = await provisionSubscription({
         email,
         tierId,
-        period: "monthly",
+        period,
         modules,
         source: "lemonsqueezy",
         // ФАКТИЧЕСКИ списанное, а не то, что мы ожидали. Поле amountUsd в записи
@@ -439,6 +458,7 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         // колонки рядом — ожидаемая и списанная — полезнее одной: расхождение
         // между ними и есть сигнал.
         ...(paidUsd === undefined ? {} : { amountUsd: paidUsd }),
+        providerPaymentId: lsSubId,
         ...(channel ? { channel } : {}),
       });
       console.log(`[ls/webhook] ${event} → provisioned ${tierId} for ${email} (ref=${ref ?? "default"})`);
@@ -446,6 +466,24 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
     }
 
     if (DEACTIVATE_EVENTS.has(event)) {
+      // Отзываем ТУ подписку, за которую пришло событие, а не любую.
+      // Правило общее на все кассы — provisioning.возвратКасаетсяДействующей.
+      // У Lemon Squeezy это отмена/истечение конкретной подписки: если у
+      // человека уже есть НОВАЯ платная, отмена старой не должна её гасить.
+      const действующая = readLatestSubscription(email);
+      const отзываем = возвратКасаетсяДействующей(действующая, lsSubId ?? "");
+      if (!отзываем) {
+        console.warn(
+          `[ls/webhook] ${event} относится к ДРУГОЙ подписке: действующая ` +
+            `${действующая?.tierId} не тронута`
+        );
+        capture(new Error("refund_for_older_purchase_kept_current_subscription"), {
+          route: "ls/webhook/deactivate",
+          email,
+          event,
+          currentTier: действующая?.tierId,
+        });
+      }
       const downgrade: Subscription = {
         id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         ts: new Date().toISOString(),
@@ -457,7 +495,7 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         trialDays: 0,
         source: "lemonsqueezy:cancel",
       };
-      writeSubscription(downgrade);
+      if (отзываем) writeSubscription(downgrade);
       console.log(`[ls/webhook] ${event} → downgraded ${email} to free`);
       return res.json({ ok: true, action: "downgraded" });
     }

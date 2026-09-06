@@ -8,6 +8,7 @@ import {
 } from "../services/qcoreai/providers";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { getPool } from "../lib/dbPool";
+import { rateLimit } from "../lib/rateLimit";
 import { safeErrorText } from "../lib/safeError";
 
 const capture = makeServiceCapture("qai");
@@ -241,7 +242,13 @@ function delay(ms: number): Promise<void> {
 }
 
 // POST /api/qai/chat
-qaiRouter.post("/chat", async (req: Request, res: Response) => {
+// Ограничитель на платный ИИ. Свип 06.09.2026: ручка звала модель
+// АНОНИМНО и БЕЗ какого-либо предела темпа — потолком расхода была
+// пропускная способность сети. Учёт расхода — отдельный долг платформы;
+// предел темпа обязателен уже сейчас.
+const qaiAiLimit = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: "qai-ai" });
+
+qaiRouter.post("/chat", qaiAiLimit, async (req: Request, res: Response) => {
   const { message, sessionId, personaId, model: reqModel, provider: reqProvider } = req.body as {
     message?: string;
     sessionId?: string;
@@ -319,7 +326,7 @@ qaiRouter.post("/chat", async (req: Request, res: Response) => {
 });
 
 // POST /api/qai/chat/stream — SSE streaming chat (word-by-word, 40ms cadence)
-qaiRouter.post("/chat/stream", async (req: Request, res: Response) => {
+qaiRouter.post("/chat/stream", qaiAiLimit, async (req: Request, res: Response) => {
   const { message, sessionId, personaId } = req.body as {
     message?: string;
     sessionId?: string;

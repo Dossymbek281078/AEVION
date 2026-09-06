@@ -2,6 +2,7 @@
 import { makeServiceCapture } from "../lib/sentry/platform";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { rateLimit } from "../lib/rateLimit";
 import { ensureQMediaTables } from "../lib/ensureQMediaTables";
 import {
   listPublicTracks, listMyTracks, getTrack, saveTrack, deleteTrack, bumpPlayCount,
@@ -324,7 +325,11 @@ qmediaRouter.get("/me/likes", async (req, res) => {
 
 /* ── AI Tools ── */
 
-qmediaRouter.post("/ai/generate-lyrics", async (req, res) => {
+// Ограничитель на платный ИИ (свип 06.09.2026: звалось анонимно и без
+// предела темпа вовсе). Учёт расхода — отдельный платформенный долг.
+const qmediaAiLimit = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: "qmedia-ai" });
+
+qmediaRouter.post("/ai/generate-lyrics", qmediaAiLimit, async (req, res) => {
   try {
     const { genre, mood, theme, lines } = req.body || {};
     const provider = getProviders().find(p => p.configured);
@@ -341,7 +346,7 @@ qmediaRouter.post("/ai/generate-lyrics", async (req, res) => {
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "generate lyrics failed" }); }
 });
 
-qmediaRouter.post("/ai/generate-title", async (req, res) => {
+qmediaRouter.post("/ai/generate-title", qmediaAiLimit, async (req, res) => {
   try {
     const { genre, mood } = req.body || {};
     const provider = getProviders().find(p => p.configured);
@@ -380,7 +385,7 @@ qmediaRouter.post("/ai/generate-color-palette", async (req, res) => {
   } catch (err) { captureQMediaError(err, { route: "qmedia" }); res.status(500).json({ error: "generate palette failed" }); }
 });
 
-qmediaRouter.post("/ai/describe-video", async (req, res) => {
+qmediaRouter.post("/ai/describe-video", qmediaAiLimit, async (req, res) => {
   try {
     const { title, category } = req.body || {};
     const provider = getProviders().find(p => p.configured);

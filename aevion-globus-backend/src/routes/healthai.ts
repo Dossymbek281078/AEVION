@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { rateLimit } from "../lib/rateLimit";
 import { getPool } from "../lib/dbPool";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { smartComplete } from "../services/qcoreai/smartComplete";
@@ -1017,7 +1018,13 @@ async function callLlmGemini(
   return { advice: reply, model };
 }
 
-healthaiRouter.post("/check-llm", async (req: Request, res: Response) => {
+// Ограничитель на платный ИИ (свип 06.09.2026: звалось анонимно и без
+// предела темпа вовсе). Учёт расхода — отдельный платформенный долг.
+// У /plan/:profileId особая беда: платная цепочка из ТРЁХ провайдеров на GET —
+// её дёргали бы префетчи браузеров и краулеры.
+const healthaiAiLimit = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: "healthai-ai" });
+
+healthaiRouter.post("/check-llm", healthaiAiLimit, async (req: Request, res: Response) => {
   const body = req.body || {};
   if (!body.profileId || typeof body.profileId !== "string") {
     return res.status(400).json({ error: "profileId-required" });
@@ -1957,7 +1964,7 @@ type GeneratedPlan = {
   rationale: string[];
 };
 
-healthaiRouter.get("/plan/:profileId", async (req: Request, res: Response) => {
+healthaiRouter.get("/plan/:profileId", healthaiAiLimit, async (req: Request, res: Response) => {
   const profileId = qstr(req.params.profileId);
   const profile = await store.getProfile(profileId);
   if (!profile) return res.status(404).json({ error: "profile-not-found" });

@@ -26,6 +26,7 @@ import { readJsonFile, updateJsonFile } from "../lib/jsonFileStore";
 import { rateLimit } from "../lib/rateLimit";
 import { requireAuth } from "../lib/authJwt";
 import { countChatTurns, listChatTurns, recordChatTurn, type ChatTurn } from "../lib/chatHistory";
+import { monthlyQuotaHeadroom, QUOTA_CALL_ESTIMATE_TOKENS } from "../lib/qcoreQuota";
 import { usageToTokens } from "../lib/usageTokens";
 import { costUsd } from "../services/qcoreai/pricing";
 import { makeServiceCapture } from "../lib/sentry/platform";
@@ -534,6 +535,35 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
   const agents = Array.isArray(req.body?.agents) ? req.body.agents : [];
   if (agents.length === 0) return res.status(400).json({ error: "agents required" });
   if (agents.length > 8) return res.status(400).json({ error: "max 8 agents per dispatch" });
+
+  // Предполётная проверка квоты НА ВЕСЬ ВЕЕР (гонка 06.09.2026).
+  //
+  // Каждый агент зовёт /api/qcoreai/chat, и квота проверялась ТОЛЬКО там —
+  // поштучно. Восемь параллельных проверок читали одно used до первой записи
+  // в леджер: у free с used=99 900 из 100 000 проходили все восемь платных
+  // вызовов. Учёт токенов пост-фактум, вернуть списание нельзя — поэтому
+  // лекарство не резерв, а требование запаса на всю пачку по оценке
+  // QUOTA_CALL_ESTIMATE_TOKENS. Одиночный вызов ведёт себя как раньше
+  // (перелив на один ответ врождён посточному учёту); веер теперь не хуже
+  // последовательного пути. Поштучная проверка в /chat остаётся второй линией.
+  const quota = await monthlyQuotaHeadroom(req);
+  if (quota) {
+    const need = (agents.length - 1) * QUOTA_CALL_ESTIMATE_TOKENS;
+    if (quota.used >= quota.limit || quota.used + need >= quota.limit) {
+      const fits = Math.max(0, Math.floor((quota.limit - quota.used) / QUOTA_CALL_ESTIMATE_TOKENS));
+      return res.status(402).json({
+        error: "upgrade_required",
+        module: "multichat",
+        reason: "monthly_token_quota_insufficient_for_fan",
+        agentsRequested: agents.length,
+        agentsAffordable: Math.min(fits, agents.length),
+        usedTokens: quota.used,
+        limitTokens: quota.limit,
+        requiredTiers: quota.requiredTiers,
+        message: `Месячной квоты токенов не хватит на консилиум из ${agents.length} агентов (использовано ${quota.used.toLocaleString("ru-RU")} из ${quota.limit.toLocaleString("ru-RU")}). Уменьшите число агентов или поднимите тариф.`,
+      });
+    }
+  }
 
   // Одинаковые id — отказ, а не тихая потеря ответа.
   //

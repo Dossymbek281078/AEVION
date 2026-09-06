@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
+import { ModuleMaturity } from "@/components/ModuleMaturity";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
@@ -19,5 +20,6 @@ export const metadata: Metadata = {
 };
 
 export default function DeepSanLayout({ children }: { children: ReactNode }) {
-  return <>{children}</>;
+  return <><ModuleMaturity id="deepsan" />
+      {children}</>;
 }

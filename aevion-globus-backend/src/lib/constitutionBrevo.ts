@@ -30,7 +30,10 @@ export type ConstitutionEmailPayload = {
   tags?: string[];
 };
 
-async function sendBrevoEmail(payload: ConstitutionEmailPayload): Promise<{
+// export добавлен 06.09.2026: отправитель нужен scripts/launch-announce-send.ts
+// (письмо запуска 10.09); прежде скрипт импортировал его вопреки локальности,
+// и это жило только потому, что scripts/ не проверялись типами.
+export async function sendBrevoEmail(payload: ConstitutionEmailPayload): Promise<{
   ok: boolean;
   messageId?: string;
   error?: string;
@@ -322,6 +325,22 @@ const LIVE_ENTRIES: Array<{ prefix: string; name: string; page: string; nextStep
       "Там же рейтинг и турниры, а партию с движком удобнее играть с компьютера.",
   },
 ];
+
+/**
+ * Живой ли модуль ПО СЛАГУ — для ворот отправки письма запуска
+ * (scripts/launch-announce-send.ts). Экспортировано 06.09.2026: скрипт
+ * раньше читал поле liveFromUtcMidnight прямо из LAUNCH_MODULES, поле
+ * переехало сюда (LIVE_ENTRIES.liveFrom), и скрипт молча сломался — поймал
+ * пятый конфиг типов на сборке цикла №3.
+ * Политика прежняя: нет записи с датой — модуль считается живым (дата не
+ * назначена ≠ запрещён); есть — решает isLiveNow по календарю Алматы.
+ */
+export function isModuleLiveNow(slug: string, now: Date = new Date()): boolean {
+  const s = slug.toLowerCase().replace(/^en-/, "");
+  const entry = LIVE_ENTRIES.find((m) => s === m.prefix || s.startsWith(`${m.prefix}-`));
+  if (!entry) return true;
+  return isLiveNow(entry.liveFrom, now);
+}
 
 function liveEntryFromSource(source?: string) {
   if (!source) return null;

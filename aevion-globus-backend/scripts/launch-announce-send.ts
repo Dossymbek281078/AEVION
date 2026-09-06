@@ -43,12 +43,14 @@ import { dirname, join } from "node:path";
 import {
   LAUNCH_MODULES,
   buildLaunchEmail,
-  isLiveNow,
   planLaunchAnnounce,
   planSendBatch,
   checkSendGate,
 } from "../src/lib/launchAnnounce";
-import { sendBrevoEmail } from "../src/lib/constitutionBrevo";
+// Живость модуля и отправитель живут у данных о датах (LIVE_ENTRIES), а не в
+// launchAnnounce: поле liveFromUtcMidnight переехало туда, и прямое чтение
+// из LAUNCH_MODULES молча сломалось (поймано типами scripts/ 06.09.2026).
+import { sendBrevoEmail, isModuleLiveNow } from "../src/lib/constitutionBrevo";
 import { extractRows } from "./launch-announce-dry";
 
 const BASE = (process.env.BASE || "https://api.aevion.app").replace(/\/+$/, "");
@@ -141,7 +143,7 @@ async function main(): Promise<void> {
     slug,
     sendFlag: ЖИВОЙ,
     confirmEnv: ПОДТВЕРЖДЕНИЕ,
-    isLive: isLiveNow(модуль.liveFromUtcMidnight),
+    isLive: isModuleLiveNow(slug),
   });
   if (!ворота.allowed && ворота.reason !== "dry") {
     const тексты: Record<string, string> = {

@@ -50,6 +50,21 @@ import { getTier } from "../data/pricing";
 
 const PUBLIC_BASE = (process.env.AEVION_PUBLIC_BASE_URL ?? "https://aevion.app").replace(/\/+$/, "");
 
+/**
+ * Оценка одного вызова чата в токенах — для ПРЕДПОЛЁТНОЙ проверки вееров.
+ *
+ * Учёт токенов здесь пост-фактум (реальный расход известен после ответа),
+ * поэтому у любой проверки есть врождённый перелив на один вызов. Гонка
+ * 06.09.2026: N параллельных вызовов читали одно used до первой записи —
+ * перелив умножался на размер веера (8 у мультичата, слой консилиума, пул
+ * batch). Лекарство — требовать запас на ВЕСЬ веер по этой оценке.
+ *
+ * Число можно ЗАВЫШАТЬ (веер раньше услышит «не хватит») и нельзя занижать
+ * (занижение возвращает гонку). 1200 ≈ системный промпт + вопрос + ответ до
+ * 200 слов с запасом.
+ */
+export const QUOTA_CALL_ESTIMATE_TOKENS = 1200;
+
 /** Monthly free-tier token allowance for qcoreai. Env-overridable. */
 export function freeTokenLimit(): number {
   const raw = process.env.QCOREAI_FREE_TOKENS_PER_MONTH;
@@ -85,26 +100,32 @@ async function block(
  * metering error — never blocks traffic or breaks the endpoint because the
  * counter query hiccuped.
  */
-export async function enforceFreeTokenQuota(req: Request, res: Response): Promise<boolean> {
+export type MonthlyQuotaState = { used: number; limit: number; rawTier: string; requiredTiers: string[] };
+
+/**
+ * Состояние месячной квоты вызывающего — ТА ЖЕ политика, что у
+ * enforceFreeTokenQuota (флаги, планы, fail-open), но без 402: null значит
+ * «не метрируется» (аноним, спящий флаг, безлимит, отказ счётчика).
+ * Нужна веерам: они решают ДО старта, хватит ли остатка на всю пачку.
+ */
+export async function monthlyQuotaHeadroom(req: Request): Promise<MonthlyQuotaState | null> {
   const auth = verifyBearerOptional(req) as { sub?: string } | null;
-  if (!auth?.sub) return false; // anonymous — unmetered, unchanged
+  if (!auth?.sub) return null; // anonymous — unmetered, unchanged
 
   const plan = resolveUserPlan(req);
 
   if (plan.tier === "free") {
-    if (process.env.QCOREAI_FREE_QUOTA !== "1") return false; // dormant unless flipped on
+    if (process.env.QCOREAI_FREE_QUOTA !== "1") return null; // dormant unless flipped on
     let used = 0;
     try {
       used = await getMonthlyTokens(auth.sub);
     } catch {
-      return false; // fail open — a metering failure must not break chat
+      return null; // fail open — a metering failure must not break chat
     }
-    const limit = freeTokenLimit();
-    if (used < limit) return false;
-    return block(res, { rawTier: "free", used, limit, requiredTiers: ["medium", "full", "enterprise"] });
+    return { used, limit: freeTokenLimit(), rawTier: "free", requiredTiers: ["medium", "full", "enterprise"] };
   }
 
-  if (process.env.QCOREAI_TIER_QUOTA !== "1") return false; // dormant unless flipped on
+  if (process.env.QCOREAI_TIER_QUOTA !== "1") return null; // dormant unless flipped on
 
   // Use the RAW tier id (e.g. "pro"/Universe), not the canonical one — "pro"
   // and "full" both normalize to canonical "full" for module-access gating,
@@ -112,17 +133,22 @@ export async function enforceFreeTokenQuota(req: Request, res: Response): Promis
   // one lookup here.
   const tier = getTier(plan.rawTier) ?? getTier(plan.tier);
   const limit = tier?.limits.llmTokensPerMonth;
-  if (limit == null) return false; // unlimited (enterprise) or unrecognized tier id
+  if (limit == null) return null; // unlimited (enterprise) or unrecognized tier id
 
   let used = 0;
   try {
     used = await getMonthlyTokens(auth.sub);
   } catch {
-    return false; // fail open — a metering failure must not break chat
+    return null; // fail open — a metering failure must not break chat
   }
-  if (used < limit) return false;
+  return { used, limit, rawTier: plan.rawTier, requiredTiers: ["enterprise"] };
+}
 
-  return block(res, { rawTier: plan.rawTier, used, limit, requiredTiers: ["enterprise"] });
+export async function enforceFreeTokenQuota(req: Request, res: Response): Promise<boolean> {
+  const state = await monthlyQuotaHeadroom(req);
+  if (!state) return false;
+  if (state.used < state.limit) return false;
+  return block(res, state);
 }
 
 /**
@@ -166,12 +192,17 @@ export async function enforcePremiumModelQuota(
    above — one policy, two delivery mechanisms. */
 
 export type PremiumQuotaHit = { usedTokens: number; limitTokens: number };
-export type PremiumQuotaGate = (provider: string, model: string) => Promise<PremiumQuotaHit | null>;
+/** projectedCalls — размер ПАРАЛЛЕЛЬНОЙ группы, которую этот вызов открывает:
+ *  слой консилиума из 8 премиум-моделей обязан пройти проверку с запасом на
+ *  все восемь, иначе N одновременных проверок читают одно used до первой
+ *  записи и предел переливается ×N (гонка 06.09.2026). */
+export type PremiumQuotaGate = (provider: string, model: string, projectedCalls?: number) => Promise<PremiumQuotaHit | null>;
 
 async function checkPremiumQuotaForPayload(
   payload: Record<string, unknown> | null,
   provider: string,
   model: string,
+  projectedCalls = 1,
 ): Promise<PremiumQuotaHit | null> {
   if (process.env.QCOREAI_PREMIUM_QUOTA !== "1") return null; // dormant unless flipped on
   if (!isPremiumModel(provider, model)) return null; // not a premium model — nothing to check
@@ -190,7 +221,10 @@ async function checkPremiumQuotaForPayload(
   } catch {
     return null; // fail open — a metering failure must not break the run
   }
-  if (used < limit) return null;
+  // Запас на всю параллельную группу: последний вызов группы стартует с тем
+  // же used, что и первый, — значит проверять надо худший случай.
+  const reserve = Math.max(0, projectedCalls - 1) * QUOTA_CALL_ESTIMATE_TOKENS;
+  if (used + reserve < limit) return null;
 
   return { usedTokens: used, limitTokens: limit };
 }
@@ -203,5 +237,5 @@ export function premiumQuotaGateForRequest(req: Request): PremiumQuotaGate {
 
 /** Gate for orchestrator runs started outside Express (e.g. the WS server). */
 export function premiumQuotaGateForPayload(payload: Record<string, unknown> | null): PremiumQuotaGate {
-  return (provider, model) => checkPremiumQuotaForPayload(payload, provider, model);
+  return (provider, model, projectedCalls) => checkPremiumQuotaForPayload(payload, provider, model, projectedCalls);
 }

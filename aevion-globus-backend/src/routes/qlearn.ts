@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { rateLimit } from "../lib/rateLimit";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
@@ -1331,7 +1332,10 @@ qlearnRouter.get("/me/progress", async (req: Request, res: Response) => {
 });
 
 // POST /api/qlearn/me/courses/:courseId/ai-generate-lesson — AI lesson generator
-qlearnRouter.post("/me/courses/:courseId/ai-generate-lesson", async (req: Request, res: Response) => {
+// Ограничитель на платный ИИ (свип 06.09.2026: auth был, предела темпа не было).
+const qlearnAiLimit = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: "qlearn-ai" });
+
+qlearnRouter.post("/me/courses/:courseId/ai-generate-lesson", qlearnAiLimit, async (req: Request, res: Response) => {
   const auth = verifyBearerOptional(req);
   if (!auth) { res.status(401).json({ error: "Authentication required" }); return; }
   const courseId = param(req, "courseId");

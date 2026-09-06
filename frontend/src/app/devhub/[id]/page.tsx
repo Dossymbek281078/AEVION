@@ -476,6 +476,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   // Live phase of the current generation (SSE) — honest states only, each
   // corresponds to something the backend is actually doing right now.
   const [genStage, setGenStage] = useState<string | null>(null);
+  // Фиксация происхождения генерации в QRight (спека 06.09). Галочка живёт
+  // в localStorage как удобство: серверная правда — сам ответ генерации.
+  const [stampProvenance, setStampProvenance] = useState(false);
+  useEffect(() => {
+    try { setStampProvenance(localStorage.getItem("devhub_provenance") === "1"); } catch { /* приватное окно */ }
+  }, []);
   // «Остановить генерацию»: до 05.09.2026 начатую генерацию нельзя было
   // отменить вовсе — человек смотрел на спиннер 1-3 минуты без выбора.
   const genAbortRef = useRef<AbortController | null>(null);
@@ -537,11 +543,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [agentStreaming, setAgentStreaming] = useState(true);
   const [agentLiveStep, setAgentLiveStep] = useState<number | null>(null);
   const [agentTemplates, setAgentTemplates] = useState<Array<{ id: string; name: string; description: string; steps: AgentStep[] }>>([]);
-  const [generatedFiles, setGeneratedFiles] = useState<Array<{ path: string; language: string }>>([]);
   type ChatFileChange = { path: string; language: string; isNew: boolean; added: number; removed: number; diff: string | null };
   type ChatMsg =
     | { role: "user"; text: string; at: string }
-    | { role: "assistant"; at: string; checkpointId?: string; files: ChatFileChange[]; note?: string }
+    | { role: "assistant"; at: string; checkpointId?: string; files: ChatFileChange[]; note?: string; provenance?: { certId: string; verifyUrl: string } }
     // Idea hook: the project clearly stores data but has no schema yet —
     // one click designs it (POST /database/design) without retyping context.
     | { role: "hint"; kind: "design_db" | "deploy" | "manifest" | "provision_db"; description: string; at: string };
@@ -626,7 +631,6 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [videoStatus, setVideoStatus] = useState<string | null>(null);
 
   // Domain provision state
-  const [domainStatus, setDomainStatus] = useState<{ customDomain?: string; url?: string } | null>(null);
 
   // DeepL bulk translate state (N files × M langs)
   const BULK_LANG_OPTIONS = [
@@ -1213,7 +1217,6 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     if (generating) return;
     if (!userText || !project) return;
     setGenerating(true);
-    setGeneratedFiles([]);
     const genCtrl = new AbortController();
     genAbortRef.current = genCtrl;
     const sentImage = aiImage;
@@ -1222,6 +1225,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     try {
       const generateBody = JSON.stringify({
         prompt: userText, stack: project.stack,
+        ...(stampProvenance ? { provenance: true } : {}),
         // Prior turns give follow-ups their referent ("make the button blue").
         history: chatHistory
           .filter((m) => m.role !== "hint") // hints are UI affordances, not dialog
@@ -1285,7 +1289,6 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       }
       const newGenerated = data.files || [];
       предупредитьЕслиНеСверили(data);
-      setGeneratedFiles(newGenerated.map((f: any) => ({ path: f.path, language: f.language })));
       // Diffs are computed against the files as they were BEFORE this
       // generation (still in state here — the list reload happens below).
       const changes = newGenerated.map((gf: { path: string; language?: string; content: string }) => {
@@ -1313,7 +1316,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       } else {
         showToast(`Создано файлов: ${newGenerated.length}`, "success");
       }
-      setChatHistory((h) => [...h, { role: "assistant", at: new Date().toISOString(), checkpointId: data.checkpointId, files: changes, note }]);
+      setChatHistory((h) => [...h, { role: "assistant", at: new Date().toISOString(), checkpointId: data.checkpointId, files: changes, note, ...(data.provenance ? { provenance: data.provenance } : {}) }]);
+      if (stampProvenance && !data.provenance) {
+        // Просили отметку, а её нет — молчать нельзя (§16). Причину несёт ответ.
+        showToast(`Происхождение не зафиксировано: ${data.provenanceError || "причина неизвестна"}. Код сгенерирован и сохранён.`, "warning");
+      }
       // Data-shaped idea + no schema yet → offer to design the database with
       // the context already in hand (rules live in lib/devhubHints — tested).
       setChatHistory((h) => {
@@ -1387,7 +1394,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const data = await r.json();
       setCheckpointHistory(data.checkpoints || []);
     } catch {
-      // leave whatever history was already loaded — a stale list beats a blank one here
+      // leave whatever history was already loaded — a stale list beats a blank one here.
+      // Но если истории ещё НЕ БЫЛО, молчание оставляло пустой список без
+      // причины: человек решал, что правок не было вовсе. Тост — вне
+      // setState-апдейтера: React зовёт апдейтеры дважды (известный класс).
+      if (checkpointHistory.length === 0) {
+        showToast("История правок не загрузилась — обновите страницу", "warning");
+      }
     } finally {
       setLoadingHistory(false);
     }
@@ -3824,6 +3837,17 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                     )}
                                   </div>
                                 ))}
+                                {msg.provenance && (
+                                  <a
+                                    href={msg.provenance.verifyUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title="Хеш результата и время зафиксированы в реестре QRight — страница проверки открывается без входа"
+                                    style={{ display: "inline-block", marginTop: 4, marginRight: 8, padding: "4px 10px", background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: 6, fontSize: 11, fontWeight: 600, color: "#065f46", textDecoration: "none" }}
+                                  >
+                                    ✔ Происхождение зафиксировано
+                                  </a>
+                                )}
                                 {msg.checkpointId && (
                                   <button
                                     onClick={() => restoreToCheckpoint(msg.checkpointId!)}
@@ -3974,6 +3998,18 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   >
                     {generating ? "Генерируем…" : "Сгенерировать код (Ctrl+Enter)"}
                   </button>
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "#475569", cursor: "pointer" }}
+                    title="После генерации хеш результата, модель и время фиксируются в публичном реестре QRight (промпт не публикуется — только его хеш). Проверяемое происхождение ИИ-кода — то, чего требует EU AI Act.">
+                    <input
+                      type="checkbox"
+                      checked={stampProvenance}
+                      onChange={(e) => {
+                        setStampProvenance(e.target.checked);
+                        try { localStorage.setItem("devhub_provenance", e.target.checked ? "1" : "0"); } catch { /* приватное окно */ }
+                      }}
+                    />
+                    Фиксировать происхождение (QRight)
+                  </label>
                   {generating && genStage && (
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
                       <div style={{ fontSize: 12, color: "#0f766e", textAlign: "center" }}>
@@ -4923,7 +4959,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Размер</label>
                           <select value={imgSize} onChange={(e) => setImgSize(e.target.value)}
                             style={{ width: "100%", padding: "7px 10px", border: "1px solid #e2e8f0", borderRadius: 7, fontSize: 13 }}>
-                            <option value="1024x1024">Square (1024)</option>
+                            <option value="1024x1024">Квадрат (1024)</option>
                             <option value="1792x1024">Landscape (1792×1024)</option>
                             <option value="1024x1792">Portrait (1024×1792)</option>
                           </select>
@@ -5305,7 +5341,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       </div>
                       <div style={{ display: "flex", gap: 8 }}>
                         <div style={{ flex: 1 }}>
-                          <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Source (auto if empty)</label>
+                          <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Исходный язык (пусто = сам определит)</label>
                           <select value={trSource} onChange={(e) => setTrSource(e.target.value)}
                             style={{ width: "100%", padding: "6px 8px", border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 12 }}>
                             <option value="">Определить язык</option>
@@ -5333,7 +5369,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           <div style={{ fontSize: 13, color: "#0f172a", whiteSpace: "pre-wrap" }}>{trResult.text}</div>
                           <button onClick={() => navigator.clipboard.writeText(trResult.text)}
                             style={{ alignSelf: "flex-start", padding: "4px 10px", background: "#0d9488", color: "#fff",
-                              border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Copy</button>
+                              border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Копировать</button>
                         </div>
                       )}
                       <button
@@ -5622,7 +5658,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
                           cursor: tplBuilderLoading ? "not-allowed" : "pointer",
                         }}>
-                        {tplBuilderLoading ? "Creating..." : "Create template"}
+                        {tplBuilderLoading ? "Создаю..." : "Создать шаблон"}
                       </button>
                     </div>
                   )}
@@ -5964,7 +6000,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         )}
                         {step.type === "music" && (
                           <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
-                            <label style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>Length (s):</label>
+                            <label style={{ fontSize: 11, color: "#64748b", fontWeight: 600 }}>Длина (с):</label>
                             <input type="number" min={10} max={300} value={step.lengthSeconds ?? 30}
                               onChange={(e) => updateAgentStep(i, { lengthSeconds: Math.max(10, Math.min(300, Number(e.target.value) || 30)) })}
                               style={{ width: 70, padding: "3px 6px", border: "1px solid #e2e8f0", borderRadius: 5, fontSize: 11 }} />

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { callProvider, getProviders } from "../services/qcoreai/providers";
+import { rateLimit } from "../lib/rateLimit";
 
 /**
  * AEVION QMelanin — anti-graying engine.
@@ -421,7 +422,11 @@ qmelaninRouter.post("/track", (req: Request, res: Response) => {
  *   foods across meals — it must not add supplements or invent doses. Falls back
  *   to a deterministic day-plan when no AI provider is configured.
  */
-qmelaninRouter.post("/ai-plan", async (req: Request, res: Response) => {
+// Ограничитель на платный ИИ (свип 06.09.2026: звалось анонимно и без
+// предела темпа вовсе). Учёт расхода — отдельный платформенный долг.
+const qmelaninAiLimit = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: "qmelanin-ai" });
+
+qmelaninRouter.post("/ai-plan", qmelaninAiLimit, async (req: Request, res: Response) => {
   const b = req.body || {};
   let deficientKeys: BiomarkerKey[] = [];
   if (Array.isArray(b.deficientKeys)) {

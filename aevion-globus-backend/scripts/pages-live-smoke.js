@@ -127,6 +127,16 @@ const PAGES = [
   // адреса, но сторож их не знал — то есть их падение прошло бы незамеченным
   // ровно так же, как пропажа /go в июле.
   "/devhub/launch",           // запуск 10.09, самый дорогой чек платформы
+  // Добавлено 06.09.2026: единственная дверь к подключению УЖЕ ОПЛАЧЕННОЙ
+  // покупки ($149/мес). Пропади она — заплативший не свяжет покупку с
+  // браузером, и никто не заметит.
+  "/devhub/link",
+  // Галерея DevHub — три НАСТОЯЩИХ приложения, которыми витрина доказывает
+  // продукт (собраны 06.09.2026 через живой прод). Пропадёт адрес — витрина
+  // начнёт обещать мёртвое, и никто не заметит.
+  "https://465693ea.aevion-project-7760cf.pages.dev",
+  "https://909ef2a1.aevion-project-af430e.pages.dev",
+  "https://75d87932.aevion-project-b85b54.pages.dev",
   "/multichat-engine/launch", // запуск 20.09
   // Добавлено 19.08.2026. Замер покрытия: сторож смотрел 39 публичных
   // страниц верхнего уровня из 92 — то есть был зелёным, наблюдая меньше
@@ -252,13 +262,21 @@ let pending = 0;
 const deployedNowPending = [];
 
 async function checkPage(p) {
-  const url = BASE + p;
+  // Абсолютные адреса (галерея DevHub на *.pages.dev) проверяются как есть;
+  // относительные, как раньше, клеятся к BASE.
+  const url = p.startsWith("http") ? p : BASE + p;
   try {
     const r = await fetch(url, { redirect: "follow", headers: { Accept: "text/html" } });
     const body = await r.text();
     const okStatus = r.ok;
-    const okSize = body.length > 5000;
-    const okBrand = /aevion/i.test(body);
+    // Внешние страницы галереи — ПРИЛОЖЕНИЯ ПОЛЬЗОВАТЕЛЕЙ: они легковесны
+    // (3-5 КБ) и слова «aevion» не содержат по определению. К ним применимы
+    // только код ответа и непустое тело; наши страницы проверяются как прежде.
+    // Проверено на живых примерах ДО коммита: 4047-4913 байт, бренда нет —
+    // со старыми критериями сторож краснел бы с первого дня.
+    const external = p.startsWith("http");
+    const okSize = body.length > (external ? 1500 : 5000);
+    const okBrand = external || /aevion/i.test(body);
     if (okStatus && okSize && okBrand) {
       if (PENDING_DEPLOY[p]) deployedNowPending.push(p);
       pass++;

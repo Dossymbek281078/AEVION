@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { callProvider, getProviders } from "../services/qcoreai/providers";
+import { rateLimit } from "../lib/rateLimit";
 
 /**
  * AEVION Longevity — the measure → act → re-measure protocol engine.
@@ -299,7 +300,11 @@ longevityRouter.post("/assess", (req: Request, res: Response) => {
  *   The AI only sequences the SAME items across the week — it must not add
  *   supplements, drugs or doses. Falls back to a deterministic week when no AI.
  */
-longevityRouter.post("/ai-plan", async (req: Request, res: Response) => {
+// Ограничитель на платный ИИ (свип 06.09.2026: звалось анонимно и без
+// предела темпа вовсе). Учёт расхода — отдельный платформенный долг.
+const longevityAiLimit = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: "longevity-ai" });
+
+longevityRouter.post("/ai-plan", longevityAiLimit, async (req: Request, res: Response) => {
   const b = req.body || {};
   const flags = (b.flags || {}) as Record<string, unknown>;
   const activeFlags = Object.keys(flags).filter((k) => Boolean(flags[k]));

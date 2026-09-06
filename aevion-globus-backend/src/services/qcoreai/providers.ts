@@ -693,22 +693,82 @@ function stubReply(messages: ChatMessage[]): string {
   return `Rigorous take on “${q}”: state the definition, reason step by step, and flag the one uncertainty. Correctness first; assumptions made explicit.`;
 }
 
+/**
+ * Учёт расхода В КЛИЕНТЕ, а не в обработчиках (проект 06.09.2026).
+ *
+ * Свип показал: 49 из 52 платных точек вызова вне месячного леджера — учёт,
+ * добавляемый по-ручечно, отстаёт вечно, а через ЭТОТ клиент проходят все.
+ * meter — необязательный: ни один существующий вызов не ломается; вызовы с
+ * userId пишутся в QCoreTokenLedger (addTokenUsage), вызовы БЕЗ метра
+ * считаются в сводку неучтённых — молча ослепнуть хвост не может (§16).
+ *
+ * НЕ передавать meter там, где учёт уже есть своим путём: оркестратор пишет
+ * QCoreMessage (стримы), devhub-генерация ограничена своей счётной квотой.
+ * enforcement здесь НЕ живёт: месяц честных чисел, потом решения о пределах.
+ */
+export type CallMeter = { userId?: string | null; module?: string };
+
+export function tokensFromUsage(usage: any): { tin: number; tout: number } {
+  if (!usage) return { tin: 0, tout: 0 };
+  return {
+    tin: Number(usage.input_tokens ?? usage.prompt_tokens ?? usage.promptTokenCount ?? 0) || 0,
+    tout: Number(usage.output_tokens ?? usage.completion_tokens ?? usage.candidatesTokenCount ?? 0) || 0,
+  };
+}
+
+const unmeteredCalls = new Map<string, number>();
+let unmeteredLastLogAt = 0;
+export function __unmeteredCallCounts(): ReadonlyMap<string, number> { return unmeteredCalls; }
+
+function noteUnmetered(module: string) {
+  unmeteredCalls.set(module, (unmeteredCalls.get(module) ?? 0) + 1);
+  const nowMs = Date.now();
+  if (nowMs - unmeteredLastLogAt > 3_600_000) {
+    unmeteredLastLogAt = nowMs;
+    const rows = [...unmeteredCalls.entries()].map(([m, n]) => `${m}=${n}`).join(", ");
+    console.warn(`[qcoreai] платные вызовы БЕЗ учёта за процесс: ${rows}`);
+  }
+}
+
+async function meterCall(meter: CallMeter | undefined, providerId: string, model: string, usage: any): Promise<void> {
+  if (!meter || !meter.userId) {
+    noteUnmetered(meter?.module ?? "unknown");
+    return;
+  }
+  const { tin, tout } = tokensFromUsage(usage);
+  try {
+    // Ленивый импорт: store статически импортирует providers, обратное ребро
+    // замкнуло бы цикл модулей.
+    const { addTokenUsage } = await import("./store");
+    await addTokenUsage(meter.userId, tin, tout, { provider: providerId, model });
+  } catch (e) {
+    // Учёт не роняет ответ, ради которого его зовут, — но и не молчит.
+    console.error(`[qcoreai] учёт вызова не записан (${meter.module ?? "?"}):`, e instanceof Error ? e.message : e);
+  }
+}
+
 export async function callProvider(
   providerId: string,
   messages: ChatMessage[],
   model: string,
   temperature: number,
   images?: ChatImage[],
-  maxTokens?: number
+  maxTokens?: number,
+  meter?: CallMeter
 ): Promise<CallResult> {
   if (providerId === "stub") {
     const reply = stubReply(messages);
-    return { reply, model, usage: { input_tokens: 40, output_tokens: reply.split(/\s+/).length } };
+    const res = { reply, model, usage: { input_tokens: 40, output_tokens: reply.split(/\s+/).length } };
+    await meterCall(meter, providerId, model, res.usage);
+    return res;
   }
-  if (providerId === "anthropic") return callAnthropic(messages, model, temperature, images, maxTokens);
-  if (providerId === "gemini") return callGemini(messages, model, temperature, images, maxTokens);
-  if (OPENAI_COMPAT[providerId]) return callOpenAICompat(providerId, messages, model, temperature, images, maxTokens);
-  throw new Error("No AI provider configured");
+  let res: CallResult;
+  if (providerId === "anthropic") res = await callAnthropic(messages, model, temperature, images, maxTokens);
+  else if (providerId === "gemini") res = await callGemini(messages, model, temperature, images, maxTokens);
+  else if (OPENAI_COMPAT[providerId]) res = await callOpenAICompat(providerId, messages, model, temperature, images, maxTokens);
+  else throw new Error("No AI provider configured");
+  await meterCall(meter, providerId, model, res.usage);
+  return res;
 }
 
 async function* streamStub(messages: ChatMessage[]): AsyncGenerator<StreamEvent> {
@@ -999,14 +1059,15 @@ export async function callProviderResilient(
   providerId: string,
   messages: ChatMessage[],
   model: string,
-  temperature: number
+  temperature: number,
+  meter?: CallMeter
 ): Promise<CallResult> {
   const candidates = fallbackCandidates(providerId, model);
   let lastErr: unknown;
   for (let i = 0; i < candidates.length; i++) {
     const t0 = Date.now();
     try {
-      const res = await callProvider(providerId, messages, candidates[i], temperature);
+      const res = await callProvider(providerId, messages, candidates[i], temperature, undefined, undefined, meter);
       recordOutcome(providerId, candidates[i], true, Date.now() - t0);
       return res;
     } catch (e) {

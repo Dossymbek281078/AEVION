@@ -6,6 +6,7 @@ const captureQCoreAIError = makeServiceCapture("qcoreai");
 import { verifyBearerOptional } from "../lib/authJwt";
 import {
   enforceFreeTokenQuota,
+  monthlyQuotaHeadroom,
   enforcePremiumModelQuota,
   freeTokenLimit,
   premiumQuotaGateForRequest,
@@ -59,6 +60,7 @@ import {
   validateWebhookUrl,
 } from "../services/qcoreai/userWebhooks";
 import {
+  updateRun,
   applyRefinement,
   buildHistoryContext,
   buildThreadContext,
@@ -3629,11 +3631,29 @@ async function runBatchItem(opts: {
   maxRevisions: number;
   maxCostUsd?: number;
   premiumGate?: PremiumQuotaGate;
+  /** Живая проверка месячной квоты ПЕРЕД стартом элемента. Гонка 06.09.2026:
+   *  квота проверялась ОДИН раз на весь batch из 20 прогонов («на одного,
+   *  расход на двадцать»), а пул из 5 стартовал элементы с одинаковым used.
+   *  Проверка на каждом элементе сжимает перелив с «весь batch» до «размер
+   *  пула». Планировщик по тику работает без неё — как и раньше, осознанно. */
+  quotaSpent?: () => Promise<boolean>;
 }): Promise<{ costUsd: number; status: "done" | "error" }> {
   let ordering = 2;
   let finalContent: string | null = null;
   let hadError: string | null = null;
   let totalCost = 0;
+  if (opts.quotaSpent) {
+    let spent = false;
+    try { spent = await opts.quotaSpent(); } catch { spent = false; /* fail open, как вся квота */ }
+    if (spent) {
+      const why = "Месячная квота токенов исчерпана — элемент batch не запускался";
+      try {
+        await insertMessage({ runId: opts.runId, role: "system", content: why, ordering: 1 });
+        await updateRun(opts.runId, { status: "error", error: why });
+      } catch { /* след важнее падения; статус останется видимым по сообщению */ }
+      return { costUsd: 0, status: "error" };
+    }
+  }
   const pendingByKey = new Map<string, { provider: string; model: string }>();
   const stageKey = (role: string, stage: string, inst?: string) => `${role}|${stage}|${inst || ""}`;
 
@@ -3694,6 +3714,9 @@ async function runBatchItem(opts: {
 }
 
 const batchLimiter = rateLimit({ windowMs: 60_000, max: 5, keyPrefix: "qcore-batch", message: "Too many batch runs. Try again in a minute." });
+// Свип 06.09.2026: четыре авторизованные платные ручки (suggest, ai-summary,
+// auto-tag, templates/suggest) не имели предела темпа вовсе.
+const assistLimiter = rateLimit({ windowMs: 60_000, max: 10, keyPrefix: "qcore-assist", message: "Too many AI assist calls. Try again in a minute." });
 
 qcoreaiRouter.post("/batch", batchLimiter, async (req, res) => {
   try {
@@ -3756,7 +3779,7 @@ qcoreaiRouter.post("/batch", batchLimiter, async (req, res) => {
           while (active < BATCH_CONCURRENCY && idx < queue.length) {
             const { runId, input } = queue[idx++];
             active++;
-            runBatchItem({ runId, sessionId: session.id, batchId: batch.id, userInput: input, strategy, overrides, maxRevisions, maxCostUsd, premiumGate: premiumQuotaGateForRequest(req) })
+            runBatchItem({ runId, sessionId: session.id, batchId: batch.id, userInput: input, strategy, overrides, maxRevisions, maxCostUsd, premiumGate: premiumQuotaGateForRequest(req), quotaSpent: async () => { const s = await monthlyQuotaHeadroom(req); return !!s && s.used >= s.limit; } })
               .then(({ costUsd: c, status }) => updateBatchProgress(batch.id, {
                 completedDelta: status === "done" ? 1 : 0,
                 failedDelta: status === "error" ? 1 : 0,
@@ -3922,6 +3945,9 @@ qcoreaiRouter.delete("/schedules/:id", async (req, res) => {
 
 /** Manual trigger — fires the batch immediately regardless of nextRunAt. */
 qcoreaiRouter.post("/schedules/:id/run-now", batchLimiter, async (req, res) => {
+  // У /batch месячная квота проверяется на входе, у run-now её НЕ БЫЛО вовсе
+  // (свип 06.09.2026): расписание можно было дёргать рукой мимо квоты.
+  if (await enforceFreeTokenQuota(req, res)) return;
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
@@ -3957,7 +3983,7 @@ qcoreaiRouter.post("/schedules/:id/run-now", batchLimiter, async (req, res) => {
           while (active < BATCH_CONCURRENCY && idx < queue.length) {
             const { runId, input } = queue[idx++];
             active++;
-            runBatchItem({ runId, sessionId: session.id, batchId: batch.id, userInput: input, strategy, overrides, maxRevisions: 0, premiumGate: premiumQuotaGateForRequest(req) })
+            runBatchItem({ runId, sessionId: session.id, batchId: batch.id, userInput: input, strategy, overrides, maxRevisions: 0, premiumGate: premiumQuotaGateForRequest(req), quotaSpent: async () => { const s = await monthlyQuotaHeadroom(req); return !!s && s.used >= s.limit; } })
               .then(({ costUsd: c, status }) => updateBatchProgress(batch.id, { completedDelta: status === "done" ? 1 : 0, failedDelta: status === "error" ? 1 : 0, costDelta: c }))
               .catch(() => updateBatchProgress(batch.id, { failedDelta: 1 }))
               .finally(() => { active--; next(); });
@@ -4592,7 +4618,7 @@ qcoreaiRouter.get("/search", async (req, res) => {
    POST /sessions/:id/suggest
    ═══════════════════════════════════════════════════════════════════════ */
 
-qcoreaiRouter.post("/sessions/:id/suggest", async (req, res) => {
+qcoreaiRouter.post("/sessions/:id/suggest", assistLimiter, async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
@@ -4626,7 +4652,7 @@ qcoreaiRouter.post("/sessions/:id/suggest", async (req, res) => {
         content: `Based on this conversation history, suggest 5 concise follow-up questions the user might want to ask next. Return ONLY a JSON array of strings, no explanation.\n\nConversation:\n${context}`,
       },
     ];
-    const result = await callProvider(provider.id, messages, provider.defaultModel, 0.7);
+    const result = await callProvider(provider.id, messages, provider.defaultModel, 0.7, undefined, undefined, { userId: auth.sub, module: "qcoreai-suggest" });
     let suggestions: string[] = [];
     try {
       const raw = result.reply.trim();
@@ -4883,7 +4909,7 @@ qcoreaiRouter.post("/notebook/qa", chatLimiter, async (req, res) => {
         content: `You are a helpful assistant. The user has saved the following notebook snippets from AI sessions:\n\n${context}\n\n---\n\nNow answer this question about the snippets:\n${question.trim()}`,
       },
     ];
-    const result = await callProvider(provider.id, messages, provider.defaultModel, 0.5);
+    const result = await callProvider(provider.id, messages, provider.defaultModel, 0.5, undefined, undefined, { userId: auth?.sub, module: "qcoreai-notebook-qa" });
     res.json({ answer: result.reply, snippetsUsed: snippets.length });
   } catch (err: any) {
     captureQCoreAIError(err, { route: "notebook-qa" });
@@ -4945,7 +4971,7 @@ qcoreaiRouter.post("/widget/run", async (req, res) => {
     if (provider) {
       try {
         const messages = [{ role: "user" as const, content: input.trim() }];
-        const result = await callProvider(provider.id, messages, provider.defaultModel, 0.7);
+        const result = await callProvider(provider.id, messages, provider.defaultModel, 0.7, undefined, undefined, { module: "qcoreai-widget" });
         finalContent = result.reply;
         await finishRun(run.id, "done", { finalContent });
       } catch (provErr: any) {
@@ -5567,7 +5593,7 @@ qcoreaiRouter.post("/runs/:id/export-pdf-data", async (req, res) => {
    ═══════════════════════════════════════════════════════════════════════ */
 
 /** POST /sessions/:id/ai-summary — generate and cache an AI summary of last 5 runs. */
-qcoreaiRouter.post("/sessions/:id/ai-summary", async (req, res) => {
+qcoreaiRouter.post("/sessions/:id/ai-summary", assistLimiter, async (req, res) => {
   try {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
@@ -5594,7 +5620,7 @@ qcoreaiRouter.post("/sessions/:id/ai-summary", async (req, res) => {
       } else {
         const msgs = [{ role: "user" as const, content: `Summarize this AI session in 2-3 sentences:\n\n${ctx}` }];
         const provider = getProviders().find((p) => p.id === providerId)!;
-        const result = await callProvider(providerId, msgs, provider.defaultModel, 0.5);
+        const result = await callProvider(providerId, msgs, provider.defaultModel, 0.5, undefined, undefined, { userId: auth?.sub, module: "qcoreai-ai-summary" });
         summary = result.reply || "Could not generate summary.";
       }
     }
@@ -5867,7 +5893,7 @@ qcoreaiRouter.post("/prompt-chains/:id/run", async (req, res) => {
    POST /notebook/collections/:id/export
    ═══════════════════════════════════════════════════════════════════════ */
 
-qcoreaiRouter.post("/notebook/auto-tag", async (req, res) => {
+qcoreaiRouter.post("/notebook/auto-tag", assistLimiter, async (req, res) => {
   const auth = verifyBearerOptional(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   const { content } = req.body || {};
@@ -5884,7 +5910,7 @@ qcoreaiRouter.post("/notebook/auto-tag", async (req, res) => {
           role: "user",
           content: `Extract 3-5 concise topic tags from this text. Return ONLY a JSON array of lowercase tag strings, no explanation.\n\nText:\n${String(content).slice(0, 2000)}`,
         },
-      ], model, 0.3);
+      ], model, 0.3, undefined, undefined, { userId: auth?.sub, module: "qcoreai-auto-tag" });
       const raw = (result.reply || "").trim();
       const match = raw.match(/\[[\s\S]*\]/);
       if (match) {
@@ -6194,7 +6220,7 @@ qcoreaiRouter.delete("/me/memories/:id", async (req, res) => {
    ═══════════════════════════════════════════════════════════════════════ */
 
 // Suggest must come before :id routes
-qcoreaiRouter.post("/templates/suggest", async (req, res) => {
+qcoreaiRouter.post("/templates/suggest", assistLimiter, async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = auth?.sub ?? null;
 
@@ -6234,7 +6260,10 @@ qcoreaiRouter.post("/templates/suggest", async (req, res) => {
         providerId,
         [{ role: "user", content: prompt }],
         prov?.defaultModel ?? "",
-        0.7
+        0.7,
+        undefined,
+        undefined,
+        { userId: auth?.sub, module: "qcoreai-templates-suggest" }
       );
       let suggestions: any[] = [];
       try {

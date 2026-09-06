@@ -8,6 +8,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { СОБЫТИЕ_ПЕРЕНОСА } from "@/components/DevHubGuestIdentity";
 import { apiUrl } from "@/lib/apiBase";
 import { useDevhubT } from "./i18n";
+import { useI18n } from "@/lib/i18n";
 import { catalog } from "@/lib/aevionCatalog";
 import { fixDoubledScheme } from "@/lib/urls";
 import { track } from "@/lib/track";
@@ -15,6 +16,7 @@ import { productById } from "@/lib/products";
 import { PageTracking } from "@/components/PageTracking";
 import { devhubServerError } from "@/lib/devhubServerError";
 import { stackForIdea } from "@/lib/devhubStackChoice";
+import { DEVHUB_EXAMPLES } from "./examples";
 
 type Stack = "next" | "express" | "static" | "react" | "python";
 type ProjectStatus = "draft" | "building" | "live" | "error";
@@ -105,20 +107,15 @@ const STUDIO_PRO = productById("devhub");
  */
 /** Названия возможностей для строки остатка. Отдельной картой, а не через
  *  словарь: ключи приходят от сервера, а `t()` типизирован фиксированным
- *  набором — динамический ключ там не проходит проверку типов, и это верно. */
-const USAGE_LABEL: Record<string, string> = {
-  video: "видео",
-  image: "картинки",
-  tts: "знаков озвучки",
-  music: "музыка",
-  deploy: "выкаток",
-  // Заведены 02.09.2026 вместе с квотой на речь и перевод. Без подписи экран
-  // показал бы СЫРОЙ КЛЮЧ (`USAGE_LABEL[k] ?? k`) — английское машинное слово
-  // на русском экране. Заводя ключ возможности, заводи и подпись: запасная
-  // ветка `?? k` не падает и не краснеет, она просто печатает жаргон.
-  speech: "распознаваний и клонов голоса",
-  translate: "переводов",
-  generate: "генераций кода",
+ *  набором — динамический ключ там не проходит проверку типов, и это верно.
+ *  Языков три, как у словаря; незнакомый язык получает английский.
+ *  Заводя ключ возможности на сервере, заводи и подпись НА ВСЕХ ТРЁХ языках:
+ *  запасная ветка `?? k` не падает и не краснеет, она печатает жаргон
+ *  (сведение 06.09: speech и translate пришли из соседней ветки). */
+const USAGE_LABELS: Record<string, Record<string, string>> = {
+  ru: { video: "видео", image: "картинки", tts: "знаков озвучки", music: "музыка", deploy: "выкаток", generate: "генераций кода", speech: "распознаваний и клонов голоса", translate: "переводов" },
+  en: { video: "videos", image: "images", tts: "TTS chars", music: "tracks", deploy: "deploys", generate: "code generations", speech: "STT & voice clones", translate: "translations" },
+  kk: { video: "бейне", image: "сурет", tts: "дыбыстау таңбасы", music: "музыка", deploy: "жарияланым", generate: "код генерациясы", speech: "тану және дауыс клоны", translate: "аударма" },
 };
 
 function capabilityOffReason(status: string | undefined): string {
@@ -141,6 +138,7 @@ function capabilityOffReason(status: string | undefined): string {
 
 export default function DevHubPage() {
   const t = useDevhubT();
+  const { lang } = useI18n();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [userTier, setUserTier] = useState<"free" | "pro" | "enterprise" | null>(null);
@@ -531,7 +529,7 @@ export default function DevHubPage() {
                 const tight = left <= Math.max(1, Math.floor(v.limit * 0.2));
                 return (
                   <span key={k} style={{ marginRight: 12, color: tight ? "#b45309" : "#334155" }}>
-                    {USAGE_LABEL[k] ?? k}: <b>{left}</b> из {v.limit}
+                    {(USAGE_LABELS[lang] ?? USAGE_LABELS.en)[k] ?? k}: <b>{left}</b> {t("caps.of")} {v.limit}
                   </span>
                 );
               })}
@@ -660,6 +658,28 @@ export default function DevHubPage() {
           </span>
         </div>
 
+        {/* Провенанс ИИ-генераций — продающая особинка $149 (спека Монетизации
+            06.09, EU AI Act): обещание едет В ОДНОЙ ветке с механизмом и
+            закреплено сторожем devhubClaims — витрина не обещает того, чего
+            нет в коде. */}
+        <div style={{
+          border: "1px solid #a7f3d0", background: "#ecfdf5", borderRadius: 12,
+          padding: "16px 20px", marginBottom: 20,
+          display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12,
+        }}>
+          <div style={{ maxWidth: 640 }}>
+            <p style={{ fontWeight: 800, fontSize: 15, margin: 0, color: "#0f172a" }}>
+              {t("prov.title")}
+            </p>
+            <p style={{ fontSize: 13, color: "#475569", margin: "4px 0 0", lineHeight: 1.5 }}>
+              {t("prov.body")}
+            </p>
+          </div>
+          <span style={{ padding: "6px 12px", background: "#059669", color: "#fff", borderRadius: 8, fontWeight: 700, fontSize: 12, whiteSpace: "nowrap" }}>
+            {t("prov.where")}
+          </span>
+        </div>
+
         {/* Live capability strip — honest state on the way in, not after the
             user has typed an idea and hit a dead button. Only rendered once
             the server has answered; silence is better than a guess. */}
@@ -723,6 +743,34 @@ export default function DevHubPage() {
         {/* One window vs a stack of subscriptions — deliberately honest: the
             money gap is small and saying otherwise would be a lie. The claim
             we can defend is the handoffs, not the price. */}
+        {/* Галерея НАСТОЯЩИХ примеров. Список живёт в examples.ts и пуст,
+            пока нет живых приложений, — секция тогда не рисуется вовсе:
+            единственное доказательство продукта — работающий результат,
+            и выдумывать его нельзя. */}
+        {DEVHUB_EXAMPLES.length > 0 && (
+          <div style={{ border: "1px solid #e2e8f0", background: "#fff", borderRadius: 12, padding: "18px 20px", marginBottom: 20 }}>
+            <p style={{ fontWeight: 800, fontSize: 15, margin: 0, color: "#0f172a" }}>{t("ex.title")}</p>
+            <p style={{ fontSize: 13, color: "#64748b", margin: "4px 0 12px" }}>{t("ex.sub")}</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12 }}>
+              {DEVHUB_EXAMPLES.map((ex) => (
+                <div key={ex.url} style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>{ex.title}</div>
+                  <div style={{ fontSize: 12.5, color: "#475569", fontStyle: "italic", flex: 1 }}>&laquo;{ex.prompt}&raquo;</div>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    <a href={ex.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12.5, color: "#0d9488", fontWeight: 600 }}>{t("ex.open")}</a>
+                    <button
+                      onClick={() => { setIdeaPrompt(ex.prompt); ideaFieldRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }}
+                      style={{ fontSize: 12.5, color: "#7c3aed", background: "none", border: "none", cursor: "pointer", padding: 0, fontWeight: 600, textDecoration: "underline" }}
+                    >
+                      {t("ex.build")}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div style={{
           border: "1px solid #e2e8f0", background: "#fff", borderRadius: 12,
           padding: "18px 20px", marginBottom: 20,

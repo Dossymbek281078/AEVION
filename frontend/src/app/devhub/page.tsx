@@ -8,6 +8,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { СОБЫТИЕ_ПЕРЕНОСА } from "@/components/DevHubGuestIdentity";
 import { apiUrl } from "@/lib/apiBase";
 import { useDevhubT } from "./i18n";
+import { useI18n } from "@/lib/i18n";
 import { catalog } from "@/lib/aevionCatalog";
 import { fixDoubledScheme } from "@/lib/urls";
 import { track } from "@/lib/track";
@@ -106,20 +107,15 @@ const STUDIO_PRO = productById("devhub");
  */
 /** Названия возможностей для строки остатка. Отдельной картой, а не через
  *  словарь: ключи приходят от сервера, а `t()` типизирован фиксированным
- *  набором — динамический ключ там не проходит проверку типов, и это верно. */
-const USAGE_LABEL: Record<string, string> = {
-  video: "видео",
-  image: "картинки",
-  tts: "знаков озвучки",
-  music: "музыка",
-  deploy: "выкаток",
-  // Заведены 02.09.2026 вместе с квотой на речь и перевод. Без подписи экран
-  // показал бы СЫРОЙ КЛЮЧ (`USAGE_LABEL[k] ?? k`) — английское машинное слово
-  // на русском экране. Заводя ключ возможности, заводи и подпись: запасная
-  // ветка `?? k` не падает и не краснеет, она просто печатает жаргон.
-  speech: "распознаваний и клонов голоса",
-  translate: "переводов",
-  generate: "генераций кода",
+ *  набором — динамический ключ там не проходит проверку типов, и это верно.
+ *  Языков три, как у словаря; незнакомый язык получает английский.
+ *  Заводя ключ возможности на сервере, заводи и подпись НА ВСЕХ ТРЁХ языках:
+ *  запасная ветка `?? k` не падает и не краснеет, она печатает жаргон
+ *  (сведение 06.09: speech и translate пришли из соседней ветки). */
+const USAGE_LABELS: Record<string, Record<string, string>> = {
+  ru: { video: "видео", image: "картинки", tts: "знаков озвучки", music: "музыка", deploy: "выкаток", generate: "генераций кода", speech: "распознаваний и клонов голоса", translate: "переводов" },
+  en: { video: "videos", image: "images", tts: "TTS chars", music: "tracks", deploy: "deploys", generate: "code generations", speech: "STT & voice clones", translate: "translations" },
+  kk: { video: "бейне", image: "сурет", tts: "дыбыстау таңбасы", music: "музыка", deploy: "жарияланым", generate: "код генерациясы", speech: "тану және дауыс клоны", translate: "аударма" },
 };
 
 function capabilityOffReason(status: string | undefined): string {
@@ -142,6 +138,7 @@ function capabilityOffReason(status: string | undefined): string {
 
 export default function DevHubPage() {
   const t = useDevhubT();
+  const { lang } = useI18n();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [userTier, setUserTier] = useState<"free" | "pro" | "enterprise" | null>(null);
@@ -532,7 +529,7 @@ export default function DevHubPage() {
                 const tight = left <= Math.max(1, Math.floor(v.limit * 0.2));
                 return (
                   <span key={k} style={{ marginRight: 12, color: tight ? "#b45309" : "#334155" }}>
-                    {USAGE_LABEL[k] ?? k}: <b>{left}</b> из {v.limit}
+                    {(USAGE_LABELS[lang] ?? USAGE_LABELS.en)[k] ?? k}: <b>{left}</b> {t("caps.of")} {v.limit}
                   </span>
                 );
               })}

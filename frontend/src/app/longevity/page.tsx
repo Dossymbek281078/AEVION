@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { fetchOrPaywall } from "@/lib/paywall";
 import { PaywallScreen } from "@/components/PaywallScreen";
 import { channelFrom } from "@/lib/products";
@@ -59,12 +61,27 @@ export default async function Page({
 }: {
   searchParams: Promise<{ c?: string | string[] }>;
 }) {
-  const r = await fetchOrPaywall("/api/longevity/health");
-  if ("paywall" in r) return <PaywallScreen payload={r.paywall} backHref="/modules" />;
   // Метка канала (?c=fb, ?c=ig …). Страница — вторая посадочная после /go: на
   // неё ведут ролики про долголетие напрямую, и без проброса метки покупка
   // отсюда приходила бы в отчёт как «источник неизвестен».
   const channel = channelFrom((await searchParams).c);
+
+  // Языковая маршрутизация: у страницы ЕСТЬ английская версия (/en/longevity),
+  // но посетитель с выбранным английским всё равно попадал сюда и читал
+  // русский протокол целиком — замер 06.09.2026 (ночной EN-свип): 75 %
+  // кириллицы под cookie en при живой английской странице. Cookie
+  // `aevion_lang_v1` — та самая, которую пишет общий переключатель языка и
+  // читает сервер. Редирект ДО платной стены и до учёта: PageTracking должен
+  // сработать один раз на той странице, которую человек реально увидит,
+  // иначе просмотр посчитается дважды. Метку канала везём с собой — без неё
+  // покупка с английской страницы пришла бы «источник неизвестен».
+  const язык = (await cookies()).get("aevion_lang_v1")?.value;
+  if (язык === "en") {
+    redirect(channel ? `/en/longevity?c=${encodeURIComponent(channel)}` : "/en/longevity");
+  }
+
+  const r = await fetchOrPaywall("/api/longevity/health");
+  if ("paywall" in r) return <PaywallScreen payload={r.paywall} backHref="/modules" />;
   return (
     <>
       <PageTracking page="longevity" />

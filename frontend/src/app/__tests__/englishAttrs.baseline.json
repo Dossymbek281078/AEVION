@@ -36,6 +36,7 @@
   "app/developers/fintech/changelog/page.tsx": 1,
   "app/developers/page.tsx": 11,
   "app/devhub/page.tsx": 1,
+  "app/en/devhub/page.tsx": 2,
   "app/en/go/page.tsx": 8,
   "app/en/longevity/_tool.tsx": 5,
   "app/en/longevity/page.tsx": 7,

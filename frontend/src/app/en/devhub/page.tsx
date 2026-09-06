@@ -3,6 +3,7 @@ import { LandingView } from "@/components/LandingView";
 import { BuyLink } from "@/components/BuyLink";
 import { PageTracking } from "@/components/PageTracking";
 import { productById, channelFrom, withChannel, keepChannel } from "@/lib/products";
+import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 
 // /en/devhub — англоязычная посадочная DevHub под западные каналы
 // (Show HN, Product Hunt, EN-письма).
@@ -114,6 +115,11 @@ export default async function EnDevhubPage({
               </div>
             </BuyLink>
           ) : null}
+          {/* Сторож everySellingPageWarnsAboutPayment: со страницы платят —
+              страница обязана сказать о недоступных способах оплаты ДО
+              кассы. lang="en" — текст обязан совпадать с языком страницы
+              (образец — en/go). Вставлено при сборке 06.09. */}
+          <PaymentReachNotice style={styles.note} lang="en" />
         </section>
 
         <section style={styles.section}>

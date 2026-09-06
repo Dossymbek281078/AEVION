@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { VARIANTS } from "../variants";
+import { DEFAULT_WEIGHTS } from "../cpi";
 
 /**
  * Публичная страница CyberChess обещает «12 вариантов» (title/description в
@@ -37,5 +38,21 @@ describe("заявка «N вариантов» на публичной стра
     // Если базовый режим переименуют/уберут, формула realVariants сломается
     // молча — этот контроль ловит смену допущения.
     expect(VARIANTS.some((v) => v.id === "standard")).toBe(true);
+  });
+});
+
+describe("заявка «N факторов» CPI на публичной странице не врёт", () => {
+  const layout = readFileSync(join(process.cwd(), "src/app/cyberchess/layout.tsx"), "utf8");
+
+  it("факторов CPI ровно столько, сколько обещает страница", () => {
+    // Факторы = веса в DEFAULT_WEIGHTS БЕЗ результат-бонусов (R_W/R_D/R_L —
+    // это бонус за исход, а не фактор качества игры).
+    const factors = Object.keys(DEFAULT_WEIGHTS).filter((k) => !k.startsWith("R_"));
+    expect(factors.length, "контроль: веса прочитаны").toBeGreaterThan(5);
+    const claimed = [...layout.matchAll(/(\d+)\s+фактор/gi)].map((m) => Number(m[1]));
+    expect(claimed.length, "в layout.tsx нет заявки «N факторов» — куда делась?").toBeGreaterThan(0);
+    for (const n of claimed) {
+      expect(n, `страница обещает ${n} факторов, а в DEFAULT_WEIGHTS их ${factors.length}`).toBe(factors.length);
+    }
   });
 });

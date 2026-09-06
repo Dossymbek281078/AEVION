@@ -5138,6 +5138,18 @@ const WORKFLOW_STEP_CAPABILITY: Partial<Record<string, CapabilityKey>> = {
   code: "generate", image: "image", tts: "tts", music: "music",
 };
 
+function stepCapAmount(step: any): { cap: CapabilityKey | undefined; amount: number } {
+  const cap = WORKFLOW_STEP_CAPABILITY[String(step?.type || "")];
+  const amount = cap === "tts" ? Math.max(1, String(step?.text || "").length) : 1;
+  return { cap, amount };
+}
+
+/** Возврат квоты за шаг, который не выполнился после резервирования.
+ *  Инкремент в базе атомарный, поэтому отрицательная величина безопасна. */
+function refundQuietly(userId: string, capability: CapabilityKey, amount = 1): Promise<void> {
+  return debitQuietly(userId, capability, -amount);
+}
+
 async function executeWorkflowStep(
   project: DevHubProject,
   userId: string,
@@ -5148,9 +5160,8 @@ async function executeWorkflowStep(
   // месячный предел на image/tts/music обходился простой пересылкой той же
   // просьбы как шага workflow — до 20 штук за один запрос.
   const stepType = String(step?.type || "");
-  const stepCap = WORKFLOW_STEP_CAPABILITY[stepType];
+  const { cap: stepCap, amount } = stepCapAmount(step);
   if (stepCap) {
-    const amount = stepCap === "tts" ? Math.max(1, String(step?.text || "").length) : 1;
     const credit = await checkCredit(userId, stepCap, amount);
     if (!credit.allowed) {
       return {
@@ -5163,6 +5174,64 @@ async function executeWorkflowStep(
     return result;
   }
   return executeWorkflowStepInner(project, userId, step, i);
+}
+
+/**
+ * Параллельный батч шагов с ЧЕСТНЫМИ квотами.
+ *
+ * Ревью 06.09: Promise.all по executeWorkflowStep давал гонку — пять шагов
+ * image одновременно читали used=9 при лимите 10, все проходили проверку, и
+ * списывалось 14 из 10. Проверка и резервирование теперь СОВОКУПНЫЕ, ДО
+ * старта батча: по каждой возможности один checkCredit на сумму и одно
+ * списание вперёд; за шаг, упавший после резервирования, квота возвращается.
+ * Гонка между РАЗНЫМИ запросами остаётся (check-then-act, как у всех
+ * метрируемых ручек) — окно микросекунды, а не длительность генерации.
+ */
+async function runWorkflowGroup(
+  project: DevHubProject,
+  userId: string,
+  steps: any[],
+  group: number[],
+  onStepDone?: (r: WorkflowStepResult) => void,
+): Promise<WorkflowStepResult[]> {
+  const perCap = new Map<CapabilityKey, { amount: number; indices: number[] }>();
+  for (const i of group) {
+    const { cap, amount } = stepCapAmount(steps[i]);
+    if (!cap) continue;
+    const row = perCap.get(cap) ?? { amount: 0, indices: [] };
+    row.amount += amount;
+    row.indices.push(i);
+    perCap.set(cap, row);
+  }
+
+  const refused = new Map<number, WorkflowStepResult>();
+  for (const [cap, row] of perCap) {
+    const credit = await checkCredit(userId, cap, row.amount);
+    if (!credit.allowed) {
+      for (const i of row.indices) {
+        refused.set(i, {
+          step: i, type: String(steps[i]?.type || ""), ok: false,
+          error: `Monthly ${cap} limit reached (${credit.used}/${credit.limit}, batch needs ${row.amount}) — the paid tier lifts the ceiling`,
+        });
+      }
+      perCap.delete(cap);
+      continue;
+    }
+    await debitQuietly(userId, cap, row.amount); // резерв вперёд
+  }
+
+  const settled = await Promise.all(group.map(async (i) => {
+    const early = refused.get(i);
+    if (early) { onStepDone?.(early); return early; }
+    const r = await executeWorkflowStepInner(project, userId, steps[i], i);
+    if (!r.ok) {
+      const { cap, amount } = stepCapAmount(steps[i]);
+      if (cap && perCap.has(cap)) await refundQuietly(userId, cap, amount);
+    }
+    onStepDone?.(r);
+    return r;
+  }));
+  return settled;
 }
 
 async function executeWorkflowStepInner(
@@ -5387,7 +5456,7 @@ devhubRouter.post("/projects/:id/agent/workflow", dhCostlyLimit("dhworkflow"), a
       // Independent non-code steps (image/tts/sfx/music) — none reads
       // another's output, so run them concurrently instead of paying their
       // latency one after another.
-      const settled = await Promise.all(group.map((i) => executeWorkflowStep(project, userId, steps[i], i)));
+      const settled = await runWorkflowGroup(project, userId, steps, group);
       for (const r of settled) results[r.step] = r;
     }
   }
@@ -5485,9 +5554,7 @@ devhubRouter.post("/projects/:id/agent/workflow/stream", dhCostlyLimit("dhworkfl
       // Independent non-code steps — emit each step-done the moment IT
       // finishes rather than waiting for the whole batch, so the client sees
       // genuinely concurrent progress instead of a fake sequential trickle.
-      await Promise.all(group.map((i) =>
-        executeWorkflowStep(project, userId, steps[i], i).then(emitStepDone)
-      ));
+      await runWorkflowGroup(project, userId, steps, group, emitStepDone);
     }
   }
 

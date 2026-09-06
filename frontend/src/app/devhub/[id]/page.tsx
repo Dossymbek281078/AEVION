@@ -459,6 +459,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deploying, setDeploying] = useState(false);
+  // Поколение опроса выкатки: инкремент на размонтировании и на каждом новом
+  // deploy() — старые циклы poll видят чужое поколение и умирают (ревью 06.09:
+  // цикл жил 3 минуты после ухода со страницы).
+  const deployPollGenRef = useRef(0);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" | "warning" } | null>(null);
   // Исчерпанная квота приходила ТОСТОМ на 4 секунды — человек в момент
   // максимальной готовности заплатить не имел куда нажать. Плашка не исчезает
@@ -857,6 +861,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   // that is gone.
   useEffect(() => () => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
+    // И цикл опроса выкатки не должен пережить страницу (ревью 06.09).
+    deployPollGenRef.current += 1;
   }, []);
 
   const showToast = (message: string, type: "success" | "error" | "info" | "warning" = "success") => {
@@ -1201,6 +1207,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const generateCode = async (promptOverride?: string) => {
     const userText = (promptOverride ?? aiPrompt).trim();
+    // Кнопка задизейблена по generating, а Ctrl+Enter — нет: второй вызов
+    // перезаписывал genAbortRef (первую генерацию стало нельзя остановить)
+    // и удваивал списание. Ревью 06.09.
+    if (generating) return;
     if (!userText || !project) return;
     setGenerating(true);
     setGeneratedFiles([]);
@@ -1829,6 +1839,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       showToast(capabilityHint(caps, "railway", "Выкатка на Railway"), "warning");
       return;
     }
+    deployPollGenRef.current += 1;
     setDeploying(true);
     showToast("Собираю…", "info");
     try {
@@ -1838,14 +1849,33 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const deploymentId: string = data.deploymentId;
       // Start streaming build log
       streamBuildLog(project.id, deploymentId);
-      // After simulation window, refresh project
-      setTimeout(async () => {
+      // Раньше здесь стоял ОДИН таймер на 4 секунды с комментарием «после
+      // окна симуляции» — след эпохи фальшивого журнала: настоящая сборка
+      // всегда дольше, и шапка показывала старый статус. Теперь опрашиваем
+      // проект до завершения выкатки (или потолка в 3 минуты).
+      const refreshProject = async (): Promise<string> => {
         const projR = await fetch(apiUrl(`/api/devhub/projects/${project.id}`), { cache: "no-store" });
         const projData = await projR.json();
         setProject(projData.project);
-        setDeploying(false);
         if (activeTab === "deployments") fetchDeployments();
-      }, 4000);
+        return projData.project?.status ?? "";
+      };
+      let tries = 0;
+      const myGen = deployPollGenRef.current;
+      const poll = async () => {
+        // Страницу покинули или запустили новую выкатку — этот цикл мёртв.
+        if (deployPollGenRef.current !== myGen) return;
+        tries += 1;
+        try {
+          const status = await refreshProject();
+          if (status === "live" || status === "error" || tries >= 36) {
+            setDeploying(false);
+            return;
+          }
+        } catch { /* сеть мигнула — следующий тик спросит снова */ }
+        setTimeout(poll, 5000);
+      };
+      setTimeout(poll, 5000);
     } catch (e: any) {
       showToast(e.message || "Выкатка не удалась", "error");
       setDeploying(false);

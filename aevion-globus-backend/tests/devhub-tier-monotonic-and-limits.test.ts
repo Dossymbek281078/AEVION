@@ -105,6 +105,23 @@ describe("платные ручки DevHub стоят за ограничите�
     expect(wrapper.includes("debitQuietly(userId, stepCap"), "обёртка шага не списывает квоту").toBe(true);
   });
 
+  test("параллельный батч workflow резервирует квоту СОВОКУПНО до старта", () => {
+    // Ревью 06.09: Promise.all по пошаговой проверке давал гонку — пять шагов
+    // image разом читали used=9 при лимите 10 и все проходили. Закреплено:
+    // оба места параллельного исполнения идут через runWorkflowGroup, который
+    // проверяет и списывает сумму ДО батча и возвращает за упавшие шаги.
+    const at = src.indexOf("async function runWorkflowGroup(");
+    expect(at, "runWorkflowGroup исчез — гонка квот вернулась").toBeGreaterThan(-1);
+    const body = src.slice(at, at + 2600);
+    expect(body.includes("checkCredit(userId, cap, row.amount)"), "совокупная проверка пропала").toBe(true);
+    expect(body.includes("debitQuietly(userId, cap, row.amount)"), "резерв вперёд пропал").toBe(true);
+    expect(body.includes("refundQuietly(userId, cap, amount)"), "возврат за упавший шаг пропал").toBe(true);
+    expect((src.match(/runWorkflowGroup\(project, userId, steps, group/g) || []).length,
+      "не оба места параллельного батча идут через групповое резервирование").toBe(2);
+    expect(src.includes("Promise.all(group.map((i) => executeWorkflowStep("),
+      "прямой Promise.all по пошаговой проверке вернулся").toBe(false);
+  });
+
   test("рассыльные ручки закрыты dhSendLimit списком", () => {
     // email/sms/whatsapp закрываются не по месту регистрации, а общим
     // devhubRouter.use([...], dhSendLimit()) — проверяем список.

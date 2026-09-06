@@ -1011,9 +1011,16 @@ export function aggregateSubscriptions(): {
 } {
   const all = readSubscriptions();
   // Все семь тарифов перечислены явно: пропущенный ключ дал бы NaN в сводке.
-  const byTier: Record<TierId, number> = {
-    free: 0, lite: 0, medium: 0, full: 0, enterprise: 0, pro: 0, business: 0,
-  };
+  // Накопитель БЕЗ прототипа: ключ приходит из записи о покупке, то есть
+  // в конечном счёте снаружи. У обычного `{}` имена `__proto__` и
+  // `constructor` разрешаются в наследство, и строка с таким именем не просто
+  // теряется из отчёта — присваивание уходит в `Object.prototype`, после чего
+  // NaN наследует КАЖДЫЙ объект процесса. Проверено поведением: канал
+  // `__proto__` исчезал из ответа, а `({}).count` становился NaN.
+  const byTier: Record<TierId, number> = Object.assign(
+    Object.create(null) as Record<TierId, number>,
+    { free: 0, lite: 0, medium: 0, full: 0, enterprise: 0, pro: 0, business: 0 },
+  );
   const cutoff7 = Date.now() - 7 * 86400000;
   const now = Date.now();
   let last7d = 0;
@@ -1107,7 +1114,14 @@ provisioningRouter.get("/subscriptions/by-channel", (req, res) => {
     return Number.isFinite(t) && t >= since;
   });
 
-  const byChannel: Record<string, { count: number; amountUsdSum: number; withAmount: number }> = {};
+  // Накопитель БЕЗ прототипа: ключ приходит из записи о покупке, то есть
+  // в конечном счёте снаружи. У обычного `{}` имена `__proto__` и
+  // `constructor` разрешаются в наследство, и строка с таким именем не просто
+  // теряется из отчёта — присваивание уходит в `Object.prototype`, после чего
+  // NaN наследует КАЖДЫЙ объект процесса. Проверено поведением: канал
+  // `__proto__` исчезал из ответа, а `({}).count` становился NaN.
+  const byChannel: Record<string, { count: number; amountUsdSum: number; withAmount: number }> =
+    Object.create(null);
   for (const s of subs) {
     const key = s.channel?.trim() || "direct";
     const row = (byChannel[key] ??= { count: 0, amountUsdSum: 0, withAmount: 0 });

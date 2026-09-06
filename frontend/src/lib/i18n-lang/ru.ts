@@ -7401,6 +7401,7 @@ const ru: Record<string, string> = {
   "pricing.checkoutSuccess.subtitleActivatedNoTier": "Спасибо! Ваша подписка активна.",
   "pricing.checkoutSuccess.titleActivatedNoTier": "Оплата принята!",
   "pricing.checkoutSuccess.titlePending": "Оплата принята — проверяем доступ",
+  "pricing.checkoutSuccess.subtitlePending": "Деньги получены. Доступ откроется, как только касса подтвердит платёж — обычно это несколько секунд. Если через минуту ничего не изменилось, напишите нам.",
   "pricing.checkoutSuccess.titleTrialNoTier": "Пробный период — {days} дней",
   "pricing.home.notice.currencyDiffers": "На экране {shown}, а касса спишет {charged}. Нажмите ещё раз, если это подходит.",
   "provenance.real": "реальных",

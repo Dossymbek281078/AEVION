@@ -7401,6 +7401,7 @@ const en: Record<string, string> = {
   "pricing.checkoutSuccess.subtitleActivatedNoTier": "Thank you! Your subscription is active.",
   "pricing.checkoutSuccess.titleActivatedNoTier": "Payment received!",
   "pricing.checkoutSuccess.titlePending": "Payment received — checking your access",
+  "pricing.checkoutSuccess.subtitlePending": "We have your payment. Access opens as soon as the processor confirms it — usually a few seconds. If nothing changes within a minute, message us.",
   "pricing.checkoutSuccess.titleTrialNoTier": "Trial started — {days} days",
   "pricing.home.notice.currencyDiffers": "Prices shown in {shown}, the checkout charges {charged}. Click again to continue.",
   "provenance.real": "from real data",

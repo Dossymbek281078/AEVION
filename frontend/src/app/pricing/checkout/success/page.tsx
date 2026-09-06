@@ -9,6 +9,7 @@ import { useI18n } from "@/lib/i18n";
 import { apiUrl } from "@/lib/apiBase";
 import PurchaseReturnTracker from "@/components/PurchaseReturnTracker";
 import { естьСледОплаты } from "@/lib/paymentTrace";
+import { изСправочника } from "@/lib/mapLookup";
 
 const APP_LINKS: Record<string, { name: string; href: string }> = {
   qcoreai:    { name: "QCoreAI", href: "/qcoreai" },
@@ -80,29 +81,14 @@ function SuccessInner() {
     (sp.get("gumroad") || saleId ? "gumroad" : null);
   // Название сервиса пишем, только если знаем его наверняка. Не знаем —
   // строка без названия: выдуманное имя хуже отсутствующего.
-  /*
-   * Прямая индексация находит и УНАСЛЕДОВАННОЕ, а `??` этого не ловит: он
-   * отсеивает только null и undefined, а `PROCESSOR_LABEL["constructor"]` —
-   * функция Object, вполне себе значение.
-   *
-   * Замер соседнего окна 04.09 ОТРИСОВКОЙ этой страницы с `?provider=constructor`:
-   *
-   *   paid via function Object() { [native code] } · secure
-   *   check your email — a receipt from function Object() { [native code] }
-   *   manage your subscription — in your function Object() { [native code] }
-   *
-   * Три раза на экране, который человек видит сразу после списания денег.
-   * Чтением кода это не видно: строка ниже выглядит аккуратной страховкой.
-   *
-   * Ключ здесь ЗАКРЫТЫЙ — четыре кассы, — поэтому проверяем собственное
-   * свойство и честно отдаём null: неизвестная касса не называется никак, и
-   * страница уже умеет молчать о том, чего не знает. Там, где ключ свободный
-   * (накопители сводок), правильнее объект без прототипа: см. routes/events.ts.
-   */
-  const processor =
-    provider && Object.prototype.hasOwnProperty.call(PROCESSOR_LABEL, provider)
-      ? (PROCESSOR_LABEL[provider] ?? null)
-      : null;
+  // Спрашиваем СВОЙ ключ, а не просто индексируем: `provider` приходит из
+  // адреса, а у обычного объекта имена `constructor` и `toString` разрешаются
+  // в наследство. Замер рендером 04.09.2026 на `?provider=constructor`:
+  // человек сразу после оплаты видел «paid via function Object() { [native
+  // code] }» — и то же самое ещё дважды, в строке про письмо и про управление
+  // подпиской. Список касс закрытый, поэтому проверка своего ключа тут точнее,
+  // чем объект без прототипа: незнакомое имя обязано давать пустоту.
+  const processor = изСправочника(PROCESSOR_LABEL, provider) ?? null;
   const stub = sp.get("stub") === "true";
   const tier = sp.get("tier") ?? sp.get("tierId");
   const period = sp.get("period");
@@ -253,6 +239,24 @@ function SuccessInner() {
   }, [stub, tier]);
 
   /*
+   * ⚠️ ЧТО ЗДЕСЬ ЗАЩИЩАЕТ, а что оказалось декорацией.
+   *
+   * `tier` приходит из адреса и попадал в заголовок как есть, с заглавной
+   * буквы: `?trial=14&tier=Zolotoy` давал «пробный доступ Zolotoy» на нашем
+   * домене — на экране, который человек читает как подтверждение покупки.
+   *
+   * Защищают ДВА условия ниже: ветка триала и ветка активации обе требуют
+   * `confirmed === true`, а подтверждение ставится, только когда сервер
+   * назвал ТОТ ЖЕ тариф. Значит там, где имя вообще доходит до экрана, оно
+   * уже сверено с сервером.
+   *
+   * Сперва я завёл здесь ещё и `tierName = confirmed ? tierName : null`
+   * и счёл это защитой. Мутация показала обратное: тест зелен и с ним, и без
+   * него — переменная недостижима иначе как при подтверждении. Убрал: код,
+   * который выглядит защитой и ничего не охраняет, дороже отсутствующего.
+   */
+
+  /*
    * ⚠️ 01.09.2026: перешёл на ОБЩИЙ компонент учёта, отменив собственное
    * исключение.
    *
@@ -312,7 +316,7 @@ function SuccessInner() {
         <h1 style={{ fontSize: 30, fontWeight: 900, margin: "0 0 12px", letterSpacing: "-0.02em" }}>
           {stub
             ? t("pricing.checkoutSuccess.titleStub")
-            : trialDays > 0
+            : trialDays > 0 && confirmed === true
               ? tierName
                 ? t("pricing.checkoutSuccess.titleTrial", { tier: tierName, days: trialDays })
                 : t("pricing.checkoutSuccess.titleTrialNoTier", { days: trialDays })
@@ -334,11 +338,13 @@ function SuccessInner() {
         <p style={{ fontSize: 15, lineHeight: 1.6, margin: "0 0 20px", opacity: 0.92, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }}>
           {stub
             ? t("pricing.checkoutSuccess.subtitleStub")
-            : trialDays > 0
+            : trialDays > 0 && confirmed === true
               ? t("pricing.checkoutSuccess.subtitleTrial", { date: trialEndDate ?? "" })
-              : tierName
-                ? t("pricing.checkoutSuccess.subtitleActivated", { tier: tierName })
-                : t("pricing.checkoutSuccess.subtitleActivatedNoTier")}
+              : confirmed === true
+                ? tierName
+                  ? t("pricing.checkoutSuccess.subtitleActivated", { tier: tierName })
+                  : t("pricing.checkoutSuccess.subtitleActivatedNoTier")
+                : t("pricing.checkoutSuccess.subtitlePending")}
         </p>
 
         {/* Trial end date badge */}
@@ -360,7 +366,14 @@ function SuccessInner() {
         )}
 
         {/* Amount */}
-        {!stub && totalUsd !== null && totalUsd > 0 && (
+        {/*
+          * Сумма — такое же утверждение, как и тариф: `?total=5000` рисовало
+          * «Сумма: $50» рядом с «оплата принята», и вместе это читается как
+          * «мы получили от вас 50 долларов». Пока сервер не подтвердил, мы
+          * этого не знаем. Условие то же, что у заголовка и абзаца, — экран
+          * должен говорить одним голосом.
+          */}
+        {!stub && confirmed === true && totalUsd !== null && totalUsd > 0 && (
           <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 20 }}>
             {t("pricing.checkoutSuccess.amountLabel")} <strong>${totalUsd}</strong>
           </div>

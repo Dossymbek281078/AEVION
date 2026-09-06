@@ -5,6 +5,7 @@ import MvpConceptBoard from "@/components/MvpConceptBoard";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { ProductNotice } from "@/components/ProductNotice";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { useI18n } from "@/lib/i18n";
 
@@ -155,6 +156,11 @@ export default function QContractHome() {
       {/* Pricing chip */}
       <div className="border-b border-slate-800 px-4 sm:px-6 py-2 flex justify-end">
         <ModulePricingChip moduleId="qcontract" theme="dark" />
+      </div>
+
+      {/* Оговорка каталога — там, где даются обещания, а не только у цены. */}
+      <div className="px-4 sm:px-6 pt-4">
+        <ProductNotice productId="qcontract" theme="dark" />
       </div>
 
       {/* Hero */}

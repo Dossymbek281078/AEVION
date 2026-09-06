@@ -33,9 +33,11 @@ const INDUSTRY_DATA: Record<string, { name: string; hero: string; gradient: stri
   },
 };
 
+import { изСправочника } from "@/lib/mapLookup";
+
 export default async function Image({ params }: { params: Promise<{ industry: string }> }) {
   const { industry } = await params;
-  const data = INDUSTRY_DATA[industry] ?? INDUSTRY_DATA.startups;
+  const data = изСправочника(INDUSTRY_DATA, industry) ?? INDUSTRY_DATA.startups;
 
   return new ImageResponse(
     (

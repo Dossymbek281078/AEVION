@@ -2,7 +2,7 @@ import { Router } from "express";
 import { gumroadSellable } from "../lib/payment/gumroadProvider";
 import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
 import { lemonSqueezyPaymentProvider } from "../lib/payment/lemonSqueezyProvider";
-import { payboxPaymentProvider, isPayboxConfigured } from "../lib/payment/payboxProvider";
+import { payboxPaymentProvider, isPayboxConfigured, isPayboxWebhookSecretSet } from "../lib/payment/payboxProvider";
 import { paypalPaymentProvider, isPaypalConfigured } from "../lib/payment/paypalProvider";
 import { resolveLemonSqueezyVariant, lemonSqueezySellable } from "../data/lemonSqueezyVariants";
 import {
@@ -616,9 +616,54 @@ checkoutRouter.get("/healthz", (_req, res) => {
         sellable: gumroadSellable([...лс.configured, ...лс.missing]),
         webhook: "/api/gumroad/webhook",
         webhookConfigured: Boolean(process.env.GUMROAD_WEBHOOK_SECRET?.trim()),
+        // ⚠️ У Gumroad `false` здесь НЕ означает «не выдаст». Замер 03.09.2026:
+        // на проде секрет вебхука не задан, и это осознанно — при его
+        // отсутствии обработчик не принимает вслепую, а проверяет продажу
+        // через API самого Gumroad по токену доступа. Отклоняет только при
+        // определённом «нет такой продажи»; не смог проверить — ведёт себя
+        // как раньше, чтобы настоящий покупатель не терял доступ из-за
+        // чужого сбоя.
+        //
+        // Поле без этой пары читалось бы как тревога, а тревога на исправном
+        // месте приучает не смотреть. Поэтому рядом стоит, чем оно заменено.
+        salesVerifiedViaApi:
+          Boolean(process.env.GUMROAD_ACCESS_TOKEN?.trim()) &&
+          process.env.GUMROAD_VERIFY_SALES !== "0",
       },
-      paybox: { configured: isPayboxConfigured(), trigger: "currency=KZT", webhook: "/api/paybox/webhook" },
-      paypal: { configured: isPaypalConfigured(), trigger: "method=paypal", webhook: "/api/paypal/webhook" },
+      // ⚠️ У ЭТИХ ДВУХ КАСС БЫЛО ТОЛЬКО `configured`, и это асимметрия,
+      // а не мелочь. У LemonSqueezy и Gumroad рядом стоит
+      // `webhookConfigured` — признак того, что купленное ВЫДАДУТ: без
+      // секрета вебхука оплата принимается, а права не начисляются.
+      //
+      // PayBox — касса казахстанского трафика, то есть ровно та, где
+      // такая тишина дороже всего. Спрашивать про неё было нечем:
+      // снаружи «настроено» и «выдаст» выглядели одинаково.
+      paybox: {
+        configured: isPayboxConfigured(),
+        webhookConfigured: isPayboxWebhookSecretSet(),
+        // 🔴 ЛОВУШКА ЗАПУСКА, сделанная видимой 04.09.2026.
+        //
+        // Тестовый режим у PayBox стоит ПО УМОЛЧАНИЮ: провайдер шлёт
+        // `pg_testing_mode: "1"`, пока не задано `PAYBOX_TESTING=0`. Умолчание
+        // безопасное и правильное — случайно взять настоящие деньги хуже, чем
+        // случайно не взять.
+        //
+        // Но при включении кассы это ловушка: задать два секрета выглядит
+        // достаточным, `configured` станет true, покупки пойдут — и ни одна
+        // не будет настоящей. Снаружи «касса работает» и «касса играет в
+        // песочнице» выглядели одинаково.
+        //
+        // Замер 04.09.2026: PAYBOX_TESTING на проде не задана.
+        testMode: process.env.PAYBOX_TESTING !== "0",
+        trigger: "currency=KZT",
+        webhook: "/api/paybox/webhook",
+      },
+      paypal: {
+        configured: isPaypalConfigured(),
+        webhookConfigured: Boolean(process.env.PAYPAL_WEBHOOK_ID?.trim()),
+        trigger: "method=paypal",
+        webhook: "/api/paypal/webhook",
+      },
     },
     frontendUrl: FRONTEND_URL,
   });

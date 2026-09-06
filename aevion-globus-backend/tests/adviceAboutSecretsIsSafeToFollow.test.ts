@@ -42,7 +42,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const CHANNELS = join(HERE, "..", "src", "routes", "channelsHealth.ts");
 
 /** Известные подсказки без второй половины на 31.08.2026. Список обязан таять. */
-const KNOWN_HALF_ADVICE = ["GUMROAD_WEBHOOK_SECRET"];
+const KNOWN_HALF_ADVICE: string[] = [];
 
 /** Слова, которыми называется вторая половина действия. */
 const SECOND_HALF = ["панел", "у провайдера", "одновременно", "на стороне", "в настройках продукта", "dashboard"];

@@ -275,6 +275,133 @@ const ATTR_UI: Record<string, Record<string, string>> = {
   },
 };
 
+// Тосты IDE: живут секунды — машинный доводчик перевести их НЕ УСПЕВАЕТ
+// (тот же замер 06.09, что у атрибутов). Русские строки остаются здесь же,
+// в ru-блоке: сторожа storageMarker/workspaceSpeaksOneLanguage читают их
+// по ключам через разбор этого словаря.
+const TOAST_UI: Record<string, Record<string, string>> = {
+  ru: {
+    listRefreshFail: "Не удалось обновить список файлов — показан прежний",
+    costUnverified: "Готово, но расход не удалось сверить: счётчик мог отстать.",
+    projLoadFail: "Не удалось загрузить проект",
+    notSavedOffline: "Не сохранено — нет связи с сервером",
+    fileCreateFail: "Не удалось создать файл",
+    fileRenamed: "Файл переименован",
+    renameFail: "Переименовать не удалось",
+    midStreamRetry: "Связь оборвалась на середине — повторяем запрос. Это займёт ещё столько же.",
+    backendRedeploy: "Бэкенд перевыкатывается — повторю через 20 с…",
+    stubCode: "Провайдер ИИ не подключён — вместо настоящего кода вставлена заготовка",
+    historyLoadFail: "История правок не загрузилась — обновите страницу",
+    nothingToUndo: "Отменять нечего — правок ИИ не было",
+    undoneMemory: "Отменено, но база была недоступна: восстановление пока в памяти и может откатиться назад при перезапуске.",
+    checkpointGone: "Эта контрольная точка больше недоступна",
+    restoredMemory: "Вернулись, но база была недоступна: восстановление пока в памяти и может откатиться назад при перезапуске.",
+    stubPlan: "Провайдер ИИ не подключён — показан общий план вместо составленного под задачу",
+    dbDesigned: "База спроектирована — db/schema.sql и клиент лежат в дереве файлов",
+    noOpenFileLink: "Нет открытого файла — ссылка скопирована в буфер",
+    stubVisual: "Провайдер ИИ не подключён — страница настоящей правкой ИИ не менялась",
+    veSyntaxFail: "Правка ИИ применена, но результат не прошёл проверку синтаксиса — просмотрите перед выкаткой",
+    building: "Собираю…",
+    envSavedMemory: "Сохранено, но база была недоступна: переменная пока в памяти и может пропасть при перезапуске. Повторите через минуту.",
+    envSaved: "Переменная сохранена",
+    envRemovedMemory: "База была недоступна: переменная убрана только из памяти и может вернуться после перезапуска.",
+    tplMemory: "Шаблон применён, но база была недоступна: результат пока в памяти и может пропасть при перезапуске.",
+    settingsSaved: "Настройки сохранены",
+    collabProOnly: "Соавторы доступны в Studio Pro — оформите, чтобы добавлять",
+    collabAddFail: "Не удалось добавить соавтора",
+    accessRevoked: "Доступ отозван",
+    repoPartial: "Часть файлов не попала в репозиторий",
+    publishingCf: "Публикую на Cloudflare Pages…",
+    deployingVercel: "Выкатываю на Vercel…",
+    pickOneFile: "Выберите хотя бы один файл",
+    pickOneLang: "Выберите хотя бы один язык перевода",
+    translateCap: "За раз не больше 50 переводов (файлы × языки)",
+    importedMemory: "Файлы импортированы, но база была недоступна: результат пока в памяти и может пропасть при перезапуске.",
+    imgPermanent: "Картинка загружена на постоянный адрес",
+    imgTooBig: "Картинка слишком большая (не больше 5 МБ)",
+  },
+  en: {
+    listRefreshFail: "Could not refresh the file list — showing the previous one",
+    costUnverified: "Done, but the spend could not be verified: the counter may lag.",
+    projLoadFail: "Could not load the project",
+    notSavedOffline: "Not saved — no connection to the server",
+    fileCreateFail: "Could not create the file",
+    fileRenamed: "File renamed",
+    renameFail: "Rename failed",
+    midStreamRetry: "The connection dropped midway — retrying. This will take about as long again.",
+    backendRedeploy: "The backend is redeploying — retrying in 20 s…",
+    stubCode: "The AI provider is not connected — a stub was inserted instead of real code",
+    historyLoadFail: "Edit history did not load — refresh the page",
+    nothingToUndo: "Nothing to undo — there were no AI edits",
+    undoneMemory: "Undone, but the database was unavailable: the restore lives in memory for now and may roll back on restart.",
+    checkpointGone: "This checkpoint is no longer available",
+    restoredMemory: "Restored, but the database was unavailable: the restore lives in memory for now and may roll back on restart.",
+    stubPlan: "The AI provider is not connected — showing a generic plan instead of one built for your task",
+    dbDesigned: "Database designed — db/schema.sql and the client are in the file tree",
+    noOpenFileLink: "No open file — the link was copied to the clipboard",
+    stubVisual: "The AI provider is not connected — the page was not changed by a real AI edit",
+    veSyntaxFail: "The AI edit was applied, but the result failed the syntax check — review before deploying",
+    building: "Building…",
+    envSavedMemory: "Saved, but the database was unavailable: the variable lives in memory for now and may vanish on restart. Try again in a minute.",
+    envSaved: "Variable saved",
+    envRemovedMemory: "The database was unavailable: the variable was removed only from memory and may come back after a restart.",
+    tplMemory: "The template was applied, but the database was unavailable: the result lives in memory for now and may vanish on restart.",
+    settingsSaved: "Settings saved",
+    collabProOnly: "Collaborators are available in Studio Pro — subscribe to add them",
+    collabAddFail: "Could not add the collaborator",
+    accessRevoked: "Access revoked",
+    repoPartial: "Some files did not make it into the repository",
+    publishingCf: "Publishing to Cloudflare Pages…",
+    deployingVercel: "Deploying to Vercel…",
+    pickOneFile: "Pick at least one file",
+    pickOneLang: "Pick at least one target language",
+    translateCap: "No more than 50 translations at once (files × languages)",
+    importedMemory: "Files imported, but the database was unavailable: the result lives in memory for now and may vanish on restart.",
+    imgPermanent: "The image was uploaded to a permanent address",
+    imgTooBig: "The image is too large (5 MB max)",
+  },
+  kk: {
+    listRefreshFail: "Файлдар тізімін жаңарту мүмкін болмады — алдыңғысы көрсетілген",
+    costUnverified: "Дайын, бірақ шығынды салыстыру мүмкін болмады: есептегіш артта қалуы мүмкін.",
+    projLoadFail: "Жобаны жүктеу мүмкін болмады",
+    notSavedOffline: "Сақталмады — сервермен байланыс жоқ",
+    fileCreateFail: "Файлды жасау мүмкін болмады",
+    fileRenamed: "Файл аты өзгертілді",
+    renameFail: "Атын өзгерту мүмкін болмады",
+    midStreamRetry: "Байланыс ортасында үзілді — сұрауды қайталаймыз. Бұл тағы сонша уақыт алады.",
+    backendRedeploy: "Бэкенд қайта жарияланып жатыр — 20 с кейін қайталаймын…",
+    stubCode: "ЖИ провайдері қосылмаған — нағыз кодтың орнына дайындама қойылды",
+    historyLoadFail: "Түзетулер тарихы жүктелмеді — бетті жаңартыңыз",
+    nothingToUndo: "Болдырмайтын ештеңе жоқ — ЖИ түзетулері болған жоқ",
+    undoneMemory: "Болдырылмады, бірақ дерекқор қолжетімсіз болды: қалпына келтіру әзірге жадта және қайта іске қосқанда кері кетуі мүмкін.",
+    checkpointGone: "Бұл бақылау нүктесі енді қолжетімсіз",
+    restoredMemory: "Қайтарылды, бірақ дерекқор қолжетімсіз болды: қалпына келтіру әзірге жадта және қайта іске қосқанда кері кетуі мүмкін.",
+    stubPlan: "ЖИ провайдері қосылмаған — тапсырмаға арналғанның орнына жалпы жоспар көрсетілген",
+    dbDesigned: "Дерекқор жобаланды — db/schema.sql мен клиент файлдар ағашында жатыр",
+    noOpenFileLink: "Ашық файл жоқ — сілтеме алмасу буферіне көшірілді",
+    stubVisual: "ЖИ провайдері қосылмаған — бет нағыз ЖИ түзетуімен өзгерген жоқ",
+    veSyntaxFail: "ЖИ түзетуі қолданылды, бірақ нәтиже синтаксис тексеруінен өтпеді — жариялау алдында қараңыз",
+    building: "Жинап жатырмын…",
+    envSavedMemory: "Сақталды, бірақ дерекқор қолжетімсіз болды: айнымалы әзірге жадта және қайта іске қосқанда жоғалуы мүмкін. Бір минуттан кейін қайталаңыз.",
+    envSaved: "Айнымалы сақталды",
+    envRemovedMemory: "Дерекқор қолжетімсіз болды: айнымалы тек жадтан жойылды және қайта іске қосқаннан кейін қайтып келуі мүмкін.",
+    tplMemory: "Үлгі қолданылды, бірақ дерекқор қолжетімсіз болды: нәтиже әзірге жадта және қайта іске қосқанда жоғалуы мүмкін.",
+    settingsSaved: "Баптаулар сақталды",
+    collabProOnly: "Тең авторлар Studio Pro-да қолжетімді — қосу үшін жазылыңыз",
+    collabAddFail: "Тең авторды қосу мүмкін болмады",
+    accessRevoked: "Қолжетімділік қайтарып алынды",
+    repoPartial: "Файлдардың бір бөлігі репозиторийге түспеді",
+    publishingCf: "Cloudflare Pages-ке жариялап жатырмын…",
+    deployingVercel: "Vercel-ге жариялап жатырмын…",
+    pickOneFile: "Кемінде бір файл таңдаңыз",
+    pickOneLang: "Кемінде бір аударма тілін таңдаңыз",
+    translateCap: "Бір ретте 50 аудармадан артық емес (файлдар × тілдер)",
+    importedMemory: "Файлдар импортталды, бірақ дерекқор қолжетімсіз болды: нәтиже әзірге жадта және қайта іске қосқанда жоғалуы мүмкін.",
+    imgPermanent: "Сурет тұрақты мекенжайға жүктелді",
+    imgTooBig: "Сурет тым үлкен (5 МБ-тан аспау керек)",
+  },
+};
+
 // Один источник для главного компонента и подкомпонентов (Toast).
 function useAttrL(): Record<string, string> {
   const lang = useI18nOptional()?.lang ?? "ru";
@@ -665,6 +792,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const uiLang = useI18nOptional()?.lang ?? "ru";
   const GL = GEN_UI[uiLang] ?? GEN_UI.ru;
   const AL = useAttrL();
+  const TL = TOAST_UI[uiLang] ?? TOAST_UI.ru;
   const [project, setProject] = useState<Project | null>(null);
   const [files, setFiles] = useState<FileItem[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
@@ -1039,7 +1167,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const applyFileList = (listData: unknown) => {
     const next = (listData as { files?: FileItem[] } | null | undefined)?.files;
     if (!Array.isArray(next)) {
-      showToast("Не удалось обновить список файлов — показан прежний", "warning");
+      showToast(TL.listRefreshFail, "warning");
       return;
     }
     setFiles(next);
@@ -1120,7 +1248,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
    */
   const предупредитьЕслиНеСверили = (d: unknown) => {
     if (d && typeof d === "object" && (d as { creditUnverified?: unknown }).creditUnverified) {
-      showToast("Готово, но расход не удалось сверить: счётчик мог отстать.", "warning");
+      showToast(TL.costUnverified, "warning");
     }
   };
 
@@ -1138,7 +1266,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         setEditorContent(first.content);
       }
     } catch {
-      showToast("Не удалось загрузить проект", "error");
+      showToast(TL.projLoadFail, "error");
     } finally {
       setLoading(false);
     }
@@ -1235,7 +1363,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       setFiles((fs) => fs.map((f) => f.path === path ? { ...f, content, updatedAt: new Date().toISOString() } : f));
     } catch {
       setSaveError(`${path} НЕ сохранён — нет связи с сервером`);
-      showToast("Не сохранено — нет связи с сервером", "error");
+      showToast(TL.notSavedOffline, "error");
     } finally {
       setSaving(false);
     }
@@ -1305,7 +1433,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       setShowNewFile(false);
       setNewFileName("");
     } catch {
-      showToast("Не удалось создать файл", "error");
+      showToast(TL.fileCreateFail, "error");
     }
   };
 
@@ -1382,9 +1510,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       if (selectedFile?.path === oldPath) {
         setSelectedFile((sf) => sf ? { ...sf, path: target } : null);
       }
-      showToast("Файл переименован", "success");
+      showToast(TL.fileRenamed, "success");
     } catch {
-      showToast("Переименовать не удалось", "error");
+      showToast(TL.renameFail, "error");
     } finally {
       setRenamingFile(null);
     }
@@ -1489,14 +1617,14 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         // иначе он видит замерший индикатор и ждёт вдвое дольше, не понимая,
         // сломалось что-то или так задумано. Денег это не стоит: генерация кода
         // ограничена по темпу, а не по квоте, — но время его стоит.
-        showToast("Связь оборвалась на середине — повторяем запрос. Это займёт ещё столько же.", "error");
+        showToast(TL.midStreamRetry, "error");
         data = null;
       }
       if (data === null) {
         const r = await fetchWithRedeployRetry(
           apiUrl(`/api/devhub/projects/${project.id}/generate`),
           { method: "POST", headers: { "Content-Type": "application/json" }, body: generateBody, signal: genCtrl.signal },
-          { onRetry: () => showToast("Бэкенд перевыкатывается — повторю через 20 с…", "info") }
+          { onRetry: () => showToast(TL.backendRedeploy, "info") }
         );
         data = await r.json();
         if (!r.ok) throw new Error(devhubServerError(data.error, "Генерация не удалась"));
@@ -1516,7 +1644,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       }
       if (data.aiGenerated === false) {
         note = "No AI provider configured — placeholder inserted instead of real code";
-        showToast("Провайдер ИИ не подключён — вместо настоящего кода вставлена заготовка", "error");
+        showToast(TL.stubCode, "error");
       } else if (Array.isArray(data.syntaxErrors) && data.syntaxErrors.length > 0) {
         const paths = data.syntaxErrors.map((s: { path: string }) => s.path).join(", ");
         note = `Syntax check failed: ${paths}`;
@@ -1618,7 +1746,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       // причины: человек решал, что правок не было вовсе. Тост — вне
       // setState-апдейтера: React зовёт апдейтеры дважды (известный класс).
       if (checkpointHistory.length === 0) {
-        showToast("История правок не загрузилась — обновите страницу", "warning");
+        showToast(TL.historyLoadFail, "warning");
       }
     } finally {
       setLoadingHistory(false);
@@ -1633,7 +1761,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const data = await r.json();
       if (!r.ok) throw new Error(devhubServerError(data.error, "Отменить не удалось"));
       if (data.ok === false) {
-        showToast("Отменять нечего — правок ИИ не было", "info");
+        showToast(TL.nothingToUndo, "info");
         return;
       }
       await reloadAfterRevert(Array.isArray(data.revertedFiles) ? data.revertedFiles : []);
@@ -1642,7 +1770,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       // живёт в памяти процесса и правки ВЕРНУТСЯ при перезапуске — а зелёный
       // тост говорил, что всё отменено насовсем.
       if (data.storage === "memory") {
-        showToast("Отменено, но база была недоступна: восстановление пока в памяти и может откатиться назад при перезапуске.", "error");
+        showToast(TL.undoneMemory, "error");
       } else {
         showToast(`Отменено: ${data.label || "последняя правка ИИ"}`, "success");
       }
@@ -1661,14 +1789,14 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const data = await r.json();
       if (!r.ok) throw new Error(devhubServerError(data.error, "Восстановить не удалось"));
       if (data.ok === false) {
-        showToast("Эта контрольная точка больше недоступна", "info");
+        showToast(TL.checkpointGone, "info");
         loadCheckpointHistory();
         return;
       }
       await reloadAfterRevert(Array.isArray(data.revertedFiles) ? data.revertedFiles : []);
       loadCheckpointHistory();
       if (data.storage === "memory") {
-        showToast("Вернулись, но база была недоступна: восстановление пока в памяти и может откатиться назад при перезапуске.", "error");
+        showToast(TL.restoredMemory, "error");
       } else {
         showToast(`Вернулись к: ${data.restoredToLabel} (шагов назад: ${data.stepsApplied})`, "success");
       }
@@ -1693,7 +1821,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       if (!r.ok || data.ok === false) throw new Error(devhubServerError(data.error, "Не удалось составить план"));
       setPlan(data);
       if (data.aiGenerated === false) {
-        showToast("Провайдер ИИ не подключён — показан общий план вместо составленного под задачу", "warning");
+        showToast(TL.stubPlan, "warning");
       }
     } catch (e: any) {
       showToast(e.message || "Не удалось составить план", "error");
@@ -1860,7 +1988,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetchWithRedeployRetry(
         apiUrl(`/api/devhub/projects/${project.id}/database/design`),
         { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ description }) },
-        { onRetry: () => showToast("Бэкенд перевыкатывается — повторю через 20 с…", "info") }
+        { onRetry: () => showToast(TL.backendRedeploy, "info") }
       );
       const data = await r.json();
       if (!r.ok) throw new Error(devhubServerError(data.error, "Не удалось спроектировать базу"));
@@ -1876,7 +2004,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const listR = await fetch(apiUrl(`/api/devhub/projects/${project.id}/files`), { cache: "no-store" });
       const listData = await listR.json();
       applyFileList(listData);
-      showToast("База спроектирована — db/schema.sql и клиент лежат в дереве файлов", "success");
+      showToast(TL.dbDesigned, "success");
       // Schema on disk is only half the job; offer to create the real database
       // right here when the server can (capability "database" is live).
       if (data.canProvision) {
@@ -1902,7 +2030,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const appendAssetToFile = (url: string, kind: AssetKind) => {
     if (!selectedFile) {
       navigator.clipboard?.writeText(url).catch(() => {});
-      showToast("Нет открытого файла — ссылка скопирована в буфер", "info");
+      showToast(TL.noOpenFileLink, "info");
       return;
     }
     const next = appendSnippet(editorContent, assetSnippet(selectedFile.path, url, kind));
@@ -1928,7 +2056,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const r = await fetchWithRedeployRetry(
         apiUrl(`/api/devhub/projects/${project.id}/database/provision`),
         { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" },
-        { onRetry: () => showToast("Бэкенд перевыкатывается — повторю через 20 с…", "info") }
+        { onRetry: () => showToast(TL.backendRedeploy, "info") }
       );
       const data = await r.json();
       if (!r.ok || !data.ok) throw new Error(devhubServerError(data.error, "Не удалось выделить ресурсы"));
@@ -1982,9 +2110,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const data = await r.json();
       if (!r.ok) throw new Error(devhubServerError(data.error, "Правка ИИ не удалась"));
       if (data.aiGenerated === false) {
-        showToast("Провайдер ИИ не подключён — страница настоящей правкой ИИ не менялась", "error");
+        showToast(TL.stubVisual, "error");
       } else if (Array.isArray(data.syntaxErrors) && data.syntaxErrors.length > 0) {
-        showToast("Правка ИИ применена, но результат не прошёл проверку синтаксиса — просмотрите перед выкаткой", "warning");
+        showToast(TL.veSyntaxFail, "warning");
       } else {
         showToast(
           visualEditHtmlPath
@@ -2073,7 +2201,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     }
     deployPollGenRef.current += 1;
     setDeploying(true);
-    showToast("Собираю…", "info");
+    showToast(TL.building, "info");
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy`), { method: "POST" });
       const data = await r.json();
@@ -2195,9 +2323,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       // в своём коде. Безусловный зелёный тост это скрывал.
       const saved = await r.json().catch(() => ({}));
       if (saved?.storage === "memory") {
-        showToast("Сохранено, но база была недоступна: переменная пока в памяти и может пропасть при перезапуске. Повторите через минуту.", "error");
+        showToast(TL.envSavedMemory, "error");
       } else {
-        showToast("Переменная сохранена", "success");
+        showToast(TL.envSaved, "success");
       }
     } catch (e: any) { showToast(`Переменная НЕ сохранена — ${e?.message || "нет связи"}`, "error"); }
   };
@@ -2212,7 +2340,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       // здесь читается как успех.
       const done = await r.json().catch(() => ({}));
       if (done?.storage === "memory") {
-        showToast("База была недоступна: переменная убрана только из памяти и может вернуться после перезапуска.", "error");
+        showToast(TL.envRemovedMemory, "error");
       }
     } catch (e: any) {
       // The list is re-read either way: a variable that is still on the server
@@ -2237,7 +2365,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const listData = await listR.json();
       applyFileList(listData);
       if (data.storage === "memory") {
-        showToast("Шаблон применён, но база была недоступна: результат пока в памяти и может пропасть при перезапуске.", "error");
+        showToast(TL.tplMemory, "error");
       } else {
         showToast(`Шаблон применён — файлов: ${(data.files || []).length}`, "success");
       }
@@ -2262,7 +2390,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         }),
       });
       setProject((p) => p ? { ...p, name: settingsName, description: settingsDesc || null, customDomain: settingsDomain || null } : p);
-      showToast("Настройки сохранены", "success");
+      showToast(TL.settingsSaved, "success");
     } catch (e: any) {
       showToast(`Настройки НЕ сохранены — ${e?.message || "нет связи"}`, "error");
     } finally {
@@ -2279,7 +2407,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         body: JSON.stringify({ userId: settingsCollab.trim(), role: collabRole }),
       });
       if (resp.status === 403) {
-        showToast("Соавторы доступны в Studio Pro — оформите, чтобы добавлять", "error");
+        showToast(TL.collabProOnly, "error");
         return;
       }
       const data = await resp.json().catch(() => null);
@@ -2294,7 +2422,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       setSettingsCollab("");
       showToast(`Соавтор добавлен (${collabRole})`, "success");
     } catch {
-      showToast("Не удалось добавить соавтора", "error");
+      showToast(TL.collabAddFail, "error");
     }
   };
 
@@ -2303,7 +2431,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     try {
       await writeOrThrow(apiUrl(`/api/devhub/projects/${project.id}/collaborators/${encodeURIComponent(collabUserId)}`), { method: "DELETE" });
       setProject((p) => p ? { ...p, collaborators: p.collaborators.filter((c) => c.userId !== collabUserId) } : p);
-      showToast("Доступ отозван", "success");
+      showToast(TL.accessRevoked, "success");
     } catch (e: any) {
       // Leave them in the list. Access is still live, and a list that hides
       // that is worse than the error.
@@ -2379,7 +2507,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         // deploy would build from.
         setGithubMsg(`⚠ Отправлено ${d.pushedFiles} из ${d.pushedFiles + (d.failedFiles?.length ?? 0)} файлов. ${d.degradedReason}`);
         setGithubMsgTone("warning");
-        showToast("Часть файлов не попала в репозиторий", "warning");
+        showToast(TL.repoPartial, "warning");
         setProject((p) => p ? { ...p, repoUrl: d.repoUrl } : p);
         await fetchGithubStatus();
         await fetchGithubBranches();
@@ -2435,7 +2563,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     }
     setPagesDeploying(true);
     setPagesResult(null);
-    showToast("Публикую на Cloudflare Pages…", "info");
+    showToast(TL.publishingCf, "info");
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy/pages`), { method: "POST" });
       const d = await r.json();
@@ -2481,7 +2609,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       return;
     }
     setVercelDeploying(true);
-    showToast("Выкатываю на Vercel…", "info");
+    showToast(TL.deployingVercel, "info");
     try {
       const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deploy/vercel`), { method: "POST" });
       const d = await r.json();
@@ -3038,15 +3166,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const runBulkTranslate = async () => {
     if (!project) return;
     if (bulkPaths.length === 0) {
-      showToast("Выберите хотя бы один файл", "error");
+      showToast(TL.pickOneFile, "error");
       return;
     }
     if (bulkLangs.length === 0) {
-      showToast("Выберите хотя бы один язык перевода", "error");
+      showToast(TL.pickOneLang, "error");
       return;
     }
     if (bulkPaths.length * bulkLangs.length > 50) {
-      showToast("За раз не больше 50 переводов (файлы × языки)", "error");
+      showToast(TL.translateCap, "error");
       return;
     }
     setBulkLoading(true);
@@ -3178,7 +3306,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         text: `Imported ${d.importedCount} file(s), skipped ${d.skippedCount}`,
       });
       if (d.storage === "memory") {
-        showToast("Файлы импортированы, но база была недоступна: результат пока в памяти и может пропасть при перезапуске.", "error");
+        showToast(TL.importedMemory, "error");
       } else {
         showToast(`Из ${file.name} импортировано файлов: ${d.importedCount}`, "success");
       }
@@ -3278,7 +3406,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         showToast(devhubServerError(d.error, "Загрузка в Cloudflare не удалась"), "error");
       } else {
         setCfImgPermanentUrl(d.url);
-        showToast("Картинка загружена на постоянный адрес", "success");
+        showToast(TL.imgPermanent, "success");
       }
     } catch (e: any) {
       showToast(e?.message || "Загрузка не удалась", "error");
@@ -4181,7 +4309,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       onChange={(e) => {
                         const f = e.target.files?.[0];
                         if (!f) return;
-                        if (f.size > 5 * 1024 * 1024) { showToast("Картинка слишком большая (не больше 5 МБ)", "error"); return; }
+                        if (f.size > 5 * 1024 * 1024) { showToast(TL.imgTooBig, "error"); return; }
                         const reader = new FileReader();
                         reader.onload = () => {
                           const url = String(reader.result || "");

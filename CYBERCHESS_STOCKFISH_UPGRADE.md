@@ -42,6 +42,33 @@
 
 ---
 
+## Готовность к Уровню 2 (подготовлено 06.09.2026 — основателю осталось скачать файл)
+
+Проверено к моменту записи, чтобы swap не сорвался на мелочах:
+
+- **crossOriginIsolation на проде ВКЛЮЧЁН** — `Cross-Origin-Embedder-Policy: credentialless` +
+  `Cross-Origin-Opener-Policy: same-origin` (curl по `aevion.app/cyberchess`). Значит
+  SharedArrayBuffer доступен → **качать МНОГОпоточную NNUE-сборку** (single — запасной вариант).
+- **Приложение грузит `/stockfish-18-lite.js`** — новые файлы должны лечь под ЭТИМ именем.
+- **Лимит `Threads value 1`** в `page.tsx` (класс `SF`, ~стр. 343) поставлен под ХРУПКУЮ lite-сборку;
+  для многопоточной NNUE его надо сделать условным (код в чеклисте установщика).
+
+**Установщик готов:** `cyberchess-install-nnue.sh` в корне репозитория. Он делает бэкап
+в `/public/stockfish-legacy/`, кладёт новые файлы под правильными именами, проверяет их
+(сигнатура wasm, размер) и печатает два оставшихся шага (условный Threads + проверка в
+DevTools). Откат — `bash cyberchess-install-nnue.sh --restore`. Самопроверен на отрицательных
+контролях (отказ без аргументов и на не-wasm, боевые файлы при отказе не трогаются).
+
+Порядок для основателя:
+```bash
+# 1. скачать stockfish-nnue-16.zip с https://github.com/nmrugg/stockfish.js/releases/latest, распаковать
+# 2. из корня репозитория:
+bash cyberchess-install-nnue.sh путь/stockfish-nnue-16.js путь/stockfish-nnue-16.wasm [путь/...worker.js]
+# 3. следовать двум напечатанным шагам, затем выкатить фронт
+```
+
+---
+
 ## Уровень 2 — Drop-in NNUE binary swap (30 мин)
 
 **Что:** заменить `frontend/public/stockfish-18-lite.{js,wasm}` (файл, который грузит приложение) на NNUE-вариант от nmrugg.

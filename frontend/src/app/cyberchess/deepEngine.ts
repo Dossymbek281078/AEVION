@@ -123,8 +123,13 @@ export class DeepEngine {
     if (this.sf) return;
     try {
       this.set("loading-engine");
-      // Строковый URL, чтобы бандлер не пытался разрешить импорт на этапе сборки:
-      // файл лежит в /public и отдаётся статикой (как в доказанной пробе).
+      // ⚠️ Next 16 = Turbopack, а webpackIgnore — вебпаковская директива, её
+      // Turbopack может НЕ уважать → этот import(url) под текущей сборкой не
+      // проверен и может не собраться. Рекомендованный путь — worker-мост
+      // (см. NNUE-DEEP-ANALYSIS.md, п.2): public/deep-engine-worker.js делает
+      // import сам, главный поток берёт его как new Worker(url,{type:"module"}).
+      // Здесь оставлен прямой import как доказанный в пробе; переключить на мост
+      // при интеграции, проверив реальной сборкой.
       const url = ENGINE_URL;
       const mod = (await import(/* webpackIgnore: true */ /* @vite-ignore */ url)) as {
         default: (arg?: Record<string, unknown>) => Promise<StockfishWeb>;

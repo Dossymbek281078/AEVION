@@ -9,9 +9,9 @@ const SITE = getSiteUrl();
 // app/opengraph-image.tsx. Metadata text is the important SEO win here — the
 // page was previously a bare "use client" route with no title/description.
 export const metadata: Metadata = {
-  title: "AEVION QSign — canonical-JSON signing, HMAC + Ed25519 verification",
+  title: "AEVION QSign — canonical-JSON signing · подпись и проверка документов",
   description:
-    "QSign signs any JSON payload over an RFC 8785-canonical form: deterministic key ordering, HMAC and Ed25519 signatures, offline verification. The signing primitive under QRight receipts, Bureau certificates and Planet attestations.",
+    "QSign signs any JSON payload over an RFC 8785-canonical form: deterministic key ordering, HMAC and Ed25519 signatures, offline verification. The signing primitive under QRight receipts, Bureau certificates and Planet attestations. Подпись любого JSON-документа и проверка офлайн — тот же примитив, что заверяет чеки QRight и сертификаты Bureau.",
   openGraph: {
     title: "AEVION QSign — deterministic signing & verification",
     description:

@@ -131,6 +131,12 @@ const PAGES = [
   // покупки ($149/мес). Пропади она — заплативший не свяжет покупку с
   // браузером, и никто не заметит.
   "/devhub/link",
+  // Галерея DevHub — три НАСТОЯЩИХ приложения, которыми витрина доказывает
+  // продукт (собраны 06.09.2026 через живой прод). Пропадёт адрес — витрина
+  // начнёт обещать мёртвое, и никто не заметит.
+  "https://465693ea.aevion-project-7760cf.pages.dev",
+  "https://909ef2a1.aevion-project-af430e.pages.dev",
+  "https://75d87932.aevion-project-b85b54.pages.dev",
   "/multichat-engine/launch", // запуск 20.09
   // Добавлено 19.08.2026. Замер покрытия: сторож смотрел 39 публичных
   // страниц верхнего уровня из 92 — то есть был зелёным, наблюдая меньше
@@ -256,7 +262,9 @@ let pending = 0;
 const deployedNowPending = [];
 
 async function checkPage(p) {
-  const url = BASE + p;
+  // Абсолютные адреса (галерея DevHub на *.pages.dev) проверяются как есть;
+  // относительные, как раньше, клеятся к BASE.
+  const url = p.startsWith("http") ? p : BASE + p;
   try {
     const r = await fetch(url, { redirect: "follow", headers: { Accept: "text/html" } });
     const body = await r.text();

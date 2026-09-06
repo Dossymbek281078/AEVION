@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18nOptional } from "@/lib/i18n";
+
 /**
  * «Перейти к содержимому» — первая остановка обхода Tab на странице.
  *
@@ -14,7 +16,15 @@
  * Поэтому цель ищется при нажатии, и если её нет — переходим к первому
  * заголовку, а он есть везде.
  */
+const LABELS: Record<string, string> = {
+  ru: "Перейти к содержимому",
+  en: "Skip to content",
+  kk: "Мазмұнға өту",
+};
+
 export default function SkipToContent() {
+  // Вне провайдера (тесты, отдельная отрисовка) — русский, как и раньше.
+  const lang = useI18nOptional()?.lang ?? "ru";
   const перейти = (e: React.MouseEvent | React.KeyboardEvent) => {
     e.preventDefault();
     const цель =
@@ -67,7 +77,7 @@ export default function SkipToContent() {
         e.currentTarget.style.position = "absolute";
       }}
     >
-      Перейти к содержимому
+      {LABELS[lang] ?? LABELS.ru}
     </a>
   );
 }

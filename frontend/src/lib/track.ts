@@ -15,6 +15,11 @@ const SID_KEY = "aevion_gtm_sid";
 
 export type EventType =
   | "page_view"
+  // Использование ключевой возможности продукта (не клик по CTA и не покупка):
+  // «дошёл до первого результата». Заведено 06.09.2026 — воронка DevHub была
+  // слепа между page_view и checkout_start, и к запуску 10.09 нельзя было бы
+  // ответить, сколько посетителей сгенерировало хоть что-то.
+  | "feature_use"
   | "cta_click"
   | "calculator_open"
   | "calculator_quote"

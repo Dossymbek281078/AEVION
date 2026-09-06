@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ldFees, todayRealizedPnl } from "@/app/qtrade/fees";
 import { ldClosed } from "@/app/qtrade/marketSim";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+import { useI18nOptional } from "@/lib/i18n";
 type Props = {
   hidePlanet?: boolean;
   variant?: "light" | "dark";
@@ -110,6 +111,9 @@ function RiskPill({ variant }: { variant: "light" | "dark" }) {
 }
 
 export function Wave1Nav({ hidePlanet = false, variant = "light" }: Props) {
+  // Навигация целиком английская; два русских ярлыка были единственным
+  // исключением и на EN-странице читались как «не для меня».
+  const lang = useI18nOptional()?.lang ?? "ru";
   const sep = variant === "dark" ? "rgba(148,163,184,0.5)" : "#cbd5e1";
   const link = variant === "dark" ? "#e2e8f0" : "#334155";
   // Teal-700 (#0f766e) on slate-50 (#f8fafc) ≈ 5.5:1 — passes WCAG 2 AA.
@@ -141,10 +145,10 @@ export function Wave1Nav({ hidePlanet = false, variant = "light" }: Props) {
       <Link href="/healthai" style={{ color: link, fontWeight: 600 }}>HealthAI</Link>
       <Link href="/qcontract" style={{ color: link, fontWeight: 600 }}>QContract</Link>
       <Link href="/qpaynet" style={{ color: link, fontWeight: 600 }}>QPayNet</Link>
-      <Link href="/startup-exchange" style={{ color: link, fontWeight: 600 }}>Биржа стартапов</Link>
+      <Link href="/startup-exchange" style={{ color: link, fontWeight: 600 }}>{lang === "ru" ? "Биржа стартапов" : "Startup Exchange"}</Link>
       <Link href="/studio" style={{ color: "#0d9488", fontWeight: 800 }}>Studio</Link>
       <Link href="/devhub" style={{ color: link, fontWeight: 600 }}>DevHub</Link>
-      <Link href="/smeta-trainer" style={{ color: link, fontWeight: 600 }}>Смета</Link>
+      <Link href="/smeta-trainer" style={{ color: link, fontWeight: 600 }}>{lang === "ru" ? "Смета" : "Smeta Trainer"}</Link>
       <Link href="/qtrade" style={{ color: link, fontWeight: 600 }}>QTrade</Link>
       <Link href="/revenue" style={{ color: link, fontWeight: 600 }}>Revenue</Link>
       <Link href="/sdks" style={{ color: link, fontWeight: 600 }}>SDKs</Link>

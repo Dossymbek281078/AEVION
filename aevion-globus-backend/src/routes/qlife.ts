@@ -373,7 +373,7 @@ qlifeRouter.post("/plan", aiLimit, async (req: Request, res: Response) => {
       },
     ];
 
-    const result = await callProvider(providerId, messages, modelName, 0.7);
+    const result = await callProvider(providerId, messages, modelName, 0.7, undefined, undefined, { module: "qlife-plan" });
 
     let plan: { goal: string; recommendation: string; frequency: string; expected_benefit: string }[] = [];
     try {

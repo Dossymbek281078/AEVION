@@ -279,6 +279,7 @@ export function summarizePurchases(
 
 const ALLOWED_TYPES = new Set([
   "page_view",
+  "feature_use",
   "cta_click",
   "calculator_open",
   "calculator_quote",

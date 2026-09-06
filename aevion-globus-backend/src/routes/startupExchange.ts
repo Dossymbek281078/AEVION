@@ -1552,7 +1552,7 @@ startupExchangeRouter.post(
     const scoredAt = new Date().toISOString();
 
     try {
-      const result = await callProvider(providerId, messages, model, 0.3);
+      const result = await callProvider(providerId, messages, model, 0.3, undefined, undefined, { module: "startupx-ai-score" });
       // Расход этой ручки не записывался НИГДЕ: скоринг идеи — платный вызов,
       // а в отчёт по деньгам он не попадал вовсе. Цену берём платформенной
       // таблицей; второй источник цен развёл бы наш отчёт с отчётом соседей.

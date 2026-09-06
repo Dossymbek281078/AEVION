@@ -1316,6 +1316,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       } else {
         showToast(`Создано файлов: ${newGenerated.length}`, "success");
       }
+      if (data.aiGenerated) {
+        // «Дошёл до первого результата» — главный шаг воронки между заходом
+        // и покупкой; до 06.09 он не измерялся вовсе.
+        track({ type: "feature_use", source: "devhub", meta: { feature: "generation", files: newGenerated.length, provenance: Boolean(data.provenance) } });
+      }
       setChatHistory((h) => [...h, { role: "assistant", at: new Date().toISOString(), checkpointId: data.checkpointId, files: changes, note, ...(data.provenance ? { provenance: data.provenance } : {}) }]);
       if (stampProvenance && !data.provenance) {
         // Просили отметку, а её нет — молчать нельзя (§16). Причину несёт ответ.
@@ -2222,6 +2227,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       const d = await r.json();
       if (!r.ok || !d.ok) throw new Error(devhubServerError(d.error, "Не удалось опубликовать на Cloudflare Pages"));
       setPagesResult({ liveUrl: d.liveUrl, domain: d.domain, pagesUrl: d.pagesUrl, domainReady: !!d.domainReady });
+      // Шаг воронки «опубликовал» — до 06.09 не измерялся.
+      track({ type: "feature_use", source: "devhub", meta: { feature: "deploy_pages" } });
       // The server decides which address is live and hands it over as liveUrl —
       // it falls back to pages.dev when the custom domain does not resolve.
       // Announcing d.domain the moment it merely *exists* told people their

@@ -188,7 +188,7 @@ async function runLens(
 
   try {
     const model = providerDefaultModel(provider);
-    const { reply } = await callProvider(provider, [system, user], model, 0.4);
+    const { reply } = await callProvider(provider, [system, user], model, 0.4, undefined, undefined, { module: "qventure-lens" });
     const parsed = parseLensJson(reply);
     if (!parsed) return fallback;
     return {
@@ -343,7 +343,7 @@ async function runSynthesis(
   };
   try {
     const model = providerDefaultModel(provider);
-    const { reply } = await callProvider(provider, [system, user], model, 0.5);
+    const { reply } = await callProvider(provider, [system, user], model, 0.5, undefined, undefined, { module: "qventure-synthesis" });
     const text = reply.trim();
     // Слишком короткий ответ — это тоже НЕ ответ модели: дальше идёт
     // заготовка, и признак обязан это отражать.

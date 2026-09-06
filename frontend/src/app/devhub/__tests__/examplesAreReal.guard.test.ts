@@ -10,6 +10,14 @@ describe("примеры галереи — настоящие по форме",
     for (const ex of DEVHUB_EXAMPLES) {
       expect(ex.title.trim().length, `пустое имя у ${ex.url}`).toBeGreaterThan(2);
       expect(ex.prompt.trim().length, `пустая фраза у ${ex.url}`).toBeGreaterThan(10);
+      // Переводы обязательны: посетитель Show HN первым делом жмёт пример,
+      // и русская фраза на EN-странице читается как «не для меня».
+      for (const l of ["en", "kk"] as const) {
+        expect(ex[l].title.trim().length, `пустое имя (${l}) у ${ex.url}`).toBeGreaterThan(2);
+        expect(ex[l].prompt.trim().length, `пустая фраза (${l}) у ${ex.url}`).toBeGreaterThan(10);
+      }
+      // EN-перевод обязан быть переводом, а не копией кириллицы.
+      expect(/[а-яё]/i.test(ex.en.title + ex.en.prompt), `кириллица в en-переводе у ${ex.url}`).toBe(false);
       expect(ex.url.startsWith("https://"), `не-https адрес: ${ex.url}`).toBe(true);
       const host = new URL(ex.url).hostname;
       expect(

@@ -476,6 +476,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   // Live phase of the current generation (SSE) — honest states only, each
   // corresponds to something the backend is actually doing right now.
   const [genStage, setGenStage] = useState<string | null>(null);
+  // Фиксация происхождения генерации в QRight (спека 06.09). Галочка живёт
+  // в localStorage как удобство: серверная правда — сам ответ генерации.
+  const [stampProvenance, setStampProvenance] = useState(false);
+  useEffect(() => {
+    try { setStampProvenance(localStorage.getItem("devhub_provenance") === "1"); } catch { /* приватное окно */ }
+  }, []);
   // «Остановить генерацию»: до 05.09.2026 начатую генерацию нельзя было
   // отменить вовсе — человек смотрел на спиннер 1-3 минуты без выбора.
   const genAbortRef = useRef<AbortController | null>(null);
@@ -540,7 +546,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   type ChatFileChange = { path: string; language: string; isNew: boolean; added: number; removed: number; diff: string | null };
   type ChatMsg =
     | { role: "user"; text: string; at: string }
-    | { role: "assistant"; at: string; checkpointId?: string; files: ChatFileChange[]; note?: string }
+    | { role: "assistant"; at: string; checkpointId?: string; files: ChatFileChange[]; note?: string; provenance?: { certId: string; verifyUrl: string } }
     // Idea hook: the project clearly stores data but has no schema yet —
     // one click designs it (POST /database/design) without retyping context.
     | { role: "hint"; kind: "design_db" | "deploy" | "manifest" | "provision_db"; description: string; at: string };
@@ -1219,6 +1225,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     try {
       const generateBody = JSON.stringify({
         prompt: userText, stack: project.stack,
+        ...(stampProvenance ? { provenance: true } : {}),
         // Prior turns give follow-ups their referent ("make the button blue").
         history: chatHistory
           .filter((m) => m.role !== "hint") // hints are UI affordances, not dialog
@@ -1309,7 +1316,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       } else {
         showToast(`Создано файлов: ${newGenerated.length}`, "success");
       }
-      setChatHistory((h) => [...h, { role: "assistant", at: new Date().toISOString(), checkpointId: data.checkpointId, files: changes, note }]);
+      setChatHistory((h) => [...h, { role: "assistant", at: new Date().toISOString(), checkpointId: data.checkpointId, files: changes, note, ...(data.provenance ? { provenance: data.provenance } : {}) }]);
+      if (stampProvenance && !data.provenance) {
+        // Просили отметку, а её нет — молчать нельзя (§16). Причину несёт ответ.
+        showToast(`Происхождение не зафиксировано: ${data.provenanceError || "причина неизвестна"}. Код сгенерирован и сохранён.`, "warning");
+      }
       // Data-shaped idea + no schema yet → offer to design the database with
       // the context already in hand (rules live in lib/devhubHints — tested).
       setChatHistory((h) => {
@@ -3826,6 +3837,17 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                     )}
                                   </div>
                                 ))}
+                                {msg.provenance && (
+                                  <a
+                                    href={msg.provenance.verifyUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title="Хеш результата и время зафиксированы в реестре QRight — страница проверки открывается без входа"
+                                    style={{ display: "inline-block", marginTop: 4, marginRight: 8, padding: "4px 10px", background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: 6, fontSize: 11, fontWeight: 600, color: "#065f46", textDecoration: "none" }}
+                                  >
+                                    ✔ Происхождение зафиксировано
+                                  </a>
+                                )}
                                 {msg.checkpointId && (
                                   <button
                                     onClick={() => restoreToCheckpoint(msg.checkpointId!)}
@@ -3976,6 +3998,18 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   >
                     {generating ? "Генерируем…" : "Сгенерировать код (Ctrl+Enter)"}
                   </button>
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "#475569", cursor: "pointer" }}
+                    title="После генерации хеш результата, модель и время фиксируются в публичном реестре QRight (промпт не публикуется — только его хеш). Проверяемое происхождение ИИ-кода — то, чего требует EU AI Act.">
+                    <input
+                      type="checkbox"
+                      checked={stampProvenance}
+                      onChange={(e) => {
+                        setStampProvenance(e.target.checked);
+                        try { localStorage.setItem("devhub_provenance", e.target.checked ? "1" : "0"); } catch { /* приватное окно */ }
+                      }}
+                    />
+                    Фиксировать происхождение (QRight)
+                  </label>
                   {generating && genStage && (
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
                       <div style={{ fontSize: 12, color: "#0f766e", textAlign: "center" }}>

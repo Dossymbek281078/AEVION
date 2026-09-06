@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, test } from "vitest";
 import { allTranslations } from "../__tests__/localeSource";
 import { readFileSync } from "node:fs";
 import path from "node:path";

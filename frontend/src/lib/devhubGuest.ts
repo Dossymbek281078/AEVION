@@ -46,6 +46,30 @@ export function getDevhubGuestId(): string | null {
   }
 }
 
+/**
+ * Выдать браузеру НОВУЮ гостевую личность.
+ *
+ * Зовётся ровно в одном случае: после того как гостевая работа переехала в
+ * аккаунт. Прежняя личность с этого момента принадлежит аккаунту, и оставлять
+ * её браузеру нельзя — иначе следующая гостевая работа (человек вышел и снова
+ * пробует без входа, или браузером пользуется второй человек) ляжет на ту же
+ * личность, которую перенос уже считает разобранной, и пропадёт из виду
+ * ровно так же, как до починки.
+ *
+ * Возвращает новую личность или `null`, если хранилище недоступно.
+ */
+export function rotateDevhubGuestId(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const fresh = newId();
+    if (!GUEST_ID.test(fresh)) return null;
+    window.localStorage.setItem(STORAGE_KEY, fresh);
+    return fresh;
+  } catch {
+    return null;
+  }
+}
+
 /** Адрес ручки DevHub — только таким запросам добавляется заголовок. */
 export function isDevhubApiUrl(input: unknown): boolean {
   let url = "";
@@ -87,8 +111,22 @@ export function installDevhubGuestHeader(): () => void {
   if (!id) return () => {};
   const original = window.fetch;
   installed = true;
-  window.fetch = ((input: RequestInfo | URL, init?: RequestInit) =>
-    isDevhubApiUrl(input) ? original(input, withGuestHeader(init, id)) : original(input, init)) as typeof window.fetch;
+  window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    if (!isDevhubApiUrl(input)) return original(input, init);
+    // Личность читается НА КАЖДЫЙ запрос, а не запоминается при установке.
+    //
+    // После переноса гостевой работы в аккаунт личность МЕНЯЕТСЯ
+    // (rotateDevhubGuestId), а захваченное значение продолжало бы уходить в
+    // заголовке до перезагрузки страницы. Выход из аккаунта страницу не
+    // перезагружает, поэтому окно не теоретическое: новая гостевая работа
+    // легла бы на уже разобранную личность и снова пропала бы из виду при
+    // следующем входе — ровно тот дефект, ради которого перенос и написан.
+    //
+    // Запасное значение — то, что было при установке: если хранилище вдруг
+    // отказало, лучше слать прежнюю личность, чем не слать заголовок вовсе
+    // (без него посетитель попадает в ОБЩИЙ ящик к чужим черновикам).
+    return original(input, withGuestHeader(init, getDevhubGuestId() ?? id));
+  }) as typeof window.fetch;
   return () => {
     window.fetch = original;
     installed = false;

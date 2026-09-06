@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { installDevhubGuestHeader, getDevhubGuestId } from "@/lib/devhubGuest";
+import { installDevhubGuestHeader, getDevhubGuestId, rotateDevhubGuestId } from "@/lib/devhubGuest";
 import { getAuthToken } from "@/lib/auth";
 import { apiUrl } from "@/lib/apiBase";
 
@@ -26,20 +26,50 @@ installDevhubGuestHeader();
  */
 const ОТМЕТКА = "aevion.devhub.guest.adopted";
 
+/**
+ * Оповещение «гостевая работа переехала, список пора перечитать».
+ * Экспортируется намеренно: слушатель обязан импортировать это имя, а не
+ * повторять строку у себя — две копии одного имени расходятся молча.
+ */
+export const СОБЫТИЕ_ПЕРЕНОСА = "aevion-devhub-guest-adopted";
+
 function перенестиОдинРаз(): void {
   if (typeof window === "undefined") return;
   try {
-    if (window.localStorage.getItem(ОТМЕТКА)) return;
     const токен = getAuthToken();
     const гость = getDevhubGuestId();
     // Без входа переносить некуда, без гостя — нечего. Обе проверки нужны:
     // ручка ответит понятным отказом, но дёргать её впустую незачем.
     if (!токен || !гость) return;
+    // Отметка помнит НЕ «да/нет», а КАКУЮ личность уже перенесли.
+    //
+    // Простое «да/нет» возвращало исходный дефект в редком, но настоящем
+    // сценарии: человек вошёл (перенос сработал), вышел, поработал гостем и
+    // вошёл снова — личность браузера та же, отметка уже стоит, переноса нет,
+    // работа снова не видна. То же на общем браузере у второго человека.
+    if (window.localStorage.getItem(ОТМЕТКА) === гость) return;
     void fetch(apiUrl("/api/devhub/studio/adopt-guest"), {
       method: "POST",
       headers: { Authorization: `Bearer ${токен}` },
     })
-      .then((r) => { if (r.ok) window.localStorage.setItem(ОТМЕТКА, "1"); })
+      .then(async (r) => {
+        if (!r.ok) return;
+        window.localStorage.setItem(ОТМЕТКА, гость);
+        // Список проектов уже уехал ДО переноса: он тоже грузится из useEffect
+        // на монтировании, и гонку выигрывает более короткий запрос. Без
+        // оповещения человек увидел бы ПУСТОТУ до перезагрузки страницы — то
+        // есть ровно ту потерю, ради которой перенос и написан.
+        const d = (await r.json().catch(() => null)) as { adopted?: number } | null;
+        if (typeof d?.adopted === "number" && d.adopted > 0) {
+          window.dispatchEvent(new CustomEvent(СОБЫТИЕ_ПЕРЕНОСА, { detail: d.adopted }));
+          // Работа переехала — прежняя гостевая личность теперь принадлежит
+          // аккаунту, и браузеру она больше не своя. Выдаём новую, иначе
+          // следующая гостевая работа ляжет на уже разобранную личность.
+          // Ротация ТОЛЬКО при реальном переезде: иначе каждая загрузка
+          // страницы меняла бы личность и порождала лишний запрос.
+          rotateDevhubGuestId();
+        }
+      })
       // Молчим намеренно: перенос — удобство, а не операция, ради которой
       // человек пришёл. Уронить из-за него страницу нельзя. Но и отметку при
       // отказе НЕ ставим, чтобы попытка повторилась в следующий заход.

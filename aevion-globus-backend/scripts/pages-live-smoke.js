@@ -269,8 +269,14 @@ async function checkPage(p) {
     const r = await fetch(url, { redirect: "follow", headers: { Accept: "text/html" } });
     const body = await r.text();
     const okStatus = r.ok;
-    const okSize = body.length > 5000;
-    const okBrand = /aevion/i.test(body);
+    // Внешние страницы галереи — ПРИЛОЖЕНИЯ ПОЛЬЗОВАТЕЛЕЙ: они легковесны
+    // (3-5 КБ) и слова «aevion» не содержат по определению. К ним применимы
+    // только код ответа и непустое тело; наши страницы проверяются как прежде.
+    // Проверено на живых примерах ДО коммита: 4047-4913 байт, бренда нет —
+    // со старыми критериями сторож краснел бы с первого дня.
+    const external = p.startsWith("http");
+    const okSize = body.length > (external ? 1500 : 5000);
+    const okBrand = external || /aevion/i.test(body);
     if (okStatus && okSize && okBrand) {
       if (PENDING_DEPLOY[p]) deployedNowPending.push(p);
       pass++;

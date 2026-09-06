@@ -53,20 +53,13 @@ function scan(): Paid[] {
 
 // Ждут кампании в fix/build-closed-vacancy-feed. Строка живёт до её мержа:
 // когда ручка получит ограничитель, проверка ниже потребует убрать её отсюда.
+// 06.09.2026: двенадцать записей закрыты ограничителями (класс A свипа +
+// qlearn) — храповик сам потребовал их убрать. Остался ОДИН осознанный:
+// /widget/run — встраиваемый виджет с CORS *, ключ apiKey; IP-предел ломал
+// бы легитимные всплески встраиваний, его расход виден счётчику неучтённых
+// (providerMetering) — решение о его пределе отдельное.
 const PENDING = new Set([
-  "longevity.ts /ai-plan",
-  "qai.ts /chat",
-  "qai.ts /chat/stream",
-  "qcoreai.ts /sessions/:id/suggest",
   "qcoreai.ts /widget/run",
-  "qcoreai.ts /sessions/:id/ai-summary",
-  "qcoreai.ts /notebook/auto-tag",
-  "qmedia.ts /ai/describe-video",
-  "qmedia.ts /ai/generate-lyrics",
-  "qmedia.ts /ai/generate-title",
-  "qmelanin.ts /ai-plan",
-  "qcoreai.ts /templates/suggest",
-  "qlearn.ts /me/courses/:courseId/ai-generate-lesson",
 ]);
 
 describe("платные ручки под ограничителем", () => {

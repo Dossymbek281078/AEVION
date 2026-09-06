@@ -7703,6 +7703,29 @@ devhubRouter.get("/providers/health", async (_req, res) => {
     }),
   ]);
 
+  // Замкнуть петлю честности (смоук 06.09.2026: «github обещан live, а проба
+  // github: HTTP 401»). Пробник мерил ключи, но НЕ кормил providerHealth —
+  // /studio/capabilities продолжал объявлять возможность живой, пока живой
+  // человек не обжигался об неё сам. Теперь результат пробы становится тем же
+  // фактом, что и настоящий вызов: applyHealth переведёт «live» в «degraded».
+  // Карта — только однозначные пары; image не трогаем (у него цепочка из трёх
+  // провайдеров, падение одного не значит падения возможности).
+  const CHECK_TO_CAPABILITIES: Record<string, string[]> = {
+    github: ["github"],
+    vercel: ["vercel"],
+    deepl: ["translate"],
+    replicate: ["video", "3d"],
+    elevenlabs: ["audio_tts", "audio_music"],
+    brevo: ["email", "sms", "whatsapp"],
+    cloudflare: ["pages"],
+  };
+  for (const c of checks) {
+    for (const capId of CHECK_TO_CAPABILITIES[c.name] ?? []) {
+      if (c.ok) noteProviderSuccess(capId);
+      else noteProviderFailure(capId, `провайдер-проба: ${c.detail}`);
+    }
+  }
+
   const failing = checks.filter((c) => !c.ok);
   res.json({ checks, healthy: failing.length === 0, failing: failing.map((c) => c.name) });
 });

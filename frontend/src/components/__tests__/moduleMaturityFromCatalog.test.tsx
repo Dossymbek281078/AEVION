@@ -19,6 +19,9 @@ const APP = join(__dirname, "..", "..", "app");
 const ПОДКЛЮЧЕНЫ = [
   "qrenew", "qreal", "qpersona", "qfusionai", "qtradeoffline", "qlife",
   "qgood", "psyapp-deps", "deepsan", "lifebox", "kids-ai-content", "qmelanin",
+  // Хвост 06.09 (вечер): «по запросу» и три «скоро» — компонент их статусы
+  // умел с рождения, подключение отставало.
+  "qmaskcard", "voice-of-earth", "mapreality", "shadownet",
 ];
 
 afterEach(() => {

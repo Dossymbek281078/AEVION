@@ -54,7 +54,7 @@ async function отправитьФорму(поиск: string) {
   });
 
   const m = await import("@/app/pricing/contact/page");
-  const Страница = m.default as () => JSX.Element;
+  const Страница = m.default as () => import("react").JSX.Element;
   await act(async () => {
     render(
       <I18nProvider>

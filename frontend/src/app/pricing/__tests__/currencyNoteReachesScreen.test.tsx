@@ -90,7 +90,7 @@ describe("неполный ответ сервера", () => {
       return { ok: true, status: 200, json: async () => тело } as unknown as Response;
     });
     const m = await import("@/app/pricing/page");
-    const Страница = m.default as () => JSX.Element;
+    const Страница = m.default as () => import("react").JSX.Element;
     await act(async () => {
       render(
         <I18nProvider>
@@ -123,7 +123,7 @@ describe("подпись о валюте на экране", () => {
   it("страница тарифов отрисовывается и несёт подпись о списании", async () => {
     ответыСервера();
     const m = await import("@/app/pricing/page");
-    const Страница = m.default as () => JSX.Element;
+    const Страница = m.default as () => import("react").JSX.Element;
     await act(async () => {
       render(
         <I18nProvider>

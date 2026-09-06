@@ -64,7 +64,7 @@ describe("сохранённая партия читается за того ж�
       tc: "5+0",
       playerColor: "w",
       analysis: kach.map((quality, i) => ({ ply: i + 1, quality: quality as never, cpLoss: 0 })),
-    } as SavedGameForCPI;
+    } as unknown as SavedGameForCPI;
     const belye = calibrateFromGames([igra, igra, igra]).accuracyPct;
     const chernye = calibrateFromGames([{ ...igra, playerColor: "b" as const }, igra, igra]).accuracyPct;
     // Белые зевали всегда → пол расчёта 20. Контроль: за чёрных то же самое

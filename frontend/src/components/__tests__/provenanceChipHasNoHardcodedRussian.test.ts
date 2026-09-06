@@ -61,7 +61,7 @@ describe("общий компонент провенанса переводит�
     }
     for (const обязательная of ["real", "tipMeasured", "tipSource", "tipTotal", "tipLabel"]) {
       expect(
-        DEFAULT_PROVENANCE_LABELS as Record<string, unknown>,
+        DEFAULT_PROVENANCE_LABELS as unknown as Record<string, unknown>,
         `подпись ${обязательная} не заведена`,
       ).toHaveProperty(обязательная);
     }

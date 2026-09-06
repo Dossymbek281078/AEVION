@@ -97,7 +97,7 @@ describe("панель FIDE и карточка сходятся на одной
       tc: "5+0",
       playerColor: "w",
       analysis: kach.map((quality, i) => ({ ply: i + 1, quality: quality as never, cpLoss: 0 })),
-    } as SavedGameForCPI;
+    } as unknown as SavedGameForCPI;
     const panel = calibrateFromGames([igra, igra, igra]).accuracyPct;
     const grafik = tochnostSohranennoy(igra.analysis!, "w")!;
     // Оба считают точность ХОДОВ ИГРОКА, но разными формулами: панель —

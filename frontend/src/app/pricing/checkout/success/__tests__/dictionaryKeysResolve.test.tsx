@@ -82,7 +82,7 @@ function ключиИзИсходника(путь: string): string[] {
 async function открыть(модуль: string, поиск: string) {
   параметры.value = поиск;
   const m = await import(/* @vite-ignore */ модуль);
-  const Страница = m.default as () => JSX.Element;
+  const Страница = m.default as () => import("react").JSX.Element;
   await act(async () => {
     render(
       <I18nProvider>

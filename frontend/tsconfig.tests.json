@@ -14,5 +14,11 @@
   // Наследует include и compilerOptions основного конфига; отличие одно —
   // не исключает *.test.ts, *.test.tsx и src/components/__tests__.
   "extends": "./tsconfig.json",
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules"],
+  "compilerOptions": {
+    // Тестам нужен ES2018+ (флаг /s в регулярках сторожей); основной конфиг
+    // держит ES2017 ради сборки, и его не трогаем. target влияет только на
+    // проверки — эмита здесь нет, lib задан в базе и не меняется.
+    "target": "ES2022"
+  }
 }

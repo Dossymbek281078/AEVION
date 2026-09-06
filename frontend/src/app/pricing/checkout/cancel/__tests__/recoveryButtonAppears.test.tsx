@@ -30,7 +30,7 @@ vi.mock("next/navigation", () => ({
 async function ссылкиПри(поиск: string) {
   параметры.объект = new URLSearchParams(поиск);
   const m = await import("@/app/pricing/checkout/cancel/page");
-  const Страница = m.default as () => JSX.Element;
+  const Страница = m.default as () => import("react").JSX.Element;
   await act(async () => {
     render(
       <I18nProvider>

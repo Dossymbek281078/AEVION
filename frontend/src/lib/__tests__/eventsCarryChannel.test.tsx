@@ -21,7 +21,7 @@ function at(search: string) {
 
 function sentBody(): Record<string, unknown> {
   expect(fetchMock, "событие не отправлено вовсе").toHaveBeenCalled();
-  const init = fetchMock.mock.calls[0][1] as unknown as { body: string };
+  const init = (fetchMock.mock.calls[0] as unknown[])[1] as { body: string };
   return JSON.parse(init.body);
 }
 

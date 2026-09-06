@@ -54,7 +54,9 @@ function запрос(ключ: string) {
       "content-type": "application/json",
     },
     body: JSON.stringify({ link_id: link.id, amount: 50, reason: "проверка режима" }),
-  });
+    // Обработчик читает только body и headers; полей NextRequest (cookies,
+    // nextUrl) он не касается — сужение типа здесь честно для этого теста.
+  }) as unknown as import("next/server").NextRequest;
 }
 
 describe("ответ о возврате называет, двигались ли настоящие деньги", () => {

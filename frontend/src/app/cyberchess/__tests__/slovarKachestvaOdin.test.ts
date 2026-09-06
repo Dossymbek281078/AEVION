@@ -60,7 +60,7 @@ describe("оценка силы не наказывает за блестящу�
     tc: "5+0",
     playerColor: "w",
     analysis: Array.from({ length: 40 }, (_, i) => ({ ply: i + 1, quality: kach as never, cpLoss: 0 })),
-  } as SavedGameForCPI);
+  } as unknown as SavedGameForCPI);
 
   it("партия из блестящих ходов не хуже партии из хороших", () => {
     const bl = calibrateFromGames([partiya("brilliant"), partiya("brilliant"), partiya("brilliant")]);
@@ -86,7 +86,7 @@ describe("оценка силы не наказывает за блестящу�
         quality: (i % 2 === 0 ? "blunder" : "good") as never,
         cpLoss: i % 2 === 0 ? 400 : 0,
       })),
-    } as SavedGameForCPI;
+    } as unknown as SavedGameForCPI;
     const m = calibrateFromGames([smeshannaya, smeshannaya, smeshannaya]);
     // Все ходы ЧЕЛОВЕКА — зевки, значит точных среди них нет вовсе.
     // 20 — намеренный пол расчёта: оценка силы не падает в ноль.

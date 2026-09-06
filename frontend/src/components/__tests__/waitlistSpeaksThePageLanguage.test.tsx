@@ -30,7 +30,7 @@ function видимоеИАтрибуты(el: HTMLElement): string {
 describe("форма раннего доступа говорит на языке страницы", () => {
   it("проп сильнее словаря — английская страница получает английские подписи", () => {
     const { container } = render(
-      <I18nProvider><WaitlistCapture lang="en" /></I18nProvider>,
+      <I18nProvider><WaitlistCapture source="test" lang="en" /></I18nProvider>,
     );
     const текст = видимоеИАтрибуты(container);
     const русское = текст.split("|").map((s) => s.trim()).filter((s) => КИРИЛЛИЦА.test(s));
@@ -39,7 +39,7 @@ describe("форма раннего доступа говорит на язык�
 
   it("контроль: проверка УМЕЕТ увидеть кириллицу", () => {
     const { container } = render(
-      <I18nProvider><WaitlistCapture lang="ru" /></I18nProvider>,
+      <I18nProvider><WaitlistCapture source="test" lang="ru" /></I18nProvider>,
     );
     expect(
       КИРИЛЛИЦА.test(видимоеИАтрибуты(container)),
@@ -49,7 +49,7 @@ describe("форма раннего доступа говорит на язык�
 
   it("форма вообще что-то рисует — иначе пустота прошла бы как успех", () => {
     const { container } = render(
-      <I18nProvider><WaitlistCapture lang="en" /></I18nProvider>,
+      <I18nProvider><WaitlistCapture source="test" lang="en" /></I18nProvider>,
     );
     expect(
       (container.querySelectorAll("input").length, container.textContent ?? "").trim().length,
@@ -59,7 +59,7 @@ describe("форма раннего доступа говорит на язык�
 
   it("поле почты имеет подсказку, и она не русская при lang=en", () => {
     const { container } = render(
-      <I18nProvider><WaitlistCapture lang="en" /></I18nProvider>,
+      <I18nProvider><WaitlistCapture source="test" lang="en" /></I18nProvider>,
     );
     const поле = container.querySelector('input[type="email"], input[name="email"], input');
     expect(поле, "поля ввода нет вовсе").not.toBeNull();

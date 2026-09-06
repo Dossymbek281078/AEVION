@@ -21,7 +21,8 @@ const STATE_LABEL: Record<DeepEngineState, string> = {
   error: "Не удалось запустить",
 };
 
-function scoreText(cp: number, mate: number): string {
+/** Оценка движка → строка для человека. Экспортирована для теста. */
+export function scoreText(cp: number, mate: number): string {
   if (mate !== 0) return `#${Math.abs(mate)}${mate > 0 ? "" : " (−)"}`;
   const v = (cp / 100).toFixed(2);
   return cp > 0 ? `+${v}` : v;

@@ -77,9 +77,11 @@ export const LANG_COOKIE = "aevion_lang_v1";
  * машине не гонялся несколько дней, а CI запускается лишь на четырёх ветках.
  */
 export const LANG_KEY_COUNT: Record<Lang, number> = {
-  ru: 7443,
-  en: 7443,
-  kk: 7402,
+  // 06.09: +2 (chargedRevenueByChannel, errorGeneric — возвращены потерянные
+  // при мерже ключи денежных веток; usdNote уже был на месте).
+  ru: 7445,
+  en: 7445,
+  kk: 7404,
   de: 134,
   fr: 134,
   es: 134,

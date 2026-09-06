@@ -35,19 +35,45 @@ describe("поломка движка видна, а не проглочена",
     const s = KOD();
     expect(s).toContain("oshibka:string|null=null;");
 
-    // Раньше здесь стояло дословное соседство "this.ok=false;this.oshibka=".
-    // 05.09.2026 между ними появился вызов naSostoyanie(false) — падение
-    // движка стало доходить до экрана, — и проверка покраснела на ПОЛЕЗНОЙ
-    // правке. Дословное соседство и было её слабым местом: оно закрепляло
-    // порядок символов, а бережём мы другое — что обе записи стоят ВНУТРИ
-    // обработчика ошибки, а не потерялись по дороге.
-    const nachalo = s.indexOf("this.w.onerror=");
-    const konec = s.indexOf("this.w.onmessage=", nachalo);
+    // 06.09.2026 обработка падения вынесена из onerror в метод onDead(): и
+    // onerror, и провал незавершённого запроса ведут в одно место. Бережём
+    // то же самое — что при смерти движка гасится флаг и запоминается причина,
+    // — но теперь ищем это в onDead(), а не в теле onerror.
+    const nachalo = s.indexOf("private onDead(");
+    const konec = s.indexOf("init(){if(this.w)return;", nachalo);
     expect(nachalo).toBeGreaterThan(0);
     expect(konec).toBeGreaterThan(nachalo);
     const obrabotchik = s.slice(nachalo, konec);
     expect(obrabotchik).toContain("this.ok=false");
     expect(obrabotchik).toContain("this.oshibka=");
+    // onerror обязан вести в onDead, а не гасить молча.
+    const oe = s.slice(s.indexOf("this.w.onerror="), s.indexOf("this.w.onmessage="));
+    expect(oe).toContain("this.onDead(");
+  });
+
+  it("мёртвый движок пересоздаётся, а не остаётся дохлым до перезагрузки", () => {
+    // 🔴 Замер на проде 06.09.2026: после смены партии/задачи Stockfish иногда
+    // падает («e.trim is not a function» в lite-сборке), и раньше init() уже не
+    // мог его поднять (`if(this.w)return` при непустом дохлом воркере), а
+    // ensureSF — тем более (`if(sfR.current)return`). Сила движка падала на
+    // запасной расчёт до КОНЦА сессии, лечила только перезагрузка страницы.
+    // Теперь onDead убивает воркер, обнуляет this.w и переинициализирует с
+    // ограничением попыток; счётчик обнуляется при удачном uciok.
+    const s = KOD();
+    const nachalo = s.indexOf("private onDead(");
+    const konec = s.indexOf("init(){if(this.w)return;", nachalo);
+    const od = s.slice(nachalo, konec);
+    expect(od).toContain("this.w?.terminate()");
+    expect(od).toContain("this.w=null");
+    expect(od).toContain("this.init()");
+    expect(od).toContain("this.retries");
+    // ограничение попыток есть и оно осмысленное
+    expect(s).toMatch(/MAX_RETRIES\s*=\s*[1-9]/);
+    // счётчик обнуляется при удачном старте, иначе долгая партия исчерпает бюджет
+    const uciok = s.slice(s.indexOf('if(l==="uciok"){'), s.indexOf('this.w!.postMessage("isready")'));
+    expect(uciok).toContain("this.retries=0");
+    // провал незавершённого запроса, чтобы ход соперника не повис
+    expect(od).toContain('cb?.("","")');
   });
 
   it("полоса состояния не называет движок, которого нет", () => {

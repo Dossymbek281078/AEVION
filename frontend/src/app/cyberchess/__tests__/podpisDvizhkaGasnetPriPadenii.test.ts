@@ -27,7 +27,12 @@ describe("подпись движка гаснет, когда движок па
   });
 
   it("удачный старт тоже сообщается — иначе подписка бесполезна", () => {
-    expect(код).toContain("this.ok=true;this.naSostoyanie?.(true)");
+    // 06.09.2026 между ними появилось this.retries=0 (обнуление счётчика
+    // само-восстановления при удачном старте) — дословное соседство больше не
+    // держим, бережём смысл: при uciok флаг поднят и о старте сообщено.
+    const uciok = код.slice(код.indexOf('if(l==="uciok"){'), код.indexOf('this.w!.postMessage("isready")'));
+    expect(uciok).toContain("this.ok=true");
+    expect(uciok).toContain("this.naSostoyanie?.(true)");
   });
 
   it("страница подписывается на состояние ДО запуска движка", () => {

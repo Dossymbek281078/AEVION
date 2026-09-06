@@ -16,7 +16,7 @@ import { productById } from "@/lib/products";
 import { PageTracking } from "@/components/PageTracking";
 import { devhubServerError } from "@/lib/devhubServerError";
 import { stackForIdea } from "@/lib/devhubStackChoice";
-import { DEVHUB_EXAMPLES } from "./examples";
+import { DEVHUB_EXAMPLES, exampleText } from "./examples";
 
 type Stack = "next" | "express" | "static" | "react" | "python";
 type ProjectStatus = "draft" | "building" | "live" | "error";
@@ -733,7 +733,7 @@ export default function DevHubPage() {
                   right now — and the strip is what makes the table checkable. */}
               <div style={{ marginTop: 8, fontSize: 12.5 }}>
                 <Link href="/compare" style={{ color: "#0d9488", fontWeight: 700, textDecoration: "none" }}>
-                  Как мы выглядим рядом с Bolt, Lovable, v0 и Replit →
+                  {t("cmp.compareLink")}
                 </Link>
                 <span style={{ color: "#94a3b8" }}>{t("store.withSourceNote")}</span>
               </div>
@@ -753,21 +753,24 @@ export default function DevHubPage() {
             <p style={{ fontWeight: 800, fontSize: 15, margin: 0, color: "#0f172a" }}>{t("ex.title")}</p>
             <p style={{ fontSize: 13, color: "#64748b", margin: "4px 0 12px" }}>{t("ex.sub")}</p>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12 }}>
-              {DEVHUB_EXAMPLES.map((ex) => (
+              {DEVHUB_EXAMPLES.map((ex) => {
+                const exT = exampleText(ex, lang);
+                return (
                 <div key={ex.url} style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>{ex.title}</div>
-                  <div style={{ fontSize: 12.5, color: "#475569", fontStyle: "italic", flex: 1 }}>&laquo;{ex.prompt}&raquo;</div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>{exT.title}</div>
+                  <div style={{ fontSize: 12.5, color: "#475569", fontStyle: "italic", flex: 1 }}>&laquo;{exT.prompt}&raquo;</div>
                   <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                     <a href={ex.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12.5, color: "#0d9488", fontWeight: 600 }}>{t("ex.open")}</a>
                     <button
-                      onClick={() => { setIdeaPrompt(ex.prompt); ideaFieldRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }}
+                      onClick={() => { setIdeaPrompt(exT.prompt); ideaFieldRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }); }}
                       style={{ fontSize: 12.5, color: "#7c3aed", background: "none", border: "none", cursor: "pointer", padding: 0, fontWeight: 600, textDecoration: "underline" }}
                     >
                       {t("ex.build")}
                     </button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -791,9 +794,9 @@ export default function DevHubPage() {
                   [t("cmp.video"), "Runway Pro", "$35"],
                   [t("cmp.images"), "Midjourney Standard", "$30"],
                   [t("cmp.voice"), "ElevenLabs Creator", "$22"],
-                  ["Музыка", "Suno", "$10"],
-                  ["3D-модели", "Meshy Pro", "$20"],
-                  ["Хостинг", "Vercel Pro", "$20"],
+                  [t("cmp.music"), "Suno", "$10"],
+                  [t("cmp.threeD"), "Meshy Pro", "$20"],
+                  [t("cmp.hosting"), "Vercel Pro", "$20"],
                 ].map(([what, who, price]) => (
                   <tr key={what as string}>
                     <td style={{ padding: "3px 14px 3px 0", color: "#334155" }}>{what}</td>
@@ -810,9 +813,7 @@ export default function DevHubPage() {
             </table>
           </div>
           <p style={{ fontSize: 12, color: "#64748b", margin: "12px 0 0", lineHeight: 1.5 }}>
-            Цены — публичные тарифы сервисов на июль 2026. Мы не обещаем «в разы дешевле»:
-            выигрыш здесь не в цене подписки, а в том, что результат одного шага сразу лежит
-            в том же проекте, что и следующий.
+            {t("value.priceNote")}
           </p>
         </div>
 

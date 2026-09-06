@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ProductNotice } from "@/components/ProductNotice";
 import type { CSSProperties } from "react";
 
 const btnPrimary: CSSProperties = {
@@ -233,6 +234,14 @@ export default function PaymentsPage() {
           </div>
         </div>
       </section>
+
+      {/*
+        * Оговорка из каталога — здесь, а не только на витрине цен.
+        * Обещания живут на этой странице (дорожная карта помечает
+        * «12-rail unified checkout» и «Settlements» как live), а человек
+        * приходит сюда по ссылке и из поиска, минуя витрину.
+        */}
+      <ProductNotice productId="qpaynet" />
 
       <div style={{ maxWidth: 1280, margin: "0 auto", padding: 24 }}>
         {/* Feature cards */}

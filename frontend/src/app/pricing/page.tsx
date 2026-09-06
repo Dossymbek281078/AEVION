@@ -8,6 +8,7 @@ import { CustomerLogosRow } from "@/components/CustomerLogosRow";
 import { apiUrl } from "@/lib/apiBase";
 import { fetchAiSavings } from "@/lib/aiSavings";
 import { gumroadCheckoutUrl } from "@/lib/gumroad";
+import { запомнитьНамерение } from "@/lib/checkoutIntent";
 import { channelFrom, withChannel } from "@/lib/products";
 import { track } from "@/lib/track";
 import { chargeCurrencyNoteKey, shouldWarnAboutCurrency } from "@/lib/chargeCurrencyNote";
@@ -261,6 +262,10 @@ export default function PricingPage() {
   }) {
     setCheckingOut(opts.tierId);
     setCheckoutNotice(null);
+    // Запоминаем тариф ДО ухода в кассу: касса вернёт отказавшегося на наш
+    // экран без тарифа в адресе, и кнопка «вернуться к тарифу» иначе не
+    // появляется вовсе (замер с контролем — см. lib/checkoutIntent.ts).
+    запомнитьНамерение(opts.tierId, opts.period ?? "monthly");
     track({
       type: "checkout_start",
       tier: opts.tierId,
@@ -371,13 +376,34 @@ export default function PricingPage() {
         const r = await fetch(apiUrl("/api/pricing"));
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const j: PricingPayload = await r.json();
+        /*
+         * Неполный ответ ведём в то же состояние, что и неудачную загрузку.
+         *
+         * Замер 02.09: страница читает пять полей БЕЗ защиты (девять
+         * обращений) — tiers, modules, bundles, notes, currencies. Сегодня прод
+         * шлёт все пять, но половины платформы выкатываются РАЗДЕЛЬНО, и при
+         * разъезде версий неполный ответ уронит денежную страницу целиком.
+         *
+         * Подставлять пустые значения нельзя: пустая таблица тарифов читается
+         * как «покупать нечего», а это худшая неправда на этой странице.
+         * Поэтому — честная ошибка, которую человек увидит и обновит страницу.
+         */
+        const обязательные = ["tiers", "modules", "bundles", "notes", "currencies"] as const;
+        const поля = j as unknown as Record<string, unknown>;
+        const нет = обязательные.filter((k) => поля[k] == null);
+        if (нет.length > 0) throw new Error(`неполный ответ: нет ${нет.join(", ")}`);
         if (!cancelled) {
           setData(j);
           setLoading(false);
         }
       } catch (e: unknown) {
         if (!cancelled) {
-          console.error("[pricing] /api/pricing:", e);
+          // Причина — в журнал, человеку — фраза. Раньше это сообщение
+          // печаталось прямо на экране вместе с адресом ручки: посетитель
+          // читал «неполный ответ: нет tiers, modules», то есть нашу
+          // внутреннюю диагностику. Убрать с экрана мало — без записи причина
+          // исчезла бы вовсе, и следующий разбор начинался бы с нуля.
+          console.error("[pricing] каталог не загрузился:", e);
           setError(e instanceof Error ? e.message : String(e));
           setLoading(false);
         }
@@ -529,6 +555,11 @@ export default function PricingPage() {
           }}
         >
           <h2 style={{ margin: 0, marginBottom: 8 }}>{tp("error.unavailable")}</h2>
+          {/* Человеку — фраза, подробность в журнал. Здесь стояли внутренний
+              адрес ручки, сообщение движка и совет «проверь, что бэкенд
+              запущен (npm run ...)» — инструкция разработчику на самой
+              посещаемой странице. Ветка сборки убрала это раньше; беру их
+              форму, чтобы не разойтись во второй раз. */}
           <p style={{ margin: 0 }}>{tp("error.whatNow")}</p>
         </div>
       </ProductPageShell>
@@ -761,10 +792,26 @@ export default function PricingPage() {
             <button
               key={p.code}
               onClick={() => {
+                // Промокод применяется в калькуляторе НЕЗАВИСИМО от буфера —
+                // это и есть то, ради чего человек нажал.
                 setCalcPromo(p.code);
-                navigator.clipboard?.writeText(p.code).catch(() => {});
-                setCopiedPromo(p.code);
-                setTimeout(() => setCopiedPromo(null), 1500);
+                /*
+                 * А «Скопировано» обещаем только по факту. Раньше подпись
+                 * показывалась безусловно, хотя отказ копирования был проглочен:
+                 * человек уходил вставлять код в другое место и вставлял пустоту.
+                 * Мелочь, но это ровно тот класс, когда неудача выглядит успехом.
+                 *
+                 * Буфера может не быть вовсе (старый браузер, небезопасный
+                 * контекст) — тогда `?.` даёт undefined, обещания нет, а промокод
+                 * всё равно применён и виден в калькуляторе.
+                 */
+                navigator.clipboard
+                  ?.writeText(p.code)
+                  .then(() => {
+                    setCopiedPromo(p.code);
+                    setTimeout(() => setCopiedPromo(null), 1500);
+                  })
+                  .catch(() => {});
               }}
               title={p.description}
               style={{

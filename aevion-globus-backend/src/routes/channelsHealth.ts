@@ -106,6 +106,19 @@ channelsHealthRouter.get("/channels", (_req: Request, res: Response) => {
   };
 
   const canRegister = email || google || github;
+
+  // Доходит ли ЗАЯВКА до человека.
+  //
+  // Обработчик заявок ведёт себя правильно: если адрес не задан, он не
+  // придумывает запасной (однажды придуманный уводил наши заявки в чужую
+  // компанию с похожим именем), пишет предупреждение и сохраняет заявку.
+  // Беда в том, что предупреждение уходит в журнал контейнера, который
+  // никто не открывает: снаружи «заявки идут в никуда» и «всё хорошо»
+  // выглядели одинаково.
+  //
+  // На витрине при этом обещано «Customer Success одобрит заявку в
+  // течение…» — обещание, которому нужен человек, а человек не узнаёт.
+  const applicationsNotified = Boolean(process.env.NOTIFY_EMAIL?.trim());
   const canPay = lemonsqueezy || gumroad || paybox || paypal;
   // ДВА РАЗНЫХ ВОПРОСА, и раньше на них отвечало одно поле.
   //
@@ -150,6 +163,7 @@ channelsHealthRouter.get("/channels", (_req: Request, res: Response) => {
     canRegister,
     canPay,
       canGrant,
+      applicationsNotified,
       canStartPurchase,
       mail,
     signup: {
@@ -175,6 +189,7 @@ channelsHealthRouter.get("/channels", (_req: Request, res: Response) => {
     },
     // Что чинить в первую очередь, если canRegister/canPay = false.
     missing: [
+      ...(applicationsNotified ? [] : ["NOTIFY_EMAIL (заявки сохраняются, но о них никто не узнаёт)"]),
       ...(email ? [] : ["SMTP_HOST+SMTP_USER+SMTP_PASS либо RESEND_API_KEY"]),
       ...(google ? [] : ["GOOGLE_OAUTH_CLIENT_ID+SECRET"]),
       ...(github ? [] : ["GITHUB_OAUTH_CLIENT_ID+SECRET"]),
@@ -185,7 +200,14 @@ channelsHealthRouter.get("/channels", (_req: Request, res: Response) => {
       ...(lemonsqueezy && usableVariants === 0
         ? ["LEMON_SQUEEZY_VARIANT_* (деньги принимаются, доступ не выдаётся ни за один товар)"]
         : []),
-      ...(gumroad && !signedGumroad ? ["GUMROAD_WEBHOOK_SECRET (оплата принимается без подписи)"] : []),
+      // Совет обязан называть ОБЕ половины действия. Задать секрет только у нас —
+          // значит начать требовать подпись, которой Gumroad не шлёт, и молча
+          // остановить выдачу ВСЕХ покупок. Пока подписи нет, защищает сверка
+          // продажи с API Gumroad; она отпадает лишь при недоступности API —
+          // тогда доступ выдаётся авансом (см. gumroadWebhook, ветка unverifiable).
+          ...(gumroad && !signedGumroad
+            ? ["GUMROAD_WEBHOOK_SECRET (подписи нет, продажи сверяются с API Gumroad). Задавать ОДНОВРЕМЕННО в настройках продукта у Gumroad и здесь — иначе выдача всех покупок остановится молча"]
+            : []),
     ],
   });
 });

@@ -2,15 +2,27 @@ import { Router } from "express";
 import { gumroadSellable } from "../lib/payment/gumroadProvider";
 import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
 import { lemonSqueezyPaymentProvider } from "../lib/payment/lemonSqueezyProvider";
-import { payboxPaymentProvider, isPayboxConfigured } from "../lib/payment/payboxProvider";
+import { payboxPaymentProvider, isPayboxConfigured, isPayboxWebhookSecretSet } from "../lib/payment/payboxProvider";
 import { paypalPaymentProvider, isPaypalConfigured } from "../lib/payment/paypalProvider";
 import { resolveLemonSqueezyVariant, lemonSqueezySellable } from "../data/lemonSqueezyVariants";
 import {
   TIERS, getTier, getModulePrice, resolvePromoCode, CURRENCY_RATES, MAX_PROMO_DISCOUNT_RATIO, buildQuote,
   type TierId, type BillingPeriod, type CurrencyCode,
 } from "../data/pricing";
-import { provisionSubscription, countSubscriptions } from "./provisioning";
+import { provisionSubscription, countSubscriptions, findSubscriptionByPaymentId } from "./provisioning";
+import { модулиДляКассы } from "../lib/payment/customData";
+
+/**
+ * Сочетания признаков, о которых уже сообщили в Sentry за жизнь процесса.
+ *
+ * Живёт на уровне модуля намеренно: расхождение суммы с кассой — свойство
+ * НАСТРОЙКИ (какой товар в магазине, что умеет провайдер), а не отдельного
+ * запроса. Второй такой же случай не добавляет знания, а квоту тревог тратит.
+ * В журнал при этом пишется КАЖДЫЙ случай — оттуда и берётся частота.
+ */
+const ужеСообщено = new Set<string>();
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { rateLimit } from "../lib/rateLimit";
 
 const capture = makeServiceCapture("checkout");
 
@@ -89,7 +101,78 @@ interface CheckoutBody {
 }
 
 // ── POST /session ─────────────────────────────────────────────────────────────
-checkoutRouter.post("/session", async (req, res) => {
+/**
+ * Предел темпа на создание платёжной сессии.
+ *
+ * ЗАЧЕМ. Ручка анонимная и на каждый вызов ходит ВО ВНЕШНЮЮ кассу
+ * (payboxPaymentProvider.createIntent / paypalPaymentProvider.createIntent).
+ * До 02.09.2026 предела не было ни здесь, ни на роутере, ни глобально
+ * (проверено: в модуле 0 ограничителей, у checkoutRouter нет .use, в
+ * index.ts до маршрутов только bodyLimitByPath). То есть темп обращений к
+ * платёжному провайдеру задавал вызывающий, а не мы.
+ *
+ * ПОЧЕМУ 30, а не строже. Покупатель может нажать «оплатить» несколько раз
+ * подряд — он видит задержку и не понимает, идёт ли что-то. Предел должен
+ * ловить машинный поток, а не живого человека: 30 в минуту с одного адреса
+ * это заведомо больше любого ручного темпа и заведомо меньше того, чем
+ * можно выжечь квоту провайдера. Слишком строгий предел здесь опаснее
+ * отсутствующего: он отсекает ПОКУПКУ, то есть стоит нам денег напрямую.
+ *
+ * keyFn НЕ переопределяем намеренно: умолчание уже нормализует адрес
+ * (в том числе IPv6), а свой ключ — известный способ незаметно отказаться
+ * от этой нормализации.
+ */
+const sessionLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 30,
+  message: "Слишком много попыток оплаты. Подождите минуту и попробуйте снова.",
+});
+
+/**
+ * «Состоялась ли выдача по моей оплате».
+ *
+ * ЗАЧЕМ. Страница успеха до 03.09.2026 показывала тариф ПРЯМО ИЗ АДРЕСНОЙ
+ * СТРОКИ. Это значение, во-первых, подделывается, а во-вторых ничего не знает
+ * о неудаче: если выдача не состоялась, человек всё равно видел «всё готово»
+ * и не обращался в поддержку.
+ *
+ * ТРИ ИСХОДА, и это главное:
+ *   200 { ready: true, tier }  — выдано;
+ *   200 { ready: false }       — ещё нет (вебхук в пути — норма первые секунды);
+ *   503 { error: "lookup_failed" } — СПРОСИТЬ НЕ УДАЛОСЬ.
+ *
+ * Третий нельзя схлопывать во второй: сбой чтения, выданный за «ещё не
+ * готово», сказал бы заплатившему «ждите» навсегда, и страница крутила бы
+ * ожидание вечно.
+ *
+ * Ручка анонимная (покупатель ещё не вошёл), поэтому: свой предел темпа —
+ * её будут опрашивать в цикле, — и в ответе НЕТ ничего личного, только
+ * готовность и тариф.
+ */
+const statusLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 60,
+  message: "Слишком много проверок. Подождите минуту.",
+});
+
+checkoutRouter.get("/status", statusLimiter, (req, res) => {
+  const intentId = typeof req.query.intentId === "string" ? req.query.intentId.trim() : "";
+  if (!intentId) return res.status(400).json({ error: "intent_required" });
+  try {
+    const итог = findSubscriptionByPaymentId(intentId);
+    if (!итог.найдено) return res.json({ ready: false });
+    return res.json({ ready: true, tier: итог.подписка.tierId, period: итог.подписка.period });
+  } catch (e) {
+    capture(e);
+    console.error("[checkout/status] lookup failed", e);
+    return res.status(503).json({
+      error: "lookup_failed",
+      message: "Не удалось проверить статус. Оплата не потеряна — обновите страницу через минуту.",
+    });
+  }
+});
+
+checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
   try {
     const body = (req.body ?? {}) as CheckoutBody;
     // Канал режем по длине: значение приходит из адресной строки, а оттуда
@@ -141,8 +224,99 @@ checkoutRouter.post("/session", async (req, res) => {
     });
     const totalUsd = quote.total;
 
+    // ЧТО СПИШУТ, ЕСЛИ КАССА НЕ ЗНАЕТ НАШЕЙ СУММЫ.
+    //
+    // Замер 04.09.2026 чтением кода. Из четырёх касс нашу сумму получают и
+    // списывают только две: paybox (payboxProvider.ts:113) и paypal
+    // (paypalProvider.ts:108). Lemon Squeezy и Gumroad её лишь возвращают
+    // обратно в объекте намерения и списывают ЦЕНУ СВОЕГО ТОВАРА:
+    //   • у LS в теле запроса нет поля цены вовсе (тело собирается в
+    //     lemonSqueezyProvider.ts:139-165), вариант выбирается по ссылке;
+    //   • у Gumroad адрес — это `l/<permalink>` без суммы
+    //     (gumroadProvider.ts:84), товар тоже выбирается по ссылке (:58).
+    //
+    // Пока покупка обычная, расхождения нет: цена товара и есть цена тарифа.
+    // Оно появляется, когда наша сумма ОТЛИЧАЕТСЯ от базовой цены тарифа —
+    // добавочные места, добавочные модули, промокод, скидка за срок. И оно
+    // несимметрично по цене ошибки:
+    //   места/модули — страница показала больше, спишут меньше: теряем мы;
+    //   промокод     — страница показала меньше, спишут больше: ПЕРЕПЛАЧИВАЕТ
+    //                  ПОКУПАТЕЛЬ, которому мы сами назвали цену.
+    //
+    // Поведение здесь НЕ меняется: списывать правильную сумму через LS —
+    // это либо custom_price на стороне магазина, либо отдельные варианты,
+    // и это решение основателя, а не моё. Меняется одно: расхождение
+    // перестаёт быть невидимым. Ровно та же развилка, что у пробного
+    // периода ниже.
+    //
+    // Родственное: комментарий на строках выше про 13.08.2026 — тогда
+    // свели РАСЧЁТ в один источник, потому что «витрина показывала одну
+    // сумму, а списывали другую». На этих двух путях класс пережил ту
+    // починку: считаем мы теперь одинаково, а до кассы сумма не доезжает.
+    const базоваяЦенаCents = Math.round(
+      buildQuote({ tierId: tier.id, modules: [], seats: 1, period, currency: "USD" }).total * 100
+    );
+    function предупредитьЕслиСуммаНеДоедет(провайдер: string): void {
+      if (totalCents === базоваяЦенаCents) return;
+      // В ЖУРНАЛ пишем каждый случай — он нужен, чтобы посчитать, как часто
+      // это происходит. А В SENTRY шлём по одному на СОЧЕТАНИЕ признаков за
+      // жизнь процесса.
+      //
+      // Иначе получается машина шума на законном трафике: расхождение даёт
+      // КАЖДАЯ покупка с промокодом, с местами или с добавочными модулями,
+      // а это нормальные покупки, а не аварии. Тревога, срабатывающая на
+      // обычной работе, приучает себя не читать — и настоящая авария в ней
+      // потеряется. Своё же правило, поэтому применяю к себе.
+      console.warn(
+        `[checkout/session] сумма не доедет до кассы: провайдер=${провайдер} ` +
+          `показано=${totalCents} спишут≈${базоваяЦенаCents} tier=${tier.id} period=${period} seats=${seats}`
+      );
+      const ключТревоги = `${провайдер}:${tier.id}:${period}:${
+        body.promoCode ? "promo" : ""
+      }:${seats > 1 ? "seats" : ""}:${(body.modules ?? []).length > 0 ? "modules" : ""}`;
+      if (ужеСообщено.has(ключТревоги)) return;
+      ужеСообщено.add(ключТревоги);
+      capture(new Error("checkout_amount_not_sent_to_provider"), {
+        route: "checkout/session",
+        provider: провайдер,
+        shownCents: totalCents,
+        providerPriceCents: базоваяЦенаCents,
+        tier: tier.id,
+        period,
+        seats,
+        hasPromo: Boolean(body.promoCode),
+        moduleCount: (body.modules ?? []).length,
+      });
+    }
+
     const trialDays = body.trial && (tier.id === "lite" || tier.id === "medium" || tier.id === "full") ? 14 : 0;
     const totalCents = Math.round(totalUsd * 100);
+
+    // ЗАПРОШЕННЫЙ ПРОБНЫЙ ПЕРИОД НЕ ИГНОРИРУЕМ МОЛЧА.
+    //
+    // Замер 04.09.2026 пробой: `trial: true` и `trial: false` дают ПОЛНОСТЬЮ
+    // одинаковый ответ — тот же платёжный адрес, та же сумма. Причина: число
+    // дней используется только ниже, в ветке нулевой цены, а сумма считается
+    // расчётом, который о пробном периоде не знает вовсе (в data/pricing.ts
+    // слова trial нет). При обычной цене ветка не берётся, и 14 дней никуда
+    // не попадают — все четыре кассы записывают потом trialDays: 0.
+    //
+    // При этом кнопка на странице цен обещает «Попробовать 14 дней бесплатно».
+    //
+    // Поведение НЕ меняю: как именно должен работать пробный период — решение
+    // основателя (оно может жить и на стороне товара у провайдера, чего отсюда
+    // не видно). Меняется одно: расхождение перестаёт быть невидимым.
+    if (trialDays > 0 && totalCents > 0) {
+      console.warn(
+        `[checkout/session] пробный период запрошен, но НЕ применён: tier=${tier.id} ` +
+          `period=${period} сумма=${totalCents}¢ — покупатель платит сразу`
+      );
+      capture(new Error("checkout_trial_requested_but_not_applied"), {
+        route: "checkout/session",
+        tier: tier.id,
+        period,
+      });
+    }
 
     const reference = `tier_${tier.id}_${period}`;
 
@@ -154,6 +328,27 @@ checkoutRouter.post("/session", async (req, res) => {
     // console.error, and the success URL was returned either way — including
     // when no email was given at all, in which case nothing was provisioned
     // and the customer still landed on the "success" page with no plan.
+    // СПИСОК модулей, а не первый из них.
+    //
+    // Замер 04.09.2026: в кассу уезжал `(body.modules ?? [])[0]` и только для
+    // Lite, а цена считается по ВСЕМ выбранным (сторож
+    // liteIncludesOneModuleInThePrice закрепляет, что модуль сверх слота
+    // прибавляет к сумме). На paybox и paypal, где сумма действительно
+    // списывается, это уже не расхождение учёта, а ОПЛАЧЕНО И НЕ ВЫДАНО:
+    // planGate пускает к модулю Lite только если тот записан выбранным.
+    //
+    // ⚠ Та же граница, что у мест: только эти две кассы. У Lemon Squeezy и
+    // Gumroad наша сумма до кассы не доезжает, там платят цену товара —
+    // запись одного модуля там соответствует оплате.
+    //
+    // ⚠ И отдельно: у medium докупленный модуль вне `includedIn` не
+    // откроется, даже будучи записанным — `isModuleEntitled` спрашивает
+    // выбранные модули ТОЛЬКО у lite. Это вопрос о продукте, не правка;
+    // запись всё равно обязана отражать оплаченное.
+    const выбранныеМодули = модулиДляКассы(body.modules);
+    const модулиДляЗаписи: Record<string, string> =
+      выбранныеМодули.length > 0 ? { modules: выбранныеМодули.join(",") } : {};
+
     if (totalCents <= 0) {
       if (!body.email) {
         return res.status(400).json({
@@ -164,7 +359,11 @@ checkoutRouter.post("/session", async (req, res) => {
       try {
         await provisionSubscription({
           email: body.email, tierId: tier.id, period, seats,
-          modules: body.modules ?? [], trialDays, amountUsd: 0,
+          // ТОТ ЖЕ список, что и на платном пути: отфильтрованный,
+          // без повторов и ограниченный. Одинаковый вход обязан давать
+          // одинаковую запись — иначе бесплатный тариф хранит сырое тело
+          // запроса, а платный очищенное, и сравнить их станет нельзя.
+          modules: выбранныеМодули, trialDays, amountUsd: 0,
           promoCode: body.promoCode, source: "gumroad_zero",
         });
       } catch (e) {
@@ -188,13 +387,28 @@ checkoutRouter.post("/session", async (req, res) => {
     //    конвертируем в тенге по курсу из CURRENCY_RATES; PayBox принимает
     //    pg_amount в основной единице (тенге), поэтому передаём amountCents в
     //    тыйынах (тенге*100), а провайдер делит на 100.
+    // МЕСТА ВЕЗЁМ В КАССУ — но только туда, где за них реально берут деньги.
+    //
+    // Замер 04.09.2026: витрина считает цену по числу мест (buildQuote выше),
+    // а вебхуки провижинили без `seats`, и умолчание provisioning.ts:564
+    // ставило единицу. Человек платил за пять мест, а его же страница
+    // подписки показывала одно (routes/pricing.ts:1512).
+    //
+    // ⚠ ТОЛЬКО paybox и paypal. У Lemon Squeezy и Gumroad наша сумма до кассы
+    // не доезжает (см. предупреждение выше) — там списывают цену товара, то
+    // есть за ОДНО место, и запись «1» там ПРАВИЛЬНАЯ. Скопировать эту правку
+    // туда значило бы записать места, за которые денег не брали. Пока не
+    // решён пункт 8 записки основателя — не копировать.
+    const местаДляКассы: Record<string, string> = seats > 1 ? { seats: String(seats) } : {};
+
+
     if (body.currency === "KZT" && isPayboxConfigured()) {
       try {
         const kztCents = Math.round(totalCents * CURRENCY_RATES.KZT.rate);
         const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
         const intent = await payboxPaymentProvider.createIntent({
           reference, amountCents: kztCents, currency: "KZT", description, email: body.email ?? null,
-          customData: собратьCustomData(liteModule, channel),
+          customData: { ...(собратьCustomData(liteModule, channel) ?? {}), ...местаДляКассы, ...модулиДляЗаписи },
           // Модуль для адреса возврата: страница после оплаты обязана
           // назвать то, за что заплатили. Только при ОДНОМ купленном
           // модуле — на наборе называть один было бы враньём.
@@ -221,7 +435,7 @@ checkoutRouter.post("/session", async (req, res) => {
         const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
         const intent = await paypalPaymentProvider.createIntent({
           reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
-          customData: собратьCustomData(liteModule, channel),
+          customData: { ...(собратьCustomData(liteModule, channel) ?? {}), ...местаДляКассы, ...модулиДляЗаписи },
           // Модуль для адреса возврата: страница после оплаты обязана
           // назвать то, за что заплатили. Только при ОДНОМ купленном
           // модуле — на наборе называть один было бы враньём.
@@ -261,6 +475,7 @@ checkoutRouter.post("/session", async (req, res) => {
         // Lite = 1 продукт на выбор: пробрасываем выбранный модуль в custom_data,
         // чтобы вебхук провижинил подписку именно на него.
         const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
+        предупредитьЕслиСуммаНеДоедет("lemonsqueezy");
         const intent = await lemonSqueezyPaymentProvider.createIntent({
           reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
           customData: собратьCustomData(liteModule, channel),
@@ -279,6 +494,7 @@ checkoutRouter.post("/session", async (req, res) => {
 
     // 2) Gumroad — fallback (one-time продукты / пока LS не настроен).
     if (gumroadPermalinkConfigured(reference)) {
+      предупредитьЕслиСуммаНеДоедет("gumroad");
       const intent = await gumroadPaymentProvider.createIntent({
         reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
         // Выбранного модуля в этой ветке нет — она для одноразовых продуктов,
@@ -400,9 +616,54 @@ checkoutRouter.get("/healthz", (_req, res) => {
         sellable: gumroadSellable([...лс.configured, ...лс.missing]),
         webhook: "/api/gumroad/webhook",
         webhookConfigured: Boolean(process.env.GUMROAD_WEBHOOK_SECRET?.trim()),
+        // ⚠️ У Gumroad `false` здесь НЕ означает «не выдаст». Замер 03.09.2026:
+        // на проде секрет вебхука не задан, и это осознанно — при его
+        // отсутствии обработчик не принимает вслепую, а проверяет продажу
+        // через API самого Gumroad по токену доступа. Отклоняет только при
+        // определённом «нет такой продажи»; не смог проверить — ведёт себя
+        // как раньше, чтобы настоящий покупатель не терял доступ из-за
+        // чужого сбоя.
+        //
+        // Поле без этой пары читалось бы как тревога, а тревога на исправном
+        // месте приучает не смотреть. Поэтому рядом стоит, чем оно заменено.
+        salesVerifiedViaApi:
+          Boolean(process.env.GUMROAD_ACCESS_TOKEN?.trim()) &&
+          process.env.GUMROAD_VERIFY_SALES !== "0",
       },
-      paybox: { configured: isPayboxConfigured(), trigger: "currency=KZT", webhook: "/api/paybox/webhook" },
-      paypal: { configured: isPaypalConfigured(), trigger: "method=paypal", webhook: "/api/paypal/webhook" },
+      // ⚠️ У ЭТИХ ДВУХ КАСС БЫЛО ТОЛЬКО `configured`, и это асимметрия,
+      // а не мелочь. У LemonSqueezy и Gumroad рядом стоит
+      // `webhookConfigured` — признак того, что купленное ВЫДАДУТ: без
+      // секрета вебхука оплата принимается, а права не начисляются.
+      //
+      // PayBox — касса казахстанского трафика, то есть ровно та, где
+      // такая тишина дороже всего. Спрашивать про неё было нечем:
+      // снаружи «настроено» и «выдаст» выглядели одинаково.
+      paybox: {
+        configured: isPayboxConfigured(),
+        webhookConfigured: isPayboxWebhookSecretSet(),
+        // 🔴 ЛОВУШКА ЗАПУСКА, сделанная видимой 04.09.2026.
+        //
+        // Тестовый режим у PayBox стоит ПО УМОЛЧАНИЮ: провайдер шлёт
+        // `pg_testing_mode: "1"`, пока не задано `PAYBOX_TESTING=0`. Умолчание
+        // безопасное и правильное — случайно взять настоящие деньги хуже, чем
+        // случайно не взять.
+        //
+        // Но при включении кассы это ловушка: задать два секрета выглядит
+        // достаточным, `configured` станет true, покупки пойдут — и ни одна
+        // не будет настоящей. Снаружи «касса работает» и «касса играет в
+        // песочнице» выглядели одинаково.
+        //
+        // Замер 04.09.2026: PAYBOX_TESTING на проде не задана.
+        testMode: process.env.PAYBOX_TESTING !== "0",
+        trigger: "currency=KZT",
+        webhook: "/api/paybox/webhook",
+      },
+      paypal: {
+        configured: isPaypalConfigured(),
+        webhookConfigured: Boolean(process.env.PAYPAL_WEBHOOK_ID?.trim()),
+        trigger: "method=paypal",
+        webhook: "/api/paypal/webhook",
+      },
     },
     frontendUrl: FRONTEND_URL,
   });

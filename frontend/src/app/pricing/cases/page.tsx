@@ -7,9 +7,11 @@ import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
 import { useI18n } from "@/lib/i18n";
+import { TIER_BADGE, значокТарифа, type CaseTier } from "@/lib/caseTierBadge";
 
 type CaseIndustry = "banks" | "startups" | "government" | "creators" | "law-firms" | "media";
-type CaseTier = "free" | "lite" | "medium" | "full" | "enterprise";
+// CaseTier переехал в lib/caseTierBadge.ts вместе со значками: тип и таблица,
+// которую он описывает, должны жить рядом, иначе они разъезжаются молча.
 
 interface CaseMetric {
   label: string;
@@ -40,13 +42,9 @@ interface CaseStudy {
 const CARD = "0 4px 20px rgba(15,23,42,0.06)";
 const BORDER = "1px solid rgba(15,23,42,0.08)";
 
-const TIER_BADGE: Record<CaseTier, { bg: string; fg: string }> = {
-  free: { bg: "#f1f5f9", fg: "#475569" },
-  lite: { bg: "#ccfbf1", fg: "#0f766e" },
-  medium: { bg: "#dbeafe", fg: "#1e40af" },
-  full: { bg: "#ede9fe", fg: "#6d28d9" },
-  enterprise: { bg: "#0f172a", fg: "#f8fafc" },
-};
+// Значок тарифа и защита от незнакомого тарифа вынесены в lib/caseTierBadge.ts:
+// из файла страницы Next не даёт экспортировать произвольные символы, а защиту
+// надо уметь проверять тестом и ломать мутацией. Разбор — там же в комментарии.
 
 const INDUSTRY_LABEL_KEY: Record<CaseIndustry, string> = {
   banks: "pricing.cases.industry.banks",
@@ -330,8 +328,8 @@ export default function PricingCasesPage() {
                       fontWeight: 800,
                       letterSpacing: "0.06em",
                       borderRadius: 6,
-                      background: TIER_BADGE[c.tier].bg,
-                      color: TIER_BADGE[c.tier].fg,
+                      background: значокТарифа(c.tier).bg,
+                      color: значокТарифа(c.tier).fg,
                     }}
                   >
                     {c.tier.toUpperCase()}

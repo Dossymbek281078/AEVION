@@ -26,7 +26,8 @@ import { ROADMAP, PHASE_META } from "../data/roadmap";
 import { CASE_STUDIES, getCaseStudy } from "../data/cases";
 import { CHANGELOG, type ChangelogKind } from "../data/changelog";
 import { sendEmail, purgeSubscriptions, writeSubscription, readLatestSubscription, subsFile, type Subscription } from "./provisioning";
-import { clientIp } from "../lib/rateLimit";
+import { clientIp, rateLimit } from "../lib/rateLimit";
+import { makeServiceCapture } from "../lib/sentry/platform";
 
 export const pricingRouter = Router();
 
@@ -243,7 +244,43 @@ pricingRouter.post("/quote", (req, res) => {
  *
  * Используется фронтом для отдельной проверки кода до отправки full-quote.
  */
-pricingRouter.post("/promo/validate", (req, res) => {
+
+/**
+ * Предел темпа на /promo/validate — ручку, у которой его не было (замер 02.09.2026:
+ * (замер 02.09.2026 ПОТОКОМ запросов, а не грепом: у /promo/validate
+ * предела не было ни одного, и мутация это подтверждает).
+ *
+ * ⚠️ Не ищите пределы грепом. Имён у ограничителей здесь около сорока
+ * пяти — rateLimit, isRateLimited, programRateLimited и другие. Мой свип
+ * по двум именам занизил счёт, и я поставил ограничители туда, где
+ * защита уже была; убрал поправкой. Правильный прибор — поток запросов
+ * по ручке: он не знает имён и не может в них ошибиться.
+ *
+ * Ограничитель отдельный, а не общий с соседями: общий бакет уже был
+ * находкой в этом репозитории — ручки начинают отбирать лимит друг у друга,
+ * и человек, отправивший заявку, не может проверить промокод.
+ *
+ * keyFn нигде не переопределяем: умолчание нормализует адрес, включая IPv6.
+ */
+
+// Оракул «код верен или нет». Без предела это перебор промокодов: их пять,
+// имена короткие. Ущерб ограничен (скидка не больше 50%), но и предел стоит
+// одной строки. 20 в минуту — заведомо больше, чем человек вводит руками.
+const promoLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 20,
+  message: "Слишком много проверок кода. Подождите минуту.",
+});
+
+// ВАЖНО для следующего читателя: у /lead и /newsletter предел УЖЕ ЕСТЬ —
+// isRateLimited(ip) внутри самих обработчиков (отказ 429, retryAfter 10m).
+// 02.09.2026 я этого не увидел: греп искал "rateLimit(" и другого имени не
+// знал, поэтому знаменатель свипа получился неверным. Свои ограничители
+// отсюда убраны как ВТОРОЙ способ делать то же самое. Поведение обеих ручек
+// закреплено сторожем publicPricingEndpointsAreRateLimited — он проверяет
+// способность отказать, а не конкретный механизм.
+
+pricingRouter.post("/promo/validate", promoLimiter, (req, res) => {
   const body = req.body ?? {};
   const code = typeof body.code === "string" ? body.code.trim().slice(0, 40) : "";
   const tierId = body.tierId as TierId;
@@ -743,15 +780,68 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/**
+ * Отправка письма, у которой отказ ВИДЕН.
+ *
+ * Здесь было пять вызовов вида `sendEmail({...}).catch((e) => console.error(...))`.
+ * Выглядит как полноценная обработка отказа, а сработать не может ни разу:
+ * `sendEmail` не бросает НИ ПРИ КАКОМ исходе — отказ поставщика, обрыв сети и
+ * даже собственное исключение она возвращает объектом `{ok: false}`. Правда об
+ * отправке живёт только в признаке `ok`, и его не читал никто.
+ *
+ * Следствие было дороже падения: заявка сохранена, ссылка выдана, ответ 200 — а
+ * письмо не ушло, и в журнале на месте отказа НЕТ строки от того, кто письмо
+ * заказывал. Сам `sendEmail` при этом пишет о себе, но не знает, ЧТО именно не
+ * доехало: вход в дашборд, подтверждение заявки или уведомление о сделке.
+ *
+ * Что НЕ меняется: письмо по-прежнему не роняет операцию, ради которой шлётся.
+ * Меняется одно — отказ перестаёт быть невидимым.
+ *
+ * Адрес получателя целиком в журнал не пишем: это персональные данные, а для
+ * разбора хватает домена и темы. То же решение принято в `sendEmail`, и держать
+ * их одинаковыми важнее, чем каждое по отдельности.
+ *
+ * Факт, на котором держится весь этот помощник, закреплён отдельным тестом:
+ * `tests/sendEmailNeverThrowsSoCatchIsDead.test.ts`. Начнёт `sendEmail` бросать —
+ * тест покраснеет, и правило надо будет пересматривать вместе с ним.
+ */
+async function отправитьПисьмо(
+  метка: string,
+  payload: { to: string; subject: string; html: string; text: string },
+): Promise<void> {
+  try {
+    const r = await sendEmail(payload);
+    if (!r.ok) {
+      const домен = String(payload.to).split("@").pop() ?? "?";
+      console.error(
+        `[${метка}] письмо НЕ отправлено: получатель @${домен}, тема "${payload.subject}" — ` +
+          `${r.error ?? "причина не названа"}`,
+      );
+      return;
+    }
+    if (r.degraded) {
+      console.warn(
+        `[${метка}] отправка вырожденная, доставка не подтверждена: ` +
+          `${r.degradedReason ?? "причина не названа"}`,
+      );
+    }
+  } catch (e) {
+    // Сегодня недостижимо (см. тест выше), но вызов обёрнут намеренно: если
+    // sendEmail когда-нибудь начнёт бросать, письмо всё равно не должно
+    // ронять денежный путь.
+    console.error(`[${метка}] отправка упала исключением`, e);
+  }
+}
+
 async function notifyApplication(app: ProgramApplication): Promise<void> {
   const meta = PROGRAM_LABELS[app.kind];
   // Auto-reply заявителю
-  sendEmail({
+  void отправитьПисьмо(`apply/${app.kind} -> заявителю`, {
     to: app.email,
     subject: meta.subject,
     html: applicantHtml(app),
     text: applicantText(app),
-  }).catch((e) => console.error(`[apply/${app.kind}] applicant email failed`, e));
+  });
   // Внутреннее уведомление — только если адрес настроен (см. комментарий у
   // NOTIFY_EMAIL: запасной вёл в чужую компанию).
   if (!NOTIFY_EMAIL) {
@@ -761,12 +851,12 @@ async function notifyApplication(app: ProgramApplication): Promise<void> {
     );
     return;
   }
-  sendEmail({
+  void отправитьПисьмо(`apply/${app.kind} -> внутреннее уведомление`, {
     to: NOTIFY_EMAIL,
     subject: `[${app.kind}] ${app.name} · ${app.organization ?? "—"}`,
     html: notifyHtml(app),
     text: `New ${app.kind} application: ${app.name} (${app.email}) · ${app.organization ?? "—"}\nID: ${app.id}\nDetails: ${app.details ?? "—"}`,
-  }).catch((e) => console.error(`[apply/${app.kind}] notify email failed`, e));
+  });
 }
 
 /**
@@ -776,7 +866,7 @@ async function notifyApplication(app: ProgramApplication): Promise<void> {
  */
 pricingRouter.post("/affiliate/apply", (req, res) => {
   const ip = clientIp(req);
-  if (programRateLimited(ip, "affiliate")) {
+  if (programRateLimited(ip, "affiliate_apply")) {
     return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
   }
   const body = req.body ?? {};
@@ -820,7 +910,7 @@ pricingRouter.post("/affiliate/apply", (req, res) => {
  */
 pricingRouter.post("/partners/apply", (req, res) => {
   const ip = clientIp(req);
-  if (programRateLimited(ip, "partners")) {
+  if (programRateLimited(ip, "partners_apply")) {
     return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
   }
   const body = req.body ?? {};
@@ -1020,6 +1110,9 @@ function verifyDashboardToken(email: string, scope: "affiliate" | "partners", go
   }
 }
 
+// Канал тревог у этого модуля до 02.09.2026 отсутствовал вовсе.
+const capture = makeServiceCapture("pricing");
+
 function readJsonlAll<T>(file: string): T[] {
   if (!existsSync(file)) return [];
   try {
@@ -1034,7 +1127,18 @@ function readJsonlAll<T>(file: string): T[] {
       }
     }
     return out;
-  } catch {
+  } catch (e) {
+    // Поведение прежнее — пустой список: у части вызывающих есть свой
+    // catch, и бросок они всё равно проглотят, а чинить каждую ручку
+    // программы партнёров отсюда не мой заход.
+    //
+    // Но отказ обязан быть виден. Замер 02.09.2026 пробой со сломанным
+    // хранилищем: нечитаемый файл заявок даёт партнёру 404 «вас нет», а
+    // нечитаемый файл сделок — НУЛЕВЫЕ комиссии. Оба молча, следа не
+    // оставалось вовсе.
+    const причина = e instanceof Error ? e.message : String(e);
+    console.error(`[pricing] журнал НЕ прочитан -> ${file} :: ${причина}`);
+    capture(e, { route: "pricing/readJsonlAll", file });
     return [];
   }
 }
@@ -1086,7 +1190,7 @@ function magicLinkHtml(
  */
 pricingRouter.post("/affiliate/magic-link", (req, res) => {
   const ip = clientIp(req);
-  if (programRateLimited(ip, "affiliate")) {
+  if (programRateLimited(ip, "affiliate_link")) {
     return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
   }
   const body = req.body ?? {};
@@ -1101,12 +1205,12 @@ pricingRouter.post("/affiliate/magic-link", (req, res) => {
   if (found) {
     const token = dashboardToken(email, "affiliate");
     const link = `${SITE_BASE}/pricing/affiliate-dashboard?email=${encodeURIComponent(email)}&token=${token}`;
-    sendEmail({
+    void отправитьПисьмо("affiliate/magic-link", {
       to: email,
       subject: "AEVION Affiliate — вход в дашборд",
       html: magicLinkHtml(found.name, link, "Affiliate"),
       text: `Здравствуйте, ${found.name}.\n\nСсылка для входа в Affiliate-дашборд:\n${link}\n\n— AEVION`,
-    }).catch((e) => console.error("[affiliate/magic-link] email failed", e));
+    });
   }
 
   // Always 204, don't leak existence.
@@ -1170,7 +1274,7 @@ pricingRouter.get("/affiliate/dashboard", (req, res) => {
  */
 pricingRouter.post("/partners/magic-link", (req, res) => {
   const ip = clientIp(req);
-  if (programRateLimited(ip, "partners")) {
+  if (programRateLimited(ip, "partners_link")) {
     return res.status(429).json({ error: "rate_limited", retryAfter: "10m" });
   }
   const body = req.body ?? {};
@@ -1185,12 +1289,12 @@ pricingRouter.post("/partners/magic-link", (req, res) => {
   if (found) {
     const token = dashboardToken(email, "partners");
     const link = `${SITE_BASE}/pricing/partners-portal?email=${encodeURIComponent(email)}&token=${token}`;
-    sendEmail({
+    void отправитьПисьмо("partners/magic-link", {
       to: email,
       subject: "AEVION Partner — вход в портал",
       html: magicLinkHtml(found.name, link, "Partner"),
       text: `Здравствуйте, ${found.name}.\n\nСсылка для входа в Partner-портал:\n${link}\n\n— AEVION`,
-    }).catch((e) => console.error("[partners/magic-link] email failed", e));
+    });
   }
   res.status(204).end();
 });
@@ -1316,7 +1420,7 @@ pricingRouter.post("/partners/deals", (req, res) => {
   }
 
   // Notify channel team
-  sendEmail({
+  void отправитьПисьмо("partners/deals", {
     to: NOTIFY_EMAIL,
     subject: `[partner-deal] ${customer} · $${dealSizeUsd.toLocaleString("en-US")}`,
     html: `<!DOCTYPE html><html><body style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:20px">
@@ -1331,7 +1435,7 @@ pricingRouter.post("/partners/deals", (req, res) => {
       <div style="margin-top:14px;font-size:11px;color:#94a3b8;font-family:ui-monospace,monospace">ID: ${escapeHtml(deal.id)} · ${escapeHtml(deal.ts)}</div>
     </body></html>`,
     text: `New deal: ${customer} · $${dealSizeUsd}\nPartner: ${email}\nModules: ${modules.join(", ")}\nExpected close: ${expectedClose ?? "—"}\nNotes: ${notes ?? "—"}\nID: ${deal.id}`,
-  }).catch((e) => console.error("[partners/deals] notify failed", e));
+  });
 
   res.status(201).json({ ok: true, deal });
 });

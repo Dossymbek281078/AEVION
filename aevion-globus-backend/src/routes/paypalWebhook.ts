@@ -13,13 +13,23 @@
 
 import { Router, type Request, type Response } from "express";
 import { paypalPaymentProvider, verifyPaypalWebhook } from "../lib/payment/paypalProvider";
-import { provisionSubscription, writeSubscription, type Subscription } from "./provisioning";
+import {
+  provisionSubscription,
+  writeSubscription,
+  readLatestSubscription,
+  возвратКасаетсяДействующей,
+  type Subscription,
+} from "./provisioning";
 import type { TierId, BillingPeriod } from "../data/pricing";
+import { periodForReference } from "../lib/payment/billingPeriod";
+import { местИзКассы, модулиИзКассы } from "../lib/payment/customData";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
 import { upsertAppSubscription } from "../lib/appEntitlements";
+import { ссылкаПодписки } from "../lib/payment/subscriptionReference";
 
 const capture = makeServiceCapture("paypalWebhook");
+
 
 export const paypalWebhookRouter = Router();
 
@@ -42,32 +52,57 @@ export function tierForReference(ref: string): TierId {
   if (r.startsWith("tier_enterprise_")) return "enterprise";
   if (r.includes("medium")) return "medium";
   if (r.includes("full") || r.includes("all-access") || r.includes("business") || r.includes("team")) return "full";
+  // Незнакомая ссылка НЕ должна выдавать платный тариф молча.
+  //
+  // Поведение оставлено прежним — выдаём lite: покупатель заплатил, и не
+  // выдать ему ничего хуже, чем выдать меньше обещанного. Но он мог
+  // оплатить ДРУГОЙ тариф, и тогда это наша ошибка, о которой надо знать.
+  //
+  // У соседней кассы (paybox) ровно это уже сделано и закреплено сторожем
+  // payboxUnknownReferenceIsLoud; у paypal тот же провал шёл без единого
+  // следа (замер 02.09.2026). Приводим к одной дисциплине.
+  if (!r.includes("lite")) {
+    console.warn(`[paypal/webhook] незнакомая ссылка заказа "${ref}" — выдан lite`);
+    capture(new Error(`paypal: неизвестная ссылка заказа "${ref}", выдан lite`), {
+      route: "paypal/webhook/tierForReference",
+    });
+  }
   return "lite";
 }
 
-function periodForReference(ref: string): BillingPeriod {
-  return ref.toLowerCase().includes("annual") ? "annual" : "monthly";
-}
 
 /**
- * `custom_id` = JSON { reference, module?, channel? } (createIntent).
+ * `custom_id` = JSON { reference, module?, channel?, seats?, modules? }.
  *
- * ⚠️ ПОПРАВКА 02.09.2026, находка соседнего окна. Канал ДОЕЗЖАЛ сюда —
- * провайдер кладёт `{ reference, ...customData }`, а customData несёт
- * `channel`, — и выбрасывался здесь: разбор возвращал ровно две ключа.
- *
- * Следствие: каждая покупка через PayPal ложилась в записи как «direct», и
- * панель «фактически списано по каналам» занижала именно тот канал, который
- * приводит валютных покупателей. Ошибка тихая: цифра есть, она правдоподобна
- * и она неверна.
+ * Мерж 06.09.2026 двух починок одного разбора:
+ * — канал (находка 02.09): он ДОЕЗЖАЛ сюда и выбрасывался, из-за чего каждая
+ *   покупка PayPal ложилась как «direct», занижая валютный канал;
+ * — места и модули (ветка платежей): без них оплаченные места и список
+ *   модулей не доезжали до записи подписки.
+ * Значения приходят СНАРУЖИ (через кассу), поэтому seats/modules проверяются
+ * общими разборщиками — теми же, что у paybox.
  */
-function parseCustomId(customId?: string): { reference: string; module?: string; channel?: string } {
-  if (!customId) return { reference: "" };
+function parseCustomId(customId?: string): {
+  reference: string;
+  module?: string;
+  channel?: string;
+  seats: number;
+  modules: string[];
+} {
+  if (!customId) return { reference: "", seats: 1, modules: [] };
   try {
-    const j = JSON.parse(customId) as { reference?: string; module?: string; channel?: string };
-    return { reference: j.reference ?? "", module: j.module, channel: j.channel };
+    const j = JSON.parse(customId) as {
+      reference?: string; module?: string; channel?: string; seats?: unknown; modules?: unknown;
+    };
+    return {
+      reference: j.reference ?? "",
+      module: j.module,
+      channel: typeof j.channel === "string" ? j.channel : undefined,
+      seats: местИзКассы(j.seats),
+      modules: модулиИзКассы(j.modules, typeof j.module === "string" ? j.module : undefined),
+    };
   } catch {
-    return { reference: customId };
+    return { reference: customId, seats: 1, modules: [] };
   }
 }
 
@@ -110,7 +145,7 @@ paypalWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
   const raw = (result.raw as Record<string, unknown> | null) ?? {};
   const payer = (raw.payer as { email_address?: string } | undefined);
   const email = (payer?.email_address ?? "").trim().toLowerCase();
-  const { reference, module, channel } = parseCustomId(raw.custom_id as string | undefined);
+  const { reference, module, channel, seats, modules } = parseCustomId(raw.custom_id as string | undefined);
 
   // Сумма заказа: PayPal кладёт её в purchase_units[0].amount.
   const paypalUnits = raw.purchase_units as
@@ -139,6 +174,20 @@ paypalWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
 
   try {
     if (refunded || failed) {
+      const действующая = readLatestSubscription(email);
+      const отзываем = возвратКасаетсяДействующей(действующая, paymentId);
+      if (!отзываем) {
+        console.warn(
+          `[paypal/webhook] возврат за ДРУГУЮ покупку: действующая подписка ` +
+            `${действующая?.tierId} не тронута, возврат по ${paymentId}`
+        );
+        capture(new Error("refund_for_older_purchase_kept_current_subscription"), {
+          route: "paypal/webhook/refund",
+          email,
+          refundedPaymentId: paymentId,
+          currentTier: действующая?.tierId,
+        });
+      }
       const downgrade: Subscription = {
         id: `sub_paypal_${paymentId}`,
         ts: new Date().toISOString(),
@@ -150,7 +199,7 @@ paypalWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         trialDays: 0,
         source: `paypal:${result.status}`,
       };
-      writeSubscription(downgrade);
+      if (отзываем) writeSubscription(downgrade);
 
       // Возврат обязан снимать И помодульную запись. Тариф понижается в
       // файле, а строка в AppSubscription живёт отдельно — и запасной путь
@@ -179,28 +228,37 @@ paypalWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
     }
 
     if (result.status === "paid") {
+      // Вебхук PayPal приходит на ВЕСЬ аккаунт, а не только на заказы нашего
+      // чекаута. Прямой перевод, счёт, старая подписка — событие придёт, почта в
+      // нём будет, а ссылки нашего формата не будет: `parseCustomId` вернёт пустую
+      // строку, разбор тарифа уйдёт в умолчание, и человек, не покупавший у нас
+      // ничего, получит подписку. Тот же класс, что закрыт у PayBox 04.09.
+      if (!ссылкаПодписки(reference)) {
+        console.warn(
+          `[paypal/webhook] заказ "${reference}" не похож на подписку — тариф не выдаём`,
+        );
+        return res.json({ ok: true, ignored: "not_a_subscription_reference", reference });
+      }
+
       const tierId = tierForReference(reference);
       const period = periodForReference(reference);
       const provResult = await provisionSubscription({
         email,
         tierId,
         period,
-        modules: module ? [module] : [],
+        seats,
+        modules,
         source: "paypal",
-        // Сумма ПРИХОДИТ в событии и до сегодня выбрасывалась: провайдер
-        // отдаёт весь заказ PayPal, а вебхук читал из него только статус.
-        // Из четырёх касс PayPal был единственным без суммы — значит его
-        // покупки попадали в панель «фактически списано» БЕЗ денег, и
-        // знаменатель withAmount занижал именно валютный канал.
-        //
-        // Валюту проверяем так же, как у PayBox: поле называется amountUsd, и
-        // записать в него сумму в другой валюте значило бы соврать молча.
+        // Сумма ПРИХОДИТ в событии и до сегодня выбрасывалась: PayPal был
+        // единственной кассой без суммы — его покупки попадали в панель
+        // «фактически списано» БЕЗ денег. Валюту проверяем как у PayBox.
         ...(paypalAmountUsd !== undefined ? { amountUsd: paypalAmountUsd } : {}),
-        // Канал приходит из custom_id — тем же путём, что у остальных касс.
-        // Обрезка до 40 символов как у PayBox: одна длина на все кассы,
-        // иначе один и тот же канал даст РАЗНЫЕ строки в сводке, и разбивка
-        // «по каналам» распадётся на близнецов.
+        // Канал из custom_id, обрезка до 40 символов — одна длина на все
+        // кассы, иначе один канал даст разные строки в сводке.
         ...(channel ? { channel: String(channel).trim().slice(0, 40) } : {}),
+        // Идентификатор платежа (ветка платежей): по нему страница успеха
+        // спрашивает, состоялась ли выдача.
+        providerPaymentId: paymentId,
       });
 
       // Помодульную покупку записываем ЕЩЁ и в базу — см. тот же разбор в

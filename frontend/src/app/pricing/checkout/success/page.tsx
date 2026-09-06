@@ -9,6 +9,7 @@ import { useI18n } from "@/lib/i18n";
 import { apiUrl } from "@/lib/apiBase";
 import PurchaseReturnTracker from "@/components/PurchaseReturnTracker";
 import { естьСледОплаты } from "@/lib/paymentTrace";
+import { изСправочника } from "@/lib/mapLookup";
 
 const APP_LINKS: Record<string, { name: string; href: string }> = {
   qcoreai:    { name: "QCoreAI", href: "/qcoreai" },
@@ -80,7 +81,14 @@ function SuccessInner() {
     (sp.get("gumroad") || saleId ? "gumroad" : null);
   // Название сервиса пишем, только если знаем его наверняка. Не знаем —
   // строка без названия: выдуманное имя хуже отсутствующего.
-  const processor = provider ? (PROCESSOR_LABEL[provider] ?? null) : null;
+  // Спрашиваем СВОЙ ключ, а не просто индексируем: `provider` приходит из
+  // адреса, а у обычного объекта имена `constructor` и `toString` разрешаются
+  // в наследство. Замер рендером 04.09.2026 на `?provider=constructor`:
+  // человек сразу после оплаты видел «paid via function Object() { [native
+  // code] }» — и то же самое ещё дважды, в строке про письмо и про управление
+  // подпиской. Список касс закрытый, поэтому проверка своего ключа тут точнее,
+  // чем объект без прототипа: незнакомое имя обязано давать пустоту.
+  const processor = изСправочника(PROCESSOR_LABEL, provider) ?? null;
   const stub = sp.get("stub") === "true";
   const tier = sp.get("tier") ?? sp.get("tierId");
   const period = sp.get("period");
@@ -93,8 +101,6 @@ function SuccessInner() {
     trialDays > 0
       ? new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000).toLocaleDateString("ru-RU")
       : null;
-
-  const tierName = tier ? tier.charAt(0).toUpperCase() + tier.slice(1) : null;
 
   /*
    * Что человек купил — знаем НЕ ВСЕГДА, и врать об этом нельзя.
@@ -150,6 +156,60 @@ function SuccessInner() {
 
   const [confirmed, setConfirmed] = useState<boolean | null>(null);
 
+  /*
+   * Мерж 06.09.2026: ВТОРОЙ вопрос серверу — из ветки платежей. Первый
+   * (entitlements, ниже) отвечает про АККАУНТ и требует входа; этот — про
+   * ВЫДАЧУ ПО ПЛАТЕЖУ (`/api/pricing/checkout/status?intentId=`), работает и
+   * гостю. Дефолт «Pro» их стороны НЕ взят: правило страницы — не знаем, не
+   * называем.
+   *
+   * Ручка отвечает тремя исходами, и «не смогли проверить» мы НЕ выдаём за
+   * «не выдано»: в этом случае просто оставляем то, что знали до вопроса.
+   * 400 повторять бессмысленно (идентификатора нет и не появится); прочие
+   * неудачи — в повтор: вебхук от кассы приходит за секунды, но не мгновенно.
+   */
+  const [подтверждённый, setПодтверждённый] = useState<string | null>(null);
+  const intentId = sessionId ?? saleId;
+
+  useEffect(() => {
+    if (!intentId) return;
+    let отменено = false;
+    let попыток = 0;
+    const спросить = async () => {
+      попыток += 1;
+      try {
+        const r = await fetch(apiUrl(`/api/pricing/checkout/status?intentId=${encodeURIComponent(intentId)}`));
+        if (r.status === 400) return;
+        if (!r.ok) {
+          if (!отменено && попыток < 8) setTimeout(спросить, 2500);
+          return;
+        }
+        const j = (await r.json()) as { ready?: boolean; tier?: string };
+        if (!отменено && j.ready && j.tier) {
+          setПодтверждённый(j.tier);
+          // Выдача по ЭТОМУ платежу состоялась — это и есть подтверждение,
+          // более сильное, чем совпадение тарифа аккаунта.
+          setConfirmed(true);
+          return;
+        }
+      } catch {
+        // Сеть недоступна — это НЕ «не выдано». Молча пробуем ещё раз.
+      }
+      if (!отменено && попыток < 8) setTimeout(спросить, 2500);
+    };
+    void спросить();
+    return () => {
+      отменено = true;
+    };
+  }, [intentId]);
+
+  // Имя тарифа: подтверждённое сервером сильнее адресной строки; ничего не
+  // знаем — не называем (никакого дефолта).
+  const источникТарифа = подтверждённый ?? tier;
+  const tierName = источникТарифа
+    ? источникТарифа.charAt(0).toUpperCase() + источникТарифа.slice(1)
+    : null;
+
   useEffect(() => {
     if (stub) return;
     let живо = true;
@@ -177,6 +237,24 @@ function SuccessInner() {
       живо = false;
     };
   }, [stub, tier]);
+
+  /*
+   * ⚠️ ЧТО ЗДЕСЬ ЗАЩИЩАЕТ, а что оказалось декорацией.
+   *
+   * `tier` приходит из адреса и попадал в заголовок как есть, с заглавной
+   * буквы: `?trial=14&tier=Zolotoy` давал «пробный доступ Zolotoy» на нашем
+   * домене — на экране, который человек читает как подтверждение покупки.
+   *
+   * Защищают ДВА условия ниже: ветка триала и ветка активации обе требуют
+   * `confirmed === true`, а подтверждение ставится, только когда сервер
+   * назвал ТОТ ЖЕ тариф. Значит там, где имя вообще доходит до экрана, оно
+   * уже сверено с сервером.
+   *
+   * Сперва я завёл здесь ещё и `tierName = confirmed ? tierName : null`
+   * и счёл это защитой. Мутация показала обратное: тест зелен и с ним, и без
+   * него — переменная недостижима иначе как при подтверждении. Убрал: код,
+   * который выглядит защитой и ничего не охраняет, дороже отсутствующего.
+   */
 
   /*
    * ⚠️ 01.09.2026: перешёл на ОБЩИЙ компонент учёта, отменив собственное
@@ -238,7 +316,7 @@ function SuccessInner() {
         <h1 style={{ fontSize: 30, fontWeight: 900, margin: "0 0 12px", letterSpacing: "-0.02em" }}>
           {stub
             ? t("pricing.checkoutSuccess.titleStub")
-            : trialDays > 0
+            : trialDays > 0 && confirmed === true
               ? tierName
                 ? t("pricing.checkoutSuccess.titleTrial", { tier: tierName, days: trialDays })
                 : t("pricing.checkoutSuccess.titleTrialNoTier", { days: trialDays })
@@ -260,11 +338,13 @@ function SuccessInner() {
         <p style={{ fontSize: 15, lineHeight: 1.6, margin: "0 0 20px", opacity: 0.92, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }}>
           {stub
             ? t("pricing.checkoutSuccess.subtitleStub")
-            : trialDays > 0
+            : trialDays > 0 && confirmed === true
               ? t("pricing.checkoutSuccess.subtitleTrial", { date: trialEndDate ?? "" })
-              : tierName
-                ? t("pricing.checkoutSuccess.subtitleActivated", { tier: tierName })
-                : t("pricing.checkoutSuccess.subtitleActivatedNoTier")}
+              : confirmed === true
+                ? tierName
+                  ? t("pricing.checkoutSuccess.subtitleActivated", { tier: tierName })
+                  : t("pricing.checkoutSuccess.subtitleActivatedNoTier")
+                : t("pricing.checkoutSuccess.subtitlePending")}
         </p>
 
         {/* Trial end date badge */}
@@ -286,7 +366,14 @@ function SuccessInner() {
         )}
 
         {/* Amount */}
-        {!stub && totalUsd !== null && totalUsd > 0 && (
+        {/*
+          * Сумма — такое же утверждение, как и тариф: `?total=5000` рисовало
+          * «Сумма: $50» рядом с «оплата принята», и вместе это читается как
+          * «мы получили от вас 50 долларов». Пока сервер не подтвердил, мы
+          * этого не знаем. Условие то же, что у заголовка и абзаца, — экран
+          * должен говорить одним голосом.
+          */}
+        {!stub && confirmed === true && totalUsd !== null && totalUsd > 0 && (
           <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 20 }}>
             {t("pricing.checkoutSuccess.amountLabel")} <strong>${totalUsd}</strong>
           </div>
@@ -354,7 +441,7 @@ function SuccessInner() {
             {t("pricing.checkoutSuccess.whatsNext")}
           </h3>
           <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8 }}>
-            {[
+            {([
               { icon: "📧", text: processor
                   ? t("pricing.checkoutSuccess.nextEmail", { processor })
                   : t("pricing.checkoutSuccess.nextEmailNoName") },
@@ -369,11 +456,27 @@ function SuccessInner() {
               ...(processor
                 ? [{ icon: "⚙️", text: t("pricing.checkoutSuccess.nextManage", { processor }) }]
                 : []),
-              { icon: "💬", text: t("pricing.checkoutSuccess.nextQuestions") },
-            ].map((item, i) => (
+              // Вопрос сразу после оплаты — самый срочный на платформе. Пункт
+              // ведёт в нашу форму с уже подставленной темой покупки, а не на
+              // почтовый адрес: у домена нет MX, и письмо туда выглядело бы для
+              // заплатившего человека как молчание в ответ.
+              {
+                icon: "💬",
+                text: t("pricing.checkoutSuccess.nextQuestions"),
+                href: "/pricing/contact?topic=purchase",
+              },
+            ] as Array<{ icon: string; text: string; href?: string }>).map((item, i) => (
               <li key={i} style={{ display: "flex", gap: 10, fontSize: 13, color: "#475569" }}>
                 <span>{item.icon}</span>
-                <span>{item.text}</span>
+                <span>
+                  {item.href ? (
+                    <Link href={item.href} style={{ color: "#2563eb", textDecoration: "underline" }}>
+                      {item.text}
+                    </Link>
+                  ) : (
+                    item.text
+                  )}
+                </span>
               </li>
             ))}
           </ul>

@@ -13,8 +13,9 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { stripComments } from "./helpers/sourceCode";
 
-const исходник = readFileSync(join(process.cwd(), "src/routes/events.ts"), "utf8");
+const исходник = stripComments(readFileSync(join(process.cwd(), "src/routes/events.ts"), "utf8"));
 
 describe("сводка сообщает об обрезке", () => {
   it("признак обрезки означает упор в предохранитель ВНУТРИ окна", () => {

@@ -10,6 +10,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { stripComments } from "../../app/__tests__/helpers/sourceCode";
 
 const ЧИТАЮТ_КАНАЛ = [
   "src/lib/track.ts",
@@ -39,7 +40,7 @@ const ЧИТАЮТ_КАНАЛ = [
  * Проверяется это ниже отдельно, а не оставлено на веру.
  */
 
-const текст = (p: string) => readFileSync(join(process.cwd(), p), "utf8");
+const текст = (p: string) => stripComments(readFileSync(join(process.cwd(), p), "utf8"));
 
 describe("источник канала один", () => {
   it.each(ЧИТАЮТ_КАНАЛ)("%s спрашивает channelNow(), а не адрес страницы", (p) => {

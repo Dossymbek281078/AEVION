@@ -1,4 +1,4 @@
-import { withCors, LINKS_ARE_MEMORY_ONLY } from "../_lib";
+import { withCors, LINKS_ARE_MEMORY_ONLY, PAYMENTS_API_MODE } from "../_lib";
 import { kvBackend, kvDegradedSince } from "../_persist";
 
 /**
@@ -36,6 +36,8 @@ export async function GET() {
       degradedSince: degraded?.at ?? null,
       // Ссылки живут в памяти процесса независимо от настройки хранилища.
       linksDurable,
+      // Демонстрационный режим: настоящих денег это API не двигает.
+      mode: PAYMENTS_API_MODE,
       note: durable
         ? "Платёжные записи сохраняются долговременно."
         : "ВНИМАНИЕ: записи хранятся в памяти процесса и исчезнут при перезапуске.",

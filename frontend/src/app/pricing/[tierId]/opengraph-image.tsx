@@ -49,9 +49,11 @@ const TIER_DATA: Record<string, { name: string; price: string; tagline: string; 
   },
 };
 
+import { изСправочника } from "@/lib/mapLookup";
+
 export default async function Image({ params }: { params: Promise<{ tierId: string }> }) {
   const { tierId } = await params;
-  const tier = TIER_DATA[tierId] ?? TIER_DATA.medium;
+  const tier = изСправочника(TIER_DATA, tierId) ?? TIER_DATA.medium;
 
   return new ImageResponse(
     (

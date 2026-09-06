@@ -47,6 +47,18 @@ describe("tierLabel", () => {
     expect(tierLabel("full")).toBe("Full");
     expect(tierLabel("enterprise")).toBe("Enterprise");
   });
+
+  it("служебное имя не превращается в подпись тарифа", () => {
+    // Тип обещает CanonicalTier, но во время исполнения значение приходит из
+    // ответа сервера. У обычного объекта `constructor` разрешается в
+    // наследство и даёт ФУНКЦИЮ — истинную, поэтому страховка `?? t` её не
+    // отсекает, и на экран уходит «function Object() { [native code] }».
+    for (const имя of ["constructor", "toString", "__proto__", "valueOf"]) {
+      const v = tierLabel(имя as never);
+      expect(typeof v, `подпись тарифа ${имя} оказалась ${typeof v}`).toBe("string");
+      expect(v.toLowerCase(), "в подпись попало внутреннее значение").not.toContain("native code");
+    }
+  });
 });
 
 describe("fetchOrPaywall", () => {

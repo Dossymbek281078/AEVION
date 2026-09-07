@@ -1,6 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { useI18nOptional } from "@/lib/i18n";
+import { BU_BUSY } from "../../busyUi";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -49,6 +51,8 @@ const ROLE_COLORS: Record<string, string> = {
 };
 
 export default function BureauOrgDetailPage() {
+  const buLang = useI18nOptional()?.lang ?? "en";
+  const BU = BU_BUSY[buLang] ?? BU_BUSY.en;
   const params = useParams();
   const orgId = (params?.orgId as string) || "";
   const { showToast } = useToast();
@@ -302,7 +306,7 @@ export default function BureauOrgDetailPage() {
                   disabled={inviting}
                   className="bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white rounded-lg px-5 py-2 text-sm font-medium transition-colors"
                 >
-                  {inviting ? "Sending…" : "Send Invite"}
+                  {inviting ? BU.sendingInvite : "Send Invite"}
                 </button>
               </form>
               {pendingInviteUrl && (

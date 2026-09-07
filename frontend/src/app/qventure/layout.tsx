@@ -14,7 +14,9 @@ import type { Metadata } from "next";
 // EN-визитёр раньше видел чисто русскую вкладку у «fund-grade English tool».
 const TITLE = "QVenture — AI Deal Analyzer · ИИ-аналитик инвестиций";
 const DESCRIPTION =
-  "Проверка сделки уровня фонда за секунды. Прозрачная оценка 0–100 по восьми факторам, "
+  "Fund-grade deal screening in seconds: a transparent 0–100 score across eight factors, "
+  + "a four-role AI council and a concrete entry strategy. "
+  + "Проверка сделки уровня фонда за секунды. Прозрачная оценка 0–100 по восьми факторам, "
   + "совет из четырёх ролей (учёный, аналитик данных, экономист, юрист) и конкретная "
   + "стратегия входа — размер чека, диапазон оценки, этапы траншей, доходность с поправкой на риск.";
 

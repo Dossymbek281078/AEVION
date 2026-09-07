@@ -28,8 +28,12 @@ const VISIBLE: Array<[string, string]> = [
   [">Имя</div>", ">Name</div>"],
   [">Почта</div>", ">Email</div>"],
   [">Пароль</div>", ">Password</div>"],
-  ['placeholder="Как к вам обращаться"', 'placeholder="Your name"'],
-  ['placeholder="Не короче 6 знаков"', 'placeholder="Minimum 6 characters"'],
+  // 07.09: подсказки полей уехали в словарь AUTH_A11Y (EN-визитёр видел
+  // русские placeholder — слепая зона доводчика). Русские фразы живут в
+  // ru-ветке словаря, показ идёт через AA.* — косвенность закреплена ниже
+  // отдельным тестом, а здесь держим сами ФРАЗЫ в ru-ветке.
+  ['namePh: "Как к вам обращаться"', 'namePh: "Your name'],
+  ['passwordPh: "Не короче 6 знаков"', 'passwordPh: "Minimum 6'],
   ["Аккаунт создан", "Account created"],
   ["Не удалось войти", "Sign in error"],
   ["Введите адрес почты и пароль", "Email and password required"],
@@ -37,6 +41,12 @@ const VISIBLE: Array<[string, string]> = [
 
 describe("страница входа говорит по-русски", () => {
   const src = readFileSync(PAGE, "utf8");
+
+  test("словарные подсказки ПРОВЕДЕНЫ до полей (AA.namePh/AA.passwordPh)", () => {
+    // Фраза в ru-ветке без провода — мёртвый словарь: закрепляем связку.
+    expect(src).toContain("placeholder={AA.namePh}");
+    expect(src).toContain("placeholder={AA.passwordPh}");
+  });
 
   for (const [ru, en] of VISIBLE) {
     test(`«${ru}» на месте, «${en}» не вернулось`, () => {

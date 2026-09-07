@@ -26,6 +26,12 @@ const PAIRS: Array<{ ru: string; en: string; target: string; beforeMark: string 
     beforeMark: "fetchOrPaywall(",
   },
   {
+    ru: "qskyway/page.tsx",
+    en: "en/qskyway/page.tsx",
+    target: "/en/qskyway",
+    beforeMark: "fetchOrPaywall(",
+  },
+  {
     ru: "qrenew/page.tsx",
     en: "en/qrenew/page.tsx",
     target: "/en/qrenew",

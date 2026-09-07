@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useI18nOptional } from "@/lib/i18n";
+import { SX_BUSY } from "./busyUi";
 import {
   ApiError,
   BUILD_BY_LABEL,
@@ -61,6 +63,8 @@ const NUM = (v: string): number | undefined => {
 };
 
 export function ListingWizard({ tiers, sectors, onPublished }: Props) {
+  const sxLang = useI18nOptional()?.lang ?? "ru";
+  const SX = SX_BUSY[sxLang] ?? SX_BUSY.ru;
   const [phase, setPhase] = useState<Phase>("draft");
   const [tier, setTier] = useState<Tier>("idea");
   const [title, setTitle] = useState("");
@@ -379,7 +383,7 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
 
         {phase === "draft" && (
           <button type="button" onClick={() => runAssessment("terms")} disabled={busy || description.trim().length < 20} style={primaryBtn(busy)}>
-            {busy ? "Считаю…" : "Показать бесплатный анализ"}
+            {busy ? SX.computing : "Показать бесплатный анализ"}
           </button>
         )}
       </div>
@@ -533,7 +537,7 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
               Пересчитать с условиями
             </button>
             <button type="button" onClick={publish} disabled={busy} style={primaryBtn(busy)}>
-              {busy ? "Публикую…" : "Опубликовать на бирже"}
+              {busy ? SX.publishing : "Опубликовать на бирже"}
             </button>
           </div>
           <p style={{ margin: "10px 0 0", fontSize: 11.5, color: "#64748b", lineHeight: 1.5 }}>

@@ -201,10 +201,14 @@ function buildReport(
 // доводчика», 06.09.2026): AutoTranslate переводит текст, но не
 // placeholder/aria — EN-визитёр видел английскую страницу с русской
 // подсказкой в ГЛАВНОМ поле модуля. Рецепт №2, образец GEN_UI.
-const MC_UI: Record<string, { askAria: string; askPh: string }> = {
-  ru: { askAria: "Вопрос совету", askPh: "Например: стоит ли запускать платный тариф до первой продажи?" },
-  en: { askAria: "Question for the council", askPh: "For example: should we launch a paid tier before the first sale?" },
-  kk: { askAria: "Кеңеске сұрақ", askPh: "Мысалы: алғашқы сатылымға дейін ақылы тарифті іске қосу керек пе?" },
+const MC_UI: Record<string, { askAria: string; askPh: string; busyAsk: string }> = {
+  // busyAsk — класс «busy-ярлык быстрее доводчика» (назначение 07.09,
+  // рецепт №2 как у GEN_UI.busy*): ярлык живёт секунды и первым видит
+  // en-посетитель главной кнопки модуля. Idle-подпись не трогаем —
+  // стабильный текст доводчик кроет.
+  ru: { askAria: "Вопрос совету", askPh: "Например: стоит ли запускать платный тариф до первой продажи?", busyAsk: "Агенты отвечают…" },
+  en: { askAria: "Question for the council", askPh: "For example: should we launch a paid tier before the first sale?", busyAsk: "Agents are answering…" },
+  kk: { askAria: "Кеңеске сұрақ", askPh: "Мысалы: алғашқы сатылымға дейін ақылы тарифті іске қосу керек пе?", busyAsk: "Агенттер жауап беруде…" },
 };
 
 export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
@@ -354,7 +358,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
             fontSize: 14, fontWeight: 600, cursor: disabled ? "default" : "pointer",
           }}
         >
-          {busy ? "Агенты отвечают…" : "Спросить консилиум"}
+          {busy ? MC.busyAsk : "Спросить консилиум"}
         </button>
         <button
           onClick={runExample}

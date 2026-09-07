@@ -23,6 +23,7 @@ import {
 import { parseDxf } from "./dxf";
 import { estimatePlan } from "./estimate";
 import { planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
+import { drawMaterial, materialById, materialsFor } from "./materials";
 
 // ---------------------------------------------------------------------------
 // Каталог мебели и оборудования. Размеры в метрах. Каждый предмет — группа
@@ -209,49 +210,20 @@ const CATALOG: CatalogItem[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Процедурные текстуры пола (canvas — без внешних файлов).
+// Текстуры отделки берутся из каталога materials.ts — данные отдельно от
+// отрисовки, поэтому каталог растёт без правки этого файла.
 
-const FLOOR_TYPES = [
-  { id: "parquet", name: "Паркет" },
-  { id: "laminate", name: "Ламинат" },
-  { id: "tile", name: "Плитка" },
-] as const;
-type FloorType = (typeof FLOOR_TYPES)[number]["id"];
-
-function floorTexture(type: FloorType): THREE.Texture {
-  const c = document.createElement("canvas");
-  c.width = 256; c.height = 256;
-  const ctx = c.getContext("2d")!;
-  if (type === "tile") {
-    ctx.fillStyle = "#d8d5cf"; ctx.fillRect(0, 0, 256, 256);
-    ctx.strokeStyle = "#b5b1a9"; ctx.lineWidth = 3;
-    for (let i = 0; i <= 4; i++) {
-      ctx.beginPath(); ctx.moveTo(i * 64, 0); ctx.lineTo(i * 64, 256); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, i * 64); ctx.lineTo(256, i * 64); ctx.stroke();
-    }
-  } else {
-    const cols = type === "parquet" ? ["#a9834f", "#9a7644", "#b28d59", "#8f6c3e"] : ["#c9ab7e", "#c2a375", "#d0b288", "#bd9d6f"];
-    for (let row = 0; row < 8; row++) {
-      const off = (row % 2) * 64;
-      for (let i = -1; i < 3; i++) {
-        ctx.fillStyle = cols[(row + i + 4) % cols.length];
-        ctx.fillRect(i * 128 + off, row * 32, 126, 30);
-      }
-    }
-  }
-  const t = new THREE.CanvasTexture(c);
-  t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.RepeatWrapping;
+function textureFor(id: string, roomW: number, roomH: number): THREE.Texture | null {
+  const m = materialById(id);
+  if (!m) return null;
+  const t = new THREE.CanvasTexture(drawMaterial(m));
+  t.wrapS = THREE.RepeatWrapping;
+  t.wrapT = THREE.RepeatWrapping;
+  // Повтор считается от РАЗМЕРА ПОМЕЩЕНИЯ и физического размера элемента:
+  // иначе одна и та же плитка была бы на разных планах разной величины.
+  t.repeat.set(Math.max(1, roomW / m.unitM / 4), Math.max(1, roomH / m.unitM / 4));
   return t;
 }
-
-const WALL_COLORS = [
-  { id: "#e8e4da", name: "Тёплый белый" },
-  { id: "#dfe6e2", name: "Шалфей" },
-  { id: "#e7dfd2", name: "Песочный" },
-  { id: "#d9dee8", name: "Голубая пудра" },
-  { id: "#e6d9d3", name: "Пыльная роза" },
-  { id: "#d6d3cd", name: "Светло-серый" },
-];
 
 const CONCRETE = 0xb6b0a6;
 const SCREED = 0x9b958b;
@@ -270,8 +242,8 @@ export default function QSpaceClient() {
 
   const [plan, setPlan] = useState<Plan>(() => demoPlan());
   const [layers, setLayers] = useState({ rough: false, finish: true, decor: true });
-  const [wallColor, setWallColor] = useState(WALL_COLORS[0].id);
-  const [floorType, setFloorType] = useState<FloorType>("parquet");
+  const [wallMatId, setWallMatId] = useState("paint-warm-white");
+  const [floorMatId, setFloorMatId] = useState("parquet-oak");
   const [warnings, setWarnings] = useState<string[]>([]);
   const [unitLabel, setUnitLabel] = useState<string>("");
   const [placed, setPlaced] = useState<PlacedItem[]>([]);
@@ -591,13 +563,30 @@ export default function QSpaceClient() {
   useEffect(() => {
     const t = three.current; if (!t) return;
     if (layers.finish) {
-      t.wallMat.color.set(wallColor);
-      t.wallMat.map = null;
-      const tex = floorTexture(floorType);
       const b = planBounds(plan);
-      tex.repeat.set(Math.max(1, (b.maxX - b.minX) / 2), Math.max(1, (b.maxY - b.minY) / 2));
-      t.floorMat.color.set(0xffffff);
-      t.floorMat.map = tex;
+      const W = b.maxX - b.minX;
+      const H = b.maxY - b.minY;
+
+      const wm = materialById(wallMatId);
+      if (wm && wm.pattern === "solid") {
+        // Сплошной цвет рисовать текстурой незачем — берём цветом материала.
+        t.wallMat.color.set(wm.colors[0]);
+        t.wallMat.map = null;
+      } else {
+        const wt = textureFor(wallMatId, W, WALL_HEIGHT);
+        t.wallMat.color.set(0xffffff);
+        t.wallMat.map = wt;
+      }
+
+      const ft = textureFor(floorMatId, W, H);
+      const fm = materialById(floorMatId);
+      if (ft && fm && fm.pattern !== "solid") {
+        t.floorMat.color.set(0xffffff);
+        t.floorMat.map = ft;
+      } else {
+        t.floorMat.color.set(fm ? fm.colors[0] : 0xffffff);
+        t.floorMat.map = null;
+      }
     } else {
       t.wallMat.color.set(CONCRETE);
       t.wallMat.map = null;
@@ -606,7 +595,7 @@ export default function QSpaceClient() {
     }
     t.wallMat.needsUpdate = true;
     t.floorMat.needsUpdate = true;
-  }, [wallColor, floorType, layers.finish, plan]);
+  }, [wallMatId, floorMatId, layers.finish, plan]);
 
   // ---- подсветка выбранного предмета -------------------------------------
   useEffect(() => {
@@ -814,35 +803,41 @@ export default function QSpaceClient() {
       <div style={S.body}>
         <aside style={S.panel}>
           <h2 style={S.h2}>Чистовая отделка</h2>
-          <div style={S.swatchRow} role="group" aria-label="Цвет стен">
-            {WALL_COLORS.map((c) => (
+          <div style={S.swatchRow} role="group" aria-label="Отделка стен">
+            {materialsFor("wall").map((m) => (
               <button
-                key={c.id}
+                key={m.id}
                 type="button"
-                aria-label={`Стены: ${c.name}`}
-                title={c.name}
-                onClick={() => setWallColor(c.id)}
+                aria-label={`Стены: ${m.name}. ${m.note}`}
+                title={`${m.name} — ${m.note}`}
+                onClick={() => setWallMatId(m.id)}
                 style={{
                   ...S.swatch,
-                  background: c.id,
-                  outline: wallColor === c.id ? "3px solid #2f5e2a" : "1px solid #b8b3aa",
+                  background: m.pattern === "stripes"
+                    ? `repeating-linear-gradient(90deg, ${m.colors[0]} 0 6px, ${m.colors[1]} 6px 12px)`
+                    : m.colors[0],
+                  outline: wallMatId === m.id ? "3px solid #2f5e2a" : "1px solid #b8b3aa",
                 }}
               />
             ))}
           </div>
-          <div style={S.swatchRow} role="group" aria-label="Покрытие пола">
-            {FLOOR_TYPES.map((f) => (
+          <p style={S.hint}>
+            Стены: {materialById(wallMatId)?.name ?? "—"}
+          </p>
+          <div style={S.swatchRow} role="group" aria-label="Напольное покрытие">
+            {materialsFor("floor").map((m) => (
               <button
-                key={f.id}
+                key={m.id}
                 type="button"
-                onClick={() => setFloorType(f.id)}
+                onClick={() => setFloorMatId(m.id)}
+                title={m.note}
                 style={{
                   ...S.btn,
-                  fontWeight: floorType === f.id ? 700 : 400,
-                  borderColor: floorType === f.id ? "#2f5e2a" : "#c9c4bb",
+                  fontWeight: floorMatId === m.id ? 700 : 400,
+                  borderColor: floorMatId === m.id ? "#2f5e2a" : "#c9c4bb",
                 }}
               >
-                {f.name}
+                {m.name}
               </button>
             ))}
           </div>

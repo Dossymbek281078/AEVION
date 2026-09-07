@@ -115,6 +115,12 @@ const ВНУТРЕННИЕ = new Set(["admin", "api-explorer"]);
 function fajly(d: string, out: string[] = []): string[] {
   for (const e of readdirSync(d)) {
     if (e === "node_modules" || e === "__tests__") continue;
+    // 07.09.2026: /en/… — АНГЛИЙСКИЕ посадочные (растущее дерево: shop,
+    // smeta-trainer, go, longevity…). Английская подпись там — норма, а не
+    // дефект: храповик стережёт «английский атрибут на РУССКОМ экране», и
+    // /en/ в этот вопрос не входит по определению. Без исключения каждая
+    // новая EN-посадочная красила бы храповик на ПОЧИНКЕ EN-готовности.
+    if (e === "en" && (d.endsWith("app") || d.endsWith("app/") || d.endsWith("app\\"))) continue;
     if (ВНУТРЕННИЕ.has(e)) continue;
     const p = join(d, e);
     if (statSync(p).isDirectory()) fajly(p, out);

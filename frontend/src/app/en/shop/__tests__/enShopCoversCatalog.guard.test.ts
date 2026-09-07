@@ -79,5 +79,26 @@ describe("английская витрина покрывает каталог"
     const src = readFileSync(join(here, "..", "page.tsx"), "utf8");
     expect(src).toMatch(/PaymentReachNotice[^/]*lang="en"/);
   });
+
+  it("эффективный заголовок каждой карточки — латиницей", () => {
+    // Находка мобильного прохода 07.09: title рендерился из каталога, и три
+    // гайда уезжали на EN-витрину как «Протокол…» — третье поле того же
+    // класса «карта не равна экрану» (desc и badge уже ловятся выше).
+    // Проверяем ЭФФЕКТИВНЫЙ заголовок — ровно то выражение, что рендерит Card.
+    // Сначала привязка к РЕНДЕРУ: без неё тест вычислял бы «эффективный»
+    // заголовок собственной копией выражения и был зелёным при подмене
+    // рендера на голый p.title — поймано мутацией 07.09 при создании.
+    const { readFileSync } = require("node:fs") as typeof import("node:fs");
+    const { join, dirname } = require("node:path") as typeof import("node:path");
+    const { fileURLToPath } = require("node:url") as typeof import("node:url");
+    const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "page.tsx"), "utf8");
+    expect(src, "Card обязан рендерить en?.titleEn ?? p.title").toContain("{en?.titleEn ?? p.title}</h3>");
+    for (const p of все) {
+      const en = EN_TEXTS[p.id];
+      const shown = en?.titleEn ?? p.title;
+      expect(shown, `заголовок товара "${p.id}" на EN-витрине содержит кириллицу: "${shown}"`).not.toMatch(/[А-Яа-яЁё]/);
+    }
+  });
 });
+
 

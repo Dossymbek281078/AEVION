@@ -39,7 +39,7 @@ function dhCostlyLimit(keyPrefix: string) {
 }
 import { getPool } from "../lib/dbPool";
 import { ensureDevHubTables, isDevHubDbReady, getDevHubDbError } from "../lib/ensureDevHubTables";
-import { callProvider, getProviders, type ChatImage } from "../services/qcoreai/providers";
+import { callProvider, streamProviderResilient, getProviders, type ChatImage } from "../services/qcoreai/providers";
 import { extractJsonObject, salvageCompleteArrayObjects } from "../services/qcoreai/jsonReply";
 import { smartComplete } from "../services/qcoreai/smartComplete";
 import { insertSmartRun, aggregateSmartRunsForUser } from "../lib/smartRunLog";
@@ -1466,7 +1466,7 @@ async function generateCodeWithAI(
   existingFiles: Array<{ path: string; content: string }> = [],
   images?: ChatImage[],
   history?: ChatTurn[],
-  onProgress?: (stage: string) => void,
+  onProgress?: (stage: string, extra?: Record<string, unknown>) => void,
   // Метка модуля для учёта расхода. Раньше здесь стояла постоянная
   // "devhub-generate", и отделить траты анонимных от трат вошедших было
   // нельзя — а именно этот вопрос основатель и решает про потолок расходов.
@@ -1542,7 +1542,60 @@ async function generateCodeWithAI(
     // неверный».
     const attempts: Array<{ provider: string; error: string }> = [];
     const chain = images?.length && visionChain.length > 0 ? visionChain : [provider];
+    // Шаг 1 стриминга (07.09): для anthropic БЕЗ картинок ответ читается
+    // ПОТОКОМ — те же max_tokens (паритет держит сторож streamCapsMatch…),
+    // тот же учёт (учтиГенерацию по done-событию), плюс живой счётчик байтов
+    // в onProgress вместо мёртвого спиннера на минуты. Только anthropic:
+    // у gemini-стрима потолок ниже GEN_MAX_TOKENS — регрессия к обрезке;
+    // прочие идут прежним callProvider. Отказ потока НЕ фатален: attempts
+    // пуст, и цикл ниже честно пробует обычный путь с фолбэками.
+    if (!images?.length && chain.length === 1 && chain[0].id === "anthropic") {
+      const cand = chain[0];
+      try {
+        let ответ = "";
+        let байт = 0;
+        let отдано = 0;
+        // Шаг 2 (07.09): файлы объявляются ПО МЕРЕ завершения их JSON-объектов
+        // в потоке — спасающий разбор уже умеет вынимать целые объекты из
+        // недописанного JSON. Разбор не чаще раза в ~4КБ: он не бесплатен.
+        const объявлено = new Set<string>();
+        let последнийРазбор = 0;
+        let tin: number | undefined;
+        let tout: number | undefined;
+        for await (const ev of streamProviderResilient(cand.id, messages, cand.defaultModel, 0.2)) {
+          if (ev.kind === "text" && ev.text) {
+            ответ += ev.text;
+            байт += Buffer.byteLength(ev.text, "utf8");
+            if (байт - отдано >= 2048) {
+              отдано = байт;
+              onProgress?.("generating", { bytes: байт });
+            }
+            if (байт - последнийРазбор >= 4096) {
+              последнийРазбор = байт;
+              for (const o of salvageCompleteArrayObjects(ответ, "files")) {
+                const путь = (o as { path?: unknown } | null)?.path;
+                if (typeof путь === "string" && путь && !объявлено.has(путь)) {
+                  объявлено.add(путь);
+                  onProgress?.("file_ready", { path: путь });
+                }
+              }
+            }
+          } else if (ev.kind === "done") {
+            tin = ev.tokensIn;
+            tout = ev.tokensOut;
+          }
+        }
+        if (ответ) {
+          result = { reply: ответ, model: cand.defaultModel, usage: { prompt_tokens: tin, completion_tokens: tout } };
+          учтиГенерацию(cand.id, cand.defaultModel, result.usage, moduleTag, userId);
+          provider = cand;
+        }
+      } catch (inner) {
+        attempts.push({ provider: cand.id + " (stream)", error: inner instanceof Error ? inner.message : String(inner) });
+      }
+    }
     for (const cand of chain) {
+      if (result) break;
       try {
         result = await callProvider(cand.id, messages, cand.defaultModel, 0.2, images, GEN_MAX_TOKENS);
         учтиГенерацию(cand.id, cand.defaultModel, result.usage, moduleTag, userId);
@@ -2365,7 +2418,7 @@ devhubRouter.post("/projects/:id/generate", dhCostlyLimit("dhgenerate"), async (
 });
 
 /** Shared by /generate and /database/design: generate → checkpoint → save. */
-async function runProjectGeneration(project: DevHubProject, userId: string, prompt: string, stack: string, targetFiles: string[], images?: ChatImage[], history?: ChatTurn[], onProgress?: (stage: string) => void) {
+async function runProjectGeneration(project: DevHubProject, userId: string, prompt: string, stack: string, targetFiles: string[], images?: ChatImage[], history?: ChatTurn[], onProgress?: (stage: string, extra?: Record<string, unknown>) => void) {
   const existingFiles = await dbListFiles(project.id);
   const { files: generatedFiles, aiGenerated, continued, syntaxErrors, selfCorrected, provider: genProvider, model: genModel } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history, onProgress,
       меткаГенерации(userId), userId);
@@ -2513,7 +2566,7 @@ devhubRouter.post("/projects/:id/generate/stream", dhCostlyLimit("dhgenerate"), 
   try {
     const result = await runProjectGeneration(
       project, userId, prompt, stack || project.stack, targetFiles, images, history,
-      (stage) => send({ type: "status", stage })
+      (stage, extra) => send({ type: "status", stage, ...(extra ?? {}) })
     );
     const провенанс = await maybeStampProvenance(req.body?.provenance === true, project, prompt, result, req.headers.authorization);
     send({ type: "result", ...result, ...провенанс });

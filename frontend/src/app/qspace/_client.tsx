@@ -24,6 +24,14 @@ import { parseDxf } from "./dxf";
 import { estimatePlan } from "./estimate";
 import { planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
 import { drawMaterial, materialById, materialsFor } from "./materials";
+import {
+  CEILING_STRETCH,
+  FLOOR_WET,
+  WALL_BLOCK,
+  WALL_FRAME,
+  finishedHeightM,
+  totalMm,
+} from "./wallStructure";
 
 // ---------------------------------------------------------------------------
 // Каталог мебели и оборудования. Размеры в метрах. Каждый предмет — группа
@@ -242,6 +250,7 @@ export default function QSpaceClient() {
 
   const [plan, setPlan] = useState<Plan>(() => demoPlan());
   const [layers, setLayers] = useState({ rough: false, finish: true, decor: true });
+  const [partition, setPartition] = useState("wall-block");
   const [wallMatId, setWallMatId] = useState("paint-warm-white");
   const [floorMatId, setFloorMatId] = useState("parquet-oak");
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -802,6 +811,61 @@ export default function QSpaceClient() {
 
       <div style={S.body}>
         <aside style={S.panel}>
+          {layers.rough && (
+            <>
+              <h2 style={S.h2}>Черновая: состав конструкций</h2>
+              <div style={S.swatchRow} role="group" aria-label="Тип перегородки">
+                {[WALL_BLOCK, WALL_FRAME].map((w) => (
+                  <button
+                    key={w.id}
+                    type="button"
+                    onClick={() => setPartition(w.id)}
+                    title={`${w.title}, ${totalMm(w)} мм`}
+                    style={{
+                      ...S.btn,
+                      fontWeight: partition === w.id ? 700 : 400,
+                      borderColor: partition === w.id ? "#2f5e2a" : "#c9c4bb",
+                    }}
+                  >
+                    {w.id === "wall-block" ? "Газоблок" : "Каркас ГКЛ"} · {totalMm(w)} мм
+                  </button>
+                ))}
+              </div>
+              <table style={S.estTable}>
+                <tbody>
+                  {(partition === "wall-block" ? WALL_BLOCK : WALL_FRAME).layers.map((l) => (
+                    <tr key={l.name}>
+                      <td style={S.estTd} title={l.note}>{l.name}</td>
+                      <td style={S.estTdNum}>{l.thicknessMm} мм</td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td style={S.estTd}><strong>Пол (пирог по перекрытию)</strong></td>
+                    <td style={S.estTdNum}><strong>{totalMm(FLOOR_WET)} мм</strong></td>
+                  </tr>
+                  <tr>
+                    <td style={S.estTd}><strong>Потолок натяжной (зазор + полотно)</strong></td>
+                    <td style={S.estTdNum}><strong>{totalMm(CEILING_STRETCH)} мм</strong></td>
+                  </tr>
+                  <tr>
+                    <td style={S.estTd}>Высота «в бетоне»</td>
+                    <td style={S.estTdNum}>{WALL_HEIGHT.toFixed(2)} м</td>
+                  </tr>
+                  <tr>
+                    <td style={S.estTd}><strong>Чистовая высота после ремонта</strong></td>
+                    <td style={S.estTdNum}>
+                      <strong>{finishedHeightM(WALL_HEIGHT, FLOOR_WET, CEILING_STRETCH).toFixed(2)} м</strong>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p style={S.hint}>
+                Наведите на слой — покажет, за что он отвечает. Толщины типовые
+                для практики ремонта, а не требование норматива: сверьте с прорабом.
+              </p>
+            </>
+          )}
+
           <h2 style={S.h2}>Чистовая отделка</h2>
           <div style={S.swatchRow} role="group" aria-label="Отделка стен">
             {materialsFor("wall").map((m) => (

@@ -7,7 +7,7 @@
 // Демо-план загружается сразу: человек видит результат ДО того, как ему
 // понадобился собственный чертёж (prompt-first, feedback_devhub_prompt_first_ux).
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import {
@@ -21,6 +21,7 @@ import {
   type Plan,
 } from "./planModel";
 import { parseDxf } from "./dxf";
+import { estimatePlan } from "./estimate";
 
 // ---------------------------------------------------------------------------
 // Каталог мебели и оборудования. Размеры в метрах. Каждый предмет — группа
@@ -678,6 +679,12 @@ export default function QSpaceClient() {
   const b = planBounds(plan);
   const dims = `${(b.maxX - b.minX).toFixed(1)} × ${(b.maxY - b.minY).toFixed(1)} м`;
 
+  const est = useMemo(() => {
+    const w = generateWiring(plan);
+    const pl = generatePlumbing(plan);
+    return estimatePlan(plan, w, pl, generateLights(plan).length);
+  }, [plan]);
+
   const S = styles;
   const groups = [...new Set(CATALOG.map((c) => c.group))];
 
@@ -813,6 +820,26 @@ export default function QSpaceClient() {
           {placed.length > 0 && (
             <p style={S.hint}>Предметов в сцене: {placed.length}</p>
           )}
+
+          <h2 style={S.h2}>Спецификация (черновик)</h2>
+          <table style={S.estTable}>
+            <tbody>
+              <tr><td style={S.estTd}>Пол (по габариту плана)</td><td style={S.estTdNum}>{est.floorArea.toFixed(1)} м²</td></tr>
+              <tr><td style={S.estTd}>Покрытие пола (+5 % подрезка)</td><td style={S.estTdNum}>{est.flooringArea.toFixed(1)} м²</td></tr>
+              <tr><td style={S.estTd}>Стены (по осям, одна сторона, минус проёмы)</td><td style={S.estTdNum}>{est.wallArea.toFixed(1)} м²</td></tr>
+              <tr><td style={S.estTd}>Краска (0.12 л/м², два слоя)</td><td style={S.estTdNum}>{est.paintLitres.toFixed(1)} л</td></tr>
+              <tr><td style={S.estTd}>Розетки</td><td style={S.estTdNum}>{est.outlets} шт</td></tr>
+              <tr><td style={S.estTd}>Выключатели</td><td style={S.estTdNum}>{est.switches} шт</td></tr>
+              <tr><td style={S.estTd}>Кабель (магистрали + спуски)</td><td style={S.estTdNum}>{est.cableMeters.toFixed(0)} м</td></tr>
+              <tr><td style={S.estTd}>Трубы воды (ХВС + ГВС)</td><td style={S.estTdNum}>{est.pipeMeters.toFixed(1)} м</td></tr>
+              <tr><td style={S.estTd}>Канализация</td><td style={S.estTdNum}>{est.drainMeters.toFixed(1)} м</td></tr>
+              <tr><td style={S.estTd}>Светильники</td><td style={S.estTdNum}>{est.ceilingLights} шт</td></tr>
+            </tbody>
+          </table>
+          <p style={S.hint}>
+            Числа выводятся из модели и меняются вместе с планом. Это черновик
+            для разговора о закупке, не смета под подпись.
+          </p>
         </aside>
 
         <div style={S.canvasWrap}>
@@ -897,6 +924,9 @@ const styles: Record<string, React.CSSProperties> = {
   },
   selRow: { display: "flex", flexWrap: "wrap", gap: 6 },
   hint: { fontSize: 12.5, color: "#6a645a", margin: "8px 0 0" },
+  estTable: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
+  estTd: { padding: "3px 6px 3px 0", borderBottom: "1px solid #eee9df", color: "#4a453d" },
+  estTdNum: { padding: "3px 0", borderBottom: "1px solid #eee9df", textAlign: "right", whiteSpace: "nowrap" },
   canvasWrap: { flex: "1 1 560px", minWidth: 300 },
   canvas: {
     width: "100%", height: "min(70vh, 640px)",

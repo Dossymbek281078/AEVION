@@ -45,24 +45,33 @@ interface Stats {
  * подсказка ГЛАВНОГО поля поиска оставалась русской. Замер живой пробой
  * прода (en-US), рецепт №2 из разбора, образец — GEN_UI в devhub/[id].
  */
-const SX_UI: Record<string, { searchAria: string; searchPh: string; ideaPh: string; rationalePh: string }> = {
+const SX_UI: Record<string, { searchAria: string; searchPh: string; ideaPh: string; rationalePh: string; ideaLabel: string; rationaleLabel: string; authorLabel: string }> = {
   ru: {
     searchAria: "Поиск по заявкам",
     searchPh: "Поиск по словам из заявки: логистика, юристы, подписка…",
     ideaPh: "напр.: эскроу для сделок по выкупу",
     rationalePh: "Что не дают существующие площадки",
+    ideaLabel: "Идея / фича",
+    rationaleLabel: "Какую дыру это закрывает",
+    authorLabel: "Псевдоним (необязательно)",
   },
   en: {
     searchAria: "Search listings",
     searchPh: "Search by words from the listing: logistics, lawyers, subscription…",
     ideaPh: "e.g. escrow for buyout deals",
     rationalePh: "What existing marketplaces don't give you",
+    ideaLabel: "Idea / feature",
+    rationaleLabel: "What gap does it close",
+    authorLabel: "Alias (optional)",
   },
   kk: {
     searchAria: "Өтінімдер бойынша іздеу",
     searchPh: "Өтінім сөздері бойынша іздеу: логистика, заңгерлер, жазылым…",
     ideaPh: "мыс.: сатып алу мәмілелеріне эскроу",
     rationalePh: "Бар алаңдар нені бермейді",
+    ideaLabel: "Идея / мүмкіндік",
+    rationaleLabel: "Бұл қандай олқылықты жабады",
+    authorLabel: "Бүркеншік ат (міндетті емес)",
   },
 };
 
@@ -470,9 +479,9 @@ export default function StartupExchangePage() {
             titleField="idea"
             summaryField="rationale"
             fields={[
-              { key: "idea", label: "Идея / фича", placeholder: SX.ideaPh, required: true },
-              { key: "rationale", label: "Какую дыру это закрывает", type: "textarea", placeholder: SX.rationalePh },
-              { key: "author", label: "Псевдоним (необязательно)", placeholder: "anon" },
+              { key: "idea", label: SX.ideaLabel, placeholder: SX.ideaPh, required: true },
+              { key: "rationale", label: SX.rationaleLabel, type: "textarea", placeholder: SX.rationalePh },
+              { key: "author", label: SX.authorLabel, placeholder: "anon" },
             ]}
           />
         </div>

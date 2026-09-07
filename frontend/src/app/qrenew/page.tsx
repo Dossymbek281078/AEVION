@@ -15,12 +15,23 @@ export const metadata: Metadata = {
   },
 };
 
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { fetchOrPaywall } from "@/lib/paywall";
 import { PaywallScreen } from "@/components/PaywallScreen";
 import QRenewClient from "./_client";
 import { PageTracking } from "@/components/PageTracking";
 
 export default async function Page() {
+  // Языковая маршрутизация — тот же приём, что у /longevity, /go и /shop
+  // (мутации у сторожей пойманы там). Замер EN-свипа 06.09.2026: под cookie
+  // en страница отдавала 61 % кириллицы. Редирект до платной стены и до
+  // учёта — просмотр считается один раз, на странице, которую человек видит.
+  const язык = (await cookies()).get("aevion_lang_v1")?.value;
+  if (язык === "en") {
+    redirect("/en/qrenew");
+  }
+
   const r = await fetchOrPaywall("/api/qrenew/health");
   if ("paywall" in r) return <PaywallScreen payload={r.paywall} backHref="/modules" />;
   return (

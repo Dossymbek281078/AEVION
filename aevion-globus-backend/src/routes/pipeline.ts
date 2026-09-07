@@ -197,13 +197,23 @@ async function ensureTables(): Promise<void> {
   `);
   // v2: signedAt хранит момент, вошедший в HMAC-пейлоад; без него
   // GET /verify/:certId не может пересчитать signatureHmac.
+  // Заверение эфемерного ключа постоянным ключом платформы. Колонки живут
+  // на IPCertificate, потому что пакет собирается из НЕЁ (SELECT * FROM
+  // "IPCertificate"): положить их на QuantumShield значило бы записать
+  // значение, которое никто не прочитает.
+  //
+  // 07.09.2026: раньше три ALTER были переданы ОДНИМ вызовом pool.query
+  // тремя АРГУМЕНТАМИ — pg читает второй аргумент как массив параметров,
+  // и ни один ALTER не выполнялся. На проде это дало 500 у /protect
+  // («column platformAttestationKid does not exist») при зелёных сторожах:
+  // текст колонки в файле ЕСТЬ, а вызов не исполнялся. По вызову на ALTER.
   await pool.query(
-    // Заверение эфемерного ключа постоянным ключом платформы. Колонки живут
-    // на IPCertificate, потому что пакет собирается из НЕЁ (SELECT * FROM
-    // "IPCertificate"): положить их на QuantumShield значило бы записать
-    // значение, которое никто не прочитает.
     `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "platformAttestationKid" TEXT;`,
+  );
+  await pool.query(
     `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "platformAttestationSig" TEXT;`,
+  );
+  await pool.query(
     `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "signedAt" TIMESTAMPTZ;`,
   );
   // v3 (Phase 3 — HMAC rotation): the QSign HMAC version that signed this

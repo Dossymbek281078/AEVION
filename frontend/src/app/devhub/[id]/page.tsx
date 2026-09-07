@@ -82,10 +82,12 @@ const PODPIS_VKLADKI: Record<Vkladka, string> = {
 // словарь IDE (~400 строк) ждёт языкового решения основателя; здесь
 // НАМЕРЕННО только замеренный поимённо остаток пути новичка (проба
 // en-newcomer-probe, 06.09.2026: 66 знаков до генерации + тосты после).
-const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; syntaxWarn: string; memoryWarn: string }> = {
+const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; syntaxWarn: string; memoryWarn: string; runCost: string; runTokens: string }> = {
   ru: {
     ph: "Опишите, что нужно построить…\nНапример: «REST API с входом пользователей и ручкой товаров»",
     created: "Создано файлов",
+    runCost: "Этот запуск",
+    runTokens: "токенов",
     noChanges: "Без изменений",
     syntaxWarn: "не прошли проверку синтаксиса — просмотрите перед выкаткой",
     memoryWarn: "но база была недоступна — они пока в памяти и могут пропасть при перезапуске. Сохраните копию.",
@@ -93,6 +95,8 @@ const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; s
   en: {
     ph: "Describe what to build…\nFor example: \"a REST API with user sign-in and a products endpoint\"",
     created: "Files created",
+    runCost: "This run",
+    runTokens: "tokens",
     noChanges: "No changes",
     syntaxWarn: "failed the syntax check — review before deploying",
     memoryWarn: "but the database was unavailable — they live in memory for now and may vanish on restart. Save a copy.",
@@ -100,6 +104,8 @@ const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; s
   kk: {
     ph: "Не құру керегін сипаттаңыз…\nМысалы: «пайдаланушы кірісі мен тауарлар жолы бар REST API»",
     created: "Жасалған файлдар",
+    runCost: "Бұл іске қосу",
+    runTokens: "токен",
     noChanges: "Өзгеріс жоқ",
     syntaxWarn: "синтаксис тексеруінен өтпеді — жариялау алдында қараңыз",
     memoryWarn: "бірақ дерекқор қолжетімсіз болды — олар әзірге жадта және қайта іске қосқанда жоғалуы мүмкін. Көшірмесін сақтаңыз.",
@@ -1684,6 +1690,14 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         track({ type: "feature_use", source: "devhub", meta: { feature: "generation", files: newGenerated.length, provenance: Boolean(data.provenance) } });
       }
       setChatHistory((h) => [...h, { role: "assistant", at: new Date().toISOString(), checkpointId: data.checkpointId, files: changes, note, ...(data.provenance ? { provenance: data.provenance } : {}) }]);
+      // Обещание Show HN «видно, сколько стоил каждый запуск» — строкой в
+      // чате, а не тостом: тост живёт секунды, расход должен остаться.
+      if (data.runTokens && (data.runTokens.in > 0 || data.runTokens.out > 0)) {
+        const т = `${data.runTokens.in}→${data.runTokens.out} ${GL.runTokens}`;
+        const цена = typeof data.runCostUsd === "number" && data.runCostUsd > 0
+          ? ` · ~$${data.runCostUsd.toFixed(4)}` : "";
+        setChatHistory((h) => [...h, { role: "hint", kind: "run_cost", description: `${GL.runCost}: ${т}${цена}` } as any]);
+      }
       if (stampProvenance && !data.provenance) {
         // Просили отметку, а её нет — молчать нельзя (§16). Причину несёт ответ.
         showToast(`Происхождение не зафиксировано: ${data.provenanceError || "причина неизвестна"}. Код сгенерирован и сохранён.`, "warning");
@@ -4113,7 +4127,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             {msg.text}
                           </div>
                         ) : msg.role === "hint" ? (
-                          msg.kind === "provision_db" ? (
+                          (msg as { kind?: string }).kind === "run_cost" ? (
+                            <div key={mi} style={{ alignSelf: "flex-start", fontSize: 11.5, color: "#64748b", padding: "2px 4px" }}>
+                              💰 {msg.description}
+                            </div>
+                          ) : msg.kind === "provision_db" ? (
                             <div key={mi} style={{ alignSelf: "flex-start", maxWidth: "95%", background: "#eef2ff", border: "1px solid #c7d2fe", borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>
                               <div style={{ color: "#3730a3", marginBottom: 8, lineHeight: 1.45 }}>
                                 🗃 Schema is on disk — create the real database now? You get your own Postgres schema, a login role only you can use, the tables from <span style={{ fontFamily: "monospace" }}>db/schema.sql</span>, and <span style={{ fontFamily: "monospace" }}>DATABASE_URL</span> in Env Vars.

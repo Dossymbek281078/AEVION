@@ -448,9 +448,19 @@ export default function QRightPage() {
       showToast("Your work is now protected!", "success");
     } catch (e) {
       timers.forEach(clearTimeout);
-      setErr((e as Error).message);
+      // «pipeline failed» и «Error 500» — наш жаргон, человеку он говорит
+      // только «что-то сломалось у них». Валидационные ответы (4xx) приходят
+      // уже человеческим текстом — их показываем как есть; всё серверное
+      // сводим к честному «не сохранилось, попробуйте ещё раз» (замер
+      // user-98 07.09: красная плашка "pipeline failed" после 10 с ожидания).
+      const raw = (e as Error).message || "";
+      const serverSide = /pipeline failed|^Error 5\d\d$|internal error/i.test(raw);
+      const human = serverSide
+        ? "Protection didn't complete — nothing was saved. Please try again in a minute; the failure is already visible on our side."
+        : raw;
+      setErr(human);
       setStep("form");
-      showToast("Protection failed: " + (e as Error).message, "error");
+      showToast(serverSide ? human : "Protection failed: " + human, "error");
     }
   };
 

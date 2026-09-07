@@ -7,7 +7,12 @@ const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://a
 export const metadata: Metadata = {
   title: "QContract — Self-Destruct Smart Documents",
   description:
-    "Саморазрушающиеся смарт-документы: burn-after-N-reads, time expiry, password gate, email-watermark, QRight-сертификация. Stripe-alternative для конфиденциальной передачи.",
+    // EN-часть первой при английском заголовке (образец /qventure, /bureau):
+    // сниппет открывался русским словом у страницы, названной по-английски.
+    // Русская часть сохранена — это ключи продвижения.
+    "Self-destructing smart documents: burn after N reads, time expiry, password "
+    + "gate, email watermark and QRight certification. "
+    + "Саморазрушающиеся смарт-документы: burn-after-N-reads, time expiry, password gate, email-watermark, QRight-сертификация. Stripe-alternative для конфиденциальной передачи.",
   alternates: { canonical: `${SITE}/qcontract` },
   openGraph: {
     type: "website",

@@ -82,7 +82,7 @@ const PODPIS_VKLADKI: Record<Vkladka, string> = {
 // словарь IDE (~400 строк) ждёт языкового решения основателя; здесь
 // НАМЕРЕННО только замеренный поимённо остаток пути новичка (проба
 // en-newcomer-probe, 06.09.2026: 66 знаков до генерации + тосты после).
-const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; syntaxWarn: string; memoryWarn: string; runCost: string; runTokens: string; stCalling: string; stWriting: string; stContinue: string; stSyntax: string; stSelfFix: string; stSaving: string }> = {
+const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; syntaxWarn: string; memoryWarn: string; runCost: string; runTokens: string; stCalling: string; stWriting: string; stContinue: string; stSyntax: string; stSelfFix: string; stSaving: string; busyDb: string; busyDesign: string; busyGen: string; busyUndo: string; busyPublish: string; busyPull: string }> = {
   ru: {
     ph: "Опишите, что нужно построить…\nНапример: «REST API с входом пользователей и ручкой товаров»",
     created: "Создано файлов",
@@ -94,6 +94,8 @@ const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; s
     stSyntax: "🔍 Проверяю синтаксис…",
     stSelfFix: "🔧 Правлю синтаксические ошибки…",
     stSaving: "💾 Сохраняю файлы…",
+    busyDb: "Создаю базу…", busyDesign: "Проектирую…", busyGen: "Генерируем…",
+    busyUndo: "Отменяем…", busyPublish: "⏳ Публикуем…", busyPull: "Забираю из репозитория…",
     noChanges: "Без изменений",
     syntaxWarn: "не прошли проверку синтаксиса — просмотрите перед выкаткой",
     memoryWarn: "но база была недоступна — они пока в памяти и могут пропасть при перезапуске. Сохраните копию.",
@@ -109,6 +111,8 @@ const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; s
     stSyntax: "🔍 Checking syntax…",
     stSelfFix: "🔧 Fixing syntax errors…",
     stSaving: "💾 Saving files…",
+    busyDb: "Creating the database…", busyDesign: "Designing…", busyGen: "Generating…",
+    busyUndo: "Undoing…", busyPublish: "⏳ Publishing…", busyPull: "Pulling…",
     noChanges: "No changes",
     syntaxWarn: "failed the syntax check — review before deploying",
     memoryWarn: "but the database was unavailable — they live in memory for now and may vanish on restart. Save a copy.",
@@ -124,6 +128,8 @@ const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; s
     stSyntax: "🔍 Синтаксисті тексеріп жатырмын…",
     stSelfFix: "🔧 Синтаксис қателерін түзеп жатырмын…",
     stSaving: "💾 Файлдарды сақтап жатырмын…",
+    busyDb: "Дерекқор жасалуда…", busyDesign: "Жобалануда…", busyGen: "Генерациялануда…",
+    busyUndo: "Болдырылмауда…", busyPublish: "⏳ Жариялануда…", busyPull: "Репозиторийден алынуда…",
     noChanges: "Өзгеріс жоқ",
     syntaxWarn: "синтаксис тексеруінен өтпеді — жариялау алдында қараңыз",
     memoryWarn: "бірақ дерекқор қолжетімсіз болды — олар әзірге жадта және қайта іске қосқанда жоғалуы мүмкін. Көшірмесін сақтаңыз.",
@@ -4160,7 +4166,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                 title={capabilityHint(caps, "database", "Создание базы данных")}
                                 style={{ padding: "7px 14px", background: provisioningDb ? "#a5b4fc" : "#4f46e5", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 12.5, cursor: provisioningDb ? "not-allowed" : "pointer", opacity: isCapabilityBlocked(caps, "database") ? 0.45 : 1 }}
                               >
-                                {provisioningDb ? "Создаю базу…" : "Создать базу данных"}
+                                {provisioningDb ? GL.busyDb : "Создать базу данных"}
                               </button>
                             </div>
                           ) : msg.kind === "manifest" ? (
@@ -4208,7 +4214,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               disabled={designingDb}
                               style={{ padding: "7px 14px", background: designingDb ? "#c4b5fd" : "#7c3aed", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 12.5, cursor: designingDb ? "not-allowed" : "pointer" }}
                             >
-                              {designingDb ? "Designing…" : "Спроектировать базу данных"}
+                              {designingDb ? GL.busyDesign : "Спроектировать базу данных"}
                             </button>
                           </div>
                           )
@@ -4403,7 +4409,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       cursor: generating ? "not-allowed" : "pointer",
                     }}
                   >
-                    {generating ? "Генерируем…" : "Сгенерировать код (Ctrl+Enter)"}
+                    {generating ? GL.busyGen : "Сгенерировать код (Ctrl+Enter)"}
                   </button>
                   <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "#475569", cursor: "pointer" }}
                     title={AL.provInfo}>
@@ -4452,7 +4458,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         cursor: undoing ? "not-allowed" : "pointer",
                       }}
                     >
-                      {undoing ? "Отменяем…" : "↩ Отменить последнюю правку ИИ"}
+                      {undoing ? GL.busyUndo : "↩ Отменить последнюю правку ИИ"}
                     </button>
                     <button
                       onClick={() => { const next = !showHistory; setShowHistory(next); if (next) loadCheckpointHistory(); }}
@@ -4676,7 +4682,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         cursor: undoing ? "not-allowed" : "pointer",
                       }}
                     >
-                      {undoing ? "Отменяем…" : "↩ Отменить последнюю правку ИИ"}
+                      {undoing ? GL.busyUndo : "↩ Отменить последнюю правку ИИ"}
                     </button>
                   )}
                 </div>
@@ -4803,7 +4809,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         cursor: pagesDeploying ? "not-allowed" : "pointer",
                       }}
                     >
-                      {pagesDeploying ? "⏳ Публикуем…" : project?.deployUrl?.includes("pages.dev") ? "🔄 Опубликовать заново" : "🚀 Опубликовать на Cloudflare Pages"}
+                      {pagesDeploying ? GL.busyPublish : project?.deployUrl?.includes("pages.dev") ? "🔄 Опубликовать заново" : "🚀 Опубликовать на Cloudflare Pages"}
                     </button>
                     <div style={{ fontSize: 10, color: "#9a3412", marginTop: 6 }}>
                       {domainCapabilityWorks
@@ -4934,7 +4940,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: repoPulling ? "not-allowed" : "pointer",
                       }}
                     >
-                      {repoPulling ? "Pulling…" : "⟳ Pull from repo"}
+                      {repoPulling ? GL.busyPull : "⟳ Pull from repo"}
                     </button>
                   )}
 

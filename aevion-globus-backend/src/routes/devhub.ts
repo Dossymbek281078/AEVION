@@ -2253,6 +2253,20 @@ devhubRouter.put("/projects/:id/files/:filepath", async (req, res) => {
   const userId = requesterId(req, auth?.sub);
   const filePath = req.params.filepath || "";
   if (!filePath) return res.status(400).json({ error: "file path required" });
+  // Серверная проверка пути — НЕ слабее клиентской (ворота 4, 07.09):
+  // живой пробой PUT принял «../../evil.txt» с кодом 200. Побега в ФС не
+  // было — выкатка такие пути отбрасывает с видимым skipped, — но дверь
+  // обязана отказывать СРАЗУ и словами, а не молча ронять файл на выкатке.
+  // Правила зеркалят frontend/src/lib/devhubFilePaths (newFilePathError).
+  const сегменты = filePath.split("/");
+  if (
+    filePath.includes("\\") ||
+    filePath.startsWith("/") ||
+    сегменты.some((s) => s === ".." || s === "." || s === "") ||
+    [...filePath].some((ch) => ch.charCodeAt(0) < 32)
+  ) {
+    return res.status(400).json({ error: "invalid file path: use nested/relative names like assets/logo.svg (no .., no leading slash)" });
+  }
   const read = await readProject(req.params.id);
   if (!read.project && read.failed) return replyStorageUnavailable(res);
   const project = read.project;

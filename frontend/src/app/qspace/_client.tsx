@@ -22,6 +22,7 @@ import {
 } from "./planModel";
 import { parseDxf } from "./dxf";
 import { estimatePlan } from "./estimate";
+import { planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
 
 // ---------------------------------------------------------------------------
 // Каталог мебели и оборудования. Размеры в метрах. Каждый предмет — группа
@@ -276,6 +277,9 @@ export default function QSpaceClient() {
   const [placed, setPlaced] = useState<PlacedItem[]>([]);
   const [selectedUid, setSelectedUid] = useState<number | null>(null);
   const [webglOk, setWebglOk] = useState(true);
+  // PDF разобран, но масштаб ещё не назван человеком — план не строим.
+  const [pdfPending, setPdfPending] = useState<PdfSegments | null>(null);
+  const [pdfExtent, setPdfExtent] = useState("10");
 
   // three-объекты живут в ref, React ими не управляет
   const three = useRef<{
@@ -658,12 +662,43 @@ export default function QSpaceClient() {
   }, []);
 
   const onFile = useCallback(async (f: File) => {
+    setPdfPending(null);
+    if (/\.pdf$/i.test(f.name)) {
+      const bytes = new Uint8Array(await f.arrayBuffer());
+      const src = await readPdfSegments(bytes);
+      if (src.segments.length === 0) {
+        // Отказ показывается отказом: почему не вышло — словами, а не пустотой.
+        setWarnings(src.warnings);
+        setUnitLabel("");
+        return;
+      }
+      // Масштаб PDF неизвестен — спрашиваем габарит у человека, а не гадаем.
+      setPdfPending(src);
+      setWarnings([
+        `Найдено линий: ${src.segments.length}. PDF не хранит масштаб чертежа — `
+        + "укажите длину БОЛЬШЕЙ стороны плана в метрах, и модель построится.",
+        ...src.warnings,
+      ]);
+      setUnitLabel("");
+      return;
+    }
     const text = await f.text();
     const r = parseDxf(text);
     setWarnings(r.warnings);
     setUnitLabel(r.plan ? r.unitLabel : "");
     if (r.plan) setPlan(r.plan);
   }, []);
+
+  const applyPdfScale = useCallback(() => {
+    if (!pdfPending) return;
+    const r = planFromPdfSegments(pdfPending, Number(pdfExtent));
+    setWarnings(r.warnings);
+    if (r.plan) {
+      setPlan(r.plan);
+      setUnitLabel(`масштаб задан вами: ${pdfExtent} м по большей стороне`);
+      setPdfPending(null);
+    }
+  }, [pdfPending, pdfExtent]);
 
   const screenshot = useCallback(() => {
     const t = three.current; if (!t) return;
@@ -693,24 +728,28 @@ export default function QSpaceClient() {
       <header style={S.header}>
         <h1 style={S.h1}>QSpace — 3D-модельер помещений</h1>
         <p style={S.lead}>
-          Загрузите план из AutoCAD (DXF) — QSpace построит 3D-модель с тремя слоями:
-          черновая отделка с разводкой электрики и труб, чистовая отделка, декор и мебель.
-          Демо-квартира уже открыта ниже — покрутите её мышью.
+          Загрузите план из AutoCAD (DXF) или векторный PDF — QSpace построит 3D-модель
+          с тремя слоями: черновая отделка с разводкой электрики и труб, чистовая отделка,
+          декор и мебель. Демо-квартира уже открыта ниже — покрутите её мышью.
         </p>
         <p style={S.note}>
-          Разводка кабелей и труб — <strong>черновик по типовым нормам</strong> (розетки 0.3 м,
-          выключатели 0.9 м, магистраль под потолком): ориентир для обсуждения с прорабом,
-          не проектная документация. Распознавание JPEG и PDF — этап 2, сейчас принимается DXF (ASCII).
+          Что это даёт и чего не даёт. Разводка кабелей и труб —{" "}
+          <strong>черновик по типовым нормам</strong> (розетки 0.3 м, выключатели 0.9 м,
+          магистраль под потолком): ориентир для обсуждения с прорабом, не проектная
+          документация. PDF читается <strong>векторный</strong> — экспортированный из
+          AutoCAD или Revit; <strong>скан и JPEG пока не распознаются</strong>, это
+          следующий этап. У PDF нет масштаба внутри файла, поэтому мы спросим у вас
+          длину большей стороны плана, а не станем угадывать.
         </p>
       </header>
 
       <section style={S.toolbar} aria-label="Управление планом">
         <label style={S.uploadBtn}>
-          Загрузить DXF
+          Загрузить план (DXF или PDF)
           <input
             ref={fileRef}
             type="file"
-            accept=".dxf"
+            accept=".dxf,.pdf"
             style={{ display: "none" }}
             onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ""; }}
           />
@@ -728,6 +767,31 @@ export default function QSpaceClient() {
         <ul style={S.warnings}>
           {warnings.map((w, i) => <li key={i}>{w}</li>)}
         </ul>
+      )}
+
+      {pdfPending && (
+        <div style={S.scaleBox}>
+          <label htmlFor="qspace-pdf-extent" style={{ fontSize: 14 }}>
+            Длина большей стороны плана, м:
+          </label>
+          <input
+            id="qspace-pdf-extent"
+            type="number"
+            min={0.5}
+            max={500}
+            step={0.1}
+            value={pdfExtent}
+            onChange={(e) => setPdfExtent(e.target.value)}
+            style={S.scaleInput}
+          />
+          <button type="button" style={S.uploadBtn} onClick={applyPdfScale}>
+            Построить модель
+          </button>
+          <span style={S.hint}>
+            Возьмите размер с самого чертежа — от этого числа зависят все
+            остальные размеры модели.
+          </span>
+        </div>
       )}
 
       <section style={S.layersRow} aria-label="Слои модели">
@@ -861,8 +925,8 @@ export default function QSpaceClient() {
 
       <footer style={S.footer}>
         <p>
-          Этап 2 (в работе): распознавание JPEG/PDF-планов с экраном ручной правки,
-          привязка проёмов из DXF, спецификация материалов и смета по слоям.
+          Этап 2 (в работе): распознавание растровых планов — скан и JPEG — с экраном
+          ручной правки стен; проёмы (окна и двери) из чертежа; экспорт модели в GLB.
         </p>
       </footer>
     </main>
@@ -924,6 +988,15 @@ const styles: Record<string, React.CSSProperties> = {
   },
   selRow: { display: "flex", flexWrap: "wrap", gap: 6 },
   hint: { fontSize: 12.5, color: "#6a645a", margin: "8px 0 0" },
+  scaleBox: {
+    display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center",
+    background: "#eef4ea", border: "1px solid #cfdec7", borderRadius: 8,
+    padding: "10px 12px", margin: "8px 0",
+  },
+  scaleInput: {
+    width: 90, padding: "6px 8px", border: "1px solid #b8c9ae",
+    borderRadius: 6, fontSize: 14,
+  },
   estTable: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
   estTd: { padding: "3px 6px 3px 0", borderBottom: "1px solid #eee9df", color: "#4a453d" },
   estTdNum: { padding: "3px 0", borderBottom: "1px solid #eee9df", textAlign: "right", whiteSpace: "nowrap" },

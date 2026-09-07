@@ -1555,6 +1555,11 @@ async function generateCodeWithAI(
         let ответ = "";
         let байт = 0;
         let отдано = 0;
+        // Шаг 2 (07.09): файлы объявляются ПО МЕРЕ завершения их JSON-объектов
+        // в потоке — спасающий разбор уже умеет вынимать целые объекты из
+        // недописанного JSON. Разбор не чаще раза в ~4КБ: он не бесплатен.
+        const объявлено = new Set<string>();
+        let последнийРазбор = 0;
         let tin: number | undefined;
         let tout: number | undefined;
         for await (const ev of streamProviderResilient(cand.id, messages, cand.defaultModel, 0.2)) {
@@ -1564,6 +1569,16 @@ async function generateCodeWithAI(
             if (байт - отдано >= 2048) {
               отдано = байт;
               onProgress?.("generating", { bytes: байт });
+            }
+            if (байт - последнийРазбор >= 4096) {
+              последнийРазбор = байт;
+              for (const o of salvageCompleteArrayObjects(ответ, "files")) {
+                const путь = (o as { path?: unknown } | null)?.path;
+                if (typeof путь === "string" && путь && !объявлено.has(путь)) {
+                  объявлено.add(путь);
+                  onProgress?.("file_ready", { path: путь });
+                }
+              }
             }
           } else if (ev.kind === "done") {
             tin = ev.tokensIn;

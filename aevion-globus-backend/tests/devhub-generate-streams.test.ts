@@ -15,13 +15,18 @@ import express from "express";
 // сюда: подозрение на первый transform, воспроизвести не удалось.
 
 const { chunks, state } = vi.hoisted(() => {
-  const reply = JSON.stringify({
-    files: [{ path: "index.html", content: "<h1>Streamed!</h1>", language: "html" }],
-  });
-  // Ответ рвётся на неровные куски — как в жизни: границы чанков не
-  // совпадают с границами JSON.
+  // ДВА файла: первый объект закрывается задолго до конца — по нему обязан
+  // прийти file_ready ещё ДО результата (шаг 2). Первый файл раздут за
+  // порог разбора (~4КБ), чтобы инкрементальный salvage точно запустился.
+  const f1 = { path: "index.html", content: "<h1>Streamed!</h1>" + "x".repeat(4200), language: "html" };
+  const f2 = { path: "style.css", content: "body{}", language: "css" };
+  const reply = JSON.stringify({ files: [f1, f2] });
+  // Резать СТРОГО на границе второго объекта: прежняя арифметика (-12)
+  // попадала внутрь первого — фикстура сама делала file_ready невозможным,
+  // и «нет события» было ошибкой ТЕСТА, не продукта (поймано пробой salvage).
+  const cut = reply.indexOf('{"path":"style.css"');
   return {
-    chunks: [reply.slice(0, 7), reply.slice(7, 31), reply.slice(31)],
+    chunks: [reply.slice(0, 7), reply.slice(7, cut), reply.slice(cut)],
     state: { callProviderCalls: 0, runs: [] as any[], streamThrows: false },
   };
 });
@@ -77,6 +82,23 @@ describe("генерация читает anthropic ПОТОКОМ", () => {
     expect(state.runs.length, "расход потоковой генерации не учтён").toBeGreaterThanOrEqual(1);
     const метки = state.runs.map((r) => String(r.module));
     expect(метки.some((m) => m.includes("devhub")), "метка учёта потеряла модуль: " + метки.join(",")).toBe(true);
+  });
+
+  test("file_ready первого файла приходит в SSE ДО результата (шаг 2)", async () => {
+    const a = await app();
+    const guest = { "x-devhub-guest": "stream-gen-guest-sse" };
+    const созд = await request(a).post("/api/devhub/projects").set(guest)
+      .send({ name: "sse order", stack: "static" });
+    const pid = созд.body.project.id;
+    const r = await request(a).post(`/api/devhub/projects/${pid}/generate/stream`).set(guest)
+      .send({ prompt: "two files" });
+    const текст = r.text;
+    const ready = текст.indexOf('"file_ready"');
+    const result = текст.indexOf('"result"');
+    expect(ready, "события file_ready нет в SSE вовсе").toBeGreaterThan(-1);
+    expect(result, "результата нет — ручка сломана").toBeGreaterThan(-1);
+    expect(ready, "file_ready пришёл ПОСЛЕ результата — прогресс декоративен").toBeLessThan(result);
+    expect(текст.indexOf('"index.html"'), "объявлен не тот файл").toBeGreaterThan(-1);
   });
 
   test("отказ потока НЕ фатален: работает прежний путь с фолбэком", async () => {

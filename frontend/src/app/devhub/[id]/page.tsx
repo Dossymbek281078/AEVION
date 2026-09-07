@@ -824,6 +824,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [genStage, setGenStage] = useState<string | null>(null);
   // Живой счётчик байтов потоковой генерации (событие status/generating).
   const [genBytes, setGenBytes] = useState(0);
+  // Файлы, чьи JSON-объекты уже ЗАКРЫЛИСЬ в потоке (событие file_ready) —
+  // человек видит, что рождается, а не только сколько байт.
+  const [genReady, setGenReady] = useState<string[]>([]);
   // Фиксация происхождения генерации в QRight (спека 06.09). Галочка живёт
   // в localStorage как удобство: серверная правда — сам ответ генерации.
   const [stampProvenance, setStampProvenance] = useState(false);
@@ -1613,8 +1616,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
               if (!e.startsWith("data: ")) continue;
               const evt = JSON.parse(e.slice(6));
               if (evt.type === "status") {
-                setGenStage(evt.stage);
-                if (typeof evt.bytes === "number") setGenBytes(evt.bytes);
+                if (evt.stage === "file_ready" && typeof evt.path === "string") {
+                  // Не трогаем строку стадии — счётчик байтов важнее ярлыка.
+                  setGenReady((xs) => (xs.includes(evt.path) ? xs : [...xs, evt.path]));
+                } else {
+                  setGenStage(evt.stage);
+                  if (typeof evt.bytes === "number") setGenBytes(evt.bytes);
+                }
               }
               else if (evt.type === "result") data = evt;
               else if (evt.type === "error") throw new Error(serverError(evt.error, "Генерация прервалась"));
@@ -1722,6 +1730,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       setGenerating(false);
       setGenStage(null);
       setGenBytes(0);
+      setGenReady([]);
     }
   };
 
@@ -4382,6 +4391,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           : genStage === "self_correcting" ? "🔧 Правлю синтаксические ошибки…"
                           : genStage === "saving" ? "💾 Сохраняю файлы…"
                           : genStage}
+                        {genReady.length > 0 && (
+                          <div style={{ marginTop: 4, color: "#475569", fontSize: 11.5 }}>
+                            ✔ {genReady.join(" · ")}
+                          </div>
+                        )}
                       </div>
                       <button
                         onClick={() => genAbortRef.current?.abort()}

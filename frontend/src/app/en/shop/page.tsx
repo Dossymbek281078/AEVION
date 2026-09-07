@@ -58,10 +58,11 @@ const CURRENCY = new Intl.NumberFormat("en-US", {
 /** Английские тексты витрины по id каталога. Цен здесь нет и быть не может. */
 export const EN_TEXTS: Record<
   string,
-  { format: string; desc: string; includes?: string[]; notice?: string }
+  { format: string; desc: string; includes?: string[]; notice?: string; badge?: string }
 > = {
   // ── Подписки ──
   xpxzam: {
+    badge: "ALL-IN-ONE",
     format: "subscription · monthly",
     desc: "Full platform access — 15+ modules: QRight, QSign, QCoreAI, QFusionAI, QPayNet, QTradeOffline, Constitution and more. One subscription, no limits.",
     includes: [
@@ -84,6 +85,7 @@ export const EN_TEXTS: Record<
   },
   // ── Гайды и книги ──
   oijxmq: {
+    badge: "NEW",
     format: "PDF · 9 pages · Russian",
     desc: "A measure → intervene → re-measure cycle: a 26-marker panel with target ranges, 20 interventions graded A/B/C/E by evidence, a 12-week timeline and a results table. Includes what is overrated (NMN/NR, telomeres, “wave” gadgets). Russian-language guide.",
   },
@@ -109,6 +111,7 @@ export const EN_TEXTS: Record<
   },
   // ── Модули ──
   devhub: {
+    badge: "FLAGSHIP",
     format: "module · subscription",
     desc: "Browser IDE on the VS Code engine, AI code generation and deploys to Cloudflare Pages.",
   },
@@ -125,6 +128,7 @@ export const EN_TEXTS: Record<
     desc: "Proof of authorship: SHA-256 hash, timestamp and signature. The signing algorithm is named in the certificate itself.",
   },
   qpaynet: {
+    badge: "BETA · DEMO",
     format: "module · subscription",
     desc: "Embedded-payments infrastructure: multi-currency, virtual cards, API and webhooks.",
     notice:
@@ -135,6 +139,7 @@ export const EN_TEXTS: Record<
     desc: "Chess platform: puzzles, an AI coach, and opponents that play like humans at your level.",
   },
   qcontract: {
+    badge: "BETA · DEMO",
     format: "module · subscription",
     desc: "Self-destructing protected documents: view and time limits, password and signature.",
     notice:
@@ -161,7 +166,7 @@ function Card({ p, channel }: { p: Product; channel: string | null }) {
       style={styles.card}
     >
       <div style={styles.cardTop}>
-        {p.badge ? <span style={styles.badge}>{p.badge}</span> : null}
+        {(en?.badge ?? p.badge) ? <span style={styles.badge}>{en?.badge ?? p.badge}</span> : null}
         <span style={styles.format}>{format}</span>
       </div>
 
@@ -262,7 +267,7 @@ export default async function EnShopPage({
           channel={channel}
         />
 
-        <PaymentReachNotice style={styles.foot} />
+        <PaymentReachNotice style={styles.foot} lang="en" />
 
         <p style={styles.foot}>
           Health and longevity materials are educational, wellness-focused

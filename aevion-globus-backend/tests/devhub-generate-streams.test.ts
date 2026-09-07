@@ -80,6 +80,9 @@ describe("генерация читает anthropic ПОТОКОМ", () => {
     expect(state.callProviderCalls, "стрим-путь всё равно позвал callProvider — двойной вызов модели").toBe(0);
     // Учёт по done-событию: запись расхода с меткой гостевой генерации.
     expect(state.runs.length, "расход потоковой генерации не учтён").toBeGreaterThanOrEqual(1);
+    // Per-run видимость (обещание Show HN): точные токены запуска в ответе.
+    expect(ген.body.runTokens, "runTokens не вернулись").toEqual({ in: 111, out: 222 });
+    expect(typeof ген.body.runCostUsd, "runCostUsd не вернулся").toBe("number");
     const метки = state.runs.map((r) => String(r.module));
     expect(метки.some((m) => m.includes("devhub")), "метка учёта потеряла модуль: " + метки.join(",")).toBe(true);
   });

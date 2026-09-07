@@ -1295,6 +1295,10 @@ interface GeneratedCodeResult {
   // than a broken-but-visible one), but callers get an honest signal instead
   // of a plain success for code that won't run.
   syntaxErrors?: Array<{ path: string; errors: string[] }>;
+  // Per-run видимость расхода (обещание Show HN): точные токены запуска и
+  // цена по прайс-таблице (0 у моделей вне неё — тогда UI показывает токены).
+  runTokens?: { in: number; out: number };
+  runCostUsd?: number;
   // Present when the first attempt had syntax errors and a self-correction
   // retry fixed them — an honest "it wasn't perfect on try one" signal
   // distinct from a clean first-pass success, without being a failure either.
@@ -1534,6 +1538,15 @@ async function generateCodeWithAI(
 
   const GEN_MAX_TOKENS = 8192;
   onProgress?.("calling_model");
+  // Show HN обещает «видно, сколько стоил каждый запуск» — токены копятся
+  // по ВСЕМ вызовам генерации (основной/дострой/самопочинка) и уезжают в
+  // ответ. Формы usage здесь уже нормализованы к prompt/completion.
+  let токВх = 0;
+  let токИсх = 0;
+  const учтиВЗапуск = (u?: { prompt_tokens?: number; completion_tokens?: number }) => {
+    токВх += Number(u?.prompt_tokens) || 0;
+    токИсх += Number(u?.completion_tokens) || 0;
+  };
   let result;
   try {
     // Порядок попыток: при картинке — вся цепочка зрячих провайдеров, иначе
@@ -1588,6 +1601,7 @@ async function generateCodeWithAI(
         if (ответ) {
           result = { reply: ответ, model: cand.defaultModel, usage: { prompt_tokens: tin, completion_tokens: tout } };
           учтиГенерацию(cand.id, cand.defaultModel, result.usage, moduleTag, userId);
+          учтиВЗапуск(result.usage);
           provider = cand;
         }
       } catch (inner) {
@@ -1599,6 +1613,7 @@ async function generateCodeWithAI(
       try {
         result = await callProvider(cand.id, messages, cand.defaultModel, 0.2, images, GEN_MAX_TOKENS);
         учтиГенерацию(cand.id, cand.defaultModel, result.usage, moduleTag, userId);
+        учтиВЗапуск(result.usage);
         provider = cand;
         break;
       } catch (inner) {
@@ -1638,6 +1653,7 @@ async function generateCodeWithAI(
       ];
       const cont = await callProvider(provider.id, contMessages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS);
       учтиГенерацию(provider.id, provider.defaultModel, cont.usage, moduleTag, userId);
+      учтиВЗапуск(cont.usage);
       const contParsed = parseGeneratedFiles(cont.reply, []);
       if (contParsed.mode !== "fallback") {
         const have = new Set(parsed.files.map((f) => f.path));
@@ -1668,6 +1684,7 @@ async function generateCodeWithAI(
     try {
       result = await callProvider(provider.id, messages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS);
       учтиГенерацию(provider.id, provider.defaultModel, result.usage, moduleTag, userId);
+      учтиВЗапуск(result.usage);
     } catch {
       break; // keep the last (still-broken) attempt rather than losing it to a retry-call failure
     }
@@ -1681,6 +1698,11 @@ async function generateCodeWithAI(
     aiGenerated: true,
     provider: provider.id,
     model: provider.defaultModel,
+    // Per-run стоимость: сумма токенов всех вызовов этого запуска; цена по
+    // ПОСЛЕДНЕМУ провайдеру цепочки (фолбэк со сменой модели редок, и тогда
+    // число приближённое — токены при этом точные всегда).
+    runTokens: { in: токВх, out: токИсх },
+    runCostUsd: costUsd(provider.id, provider.defaultModel, токВх, токИсх),
     ...(wasContinued ? { continued: true } : {}),
     ...(syntaxProblems.length > 0 ? { syntaxErrors: syntaxProblems } : {}),
     ...(selfCorrected > 0 && syntaxProblems.length === 0 ? { selfCorrected } : {}),
@@ -2445,7 +2467,7 @@ devhubRouter.post("/projects/:id/generate", dhCostlyLimit("dhgenerate"), async (
 /** Shared by /generate and /database/design: generate → checkpoint → save. */
 async function runProjectGeneration(project: DevHubProject, userId: string, prompt: string, stack: string, targetFiles: string[], images?: ChatImage[], history?: ChatTurn[], onProgress?: (stage: string, extra?: Record<string, unknown>) => void) {
   const existingFiles = await dbListFiles(project.id);
-  const { files: generatedFiles, aiGenerated, continued, syntaxErrors, selfCorrected, provider: genProvider, model: genModel } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history, onProgress,
+  const { files: generatedFiles, aiGenerated, continued, syntaxErrors, selfCorrected, provider: genProvider, model: genModel, runTokens, runCostUsd } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history, onProgress,
       меткаГенерации(userId), userId);
   // Модель отработала — вот теперь генерация потрачена. Списание здесь, в
   // общем помощнике, покрывает все точки генерации разом: обычную, потоковую
@@ -2490,6 +2512,7 @@ async function runProjectGeneration(project: DevHubProject, userId: string, prom
     files: generatedFiles, aiGenerated, ...(continued ? { continued } : {}),
     ...(syntaxErrors ? { syntaxErrors } : {}), ...(selfCorrected ? { selfCorrected } : {}),
     ...(genProvider ? { provider: genProvider, model: genModel } : {}),
+    ...(runTokens ? { runTokens, runCostUsd } : {}),
     checkpointId, projectId: project.id, storage,
   };
 }

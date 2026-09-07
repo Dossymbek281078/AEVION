@@ -778,6 +778,39 @@ qrightRouter.get("/embed/:id", embedRateLimit, async (req, res) => {
     res.setHeader("ETag", etag);
     res.setHeader("Cache-Control", "public, max-age=120");
     res.setHeader("Access-Control-Allow-Origin", "*");
+    // Человеку из браузера (Show HN пойдёт именно сюда по verifyUrl) — не
+    // сырой JSON-дамп, а читаемая страница проверки. Только при ЯВНОМ
+    // text/html: curl и urllib шлют */* или ничего — им прежний JSON,
+    // машинные потребители (включая пробы) не ломаются.
+    if (String(req.headers.accept || "").includes("text/html")) {
+      const статус = row.revokedAt ? "REVOKED" : "REGISTERED";
+      const цвет = row.revokedAt ? "#b91c1c" : "#15803d";
+      const создано = row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt);
+      const экр = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.send(`<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AEVION QRight — provenance record</title></head>
+<body style="margin:0;background:#fffdf8;color:#0f172a;font:15px/1.55 Georgia,serif">
+<div style="max-width:640px;margin:0 auto;padding:36px 20px">
+<div style="font-weight:800;letter-spacing:.08em;font-size:12px;color:#0f766e">AEVION · QRIGHT REGISTRY</div>
+<h1 style="font-size:24px;margin:10px 0 2px">Provenance record</h1>
+<div style="display:inline-block;margin:8px 0 18px;padding:3px 12px;border-radius:999px;background:${цвет};color:#fff;font:700 12px system-ui">${статус}</div>
+${row.revokedAt ? `<div style="color:#b91c1c;margin:-8px 0 14px">${экр(row.revokeReason || "revoked")}</div>` : ""}
+<table style="border-collapse:collapse;font-size:14px">
+<tr><td style="padding:4px 14px 4px 0;color:#64748b">Title</td><td>${экр(row.title)}</td></tr>
+<tr><td style="padding:4px 14px 4px 0;color:#64748b">Kind</td><td>${экр(row.kind)}</td></tr>
+<tr><td style="padding:4px 14px 4px 0;color:#64748b">Registered (UTC)</td><td>${экр(создано)}</td></tr>
+${row.ownerName ? `<tr><td style="padding:4px 14px 4px 0;color:#64748b">Owner</td><td>${экр(row.ownerName)}</td></tr>` : ""}
+</table>
+<div style="margin:16px 0 4px;color:#64748b;font-size:13px">SHA-256 of the registered content</div>
+<code style="display:block;word-break:break-all;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;font:13px ui-monospace,monospace">${экр(row.contentHash)}</code>
+<p style="color:#475569;font-size:13px;margin-top:18px">This record proves <b>what</b> digest was registered and <b>when</b>.
+The content itself (and, for AI generations, the prompt) is never published here — recompute the SHA-256 of what you hold and compare.
+<span lang="ru" style="color:#94a3b8">· Запись подтверждает хеш и время; само содержимое и промпт не публикуются.</span></p>
+<p style="font-size:12px;color:#94a3b8">Machine-readable: request this URL with <code>Accept: application/json</code>.</p>
+</div></body></html>`);
+    }
     res.json({
       id: row.id,
       status: row.revokedAt ? "revoked" : "registered",

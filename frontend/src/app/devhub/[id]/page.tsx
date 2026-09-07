@@ -82,10 +82,25 @@ const PODPIS_VKLADKI: Record<Vkladka, string> = {
 // словарь IDE (~400 строк) ждёт языкового решения основателя; здесь
 // НАМЕРЕННО только замеренный поимённо остаток пути новичка (проба
 // en-newcomer-probe, 06.09.2026: 66 знаков до генерации + тосты после).
-const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; syntaxWarn: string; memoryWarn: string }> = {
+const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; syntaxWarn: string; memoryWarn: string; runCost: string; runTokens: string; stCalling: string; stWriting: string; stContinue: string; stSyntax: string; stSelfFix: string; stSaving: string; busyDb: string; busyDesign: string; busyGen: string; busyUndo: string; busyPublish: string; busyPull: string; busyDeploy: string; busyPlan: string; busyImg: string; busySave: string; busyApply: string; busyPush: string; busySync: string; busyCompose: string; busySend: string; busyTranslate: string; busyCreate: string; busyPreview: string; busyUpload: string; busyStt: string; busyAgent: string; busySetup: string }> = {
   ru: {
     ph: "Опишите, что нужно построить…\nНапример: «REST API с входом пользователей и ручкой товаров»",
     created: "Создано файлов",
+    runCost: "Этот запуск",
+    runTokens: "токенов",
+    stCalling: "⚙ Вызываю модель…",
+    stWriting: "⚙ Модель пишет…",
+    stContinue: "✍ Ответ обрезался — дописываю недостающие файлы…",
+    stSyntax: "🔍 Проверяю синтаксис…",
+    stSelfFix: "🔧 Правлю синтаксические ошибки…",
+    stSaving: "💾 Сохраняю файлы…",
+    busyDb: "Создаю базу…", busyDesign: "Проектирую…", busyGen: "Генерируем…",
+    busyUndo: "Отменяем…", busyPublish: "⏳ Публикуем…", busyPull: "Забираю из репозитория…",
+    busyDeploy: "Выкатываю…", busyPlan: "Продумываю…", busyImg: "Генерирую…",
+    busySave: "Сохраняю…", busyApply: "Применяю…", busyPush: "Отправляю…", busySync: "Синхронизирую…",
+    busyCompose: "Сочиняю…", busySend: "Отправляю…", busyTranslate: "Перевожу…",
+    busyCreate: "Создаю…", busyPreview: "Слушаю образец…", busyUpload: "Загружаю…",
+    busyStt: "Расшифровываю…", busyAgent: "Выполняю сценарий…", busySetup: "Настраиваю…",
     noChanges: "Без изменений",
     syntaxWarn: "не прошли проверку синтаксиса — просмотрите перед выкаткой",
     memoryWarn: "но база была недоступна — они пока в памяти и могут пропасть при перезапуске. Сохраните копию.",
@@ -93,6 +108,21 @@ const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; s
   en: {
     ph: "Describe what to build…\nFor example: \"a REST API with user sign-in and a products endpoint\"",
     created: "Files created",
+    runCost: "This run",
+    runTokens: "tokens",
+    stCalling: "⚙ Calling the model…",
+    stWriting: "⚙ Model is writing…",
+    stContinue: "✍ Reply was cut off — fetching the missing files…",
+    stSyntax: "🔍 Checking syntax…",
+    stSelfFix: "🔧 Fixing syntax errors…",
+    stSaving: "💾 Saving files…",
+    busyDb: "Creating the database…", busyDesign: "Designing…", busyGen: "Generating…",
+    busyUndo: "Undoing…", busyPublish: "⏳ Publishing…", busyPull: "Pulling…",
+    busyDeploy: "Deploying…", busyPlan: "Thinking it through…", busyImg: "Generating…",
+    busySave: "Saving…", busyApply: "Applying…", busyPush: "Pushing…", busySync: "Syncing…",
+    busyCompose: "Composing…", busySend: "Sending…", busyTranslate: "Translating…",
+    busyCreate: "Creating…", busyPreview: "Previewing…", busyUpload: "Uploading…",
+    busyStt: "Transcribing…", busyAgent: "Running the scenario…", busySetup: "Setting up…",
     noChanges: "No changes",
     syntaxWarn: "failed the syntax check — review before deploying",
     memoryWarn: "but the database was unavailable — they live in memory for now and may vanish on restart. Save a copy.",
@@ -100,6 +130,21 @@ const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; s
   kk: {
     ph: "Не құру керегін сипаттаңыз…\nМысалы: «пайдаланушы кірісі мен тауарлар жолы бар REST API»",
     created: "Жасалған файлдар",
+    runCost: "Бұл іске қосу",
+    runTokens: "токен",
+    stCalling: "⚙ Модельді шақырып жатырмын…",
+    stWriting: "⚙ Модель жазып жатыр…",
+    stContinue: "✍ Жауап үзілді — жетіспейтін файлдарды аламын…",
+    stSyntax: "🔍 Синтаксисті тексеріп жатырмын…",
+    stSelfFix: "🔧 Синтаксис қателерін түзеп жатырмын…",
+    stSaving: "💾 Файлдарды сақтап жатырмын…",
+    busyDb: "Дерекқор жасалуда…", busyDesign: "Жобалануда…", busyGen: "Генерациялануда…",
+    busyUndo: "Болдырылмауда…", busyPublish: "⏳ Жариялануда…", busyPull: "Репозиторийден алынуда…",
+    busyDeploy: "Жариялануда…", busyPlan: "Ойластырылуда…", busyImg: "Генерациялануда…",
+    busySave: "Сақталуда…", busyApply: "Қолданылуда…", busyPush: "Жіберілуде…", busySync: "Синхрондалуда…",
+    busyCompose: "Шығарылуда…", busySend: "Жіберілуде…", busyTranslate: "Аударылуда…",
+    busyCreate: "Жасалуда…", busyPreview: "Үлгі тыңдалуда…", busyUpload: "Жүктелуде…",
+    busyStt: "Мәтінге айналдырылуда…", busyAgent: "Сценарий орындалуда…", busySetup: "Бапталуда…",
     noChanges: "Өзгеріс жоқ",
     syntaxWarn: "синтаксис тексеруінен өтпеді — жариялау алдында қараңыз",
     memoryWarn: "бірақ дерекқор қолжетімсіз болды — олар әзірге жадта және қайта іске қосқанда жоғалуы мүмкін. Көшірмесін сақтаңыз.",
@@ -1684,6 +1729,14 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         track({ type: "feature_use", source: "devhub", meta: { feature: "generation", files: newGenerated.length, provenance: Boolean(data.provenance) } });
       }
       setChatHistory((h) => [...h, { role: "assistant", at: new Date().toISOString(), checkpointId: data.checkpointId, files: changes, note, ...(data.provenance ? { provenance: data.provenance } : {}) }]);
+      // Обещание Show HN «видно, сколько стоил каждый запуск» — строкой в
+      // чате, а не тостом: тост живёт секунды, расход должен остаться.
+      if (data.runTokens && (data.runTokens.in > 0 || data.runTokens.out > 0)) {
+        const т = `${data.runTokens.in}→${data.runTokens.out} ${GL.runTokens}`;
+        const цена = typeof data.runCostUsd === "number" && data.runCostUsd > 0
+          ? ` · ~$${data.runCostUsd.toFixed(4)}` : "";
+        setChatHistory((h) => [...h, { role: "hint", kind: "run_cost", description: `${GL.runCost}: ${т}${цена}` } as any]);
+      }
       if (stampProvenance && !data.provenance) {
         // Просили отметку, а её нет — молчать нельзя (§16). Причину несёт ответ.
         showToast(`Происхождение не зафиксировано: ${data.provenanceError || "причина неизвестна"}. Код сгенерирован и сохранён.`, "warning");
@@ -3749,7 +3802,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
               opacity: isCapabilityBlocked(caps, "railway") ? 0.45 : 1,
             }}
           >
-            {deploying ? "Выкатываю..." : "Выкатить"}
+            {deploying ? GL.busyDeploy : "Выкатить"}
           </button>
           <button
             onClick={deployToVercel}
@@ -4113,7 +4166,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             {msg.text}
                           </div>
                         ) : msg.role === "hint" ? (
-                          msg.kind === "provision_db" ? (
+                          (msg as { kind?: string }).kind === "run_cost" ? (
+                            <div key={mi} style={{ alignSelf: "flex-start", fontSize: 11.5, color: "#64748b", padding: "2px 4px" }}>
+                              💰 {msg.description}
+                            </div>
+                          ) : msg.kind === "provision_db" ? (
                             <div key={mi} style={{ alignSelf: "flex-start", maxWidth: "95%", background: "#eef2ff", border: "1px solid #c7d2fe", borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>
                               <div style={{ color: "#3730a3", marginBottom: 8, lineHeight: 1.45 }}>
                                 🗃 Schema is on disk — create the real database now? You get your own Postgres schema, a login role only you can use, the tables from <span style={{ fontFamily: "monospace" }}>db/schema.sql</span>, and <span style={{ fontFamily: "monospace" }}>DATABASE_URL</span> in Env Vars.
@@ -4124,7 +4181,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                 title={capabilityHint(caps, "database", "Создание базы данных")}
                                 style={{ padding: "7px 14px", background: provisioningDb ? "#a5b4fc" : "#4f46e5", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 12.5, cursor: provisioningDb ? "not-allowed" : "pointer", opacity: isCapabilityBlocked(caps, "database") ? 0.45 : 1 }}
                               >
-                                {provisioningDb ? "Создаю базу…" : "Создать базу данных"}
+                                {provisioningDb ? GL.busyDb : "Создать базу данных"}
                               </button>
                             </div>
                           ) : msg.kind === "manifest" ? (
@@ -4172,7 +4229,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               disabled={designingDb}
                               style={{ padding: "7px 14px", background: designingDb ? "#c4b5fd" : "#7c3aed", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 12.5, cursor: designingDb ? "not-allowed" : "pointer" }}
                             >
-                              {designingDb ? "Designing…" : "Спроектировать базу данных"}
+                              {designingDb ? GL.busyDesign : "Спроектировать базу данных"}
                             </button>
                           </div>
                           )
@@ -4263,7 +4320,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             cursor: planning ? "not-allowed" : "pointer",
                           }}
                         >
-                          {planning ? "Продумываю..." : "Продумать замысел"}
+                          {planning ? GL.busyPlan : "Продумать замысел"}
                         </button>
                         {plan && (
                           <div style={{ background: "#f8fafc", borderRadius: 8, padding: 10 }}>
@@ -4367,7 +4424,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       cursor: generating ? "not-allowed" : "pointer",
                     }}
                   >
-                    {generating ? "Генерируем…" : "Сгенерировать код (Ctrl+Enter)"}
+                    {generating ? GL.busyGen : "Сгенерировать код (Ctrl+Enter)"}
                   </button>
                   <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "#475569", cursor: "pointer" }}
                     title={AL.provInfo}>
@@ -4384,12 +4441,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {generating && genStage && (
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
                       <div style={{ fontSize: 12, color: "#0f766e", textAlign: "center" }}>
-                        {genStage === "generating" ? `⚙ Модель пишет… ${(genBytes / 1024).toFixed(1)} КБ` :
-                          genStage === "calling_model" ? "⚙ Вызываю модель…"
-                          : genStage === "continuation" ? "✍ Ответ обрезался — дописываю недостающие файлы…"
-                          : genStage === "syntax_check" ? "🔍 Проверяю синтаксис…"
-                          : genStage === "self_correcting" ? "🔧 Правлю синтаксические ошибки…"
-                          : genStage === "saving" ? "💾 Сохраняю файлы…"
+                        {genStage === "generating" ? `${GL.stWriting} ${(genBytes / 1024).toFixed(1)} KB` :
+                          genStage === "calling_model" ? GL.stCalling
+                          : genStage === "continuation" ? GL.stContinue
+                          : genStage === "syntax_check" ? GL.stSyntax
+                          : genStage === "self_correcting" ? GL.stSelfFix
+                          : genStage === "saving" ? GL.stSaving
                           : genStage}
                         {genReady.length > 0 && (
                           <div style={{ marginTop: 4, color: "#475569", fontSize: 11.5 }}>
@@ -4416,7 +4473,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         cursor: undoing ? "not-allowed" : "pointer",
                       }}
                     >
-                      {undoing ? "Отменяем…" : "↩ Отменить последнюю правку ИИ"}
+                      {undoing ? GL.busyUndo : "↩ Отменить последнюю правку ИИ"}
                     </button>
                     <button
                       onClick={() => { const next = !showHistory; setShowHistory(next); if (next) loadCheckpointHistory(); }}
@@ -4538,7 +4595,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               cursor: visualEditImgBusy || !visualEditImgPrompt.trim() ? "not-allowed" : "pointer",
                             }}
                           >
-                            {visualEditImgBusy ? "Генерирую..." : "🎨 Сгенерировать и заменить картинку"}
+                            {visualEditImgBusy ? GL.busyImg : "🎨 Сгенерировать и заменить картинку"}
                           </button>
                         </div>
                       ) : (
@@ -4604,7 +4661,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: visualEditSaving ? "not-allowed" : "pointer",
                         }}
                       >
-                        {visualEditSaving ? "Сохраняю..." : "Сохранить"}
+                        {visualEditSaving ? GL.busySave : "Сохранить"}
                       </button>
                       )}
                       <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -4624,7 +4681,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             cursor: visualEditAiBusy || !visualEditAiPrompt.trim() ? "not-allowed" : "pointer",
                           }}
                         >
-                          {visualEditAiBusy ? "Применяю..." : "Применить через ИИ"}
+                          {visualEditAiBusy ? GL.busyApply : "Применить через ИИ"}
                         </button>
                       </div>
                     </>
@@ -4640,7 +4697,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         cursor: undoing ? "not-allowed" : "pointer",
                       }}
                     >
-                      {undoing ? "Отменяем…" : "↩ Отменить последнюю правку ИИ"}
+                      {undoing ? GL.busyUndo : "↩ Отменить последнюю правку ИИ"}
                     </button>
                   )}
                 </div>
@@ -4767,7 +4824,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         cursor: pagesDeploying ? "not-allowed" : "pointer",
                       }}
                     >
-                      {pagesDeploying ? "⏳ Публикуем…" : project?.deployUrl?.includes("pages.dev") ? "🔄 Опубликовать заново" : "🚀 Опубликовать на Cloudflare Pages"}
+                      {pagesDeploying ? GL.busyPublish : project?.deployUrl?.includes("pages.dev") ? "🔄 Опубликовать заново" : "🚀 Опубликовать на Cloudflare Pages"}
                     </button>
                     <div style={{ fontSize: 10, color: "#9a3412", marginTop: 6 }}>
                       {domainCapabilityWorks
@@ -4797,7 +4854,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         cursor: vercelDeploying ? "not-allowed" : "pointer",
                       }}
                     >
-                      {vercelDeploying ? "Выкатываю..." : "Выкатить на Vercel"}
+                      {vercelDeploying ? GL.busyDeploy : "Выкатить на Vercel"}
                     </button>
                   </div>
 
@@ -4898,7 +4955,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: repoPulling ? "not-allowed" : "pointer",
                       }}
                     >
-                      {repoPulling ? "Pulling…" : "⟳ Pull from repo"}
+                      {repoPulling ? GL.busyPull : "⟳ Pull from repo"}
                     </button>
                   )}
 
@@ -4952,7 +5009,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         opacity: isCapabilityBlocked(caps, "github") ? 0.45 : 1,
                       }}
                     >
-                      {githubPushing ? "Отправляю..." : project?.repoUrl ? "Отправить (обновить репозиторий)" : "Отправить в GitHub (создать репозиторий)"}
+                      {githubPushing ? GL.busyPush : project?.repoUrl ? "Отправить (обновить репозиторий)" : "Отправить в GitHub (создать репозиторий)"}
                     </button>
                     {project?.repoUrl && (
                       <button
@@ -4964,7 +5021,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: githubSyncing ? "not-allowed" : "pointer",
                         }}
                       >
-                        {githubSyncing ? "Синхронизирую..." : "Синхронизировать ветки"}
+                        {githubSyncing ? GL.busySync : "Синхронизировать ветки"}
                       </button>
                     )}
                   </div>
@@ -5310,7 +5367,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: (mediaTtsLoading || !mediaTtsText.trim()) ? "not-allowed" : "pointer",
                         }}
                       >
-                        {mediaTtsLoading ? "Генерирую..." : "Озвучить"}
+                        {mediaTtsLoading ? GL.busyImg : "Озвучить"}
                       </button>
                     </div>
                   )}
@@ -5387,7 +5444,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                   border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer",
                                 }}
                               >
-                                {cfImgUploading ? "Uploading..." : "→ Permanent CDN URL"}
+                                {cfImgUploading ? GL.busyUpload : "→ Permanent CDN URL"}
                               </button>
                             )}
                             <button
@@ -5414,7 +5471,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: (imgLoading || !imgPrompt.trim()) ? "not-allowed" : "pointer",
                         }}
                       >
-                        {imgLoading ? "Генерирую..." : "Сделать картинку"}
+                        {imgLoading ? GL.busyImg : "Сделать картинку"}
                       </button>
                       <span />
                     </div>
@@ -5466,7 +5523,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: (sfxLoading || !sfxText.trim()) ? "not-allowed" : "pointer",
                         }}
                       >
-                        {sfxLoading ? "Генерирую..." : "Сделать звук"}
+                        {sfxLoading ? GL.busyImg : "Сделать звук"}
                       </button>
                     </div>
                   )}
@@ -5517,7 +5574,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: (musicLoading || !musicPrompt.trim()) ? "not-allowed" : "pointer",
                         }}
                       >
-                        {musicLoading ? "Сочиняю..." : "Сочинить музыку"}
+                        {musicLoading ? GL.busyCompose : "Сочинить музыку"}
                       </button>
                       <span />
                     </div>
@@ -5577,7 +5634,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: (emailLoading || !emailTo.trim() || !emailSubject.trim() || !emailBody.trim()) ? "not-allowed" : "pointer",
                         }}
                       >
-                        {emailLoading ? "Отправляю..." : "Отправить письмо"}
+                        {emailLoading ? GL.busySend : "Отправить письмо"}
                       </button>
                     </div>
                   )}
@@ -5695,7 +5752,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               cursor: disabled ? "not-allowed" : "pointer",
                             }}
                           >
-                            {payLoading ? "Creating..." : payProvider === "gumroad" ? "Get Gumroad Checkout Link" : "Create Payment Link"}
+                            {payLoading ? GL.busyCreate : payProvider === "gumroad" ? "Get Gumroad Checkout Link" : "Create Payment Link"}
                           </button>
                         );
                       })()}
@@ -5758,7 +5815,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: (trLoading || !trText.trim()) ? "not-allowed" : "pointer",
                         }}
                       >
-                        {trLoading ? "Перевожу..." : "Перевести"}
+                        {trLoading ? GL.busyTranslate : "Перевести"}
                       </button>
 
                       {/* File translate */}
@@ -5882,7 +5939,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
                           cursor: bulkLoading ? "not-allowed" : "pointer",
                         }}>
-                        {bulkLoading ? "Перевожу..." : `Перевести ${bulkPaths.length} × ${bulkLangs.length}`}
+                        {bulkLoading ? GL.busyTranslate : `Перевести ${bulkPaths.length} × ${bulkLangs.length}`}
                       </button>
 
                       {bulkSummary && (
@@ -6035,7 +6092,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
                           cursor: tplBuilderLoading ? "not-allowed" : "pointer",
                         }}>
-                        {tplBuilderLoading ? "Создаю..." : "Создать шаблон"}
+                        {tplBuilderLoading ? GL.busyCreate : "Создать шаблон"}
                       </button>
                     </div>
                   )}
@@ -6078,7 +6135,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: (smsLoading || !smsRecipient.trim() || !smsContent.trim()) ? "not-allowed" : "pointer",
                         }}
                       >
-                        {smsLoading ? "Отправляю..." : "Отправить SMS"}
+                        {smsLoading ? GL.busySend : "Отправить SMS"}
                       </button>
                     </div>
                   )}
@@ -6120,7 +6177,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         }}
                       >
                         <span style={{ fontSize: 14 }}>💬</span>
-                        {waLoading ? "Отправляю..." : "Отправить в WhatsApp"}
+                        {waLoading ? GL.busySend : "Отправить в WhatsApp"}
                       </button>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
                          Шаблон должен быть заранее одобрен WhatsApp.
@@ -6176,7 +6233,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             cursor: (voicePreviewLoading || !voiceCloneFile) ? "not-allowed" : "pointer",
                           }}
                         >
-                          {voicePreviewLoading ? "Previewing..." : "🎧 Послушать голос (без сохранения)"}
+                          {voicePreviewLoading ? GL.busyPreview : "🎧 Послушать голос (без сохранения)"}
                         </button>
                         <button
                           onClick={cloneVoice}
@@ -6188,7 +6245,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             cursor: (voiceCloneLoading || !voiceCloneName.trim() || !voiceCloneFile || !voicePreviewOk) ? "not-allowed" : "pointer",
                           }}
                         >
-                          {voiceCloneLoading ? "Saving..." : "✓ Save voice to account"}
+                          {voiceCloneLoading ? GL.busySave : "✓ Save voice to account"}
                         </button>
                       </div>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
@@ -6236,7 +6293,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: (sttLoading || !sttFile) ? "not-allowed" : "pointer",
                         }}
                       >
-                        {sttLoading ? "Расшифровываю..." : "Расшифровать"}
+                        {sttLoading ? GL.busyStt : "Расшифровать"}
                       </button>
                     </div>
                   )}
@@ -6433,7 +6490,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       cursor: (agentRunning || agentSteps.length === 0) ? "not-allowed" : "pointer",
                     }}
                   >
-                    {agentRunning ? "Выполняю сценарий..." : `🤖 Запустить сценарий из ${agentSteps.length} шагов`}
+                    {agentRunning ? GL.busyAgent : `🤖 Запустить сценарий из ${agentSteps.length} шагов`}
                   </button>
                 </div>
               )}
@@ -6509,7 +6566,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           }}
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M14.97 16.95L10 13.87V7h2v5.76l4.03 2.49-1.06 1.7zM12 3a9 9 0 109 9 9 9 0 00-9-9z"/></svg>
-                          {domainSetupLoading ? "Настраиваю..." : "Настроить DNS автоматически (Cloudflare)"}
+                          {domainSetupLoading ? GL.busySetup : "Настроить DNS автоматически (Cloudflare)"}
                         </button>
                         {domainSetupMsg && (
                           <div style={{
@@ -6529,7 +6586,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     disabled={savingSettings}
                     style={{ padding: "9px 18px", background: savingSettings ? "#99f6e4" : "#0d9488", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: savingSettings ? "not-allowed" : "pointer", alignSelf: "flex-start" }}
                   >
-                    {savingSettings ? "Сохраняю..." : "Сохранить настройки"}
+                    {savingSettings ? GL.busySave : "Сохранить настройки"}
                   </button>
 
                   {/* Collaborators — Studio Pro */}

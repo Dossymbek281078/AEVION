@@ -291,7 +291,7 @@ export const MODULE_RUNTIME: Record<string, ModuleRuntimeMeta> = {
     tier: "mvp_live",
     primaryPath: "/qspace",
     apiHints: [],
-    hint: "3D-модельер помещений · DXF -> 3 слоя (черновая/чистовая/декор) · целиком в браузере, без API",
+    hint: "3D-модельер помещений · DXF, векторный PDF и распознавание картинки -> 3 слоя (черновая/чистовая/декор) · целиком в браузере, без API",
   },
 
   qskyway: {

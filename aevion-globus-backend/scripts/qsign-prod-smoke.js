@@ -151,6 +151,49 @@ async function run() {
     ok("GET /qsign/v2/sigs/<unknown> → 4xx (not 5xx)", `status=${r.status}`);
   } else fail("GET /qsign/v2/sigs/<unknown>", `got=${r.status}`);
 
+  // 16. Пинованная карта offline-верификатора ↖ живые ключи прода.
+  //
+  // Гэп найден вахтой 07.09.2026: /verify-offline проверяет подпись
+  // платформы ключом, ЗАКРЕПЛЁННЫМ в frontend/src/lib/verifyBundle.ts
+  // (это и есть заверение, а не самосогласованность), но НИ ОДИН сторож
+  // не сверял карту с /api/qsign/v2/keys. Смени прод ключ — и реальные
+  // бандлы перестали бы проверяться офлайн МОЛЧА: ручной шаг «добавить
+  // строку в карту» — класс manual_step_on_day_x_never_happens.
+  //
+  // Сверка в ОБЕ стороны: (а) каждый активный Ed25519-kid прода есть в
+  // карте и hex совпадает; (б) хотя бы один пин жив на проде (карта из
+  // одних мёртвых ключей — тоже слом). Смоук живёт в репо и читает файл
+  // верификатора напрямую — третьей копии ключа не появляется.
+  try {
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const vbPath = path.join(__dirname, "..", "..", "frontend", "src", "lib", "verifyBundle.ts");
+    const vb = fs.readFileSync(vbPath, "utf8");
+    const mapBlock = (vb.match(/PLATFORM_PUBLIC_KEYS[^=]*=\s*\{([\s\S]*?)\}/) || [])[1] || "";
+    const pinned = {};
+    for (const m of mapBlock.matchAll(/"([\w-]+)":\s*\n?\s*"([0-9a-f]{64})"/g)) pinned[m[1]] = m[2];
+    r = await req("GET", "/api/qsign/v2/keys");
+    const activeEd = (r.body?.keys || []).filter((k) => k.algo === "Ed25519" && k.status === "active");
+    if (!Object.keys(pinned).length) {
+      fail("pinned map parse", "PLATFORM_PUBLIC_KEYS не разобрана — прибор, не прод");
+    } else if (!activeEd.length) {
+      fail("prod active ed25519", "на проде нет активного Ed25519-ключа");
+    } else {
+      const missing = activeEd.filter((k) => pinned[k.kid] !== k.publicKey);
+      if (missing.length === 0) {
+        ok("offline pin == prod keys", activeEd.map((k) => k.kid).join(","));
+      } else {
+        fail("offline pin mismatch",
+          missing.map((k) => `${k.kid}: прод=${(k.publicKey || "null").slice(0, 12)}… пин=${(pinned[k.kid] || "НЕТ").slice(0, 12)}…`).join("; "));
+      }
+      const alive = Object.keys(pinned).some((kid) => activeEd.some((k) => k.kid === kid));
+      if (alive) ok("хотя бы один пин активен на проде", Object.keys(pinned).join(","));
+      else fail("все пины мертвы", "ротация прошла мимо verifyBundle");
+    }
+  } catch (e) {
+    fail("pin-check не выполнился", String(e && e.message).slice(0, 120));
+  }
+
   console.log(`\n${passed + failed} assertions — ${passed} PASS  ${failed} FAIL\n`);
   process.exit(failed > 0 ? 1 : 0);
 }

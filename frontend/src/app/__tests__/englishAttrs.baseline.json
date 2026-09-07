@@ -140,5 +140,6 @@
   "lib/constitution.ts": 1,
   "lib/planetNominations.ts": 3,
   "lib/products.ts": 7,
-  "lib/qrightServerI18n.ts": 1
+  "lib/qrightServerI18n.ts": 1,
+  "app/qsign/keys/page.tsx": 5
 }

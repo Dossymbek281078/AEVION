@@ -102,9 +102,13 @@ describe("рабочее окно не смешивает языки", () => {
     // если букв не осталось, это не зашитый английский. Сам словарь проверяет
     // тест «прибор работает»: русские строки GEN_UI.ru входят в общий счёт.
     const stripInterp = (t: string) => t.replace(/\$\{[^}]*\}/g, "");
+    // Чистый плейсхолдер "{path}" (аргумент .replace словарной строки) —
+    // не сообщение: подстановки живут в СЛОВАРЕ, а тут только имя дырки.
+    const isPlaceholder = (t: string) => /^\{\w+\}$/.test(t);
     const english = messages()
       .filter((t) => /[A-Za-z]/.test(t) && !/[А-Яа-я]/.test(t))
       .filter((t) => /[A-Za-zА-я]/.test(stripInterp(t)))
+      .filter((t) => !isPlaceholder(t))
       .filter((t) => !ALLOWED.has(t));
     expect(english, "сообщение на английском в русском окне").toEqual([]);
   });

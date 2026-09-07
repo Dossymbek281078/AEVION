@@ -24,6 +24,7 @@ import { parseDxf } from "./dxf";
 import { estimatePlan } from "./estimate";
 import { planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
 import { drawMaterial, materialById, materialsFor } from "./materials";
+import RasterReview from "./RasterReview";
 import {
   CEILING_STRETCH,
   FLOOR_WET,
@@ -260,6 +261,9 @@ export default function QSpaceClient() {
   const [webglOk, setWebglOk] = useState(true);
   // PDF разобран, но масштаб ещё не назван человеком — план не строим.
   const [pdfPending, setPdfPending] = useState<PdfSegments | null>(null);
+  // Растровый план ждёт проверки человеком: строить 3D молча по
+  // распознанному нельзя (см. RasterReview).
+  const [rasterUrl, setRasterUrl] = useState<string | null>(null);
   const [pdfExtent, setPdfExtent] = useState("10");
 
   // three-объекты живут в ref, React ими не управляет
@@ -661,6 +665,15 @@ export default function QSpaceClient() {
 
   const onFile = useCallback(async (f: File) => {
     setPdfPending(null);
+    if (/^image\//.test(f.type) || /\.(png|jpe?g|webp|bmp)$/i.test(f.name)) {
+      setRasterUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return URL.createObjectURL(f);
+      });
+      setWarnings([]);
+      setUnitLabel("");
+      return;
+    }
     if (/\.pdf$/i.test(f.name)) {
       const bytes = new Uint8Array(await f.arrayBuffer());
       const src = await readPdfSegments(bytes);
@@ -743,11 +756,11 @@ export default function QSpaceClient() {
 
       <section style={S.toolbar} aria-label="Управление планом">
         <label style={S.uploadBtn}>
-          Загрузить план (DXF или PDF)
+          Загрузить план (DXF, PDF или картинка)
           <input
             ref={fileRef}
             type="file"
-            accept=".dxf,.pdf"
+            accept=".dxf,.pdf,image/*"
             style={{ display: "none" }}
             onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ""; }}
           />
@@ -790,6 +803,26 @@ export default function QSpaceClient() {
             остальные размеры модели.
           </span>
         </div>
+      )}
+
+      {rasterUrl && (
+        <RasterReview
+          imageUrl={rasterUrl}
+          onCancel={() => {
+            URL.revokeObjectURL(rasterUrl);
+            setRasterUrl(null);
+          }}
+          onAccept={(p) => {
+            setPlan(p);
+            setUnitLabel("масштаб задан вами по картинке");
+            setWarnings([
+              "Модель построена по РАСПОЗНАННОЙ картинке и вашей правке — "
+              + "сверьте размеры с чертежом, прежде чем считать по ней закупку.",
+            ]);
+            URL.revokeObjectURL(rasterUrl);
+            setRasterUrl(null);
+          }}
+        />
       )}
 
       <section style={S.layersRow} aria-label="Слои модели">

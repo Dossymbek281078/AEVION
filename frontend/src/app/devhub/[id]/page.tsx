@@ -822,6 +822,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   // Live phase of the current generation (SSE) — honest states only, each
   // corresponds to something the backend is actually doing right now.
   const [genStage, setGenStage] = useState<string | null>(null);
+  // Живой счётчик байтов потоковой генерации (событие status/generating).
+  const [genBytes, setGenBytes] = useState(0);
   // Фиксация происхождения генерации в QRight (спека 06.09). Галочка живёт
   // в localStorage как удобство: серверная правда — сам ответ генерации.
   const [stampProvenance, setStampProvenance] = useState(false);
@@ -1610,7 +1612,10 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
             for (const e of events) {
               if (!e.startsWith("data: ")) continue;
               const evt = JSON.parse(e.slice(6));
-              if (evt.type === "status") setGenStage(evt.stage);
+              if (evt.type === "status") {
+                setGenStage(evt.stage);
+                if (typeof evt.bytes === "number") setGenBytes(evt.bytes);
+              }
               else if (evt.type === "result") data = evt;
               else if (evt.type === "error") throw new Error(serverError(evt.error, "Генерация прервалась"));
             }
@@ -1716,6 +1721,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       genAbortRef.current = null;
       setGenerating(false);
       setGenStage(null);
+      setGenBytes(0);
     }
   };
 
@@ -4369,7 +4375,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {generating && genStage && (
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
                       <div style={{ fontSize: 12, color: "#0f766e", textAlign: "center" }}>
-                        {genStage === "calling_model" ? "⚙ Вызываю модель…"
+                        {genStage === "generating" ? `⚙ Модель пишет… ${(genBytes / 1024).toFixed(1)} КБ` :
+                          genStage === "calling_model" ? "⚙ Вызываю модель…"
                           : genStage === "continuation" ? "✍ Ответ обрезался — дописываю недостающие файлы…"
                           : genStage === "syntax_check" ? "🔍 Проверяю синтаксис…"
                           : genStage === "self_correcting" ? "🔧 Правлю синтаксические ошибки…"

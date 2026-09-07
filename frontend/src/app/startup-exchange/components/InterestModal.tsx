@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useI18nOptional } from "@/lib/i18n";
+import { SX_BUSY } from "./busyUi";
 import { ApiError, INTENT_LABEL, dealHeadline, startupxApi, usd, type DealIntent, type Listing } from "../lib";
 
 /**
@@ -18,6 +20,8 @@ export function InterestModal({
   onClose: () => void;
   onSubmitted: (id: number) => void;
 }) {
+  const sxLang = useI18nOptional()?.lang ?? "ru";
+  const SX = SX_BUSY[sxLang] ?? SX_BUSY.ru;
   const suggested = listing.assessment?.deal.ticket;
   const defaultIntent: DealIntent = listing.deal?.intent ?? "raise";
 
@@ -207,7 +211,7 @@ export function InterestModal({
             disabled={busy}
             style={{ padding: "10px 18px", borderRadius: 9, border: "none", background: busy ? "#64748b" : "#0f172a", color: "#fff", fontWeight: 700, fontSize: 13, cursor: busy ? "wait" : "pointer" }}
           >
-            {busy ? "Отправляю…" : "Отправить основателю"}
+            {busy ? SX.sending : "Отправить основателю"}
           </button>
         </div>
       </div>

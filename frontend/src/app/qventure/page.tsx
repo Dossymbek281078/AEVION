@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import { QV_BUSY } from "./busyUi";
 import { useI18nOptional } from "@/lib/i18n";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
@@ -325,6 +326,8 @@ function MarketingSections() {
 // ─── Single analysis ──────────────────────────────────────────────────────────
 
 function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
+  const qvLang = useI18nOptional()?.lang ?? "ru";
+  const QV = QV_BUSY[qvLang] ?? QV_BUSY.ru;
   const [form, setForm] = useState<FormShape>(emptyForm);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -420,7 +423,7 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
             padding: "10px 18px", background: extracting ? "var(--teal, #0a7d72)" : "var(--teal-deep, #075b53)", color: "#fff", border: "none",
             borderRadius: 9, fontSize: 14, fontWeight: 700, cursor: extracting ? "wait" : "pointer", whiteSpace: "nowrap",
           }}>
-            {extracting ? "Читаем презентацию…" : "📄 Загрузить презентацию (PDF)"}
+            {extracting ? QV.extracting : "📄 Загрузить презентацию (PDF)"}
           </button>
           <span style={{ fontSize: 12.5, color: extractNote ? "var(--teal-deep, #075b53)" : "#94a3b8", fontWeight: extractNote ? 600 : 400 }}>
             {extractNote || "Мы вытащим поля и заполним форму — вы проверяете и запускаете."}
@@ -445,7 +448,7 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
         )}
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           <button onClick={() => run(form)} disabled={loading} style={primaryBtn(loading)}>
-            {loading ? "Разбираем…" : "Разобрать"}
+            {loading ? QV.parsing : "Разобрать"}
           </button>
           <button onClick={runSample} disabled={loading} type="button" style={ghostBtn(loading)}>
             ✨ Показать пример разбора
@@ -461,6 +464,8 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
 // ─── Compare two ──────────────────────────────────────────────────────────────
 
 function ComparePanel({ sectors }: { sectors: SectorOption[] }) {
+  const qvLang = useI18nOptional()?.lang ?? "ru";
+  const QV = QV_BUSY[qvLang] ?? QV_BUSY.ru;
   const [a, setA] = useState<FormShape>(() => ({ ...emptyForm(), name: "Компания А" }));
   const [b, setB] = useState<FormShape>(() => ({ ...emptyForm(), name: "Компания Б" }));
   const [loading, setLoading] = useState(false);
@@ -511,7 +516,7 @@ function ComparePanel({ sectors }: { sectors: SectorOption[] }) {
           </div>
         )}
       <button onClick={run} disabled={loading} style={{ ...primaryBtn(loading), marginBottom: 18 }}>
-        {loading ? "Разбираем оба…" : "⚖ Compare"}
+        {loading ? QV.parsingBoth : "⚖ Compare"}
       </button>
       {pair && <CompareResult a={pair[0]} b={pair[1]} />}
     </>

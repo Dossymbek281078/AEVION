@@ -43,6 +43,22 @@ describe("дверь пути файла отказывает мусору са�
     expect(String(r.body.error)).toContain("invalid file path");
   });
 
+  test("saveAs перевода — та же дверь: мусор бьётся ДО провайдера", async () => {
+    // DEEPL не настроен в тестах — если бы проверка стояла ПОСЛЕ вызова,
+    // ответ был бы «not configured», а не invalid file path. Порядок и есть
+    // предмет: мусорный путь не должен стоить человеку перевода.
+    const a = await app();
+    const guest = { "x-devhub-guest": "path-door-saveas" };
+    const созд = await request(a).post("/api/devhub/projects").set(guest)
+      .send({ name: "door t", stack: "static" });
+    const pid = созд.body.project.id;
+    const r = await request(a)
+      .post(`/api/devhub/projects/${pid}/files/translate`).set(guest)
+      .send({ path: "index.html", targetLang: "de", saveAs: "../../out.html" });
+    expect(r.status, "мусорный saveAs прошёл дверь").toBe(400);
+    expect(String(r.body.error)).toContain("invalid file path");
+  });
+
   test("нормальный вложенный путь проходит (дверь не перетянута)", async () => {
     const a = await app();
     const guest = { "x-devhub-guest": "path-door-guest-ok" };

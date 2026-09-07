@@ -2248,6 +2248,23 @@ devhubRouter.put("/projects/:id/file", async (req, res) => {
 });
 
 // PUT /api/devhub/projects/:id/files/:filepath — upsert file with simple single-segment path
+/**
+ * Серверная проверка пути файла — НЕ слабее клиентской (§15; ворота 4,
+ * 07.09: PUT принял «../../evil.txt» с кодом 200, а saveAs перевода —
+ * вторая дверь того же класса). Правила зеркалят frontend devhubFilePaths.
+ * Управляющие символы ловятся charCodeAt, обратный слэш — fromCharCode(92):
+ * НИКАКОГО экранирования в этом файле — юникод-класс в регулярке через
+ * границу вызова однажды положил в исходник сырой NUL-байт.
+ */
+function плохойПутьФайла(p: string): boolean {
+  if (!p) return true;
+  if (p.includes(String.fromCharCode(92))) return true;
+  if (p.startsWith("/")) return true;
+  if (p.split("/").some((s) => s === ".." || s === "." || s === "")) return true;
+  if ([...p].some((ch) => ch.charCodeAt(0) < 32)) return true;
+  return false;
+}
+
 devhubRouter.put("/projects/:id/files/:filepath", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
@@ -2258,13 +2275,7 @@ devhubRouter.put("/projects/:id/files/:filepath", async (req, res) => {
   // было — выкатка такие пути отбрасывает с видимым skipped, — но дверь
   // обязана отказывать СРАЗУ и словами, а не молча ронять файл на выкатке.
   // Правила зеркалят frontend/src/lib/devhubFilePaths (newFilePathError).
-  const сегменты = filePath.split("/");
-  if (
-    filePath.includes("\\") ||
-    filePath.startsWith("/") ||
-    сегменты.some((s) => s === ".." || s === "." || s === "") ||
-    [...filePath].some((ch) => ch.charCodeAt(0) < 32)
-  ) {
+  if (плохойПутьФайла(filePath)) {
     return res.status(400).json({ error: "invalid file path: use nested/relative names like assets/logo.svg (no .., no leading slash)" });
   }
   const read = await readProject(req.params.id);
@@ -6024,6 +6035,11 @@ devhubRouter.post("/projects/:id/files/translate", dhCostlyLimit("dhtranslate"),
   const { path, targetLang, saveAs } = req.body || {};
   if (!path || typeof path !== "string") return res.status(400).json({ error: "path required" });
   if (!targetLang || typeof targetLang !== "string") return res.status(400).json({ error: "targetLang required" });
+  // saveAs — та же дверь пути, что PUT files (§15): проверяем ДО списания
+  // квоты и вызова провайдера, иначе мусорный путь стоил бы человеку перевода.
+  if (saveAs !== undefined && (typeof saveAs !== "string" || плохойПутьФайла(saveAs))) {
+    return res.status(400).json({ error: "invalid file path: use nested/relative names like assets/logo.svg (no .., no leading slash)" });
+  }
 
   const ftrCredit = await checkCredit(userId, "translate", 1);
   if (!ftrCredit.allowed) {

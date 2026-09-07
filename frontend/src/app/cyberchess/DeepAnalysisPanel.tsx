@@ -21,11 +21,23 @@ const STATE_LABEL: Record<DeepEngineState, string> = {
   error: "Не удалось запустить",
 };
 
-/** Оценка движка → строка для человека. Экспортирована для теста. */
+/** Оценка движка → строка для человека. Экспортирована для теста.
+ *  ВХОД — БЕЛО-ОТНОСИТЕЛЬНЫЙ cp (+ = лучше у белых), как в основном eval-баре. */
 export function scoreText(cp: number, mate: number): string {
   if (mate !== 0) return `#${Math.abs(mate)}${mate > 0 ? "" : " (−)"}`;
   const v = (cp / 100).toFixed(2);
   return cp > 0 ? `+${v}` : v;
+}
+
+/** UCI `score cp/mate` идёт ОТ СТОРОНЫ ХОДА. Основной eval-бар приводит его к
+ *  бело-относительному (cp*sign, sign=turn==="w"?1:-1, page.tsx). Панель обязана
+ *  делать то же, иначе на ходу чёрных её оценка и eval-бар показывают
+ *  ПРОТИВОПОЛОЖНЫЙ знак (два наших ответа об одном спорят). Сторона хода — 2-е
+ *  поле FEN. Экспортирована для теста. */
+export function toWhiteRelative(cp: number, mate: number, fen: string): { cp: number; mate: number } {
+  const sign = fen.split(" ")[1] === "b" ? -1 : 1;
+  const flip = (x: number) => (x === 0 ? 0 : x * sign); // не плодить -0
+  return { cp: flip(cp), mate: flip(mate) };
 }
 
 export default function DeepAnalysisPanel({ fen }: { fen: string }) {
@@ -59,8 +71,11 @@ export default function DeepAnalysisPanel({ fen }: { fen: string }) {
       18,
       (c, m, d) => {
         if (cancelled) return;
-        setCp(c);
-        setMate(m);
+        // Привести к бело-относительной оценке (fen из этого же замыкания —
+        // сторона хода совпадает с оцениваемой позицией, без гонки знака).
+        const w = toWhiteRelative(c, m, fen);
+        setCp(w.cp);
+        setMate(w.mate);
         setDepth(d);
       },
       () => {},

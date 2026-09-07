@@ -7161,7 +7161,7 @@ export default function CyberChessPage(){
             const killer:Array<{emoji:string;title:string;desc:string;cta:string;accent:string;onClick:()=>void}>=[
               {emoji:"🏆",title:"Турниры онлайн",desc:"Швейцарская · круговой · нокаут. Призовой фонд в Chessy.",cta:"К турнирам",accent:"#d97706",onClick:()=>{try{window.location.href="/cyberchess/tournaments"}catch{}}},
               {emoji:"📈",title:"CPI рейтинг",desc:"Составной рейтинг по 11 факторам — такого нет ни у lichess, ни у chess.com.",cta:"Открыть",accent:"#0891b2",onClick:()=>{try{window.location.href="/cyberchess/cpi/dashboard"}catch{}}},
-              {emoji:"🪙",title:"Chessy Экономика",desc:"Аукцион, аренда коуча, подписки на стримеров — на нашей валюте.",cta:"Войти",accent:"#ca8a04",onClick:()=>{try{window.location.href="/cyberchess/economy"}catch{}}},
+              {emoji:"🪙",title:"Chessy Экономика",desc:"Аукцион, аренда коуча, подписки на стримеров на нашей валюте. Пока превью замысла — скоро.",cta:"Смотреть",accent:"#ca8a04",onClick:()=>{try{window.location.href="/cyberchess/economy"}catch{}}},
               {emoji:"🎲",title:"12 вариантов",desc:"Атомные · Шахматы Фишера · Царь горы · Крейзихаус · Только кони и др.",cta:"Выбрать",accent:"#7c3aed",onClick:()=>sShowVariants(true)},
             ];
             return <Card padding={SPACE[3]} elevation="sm">

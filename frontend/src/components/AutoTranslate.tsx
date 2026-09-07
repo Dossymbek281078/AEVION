@@ -46,6 +46,7 @@ const dict: Record<string, string> = {
   // счётчика модулей молча выключает перевод этой фразы. Пара ниже обязана
   // соответствовать MODULE_NODES — это проверяет pitchNumbers.guard.test.ts.
   "40 product nodes": "40 \u043f\u0440\u043e\u0434\u0443\u043a\u0442\u043e\u0432\u044b\u0445 \u0443\u0437\u043b\u043e\u0432",
+  "41 product nodes": "41 \u043f\u0440\u043e\u0434\u0443\u043a\u0442\u043e\u0432\u044b\u0439 \u0443\u0437\u0435\u043b",
   "Nodes on map": "\u0423\u0437\u043b\u043e\u0432 \u043d\u0430 \u043a\u0430\u0440\u0442\u0435",
   "QRight records": "\u0417\u0430\u043f\u0438\u0441\u0435\u0439 QRight",
   "Planet participants": "Planet \u0443\u0447\u0430\u0441\u0442\u043d\u0438\u043a\u043e\u0432",

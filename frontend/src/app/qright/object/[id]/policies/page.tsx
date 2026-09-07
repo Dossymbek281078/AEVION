@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useI18nOptional } from "@/lib/i18n";
+import { QR_BUSY } from "../../../busyUi";
 import { getAuthToken } from "@/lib/auth";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -46,6 +48,8 @@ function authHeaders(): HeadersInit {
 }
 
 export default function PoliciesPage() {
+  const qrLang = useI18nOptional()?.lang ?? "en";
+  const QR = QR_BUSY[qrLang] ?? QR_BUSY.en;
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const objectId = params?.id ?? "";
@@ -253,7 +257,7 @@ export default function PoliciesPage() {
               cursor: adding || !termsText.trim() ? "not-allowed" : "pointer",
             }}
           >
-            {adding ? "Adding…" : "Add policy"}
+            {adding ? QR.adding : "Add policy"}
           </button>
         </div>
 

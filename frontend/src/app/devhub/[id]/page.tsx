@@ -82,7 +82,7 @@ const PODPIS_VKLADKI: Record<Vkladka, string> = {
 // словарь IDE (~400 строк) ждёт языкового решения основателя; здесь
 // НАМЕРЕННО только замеренный поимённо остаток пути новичка (проба
 // en-newcomer-probe, 06.09.2026: 66 знаков до генерации + тосты после).
-const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; syntaxWarn: string; memoryWarn: string; runCost: string; runTokens: string; stCalling: string; stWriting: string; stContinue: string; stSyntax: string; stSelfFix: string; stSaving: string; busyDb: string; busyDesign: string; busyGen: string; busyUndo: string; busyPublish: string; busyPull: string; busyDeploy: string; busyPlan: string; busyImg: string; busySave: string; busyApply: string; busyPush: string; busySync: string; busyCompose: string; busySend: string; busyTranslate: string; busyCreate: string; busyPreview: string; busyUpload: string; busyStt: string; busyAgent: string; busySetup: string }> = {
+const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; syntaxWarn: string; memoryWarn: string; runCost: string; runTokens: string; stCalling: string; stWriting: string; stContinue: string; stSyntax: string; stSelfFix: string; stSaving: string; busyDb: string; busyDesign: string; busyGen: string; busyUndo: string; busyPublish: string; busyPull: string; busyDeploy: string; busyPlan: string; busyImg: string; busySave: string; busyApply: string; busyPush: string; busySync: string; busyCompose: string; busySend: string; busyTranslate: string; busyCreate: string; busyPreview: string; busyUpload: string; busyStt: string; busyAgent: string; busySetup: string; confirmDelFile: string }> = {
   ru: {
     ph: "Опишите, что нужно построить…\nНапример: «REST API с входом пользователей и ручкой товаров»",
     created: "Создано файлов",
@@ -101,6 +101,7 @@ const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; s
     busyCompose: "Сочиняю…", busySend: "Отправляю…", busyTranslate: "Перевожу…",
     busyCreate: "Создаю…", busyPreview: "Слушаю образец…", busyUpload: "Загружаю…",
     busyStt: "Расшифровываю…", busyAgent: "Выполняю сценарий…", busySetup: "Настраиваю…",
+    confirmDelFile: "Удалить файл {path}? Кнопка отмены правок ИИ его не вернёт.",
     noChanges: "Без изменений",
     syntaxWarn: "не прошли проверку синтаксиса — просмотрите перед выкаткой",
     memoryWarn: "но база была недоступна — они пока в памяти и могут пропасть при перезапуске. Сохраните копию.",
@@ -123,6 +124,7 @@ const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; s
     busyCompose: "Composing…", busySend: "Sending…", busyTranslate: "Translating…",
     busyCreate: "Creating…", busyPreview: "Previewing…", busyUpload: "Uploading…",
     busyStt: "Transcribing…", busyAgent: "Running the scenario…", busySetup: "Setting up…",
+    confirmDelFile: "Delete {path}? The AI-undo button will not bring it back.",
     noChanges: "No changes",
     syntaxWarn: "failed the syntax check — review before deploying",
     memoryWarn: "but the database was unavailable — they live in memory for now and may vanish on restart. Save a copy.",
@@ -145,6 +147,7 @@ const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; s
     busyCompose: "Шығарылуда…", busySend: "Жіберілуде…", busyTranslate: "Аударылуда…",
     busyCreate: "Жасалуда…", busyPreview: "Үлгі тыңдалуда…", busyUpload: "Жүктелуде…",
     busyStt: "Мәтінге айналдырылуда…", busyAgent: "Сценарий орындалуда…", busySetup: "Бапталуда…",
+    confirmDelFile: "{path} файлын жою керек пе? ЖИ болдырмау түймесі оны қайтармайды.",
     noChanges: "Өзгеріс жоқ",
     syntaxWarn: "синтаксис тексеруінен өтпеді — жариялау алдында қараңыз",
     memoryWarn: "бірақ дерекқор қолжетімсіз болды — олар әзірге жадта және қайта іске қосқанда жоғалуы мүмкін. Көшірмесін сақтаңыз.",
@@ -1506,7 +1509,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     // создаёт точки, поэтому кнопка отмены правок его не отменит. Об этом и
     // говорим: обещание невозможности в диалоге — такая же неправда, как
     // умолчание о потере.
-    if (!confirm(`Удалить файл ${path}? Кнопка отмены правок ИИ его не вернёт.`)) return;
+    // Нативный confirm — слепая зона доводчика ЦЕЛИКОМ (браузерный диалог
+    // не переводится никем) — только словарь.
+    if (!confirm(GL.confirmDelFile.replace("{path}", path))) return;
     try {
       await writeOrThrow(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(path)}`), { method: "DELETE" });
       const remaining = files.filter((f) => f.path !== path);

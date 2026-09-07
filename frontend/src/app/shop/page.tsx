@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { BuyLink } from "@/components/BuyLink";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 import {
@@ -142,6 +144,18 @@ export default async function ShopPage({
   // чекаута, иначе переход «страница профиля → магазин → покупка» теряет источник
   // ровно там, где человек и решает платить.
   const channel = channelFrom((await searchParams).c);
+
+  // Языковая маршрутизация — третий случай проверенного приёма (образцы:
+  // /longevity и /go, ветки feat/lang-aware-*, мутации у сторожей пойманы).
+  // Замер EN-свипа 06.09: витрина под cookie en отдавала 73 % кириллицы —
+  // худшая ДЕНЕЖНАЯ страница для en-покупателя; /en/shop заведена тем же
+  // заходом (07.09). Редирект до PageTracking: просмотр считается один раз,
+  // на той витрине, которую человек видит. Метка канала едет с собой.
+  const язык = (await cookies()).get("aevion_lang_v1")?.value;
+  if (язык === "en") {
+    redirect(channel ? `/en/shop?c=${encodeURIComponent(channel)}` : "/en/shop");
+  }
+
   // Язык объявляется на самом блоке: в корневом макете стоит lang="en",
   // а витрина русская — замер на проде 28.08.2026 дал 2634 русских буквы
   // против 1028 латинских. Несоответствие браузер лечит машинным переводом

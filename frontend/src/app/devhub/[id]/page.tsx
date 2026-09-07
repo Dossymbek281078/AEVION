@@ -82,12 +82,18 @@ const PODPIS_VKLADKI: Record<Vkladka, string> = {
 // словарь IDE (~400 строк) ждёт языкового решения основателя; здесь
 // НАМЕРЕННО только замеренный поимённо остаток пути новичка (проба
 // en-newcomer-probe, 06.09.2026: 66 знаков до генерации + тосты после).
-const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; syntaxWarn: string; memoryWarn: string; runCost: string; runTokens: string }> = {
+const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; syntaxWarn: string; memoryWarn: string; runCost: string; runTokens: string; stCalling: string; stWriting: string; stContinue: string; stSyntax: string; stSelfFix: string; stSaving: string }> = {
   ru: {
     ph: "Опишите, что нужно построить…\nНапример: «REST API с входом пользователей и ручкой товаров»",
     created: "Создано файлов",
     runCost: "Этот запуск",
     runTokens: "токенов",
+    stCalling: "⚙ Вызываю модель…",
+    stWriting: "⚙ Модель пишет…",
+    stContinue: "✍ Ответ обрезался — дописываю недостающие файлы…",
+    stSyntax: "🔍 Проверяю синтаксис…",
+    stSelfFix: "🔧 Правлю синтаксические ошибки…",
+    stSaving: "💾 Сохраняю файлы…",
     noChanges: "Без изменений",
     syntaxWarn: "не прошли проверку синтаксиса — просмотрите перед выкаткой",
     memoryWarn: "но база была недоступна — они пока в памяти и могут пропасть при перезапуске. Сохраните копию.",
@@ -97,6 +103,12 @@ const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; s
     created: "Files created",
     runCost: "This run",
     runTokens: "tokens",
+    stCalling: "⚙ Calling the model…",
+    stWriting: "⚙ Model is writing…",
+    stContinue: "✍ Reply was cut off — fetching the missing files…",
+    stSyntax: "🔍 Checking syntax…",
+    stSelfFix: "🔧 Fixing syntax errors…",
+    stSaving: "💾 Saving files…",
     noChanges: "No changes",
     syntaxWarn: "failed the syntax check — review before deploying",
     memoryWarn: "but the database was unavailable — they live in memory for now and may vanish on restart. Save a copy.",
@@ -106,6 +118,12 @@ const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; s
     created: "Жасалған файлдар",
     runCost: "Бұл іске қосу",
     runTokens: "токен",
+    stCalling: "⚙ Модельді шақырып жатырмын…",
+    stWriting: "⚙ Модель жазып жатыр…",
+    stContinue: "✍ Жауап үзілді — жетіспейтін файлдарды аламын…",
+    stSyntax: "🔍 Синтаксисті тексеріп жатырмын…",
+    stSelfFix: "🔧 Синтаксис қателерін түзеп жатырмын…",
+    stSaving: "💾 Файлдарды сақтап жатырмын…",
     noChanges: "Өзгеріс жоқ",
     syntaxWarn: "синтаксис тексеруінен өтпеді — жариялау алдында қараңыз",
     memoryWarn: "бірақ дерекқор қолжетімсіз болды — олар әзірге жадта және қайта іске қосқанда жоғалуы мүмкін. Көшірмесін сақтаңыз.",
@@ -4402,12 +4420,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                   {generating && genStage && (
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
                       <div style={{ fontSize: 12, color: "#0f766e", textAlign: "center" }}>
-                        {genStage === "generating" ? `⚙ Модель пишет… ${(genBytes / 1024).toFixed(1)} КБ` :
-                          genStage === "calling_model" ? "⚙ Вызываю модель…"
-                          : genStage === "continuation" ? "✍ Ответ обрезался — дописываю недостающие файлы…"
-                          : genStage === "syntax_check" ? "🔍 Проверяю синтаксис…"
-                          : genStage === "self_correcting" ? "🔧 Правлю синтаксические ошибки…"
-                          : genStage === "saving" ? "💾 Сохраняю файлы…"
+                        {genStage === "generating" ? `${GL.stWriting} ${(genBytes / 1024).toFixed(1)} KB` :
+                          genStage === "calling_model" ? GL.stCalling
+                          : genStage === "continuation" ? GL.stContinue
+                          : genStage === "syntax_check" ? GL.stSyntax
+                          : genStage === "self_correcting" ? GL.stSelfFix
+                          : genStage === "saving" ? GL.stSaving
                           : genStage}
                         {genReady.length > 0 && (
                           <div style={{ marginTop: 4, color: "#475569", fontSize: 11.5 }}>

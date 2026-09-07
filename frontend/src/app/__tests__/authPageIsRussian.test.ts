@@ -28,11 +28,15 @@ const VISIBLE: Array<[string, string]> = [
   [">Имя</div>", ">Name</div>"],
   [">Почта</div>", ">Email</div>"],
   [">Пароль</div>", ">Password</div>"],
-  // 06.09.2026: плейсхолдеры ушли в словарь AUTH_A11Y (страница стала
-  // языко-зависимой). Русская формулировка теперь живёт в ru-ветке словаря,
-  // а возврат зашитого английского placeholder ловится прежней правой частью.
+  // 06-07.09.2026: плейсхолдеры ушли в словарь AUTH_A11Y (страница стала
+  // языко-зависимой). Русская фраза живёт в ru-ветке словаря; запрещены ОБА
+  // отката (сведение двух окон): возврат зашитого английского placeholder
+  // (правая часть первой пары) и английский текст В ru-ветке словаря
+  // (правая часть второй). Косвенность показа через AA.* закреплена ниже.
   ['namePh: "Как к вам обращаться"', 'placeholder="Your name"'],
   ['passwordPh: "Не короче 6 знаков"', 'placeholder="Minimum 6 characters"'],
+  ['namePh: "Как к вам обращаться"', 'namePh: "Your name'],
+  ['passwordPh: "Не короче 6 знаков"', 'passwordPh: "Minimum 6'],
   ["Аккаунт создан", "Account created"],
   ["Не удалось войти", "Sign in error"],
   ["Введите адрес почты и пароль", "Email and password required"],
@@ -40,6 +44,12 @@ const VISIBLE: Array<[string, string]> = [
 
 describe("страница входа говорит по-русски", () => {
   const src = readFileSync(PAGE, "utf8");
+
+  test("словарные подсказки ПРОВЕДЕНЫ до полей (AA.namePh/AA.passwordPh)", () => {
+    // Фраза в ru-ветке без провода — мёртвый словарь: закрепляем связку.
+    expect(src).toContain("placeholder={AA.namePh}");
+    expect(src).toContain("placeholder={AA.passwordPh}");
+  });
 
   for (const [ru, en] of VISIBLE) {
     test(`«${ru}» на месте, «${en}» не вернулось`, () => {

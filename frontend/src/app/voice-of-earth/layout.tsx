@@ -5,7 +5,7 @@ import { ModuleMaturity } from "@/components/ModuleMaturity";
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "Voice of Earth — Multi-language Music · AEVION",
+  title: "Voice of Earth — Multi-language Music",
   description:
     "Международный музыкальный проект на разных языках с автоматической фиксацией авторства через QRight + QSign и публичным распределением роялти.",
   alternates: { canonical: `${SITE}/voice-of-earth` },

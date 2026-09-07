@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import ComplianceBanner from "@/components/ComplianceBanner";
 
 export const metadata = {
-  title: "QPayNet — Embedded Payments · AEVION",
+  title: "QPayNet — Embedded Payments",
   description: "Встроенная платёжная инфраструктура AEVION. Кошельки, переводы, merchant API.",
 };
 

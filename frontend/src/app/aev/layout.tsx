@@ -4,7 +4,9 @@ import ComplianceBanner from "@/components/ComplianceBanner";
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "AEV — нативный токен AEVION",
+  // Без хвоста "AEVION": корневой шаблон "%s · AEVION" давал "…токен
+  // AEVION · AEVION". В openGraph ниже название оставлено как есть.
+  title: "AEV — нативный токен платформы",
   description:
     "AEV эмитится не по принципу traditional coins. 8 движков: Play, Compute, Stewardship, Curation, Mentorship, Streak, Network, Insight. Хард-кап 21M, marketplace + 19 quests + tokenomics page.",
   metadataBase: new URL(SITE),

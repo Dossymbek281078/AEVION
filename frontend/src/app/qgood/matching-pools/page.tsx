@@ -9,7 +9,7 @@ type TFn = (key: string, vars?: Record<string, string | number>) => string;
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "QGood Matching Pools · AEVION",
+  title: "QGood Matching Pools",
   description:
     "Active matching pools auto-match donations across QGood campaigns. Audit-trail through QRight + VeilNetX ledger.",
   alternates: { canonical: "https://aevion.app/qgood/matching-pools" },

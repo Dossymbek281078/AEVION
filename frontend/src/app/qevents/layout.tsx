@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "QEvents — Events Platform | AEVION",
+  title: "QEvents — Events Platform",
   description: "Discover and attend tech conferences, hackathons, workshops and networking events in the AEVION ecosystem.",
   openGraph: {
     title: "QEvents — Events Platform",

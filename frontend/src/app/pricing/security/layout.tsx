@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Безопасность и соответствие требованиям — AEVION",
+  title: "Безопасность и соответствие требованиям",
   description:
     "SOC 2 Type II, GDPR, 152-ФЗ, PCI DSS. Шифрование, контроль доступа, аудит, BCP и безопасная разработка. Узнайте, как AEVION защищает ваши данные.",
   openGraph: {

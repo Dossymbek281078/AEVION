@@ -5,7 +5,7 @@ import { getApiBase } from "@/lib/apiBase";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "QMaskCard Dashboard · AEVION",
+  title: "QMaskCard Dashboard",
   description: "Виртуальные платёжные карты — общая статистика и активность.",
   robots: { index: false, follow: false },
 };

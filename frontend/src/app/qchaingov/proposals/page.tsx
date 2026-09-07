@@ -5,7 +5,7 @@ import { getApiBase } from "@/lib/apiBase";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "QChainGov Proposals · AEVION",
+  title: "QChainGov Proposals",
   description: "Open proposals for AEVION ecosystem governance — vote your stake.",
   alternates: { canonical: "https://aevion.app/qchaingov/proposals" },
   robots: { index: true, follow: true },

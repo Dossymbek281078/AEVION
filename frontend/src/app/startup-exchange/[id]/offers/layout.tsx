@@ -14,7 +14,8 @@ import type { Metadata } from "next";
  * be indexed.
  */
 export const metadata: Metadata = {
-  title: "Предложения по заявке · Биржа стартапов AEVION",
+  // «AEVION» в хвосте не пишем: корневой шаблон добавляет "· AEVION".
+  title: "Предложения по заявке · Биржа стартапов",
   robots: { index: false, follow: false, nocache: true },
   referrer: "no-referrer",
 };

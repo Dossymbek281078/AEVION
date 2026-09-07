@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "Constitution — World-System Design Lab · AEVION",
+  title: "Constitution — World-System Design Lab",
   description:
     "8 ползунков → 10 исторических режимов. Лаборатория устройства мира: настрой пол снизу, верховенство закона, ротацию, прозрачность и увидь, в какой регим скатывается общество. Open-source + QSign-подписанные сценарии.",
   alternates: {

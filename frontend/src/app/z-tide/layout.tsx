@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "Z-Tide — Energy & Emotion Currency · AEVION",
+  title: "Z-Tide — Energy & Emotion Currency",
   description:
     "Research-проект: концептуальная валюта, привязанная к энергозатратам и социальному вкладу. Параллельный экспериментальный слой к AEV.",
   alternates: { canonical: `${SITE}/z-tide` },

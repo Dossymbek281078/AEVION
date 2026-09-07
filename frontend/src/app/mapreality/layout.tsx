@@ -5,7 +5,7 @@ import { ModuleMaturity } from "@/components/ModuleMaturity";
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "MapReality — Map of Real Needs · AEVION",
+  title: "MapReality — Map of Real Needs",
   description:
     "Карта реальных событий и потребностей: сигналы граждан с гео-привязкой, QSign-аудит источников, open API для сторонних визуализаций.",
   alternates: { canonical: `${SITE}/mapreality` },

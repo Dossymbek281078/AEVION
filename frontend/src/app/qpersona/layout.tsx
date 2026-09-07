@@ -6,7 +6,7 @@ import { ModuleMaturity } from "@/components/ModuleMaturity";
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "QPersona — AI Personality Twin · AEVION",
+  title: "QPersona — AI Personality Twin",
   description:
     "Создайте AI-двойника по вашим текстам/голосу/решениям. Делегируйте рутинные коммуникации, сохраняя свой стиль.",
   alternates: { canonical: `${SITE}/qpersona` },

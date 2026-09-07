@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   // Было «Privacy Proxy + Tor-routing». Собственный реестр модулей говорит обратное:
   // moduleRuntime.ts — «Tor-прокси остаётся roadmap Q4'26 (waitlist)», projects.ts —
   // «Tor-proxy roadmap Q4 2026». Живёт сканер раскрытия и утечек, он и в заголовке.
-  title: "VeilNetX — Privacy Exposure Scanner · AEVION",
+  title: "VeilNetX — Privacy Exposure Scanner",
   description:
     "Privacy-сканер: что ваш запрос раскрывает серверу (IP, гео, User-Agent, Client-Hints) и какие утечки даёт браузер (WebRTC, энтропия отпечатка). Без логов, без email, без KYC. Tor-прокси — в плане на Q4 2026.",
   alternates: { canonical: `${SITE}/veilnetx` },

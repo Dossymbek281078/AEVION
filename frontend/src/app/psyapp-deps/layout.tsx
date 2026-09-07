@@ -6,7 +6,7 @@ import { ModuleMaturity } from "@/components/ModuleMaturity";
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "PsyApp — Dependencies Exit · AEVION",
+  title: "PsyApp — Dependencies Exit",
   description:
     "Платформа выхода из зависимостей: ML trigger-детекция, анонимные группы поддержки, профилактика срывов, эскалация к QGood-специалисту.",
   alternates: { canonical: `${SITE}/psyapp-deps` },

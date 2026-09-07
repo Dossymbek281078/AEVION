@@ -40,7 +40,9 @@ async function loadTransparency(): Promise<TransparencyView | null> {
 }
 
 export const metadata: Metadata = {
-  title: "Planet transparency — AEVION",
+  // Без хвоста «— AEVION»: корневой шаблон "%s · AEVION" добавляет его сам.
+  // В openGraph ниже он остаётся — там шаблона нет.
+  title: "Planet transparency",
   description:
     "Public aggregate stats for the AEVION Planet certificate registry: total issued, active vs revoked, by revocation reason and artifact type.",
   // СВОЙ canonical: без него страница наследует адрес раздела из его макета

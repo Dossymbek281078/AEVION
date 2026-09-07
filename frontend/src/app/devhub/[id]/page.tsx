@@ -82,7 +82,7 @@ const PODPIS_VKLADKI: Record<Vkladka, string> = {
 // словарь IDE (~400 строк) ждёт языкового решения основателя; здесь
 // НАМЕРЕННО только замеренный поимённо остаток пути новичка (проба
 // en-newcomer-probe, 06.09.2026: 66 знаков до генерации + тосты после).
-const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; syntaxWarn: string; memoryWarn: string; runCost: string; runTokens: string; stCalling: string; stWriting: string; stContinue: string; stSyntax: string; stSelfFix: string; stSaving: string; busyDb: string; busyDesign: string; busyGen: string; busyUndo: string; busyPublish: string; busyPull: string }> = {
+const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; syntaxWarn: string; memoryWarn: string; runCost: string; runTokens: string; stCalling: string; stWriting: string; stContinue: string; stSyntax: string; stSelfFix: string; stSaving: string; busyDb: string; busyDesign: string; busyGen: string; busyUndo: string; busyPublish: string; busyPull: string; busyDeploy: string; busyPlan: string; busyImg: string; busySave: string; busyApply: string; busyPush: string; busySync: string; busyCompose: string; busySend: string; busyTranslate: string; busyCreate: string; busyPreview: string; busyUpload: string; busyStt: string; busyAgent: string; busySetup: string }> = {
   ru: {
     ph: "Опишите, что нужно построить…\nНапример: «REST API с входом пользователей и ручкой товаров»",
     created: "Создано файлов",
@@ -96,6 +96,11 @@ const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; s
     stSaving: "💾 Сохраняю файлы…",
     busyDb: "Создаю базу…", busyDesign: "Проектирую…", busyGen: "Генерируем…",
     busyUndo: "Отменяем…", busyPublish: "⏳ Публикуем…", busyPull: "Забираю из репозитория…",
+    busyDeploy: "Выкатываю…", busyPlan: "Продумываю…", busyImg: "Генерирую…",
+    busySave: "Сохраняю…", busyApply: "Применяю…", busyPush: "Отправляю…", busySync: "Синхронизирую…",
+    busyCompose: "Сочиняю…", busySend: "Отправляю…", busyTranslate: "Перевожу…",
+    busyCreate: "Создаю…", busyPreview: "Слушаю образец…", busyUpload: "Загружаю…",
+    busyStt: "Расшифровываю…", busyAgent: "Выполняю сценарий…", busySetup: "Настраиваю…",
     noChanges: "Без изменений",
     syntaxWarn: "не прошли проверку синтаксиса — просмотрите перед выкаткой",
     memoryWarn: "но база была недоступна — они пока в памяти и могут пропасть при перезапуске. Сохраните копию.",
@@ -113,6 +118,11 @@ const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; s
     stSaving: "💾 Saving files…",
     busyDb: "Creating the database…", busyDesign: "Designing…", busyGen: "Generating…",
     busyUndo: "Undoing…", busyPublish: "⏳ Publishing…", busyPull: "Pulling…",
+    busyDeploy: "Deploying…", busyPlan: "Thinking it through…", busyImg: "Generating…",
+    busySave: "Saving…", busyApply: "Applying…", busyPush: "Pushing…", busySync: "Syncing…",
+    busyCompose: "Composing…", busySend: "Sending…", busyTranslate: "Translating…",
+    busyCreate: "Creating…", busyPreview: "Previewing…", busyUpload: "Uploading…",
+    busyStt: "Transcribing…", busyAgent: "Running the scenario…", busySetup: "Setting up…",
     noChanges: "No changes",
     syntaxWarn: "failed the syntax check — review before deploying",
     memoryWarn: "but the database was unavailable — they live in memory for now and may vanish on restart. Save a copy.",
@@ -130,6 +140,11 @@ const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; s
     stSaving: "💾 Файлдарды сақтап жатырмын…",
     busyDb: "Дерекқор жасалуда…", busyDesign: "Жобалануда…", busyGen: "Генерациялануда…",
     busyUndo: "Болдырылмауда…", busyPublish: "⏳ Жариялануда…", busyPull: "Репозиторийден алынуда…",
+    busyDeploy: "Жариялануда…", busyPlan: "Ойластырылуда…", busyImg: "Генерациялануда…",
+    busySave: "Сақталуда…", busyApply: "Қолданылуда…", busyPush: "Жіберілуде…", busySync: "Синхрондалуда…",
+    busyCompose: "Шығарылуда…", busySend: "Жіберілуде…", busyTranslate: "Аударылуда…",
+    busyCreate: "Жасалуда…", busyPreview: "Үлгі тыңдалуда…", busyUpload: "Жүктелуде…",
+    busyStt: "Мәтінге айналдырылуда…", busyAgent: "Сценарий орындалуда…", busySetup: "Бапталуда…",
     noChanges: "Өзгеріс жоқ",
     syntaxWarn: "синтаксис тексеруінен өтпеді — жариялау алдында қараңыз",
     memoryWarn: "бірақ дерекқор қолжетімсіз болды — олар әзірге жадта және қайта іске қосқанда жоғалуы мүмкін. Көшірмесін сақтаңыз.",
@@ -3787,7 +3802,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
               opacity: isCapabilityBlocked(caps, "railway") ? 0.45 : 1,
             }}
           >
-            {deploying ? "Выкатываю..." : "Выкатить"}
+            {deploying ? GL.busyDeploy : "Выкатить"}
           </button>
           <button
             onClick={deployToVercel}
@@ -4305,7 +4320,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             cursor: planning ? "not-allowed" : "pointer",
                           }}
                         >
-                          {planning ? "Продумываю..." : "Продумать замысел"}
+                          {planning ? GL.busyPlan : "Продумать замысел"}
                         </button>
                         {plan && (
                           <div style={{ background: "#f8fafc", borderRadius: 8, padding: 10 }}>
@@ -4580,7 +4595,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               cursor: visualEditImgBusy || !visualEditImgPrompt.trim() ? "not-allowed" : "pointer",
                             }}
                           >
-                            {visualEditImgBusy ? "Генерирую..." : "🎨 Сгенерировать и заменить картинку"}
+                            {visualEditImgBusy ? GL.busyImg : "🎨 Сгенерировать и заменить картинку"}
                           </button>
                         </div>
                       ) : (
@@ -4646,7 +4661,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: visualEditSaving ? "not-allowed" : "pointer",
                         }}
                       >
-                        {visualEditSaving ? "Сохраняю..." : "Сохранить"}
+                        {visualEditSaving ? GL.busySave : "Сохранить"}
                       </button>
                       )}
                       <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -4666,7 +4681,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             cursor: visualEditAiBusy || !visualEditAiPrompt.trim() ? "not-allowed" : "pointer",
                           }}
                         >
-                          {visualEditAiBusy ? "Применяю..." : "Применить через ИИ"}
+                          {visualEditAiBusy ? GL.busyApply : "Применить через ИИ"}
                         </button>
                       </div>
                     </>
@@ -4839,7 +4854,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         cursor: vercelDeploying ? "not-allowed" : "pointer",
                       }}
                     >
-                      {vercelDeploying ? "Выкатываю..." : "Выкатить на Vercel"}
+                      {vercelDeploying ? GL.busyDeploy : "Выкатить на Vercel"}
                     </button>
                   </div>
 
@@ -4994,7 +5009,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         opacity: isCapabilityBlocked(caps, "github") ? 0.45 : 1,
                       }}
                     >
-                      {githubPushing ? "Отправляю..." : project?.repoUrl ? "Отправить (обновить репозиторий)" : "Отправить в GitHub (создать репозиторий)"}
+                      {githubPushing ? GL.busyPush : project?.repoUrl ? "Отправить (обновить репозиторий)" : "Отправить в GitHub (создать репозиторий)"}
                     </button>
                     {project?.repoUrl && (
                       <button
@@ -5006,7 +5021,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: githubSyncing ? "not-allowed" : "pointer",
                         }}
                       >
-                        {githubSyncing ? "Синхронизирую..." : "Синхронизировать ветки"}
+                        {githubSyncing ? GL.busySync : "Синхронизировать ветки"}
                       </button>
                     )}
                   </div>
@@ -5352,7 +5367,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: (mediaTtsLoading || !mediaTtsText.trim()) ? "not-allowed" : "pointer",
                         }}
                       >
-                        {mediaTtsLoading ? "Генерирую..." : "Озвучить"}
+                        {mediaTtsLoading ? GL.busyImg : "Озвучить"}
                       </button>
                     </div>
                   )}
@@ -5429,7 +5444,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                   border: "none", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer",
                                 }}
                               >
-                                {cfImgUploading ? "Uploading..." : "→ Permanent CDN URL"}
+                                {cfImgUploading ? GL.busyUpload : "→ Permanent CDN URL"}
                               </button>
                             )}
                             <button
@@ -5456,7 +5471,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: (imgLoading || !imgPrompt.trim()) ? "not-allowed" : "pointer",
                         }}
                       >
-                        {imgLoading ? "Генерирую..." : "Сделать картинку"}
+                        {imgLoading ? GL.busyImg : "Сделать картинку"}
                       </button>
                       <span />
                     </div>
@@ -5508,7 +5523,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: (sfxLoading || !sfxText.trim()) ? "not-allowed" : "pointer",
                         }}
                       >
-                        {sfxLoading ? "Генерирую..." : "Сделать звук"}
+                        {sfxLoading ? GL.busyImg : "Сделать звук"}
                       </button>
                     </div>
                   )}
@@ -5559,7 +5574,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: (musicLoading || !musicPrompt.trim()) ? "not-allowed" : "pointer",
                         }}
                       >
-                        {musicLoading ? "Сочиняю..." : "Сочинить музыку"}
+                        {musicLoading ? GL.busyCompose : "Сочинить музыку"}
                       </button>
                       <span />
                     </div>
@@ -5619,7 +5634,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: (emailLoading || !emailTo.trim() || !emailSubject.trim() || !emailBody.trim()) ? "not-allowed" : "pointer",
                         }}
                       >
-                        {emailLoading ? "Отправляю..." : "Отправить письмо"}
+                        {emailLoading ? GL.busySend : "Отправить письмо"}
                       </button>
                     </div>
                   )}
@@ -5737,7 +5752,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               cursor: disabled ? "not-allowed" : "pointer",
                             }}
                           >
-                            {payLoading ? "Creating..." : payProvider === "gumroad" ? "Get Gumroad Checkout Link" : "Create Payment Link"}
+                            {payLoading ? GL.busyCreate : payProvider === "gumroad" ? "Get Gumroad Checkout Link" : "Create Payment Link"}
                           </button>
                         );
                       })()}
@@ -5800,7 +5815,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: (trLoading || !trText.trim()) ? "not-allowed" : "pointer",
                         }}
                       >
-                        {trLoading ? "Перевожу..." : "Перевести"}
+                        {trLoading ? GL.busyTranslate : "Перевести"}
                       </button>
 
                       {/* File translate */}
@@ -5924,7 +5939,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
                           cursor: bulkLoading ? "not-allowed" : "pointer",
                         }}>
-                        {bulkLoading ? "Перевожу..." : `Перевести ${bulkPaths.length} × ${bulkLangs.length}`}
+                        {bulkLoading ? GL.busyTranslate : `Перевести ${bulkPaths.length} × ${bulkLangs.length}`}
                       </button>
 
                       {bulkSummary && (
@@ -6077,7 +6092,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
                           cursor: tplBuilderLoading ? "not-allowed" : "pointer",
                         }}>
-                        {tplBuilderLoading ? "Создаю..." : "Создать шаблон"}
+                        {tplBuilderLoading ? GL.busyCreate : "Создать шаблон"}
                       </button>
                     </div>
                   )}
@@ -6120,7 +6135,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: (smsLoading || !smsRecipient.trim() || !smsContent.trim()) ? "not-allowed" : "pointer",
                         }}
                       >
-                        {smsLoading ? "Отправляю..." : "Отправить SMS"}
+                        {smsLoading ? GL.busySend : "Отправить SMS"}
                       </button>
                     </div>
                   )}
@@ -6162,7 +6177,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                         }}
                       >
                         <span style={{ fontSize: 14 }}>💬</span>
-                        {waLoading ? "Отправляю..." : "Отправить в WhatsApp"}
+                        {waLoading ? GL.busySend : "Отправить в WhatsApp"}
                       </button>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
                          Шаблон должен быть заранее одобрен WhatsApp.
@@ -6218,7 +6233,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             cursor: (voicePreviewLoading || !voiceCloneFile) ? "not-allowed" : "pointer",
                           }}
                         >
-                          {voicePreviewLoading ? "Previewing..." : "🎧 Послушать голос (без сохранения)"}
+                          {voicePreviewLoading ? GL.busyPreview : "🎧 Послушать голос (без сохранения)"}
                         </button>
                         <button
                           onClick={cloneVoice}
@@ -6230,7 +6245,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             cursor: (voiceCloneLoading || !voiceCloneName.trim() || !voiceCloneFile || !voicePreviewOk) ? "not-allowed" : "pointer",
                           }}
                         >
-                          {voiceCloneLoading ? "Saving..." : "✓ Save voice to account"}
+                          {voiceCloneLoading ? GL.busySave : "✓ Save voice to account"}
                         </button>
                       </div>
                       <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
@@ -6278,7 +6293,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           cursor: (sttLoading || !sttFile) ? "not-allowed" : "pointer",
                         }}
                       >
-                        {sttLoading ? "Расшифровываю..." : "Расшифровать"}
+                        {sttLoading ? GL.busyStt : "Расшифровать"}
                       </button>
                     </div>
                   )}
@@ -6475,7 +6490,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       cursor: (agentRunning || agentSteps.length === 0) ? "not-allowed" : "pointer",
                     }}
                   >
-                    {agentRunning ? "Выполняю сценарий..." : `🤖 Запустить сценарий из ${agentSteps.length} шагов`}
+                    {agentRunning ? GL.busyAgent : `🤖 Запустить сценарий из ${agentSteps.length} шагов`}
                   </button>
                 </div>
               )}
@@ -6551,7 +6566,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           }}
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M14.97 16.95L10 13.87V7h2v5.76l4.03 2.49-1.06 1.7zM12 3a9 9 0 109 9 9 9 0 00-9-9z"/></svg>
-                          {domainSetupLoading ? "Настраиваю..." : "Настроить DNS автоматически (Cloudflare)"}
+                          {domainSetupLoading ? GL.busySetup : "Настроить DNS автоматически (Cloudflare)"}
                         </button>
                         {domainSetupMsg && (
                           <div style={{
@@ -6571,7 +6586,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     disabled={savingSettings}
                     style={{ padding: "9px 18px", background: savingSettings ? "#99f6e4" : "#0d9488", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: savingSettings ? "not-allowed" : "pointer", alignSelf: "flex-start" }}
                   >
-                    {savingSettings ? "Сохраняю..." : "Сохранить настройки"}
+                    {savingSettings ? GL.busySave : "Сохранить настройки"}
                   </button>
 
                   {/* Collaborators — Studio Pro */}

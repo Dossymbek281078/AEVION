@@ -58,7 +58,7 @@ const CURRENCY = new Intl.NumberFormat("en-US", {
 /** Английские тексты витрины по id каталога. Цен здесь нет и быть не может. */
 export const EN_TEXTS: Record<
   string,
-  { format: string; desc: string; includes?: string[]; notice?: string; badge?: string }
+  { format: string; desc: string; includes?: string[]; notice?: string; badge?: string; titleEn?: string }
 > = {
   // ── Подписки ──
   xpxzam: {
@@ -86,10 +86,12 @@ export const EN_TEXTS: Record<
   // ── Гайды и книги ──
   oijxmq: {
     badge: "NEW",
+    titleEn: "AEVION Longevity Protocol — 12 weeks",
     format: "PDF · 9 pages · Russian",
     desc: "A measure → intervene → re-measure cycle: a 26-marker panel with target ranges, 20 interventions graded A/B/C/E by evidence, a 12-week timeline and a results table. Includes what is overrated (NMN/NR, telomeres, “wave” gadgets). Russian-language guide.",
   },
   tmuyxw: {
+    titleEn: "The Anti-Grey Protocol — Russian edition",
     format: "PDF · guide · Russian",
     desc: "The science of why hair greys and what actually slows it — no hype. Russian-language guide.",
   },
@@ -98,14 +100,17 @@ export const EN_TEXTS: Record<
     desc: "The evidence-first science of pigment aging and what actually slows it.",
   },
   ghvzq: {
+    titleEn: "Gratitude ∞ Forever Young — Complete Pack",
     format: "PDF + EPUB + audio · book",
     desc: "A 90-day gratitude-and-youth practice: 4 minutes a day. Book, audiobook and materials in one pack.",
   },
   lelzw: {
+    titleEn: "Gratitude ∞ Forever Young — Book + Audiobook",
     format: "PDF + EPUB + audio",
     desc: "The book plus the full audio version — for listening on the move.",
   },
   orcfbo: {
+    titleEn: "Gratitude ∞ Forever Young — Book (PDF + EPUB)",
     format: "PDF + EPUB",
     desc: "The book text only. The most affordable way in.",
   },
@@ -170,7 +175,7 @@ function Card({ p, channel }: { p: Product; channel: string | null }) {
         <span style={styles.format}>{format}</span>
       </div>
 
-      <h3 style={styles.cardTitle}>{p.title}</h3>
+      <h3 style={styles.cardTitle}>{en?.titleEn ?? p.title}</h3>
       <p style={styles.cardDesc} lang={descLang}>
         {desc}
       </p>

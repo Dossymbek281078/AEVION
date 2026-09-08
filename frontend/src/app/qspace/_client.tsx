@@ -1092,7 +1092,17 @@ const styles: Record<string, React.CSSProperties> = {
   estTable: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
   estTd: { padding: "3px 6px 3px 0", borderBottom: "1px solid #eee9df", color: "#4a453d" },
   estTdNum: { padding: "3px 0", borderBottom: "1px solid #eee9df", textAlign: "right", whiteSpace: "nowrap" },
-  canvasWrap: { flex: "1 1 560px", minWidth: 300 },
+  // 3D-вид закреплён: каталог мебели длиннее вида, и без этого человек,
+  // прокрутив до кнопок, не видит, что он добавляет в сцену. Отступ считается
+  // от высоты шапки сайта — она разная на телефоне и десктопе, поэтому число
+  // здесь не годится (переменную публикует SiteHeader).
+  canvasWrap: {
+    flex: "1 1 560px",
+    minWidth: 300,
+    position: "sticky",
+    top: "calc(var(--aevion-header-h, 0px) + 8px)",
+    alignSelf: "flex-start",
+  },
   canvas: {
     width: "100%", height: "min(70vh, 640px)",
     border: "1px solid #e2ddd2", borderRadius: 10, overflow: "hidden",

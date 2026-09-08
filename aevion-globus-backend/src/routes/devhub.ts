@@ -6066,8 +6066,20 @@ devhubRouter.post("/media/translate", dhCostlyLimit("dhtranslate"), async (req, 
           accountUrl: "https://www.deepl.com/account/usage",
         });
       }
+      // Сырое тело ответа поставщика наружу НЕ отдаём: 300 знаков чужого JSON
+      // граница показа не узнаёт (она ловит имена переменных и панели), и
+      // покупатель читал бы его в скобках после «Не удалось перевести».
+      // Ветка 456 выше — отдельный случай: её текст называет DEEPL_API_KEY, и
+      // именно поэтому граница его узнаёт и прячет, а подробность остаётся нам.
+      // Здесь такой приметы нет, поэтому категорию выбираем сами.
+      //
+      // Код ответа тоже свой: 502 — «посредник ответил ошибкой». Пропускать
+      // наружу статус поставщика значит выдавать его семантику за нашу.
       noteProviderFailure("translate", `DeepL HTTP ${r.status}: ${errText.slice(0, 100)}`);
-      return res.status(r.status).json({ error: `DeepL error: ${errText.slice(0, 300)}` });
+      return res.status(502).json({
+        error: "Translation provider returned an error — we know about it, try again later",
+        code: "provider_error",
+      });
     }
     const data = await r.json() as { translations: Array<{ text: string; detected_source_language: string }> };
     const first = data.translations?.[0];

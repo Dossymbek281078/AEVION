@@ -107,6 +107,7 @@ import { ldClones, svClones, fetchLichessGames, analyzeGames, profileToShareCode
 import { generateReel, pickHighlights, estimateReelSeconds } from "./reelsGen";
 import { GHOSTS, ghostBookMove, pickGhostStyleMove, type Ghost, type GhostId } from "./ghostMode";
 import { todayHunt, applyGuess, showHint, giveUp, hintFor, simulatedLeaderboard, BRILLIANCIES, type BrilliancyHunt, type BrilliancyState } from "./brilliancy";
+import { useCcI18n } from "./i18n";
 import { getTopWithMe, getFullBoardAroundMe, findMyRank, CATEGORY_LABEL, type LbCategory, type LbEntry } from "./leaderboards";
 import { createTierPaymentRequest, pollPaymentRequest, verifyPaymentRequest, type ChessyTier } from "./billing";
 import MultiPanel from "./MultiPanel";
@@ -1055,6 +1056,10 @@ export default function CyberChessPage(){
   // прыгают, ходы / премувы / drag не работают стабильно.
   const[mounted,sMounted]=useState(false);
   useEffect(()=>{sMounted(true)},[]);
+  // Язык модуля (следует за переключателем сайта через loadLocale). Полный
+  // рендер доски за !mounted-гейтом (ниже) — до гидрации ничего не рисуем,
+  // поэтому синхронный t() не даёт вспышки ru→en на первом экране.
+  const cc=useCcI18n();
   const[game,setGame]=useState(()=>new Chess());
   const[bk,sBk]=useState(0);
   const[boardTheme,sBoardTheme]=useState(()=>{try{const v=parseInt(localStorage.getItem("aevion_chess_theme_v1")||"0");return isNaN(v)||v<0||v>=BOARD_THEMES.length?0:v}catch{return 0}});
@@ -6477,11 +6482,12 @@ export default function CyberChessPage(){
                     const sel=activeCat===c;
                     const tone={Bullet:"#dc2626",Blitz:"#f59e0b",Rapid:"#10b981",Custom:CC.accent}[c];
                     const emoji={Bullet:"💨",Blitz:"⚡",Rapid:"🕐",Custom:"⚙"}[c];
-                    // Подписи по-русски В КОДЕ, а не машинным переводом на лету:
-                    // 21.08 на телефоне стояло «Custom», на десктопе в ту же
-                    // минуту — «Пользовательский». Перевод интерфейсной метки
-                    // асинхронный, и до него человек видит английское слово.
-                    const label={Bullet:"Пуля",Blitz:"Блиц",Rapid:"Рапид",Custom:"Свой"}[c];
+                    // Подписи через СИНХРОННЫЙ словарь (cc.t → tFor), а не
+                    // машинный перевод на лету: 21.08 асинхронный перевод давал
+                    // вспышку («Custom»→«Пользовательский»). Синхронный t() +
+                    // !mounted-гейт вспышки не дают и следуют выбранному языку
+                    // (08.09: при en-куке метки оставались русскими — хардкод).
+                    const label={Bullet:cc.t("tc.bullet"),Blitz:cc.t("tc.blitz"),Rapid:cc.t("tc.rapid"),Custom:cc.t("tc.custom")}[c];
                     return <button key={c} onClick={()=>{
                       if(c==="Custom"){sUseCustom(true);sShowCustom(true);return}
                       sUseCustom(false);

@@ -1,7 +1,7 @@
 import { describe, test, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { COMPARISON_ROWS, capabilityIsKnownOff } from "../capabilityRows";
+import { COMPARISON_ROWS, capabilityIsKnownOff, comparisonTotalUsd, PRICES_CHECKED_AT } from "../capabilityRows";
 import { DEVHUB_DICT } from "../i18n";
 
 /**
@@ -51,6 +51,39 @@ describe("таблица сравнения не спорит с полосой 
   test("отметка есть во всех трёх языках", () => {
     for (const [lang, dict] of Object.entries(DEVHUB_DICT)) {
       expect((dict as Record<string, string>)["cmp.offNow"], `cmp.offNow пуст в ${lang}`).toBeTruthy();
+    }
+  });
+});
+
+describe("цены конкурентов — сверенные, а итог считается из строк", () => {
+  test("итог равен сумме строк, а не отдельному числу в разметке", () => {
+    expect(comparisonTotalUsd()).toBe(COMPARISON_ROWS.reduce((s, r) => s + r.usd, 0));
+    expect(PAGE, "итог снова зашит рядом со строками — разойдётся при первой правке").not.toContain("≈ $162");
+    expect(PAGE).toContain("comparisonTotalUsd()");
+  });
+
+  test("у каждой строки цена числом и она положительная", () => {
+    for (const row of COMPARISON_ROWS) {
+      expect(typeof row.usd, `${row.rival}: цена не число`).toBe("number");
+      expect(row.usd, `${row.rival}: цена не положительная`).toBeGreaterThan(0);
+    }
+  });
+
+  test("цена Suno соответствует сверке 08.09.2026", () => {
+    // Стояло $10 — столько тариф стоил раньше. На день сверки Suno Pro стоит $8,
+    // то есть мы завышали конкурента В СВОЮ ПОЛЬЗУ. Такое находят и предъявляют
+    // публично, и одна такая цифра дороже всей таблицы.
+    const suno = COMPARISON_ROWS.find((r) => r.rival.startsWith("Suno"));
+    expect(suno?.usd).toBe(8);
+  });
+
+  test("дата сверки названа и совпадает со сноской во всех языках", () => {
+    expect(PRICES_CHECKED_AT).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    const year = PRICES_CHECKED_AT.slice(0, 4);
+    for (const [lang, dict] of Object.entries(DEVHUB_DICT)) {
+      const note = (dict as Record<string, string>)["value.priceNote"];
+      expect(note, `сноска о ценах пуста в ${lang}`).toBeTruthy();
+      expect(note, `сноска в ${lang} не называет год сверки`).toContain(year);
     }
   });
 });

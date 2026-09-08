@@ -70,6 +70,15 @@ function textureFor(id: string, roomW: number, roomH: number): THREE.Texture | n
   return t;
 }
 
+/**
+ * Предел размера загружаемого файла, байт.
+ *
+ * 40 МБ с запасом: чертёж этажа в DXF — единицы мегабайт, векторный PDF
+ * столько же, скан плана в 300 dpi — от силы 15. Файл крупнее почти всегда
+ * означает не тот файл: подшивку чертежей или фотографии внутри.
+ */
+export const MAX_FILE_BYTES = 40 * 1024 * 1024;
+
 const CONCRETE = 0xb6b0a6;
 const SCREED = 0x9b958b;
 
@@ -651,6 +660,21 @@ export default function QSpaceClient() {
 
   const onFile = useCallback(async (f: File) => {
     setPdfPending(null);
+    // Предел размера — ПЕРЕД чтением, а не после. Дальше по всем трём веткам
+    // файл читается целиком в память (`f.text()`, `f.arrayBuffer()`), и на
+    // папке гигабайтных сканов вкладка просто повисла бы без единого слова.
+    // Отказ по размеру честнее зависания: человек видит, что не так, и
+    // понимает, что делать.
+    if (f.size > MAX_FILE_BYTES) {
+      setWarnings([
+        `Файл ${(f.size / 1024 / 1024).toFixed(0)} МБ — это больше предела `
+        + `${MAX_FILE_BYTES / 1024 / 1024} МБ. Планы столько не весят: обычно `
+        + "внутри фотографии или вся подшивка чертежей. Сохраните из AutoCAD "
+        + "только нужный лист или уменьшите картинку.",
+      ]);
+      setUnitLabel("");
+      return;
+    }
     if (/^image\//.test(f.type) || /\.(png|jpe?g|webp|bmp)$/i.test(f.name)) {
       setRasterUrl((prev) => {
         if (prev) URL.revokeObjectURL(prev);

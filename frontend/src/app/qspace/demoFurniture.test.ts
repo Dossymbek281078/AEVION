@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import { CATALOG, demoFurniture, demoPlacedSnapshots } from "./furniture";
 import { demoPlan } from "./planModel";
+import { MAX_FILE_BYTES } from "./_client";
 import { findRooms } from "./rooms";
 import { heatingPlan } from "./heating";
 import { checkClearance, type Placed } from "./clearance";
@@ -310,5 +311,51 @@ describe("сообщения объявляются экранному дикт�
                                client.indexOf("{pdfPending && ("));
     expect(кусок.length, "срез пуст — проверка смотрит в пустоту").toBeGreaterThan(80);
     expect(кусок).toContain("warnings.map");
+  });
+});
+
+describe("огромный файл отвергается ДО чтения в память", () => {
+  // По всем трём веткам загрузки файл читается целиком (f.text(),
+  // f.arrayBuffer()). Без предела вкладка на гигабайтном скане повисла бы
+  // молча — а зависание хуже отказа: человек не знает, ждать ему или нет.
+  const client = readFileSync(path.join(__dirname, "_client.tsx"), "utf8");
+  // ⚠️ Комментарии ВЫРЕЗАЮТСЯ: мой же пояснительный текст рядом с проверкой
+  // упоминает `f.text()` и `f.arrayBuffer()` — и первая версия сторожа нашла
+  // «чтение файла» в собственном объяснении, раньше самой проверки. Четвёртый
+  // случай этого за день; сторож обязан судить о КОДЕ, а не о рассказе о нём.
+  const голова = client
+    .slice(client.indexOf("const onFile = useCallback"),
+           client.indexOf("const applyPdfScale"))
+    .replace(/\/\/[^\n]*/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+
+  it("проверка размера стоит ПЕРЕД чтением файла", () => {
+    const iРазмер = голова.indexOf("f.size > MAX_FILE_BYTES");
+    const iЧтение = Math.min(
+      ...["f.text()", "f.arrayBuffer()", "createObjectURL(f)"]
+        .map((k) => голова.indexOf(k))
+        .filter((i) => i >= 0),
+    );
+    expect(iРазмер, "проверки размера нет вовсе").toBeGreaterThan(0);
+    expect(iРазмер, "файл читается раньше, чем проверен его размер")
+      .toBeLessThan(iЧтение);
+  });
+
+  it("предел разумен: план в него влезает, подшивка — нет", () => {
+    expect(MAX_FILE_BYTES).toBeGreaterThan(15 * 1024 * 1024); // скан 300 dpi
+    expect(MAX_FILE_BYTES).toBeLessThan(100 * 1024 * 1024);
+  });
+
+  it("отказ называет и размер файла, и предел", () => {
+    // «файл слишком большой» без чисел не говорит человеку, что делать
+    expect(голова).toMatch(/МБ — это больше предела/);
+    expect(голова).toMatch(/f\.size \/ 1024 \/ 1024/);
+  });
+
+  it("контроль прибора: вырезалка комментариев не съела сам код", () => {
+    // иначе «проверка стоит первой» могло бы держаться на пустом срезе
+    expect(голова, "срез пуст — сторож смотрит в пустоту").toContain("f.text()");
+    expect(голова).toContain("MAX_FILE_BYTES");
+    expect(голова, "комментарии не вырезаны").not.toMatch(/\/\/ /);
   });
 });

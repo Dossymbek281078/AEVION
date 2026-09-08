@@ -18,6 +18,23 @@ interface Props {
 
 const SUNS: SunLoad[] = ["shade", "normal", "sunny"];
 
+/**
+ * Число людей из поля ввода.
+ *
+ * ⚠️ `Number(v) || 0` здесь НЕЛЬЗЯ, хотя так и было написано в первой версии:
+ * очищенное поле даёт пустую строку, `Number("")` — ноль, и мощность молча
+ * падает на 100 Вт за каждого. Занижение в этом расчёте дороже завышения:
+ * слабый кондиционер работает без остановки и всё равно не охлаждает. Поэтому
+ * непонятный ввод откатывается к ОДНОМУ человеку — к умолчанию, а не к нулю.
+ * Ноль остаётся возможным, но только если его набрали намеренно.
+ */
+export function peopleFrom(v: string): number {
+  if (v.trim() === "") return 1;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 1;
+  return Math.max(0, Math.min(10, Math.round(n)));
+}
+
 export default function CoolingPanel({ rooms }: Props) {
   const [sun, setSun] = useState<Record<number, SunLoad>>({});
   const [people, setPeople] = useState<Record<number, number>>({});
@@ -64,9 +81,7 @@ export default function CoolingPanel({ rooms }: Props) {
                       min={0}
                       max={10}
                       value={people[r.index] ?? 1}
-                      onChange={(e) =>
-                        setPeople((p) => ({ ...p, [r.index]: Number(e.target.value) || 0 }))
-                      }
+                      onChange={(e) => setPeople((p) => ({ ...p, [r.index]: peopleFrom(e.target.value) }))}
                       style={S.num}
                     />
                   </label>

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { coolingPlan, totalPickedWatt, type SunLoad } from "./cooling";
+import { peopleFrom } from "./CoolingPanel";
 import type { Room } from "./rooms";
 
 const room = (index: number, area: number): Room =>
@@ -77,5 +78,36 @@ describe("подбор сплит-системы", () => {
     const res = coolingPlan([]);
     expect(res.rooms).toEqual([]);
     expect(totalPickedWatt(res)).toBe(0);
+  });
+});
+
+describe("число людей из поля ввода", () => {
+  it("пустое поле НЕ означает ноль людей", () => {
+    // Number("") === 0, и мощность молча упала бы — занижение здесь опаснее
+    expect(peopleFrom("")).toBe(1);
+    expect(peopleFrom("   ")).toBe(1);
+  });
+
+  it("мусор откатывается к умолчанию, а не к нулю", () => {
+    for (const v of ["abc", "--", "1e", "NaN"]) {
+      expect(peopleFrom(v), `«${v}» дал не умолчание`).toBe(1);
+    }
+  });
+
+  it("намеренный ноль уважается", () => {
+    expect(peopleFrom("0")).toBe(0);
+  });
+
+  it("значение зажато сверху и снизу", () => {
+    expect(peopleFrom("99")).toBe(10);
+    expect(peopleFrom("-3")).toBe(0);
+  });
+
+  it("разница видна в мощности, а не только в числе", () => {
+    // без этого проверка про поле ввода не связана с тем, ради чего она есть
+    const need = (n: number) =>
+      coolingPlan([{ index: 1, area: 20, perimeter: 18, cx: 0, cy: 0 }], { people: { 1: n } })
+        .rooms[0].needWatt;
+    expect(need(peopleFrom(""))).toBeGreaterThan(need(0));
   });
 });

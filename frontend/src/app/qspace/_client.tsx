@@ -1270,6 +1270,22 @@ export default function QSpaceClient() {
             <p style={S.hint}>Предметов в сцене: {placed.length}</p>
           )}
 
+          {/* Раздел показывается ВСЕГДА, когда есть что проверять.
+              Прежде он появлялся только при замечаниях — и это значило, что
+              возможность, которую модуль обещает, невидима ровно тогда, когда
+              она отработала успешно: «проверено, всё хорошо» неотличимо от
+              «проверка не запускалась». Молчание — не отчёт. */}
+          {placed.length > 0 && issues.length === 0 && (
+            <>
+              <h2 style={S.h2}>Проверка расстановки</h2>
+              <p style={S.ok} role="status">
+                Замечаний нет: предметы не пересекаются, ни один не стоит перед
+                дверью и не заходит в стену, до каждой комнаты можно дойти.
+                Проверено предметов: {placed.length}.
+              </p>
+            </>
+          )}
+
           {issues.length > 0 && (
             <>
               <h2 style={S.h2}>Проверка расстановки</h2>
@@ -1460,6 +1476,10 @@ const styles: Record<string, React.CSSProperties> = {
   scaleInput: {
     width: 90, padding: "6px 8px", border: "1px solid #b8c9ae",
     borderRadius: 6, fontSize: 14,
+  },
+  ok: {
+    fontSize: 12.5, color: "#2f5d3a", background: "#eef6f0",
+    border: "1px solid #cfe3d6", borderRadius: 8, padding: "7px 10px", margin: "6px 0",
   },
   issues: {
     fontSize: 13, color: "#7a3f1f", background: "#fbeee2",

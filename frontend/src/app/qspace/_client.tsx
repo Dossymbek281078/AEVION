@@ -25,7 +25,7 @@ import { parseDxf } from "./dxf";
 import { estimatePlan } from "./estimate";
 import { planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
 import { drawMaterial, materialById, materialsFor } from "./materials";
-import { CATALOG, groups, itemById, type CatalogItem } from "./furniture";
+import { CATALOG, demoPlacedSnapshots, groups, itemById, type CatalogItem } from "./furniture";
 import { checkClearance, type Issue, type Placed } from "./clearance";
 import { findRooms } from "./rooms";
 import { floorPlanSvg } from "./floorPlanSvg";
@@ -106,7 +106,9 @@ export default function QSpaceClient() {
   const [restoreNote, setRestoreNote] = useState<string>("");
   // Восстановление возможно только после того, как сцена собрана, поэтому
   // прочитанный проект ждёт здесь.
-  const [pendingRestore, setPendingRestore] = useState<Project | null>(null);
+  // Только доставка мебели: остальные поля проекта применяются сразу, а
+  // предметы ждут, пока сцена пересоберётся под новый план.
+  const [pendingRestore, setPendingRestore] = useState<Pick<Project, "placed"> | null>(null);
   // PDF разобран, но масштаб ещё не назван человеком — план не строим.
   const [pdfPending, setPdfPending] = useState<PdfSegments | null>(null);
   // Растровый план ждёт проверки человеком: строить 3D молча по
@@ -455,6 +457,13 @@ export default function QSpaceClient() {
       );
     } else if (r.kind === "broken") {
       setWarnings([r.reason + " Показан демо-план."]);
+      setPendingRestore({ placed: demoPlacedSnapshots() });
+    } else {
+      // Ничего не сохранено — обставляем демо. Слой «декор и мебель» иначе
+      // пуст при первом заходе: человек включает флажок и не видит НИЧЕГО,
+      // а пустой слой неотличим от сломанного. Расстановка проверяется теми
+      // же сторожами, что и работа человека (demoFurniture.test.ts).
+      setPendingRestore({ placed: demoPlacedSnapshots() });
     }
     // намеренно один раз при монтировании: перечитывать сохранённое поверх
     // работы человека нельзя
@@ -902,7 +911,8 @@ export default function QSpaceClient() {
           Загрузите план — чертёж из AutoCAD (DXF), векторный PDF или просто картинку
           (JPEG, PNG, скан). QSpace построит 3D-модель с тремя слоями: черновая отделка
           с разводкой электрики и труб, чистовая отделка, декор и мебель.
-          Демо-квартира уже открыта ниже — покрутите её мышью.
+          Демо-квартира уже открыта ниже, с расставленной мебелью — покрутите её
+          мышью и попереключайте слои.
         </p>
         <p style={S.note}>
           Что это даёт и чего не даёт. Разводка кабелей и труб —{" "}
@@ -949,7 +959,12 @@ export default function QSpaceClient() {
         <button
           type="button"
           style={S.btn}
-          onClick={() => { forgetSaved(); setPlan(demoPlan()); setWarnings([]); setUnitLabel(""); }}
+          onClick={() => {
+            forgetSaved(); setPlan(demoPlan()); setWarnings([]); setUnitLabel("");
+            // «заново» значит демо ЦЕЛИКОМ: без этой строки квартира
+            // возвращалась пустой, и третий слой снова показывал ничего
+            setPendingRestore({ placed: demoPlacedSnapshots() });
+          }}
         >
           Начать заново
         </button>
@@ -1028,6 +1043,16 @@ export default function QSpaceClient() {
               onChange={(e) => setLayers((l) => ({ ...l, [key]: e.target.checked }))}
             />{" "}
             {label}
+            {/* Пустой слой молча ничего не показывает — и это неотличимо от
+                сломанного: человек жмёт флажок, картинка не меняется, объяснения
+                нет. Поэтому слой сам говорит, сколько в нём предметов. */}
+            {key === "decor" && (
+              <span style={S.layerCount}>
+                {placed.length > 0
+                  ? ` — ${placed.length}`
+                  : " — пусто, добавьте из каталога ниже"}
+              </span>
+            )}
           </label>
         ))}
       </section>
@@ -1354,6 +1379,7 @@ const styles: Record<string, React.CSSProperties> = {
     margin: "8px 0",
   },
   layersRow: { display: "flex", flexWrap: "wrap", gap: 16, margin: "8px 0 12px", fontSize: 14.5 },
+  layerCount: { color: "#7a746b", fontSize: 12 },
   layerLabel: { cursor: "pointer", userSelect: "none" },
   body: { display: "flex", flexWrap: "wrap", gap: 16, alignItems: "flex-start" },
   panel: {

@@ -7361,6 +7361,8 @@ const kk: Record<string, string> = {
   "pricing.checkoutSuccess.openAppNoName": "Өнімдер каталогын ашу",
   "pricing.checkoutSuccess.subtitleActivatedNoTier": "Рақмет! Жазылымыңыз белсенді.",
   "pricing.checkoutSuccess.titleActivatedNoTier": "Төлем қабылданды!",
+  "pricing.checkoutSuccess.titleNoPayment": "Төлем болды ма — тексеріп жатырмыз",
+  "pricing.checkoutSuccess.subtitleNoPayment": "Мекенжайда төлем нөмірі жоқ, сондықтан төлемді растай алмаймыз. Жаңа ғана төлеген болсаңыз — касса хатындағы сілтемемен өтіңіз. Төлем өтпесе, ақша шешілмеген.",
   "pricing.checkoutSuccess.titlePending": "Төлем қабылданды — қолжетімділікті тексеріп жатырмыз",
   "pricing.checkoutSuccess.subtitlePending": "Төлем қабылданды. Касса растағаннан кейін қолжетімділік ашылады — әдетте бірнеше секунд. Бір минуттан кейін ештеңе өзгермесе, бізге жазыңыз.",
   "pricing.checkoutSuccess.titleTrialNoTier": "Сынақ кезеңі — {days} күн",

@@ -93,12 +93,37 @@ describe("после оплаты не выдумываем покупку", () 
 
   test("сервер не подтвердил — тариф не называем вовсе", async () => {
     // Находка 04.09: `?tier=Zolotoy` попадал на экран как подтверждённый.
-    // Теперь до подтверждения экран говорит только «оплата принята».
+    // До подтверждения экран говорит только «оплата принята».
+    //
+    // 08.09: номер платежа задан НАМЕРЕННО. Раньше здесь его не было, и тест
+    // проверял «оплата принята» на адресе, где признака платежа нет вовсе, —
+    // то есть закреплял утверждение об оплате без основания. Суть теста от
+    // этого не меняется: «Zolotoy» из адреса по-прежнему не должен попасть на
+    // экран как подтверждённый, а сценарий стал настоящим — человек пришёл из
+    // кассы, ответ ещё не получен.
     серверОтвечает(null);
-    params = new URLSearchParams("tier=Zolotoy");
+    params = new URLSearchParams("tier=Zolotoy&session_id=cs_test_zzz");
     const { container } = render(<Success />);
     await waitFor(() => expect(container.textContent).toContain("checkoutSuccess.titlePending"), { timeout: 2000 });
     expect(container.textContent, "название из адреса показано как подтверждённое").not.toContain("Zolotoy");
+  });
+
+  test("признака платежа нет — не утверждаем, что платёж был", async () => {
+    // Замер 08.09 на проде: /pricing/checkout/success БЕЗ параметров
+    // бессрочно показывал «Оплата принята. Деньги получены» — утверждение,
+    // которого страница ничем не проверяла. Тот же класс уже вычищен в
+    // кабинете; здесь он оставался.
+    серверОтвечает(null);
+    params = new URLSearchParams("");
+    const { container } = render(<Success />);
+    await waitFor(
+      () => expect(container.textContent).toContain("checkoutSuccess.titleNoPayment"),
+      { timeout: 2000 },
+    );
+    expect(
+      container.textContent,
+      "страница утверждает оплату, которой не было",
+    ).not.toContain("checkoutSuccess.titlePending");
   });
 
   test("без продукта — ведём в каталог, а не в случайный модуль", async () => {

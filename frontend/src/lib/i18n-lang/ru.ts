@@ -7402,6 +7402,8 @@ const ru: Record<string, string> = {
   "pricing.checkoutSuccess.openAppNoName": "Открыть каталог продуктов",
   "pricing.checkoutSuccess.subtitleActivatedNoTier": "Спасибо! Ваша подписка активна.",
   "pricing.checkoutSuccess.titleActivatedNoTier": "Оплата принята!",
+  "pricing.checkoutSuccess.titleNoPayment": "Проверяем, была ли оплата",
+  "pricing.checkoutSuccess.subtitleNoPayment": "В адресе нет номера платежа, поэтому подтвердить оплату мы не можем. Если вы только что платили — вернитесь по ссылке из письма кассы. Если оплата не прошла, деньги не списаны.",
   "pricing.checkoutSuccess.titlePending": "Оплата принята — проверяем доступ",
   "pricing.checkoutSuccess.subtitlePending": "Деньги получены. Доступ откроется, как только касса подтвердит платёж — обычно это несколько секунд. Если через минуту ничего не изменилось, напишите нам.",
   "pricing.checkoutSuccess.titleTrialNoTier": "Пробный период — {days} дней",

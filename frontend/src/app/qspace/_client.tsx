@@ -94,6 +94,10 @@ export default function QSpaceClient() {
   const [exporting, setExporting] = useState(false);
   // Состояние сохранения: человек должен ВИДЕТЬ, сохранена ли его работа.
   const [saveNote, setSaveNote] = useState<string>("");
+  // Сообщение о восстановлении держится отдельно: автосохранение срабатывает
+  // через секунду и затирало его — человек не успевал прочитать, что его
+  // проект вернули (поймано браузерной пробой, а не чтением кода).
+  const [restoreNote, setRestoreNote] = useState<string>("");
   // Восстановление возможно только после того, как сцена собрана, поэтому
   // прочитанный проект ждёт здесь.
   const [pendingRestore, setPendingRestore] = useState<Project | null>(null);
@@ -438,7 +442,7 @@ export default function QSpaceClient() {
     if (r.kind === "ok") {
       applyProject(r.project);
       const when = new Date(r.project.savedAt);
-      setSaveNote(
+      setRestoreNote(
         "Восстановлен ваш проект от "
         + when.toLocaleString("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })
         + ". Нажмите «Начать заново», чтобы вернуться к демо.",
@@ -771,6 +775,7 @@ export default function QSpaceClient() {
 
   const forgetSaved = useCallback(() => {
     clearLocal();
+    setRestoreNote("");
     setSaveNote("Сохранённое в браузере удалено. Файлы проектов не тронуты.");
   }, []);
 
@@ -912,6 +917,7 @@ export default function QSpaceClient() {
         </span>
       </section>
 
+      {restoreNote && <p style={S.restoreNote} role="status">{restoreNote}</p>}
       {saveNote && <p style={S.saveNote} role="status">{saveNote}</p>}
 
       {warnings.length > 0 && (
@@ -1272,6 +1278,11 @@ const styles: Record<string, React.CSSProperties> = {
     display: "inline-block", padding: "7px 12px", background: "#fff",
     border: "1px solid #c9c4bb", borderRadius: 8, cursor: "pointer",
     fontSize: 14, color: "#1f1d1a",
+  },
+  restoreNote: {
+    fontSize: 13.5, color: "#2f5e2a", background: "#e6f0e2",
+    border: "1px solid #b9d0af", borderRadius: 8,
+    padding: "8px 12px", margin: "6px 0", fontWeight: 600,
   },
   saveNote: {
     fontSize: 13, color: "#3f5c3a", background: "#eef4ea",

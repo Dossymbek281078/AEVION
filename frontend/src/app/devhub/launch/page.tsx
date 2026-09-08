@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import paper from "@/styles/aevionPaper.module.css";
 import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 import { probeJson } from "@/lib/probeLive";
+import { voiceIsKnownDown } from "../capabilityRows";
 import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { PageTracking } from "@/components/PageTracking";
@@ -88,15 +89,35 @@ export default async function DevhubLaunchPage({
   // Обещание опирается на СОДЕРЖИМОЕ ответа, а не на то, что маршрут ответил:
   // пустой список начал тоже вернул бы 200, а каталог видеомоделей отдаётся
   // статически всегда и сам сообщает, настроен ли провайдер (`configured`).
-  const [tpl, agents, media] = await Promise.all([
+  const [tpl, agents, media, caps] = await Promise.all([
     probeJson<{ templates?: unknown[] }>("/api/devhub/templates"),
     probeJson<{ templates?: unknown[] }>("/api/devhub/agent/templates"),
     probeJson<{ models?: unknown[]; configured?: boolean }>("/api/devhub/media/video/models"),
+    probeJson<{ capabilities?: Array<{ id: string; status: string }> }>("/api/devhub/studio/capabilities"),
   ]);
   const tplUp = Array.isArray(tpl?.templates) && tpl.templates.length > 0;
   const agentsUp = Array.isArray(agents?.templates) && agents.templates.length > 0;
   // Каталог без ключа провайдера — не возможность, а список названий.
   const mediaUp = media?.configured === true && Array.isArray(media.models) && media.models.length > 0;
+
+  /**
+   * Голос страница обещает ЧЕТЫРЕЖДЫ — в заголовке шага 3 и во всех трёх
+   * сценариях шага 2 (озвучка лендинга, аудиочтение статьи, голосовой
+   * онбординг панели), — а спрашивала только каталог ВИДЕО. Замер 08.09.2026:
+   * /studio/capabilities отдаёт audio_tts как degraded (отвергнут ключ
+   * ElevenLabs), и карточка при этом писала «работает».
+   *
+   * Умолчание здесь ОБРАТНОЕ тому, что стоит у суммы в таблице сравнения, и
+   * это не небрежность: там вопрос «сколько мы стоим» и незнание не должно
+   * занижать нас, здесь вопрос «обещать ли вслух» и незнание не должно
+   * обещать за нас. Поэтому оговорка появляется, только когда состояние
+   * ПРИШЛО и оно нерабочее; молчащая ручка оставляет страницу как была.
+   */
+  const voiceStatus = caps?.capabilities?.find((c) => c.id === "audio_tts")?.status;
+  const voiceDown = voiceIsKnownDown(voiceStatus);
+  const voiceCaveat = voiceDown
+    ? "Голос сейчас недоступен: провайдер озвучки не принимает наш ключ. Остальное в этом шаге работает."
+    : null;
 
   // Метка канала — та же механика, что на посадочных бюро, шахмат и мультичата:
   // без неё после запуска не ответить, какой источник привёл людей именно сюда.
@@ -181,17 +202,19 @@ export default async function DevhubLaunchPage({
             title="Сценарий даёт и страницу, и медиа к ней"
             note="Три сценария за один запуск: лендинг — вёрстка плюс озвучка и звуковой эффект; статья — картинка в шапке и аудиочтение; панель — карточки, график и голосовой онбординг. Файлы приходят отдельными: код и медиа ложатся рядом, связать их в разметке — последний шаг за вами. Обещать «готовую страницу целиком» мы не будем: шаг с кодом идёт первым и о будущих файлах ещё не знает."
             live={agentsUp}
+            caveat={voiceCaveat}
           />
           <Step
             n={3}
             title="Картинки, видео и голос — внутри, а не сбоку"
             note="Генерация подключена по-настоящему: видео (veo-3, veo-3-fast, seedance) и объёмные модели (trellis, hunyuan3d). Это те же ключи, что у платформы, — отдельных подписок на медиа не нужно."
             live={mediaUp}
+            caveat={voiceCaveat}
           />
 
           <p style={{ color: "var(--ink-faint)", fontSize: 13, lineHeight: 1.6, margin: 0 }}>
             Отметка «работает» ставится не вручную: страница спрашивает у боевого
-            сервера при сборке.
+            сервера и перепроверяет его раз в полчаса.
           </p>
         </section>
 
@@ -222,7 +245,7 @@ export default async function DevhubLaunchPage({
   );
 }
 
-function Step({ n, title, note, live }: { n: number; title: string; note: string; live: boolean }) {
+function Step({ n, title, note, live, caveat }: { n: number; title: string; note: string; live: boolean; caveat?: string | null }) {
   return (
     <div className={paper.card} style={{ display: "flex", gap: 12 }}>
       <div
@@ -249,6 +272,11 @@ function Step({ n, title, note, live }: { n: number; title: string; note: string
         <div style={{ color: "var(--ink-soft)", fontSize: 13.5, lineHeight: 1.55, marginTop: 4 }}>
           {note}
         </div>
+        {caveat ? (
+          <div style={{ color: "var(--amber-deep, #b45309)", fontSize: 12.5, lineHeight: 1.5, marginTop: 6 }}>
+            {caveat}
+          </div>
+        ) : null}
       </div>
     </div>
   );

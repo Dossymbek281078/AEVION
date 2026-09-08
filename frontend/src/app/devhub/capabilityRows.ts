@@ -70,3 +70,19 @@ export function capabilityIsKnownOff(
 export function comparisonTotalUsd(rows: readonly ComparisonRow[] = COMPARISON_ROWS): number {
   return rows.reduce((sum, r) => sum + r.usd, 0);
 }
+
+
+/**
+ * «Состояние ПРИШЛО и оно нерабочее» — отдельный вопрос от «возможность
+ * отключена», и умолчания у них противоположны.
+ *
+ * Витрина спрашивает «сколько мы стоим»: там незнание не должно занижать нас,
+ * поэтому capabilityIsKnownOff на молчащей ручке отвечает false. Страница
+ * запуска спрашивает «обещать ли вслух»: там незнание не должно обещать за
+ * нас. Обе ветки сходятся в одном — молчание не выдумывает ответ, — но
+ * последствие у молчания разное, и потому это разные функции с разными
+ * именами, а не одна с флагом.
+ */
+export function voiceIsKnownDown(status?: string | null): boolean {
+  return typeof status === "string" && status.length > 0 && status !== "live";
+}

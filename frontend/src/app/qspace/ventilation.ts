@@ -80,17 +80,20 @@ export function ventilationPlan(
     switch (kind) {
       case "kitchen":
         flow = KITCHEN_FLOW;
-        how = "вытяжка над плитой, 60 м³/ч (электроплита)";
+        // Число подставляется из константы, а не переписывается словами: под
+        // строкой ниже такая же подпись уже сделана правильно, а эти три жили
+        // копиями. Поменяй норму — и подпись врала бы, не уронив ни одного теста.
+        how = `вытяжка над плитой, ${KITCHEN_FLOW} м³/ч (электроплита)`;
         needsFan = true;
         break;
       case "bath":
         flow = BATH_FLOW;
-        how = "вытяжной вентилятор, 50 м³/ч";
+        how = `вытяжной вентилятор, ${BATH_FLOW} м³/ч`;
         needsFan = true;
         break;
       case "toilet":
         flow = TOILET_FLOW;
-        how = "вытяжной вентилятор, 25 м³/ч";
+        how = `вытяжной вентилятор, ${TOILET_FLOW} м³/ч`;
         needsFan = true;
         break;
       case "corridor":

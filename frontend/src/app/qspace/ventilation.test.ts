@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { humidityAdvice, ventilationPlan, type RoomKind } from "./ventilation";
 
 const rooms = [
@@ -103,5 +105,36 @@ describe("влажность", () => {
   it("жилая комната без окна в советы по влажности не попадает", () => {
     const plan = ventilationPlan(rooms, kinds);
     expect(humidityAdvice(plan.rooms, [1])).toEqual([]);
+  });
+});
+
+describe("подписи не переписывают нормы числом", () => {
+  // Три строки из четырёх держали норму копией рядом с собственной константой.
+  // Поменяй норму — подпись врала бы, не уронив ни одного теста: он проверяет
+  // расход, а не текст.
+  const src = readFileSync(path.join(__dirname, "ventilation.ts"), "utf8");
+  const тело = src.slice(src.indexOf("export function ventilationPlan"));
+
+  it("в подписях нет чисел, вписанных вручную", () => {
+    const строки = тело.split("\n").filter((l) => /how = /.test(l));
+    expect(строки.length, "подписей не найдено — проверка пуста").toBeGreaterThan(3);
+    for (const l of строки) {
+      expect(l, `норма вписана числом: ${l.trim()}`).not.toMatch(/\d+ м³\/ч/);
+    }
+  });
+
+  it("подпись МЕНЯЕТСЯ вместе с нормой — проверяем следствием", () => {
+    // сильнее, чем чтение исходника: сравниваем текст с посчитанным расходом
+    const rooms = [{ index: 1, area: 12 }, { index: 2, area: 5 }];
+    const r = ventilationPlan(rooms, { 1: "kitchen", 2: "bath" });
+    for (const комната of r.rooms) {
+      if (комната.flow <= 0) continue;
+      expect(комната.how, `подпись «${комната.how}» не называет расход ${комната.flow}`)
+        .toContain(String(Math.round(комната.flow)));
+    }
+  });
+
+  it("контроль прибора: шаблон НАХОДИТ вписанное число", () => {
+    expect(/\d+ м³\/ч/.test('how = "вытяжной вентилятор, 50 м³/ч";')).toBe(true);
   });
 });

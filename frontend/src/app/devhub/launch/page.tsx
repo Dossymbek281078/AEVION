@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import paper from "@/styles/aevionPaper.module.css";
+import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 import { probeJson } from "@/lib/probeLive";
 import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
@@ -102,6 +103,9 @@ export default async function DevhubLaunchPage({
   // без неё после запуска не ответить, какой источник привёл людей именно сюда.
   const channel = channelFrom((await searchParams).c);
   const source = channel ? `devhub-${channel}` : "devhub";
+  // Дней до открытия. 10 сентября 2026 — документ основателя
+  // 00-НАЧНИ-ОТСЮДА/2026-08-30-ПЛАН-даты-запуска-новые.md.
+  const left = daysUntilLaunch(Date.UTC(2026, 8, 10));
 
   return (
     <main lang="ru" className={paper.paper} style={{ minHeight: "100vh", padding: "clamp(16px, 4vw, 32px) 18px 56px" }}>
@@ -124,7 +128,27 @@ export default async function DevhubLaunchPage({
             проект: код, страницы, а при необходимости картинки и озвучку к ним.
             Начинать со списка возможностей не нужно, он ниже — просто чтобы вы
             видели, из чего собирается.
-            {" Дату открытия объявим отдельно — оставьте адрес, и письмо придёт в день запуска."}
+            {/*
+              Дата, а не «объявим отдельно». Опора — документ основателя
+              00-НАЧНИ-ОТСЮДА/2026-08-30-ПЛАН-даты-запуска-новые.md: строка
+              «10 сентября | DevHub, Мультичат, QRight, QSign, биржа
+              стартапов, анализатор бизнес-идей, QSkyway». Проверено по
+              документу 08.09.2026, а не по чужой ссылке на него.
+
+              Месяц НЕ называем: соседний ратчет launchPages.render запрещает
+              названия месяцев на этих двух страницах — он заведён против
+              выдуманных дат, и ослаблять его ради текста я не стал. Счётчика
+              дней достаточно: он меняется сам и в день открытия скажет правду.
+
+              Переключение ПО ДАТЕ, как у /bureau/launch и /cyberchess/launch:
+              иначе 10 сентября подписчик получит письмо «DevHub открыт»,
+              придёт сюда и прочтёт «дату объявим отдельно». Строка, которая
+              обязана стать другой в назначенный день, не может быть
+              статической — менять её руками в день запуска никто не успеет.
+            */}
+            {left > 0
+              ? ` Открываем ${left === 1 ? "завтра" : `через ${left} дн.`}. Оставьте адрес, и письмо придёт в день запуска.`
+              : " Уже открыто — заходите."}
           </p>
         </header>
 

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import paper from "@/styles/aevionPaper.module.css";
+import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 import { probeJson, probeLive } from "@/lib/probeLive";
 import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
@@ -126,6 +127,9 @@ export default async function MultichatLaunchPage({
   // после запуска не ответить, какой источник привёл людей именно сюда.
   const channel = channelFrom((await searchParams).c);
   const source = channel ? `multichat-${channel}` : "multichat";
+  // Дней до открытия. 10 сентября 2026 — документ основателя
+  // 00-НАЧНИ-ОТСЮДА/2026-08-30-ПЛАН-даты-запуска-новые.md.
+  const left = daysUntilLaunch(Date.UTC(2026, 8, 10));
 
   return (
     <main className={paper.paper} style={{ minHeight: "100vh", padding: "32px 18px 56px" }}>
@@ -154,7 +158,27 @@ export default async function MultichatLaunchPage({
             Опишите задачу словами — вопрос уходит сразу нескольким моделям, ответы
             встают рядом, и отдельно показано, <b>где они расходятся</b>. Именно
             расхождение чаще всего и есть то место, которое стоит проверить самому.
-            {" Дату открытия объявим отдельно — оставьте адрес, и письмо придёт в день запуска."}
+            {/*
+              Дата, а не «объявим отдельно». Опора — документ основателя
+              00-НАЧНИ-ОТСЮДА/2026-08-30-ПЛАН-даты-запуска-новые.md, строка
+              «10 сентября | DevHub, Мультичат, QRight, QSign, биржа
+              стартапов, анализатор бизнес-идей, QSkyway». Проверено по самому
+              документу 08.09.2026.
+
+              Месяц НЕ называем: соседний ратчет launchPages.render запрещает
+              названия месяцев на этих двух страницах — он заведён против
+              выдуманных дат, и ослаблять его ради текста я не стал. Счётчика
+              дней достаточно: он меняется сам и в день открытия скажет правду.
+
+              Переключение ПО ДАТЕ, как у /bureau/launch и /cyberchess/launch:
+              без него 10 сентября подписчик получит письмо «Multichat открыт»,
+              придёт сюда и прочтёт «дату объявим отдельно». Строку, которая
+              обязана стать другой в назначенный день, нельзя оставлять
+              статической — руками её в этот день никто не поменяет.
+            */}
+            {left > 0
+              ? ` Открываем ${left === 1 ? "завтра" : `через ${left} дн.`}. Оставьте адрес, и письмо придёт в день запуска.`
+              : " Уже открыто — заходите."}
           </p>
         </header>
 

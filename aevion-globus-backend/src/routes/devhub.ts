@@ -7096,6 +7096,18 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       // Pages is the one deploy path that actually works, so when it stops
       // working the shop window should be the first to say it — not the user
       // whose page never came up.
+      // ТЕКСТ НЕУДАЧИ НАЗЫВАЛ МЁРТВУЮ ПРИЧИНУ. До 08.09.2026 здесь стояло
+      // «CF direct-upload via raw REST is deprecated, wrangler-based upload
+      // needed» — а загрузка идёт ЧЕРЕЗ WRANGLER (строка с deployViaWrangler
+      // выше), и этот путь давно единственный. Сообщение уводило разбирающего
+      // к замене загрузчика, который менять не надо.
+      //
+      // Замер, ради которого это нашлось: за 7 дней 5 выкаток, успешных ноль
+      // (`/studio/deploy-stats`). Разбирать их будут по этому самому журналу,
+      // и ложная причина в нём стоит дороже самой неудачи.
+      //
+      // Отличать ветки просто: `wrangler: ...` — упала загрузка;
+      // `verify: ...` — загрузка прошла, а адрес не ответил.
       if (serves) noteProviderSuccess("pages");
       else noteProviderFailure("pages", "the deployed page does not serve (2xx never came back after retries)");
       if (serves) {
@@ -7103,7 +7115,9 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       } else {
         d.status = "failed";
         d.buildLog = (d.buildLog || "") +
-          " | verify: deployed assets are not serving (upstream accepted the upload but the page returns non-2xx — CF direct-upload via raw REST is deprecated, wrangler-based upload needed)";
+          " | verify: wrangler upload finished, but the page did not answer 2xx within ~25s " +
+          "(5 attempts, 5s apart). Either the new Pages project has not propagated yet, or it " +
+          "really does not serve. Check the address by hand before blaming the upload.";
         d.completedAt = now();
       }
       try { await dbSaveDeployment(d); } catch { memDeployments.set(d.id, d); }

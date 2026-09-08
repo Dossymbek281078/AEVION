@@ -262,7 +262,7 @@ export default function ShadowNetPage() {
       </section>
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 20px 16px" }}>
-        <PaddleUpgradeButton variant="banner" appId="shadownet" label="ShadowNet Pro — максимальная приватность, 14 дней бесплатно" />
+        <PaddleUpgradeButton variant="banner" appId="shadownet" label="ShadowNet Pro — максимальная приватность" />
       </div>
 
       <section style={{ maxWidth: 1100, margin: "0 auto", padding: "0 24px 32px" }}>

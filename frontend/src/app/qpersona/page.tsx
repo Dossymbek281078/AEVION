@@ -344,7 +344,7 @@ export default function QPersonaPage() {
       </section>
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "0 20px 16px" }}>
-        <PaddleUpgradeButton variant="banner" appId="qpersona" label="QPersona Pro — безлимитные персоны, 14 дней бесплатно" />
+        <PaddleUpgradeButton variant="banner" appId="qpersona" label="QPersona Pro — безлимитные персоны" />
       </div>
 
       <section style={{ maxWidth: 960, margin: "0 auto", padding: "0 20px 40px" }}>

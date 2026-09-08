@@ -523,7 +523,7 @@ export default function QLearnPage() {
         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 16px 80px" }}>
           {/* Paddle upgrade banner */}
           <div style={{ marginBottom: 20 }}>
-            <PaddleUpgradeButton variant="banner" appId="qlearn" label="Открыть все курсы — 14 дней бесплатно" />
+            <PaddleUpgradeButton variant="banner" appId="qlearn" label="Открыть все курсы" />
             <div style={{ marginTop: 10 }}>
               <ModulePricingChip moduleId="qlearn" />
             </div>

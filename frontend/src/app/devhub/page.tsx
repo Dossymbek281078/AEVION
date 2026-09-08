@@ -8,6 +8,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { СОБЫТИЕ_ПЕРЕНОСА } from "@/components/DevHubGuestIdentity";
 import { apiUrl } from "@/lib/apiBase";
 import { useDevhubT, type DevhubKey } from "./i18n";
+import { COMPARISON_ROWS, capabilityIsKnownOff } from "./capabilityRows";
 import { useI18n } from "@/lib/i18n";
 import { catalog } from "@/lib/aevionCatalog";
 import { fixDoubledScheme } from "@/lib/urls";
@@ -851,21 +852,29 @@ export default function DevHubPage() {
           <div style={{ overflowX: "auto" }}>
             <table style={{ borderCollapse: "collapse", fontSize: 12.5, minWidth: 420 }}>
               <tbody>
-                {[
-                  [t("cmp.app"), "Lovable Pro", "$25"],
-                  [t("cmp.video"), "Runway Pro", "$35"],
-                  [t("cmp.images"), "Midjourney Standard", "$30"],
-                  [t("cmp.voice"), "ElevenLabs Creator", "$22"],
-                  [t("cmp.music"), "Suno", "$10"],
-                  [t("cmp.threeD"), "Meshy Pro", "$20"],
-                  [t("cmp.hosting"), "Vercel Pro", "$20"],
-                ].map(([what, who, price]) => (
-                  <tr key={what as string}>
-                    <td style={{ padding: "3px 14px 3px 0", color: "#334155" }}>{what}</td>
-                    <td style={{ padding: "3px 14px 3px 0", color: "#64748b" }}>{who}</td>
-                    <td style={{ padding: "3px 0", color: "#334155", fontVariantNumeric: "tabular-nums" }}>{price}</td>
+                {/* Строки привязаны к тем же идентификаторам возможностей, что
+                    приходят с /studio/capabilities. Замер прода 08.09.2026:
+                    таблица обещала озвучку и музыку, а обе не работали —
+                    отвергнут ключ ElevenLabs. Полоса состояния СТРОКОЙ ВЫШЕ
+                    говорила правду, таблица нет; верят же крупному и
+                    продающему. Одно живое состояние на оба места. */}
+                {COMPARISON_ROWS.map((row) => {
+                  const off = capabilityIsKnownOff(caps, row.cap);
+                  return (
+                  <tr key={row.label}>
+                    <td style={{ padding: "3px 14px 3px 0", color: off ? "#92400e" : "#334155" }}>
+                      {t(row.label)}
+                      {off ? (
+                        <span style={{ color: "#b45309", fontSize: 11.5, marginLeft: 6 }}>
+                          {"— "}{t("cmp.offNow")}
+                        </span>
+                      ) : null}
+                    </td>
+                    <td style={{ padding: "3px 14px 3px 0", color: "#64748b" }}>{row.rival}</td>
+                    <td style={{ padding: "3px 0", color: "#334155", fontVariantNumeric: "tabular-nums" }}>{row.price}</td>
                   </tr>
-                ))}
+                  );
+                })}
                 <tr>
                   <td style={{ padding: "6px 14px 0 0", fontWeight: 800, color: "#0f172a", borderTop: "1px solid #e2e8f0" }}>{t("store.total")}</td>
                   <td style={{ padding: "6px 14px 0 0", color: "#64748b", borderTop: "1px solid #e2e8f0" }}>{t("store.subsLogins")}</td>

@@ -435,6 +435,10 @@ export default function DevHubPage() {
     }
   };
 
+  // Строки сравнения, за которые мы сегодня можем отвечать. Отсюда берутся и
+  // сумма, и счётчик подписок — чтобы итог не спорил со строками над ним.
+  const workingRows = COMPARISON_ROWS.filter((r) => !capabilityIsKnownOff(caps, r.cap));
+
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "system-ui, sans-serif", overflowX: "hidden" }}>
       {/* Замер посещения и ухода к оплате — см. components/PageTracking.
@@ -891,6 +895,12 @@ export default function DevHubPage() {
                     отвергнут ключ ElevenLabs. Полоса состояния СТРОКОЙ ВЫШЕ
                     говорила правду, таблица нет; верят же крупному и
                     продающему. Одно живое состояние на оба места. */}
+                {/* Итог считается по РАБОТАЮЩИМ строкам. Замер прода 08.09.2026:
+                    строки честно писали «сейчас не работает» у озвучки и музыки,
+                    а итог всё равно складывал их $22 и $8 и обещал «7 подписок».
+                    Внутри одной таблицы два наших ответа спорили, и верили бы
+                    крупному. Незнание НЕ вычитает: пока состояние не пришло,
+                    capabilityIsKnownOff даёт false, и сумма прежняя. */}
                 {COMPARISON_ROWS.map((row) => {
                   const off = capabilityIsKnownOff(caps, row.cap);
                   return (
@@ -910,8 +920,8 @@ export default function DevHubPage() {
                 })}
                 <tr>
                   <td style={{ padding: "6px 14px 0 0", fontWeight: 800, color: "#0f172a", borderTop: "1px solid #e2e8f0" }}>{t("store.total")}</td>
-                  <td style={{ padding: "6px 14px 0 0", color: "#64748b", borderTop: "1px solid #e2e8f0" }}>{t("store.subsLogins")}</td>
-                  <td style={{ padding: "6px 0 0", fontWeight: 800, color: "#0f172a", borderTop: "1px solid #e2e8f0", fontVariantNumeric: "tabular-nums" }}>{`≈ $${comparisonTotalUsd()}`}</td>
+                  <td style={{ padding: "6px 14px 0 0", color: "#64748b", borderTop: "1px solid #e2e8f0" }}>{t("store.subsLogins")} {workingRows.length}</td>
+                  <td style={{ padding: "6px 0 0", fontWeight: 800, color: "#0f172a", borderTop: "1px solid #e2e8f0", fontVariantNumeric: "tabular-nums" }}>{`≈ $${comparisonTotalUsd(workingRows)}`}</td>
                 </tr>
               </tbody>
             </table>

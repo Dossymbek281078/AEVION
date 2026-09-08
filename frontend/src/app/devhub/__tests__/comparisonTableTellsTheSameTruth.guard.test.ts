@@ -59,7 +59,55 @@ describe("цены конкурентов — сверенные, а итог с
   test("итог равен сумме строк, а не отдельному числу в разметке", () => {
     expect(comparisonTotalUsd()).toBe(COMPARISON_ROWS.reduce((s, r) => s + r.usd, 0));
     expect(PAGE, "итог снова зашит рядом со строками — разойдётся при первой правке").not.toContain("≈ $162");
-    expect(PAGE).toContain("comparisonTotalUsd()");
+  });
+
+  /**
+   * Замер прода 08.09.2026: строки честно писали «сейчас не работает» у озвучки
+   * и музыки, а итог складывал их $22 и $8 и обещал «7 подписок, 7 логинов».
+   * Два наших ответа спорили внутри ОДНОЙ таблицы, и покупатель поверил бы
+   * крупному. Ниже закреплено следствие, а не форма вызова.
+   */
+  const OFF_TTS_MUSIC = [
+    { id: "audio_tts", name: "Озвучка", status: "degraded", offCode: "auth_rejected" },
+    { id: "audio_music", name: "Музыка", status: "degraded", offCode: "auth_rejected" },
+  ];
+  const working = (caps: Array<{ id: string; status: string; offCode?: string }>) =>
+    COMPARISON_ROWS.filter((r) => !capabilityIsKnownOff(caps, r.cap));
+
+  test("итог НЕ считает возможности, которые сейчас не работают", () => {
+    const all = comparisonTotalUsd();
+    const now = comparisonTotalUsd(working(OFF_TTS_MUSIC));
+    const tts = COMPARISON_ROWS.find((r) => r.cap === "audio_tts")!;
+    const music = COMPARISON_ROWS.find((r) => r.cap === "audio_music")!;
+    expect(now, "итог обещает деньги за то, что сегодня не работает").toBe(all - tts.usd - music.usd);
+    expect(working(OFF_TTS_MUSIC).length).toBe(COMPARISON_ROWS.length - 2);
+  });
+
+  test("незнание НЕ вычитает: ручка молчит — итог прежний", () => {
+    expect(comparisonTotalUsd(working([]))).toBe(comparisonTotalUsd());
+    expect(working([]).length).toBe(COMPARISON_ROWS.length);
+  });
+
+  test("страница берёт и сумму, и счётчик из отфильтрованных строк", () => {
+    expect(PAGE, "сумма снова по всем строкам — вернётся спор со строками").toContain(
+      "comparisonTotalUsd(workingRows)",
+    );
+    expect(PAGE, "workingRows должны строиться живым состоянием").toContain(
+      "const workingRows = COMPARISON_ROWS.filter(",
+    );
+    expect(PAGE, "фильтр должен спрашивать состояние, а не список внутри страницы").toContain(
+      "!capabilityIsKnownOff(caps, r.cap)",
+    );
+    expect(PAGE, "счётчик подписок должен считаться, а не стоять словом").toContain(
+      '{t("store.subsLogins")} {workingRows.length}',
+    );
+  });
+
+  test("в подписи итога не зашито число ни на одном языке", () => {
+    for (const lang of ["en", "ru", "kk"] as const) {
+      const v = DEVHUB_DICT[lang]["store.subsLogins"];
+      expect(v, `${lang}: в подписи снова стоит число — разойдётся с фактом`).not.toMatch(/[0-9]/);
+    }
   });
 
   test("у каждой строки цена числом и она положительная", () => {

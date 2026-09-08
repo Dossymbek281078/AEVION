@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import {
   demoPlan,
   generateLights,
@@ -263,6 +264,7 @@ export default function QSpaceClient() {
   const [placed, setPlaced] = useState<PlacedItem[]>([]);
   const [selectedUid, setSelectedUid] = useState<number | null>(null);
   const [webglOk, setWebglOk] = useState(true);
+  const [exporting, setExporting] = useState(false);
   // PDF разобран, но масштаб ещё не назван человеком — план не строим.
   const [pdfPending, setPdfPending] = useState<PdfSegments | null>(null);
   // Растровый план ждёт проверки человеком: строить 3D молча по
@@ -761,6 +763,50 @@ export default function QSpaceClient() {
     }
   }, [pdfPending, pdfExtent]);
 
+  // Экспорт модели в GLB — двоичный glTF, открывается в Blender, SketchUp,
+  // 3ds Max и просмотрщике Windows. Экспортируются только ВИДИМЫЕ слои:
+  // выключенный слой в файл не попадает, иначе подрядчик получил бы не то,
+  // что видел на экране.
+  const exportGlb = useCallback(() => {
+    const t = three.current; if (!t) return;
+    setExporting(true);
+    const parts: THREE.Object3D[] = [];
+    if (t.gWalls.visible) parts.push(t.gWalls);
+    if (t.gRough.visible) parts.push(t.gRough);
+    if (t.gFinish.visible) parts.push(t.gFinish);
+    if (t.gDecor.visible) parts.push(t.gDecor);
+    if (parts.length === 0) {
+      setWarnings(["Все слои выключены — экспортировать нечего."]);
+      setExporting(false);
+      return;
+    }
+    new GLTFExporter().parse(
+      parts,
+      (res) => {
+        try {
+          const blob = res instanceof ArrayBuffer
+            ? new Blob([res], { type: "model/gltf-binary" })
+            : new Blob([JSON.stringify(res)], { type: "model/gltf+json" });
+          const url = URL.createObjectURL(blob);
+          const a2 = document.createElement("a");
+          a2.href = url;
+          a2.download = res instanceof ArrayBuffer ? "qspace.glb" : "qspace.gltf";
+          a2.click();
+          URL.revokeObjectURL(url);
+          setWarnings([]);
+        } finally {
+          setExporting(false);
+        }
+      },
+      // отказ показывается отказом, а не тишиной: человек нажал и ждёт файл
+      (err) => {
+        setWarnings(["Не удалось собрать GLB: " + String(err)]);
+        setExporting(false);
+      },
+      { binary: true },
+    );
+  }, []);
+
   const screenshot = useCallback(() => {
     const t = three.current; if (!t) return;
     t.renderer.render(t.scene, t.camera);
@@ -834,6 +880,9 @@ export default function QSpaceClient() {
           Демо-план
         </button>
         <button type="button" style={S.btn} onClick={screenshot}>Скачать кадр (PNG)</button>
+        <button type="button" style={S.btn} onClick={exportGlb} disabled={exporting}>
+          {exporting ? "Собираю GLB…" : "Скачать модель (GLB)"}
+        </button>
         <span style={S.dims}>
           {plan.name} · {dims}{unitLabel ? ` · единицы: ${unitLabel}` : ""}
         </span>

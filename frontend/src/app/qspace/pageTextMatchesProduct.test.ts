@@ -49,6 +49,16 @@ describe("страница описывает продукт таким, как�
     expect(/не проектная\s+документация/i.test(client)).toBe(true);
   });
 
+  it("экспорт GLB подключён — значит кнопка обязана быть, и наоборот", () => {
+    const wired = /GLTFExporter/.test(client) && /exportGlb/.test(client);
+    const shown = /Скачать модель \(GLB\)/.test(client);
+    expect(wired, "экспортёр не подключён").toBe(true);
+    expect(shown, "экспорт есть в коде, но кнопки нет — человек о нём не узнает").toBe(true);
+    // экспортируются только видимые слои: иначе в файл уедет то, чего
+    // человек не видел на экране
+    expect(/gRough\.visible/.test(client) && /gDecor\.visible/.test(client)).toBe(true);
+  });
+
   it("контроль прибора: выдуманная фраза на странице НЕ находится", () => {
     expect(/сертифицированное проектное решение/i.test(client)).toBe(false);
   });

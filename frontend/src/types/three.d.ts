@@ -231,6 +231,19 @@ declare module "three" {
   }
 }
 
+// Экспорт сцены в GLB (двоичный glTF) — из примеров three, своих типов нет.
+declare module "three/examples/jsm/exporters/GLTFExporter.js" {
+  import type { Object3D } from "three";
+  export class GLTFExporter {
+    parse(
+      input: Object3D | Object3D[],
+      onDone: (result: ArrayBuffer | object) => void,
+      onError: (err: unknown) => void,
+      options?: Record<string, unknown>
+    ): void;
+  }
+}
+
 // Управление камерой из примеров three (у пакета нет собственных типов
 // в этой сборке — см. комментарий в шапке файла).
 declare module "three/examples/jsm/controls/OrbitControls.js" {

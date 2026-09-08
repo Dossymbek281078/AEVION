@@ -42,6 +42,13 @@ const PAGES = [
   // /en/shop прямо сейчас правит соседняя ветка. Все пять живы на 08.09 —
   // замер передан их окнам, добавлять должны они.
   "/en/devhub",
+  // Две из тех пяти добавляет окно выкатки, потому что 08.09 правило их
+  // текст: обе страницы обещали покупателю русский интерфейс, а замер
+  // отрисовки с locale en-US дал 0 % и 0.3 % кириллицы — оговорка пережила
+  // свою причину. Кто трогает страницу, тот и ставит её под присмотр:
+  // иначе правка живёт без сторожа ровно до первой поломки.
+  "/en/qrenew",
+  "/en/qskyway",
   // The comparison page states what the product does against named rivals — a
   // page that quietly 404s or empties out is worse than one that never
   // existed, because it is the page an investor is sent to.

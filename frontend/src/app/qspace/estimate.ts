@@ -10,6 +10,7 @@
 
 import type { Plan, PlumbingDraft, WiringDraft } from "./planModel";
 import { planBounds } from "./planModel";
+import { CUT_WASTE, PAINT_COATS, PAINT_LITRES_PER_M2 } from "./roomSpec";
 
 export type WallAreaSource = "rooms" | "axes";
 
@@ -128,8 +129,10 @@ export function estimatePlan(
     floorAreaSource,
     wallArea,
     wallAreaSource,
-    paintLitres: wallArea * 0.12 * 2,
-    flooringArea: floorArea * 1.05,
+    // Ставки берутся ИЗ roomSpec, а не повторяются здесь: две копии одной
+    // ставки — готовая причина для двух таблиц разойтись снова.
+    paintLitres: wallArea * PAINT_LITRES_PER_M2 * PAINT_COATS,
+    flooringArea: floorArea * CUT_WASTE,
     outlets: wiring.points.filter((p) => p.kind === "outlet").length,
     switches: wiring.points.filter((p) => p.kind === "switch").length,
     cableMeters,

@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { demoPlan, generateLights, generatePlumbing, generateWiring } from "./planModel";
 import { estimatePlan } from "./estimate";
 import { findRooms } from "./rooms";
@@ -131,5 +133,30 @@ describe("общая смета и таблица по комнатам гово
     // иначе «теперь совпадает» неотличимо от «и раньше совпадало»
     const поОсям = estimatePlan(plan, generateWiring(plan), generatePlumbing(plan), 6);
     expect(rs.totals.paint - поОсям.paintLitres).toBeGreaterThan(5); // литров
+  });
+});
+
+describe("ставки материалов живут в одном месте", () => {
+  // Ставка краски стояла в трёх местах: числом в смете, константой в расчёте
+  // по комнатам и словами в подписи. Общая смета и таблица по комнатам
+  // обязаны сходиться, а три копии одной ставки — готовая причина разойтись.
+  const est = readFileSync(path.join(__dirname, "estimate.ts"), "utf8");
+  const client = readFileSync(path.join(__dirname, "_client.tsx"), "utf8");
+
+  it("смета не повторяет ставки числом", () => {
+    const тело = est.slice(est.indexOf("export function estimatePlan"));
+    expect(тело, "ставка краски снова вписана числом").not.toMatch(/0\.12/);
+    expect(тело, "запас на подрезку снова вписан числом").not.toMatch(/\*\s*1\.05/);
+  });
+
+  it("подпись на экране берёт ставку из кода, а не переписывает словами", () => {
+    expect(client).toContain("{PAINT_LITRES_PER_M2}");
+    expect(client, "в подписи снова записано число").not.toMatch(/Краска \(0\.12/);
+  });
+
+  it("контроль прибора: шаблоны НАХОДЯТ запись числом", () => {
+    // без этого «не найдено» неотличимо от «шаблон ничего не ищет»
+    expect(/0\.12/.test("paintLitres: wallArea * 0.12 * 2")).toBe(true);
+    expect(/Краска \(0\.12/.test("Краска (0.12 л/м², два слоя)")).toBe(true);
   });
 });

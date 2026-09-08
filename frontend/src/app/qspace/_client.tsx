@@ -30,7 +30,7 @@ import { checkClearance, type Issue, type Placed } from "./clearance";
 import { findRooms } from "./rooms";
 import { floorPlanSvg } from "./floorPlanSvg";
 import { checkPassage } from "./passage";
-import { roomSpec, roomSpecText } from "./roomSpec";
+import { PAINT_COATS, PAINT_LITRES_PER_M2, roomSpec, roomSpecText } from "./roomSpec";
 import RasterReview from "./RasterReview";
 import HeatingPanel from "./HeatingPanel";
 import CoolingPanel from "./CoolingPanel";
@@ -1398,7 +1398,14 @@ export default function QSpaceClient() {
                 </td>
                 <td style={S.estTdNum}>{est.wallArea.toFixed(1)} м²</td>
               </tr>
-              <tr><td style={S.estTd}>Краска (0.12 л/м², два слоя)</td><td style={S.estTdNum}>{est.paintLitres.toFixed(1)} л</td></tr>
+              {/* Ставка берётся из кода, а не переписана словами: третья копия
+                  одного числа — третья возможность разойтись молча. */}
+              <tr>
+                <td style={S.estTd}>
+                  Краска ({PAINT_LITRES_PER_M2} л/м², слоёв: {PAINT_COATS})
+                </td>
+                <td style={S.estTdNum}>{est.paintLitres.toFixed(1)} л</td>
+              </tr>
               <tr><td style={S.estTd}>Розетки</td><td style={S.estTdNum}>{est.outlets} шт</td></tr>
               <tr><td style={S.estTd}>Выключатели</td><td style={S.estTdNum}>{est.switches} шт</td></tr>
               <tr><td style={S.estTd}>Кабель (магистрали + спуски)</td><td style={S.estTdNum}>{est.cableMeters.toFixed(0)} м</td></tr>

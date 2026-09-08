@@ -50,3 +50,30 @@ describe("панель тёплого пола", () => {
     expect(screen.getByText(/не влезает в один контур/)).toBeTruthy();
   });
 });
+
+describe("площадь под встроенной мебелью доезжает до расчёта", () => {
+  // Проверяется ПРОВОДКА, а не расчёт: у heatingPlan этот параметр был с
+  // самого начала и объяснён комментарием, но панель его не передавала.
+  // Тест на самой функции такой дефект не видит — она-то работает.
+  const rooms = [room(1, 10, 13), room(2, 8, 11)];
+  const totalPipe = (c: HTMLElement) =>
+    Number(/Всего трубы\s*(\d+)/.exec(c.textContent ?? "")?.[1] ?? NaN);
+
+  it("панель с мебелью показывает МЕНЬШЕ трубы, чем без неё", () => {
+    const { container: без } = render(<HeatingPanel rooms={rooms} />);
+    const a = totalPipe(без);
+    const { container: с } = render(
+      <HeatingPanel rooms={rooms} blockedAreaByRoom={{ 1: 3, 2: 2 }} />,
+    );
+    const b = totalPipe(с);
+    expect(Number.isFinite(a) && Number.isFinite(b), "не нашёл итог трубы на экране").toBe(true);
+    expect(b, "мебель не повлияла на экран — параметр до расчёта не доехал").toBeLessThan(a);
+  });
+
+  it("контроль: пустой список мебели ничего не меняет", () => {
+    // без этого «меньше» неотличимо от «панель просто выдаёт разное»
+    const { container: x } = render(<HeatingPanel rooms={rooms} />);
+    const { container: y } = render(<HeatingPanel rooms={rooms} blockedAreaByRoom={{}} />);
+    expect(totalPipe(y)).toBe(totalPipe(x));
+  });
+});

@@ -3,6 +3,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { CATALOG, demoFurniture, demoPlacedSnapshots } from "./furniture";
 import { demoPlan } from "./planModel";
+import { findRooms } from "./rooms";
+import { heatingPlan } from "./heating";
 import { checkClearance, type Placed } from "./clearance";
 import { checkPassage } from "./passage";
 
@@ -135,5 +137,54 @@ describe("предметы демо действительно строят ге
 
   it("контроль прибора: пустая группа НАХОДИТСЯ", () => {
     expect(meshCount({ children: [] })).toBe(0);
+  });
+});
+
+describe("тёплый пол видит встроенную мебель", () => {
+  // Параметр blockedAreaByRoom был у heatingPlan с самого начала и объяснён
+  // комментарием — но НИКТО его не передавал. Пока мебели не было, это ничего
+  // не меняло; с обставленной квартирой в санузле под ванной и унитазом около
+  // трети площади считалось тёплой ошибочно.
+  const blockedByRoom = () => {
+    const plan = demoPlan();
+    const { roomAt } = findRooms(plan);
+    const blocked: Record<number, number> = {};
+    for (const d of demoFurniture()) {
+      const item = CATALOG.find((c) => c.id === d.catalogId)!;
+      if (!item.blocksFloor) continue;
+      const idx = roomAt(d.x, d.y);
+      if (idx === null) continue;
+      blocked[idx] = (blocked[idx] ?? 0) + item.size[0] * item.size[1];
+    }
+    return blocked;
+  };
+
+  it("в демо есть комнаты со встроенной мебелью", () => {
+    const b = blockedByRoom();
+    expect(Object.keys(b).length, "ни один предмет не отнесён к комнате").toBeGreaterThan(1);
+  });
+
+  it("площадь под мебелью УМЕНЬШАЕТ тёплую площадь и метры трубы", () => {
+    const rooms = findRooms(demoPlan()).rooms;
+    const без = heatingPlan(rooms, 0.15);
+    const с = heatingPlan(rooms, 0.15, blockedByRoom());
+    expect(с.totals.heatedArea, "мебель не повлияла — параметр снова не доехал")
+      .toBeLessThan(без.totals.heatedArea);
+    expect(с.totals.pipeLength).toBeLessThan(без.totals.pipeLength);
+  });
+
+  it("разница заметная, а не косметическая", () => {
+    // если бы разница была в сотых, параметр не стоил бы проводки
+    const rooms = findRooms(demoPlan()).rooms;
+    const без = heatingPlan(rooms, 0.15).totals.heatedArea;
+    const с = heatingPlan(rooms, 0.15, blockedByRoom()).totals.heatedArea;
+    expect(без - с).toBeGreaterThan(2); // м²
+  });
+
+  it("предметы БЕЗ признака пол не занимают", () => {
+    // контроль: диван и кровать не помечены сознательно — у них просвет
+    for (const id of ["sofa", "bed", "coffee", "dining"]) {
+      expect(CATALOG.find((c) => c.id === id)!.blocksFloor, `«${id}» помечен зря`).toBeFalsy();
+    }
   });
 });

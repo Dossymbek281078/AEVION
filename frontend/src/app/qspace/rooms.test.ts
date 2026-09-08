@@ -116,3 +116,31 @@ describe("выделение комнат", () => {
     expect(r.warnings[0]).toContain("нет стен");
   });
 });
+
+describe("поиск комнаты по точке", () => {
+  const plan = demoPlan();
+  const res = findRooms(plan);
+
+  it("центр каждой комнаты попадает в саму себя", () => {
+    expect(res.rooms.length).toBeGreaterThan(1);
+    for (const r of res.rooms) {
+      expect(res.roomAt(r.cx, r.cy), `центр помещения ${r.index} не нашёл себя`).toBe(r.index);
+    }
+  });
+
+  it("разные комнаты различаются, а не сливаются в одну", () => {
+    // без этого «нашлось» неотличимо от «всегда возвращает первую»
+    const found = new Set(res.rooms.map((r) => res.roomAt(r.cx, r.cy)));
+    expect(found.size).toBe(res.rooms.length);
+  });
+
+  it("точка снаружи плана и точка в стене дают null", () => {
+    expect(res.roomAt(-5, -5)).toBeNull();
+    expect(res.roomAt(4.8, 1.5)).toBeNull(); // перегородка demoPlan
+  });
+
+  it("план без стен не роняет", () => {
+    const empty = findRooms({ name: "пусто", walls: [], openings: [], source: "demo" });
+    expect(empty.roomAt(1, 1)).toBeNull();
+  });
+});

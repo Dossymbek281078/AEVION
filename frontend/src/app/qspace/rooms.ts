@@ -39,6 +39,16 @@ export interface RoomsResult {
   totalArea: number;
   /** предупреждения человеку: почему результат может быть не тем, что ждали */
   warnings: string[];
+  /**
+   * В какой комнате лежит точка плана: номер из `rooms` или null (стена,
+   * улица, слишком мелкая область).
+   *
+   * Нужно, чтобы отнести поставленный предмет к комнате — например, посчитать
+   * площадь под встроенной мебелью для тёплого пола. Заливка уже разметила
+   * каждую клетку, и выбрасывать эту разметку значило бы считать её заново
+   * другим способом, то есть завести второй источник правды.
+   */
+  roomAt(x: number, y: number): number | null;
 }
 
 const CELL = 0.05; // 5 см — компромисс между точностью и объёмом работы
@@ -82,7 +92,7 @@ export function findRooms(plan: Plan, opts: { minAreaM2?: number } = {}): RoomsR
   const warnings: string[] = [];
 
   if (plan.walls.length === 0) {
-    return { rooms: [], totalArea: 0, warnings: ["В плане нет стен."] };
+    return { rooms: [], totalArea: 0, warnings: ["В плане нет стен."], roomAt: () => null };
   }
 
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -100,6 +110,7 @@ export function findRooms(plan: Plan, opts: { minAreaM2?: number } = {}): RoomsR
       rooms: [],
       totalArea: 0,
       warnings: ["План слишком велик для разбивки на комнаты — проверьте масштаб."],
+      roomAt: () => null,
     };
   }
 
@@ -113,6 +124,9 @@ export function findRooms(plan: Plan, opts: { minAreaM2?: number } = {}): RoomsR
   // --- заливка ------------------------------------------------------------
   const label = new Int32Array(gw * gh).fill(-1);
   const rooms: Room[] = [];
+  // Ссылка на ТОТ ЖЕ объект комнаты, а не копия номера: номера проставляются
+  // после сортировки, и копия осталась бы нулём.
+  const labelToRoom = new Map<number, Room>();
   let next = 0;
   let outsideTouched = false;
 
@@ -148,13 +162,15 @@ export function findRooms(plan: Plan, opts: { minAreaM2?: number } = {}): RoomsR
     if (touchesEdge) { outsideTouched = true; continue; } // это улица, а не комната
     const area = count * CELL * CELL;
     if (area < minArea) continue;
-    rooms.push({
+    const room = {
       index: 0, // проставится после сортировки
       area,
       perimeter: border * CELL,
       cx: ox + (sumX / count) * CELL,
       cy: oy + (sumY / count) * CELL,
-    });
+    };
+    rooms.push(room);
+    labelToRoom.set(id, room);
   }
 
   rooms.sort((a, b) => b.area - a.area);
@@ -169,5 +185,14 @@ export function findRooms(plan: Plan, opts: { minAreaM2?: number } = {}): RoomsR
   }
 
   const totalArea = rooms.reduce((s, r) => s + r.area, 0);
-  return { rooms, totalArea, warnings };
+
+  const roomAt = (x: number, y: number): number | null => {
+    const gx = Math.floor((x - ox) / CELL);
+    const gy = Math.floor((y - oy) / CELL);
+    if (gx < 0 || gy < 0 || gx >= gw || gy >= gh) return null;
+    const room = labelToRoom.get(label[gy * gw + gx]);
+    return room ? room.index : null;
+  };
+
+  return { rooms, totalArea, warnings, roomAt };
 }

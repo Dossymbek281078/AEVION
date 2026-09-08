@@ -97,6 +97,8 @@ export default function QSpaceClient() {
   const [unitLabel, setUnitLabel] = useState<string>("");
   const [placed, setPlaced] = useState<PlacedItem[]>([]);
   const [selectedUid, setSelectedUid] = useState<number | null>(null);
+  /** площадь под встроенной мебелью по номеру комнаты, м² — для тёплого пола */
+  const [blockedArea, setBlockedArea] = useState<Record<number, number>>({});
   const [webglOk, setWebglOk] = useState(true);
   const [exporting, setExporting] = useState(false);
   // Состояние сохранения: человек должен ВИДЕТЬ, сохранена ли его работа.
@@ -142,6 +144,10 @@ export default function QSpaceClient() {
   const openingModeRef = useRef<"off" | "door" | "window" | "erase">("off");
   const openingClickRef = useRef<((x: number, y: number, mode: "door" | "window" | "erase") => void) | null>(null);
   const recheckRef = useRef<(() => void) | null>(null);
+  // Разбиение на комнаты для отнесения предмета к комнате. Через ref, а не
+  // прямой зависимостью: пересчёт расстановки не должен тянуть за собой
+  // заливку плана, она дорогая и меняется только вместе с планом.
+  const roomsRef = useRef<ReturnType<typeof findRooms> | null>(null);
 
   // ---- начальная сцена ----------------------------------------------------
   useEffect(() => {
@@ -885,9 +891,30 @@ export default function QSpaceClient() {
         text: p.text,
       })),
     ]);
+
+    // ⚠️ ГРАНИЦА ПОКРЫТИЯ: этот сбор мутацией НЕ ловится — он живёт внутри
+    // сцены three.js, и тестом сюда не дотянуться. Проверен браузером на
+    // боевой сборке (проба qspace-проба-после-сборки.mjs: панель тёплого пола
+    // показывает меньше трубы, когда мебель стоит). Закреплены ОТДЕЛЬНО две
+    // соседние половины: сама формула (demoFurniture.test.ts) и проводка
+    // параметра из панели в расчёт (HeatingPanel.test.tsx, мутация ловится).
+    // Заодно площадь под встроенной мебелью — по комнатам. Считается ЗДЕСЬ,
+    // а не отдельным проходом: список предметов с их настоящими положениями
+    // собирается один раз, и второй способ его собрать стал бы вторым
+    // источником правды. Пересчёт идёт после каждой постановки и перетаскивания.
+    const blocked: Record<number, number> = {};
+    for (const it of list) {
+      const item = itemById(placed.find((x) => x.uid === it.uid)!.catalogId);
+      if (!item?.blocksFloor) continue;
+      const idx = roomsRef.current?.roomAt(it.x, it.y) ?? null;
+      if (idx === null) continue;
+      blocked[idx] = (blocked[idx] ?? 0) + item.size[0] * item.size[1];
+    }
+    setBlockedArea(blocked);
   }, [placed, plan]);
 
-  useEffect(() => { recheck(); }, [recheck]);
+  useEffect(() => { roomsRef.current = roomsInfo; }, [roomsInfo]);
+  useEffect(() => { recheck(); }, [recheck, roomsInfo]);
   useEffect(() => { recheckRef.current = recheck; }, [recheck]);
 
 
@@ -1108,21 +1135,28 @@ export default function QSpaceClient() {
                   </tr>
                 </tbody>
               </table>
-              <h2 style={S.h2}>Тёплый пол</h2>
-              <HeatingPanel rooms={roomsInfo.rooms} />
-
-              <h2 style={S.h2}>Вентиляция и влажность</h2>
-              <VentilationPanel rooms={roomsInfo.rooms} />
-
-              <h2 style={S.h2}>Кондиционирование: какой сплит нужен</h2>
-              <CoolingPanel rooms={roomsInfo.rooms} />
-
               <p style={S.hint}>
                 Наведите на слой — покажет, за что он отвечает. Толщины типовые
                 для практики ремонта, а не требование норматива: сверьте с прорабом.
               </p>
             </>
           )}
+
+          {/* Инженерные расчёты НЕ прячутся за флажком слоя.
+              Замер на боевой сборке 08.09.2026: тёплый пол, вентиляция и
+              кондиционирование были невидимы при первом заходе — они стояли
+              внутри блока `layers.rough`, а этот флажок выключен по умолчанию.
+              Возможности работали и были покрыты тестами, но человек их не
+              видел вовсе. Флажок отвечает за то, что РИСУЕТСЯ в трёхмерном
+              виде; считать по квартире можно и не глядя на трубы. */}
+          <h2 style={S.h2}>Тёплый пол</h2>
+          <HeatingPanel rooms={roomsInfo.rooms} blockedAreaByRoom={blockedArea} />
+
+          <h2 style={S.h2}>Вентиляция и влажность</h2>
+          <VentilationPanel rooms={roomsInfo.rooms} />
+
+          <h2 style={S.h2}>Кондиционирование: какой сплит нужен</h2>
+          <CoolingPanel rooms={roomsInfo.rooms} />
 
           <h2 style={S.h2}>Чистовая отделка</h2>
           <div style={S.swatchRow} role="group" aria-label="Отделка стен">

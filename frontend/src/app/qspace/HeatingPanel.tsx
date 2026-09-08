@@ -14,13 +14,26 @@ import { heatingPlan, stepHint } from "./heating";
 
 interface Props {
   rooms: Room[];
+  /**
+   * Площадь под встроенной мебелью по номеру комнаты, м².
+   *
+   * У `heatingPlan` этот параметр был с самого начала и объяснён
+   * комментарием, но НИКТО его не передавал: пока мебели в демо не было,
+   * это ничего не меняло. С обставленной квартирой разница стала видна —
+   * в санузле 4.4 м² под ванной и унитазом около 1.5 м², то есть треть
+   * площади считалась тёплой ошибочно.
+   */
+  blockedAreaByRoom?: Record<number, number>;
 }
 
 const STEPS = [0.1, 0.15, 0.2, 0.25] as const;
 
-export default function HeatingPanel({ rooms }: Props) {
+export default function HeatingPanel({ rooms, blockedAreaByRoom }: Props) {
   const [step, setStep] = useState<number>(0.15);
-  const plan = useMemo(() => heatingPlan(rooms, step), [rooms, step]);
+  const plan = useMemo(
+    () => heatingPlan(rooms, step, blockedAreaByRoom),
+    [rooms, step, blockedAreaByRoom],
+  );
 
   if (rooms.length === 0) {
     return (

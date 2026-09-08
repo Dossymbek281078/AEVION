@@ -18,6 +18,16 @@ export interface CatalogItem {
   group: string;
   /** габарит Ш×Г×В в метрах */
   size: [number, number, number];
+  /**
+   * Стоит на полу вплотную, без просвета — под таким предметом трубу тёплого
+   * пола не кладут: она перегреется и греть будет мебель, а не комнату.
+   *
+   * Помечены только те, у кого нет ножек и зазора: кухня, шкафы, ванна, душ,
+   * техника. Диван, кровать, стол и комод НЕ помечены сознательно — у них
+   * обычно есть просвет, и ошибка в эту сторону даёт БОЛЬШЕ трубы в закупке.
+   * Лишний моток дешевле, чем недобор посреди укладки.
+   */
+  blocksFloor?: boolean;
   build: () => THREE.Group;
 }
 
@@ -132,13 +142,13 @@ export const CATALOG: CatalogItem[] = [
     box(g, 0.3, 0.02, 0.02, METAL, 0, 0.3, 0.21);
     return g;
   }},
-  { id: "wardrobe", name: "Шкаф", group: "Спальня", size: [1.8, 0.6, 2.3], build: () => {
+  { id: "wardrobe", name: "Шкаф", group: "Спальня", size: [1.8, 0.6, 2.3], blocksFloor: true, build: () => {
     const g = new THREE.Group();
     box(g, 1.8, 2.3, 0.6, 0x9d8265);
     box(g, 0.02, 2.1, 0.02, 0x5a4632, 0, 0.1, 0.31);
     return g;
   }},
-  { id: "wardrobe-sliding", name: "Шкаф-купе", group: "Спальня", size: [2.4, 0.65, 2.4], build: () => {
+  { id: "wardrobe-sliding", name: "Шкаф-купе", group: "Спальня", size: [2.4, 0.65, 2.4], blocksFloor: true, build: () => {
     const g = new THREE.Group();
     box(g, 2.4, 2.4, 0.65, 0x8d7458);
     box(g, 0.03, 2.2, 0.03, METAL, -0.4, 0.1, 0.34);
@@ -161,7 +171,7 @@ export const CATALOG: CatalogItem[] = [
   }},
 
   // ── Кухня ─────────────────────────────────────────────────────────────
-  { id: "kitchen", name: "Кухонный гарнитур", group: "Кухня", size: [2.4, 0.6, 2.2], build: () => {
+  { id: "kitchen", name: "Кухонный гарнитур", group: "Кухня", size: [2.4, 0.6, 2.2], blocksFloor: true, build: () => {
     const g = new THREE.Group();
     box(g, 2.4, 0.85, 0.6, 0xdad5cc);
     box(g, 2.4, 0.04, 0.62, 0x6f6a63, 0, 0.85);
@@ -169,20 +179,20 @@ export const CATALOG: CatalogItem[] = [
     box(g, 0.5, 0.02, 0.4, 0x9fb3c8, 0.6, 0.89);
     return g;
   }},
-  { id: "kitchen-island", name: "Кухонный остров", group: "Кухня", size: [1.8, 0.9, 0.9], build: () => {
+  { id: "kitchen-island", name: "Кухонный остров", group: "Кухня", size: [1.8, 0.9, 0.9], blocksFloor: true, build: () => {
     const g = new THREE.Group();
     box(g, 1.8, 0.85, 0.9, 0xdad5cc);
     box(g, 1.9, 0.05, 1.0, 0x585450, 0, 0.85);
     return g;
   }},
-  { id: "fridge", name: "Холодильник", group: "Кухня", size: [0.6, 0.65, 1.85], build: () => {
+  { id: "fridge", name: "Холодильник", group: "Кухня", size: [0.6, 0.65, 1.85], blocksFloor: true, build: () => {
     const g = new THREE.Group();
     box(g, 0.6, 1.85, 0.65, METAL);
     box(g, 0.02, 0.5, 0.03, 0x9aa3ab, 0.26, 1.1, 0.33);
     box(g, 0.58, 0.02, 0.02, 0x9aa3ab, 0, 1.15, 0.33);
     return g;
   }},
-  { id: "stove", name: "Плита", group: "Кухня", size: [0.6, 0.6, 0.85], build: () => {
+  { id: "stove", name: "Плита", group: "Кухня", size: [0.6, 0.6, 0.85], blocksFloor: true, build: () => {
     const g = new THREE.Group();
     box(g, 0.6, 0.85, 0.6, 0xd8d8d8);
     cyl(g, 0.09, 0.02, 0x333333, -0.15, 0.85, -0.12); cyl(g, 0.09, 0.02, 0x333333, 0.15, 0.85, -0.12);
@@ -195,7 +205,7 @@ export const CATALOG: CatalogItem[] = [
     box(g, 0.25, 0.55, 0.25, METAL, 0, 1.67, -0.1);
     return g;
   }},
-  { id: "dishwasher", name: "Посудомоечная машина", group: "Кухня", size: [0.6, 0.6, 0.85], build: () => {
+  { id: "dishwasher", name: "Посудомоечная машина", group: "Кухня", size: [0.6, 0.6, 0.85], blocksFloor: true, build: () => {
     const g = new THREE.Group();
     box(g, 0.6, 0.85, 0.6, 0xe4e4e2);
     box(g, 0.5, 0.02, 0.02, METAL, 0, 0.72, 0.31);
@@ -230,14 +240,14 @@ export const CATALOG: CatalogItem[] = [
   }},
 
   // ── Санузел ───────────────────────────────────────────────────────────
-  { id: "bathtub", name: "Ванна", group: "Санузел", size: [1.7, 0.75, 0.6], build: () => {
+  { id: "bathtub", name: "Ванна", group: "Санузел", size: [1.7, 0.75, 0.6], blocksFloor: true, build: () => {
     const g = new THREE.Group();
     box(g, 1.7, 0.6, 0.75, WHITE);
     const inner = box(g, 1.5, 0.1, 0.55, 0xdde8ee, 0, 0.51, 0);
     inner.position.y = 0.56;
     return g;
   }},
-  { id: "shower", name: "Душевая кабина", group: "Санузел", size: [0.9, 0.9, 2.0], build: () => {
+  { id: "shower", name: "Душевая кабина", group: "Санузел", size: [0.9, 0.9, 2.0], blocksFloor: true, build: () => {
     const g = new THREE.Group();
     box(g, 0.9, 0.12, 0.9, WHITE);
     const glass = new THREE.Mesh(
@@ -252,7 +262,7 @@ export const CATALOG: CatalogItem[] = [
     side.position.set(0.44, 1.07, 0); g.add(side);
     return g;
   }},
-  { id: "toilet", name: "Унитаз", group: "Санузел", size: [0.38, 0.7, 0.8], build: () => {
+  { id: "toilet", name: "Унитаз", group: "Санузел", size: [0.38, 0.7, 0.8], blocksFloor: true, build: () => {
     const g = new THREE.Group();
     box(g, 0.38, 0.4, 0.55, WHITE, 0, 0, 0.05);
     box(g, 0.38, 0.4, 0.18, 0xeeeeec, 0, 0.4, -0.18);
@@ -265,14 +275,14 @@ export const CATALOG: CatalogItem[] = [
     cyl(g, 0.02, 0.18, METAL, 0, 0.92, -0.14);
     return g;
   }},
-  { id: "vanity", name: "Тумба с раковиной", group: "Санузел", size: [0.8, 0.45, 0.85], build: () => {
+  { id: "vanity", name: "Тумба с раковиной", group: "Санузел", size: [0.8, 0.45, 0.85], blocksFloor: true, build: () => {
     const g = new THREE.Group();
     box(g, 0.8, 0.75, 0.45, 0xdfe4e6);
     box(g, 0.84, 0.1, 0.48, WHITE, 0, 0.75);
     cyl(g, 0.02, 0.2, METAL, 0, 0.85, -0.15);
     return g;
   }},
-  { id: "washer", name: "Стиральная машина", group: "Санузел", size: [0.6, 0.6, 0.85], build: () => {
+  { id: "washer", name: "Стиральная машина", group: "Санузел", size: [0.6, 0.6, 0.85], blocksFloor: true, build: () => {
     const g = new THREE.Group();
     box(g, 0.6, 0.85, 0.6, 0xe8e8e6);
     cyl(g, 0.18, 0.02, 0x4a5560, 0, 0.45, 0.3).rotation.x = Math.PI / 2;
@@ -297,7 +307,7 @@ export const CATALOG: CatalogItem[] = [
     for (let i = 0; i < 8; i++) box(g, 0.08, 0.5, 0.06, 0xe6e6e4, -0.42 + i * 0.12, 0.15);
     return g;
   }},
-  { id: "boiler", name: "Водонагреватель", group: "Климат", size: [0.9, 0.45, 0.45], build: () => {
+  { id: "boiler", name: "Водонагреватель", group: "Климат", size: [0.9, 0.45, 0.45], blocksFloor: true, build: () => {
     const g = new THREE.Group();
     const t = cyl(g, 0.22, 0.9, 0xeeeeec, 0, 1.2);
     t.rotation.z = Math.PI / 2;

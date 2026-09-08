@@ -52,7 +52,24 @@ import { unsubscribeUrl, unsubContact } from "./waitlistUnsubToken";
  */
 export const LAUNCH_MODULES: Record<
   string,
-  { name: string; date: string | null; dateSource: string; page: string; opens: string }
+  {
+    name: string;
+    date: string | null;
+    dateSource: string;
+    page: string;
+    opens: string;
+    /**
+     * Как сказать «открыт» ПРО ЭТО имя. Умолчание — мужской род, потому что
+     * восемь имён из девяти латиницей («CyberChess открыт»), и там род не
+     * читается.
+     *
+     * 08.09.2026: девятое имя русское и женского рода — тема письма выходила
+     * «Биржа стартапов открыт», и это первое, что увидит подписчик в ящике.
+     * Поле необязательное: у кого имя не спорит с умолчанием, писать ничего
+     * не надо.
+     */
+    openedWord?: string;
+  }
 > = {
   cyberchess: {
     name: "CyberChess",
@@ -133,6 +150,7 @@ export const LAUNCH_MODULES: Record<
   },
   startup: {
     name: "Биржа стартапов",
+    openedWord: "открыта",
     date: null,
     dateSource: "",
     page: "/startup-exchange",
@@ -222,6 +240,10 @@ export function buildLaunchEmail(moduleSlug: string, email: string): Constitutio
   if (!m) throw new Error(`launchAnnounce: неизвестный модуль «${moduleSlug}»`);
 
   const url = `https://aevion.app${m.page}`;
+  // Согласование со ЗНАЧЕНИЕМ, а не с языком вообще: «Биржа стартапов
+  // открыта», «CyberChess открыт». Умолчание мужского рода — восемь имён
+  // из девяти латиницей, там род не читается.
+  const otkryt = m.openedWord ?? "открыт";
   const html = `
     <div style="font-family:Georgia,'Times New Roman',serif;max-width:560px;margin:0 auto;padding:28px;background:#f7f6f2;color:#16161a">
       <!-- Прехедер: строка, которую почтовый клиент показывает в СПИСКЕ писем
@@ -236,7 +258,7 @@ export function buildLaunchEmail(moduleSlug: string, email: string): Constitutio
         &#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;
       </div>
       ${m.name.startsWith("AEVION") ? "" : `<div style="font-family:monospace;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#a9781a">AEVION</div>`}
-      <h1 style="font-size:26px;line-height:1.2;margin:10px 0 14px">${m.name} открыт</h1>
+      <h1 style="font-size:26px;line-height:1.2;margin:10px 0 14px">${m.name} ${otkryt}</h1>
       <p style="margin:0 0 14px;font-size:15px;line-height:1.6">
         Вы оставляли адрес, чтобы узнать о запуске — он состоялся${m.date ? ` ${m.date}` : ""}.
         Доступно: ${m.opens}.
@@ -265,9 +287,9 @@ export function buildLaunchEmail(moduleSlug: string, email: string): Constitutio
     to: [{ email }],
     // Без даты в теме, если даты нет. Шаблонная строка напечатала бы «null»
     // прямо в теме письма живому человеку — молча и убедительно.
-    subject: m.date ? `${m.name} открыт — ${m.date}` : `${m.name} открыт`,
+    subject: m.date ? `${m.name} ${otkryt} — ${m.date}` : `${m.name} ${otkryt}`,
     htmlContent: html,
-    textContent: `${m.name} открыт. Доступно: ${m.opens}. Открыть: ${url}\n\nВы подписались на странице запуска ${m.name}. ${unsubLine(email)}`,
+    textContent: `${m.name} ${otkryt}. Доступно: ${m.opens}. Открыть: ${url}\n\nВы подписались на странице запуска ${m.name}. ${unsubLine(email)}`,
     tags: ["launch", `launch-${moduleSlug}`],
   };
 }

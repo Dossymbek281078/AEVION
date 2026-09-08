@@ -432,7 +432,11 @@ export default function QSpaceClient() {
     const H = Math.max(b.maxY - b.minY, 2);
 
     // --- пол ---------------------------------------------------------------
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(W + 0.6, H + 0.6), t.floorMat);
+    // Пол доводим ровно до ВНЕШНЕЙ грани наружных стен. Стены нарисованы по
+    // осям и толщиной 0.3 м торчат наружу на 0.15 м с каждой стороны; при
+    // запасе 0.6 м пол вылезал из-под них видимой полосой паркета (нашлось
+    // на снимке экрана, тестами такое не ловится).
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(W + 0.3, H + 0.3), t.floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(cx, 0, cz);
     t.gWalls.add(floor);
@@ -736,6 +740,19 @@ export default function QSpaceClient() {
 
   return (
     <main style={S.page}>
+      {/*
+        На узком экране колонки складываются, и 3D-вид уезжает ПОД каталог:
+        человек жмёт «+ Диван» и не видит результата (замер: 0 px вида).
+        Поднимаем вид наверх и делаем его ниже, чтобы под ним оставалось место
+        каталогу. Медиазапрос инлайновым стилем не выразить, поэтому scoped-блок;
+        !important нужен, потому что высоту холста задаёт инлайновый стиль.
+      */}
+      <style>{`
+        @media (max-width: 860px) {
+          .qspace-canvas-wrap { order: -1; width: 100%; }
+          .qspace-canvas-wrap > div { height: 42vh !important; }
+        }
+      `}</style>
       <header style={S.header}>
         <h1 style={S.h1}>QSpace — 3D-модельер помещений</h1>
         <p style={S.lead}>
@@ -998,7 +1015,7 @@ export default function QSpaceClient() {
           </p>
         </aside>
 
-        <div style={S.canvasWrap}>
+        <div style={S.canvasWrap} className="qspace-canvas-wrap">
           {webglOk ? (
             <div
               ref={mountRef}

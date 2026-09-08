@@ -864,8 +864,15 @@ export default function QSpaceClient() {
     // Площадь пола — по ПОМЕЩЕНИЯМ, а не по габариту: стены не застилают.
     // На демо-квартире разница 48 против 41.1 м², то есть 17 % лишнего
     // покрытия в закупке.
-    return estimatePlan(plan, w, pl, generateLights(plan, roomsInfo).length, roomsInfo.totalArea);
-  }, [plan, roomsInfo]);
+    // Стены — тоже по ПОМЕЩЕНИЯМ, из той же таблицы, что показана выше.
+    // Прежде смета считала их заново по осям: 86.7 м² против 115.3, то есть
+    // 20.8 л краски вместо 27.7 — два наших ответа об одном на одном экране,
+    // и общий занижал на треть.
+    return estimatePlan(
+      plan, w, pl, generateLights(plan, roomsInfo).length,
+      roomsInfo.totalArea, perRoom.totals.wallArea,
+    );
+  }, [plan, roomsInfo, perRoom]);
 
   const S = styles;
   const catalogGroups = groups();
@@ -1372,9 +1379,25 @@ export default function QSpaceClient() {
           <h2 style={S.h2}>Спецификация (черновик)</h2>
           <table style={S.estTable}>
             <tbody>
-              <tr><td style={S.estTd}>Пол (по габариту плана)</td><td style={S.estTdNum}>{est.floorArea.toFixed(1)} м²</td></tr>
+              {/* Подписи следуют за ОСНОВАНИЕМ расчёта, а не написаны один раз
+                  словами. Прежде здесь стояло «Пол (по габариту плана)» и
+                  «Стены (по осям)» — оба ярлыка пережили правку самих расчётов
+                  и врали бы про способ, которым посчитано купленное. */}
+              <tr>
+                <td style={S.estTd}>
+                  Пол ({est.floorAreaSource === "rooms" ? "сумма помещений" : "по габариту плана"})
+                </td>
+                <td style={S.estTdNum}>{est.floorArea.toFixed(1)} м²</td>
+              </tr>
               <tr><td style={S.estTd}>Покрытие пола (+5 % подрезка)</td><td style={S.estTdNum}>{est.flooringArea.toFixed(1)} м²</td></tr>
-              <tr><td style={S.estTd}>Стены (по осям, одна сторона, минус проёмы)</td><td style={S.estTdNum}>{est.wallArea.toFixed(1)} м²</td></tr>
+              <tr>
+                <td style={S.estTd}>
+                  Стены ({est.wallAreaSource === "rooms"
+                    ? "внутренние поверхности комнат, обе стороны перегородок"
+                    : "по осям, одна сторона, минус проёмы"})
+                </td>
+                <td style={S.estTdNum}>{est.wallArea.toFixed(1)} м²</td>
+              </tr>
               <tr><td style={S.estTd}>Краска (0.12 л/м², два слоя)</td><td style={S.estTdNum}>{est.paintLitres.toFixed(1)} л</td></tr>
               <tr><td style={S.estTd}>Розетки</td><td style={S.estTdNum}>{est.outlets} шт</td></tr>
               <tr><td style={S.estTd}>Выключатели</td><td style={S.estTdNum}>{est.switches} шт</td></tr>

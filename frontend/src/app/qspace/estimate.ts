@@ -11,11 +11,25 @@
 import type { Plan, PlumbingDraft, WiringDraft } from "./planModel";
 import { planBounds } from "./planModel";
 
+export type WallAreaSource = "rooms" | "axes";
+
 export interface Estimate {
-  /** площадь пола по габариту плана, м² */
+  /** площадь пола, м² — основание см. в `floorAreaSource` */
   floorArea: number;
-  /** площадь стен по осям (одна сторона), за вычетом проёмов, м² */
+  /**
+   * Откуда взята площадь пола. Ярлык на экране обязан следовать за
+   * основанием: подпись «по габариту плана» пережила саму правку на габарит и
+   * сутки врала бы человеку про способ, которым посчитано его покрытие.
+   */
+  floorAreaSource: WallAreaSource;
+  /** площадь стен, м² — основание см. в `wallAreaSource` */
   wallArea: number;
+  /**
+   * Откуда взята площадь стен. Число несёт свою родословную само: подпись на
+   * экране обязана называть основание, иначе человек прочтёт «стены» и не
+   * узнает, что это осевые линии, а не то, что он будет красить.
+   */
+  wallAreaSource: WallAreaSource;
   /** краска на два слоя при расходе 0.12 л/м², л */
   paintLitres: number;
   /** напольное покрытие с запасом 5 % на подрезку, м² */
@@ -60,20 +74,48 @@ export function estimatePlan(
    * контур, картинка с разрывами), лучше завышенная оценка, чем никакой.
    */
   roomArea?: number,
+  /**
+   * Площадь стен ПО КОМНАТАМ (сумма периметр × высоту), м².
+   *
+   * Замер 08.09.2026 на демо-квартире: по осям стен выходило 86.7 м² и 20.8 л
+   * краски, по комнатам — 115.3 м² и 27.7 л. Расхождение 33 %, и оба числа
+   * стояли на ОДНОМ экране: список по комнатам выше, общая смета ниже.
+   *
+   * Верна комнатная сторона: красят ВНУТРЕННИЕ поверхности, и перегородка
+   * попадает дважды — по разу на каждую соседнюю комнату. Счёт по осям берёт
+   * её один раз, а наружную стену меряет по осевой линии, а не по грани.
+   * Занижение краски дороже завышения: не хватит посреди работы, а
+   * докупленная партия ляжет другим оттенком.
+   */
+  roomWallArea?: number,
 ): Estimate {
   const b = planBounds(plan);
-  const floorArea = roomArea && roomArea > 0
-    ? roomArea
+  const поКомнатам = Boolean(roomArea && roomArea > 0);
+  const floorArea = поКомнатам
+    ? (roomArea as number)
     : (b.maxX - b.minX) * (b.maxY - b.minY);
+  const floorAreaSource: WallAreaSource = поКомнатам ? "rooms" : "axes";
 
-  let wallArea = 0;
-  for (const w of plan.walls) {
-    wallArea += Math.hypot(w.x2 - w.x1, w.y2 - w.y1) * w.height;
+  // Проёмы вычитаются ТОЛЬКО на запасном пути. Комнатная сторона их намеренно
+  // не вычитает (положение проёмов по комнатам неизвестно, а завышение здесь
+  // безопаснее), и вычесть их тут значило бы вернуть расхождение с другой
+  // стороны: числа опять перестали бы сходиться.
+  let wallArea: number;
+  let wallAreaSource: WallAreaSource;
+  if (roomWallArea && roomWallArea > 0) {
+    wallArea = roomWallArea;
+    wallAreaSource = "rooms";
+  } else {
+    let byAxes = 0;
+    for (const w of plan.walls) {
+      byAxes += Math.hypot(w.x2 - w.x1, w.y2 - w.y1) * w.height;
+    }
+    for (const o of plan.openings) {
+      byAxes -= o.width * o.height;
+    }
+    wallArea = Math.max(0, byAxes);
+    wallAreaSource = "axes";
   }
-  for (const o of plan.openings) {
-    wallArea -= o.width * o.height;
-  }
-  wallArea = Math.max(0, wallArea);
 
   const cableMeters = wiring.runs.reduce((s, r) => s + runLen(r), 0);
   const pipeMeters =
@@ -83,7 +125,9 @@ export function estimatePlan(
 
   return {
     floorArea,
+    floorAreaSource,
     wallArea,
+    wallAreaSource,
     paintLitres: wallArea * 0.12 * 2,
     flooringArea: floorArea * 1.05,
     outlets: wiring.points.filter((p) => p.kind === "outlet").length,

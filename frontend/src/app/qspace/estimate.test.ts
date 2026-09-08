@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { demoPlan, generateLights, generatePlumbing, generateWiring } from "./planModel";
 import { estimatePlan } from "./estimate";
 import { findRooms } from "./rooms";
+import { roomSpec } from "./roomSpec";
 
 describe("спецификация из демо-плана", () => {
   const p = demoPlan();
@@ -82,5 +83,53 @@ describe("площадь пола берётся по помещениям, а �
       expect(estimatePlan(plan, w, pl, l, плохо).flooringArea,
         `при значении ${плохо} смета обнулилась`).toBeGreaterThan(40);
     }
+  });
+});
+
+describe("общая смета и таблица по комнатам говорят ОДНО", () => {
+  // Замер 08.09: по осям стен выходило 86.7 м² и 20.8 л краски, по комнатам —
+  // 115.3 м² и 27.7 л. Расхождение 33 %, и оба числа стояли на одном экране.
+  // Занижение краски дороже завышения: не хватит посреди работы, а
+  // докупленная партия ляжет другим оттенком.
+  const plan = demoPlan();
+  const rr = findRooms(plan);
+  const rs = roomSpec(rr.rooms, 2.7);
+  const est = estimatePlan(
+    plan, generateWiring(plan), generatePlumbing(plan), generateLights(plan, rr).length,
+    rr.totalArea, rs.totals.wallArea,
+  );
+
+  it("площадь стен совпадает с суммой по комнатам", () => {
+    expect(est.wallArea).toBeCloseTo(rs.totals.wallArea, 1);
+  });
+
+  it("краска совпадает с суммой по комнатам", () => {
+    expect(est.paintLitres).toBeCloseTo(rs.totals.paint, 1);
+  });
+
+  it("площадь пола совпадает с суммой помещений", () => {
+    expect(est.floorArea).toBeCloseTo(rr.totalArea, 1);
+  });
+
+  it("число само называет своё основание", () => {
+    // подпись на экране читает это поле; без него ярлык живёт отдельно от
+    // расчёта и переживает его правку — так уже случилось дважды
+    expect(est.wallAreaSource).toBe("rooms");
+    expect(est.floorAreaSource).toBe("rooms");
+  });
+
+  it("контроль: без данных о комнатах основание другое и названо честно", () => {
+    const без = estimatePlan(plan, generateWiring(plan), generatePlumbing(plan), 6);
+    expect(без.wallAreaSource).toBe("axes");
+    expect(без.floorAreaSource).toBe("axes");
+    // и запасной путь не обнуляется
+    expect(без.wallArea).toBeGreaterThan(10);
+    expect(без.floorArea).toBeGreaterThan(10);
+  });
+
+  it("контроль прибора: расхождение БЫЛО настоящим, а не выдуманным", () => {
+    // иначе «теперь совпадает» неотличимо от «и раньше совпадало»
+    const поОсям = estimatePlan(plan, generateWiring(plan), generatePlumbing(plan), 6);
+    expect(rs.totals.paint - поОсям.paintLitres).toBeGreaterThan(5); // литров
   });
 });

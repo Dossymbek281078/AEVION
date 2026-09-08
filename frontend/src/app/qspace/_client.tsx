@@ -291,12 +291,10 @@ export default function QSpaceClient() {
   } | null>(null);
 
   const selRef = useRef<number | null>(null);
-  selRef.current = selectedUid;
 
   // Обработчик мыши создаётся один раз вместе со сценой, поэтому режим и
   // действие он должен читать через ref, а не из замкнутого состояния.
   const openingModeRef = useRef<"off" | "door" | "window" | "erase">("off");
-  openingModeRef.current = openingMode;
   const openingClickRef = useRef<((x: number, y: number, mode: "door" | "window" | "erase") => void) | null>(null);
 
   // ---- начальная сцена ----------------------------------------------------
@@ -593,6 +591,15 @@ export default function QSpaceClient() {
     t.controls.update();
   }, [plan]);
 
+  // ---- синхронизация ref-ов -----------------------------------------------
+  // Обработчики мыши создаются ОДИН раз вместе со сценой и не видят
+  // последующих состояний, поэтому актуальные значения им передаются через
+  // ref. Присваивать ref во время отрисовки нельзя: React вправе отрисовать
+  // компонент, не показав результат (и делает это в строгом режиме), — тогда
+  // сцена получила бы значение из отброшенного прохода. Поэтому эффектом.
+  useEffect(() => { selRef.current = selectedUid; }, [selectedUid]);
+  useEffect(() => { openingModeRef.current = openingMode; }, [openingMode]);
+
   // ---- видимость слоёв ----------------------------------------------------
   useEffect(() => {
     const t = three.current; if (!t) return;
@@ -687,7 +694,9 @@ export default function QSpaceClient() {
     },
     [plan],
   );
-  openingClickRef.current = onOpeningClick;
+
+  // Привязка эффектом, а не во время отрисовки: см. блок синхронизации ref-ов.
+  useEffect(() => { openingClickRef.current = onOpeningClick; }, [onOpeningClick]);
 
   const withSelected = useCallback((fn: (g: THREE.Object3D) => void) => {
     const t = three.current; if (!t || selRef.current === null) return;

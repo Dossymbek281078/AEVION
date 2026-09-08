@@ -120,3 +120,43 @@ describe("файл проекта", () => {
     expect(isProject(sample())).toBe(true);
   });
 });
+
+describe("файл с неполными полями отвергается ДО применения", () => {
+  // Проверка формы смотрела «layers это объект» и не смотрела на partition
+  // вовсе. Файл с `layers: {}` проходил как исправный, а страница делала
+  // checked={layers.rough} со значением undefined — флажок становился
+  // неуправляемым уже ПОСЛЕ сообщения «проект восстановлен». Отказать честно
+  // дешевле, чем принять и сломаться позже.
+  const целый = () => JSON.parse(JSON.stringify({
+    version: 1,
+    savedAt: new Date().toISOString(),
+    plan: { name: "п", source: "demo", walls: [
+      { x1: 0, y1: 0, x2: 4, y2: 0, thickness: 0.2, height: 2.7 },
+    ], openings: [] },
+    placed: [],
+    wallMatId: "paint-warm-white",
+    floorMatId: "parquet-oak",
+    partition: "wall-block",
+    layers: { rough: false, finish: true, decor: true },
+  }));
+
+  it("контроль прибора: целый файл принимается", () => {
+    // без этого «всё отвергнуто» неотличимо от «отвергается что угодно»
+    expect(isProject(целый())).toBe(true);
+  });
+
+  it("слои без нужных полей — отказ", () => {
+    for (const плохие of [{}, { rough: true }, { rough: 1, finish: true, decor: true },
+                          { rough: true, finish: true }]) {
+      const p = целый(); p.layers = плохие;
+      expect(isProject(p), `принят файл со слоями ${JSON.stringify(плохие)}`).toBe(false);
+    }
+  });
+
+  it("тип перегородки обязателен", () => {
+    const p = целый(); delete p.partition;
+    expect(isProject(p)).toBe(false);
+    const q = целый(); q.partition = 5;
+    expect(isProject(q)).toBe(false);
+  });
+});

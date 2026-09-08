@@ -65,7 +65,20 @@ export function isProject(v: unknown): v is Project {
     if (![it.x, it.z, it.rotY].every((n) => typeof n === "number" && Number.isFinite(n))) return false;
   }
   if (typeof p.wallMatId !== "string" || typeof p.floorMatId !== "string") return false;
+  // Тип перегородки читается страницей напрямую (setPartition), поэтому его
+  // отсутствие ломает состав конструкций уже ПОСЛЕ того, как файл принят.
+  if (typeof p.partition !== "string") return false;
   if (!p.layers || typeof p.layers !== "object") return false;
+  // ⚠️ Три поля слоёв проверяются поимённо, а не «это объект». Файл с
+  // `layers: {}` проходил как исправный, а затем страница делала
+  // `checked={layers.rough}` со значением undefined — флажок становится
+  // неуправляемым, React ругается в консоль, а человек видит непонятное
+  // поведение уже ПОСЛЕ сообщения «проект восстановлен». Отказать честно
+  // дешевле, чем принять и сломаться позже.
+  const l = p.layers as Partial<Project["layers"]>;
+  if (!["rough", "finish", "decor"].every((k) => typeof l[k as keyof typeof l] === "boolean")) {
+    return false;
+  }
   return true;
 }
 

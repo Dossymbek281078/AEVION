@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import paper from "@/styles/aevionPaper.module.css";
-import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 import { probeJson } from "@/lib/probeLive";
 import { voiceIsKnownDown } from "../capabilityRows";
 import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
+import { LandingView } from "@/components/LandingView";
 import { PageTracking } from "@/components/PageTracking";
 
 // Посадочная запуска DevHub.
@@ -123,9 +123,6 @@ export default async function DevhubLaunchPage({
   // без неё после запуска не ответить, какой источник привёл людей именно сюда.
   const channel = channelFrom((await searchParams).c);
   const source = channel ? `devhub-${channel}` : "devhub";
-  // Дней до открытия. 10 сентября 2026 — документ основателя
-  // 00-НАЧНИ-ОТСЮДА/2026-08-30-ПЛАН-даты-запуска-новые.md.
-  const left = daysUntilLaunch(Date.UTC(2026, 8, 10));
 
   return (
     <main lang="ru" className={paper.paper} style={{ minHeight: "100vh", padding: "clamp(16px, 4vw, 32px) 18px 56px" }}>
@@ -144,33 +141,12 @@ export default async function DevhubLaunchPage({
             Опишите приложение словами
           </h1>
           <p style={{ color: "var(--ink-soft)", fontSize: 15.5, lineHeight: 1.5, margin: "10px 0 0" }}>
-            «Сделай таймер помодоро с настройкой длительности» — и DevHub собирает
+            «Сделай таймер помодоро с настройкой длительности» — и DevHub соберёт
             проект: код, страницы, а при необходимости картинки и озвучку к ним.
-            Начинать со списка возможностей не нужно, он ниже — просто чтобы вы
-            видели, из чего собирается.
-            {/*
-              Дата, а не «объявим отдельно». Опора — документ основателя
-              00-НАЧНИ-ОТСЮДА/2026-08-30-ПЛАН-даты-запуска-новые.md: строка
-              «10 сентября | DevHub, Мультичат, QRight, QSign, биржа
-              стартапов, анализатор бизнес-идей, QSkyway». Проверено по
-              документу 08.09.2026, а не по чужой ссылке на него.
-
-              Месяц НЕ называем: соседний ратчет launchPages.render запрещает
-              названия месяцев на этих двух страницах — он заведён против
-              выдуманных дат, и ослаблять его ради текста я не стал. Счётчика
-              дней достаточно: он меняется сам и в день открытия скажет правду.
-
-              Переключение ПО ДАТЕ, как у /bureau/launch и /cyberchess/launch:
-              иначе 10 сентября подписчик получит письмо «DevHub открыт»,
-              придёт сюда и прочтёт «дату объявим отдельно». Строка, которая
-              обязана стать другой в назначенный день, не может быть
-              статической — менять её руками в день запуска никто не успеет.
-            */}
-            {left > 0
-              ? ` Открываем ${left === 1 ? "завтра" : `через ${left} дн.`}. Оставьте адрес, и письмо придёт в день запуска.`
-              : " Уже открыто — заходите."}
           </p>
         </header>
+
+        <LandingView source={source} />
 
         <WaitlistCapture
           // Язык НЕ задан жёстко (было lang="ru", снято 06.09.2026 по живому
@@ -183,6 +159,19 @@ export default async function DevhubLaunchPage({
           title="Написать вам в день запуска"
           description="Одно письмо на запуск и условия раннего доступа. Ничего больше."
         />
+
+        {/* Хвост объяснения стоит ПОСЛЕ формы намеренно. Замер прода
+            08.09.2026 на 360×640 (вахта нашла, я перемерил): поле адреса
+            лежало на 697px при сгибе 640 — то есть человек, пришедший по
+            письму, не видел единственного действия, ради которого страница
+            существует. Верхних 234px занимает общая шапка сайта, ещё 287 —
+            заголовок с абзацем; форме оставалось начаться за экраном.
+            На 390×844 всё было в порядке, поэтому на глаз не заметно. */}
+        <p style={{ color: "var(--ink-soft)", fontSize: 15.5, lineHeight: 1.5, margin: 0 }}>
+          Начинать со списка возможностей не нужно, он ниже — просто чтобы вы
+          видели, из чего собирается. Дату открытия объявим отдельно: оставьте
+          адрес, и письмо придёт в тот же день.
+        </p>
 
         <section style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div className={paper.sectionHead}>

@@ -32,6 +32,7 @@ import { stripComments } from "./helpers/sourceCode";
  * текстовая проверка, а живая проба ответов — она в отдельной работе.
  */
 const RE = join(__dirname, "..", "src", "routes", "revenue.ts");
+const QRIGHT = join(__dirname, "..", "src", "routes", "qright.ts");
 
 describe("список продаж не отдаёт почту наружу", () => {
   const src = stripComments(readFileSync(RE, "utf8"));
@@ -66,4 +67,64 @@ describe("список продаж не отдаёт почту наружу", 
       ).toContain("internal: isInternalPurchase");
     });
   }
+});
+
+
+/**
+ * Реестр прав: АНОНИМНЫЙ список не отдаёт почту и внутренний номер владельца.
+ *
+ * 🔴 ЗАЧЕМ. Замер 08.09.2026, живая проба: GET /api/qright/objects без единого
+ * заголовка возвращал "ownerEmail" — адреса живых владельцев работ. Причина в
+ * `SELECT *`: колонка появилась в таблице и молча поехала наружу. Починено
+ * перечислением полей явно.
+ *
+ * 🔴 ПОЧЕМУ НЕ «НЕТ СЛОВА ownerEmail В ТЕЛЕ РУЧКИ». Первую редакцию этого
+ * сторожа я написал именно так, и она покраснела на ИСПРАВНОМ коде. Причина
+ * не в шаблоне, а в устройстве: обработчик ОДИН, а веток в нём ДВЕ —
+ * анонимная и `?mine=1` под Bearer, где `SELECT *` с почтой ЗАКОНЕН, человек
+ * смотрит своё. Тело ручки 2578 знаков, ownerEmail в нём есть, и это правильно.
+ * Сторож, краснеющий на здоровом коде, будет отключён в первый же день, —
+ * поэтому смотрим на КОНКРЕТНЫЙ запрос, а не на тело.
+ *
+ * Признак: последний `pool.query` ручки — тот самый анонимный, он идёт ПОСЛЕ
+ * ветки `if (mine)` с её ранним возвратом.
+ */
+describe("реестр прав не отдаёт почту владельцев анонимно", () => {
+  const src = stripComments(readFileSync(QRIGHT, "utf8"));
+
+  /** Тело обработчика GET /objects — от объявления до следующего маршрута. */
+  function телоРучки(): string {
+    const at = src.indexOf('get("/objects"');
+    expect(at, "ручка /objects не найдена — переименовали?").toBeGreaterThan(-1);
+    const след = src.indexOf("qrightRouter.", at + 10);
+    return src.slice(at, след < 0 ? src.length : след);
+  }
+
+  /** Последний SQL в теле — анонимный: ветка mine выше и возвращает раньше. */
+  function анонимныйЗапрос(тело: string): string {
+    const i = тело.lastIndexOf("pool.query");
+    expect(i, "в ручке не осталось ни одного запроса").toBeGreaterThan(-1);
+    return тело.slice(i, i + 700);
+  }
+
+  it("прибор видит предмет: ручка, ветка mine и запросы на месте", () => {
+    const тело = телоРучки();
+    expect(тело).toContain("if (mine)");
+    expect(тело.split("pool.query").length - 1).toBeGreaterThanOrEqual(2);
+  });
+
+  it("анонимный запрос перечисляет поля, а не SELECT *", () => {
+    const q = анонимныйЗапрос(телоРучки());
+    expect(
+      /SELECT\s+\*/.test(q),
+      "анонимная выборка снова через SELECT * — так почта владельцев уехала наружу 08.09",
+    ).toBe(false);
+  });
+
+  it("в анонимном запросе нет ownerEmail и ownerUserId", () => {
+    const q = анонимныйЗапрос(телоРучки());
+    for (const поле of ["ownerEmail", "ownerUserId"]) {
+      expect(q.includes(поле), `анонимная выборка снова отдаёт ${поле}`).toBe(false);
+    }
+  });
 });

@@ -33,6 +33,7 @@ import { checkPassage } from "./passage";
 import { roomSpec, roomSpecText } from "./roomSpec";
 import RasterReview from "./RasterReview";
 import HeatingPanel from "./HeatingPanel";
+import CoolingPanel from "./CoolingPanel";
 import VentilationPanel from "./VentilationPanel";
 import { nearestWall, placeOpening, removeOpeningNear } from "./openings";
 import {
@@ -1112,6 +1113,9 @@ export default function QSpaceClient() {
 
               <h2 style={S.h2}>Вентиляция и влажность</h2>
               <VentilationPanel rooms={roomsInfo.rooms} />
+
+              <h2 style={S.h2}>Кондиционирование: какой сплит нужен</h2>
+              <CoolingPanel rooms={roomsInfo.rooms} />
 
               <p style={S.hint}>
                 Наведите на слой — покажет, за что он отвечает. Толщины типовые

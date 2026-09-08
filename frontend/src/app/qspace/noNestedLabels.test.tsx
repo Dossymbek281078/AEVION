@@ -3,6 +3,7 @@ import { render } from "@testing-library/react";
 import type { Room } from "./rooms";
 import HeatingPanel from "./HeatingPanel";
 import VentilationPanel from "./VentilationPanel";
+import CoolingPanel from "./CoolingPanel";
 
 /**
  * Вложенных `<label>` в модуле быть не должно.
@@ -33,6 +34,25 @@ describe("вложенных label в модуле нет", () => {
   it("панель вентиляции", () => {
     const { container } = render(<VentilationPanel rooms={rooms} />);
     expect(nestedLabelCount(container), "label внутри label в панели вентиляции").toBe(0);
+  });
+
+  it("панель кондиционирования", () => {
+    const { container } = render(<CoolingPanel rooms={rooms} />);
+    expect(nestedLabelCount(container), "label внутри label в панели сплитов").toBe(0);
+  });
+
+  it("у каждого органа управления панели сплитов есть имя", () => {
+    const { container } = render(<CoolingPanel rooms={rooms} />);
+    const controls = container.querySelectorAll("select, input, button");
+    expect(controls.length, "органов управления не найдено — проверка пуста").toBeGreaterThan(2);
+    for (const el of Array.from(controls)) {
+      const aria = el.getAttribute("aria-label");
+      const inLabel = el.closest("label") !== null;
+      const id = el.getAttribute("id");
+      const labelled = id ? container.querySelector(`label[for="${id}"]`) !== null : false;
+      expect(Boolean(aria) || inLabel || labelled,
+        `орган ${el.tagName.toLowerCase()} без имени`).toBe(true);
+    }
   });
 
   it("панель тёплого пола", () => {

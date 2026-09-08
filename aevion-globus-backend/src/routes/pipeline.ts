@@ -1819,9 +1819,22 @@ pipelineRouter.get("/certificates.csv", async (req, res) => {
           : `"protectedAt" DESC`;
     params.push(limit);
 
+    /*
+     * 🔴 LIMIT — ПЛЕЙСХОЛДЕР `$${params.length}`, а не `${params.length}`.
+     * Замер 08.09.2026 на живом проде: ручка отвечала 500 при ЛЮБЫХ
+     * параметрах — `{"error":"csv export failed"}`. Без доллара в текст
+     * запроса подставлялось ЧИСЛО параметров, сам параметр оставался
+     * непривязанным, и Postgres отбивал запрос («supplies N parameters, but
+     * prepared statement requires N-1»). То есть экспорт не работал НИКОГДА
+     * с момента переноса.
+     * Класс известный: SQL для TypeScript — просто строка, и ни типы, ни
+     * сборка такой ошибки не видят. Контроль при проверке: соседняя
+     * GET /certificates того же роутера отвечала 200.
+     */
+
     const { rows } = await pool.query(
       `SELECT "id","title","kind","authorName","country","city","contentHash","fileHash","algorithm","protectedAt","verifiedCount","otsStatus","otsBitcoinBlockHeight"
-       FROM "IPCertificate" WHERE ${conditions.join(" AND ")} ORDER BY ${orderBy} LIMIT ${params.length}`,
+       FROM "IPCertificate" WHERE ${conditions.join(" AND ")} ORDER BY ${orderBy} LIMIT $${params.length}`,
       params,
     );
 

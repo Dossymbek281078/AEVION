@@ -392,18 +392,19 @@ export function demoFurniture(): DemoPlacement[] {
     at("kitchen", 1.5, 5.45),
     at("dining", 2.2, 4.2),
     at("chair", 2.2, 3.5),
+    at("chair", 2.2, 4.9),
     at("sofa", 2.4, 1.9),
     at("coffee", 2.4, 1.0),
-    at("tv", 2.4, 0.35),
+    at("tv", 2.4, 0.4),
     at("plant", 4.3, 5.4),
     // спальня, 9.6 м² (юго-восток)
     at("bed", 6.4, 1.4),
     at("nightstand", 5.25, 0.4),
     at("wardrobe", 6.9, 3.1),
     // санузел, 4.4 м² (северо-восток)
-    at("bathtub", 7.5, 4.9, Math.PI / 2),
-    at("toilet", 6.2, 5.5),
-    at("sink", 6.8, 5.5),
+    at("bathtub", 7.42, 4.9, Math.PI / 2),
+    at("toilet", 6.2, 5.45),
+    at("sink", 6.75, 5.45),
   ];
 }
 

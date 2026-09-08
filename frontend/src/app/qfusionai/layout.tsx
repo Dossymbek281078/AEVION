@@ -5,7 +5,7 @@ import { ModuleMaturity } from "@/components/ModuleMaturity";
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "QFusionAI — Hybrid AI Router · AEVION",
+  title: "QFusionAI — Hybrid AI Router",
   description:
     "Гибридный AI-движок, объединяющий лучшие LLM (OpenAI, Anthropic, Gemini, DeepSeek, Grok) с автоматическим routing по цене/скорости/качеству. Один API — пять провайдеров.",
   alternates: { canonical: `${SITE}/qfusionai` },

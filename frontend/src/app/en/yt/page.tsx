@@ -5,7 +5,7 @@ import type { Metadata } from "next";
 // Метаданные обязательны у каждой публичной страницы (сторож pageMetadata), и
 // у перенаправления они решают отдельную задачу: закрыть его от поисковика.
 export const metadata: Metadata = {
-  title: "AEVION",
+  title: { absolute: "AEVION" },
   robots: { index: false, follow: true },
 };
 

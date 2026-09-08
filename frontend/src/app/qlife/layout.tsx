@@ -6,7 +6,7 @@ import { ModuleMaturity } from "@/components/ModuleMaturity";
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "QLife — Personal OS · AEVION",
+  title: "QLife — Personal OS",
   description:
     "Personal Operating System: единый интерфейс для всей жизни — финансы, здоровье, расписание, отношения, цели. AI-агент держит фокус, ты управляешь.",
   alternates: { canonical: `${SITE}/qlife` },

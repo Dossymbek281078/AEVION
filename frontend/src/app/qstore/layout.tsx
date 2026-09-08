@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "QStore — Digital Marketplace | AEVION",
+  title: "QStore — Digital Marketplace",
   description:
     "Buy and sell digital products: templates, presets, code, music, design assets. AEVION digital marketplace.",
   openGraph: {

@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "Planet Constitutions — Leaderboard · AEVION",
+  title: "Planet Constitutions — Leaderboard",
   description:
     "Топ опубликованных конституций с QSign-подписями. Голосование за лучшие сценарии, похожие отпечатки по cosine similarity, deep-link применения ползунков одним кликом.",
   alternates: { canonical: `${SITE}/constitution/leaderboard` },

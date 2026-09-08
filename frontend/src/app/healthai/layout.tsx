@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
 
 export const metadata: Metadata = {
-  title: "HealthAI — Personal AI Doctor · AEVION",
+  // Хвост "· AEVION" не пишем: корневой layout добавляет его шаблоном
+  // "%s · AEVION". В openGraph ниже он остаётся — там шаблона нет.
+  title: "HealthAI — Personal AI Doctor",
   description:
     "Personal AI Doctor: rule-based symptom triage, daily wellness log, BMI, trends, risk indicators, PHQ-9 & GAD-7 screeners, weekly plan, cycle tracker, family profiles. RU/EN.",
   keywords: ["HealthAI", "AEVION", "AI doctor", "symptom checker", "wellness", "PHQ-9", "personal health"],

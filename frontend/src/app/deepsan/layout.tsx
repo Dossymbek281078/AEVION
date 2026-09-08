@@ -5,7 +5,7 @@ import { ModuleMaturity } from "@/components/ModuleMaturity";
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "DeepSan — Anti-chaos Productivity · AEVION",
+  title: "DeepSan — Anti-chaos Productivity",
   description:
     "Антихаос-приложение: tasks как состояния, AI inbox-парсер, принудительные фокус-сессии, bridge к QCoreAI агентам.",
   alternates: { canonical: `${SITE}/deepsan` },

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Affiliate Dashboard — AEVION",
+  title: "Affiliate Dashboard",
   description:
     "Личный кабинет affiliate-партнёра AEVION: ваш реферальный код, статистика кликов, MRR и payouts. Вход по magic-link, отправляемому на email.",
   robots: { index: false, follow: false },

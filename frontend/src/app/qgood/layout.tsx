@@ -6,7 +6,7 @@ import { ModuleMaturity } from "@/components/ModuleMaturity";
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "QGood — Psychology & Mental Health · AEVION",
+  title: "QGood — Psychology & Mental Health",
   description:
     "AI-сопровождение психологического благополучия: разговорный AI, офлайн-режим, link с HealthAI скринером (PHQ-9 / GAD-7), эскалация к живому специалисту.",
   alternates: { canonical: `${SITE}/qgood` },

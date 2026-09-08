@@ -8,7 +8,7 @@ type TFn = (key: string, vars?: Record<string, string | number>) => string;
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "QGood Campaigns — Transparent Charity · AEVION",
+  title: "QGood Campaigns — Transparent Charity",
   description:
     "Прозрачные благотворительные кампании на AEVION. Каждый донат — audit-trail через QRight + VeilNetX ledger. Stripe-готовый платёжный канал.",
   alternates: { canonical: "https://aevion.app/qgood/campaigns" },

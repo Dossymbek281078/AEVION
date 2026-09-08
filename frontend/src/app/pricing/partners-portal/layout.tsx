@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Partners Portal — AEVION",
+  title: "Partners Portal",
   description:
     "Кабинет партнёра AEVION: deal registration, pipeline, статус сделок. Reseller / System Integrator / Agency программа. Margin 30%.",
   robots: { index: false, follow: false },

@@ -5,7 +5,7 @@ import { getApiBase } from "@/lib/apiBase";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "VeilNetX Ledger Explorer · AEVION",
+  title: "VeilNetX Ledger Explorer",
   description: "Tamper-evident settlement chain — recent entries + chain head + integrity verification.",
   alternates: { canonical: "https://aevion.app/veilnetx/ledger" },
   robots: { index: true, follow: true },

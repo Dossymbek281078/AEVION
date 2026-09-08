@@ -8,7 +8,7 @@ const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://a
 // first thing a visitor does with a marketplace is check whether it does what
 // its own page says. Describes what actually ships.
 export const metadata: Metadata = {
-  title: "Биржа стартапов — идея, MVP или готовый продукт · AEVION",
+  title: "Биржа стартапов — идея, MVP или готовый продукт",
   description:
     "Три уровня заявок: только идея (доля за вложение в разработку), идея + MVP (доля за вложение в доработку), готовый продукт (выкуп целиком или доли). У каждой заявки — названные условия сделки, бесплатный разбор с рыночным диапазоном цены и SHA-256 отпечаток авторства.",
   alternates: {

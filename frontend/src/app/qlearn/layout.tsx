@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "QLearn — Learning Platform | AEVION",
+  title: "QLearn — Learning Platform",
   description:
     "Online courses for tech, business, design, music and more. Learn at your own pace with QLearn.",
   openGraph: {

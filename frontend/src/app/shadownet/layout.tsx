@@ -5,7 +5,7 @@ import { ModuleMaturity } from "@/components/ModuleMaturity";
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "ShadowNet — Alternative Private Network · AEVION",
+  title: "ShadowNet — Alternative Private Network",
   description:
     "Альтернативная приватная сеть поверх VeilNetX: анонимный форум, mesh-обмен, off-grid коммуникации, end-to-end шифрование без метаданных.",
   alternates: { canonical: `${SITE}/shadownet` },

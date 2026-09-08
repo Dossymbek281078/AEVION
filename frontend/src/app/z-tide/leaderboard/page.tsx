@@ -5,7 +5,7 @@ import { getApiBase } from "@/lib/apiBase";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Z-Tide Leaderboard · AEVION",
+  title: "Z-Tide Leaderboard",
   description: "Top contributors across the AEVION ecosystem by Z-Tide tide score.",
   alternates: { canonical: "https://aevion.app/z-tide/leaderboard" },
   robots: { index: true, follow: true },

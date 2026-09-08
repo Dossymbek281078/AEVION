@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "Constitution Embed Widget · AEVION",
+  title: "Constitution Embed Widget",
   description:
     "Iframe-friendly Constitution radar widget. Drop on any site to show a governance fingerprint.",
   alternates: { canonical: `${SITE}/constitution/embed` },

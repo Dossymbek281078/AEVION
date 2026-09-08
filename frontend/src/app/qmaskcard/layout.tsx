@@ -6,7 +6,7 @@ import { ModuleMaturity } from "@/components/ModuleMaturity";
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "QMaskCard — Disposable Virtual Cards · AEVION",
+  title: "QMaskCard — Disposable Virtual Cards",
   description:
     "Одноразовые виртуальные карты для онлайн-покупок. Генерируйте новую карту под каждый платёж — настоящие данные никогда не покидают ваш кошелёк.",
   alternates: { canonical: `${SITE}/qmaskcard` },

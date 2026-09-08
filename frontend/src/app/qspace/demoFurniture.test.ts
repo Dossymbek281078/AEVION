@@ -425,3 +425,27 @@ describe("на экране нет ни жаргона, ни сырых ошиб
     expect(жаргон.test("Модель собралась, но файл сохранить не удалось")).toBe(false);
   });
 });
+
+describe("экран правки распознанного плана не молчит на отказе", () => {
+  // Кнопка «принять» имела два молчаливых return: неверный габарит и «не
+  // осталось линий». Человек нажимал, ничего не происходило — со стороны это
+  // неотличимо от «кнопка не работает», и жать её будут снова.
+  const src = readFileSync(path.join(__dirname, "RasterReview.tsx"), "utf8")
+    .replace(/\/\/[^\n]*/g, "");
+  const accept = src.slice(src.indexOf("const accept = useCallback"),
+                           src.indexOf("const walls: Wall[]"));
+
+  it("срез найден — проверка не смотрит в пустоту", () => {
+    expect(accept.length).toBeGreaterThan(100);
+    expect(accept).toContain("extentM");
+  });
+
+  it("ни одного возврата без объяснения", () => {
+    const возвраты = [...accept.matchAll(/return;/g)].length;
+    const сообщения = [...accept.matchAll(/setWarnings\(/g)].length;
+    expect(возвраты, "в кнопке «принять» нет ни одного выхода — срез не тот")
+      .toBeGreaterThan(1);
+    expect(сообщения, `выходов ${возвраты}, а объяснений ${сообщения}`)
+      .toBeGreaterThanOrEqual(возвраты);
+  });
+});

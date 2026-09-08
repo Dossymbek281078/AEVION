@@ -155,15 +155,37 @@ export default function RasterReview({ imageUrl, onCancel, onAccept }: Props) {
   );
 
   const accept = useCallback(() => {
+    // ⚠️ Прежде здесь стоял молчаливый return: человек вводил неверный габарит,
+    // нажимал «принять» и НИЧЕГО не происходило — ни модели, ни объяснения.
+    // Со стороны это неотличимо от «кнопка не работает», и жать её будут снова.
     const extent = Number(extentM);
-    if (!(extent > 0.5) || !(extent < 500)) return;
+    if (!(extent > 0.5) || !(extent < 500)) {
+      setWarnings([
+        `Габарит «${extentM}» не подходит: нужна длина большей стороны плана `
+        + "в метрах, от 0.5 до 500. Посмотрите её на самом чертеже — обычно "
+        + "она подписана у размерной линии.",
+      ]);
+      return;
+    }
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const s of kept) {
       minX = Math.min(minX, s.x1, s.x2); minY = Math.min(minY, s.y1, s.y2);
       maxX = Math.max(maxX, s.x1, s.x2); maxY = Math.max(maxY, s.y1, s.y2);
     }
     const extentPx = Math.max(maxX - minX, maxY - minY);
-    if (!(extentPx > 0)) return;
+    if (!(extentPx > 0)) {
+      // Тот же молчаливый return: линий не осталось (все сняты) или они
+      // выродились в точку. Человек снял лишнее и не понимает, почему кнопка
+      // молчит.
+      setWarnings([
+        kept.length === 0
+          ? "Не осталось ни одной линии — вы сняли все. Нажмите «Распознать "
+            + "заново» или верните часть линий обратно."
+          : "Оставшиеся линии сошлись в одну точку — по ним нельзя задать "
+            + "масштаб. Верните часть линий обратно.",
+      ]);
+      return;
+    }
     const mPerPx = extent / extentPx;
 
     const walls: Wall[] = [];

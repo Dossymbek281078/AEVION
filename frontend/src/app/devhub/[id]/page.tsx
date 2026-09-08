@@ -2149,7 +2149,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const provisionDatabase = async () => {
     if (!project || provisioningDb) return;
     if (isCapabilityBlocked(caps, "database")) {
-      showToast(capabilityHint(caps, "database", "База данных"), "warning");
+      showToast(capabilityHint(caps, "database", uiLang), "warning");
       return;
     }
     setProvisioningDb(true);
@@ -2297,7 +2297,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const deploy = async () => {
     if (!project) return;
     if (isCapabilityBlocked(caps, "railway")) {
-      showToast(capabilityHint(caps, "railway", "Выкатка на Railway"), "warning");
+      showToast(capabilityHint(caps, "railway", uiLang), "warning");
       return;
     }
     deployPollGenRef.current += 1;
@@ -2665,7 +2665,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const deployToPages = async () => {
     if (!project) return;
     if (isCapabilityBlocked(caps, "pages")) {
-      showToast(capabilityHint(caps, "pages", "Публикация на Cloudflare Pages"), "warning");
+      showToast(capabilityHint(caps, "pages", uiLang), "warning");
       return;
     }
     setPagesDeploying(true);
@@ -2712,7 +2712,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const deployToVercel = async () => {
     if (!project) return;
     if (isCapabilityBlocked(caps, "vercel")) {
-      showToast(capabilityHint(caps, "vercel", "Выкатка на Vercel"), "warning");
+      showToast(capabilityHint(caps, "vercel", uiLang), "warning");
       return;
     }
     setVercelDeploying(true);
@@ -2833,7 +2833,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const generateImage = async () => {
     if (!imgPrompt.trim()) return;
     if (isCapabilityBlocked(caps, "image")) {
-      setImgError(capabilityHint(caps, "image", "Генерация картинок"));
+      setImgError(capabilityHint(caps, "image", uiLang));
       return;
     }
     setImgLoading(true);
@@ -2905,7 +2905,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const generateMusic = async () => {
     if (!musicPrompt.trim()) return;
     if (isCapabilityBlocked(caps, "audio_music")) {
-      setMusicError(capabilityHint(caps, "audio_music", "Генерация музыки"));
+      setMusicError(capabilityHint(caps, "audio_music", uiLang));
       return;
     }
     setMusicLoading(true);
@@ -3152,6 +3152,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const translateText = async () => {
     if (!trText.trim() || !trTarget.trim()) return;
+    // Спрашиваем состояние возможности ПЕРЕД вызовом — как это делают пять
+    // соседних кнопок. Замер прода 08.09.2026: `translate` в degraded (у DeepL
+    // выжжена месячная квота), и человек узнавал об этом только после нажатия,
+    // общей фразой «Не удалось перевести». Причина известна заранее — значит и
+    // сказать её надо заранее.
+    if (isCapabilityBlocked(caps, "translate")) {
+      setTrError(capabilityHint(caps, "translate", uiLang));
+      return;
+    }
     setTrLoading(true);
     setTrError(null);
     setTrResult(null);
@@ -3713,7 +3722,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const generateTts = async () => {
     if (!mediaTtsText.trim()) return;
     if (isCapabilityBlocked(caps, "audio_tts")) {
-      setMediaTtsError(capabilityHint(caps, "audio_tts", "Озвучка"));
+      setMediaTtsError(capabilityHint(caps, "audio_tts", uiLang));
       return;
     }
     setMediaTtsLoading(true);
@@ -3826,7 +3835,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           <button
             onClick={deploy}
             disabled={deploying}
-            title={capabilityHint(caps, "railway", "Выкатка на Railway")}
+            title={capabilityHint(caps, "railway", uiLang)}
             style={{
               padding: "8px 18px", background: deploying ? "#99f6e4" : "#0d9488",
               color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
@@ -3839,7 +3848,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           <button
             onClick={deployToVercel}
             disabled={vercelDeploying}
-            title={capabilityHint(caps, "vercel", "Выкатка на Vercel")}
+            title={capabilityHint(caps, "vercel", uiLang)}
             style={{
               padding: "8px 14px", background: vercelDeploying ? "#e2e8f0" : "#000",
               color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
@@ -4210,7 +4219,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               <button
                                 onClick={provisionDatabase}
                                 disabled={provisioningDb}
-                                title={capabilityHint(caps, "database", "Создание базы данных")}
+                                title={capabilityHint(caps, "database", uiLang)}
                                 style={{ padding: "7px 14px", background: provisioningDb ? "#a5b4fc" : "#4f46e5", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 12.5, cursor: provisioningDb ? "not-allowed" : "pointer", opacity: isCapabilityBlocked(caps, "database") ? 0.45 : 1 }}
                               >
                                 {provisioningDb ? GL.busyDb : "Создать базу данных"}
@@ -5033,7 +5042,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     <button
                       onClick={pushToGithub}
                       disabled={githubPushing || isCapabilityBlocked(caps, "github")}
-                      title={capabilityHint(caps, "github", "Отправка в GitHub")}
+                      title={capabilityHint(caps, "github", uiLang)}
                       style={{
                         padding: "9px 18px", background: githubPushing ? "#99f6e4" : "#0f172a",
                         color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
@@ -5176,7 +5185,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           onClick={async () => {
                             if (!videoPrompt.trim()) { setVideoError("Сначала опишите, что нужно"); return; }
                             if (isCapabilityBlocked(caps, "video")) {
-                              setVideoError(capabilityHint(caps, "video", "Генерация видео"));
+                              setVideoError(capabilityHint(caps, "video", uiLang));
                               return;
                             }
                             setVideoLoading(true); setVideoError(null); setVideoUrl(null); setVideoPredictionId(null); setVideoStatus("starting");
@@ -5216,7 +5225,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             } catch (e: any) { setVideoError(e.message || "Не удалось"); setVideoLoading(false); }
                           }}
                           disabled={videoLoading || !videoPrompt.trim()}
-                          title={capabilityHint(caps, "video", "Генерация видео")}
+                          title={capabilityHint(caps, "video", uiLang)}
                           style={{ padding: "8px 20px", background: videoLoading ? "#94a3b8" : "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: videoLoading ? "default" : "pointer", whiteSpace: "nowrap", opacity: isCapabilityBlocked(caps, "video") ? 0.45 : 1 }}
                         >
                           {videoLoading ? `${videoStatus || "генерирую..."}` : "Сделать видео"}
@@ -5275,7 +5284,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       <button
                         onClick={async () => {
                           if (!threeDImageUrl.trim()) { setThreeDError("Вставьте ссылку на картинку"); return; }
-                          if (isCapabilityBlocked(caps, "3d")) { setThreeDError(capabilityHint(caps, "3d", "3D-генерация")); return; }
+                          if (isCapabilityBlocked(caps, "3d")) { setThreeDError(capabilityHint(caps, "3d", uiLang)); return; }
                           setThreeDLoading(true); setThreeDError(null); setThreeDUrl(null); setThreeDStatus("starting");
                           try {
                             const r = await fetch(apiUrl("/api/devhub/media/3d"), {
@@ -5310,7 +5319,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           } catch (e: any) { setThreeDError(e.message || "Не удалось"); setThreeDLoading(false); }
                         }}
                         disabled={threeDLoading || !threeDImageUrl.trim()}
-                        title={capabilityHint(caps, "3d", "Сгенерировать 3D")}
+                        title={capabilityHint(caps, "3d", uiLang)}
                         style={{ padding: "8px 20px", background: threeDLoading ? "#94a3b8" : "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: threeDLoading ? "default" : "pointer", opacity: isCapabilityBlocked(caps, "3d") ? 0.45 : 1 }}
                       >
                         {threeDLoading ? (threeDStatus || "generating…") : "Сделать 3D-модель"}

@@ -8262,12 +8262,17 @@ export default function CyberChessPage(){
               const parseVoice=(text:string):{from?:string;to?:string;san?:string;special?:string}=>{
                 let t=text.toLowerCase().trim().replace(/ё/g,"е");
                 // Special commands
-                if(/\b(новая\s+партия|новую\s+партию|new\s+game|начать\s+заново)\b/.test(t))return{special:"new"};
-                if(/\b(сдаюсь|сдаться|resign|признаю\s+поражение)\b/.test(t))return{special:"resign"};
-                if(/\b(переверни|переверни\s+доску|flip|flip\s+board)\b/.test(t))return{special:"flip"};
-                if(/\b(отмена|отмени|отменить|undo|отмени\s+ход)\b/.test(t))return{special:"undo"};
-                if(/\b(анализ|проанализируй|analyze|analysis)\b/.test(t))return{special:"analyze"};
-                if(/\b(выкл(ючи)?\s+голос|выключи\s+микрофон|stop\s+listening)\b/.test(t))return{special:"stopvoice"};
+                // ⚠️ JS \b — граница класса [A-Za-z0-9_], кириллица в него НЕ входит:
+                // /\b(сдаюсь)\b/.test("сдаюсь") === false. Русские команды не
+                // распознавались вовсе (замер 08.09.2026). У многосимвольных
+                // команд \b просто убран — подстрока в коротком транскрипте
+                // голоса безопасна; латинские альтернативы работают как прежде.
+                if(/(новая\s+партия|новую\s+партию|new\s+game|начать\s+заново)/.test(t))return{special:"new"};
+                if(/(сдаюсь|сдаться|resign|признаю\s+поражение)/.test(t))return{special:"resign"};
+                if(/(переверни|переверни\s+доску|flip|flip\s+board)/.test(t))return{special:"flip"};
+                if(/(отмена|отмени|отменить|undo|отмени\s+ход)/.test(t))return{special:"undo"};
+                if(/(анализ|проанализируй|analyze|analysis)/.test(t))return{special:"analyze"};
+                if(/(выкл(ючи)?\s+голос|выключи\s+микрофон|stop\s+listening)/.test(t))return{special:"stopvoice"};
                 // Castling — broad coverage
                 if(/(коротк(ая|ую)\s+рокировк|короткая|short\s+castle|castle\s+short|king[-\s]?side|o-?o(?!-?o))/i.test(t))return{san:"O-O"};
                 if(/(длинн(ая|ую)\s+рокировк|длинная|long\s+castle|castle\s+long|queen[-\s]?side|o-?o-?o)/i.test(t))return{san:"O-O-O"};
@@ -8288,17 +8293,27 @@ export default function CyberChessPage(){
                 };
                 // Strip capture / connector words — they're fluff for parsing
                 t=t.replace(/\s+/g," ");
-                t=t.replace(/\b(идёт|идет|на|берёт|берет|бьёт|бьет|рубит|съест|съедает|съесть|captures|takes|to|move|move\s+to|-|—|—>|->|→|идет\s+на|идёт\s+на|играет)\b/g," ");
+                // \b глотал кириллицу (идёт/берёт/бьёт/рубит/съест не стрипались) —
+                // границу заменил на кириллице-осведомлённый lookaround, чтобы и
+                // короткие слова («на») не резались внутри других слов.
+                t=t.replace(/(?<![\wА-Яа-яЁё])(идёт|идет|на|берёт|берет|бьёт|бьет|рубит|съест|съедает|съесть|captures|takes|to|move|move\s+to|-|—|—>|->|→|идет\s+на|идёт\s+на|играет)(?![\wА-Яа-яЁё])/g," ");
                 t=t.replace(/\s+/g," ");
-                for(const[k,v]of Object.entries(rusMap))t=t.replace(new RegExp("\\b"+k+"\\b","g"),v);
-                for(const[k,v]of Object.entries(engFileMap))t=t.replace(new RegExp("\\b"+k+"\\b","g"),v);
-                for(const[k,v]of Object.entries(numMap))t=t.replace(new RegExp("\\b"+k+"\\b","g"),v);
+                // \b не совпадает с кириллицей → «эф»→f, «три»→3 и русские буквы
+                // не мапились. Кириллице-осведомлённая граница: не режем внутри
+                // слова (важно для одиночных «а/в/г»), но ловим отдельное слово.
+                // Класс включает ЗАГЛАВНЫЕ (А-ЯЁ) намеренно: вход здесь в нижнем
+                // регистре (toLowerCase выше) и флага i нет, но со строчным
+                // классом добавление i кем-то позже тихо пропустило бы «ШЭФЕР».
+                const cyrBound=(w:string)=>new RegExp("(?<![\\wА-Яа-яЁё])"+w+"(?![\\wА-Яа-яЁё])","g");
+                for(const[k,v]of Object.entries(rusMap))t=t.replace(cyrBound(k),v);
+                for(const[k,v]of Object.entries(engFileMap))t=t.replace(cyrBound(k),v);
+                for(const[k,v]of Object.entries(numMap))t=t.replace(cyrBound(k),v);
                 // Promotion
                 let promo:"q"|"r"|"b"|"n"|undefined;
-                if(/(ферзь|ферзя|queen)\s*$/.test(t)||/\bв\s*(ферз[ьяеем]|queen)/.test(text)){promo="q";t=t.replace(/(ферзь|ферзя|queen)/g,"")}
-                else if(/(конь|коня|knight)\s*$/.test(t)||/\bв\s*(кон[ьяем]|knight)/.test(text)){promo="n";t=t.replace(/(конь|коня|knight)/g,"")}
-                else if(/(ладья|ладью|rook)\s*$/.test(t)||/\bв\s*(ладь[юея]|rook)/.test(text)){promo="r";t=t.replace(/(ладья|ладью|rook)/g,"")}
-                else if(/(слон|слона|bishop)\s*$/.test(t)||/\bв\s*(слон[ае]|bishop)/.test(text)){promo="b";t=t.replace(/(слон|слона|bishop)/g,"")}
+                if(/(ферзь|ферзя|queen)\s*$/.test(t)||/(?<![\wА-Яа-яЁё])в\s*(ферз[ьяеем]|queen)/.test(text)){promo="q";t=t.replace(/(ферзь|ферзя|queen)/g,"")}
+                else if(/(конь|коня|knight)\s*$/.test(t)||/(?<![\wА-Яа-яЁё])в\s*(кон[ьяем]|knight)/.test(text)){promo="n";t=t.replace(/(конь|коня|knight)/g,"")}
+                else if(/(ладья|ладью|rook)\s*$/.test(t)||/(?<![\wА-Яа-яЁё])в\s*(ладь[юея]|rook)/.test(text)){promo="r";t=t.replace(/(ладья|ладью|rook)/g,"")}
+                else if(/(слон|слона|bishop)\s*$/.test(t)||/(?<![\wА-Яа-яЁё])в\s*(слон[ае]|bishop)/.test(text)){promo="b";t=t.replace(/(слон|слона|bishop)/g,"")}
                 // Extract piece
                 let piece="";
                 for(const[k,v]of Object.entries(pieceMap))if(t.includes(k)){piece=v;t=t.replace(k," ");break;}

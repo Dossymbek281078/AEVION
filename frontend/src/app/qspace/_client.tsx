@@ -961,7 +961,7 @@ export default function QSpaceClient() {
             ref={fileRef}
             type="file"
             accept=".dxf,.pdf,image/*"
-            style={{ display: "none" }}
+            className="aevion-file-input"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ""; }}
           />
         </label>
@@ -980,7 +980,7 @@ export default function QSpaceClient() {
           <input
             type="file"
             accept=".json,.qspace.json,application/json"
-            style={{ display: "none" }}
+            className="aevion-file-input"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) openProjectFile(f); e.target.value = ""; }}
           />
         </label>

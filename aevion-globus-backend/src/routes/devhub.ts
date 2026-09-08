@@ -940,8 +940,6 @@ async function dbDeleteProject(id: string): Promise<void> {
   }
   // Drop the parked copy too, or the overlay in dbGetProject resurrects a
   // project the user just deleted — a hole the overlay itself opens.
-  // Drop the parked copy too, or the overlay in dbGetProject resurrects a
-  // project the user just deleted — a hole the overlay itself opens.
   memProjects.delete(id);
   for (const [fid, f] of memFiles) { if (f.projectId === id) memFiles.delete(fid); }
   for (const [cid, c] of memCheckpoints) { if (c.projectId === id) memCheckpoints.delete(cid); }

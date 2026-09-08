@@ -9,6 +9,7 @@ import { СОБЫТИЕ_ПЕРЕНОСА } from "@/components/DevHubGuestIdentit
 import { apiUrl } from "@/lib/apiBase";
 import { useDevhubT, type DevhubKey } from "./i18n";
 import { COMPARISON_ROWS, capabilityIsKnownOff, comparisonTotalUsd } from "./capabilityRows";
+import { howtoTranscript } from "./howtoTranscript";
 import { useI18n } from "@/lib/i18n";
 import { catalog } from "@/lib/aevionCatalog";
 import { fixDoubledScheme } from "@/lib/urls";
@@ -573,6 +574,21 @@ export default function DevHubPage() {
           <p style={{ fontSize: 12, color: "#64748b", margin: "8px 0 0" }}>
             {t("howto.lang")}
           </p>
+          {/* Расшифровка: та же польза без звука и без знания языка. Озвучка
+              русская, английской версии ролика нет — для посетителя с Show HN
+              двухминутное видео на чужом языке бесполезно, а честная подпись
+              про язык это признаёт, но не лечит. Свёрнута, чтобы не удлинять
+              страницу тем, кто просто нажмёт play. */}
+          <details style={{ marginTop: 10 }}>
+            <summary style={{ fontSize: 12.5, color: "#0d9488", cursor: "pointer", fontWeight: 600 }}>
+              {t("howto.transcript")}
+            </summary>
+            <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+              {howtoTranscript(lang).map((строка, i) => (
+                <p key={i} style={{ fontSize: 12.5, color: "#475569", margin: 0, lineHeight: 1.55 }}>{строка}</p>
+              ))}
+            </div>
+          </details>
         </div>
 
         {/* ОСТАТОК ЗА МЕСЯЦ. Модуль знал числа и молчал: человек упирался в предел,

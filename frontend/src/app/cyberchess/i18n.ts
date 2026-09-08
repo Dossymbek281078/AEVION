@@ -30,6 +30,9 @@ export const SUPPORTED_LOCALES: { code: CcLocale; label: string; flag: string }[
 
 const DICTIONARY: Record<CcLocale, Record<string, string>> = {
   ru: {
+    // Категории контроля времени (первый экран выбора игры). Были хардкодом в
+    // page.tsx — теперь через словарь, чтобы следовать выбранному языку.
+    "tc.bullet": "Пуля", "tc.blitz": "Блиц", "tc.rapid": "Рапид", "tc.custom": "Свой",
     // Spectator hub
     "spectator.hub.title":         "Трансляции",
     "spectator.hub.live":          "В эфире",
@@ -215,6 +218,7 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "flash.show_theory":           "Покажи теорию 📚",
   },
   en: {
+    "tc.bullet": "Bullet", "tc.blitz": "Blitz", "tc.rapid": "Rapid", "tc.custom": "Custom",
     "spectator.hub.title":         "Live broadcasts",
     "spectator.hub.live":          "Live",
     "spectator.hub.empty":         "Nobody is streaming right now",

@@ -8,7 +8,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { СОБЫТИЕ_ПЕРЕНОСА } from "@/components/DevHubGuestIdentity";
 import { apiUrl } from "@/lib/apiBase";
 import { useDevhubT, type DevhubKey } from "./i18n";
-import { COMPARISON_ROWS, capabilityIsKnownOff } from "./capabilityRows";
+import { COMPARISON_ROWS, capabilityIsKnownOff, comparisonTotalUsd } from "./capabilityRows";
 import { useI18n } from "@/lib/i18n";
 import { catalog } from "@/lib/aevionCatalog";
 import { fixDoubledScheme } from "@/lib/urls";
@@ -871,14 +871,14 @@ export default function DevHubPage() {
                       ) : null}
                     </td>
                     <td style={{ padding: "3px 14px 3px 0", color: "#64748b" }}>{row.rival}</td>
-                    <td style={{ padding: "3px 0", color: "#334155", fontVariantNumeric: "tabular-nums" }}>{row.price}</td>
+                    <td style={{ padding: "3px 0", color: "#334155", fontVariantNumeric: "tabular-nums" }}>${row.usd}</td>
                   </tr>
                   );
                 })}
                 <tr>
                   <td style={{ padding: "6px 14px 0 0", fontWeight: 800, color: "#0f172a", borderTop: "1px solid #e2e8f0" }}>{t("store.total")}</td>
                   <td style={{ padding: "6px 14px 0 0", color: "#64748b", borderTop: "1px solid #e2e8f0" }}>{t("store.subsLogins")}</td>
-                  <td style={{ padding: "6px 0 0", fontWeight: 800, color: "#0f172a", borderTop: "1px solid #e2e8f0", fontVariantNumeric: "tabular-nums" }}>≈ $162</td>
+                  <td style={{ padding: "6px 0 0", fontWeight: 800, color: "#0f172a", borderTop: "1px solid #e2e8f0", fontVariantNumeric: "tabular-nums" }}>{`≈ $${comparisonTotalUsd()}`}</td>
                 </tr>
               </tbody>
             </table>

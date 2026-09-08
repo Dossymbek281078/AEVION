@@ -19,17 +19,32 @@ export type ComparisonRow = {
   cap: string;
   /** С чем сравниваем и почём — цены публичные, тарифы поставщиков. */
   rival: string;
-  price: string;
+  /** Месячная цена в долларах ЧИСЛОМ: итог считается из строк, а не рядом. */
+  usd: number;
 };
 
+/**
+ * Когда цены сверялись с публичными страницами поставщиков. Дата стоит здесь, а
+ * не только в переводе сноски: строку человек читает, а число проверяет сторож.
+ *
+ * Сверка 08.09.2026 (шесть из семи совпали, одна нет):
+ *   Lovable Pro $25 · Runway Pro $35 · Midjourney Standard $30 ·
+ *   ElevenLabs Creator $22 · Meshy Pro $20 · Vercel Pro $20 — как было;
+ *   Suno Pro — СТАЛО $8, у нас стояло $10, то есть мы завышали конкурента
+ *   в свою пользу. Такое находят и предъявляют публично, поэтому исправлено.
+ *
+ * Перепроверяя цены, поменяй ЭТУ дату и все три перевода сноски value.priceNote.
+ */
+export const PRICES_CHECKED_AT = "2026-09-08";
+
 export const COMPARISON_ROWS: readonly ComparisonRow[] = [
-  { label: "cmp.app", cap: "code", rival: "Lovable Pro", price: "$25" },
-  { label: "cmp.video", cap: "video", rival: "Runway Pro", price: "$35" },
-  { label: "cmp.images", cap: "image", rival: "Midjourney Standard", price: "$30" },
-  { label: "cmp.voice", cap: "audio_tts", rival: "ElevenLabs Creator", price: "$22" },
-  { label: "cmp.music", cap: "audio_music", rival: "Suno", price: "$10" },
-  { label: "cmp.threeD", cap: "3d", rival: "Meshy Pro", price: "$20" },
-  { label: "cmp.hosting", cap: "pages", rival: "Vercel Pro", price: "$20" },
+  { label: "cmp.app", cap: "code", rival: "Lovable Pro", usd: 25 },
+  { label: "cmp.video", cap: "video", rival: "Runway Pro", usd: 35 },
+  { label: "cmp.images", cap: "image", rival: "Midjourney Standard", usd: 30 },
+  { label: "cmp.voice", cap: "audio_tts", rival: "ElevenLabs Creator", usd: 22 },
+  { label: "cmp.music", cap: "audio_music", rival: "Suno Pro", usd: 8 },
+  { label: "cmp.threeD", cap: "3d", rival: "Meshy Pro", usd: 20 },
+  { label: "cmp.hosting", cap: "pages", rival: "Vercel Pro", usd: 20 },
 ];
 
 /**
@@ -46,4 +61,12 @@ export function capabilityIsKnownOff(
   const found = caps.find((c) => c.id === capId);
   if (!found) return false;
   return found.status !== "live";
+}
+
+/**
+ * Итог считается ИЗ СТРОК. Раньше «≈ $162» стояло в разметке отдельным числом —
+ * второй ответ о том же самом, который расходится при первой же правке цены.
+ */
+export function comparisonTotalUsd(rows: readonly ComparisonRow[] = COMPARISON_ROWS): number {
+  return rows.reduce((sum, r) => sum + r.usd, 0);
 }

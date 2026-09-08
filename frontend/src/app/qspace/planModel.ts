@@ -229,20 +229,65 @@ export function generatePlumbing(plan: Plan): PlumbingDraft {
 }
 
 /** Потолочные светильники сеткой ~3 м внутри габарита плана. */
-export function generateLights(plan: Plan): CeilingLight[] {
+/**
+ * Светильники на потолке.
+ *
+ * Сетка с шагом около 3 м — так их и вешают. Но сетка сама по себе НЕ знает
+ * про комнаты, и это стоило дефекта: замер 08.09.2026 на длинной узкой
+ * квартире 12 × 3 м дал комнату 6.8 м² БЕЗ единого светильника и один
+ * светильник в стене. На демо-квартире та же сетка ложится удачно, поэтому
+ * дефект не всплывал — показательный случай проверять на ДВУХ планировках.
+ *
+ * Поэтому, когда разбиение на помещения известно, сетка через него
+ * ПРОСЕИВАЕТСЯ: точки в стенах и на улице отбрасываются, а комната, которой
+ * не досталось ни одной, получает светильник в свой центр. Без разбиения
+ * остаётся прежнее поведение: лучше грубая сетка, чем пустой потолок.
+ */
+export function generateLights(
+  plan: Plan,
+  rooms?: { rooms: Array<{ index: number; cx: number; cy: number }>; roomAt(x: number, y: number): number | null },
+): CeilingLight[] {
   const b = planBounds(plan);
   const W = b.maxX - b.minX;
   const H = b.maxY - b.minY;
   const nx = Math.max(1, Math.round(W / 3));
   const ny = Math.max(1, Math.round(H / 3));
-  const out: CeilingLight[] = [];
+  const grid: CeilingLight[] = [];
   for (let i = 0; i < nx; i++) {
     for (let j = 0; j < ny; j++) {
-      out.push({
+      grid.push({
         x: b.minX + (W * (i + 0.5)) / nx,
         y: b.minY + (H * (j + 0.5)) / ny,
       });
     }
+  }
+  if (!rooms || rooms.rooms.length === 0) return grid;
+
+  const out: CeilingLight[] = [];
+  const попало = new Set<number>();
+  for (const l of grid) {
+    const r = rooms.roomAt(l.x, l.y);
+    if (r === null) continue; // в стене или на улице — светильник туда не вешают
+    попало.add(r);
+    out.push(l);
+  }
+  for (const r of rooms.rooms) {
+    if (попало.has(r.index)) continue;
+    // ⚠️ Центр комнаты НЕ ГОДИТСЯ как запасная точка: у Г-образного помещения
+    // центроид попадает в перегородку. Замер на узкой квартире: светильник по
+    // центру комнаты 6.8 м² оказывался в стене, то есть починка меняла один
+    // дефект на другой. Ищем настоящую точку внутри — решёткой в четверть метра.
+    let точка: CeilingLight | null = null;
+    if (rooms.roomAt(r.cx, r.cy) === r.index) {
+      точка = { x: r.cx, y: r.cy };
+    } else {
+      for (let y = b.minY; y <= b.maxY && !точка; y += 0.25) {
+        for (let x = b.minX; x <= b.maxX; x += 0.25) {
+          if (rooms.roomAt(x, y) === r.index) { точка = { x, y }; break; }
+        }
+      }
+    }
+    if (точка) out.push(точка);
   }
   return out;
 }

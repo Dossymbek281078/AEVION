@@ -86,6 +86,9 @@ export default function QSpaceClient() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [plan, setPlan] = useState<Plan>(() => demoPlan());
+  // Разбиение на помещения объявлено ЗДЕСЬ, а не ниже: его читает эффект
+  // сборки сцены (светильники ставятся по комнатам), а он идёт раньше.
+  const roomsInfo = useMemo(() => findRooms(plan), [plan]);
   const [layers, setLayers] = useState({ rough: false, finish: true, decor: true });
   // Режим расстановки проёмов: из DXF/PDF/картинки приходят только стены,
   // окна и двери человек ставит сам кликом по стене.
@@ -385,7 +388,7 @@ export default function QSpaceClient() {
         t.gFinish.add(door);
       }
     }
-    for (const l of generateLights(plan)) {
+    for (const l of generateLights(plan, roomsInfo)) {
       const fixture = new THREE.Group();
       const base = new THREE.Mesh(
         new THREE.CylinderGeometry(0.11, 0.11, 0.05, 16),
@@ -445,7 +448,7 @@ export default function QSpaceClient() {
     t.camera.position.set(cx + diag * 0.75, diag * 0.8, cz + diag * 0.9);
     t.controls.target.set(cx, 1, cz);
     t.controls.update();
-  }, [plan]);
+  }, [plan, roomsInfo]);
 
   // ---- восстановление при открытии страницы --------------------------------
   // Читается ОДИН раз. Три исхода различаются: ничего не сохранено — молчим и
@@ -832,7 +835,6 @@ export default function QSpaceClient() {
   // Комнаты и спецификация по ним. Пересчитываются вместе с планом: площадь
   // помещения — это то, по чему покупают плитку и обои, и она обязана
   // меняться, когда меняется план.
-  const roomsInfo = useMemo(() => findRooms(plan), [plan]);
   const perRoom = useMemo(
     () => roomSpec(roomsInfo.rooms, WALL_HEIGHT),
     [roomsInfo],
@@ -862,7 +864,7 @@ export default function QSpaceClient() {
     // Площадь пола — по ПОМЕЩЕНИЯМ, а не по габариту: стены не застилают.
     // На демо-квартире разница 48 против 41.1 м², то есть 17 % лишнего
     // покрытия в закупке.
-    return estimatePlan(plan, w, pl, generateLights(plan).length, roomsInfo.totalArea);
+    return estimatePlan(plan, w, pl, generateLights(plan, roomsInfo).length, roomsInfo.totalArea);
   }, [plan, roomsInfo]);
 
   const S = styles;

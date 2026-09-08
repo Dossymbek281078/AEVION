@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { findRooms } from "./rooms";
 import {
   demoPlan,
   generateLights,
@@ -135,5 +136,53 @@ describe("свет", () => {
       expect(l.y).toBeGreaterThan(b.minY);
       expect(l.y).toBeLessThan(b.maxY);
     }
+  });
+});
+
+describe("светильники знают про помещения", () => {
+  // Найдено замером 08.09: сетка по габариту оставляла комнату 6.8 м² в узкой
+  // квартире БЕЗ единого светильника, а один светильник вешала в стену.
+  // На демо та же сетка ложится удачно — поэтому проверяем на ДВУХ планировках.
+  const w2 = (x1: number, y1: number, x2: number, y2: number, t = 0.15) =>
+    ({ x1, y1, x2, y2, thickness: t, height: 2.7 });
+  const узкая: Plan = {
+    name: "узкая", source: "demo", openings: [],
+    walls: [
+      w2(0, 0, 12, 0, 0.3), w2(12, 0, 12, 3, 0.3), w2(12, 3, 0, 3, 0.3), w2(0, 3, 0, 0, 0.3),
+      w2(9, 0, 9, 3), w2(10.5, 0, 10.5, 1.4),
+    ],
+  };
+
+  for (const [имя, plan] of [["демо", demoPlan()], ["узкая", узкая]] as const) {
+    it(`«${имя}»: ни одно помещение не осталось без светильника`, () => {
+      const rooms = findRooms(plan);
+      const ls = generateLights(plan, rooms);
+      expect(rooms.rooms.length, "помещений не выделено — проверка пуста").toBeGreaterThan(1);
+      for (const r of rooms.rooms) {
+        const n = ls.filter((l) => rooms.roomAt(l.x, l.y) === r.index).length;
+        expect(n, `помещение ${r.index} (${r.area.toFixed(1)} м²) без света`).toBeGreaterThan(0);
+      }
+    });
+
+    it(`«${имя}»: ни один светильник не висит в стене`, () => {
+      const rooms = findRooms(plan);
+      const вСтене = generateLights(plan, rooms).filter((l) => rooms.roomAt(l.x, l.y) === null);
+      expect(вСтене.length, "светильники вне помещений").toBe(0);
+    });
+  }
+
+  it("контроль: БЕЗ помещений остаётся прежняя сетка, а не пустой потолок", () => {
+    // разбиение может не получиться (открытый контур) — лучше грубо, чем никак
+    expect(generateLights(demoPlan()).length).toBeGreaterThan(0);
+  });
+
+  it("контроль прибора: старое поведение действительно давало дефект", () => {
+    // без этого «теперь хорошо» неотличимо от «и раньше было хорошо»
+    const rooms = findRooms(узкая);
+    const безУчёта = generateLights(узкая); // прежний путь: сетка по габариту
+    const пустые = rooms.rooms.filter(
+      (r) => !безУчёта.some((l) => rooms.roomAt(l.x, l.y) === r.index));
+    expect(пустые.length, "на узкой планировке прежняя сетка была исправна — тест ничего не доказывает")
+      .toBeGreaterThan(0);
   });
 });

@@ -27,6 +27,8 @@ import { planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
 import { drawMaterial, materialById, materialsFor } from "./materials";
 import { CATALOG, groups, itemById, type CatalogItem } from "./furniture";
 import { checkClearance, type Issue, type Placed } from "./clearance";
+import { findRooms } from "./rooms";
+import { roomSpec, roomSpecText } from "./roomSpec";
 import RasterReview from "./RasterReview";
 import { nearestWall, placeOpening, removeOpeningNear } from "./openings";
 import {
@@ -807,6 +809,15 @@ export default function QSpaceClient() {
   const b = planBounds(plan);
   const dims = `${(b.maxX - b.minX).toFixed(1)} × ${(b.maxY - b.minY).toFixed(1)} м`;
 
+  // Комнаты и спецификация по ним. Пересчитываются вместе с планом: площадь
+  // помещения — это то, по чему покупают плитку и обои, и она обязана
+  // меняться, когда меняется план.
+  const roomsInfo = useMemo(() => findRooms(plan), [plan]);
+  const perRoom = useMemo(
+    () => roomSpec(roomsInfo.rooms, WALL_HEIGHT),
+    [roomsInfo],
+  );
+
   const est = useMemo(() => {
     const w = generateWiring(plan);
     const pl = generatePlumbing(plan);
@@ -1167,6 +1178,55 @@ export default function QSpaceClient() {
                 Это подсказка, а не приговор: предметы меряются прямоугольником
                 по габариту, поэтому круглый стол и угловой диван считаются с
                 запасом. Посмотрите глазами.
+              </p>
+            </>
+          )}
+
+          <h2 style={S.h2}>Помещения</h2>
+          {roomsInfo.rooms.length === 0 ? (
+            <p style={S.hint}>
+              {roomsInfo.warnings[0] ?? "Помещения не выделены."}
+            </p>
+          ) : (
+            <>
+              <table style={S.estTable}>
+                <tbody>
+                  {perRoom.lines.map((l) => (
+                    <tr key={l.index}>
+                      <td style={S.estTd}>
+                        Помещение {l.index}
+                        <br />
+                        <span style={{ fontSize: 11.5, color: "#7a746b" }}>
+                          покрытие {l.flooring.toFixed(1)} м² · стены {l.wallArea.toFixed(1)} м² ·
+                          краска {l.paint.toFixed(1)} л · плинтус {l.skirting.toFixed(1)} м
+                        </span>
+                      </td>
+                      <td style={S.estTdNum}>{l.area.toFixed(1)} м²</td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td style={S.estTd}><strong>Итого по помещениям</strong></td>
+                    <td style={S.estTdNum}><strong>{perRoom.totals.area.toFixed(1)} м²</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+              <button
+                type="button"
+                style={{ ...S.btn, marginTop: 8 }}
+                onClick={() => {
+                  const text = roomSpecText(perRoom, plan.name);
+                  navigator.clipboard?.writeText(text).then(
+                    () => setSaveNote("Спецификация скопирована — вставьте её в сообщение подрядчику."),
+                    // отказ показывается отказом: человек нажал и ждёт результата
+                    () => setWarnings(["Браузер не дал скопировать. Выделите текст в спецификации вручную."]),
+                  );
+                }}
+              >
+                Скопировать спецификацию
+              </button>
+              <p style={S.hint}>
+                Площадь стен считается по периметру БЕЗ вычета окон и дверей:
+                завышение безопаснее — не хватит рулона хуже, чем останется лишний.
               </p>
             </>
           )}

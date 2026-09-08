@@ -89,6 +89,7 @@ describe("описание QSpace в реестре не расходится с
       ["сохранение проекта", /saveLocal|loadLocal/, /сохран\w+ в браузере|qspace\.json/i],
       ["распознавание картинки", /RasterReview/, /РАСТРОВЫЙ|картинк/i],
       ["чтение PDF", /readPdfSegments/, /PDF/],
+      ["площади помещений", /findRooms/, /помещени|комнат/i],
     ];
     const пропущены: string[] = [];
     for (const [имя, вКоде, вОписании] of пары) {

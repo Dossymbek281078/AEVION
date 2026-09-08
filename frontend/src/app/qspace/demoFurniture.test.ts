@@ -359,3 +359,28 @@ describe("огромный файл отвергается ДО чтения в 
     expect(голова, "комментарии не вырезаны").not.toMatch(/\/\/ /);
   });
 });
+
+describe("у экспорта модели нет пути молчаливого отказа", () => {
+  // В успешной ветке экспорта не было catch: если сборка файла или скачивание
+  // упадёт (не хватило памяти на большую сцену, браузер запретил загрузку),
+  // ожидание снималось бы в finally, а человек оставался без файла И без
+  // слова — нажал, подождал, ничего не произошло.
+  const client = readFileSync(path.join(__dirname, "_client.tsx"), "utf8");
+  const кусок = client
+    .slice(client.indexOf("const exportGlb = useCallback"),
+           client.indexOf("const screenshot") >= 0
+             ? client.indexOf("const screenshot")
+             : client.indexOf("const downloadPlanSvg"))
+    .replace(/\/\/[^\n]*/g, "");
+
+  it("обе ветки — успех и падение — что-то говорят человеку", () => {
+    expect(кусок, "срез пуст").toContain("GLTFExporter");
+    expect(кусок, "в успешной ветке нет обработки падения").toMatch(/\}\s*catch/);
+    // и ожидание снимается в любом случае
+    expect(кусок).toMatch(/finally\s*\{\s*setExporting\(false\)/);
+  });
+
+  it("сообщение объясняет, что делать, а не только что случилось", () => {
+    expect(кусок).toMatch(/Выключите лишние слои/);
+  });
+});

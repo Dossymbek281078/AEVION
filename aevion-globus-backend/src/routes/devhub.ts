@@ -8082,6 +8082,14 @@ devhubRouter.get("/studio/deploy-stats", async (req, res) => {
   // придуманный список: иначе новый статус молча выпадет из знаменателя.
   const counts = new Map<string, number>();
   let storage: "db" | "memory" = "db";
+  // Сколько «неудач» несут ЖИВОЙ адрес. Замер 08.09.2026: за неделю ручка
+  // показывала 5 выкаток и 0 успешных, а четыре из пяти адресов отвечали 200
+  // (контроль: выдуманный поддомен того же проекта даёт 404). Причина была не
+  // в публикации: проверка ждала ответа 25 секунд, а у гостя КАЖДЫЙ проект —
+  // это новый проект Cloudflare Pages, он поднимается дольше. Ожидание
+  // исправлено, но старые записи остались, и «успешных 0» продолжает пугать
+  // человека, читающего эту цифру. Пусть цифра называет свою оговорку сама.
+  let failedWithUrl = 0;
 
   if (!isDevHubDbReady()) {
     storage = "memory";
@@ -8089,6 +8097,7 @@ devhubRouter.get("/studio/deploy-stats", async (req, res) => {
     for (const d of memDeployments.values()) {
       if (Date.parse(d.triggeredAt) >= since) {
         counts.set(d.status, (counts.get(d.status) ?? 0) + 1);
+        if (d.status === "failed" && d.deployUrl) failedWithUrl += 1;
       }
     }
   } else {
@@ -8108,6 +8117,15 @@ devhubRouter.get("/studio/deploy-stats", async (req, res) => {
       for (const row of r.rows as Array<{ status: string; n: number }>) {
         counts.set(row.status, Number(row.n));
       }
+      const f = await pool.query(
+        `SELECT COUNT(*)::int AS n
+           FROM "DevHubDeployment"
+          WHERE "triggeredAt" >= NOW() - ($1::int * INTERVAL '1 day')
+            AND "status" = 'failed'
+            AND "deployUrl" IS NOT NULL AND "deployUrl" <> ''`,
+        [days],
+      );
+      failedWithUrl = Number((f.rows[0] as { n: number } | undefined)?.n ?? 0);
     } catch {
       return replyStorageUnavailable(res);
     }
@@ -8123,6 +8141,10 @@ devhubRouter.get("/studio/deploy-stats", async (req, res) => {
     days,
     total,
     byStatus,
+    // Оговорка ЕДЕТ РЯДОМ С ЧИСЛОМ, а не живёт в чужой голове: столько
+    // «неудач» имеют живой адрес и почти наверняка были успехами, которые
+    // прежняя проверка не дождалась.
+    failedWithUrl,
     // NULL, а не 0, когда считать не из чего. Ноль здесь читался бы как
     // «ни одна публикация не удалась» — это другое утверждение, и оно
     // отправило бы человека чинить работающее.

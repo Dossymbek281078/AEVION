@@ -410,8 +410,29 @@ qrightRouter.get("/objects", objectsRateLimit, async (req, res) => {
       });
     }
 
+    /*
+     * 🔴 ПОЛЯ ПЕРЕЧИСЛЕНЫ ЯВНО, а не SELECT *. Замер 08.09.2026 живой пробой:
+     * эта ручка анонимна и отдавала "ownerEmail" — почту владельцев объектов
+     * авторского права. Проверено на проде: GET /api/qright/objects без
+     * заголовков, 200, два адреса в теле.
+     *
+     * Корень был именно в звёздочке: она отдаёт ВСЕ колонки таблицы, и любое
+     * новое поле с личными данными уезжает наружу само, без единой правки
+     * этого места. Перечисление превращает утечку в осознанное действие —
+     * чтобы отдать почту, её теперь надо дописать сюда руками.
+     *
+     * Публичной странице адрес не нужен: она показывает title, kind,
+     * description и contentHash, а ownerEmail использует только при вводе
+     * формы. Админка ходит в свою ручку /api/qright/admin/objects.
+     * "ownerUserId" тоже не отдаём — это идентификатор человека.
+     */
     const result = await pool.query(
-      'SELECT * FROM "QRightObject" WHERE "ownerName" IS DISTINCT FROM $1 ORDER BY "createdAt" DESC',
+      `SELECT id, title, description, kind, "contentHash", "ownerName",
+              country, city, "createdAt", "revokedAt", "revokeReason",
+              "revokeReasonCode", "embedFetches", "lastFetchedAt"
+         FROM "QRightObject"
+        WHERE "ownerName" IS DISTINCT FROM $1
+        ORDER BY "createdAt" DESC`,
       [SMOKE_OWNER],
     );
 
@@ -622,7 +643,10 @@ qrightRouter.get("/objects.csv", objectsRateLimit, async (req, res) => {
     await ensureQRightTable();
 
     const result = await pool.query(
-      `SELECT id, title, kind, "contentHash", "ownerName", "ownerEmail", country, city, "createdAt"
+      // Без "ownerEmail": выгрузка анонимна, а это почта живых людей (замер
+      // 08.09.2026 — два адреса в скачанном файле). Имя владельца остаётся:
+      // оно и есть публичное заявление авторства, ради которого реестр.
+      `SELECT id, title, kind, "contentHash", "ownerName", country, city, "createdAt"
        FROM "QRightObject"
        WHERE "ownerName" IS DISTINCT FROM $1
        ORDER BY "createdAt" DESC`,
@@ -651,7 +675,6 @@ qrightRouter.get("/objects.csv", objectsRateLimit, async (req, res) => {
       "kind",
       "contentHash",
       "ownerName",
-      "ownerEmail",
       "country",
       "city",
       "createdAt",

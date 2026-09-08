@@ -894,7 +894,21 @@ revenueRouter.get("/gumroad/recent", async (_req, res) => {
     id: s.id ?? "",
     appId: appIdForPermalink(s.product_permalink),
     product: s.product_name ?? s.product_permalink ?? "unknown",
-    email: s.email ?? null,
+    /*
+     * 🔴 АДРЕС ПОКУПАТЕЛЯ НАРУЖУ НЕ ОТДАЁМ. Замер 08.09.2026: эта ручка
+     * анонимна (роутер /api/revenue смонтирован без проверки прав, isAdmin в
+     * файле нет вовсе), и один GET без единого заголовка возвращал список
+     * покупателей с их почтой. Это персональные данные, отданные любому.
+     *
+     * Поле убрано, а не закрыто токеном: дашборд /revenue его НЕ отображает
+     * (проверено — в page.tsx оно объявлено в типе и нигде не читается), а
+     * закрывать всю ручку значило бы сломать публичную страницу выручки ради
+     * поля, которое ей не нужно.
+     *
+     * Внутренние покупки по-прежнему отделяются: isInternalPurchase считает
+     * их ВНУТРИ бэкенда, по s.email, — наружу уходит только признак.
+     */
+    internal: isInternalPurchase(s.email),
     amountUsd: s.price ? s.price / 100 : 0,
     currency: s.currency?.toUpperCase() ?? "USD",
     refunded: Boolean(s.refunded || s.disputed || s.chargedback),

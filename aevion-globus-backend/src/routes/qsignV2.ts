@@ -1340,6 +1340,11 @@ qsignV2Router.get("/verify/:id", async (req, res) => {
           ? {
               source: row.geoSource ?? null,
               country: row.geoCountry ?? null,
+              // Явные null, а не отсутствие ключей: старый клиент сравнивает
+              // с null, и на undefined он упал бы. См. разбор в types.ts.
+              city: null,
+              lat: null,
+              lng: null,
             }
           : null,
     };
@@ -2250,6 +2255,11 @@ qsignV2Router.get("/:id/public", async (req, res) => {
           ? {
               source: row.geoSource ?? null,
               country: row.geoCountry ?? null,
+              // Явные null, а не отсутствие ключей: старый клиент сравнивает
+              // с null, и на undefined он упал бы. См. разбор в types.ts.
+              city: null,
+              lat: null,
+              lng: null,
             }
           : null,
     });

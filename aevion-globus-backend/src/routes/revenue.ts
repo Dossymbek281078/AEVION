@@ -983,7 +983,17 @@ revenueRouter.get("/lemonsqueezy/recent", async (_req, res) => {
     id: o.id,
     appId: appIdForLsVariant(o.variantId),
     product: o.product,
-    email: o.email || null,
+    /*
+     * 🔴 То же, что у соседней ручки Gumroad, и найдено ПОСЛЕ её починки.
+     * Первую утечку я закрыл 08.09 в /gumroad/recent — и на этом остановился,
+     * решив, что класс закрыт. Полный обход публичного периметра (404 GET-
+     * адреса) показал ту же строку здесь: /lemonsqueezy/recent отдавал почту
+     * покупателя анонимному запросу, проверено на проде (200, один адрес).
+     *
+     * Урок дороже находки: починка ОДНОГО места не закрывает класс, даже
+     * когда второе место лежит в том же файле в двадцати строках ниже.
+     */
+    internal: isInternalPurchase(o.email),
     amountUsd: o.total / 100,
     currency: o.currency,
     refunded: o.refunded,

@@ -39,25 +39,31 @@ describe("список продаж не отдаёт почту наружу", 
   it("прибор видит предмет: ручка на месте", () => {
     // без этого «утечки нет» означало бы «файл переименовали»
     expect(src).toContain('get("/gumroad/recent"');
+    expect(src).toContain('get("/lemonsqueezy/recent"');
     expect(src).toContain("isInternalPurchase");
   });
 
-  it("в ответе есть признак internal, а не адрес", () => {
-    const at = src.indexOf('get("/gumroad/recent"');
-    expect(at, "ручка не найдена").toBeGreaterThan(-1);
-    // тело ручки: до следующего объявления маршрута
-    const след = src.indexOf("revenueRouter.", at + 10);
-    const тело = src.slice(at, след < 0 ? src.length : след);
-
-    expect(
-      /^\s*email:/m.test(тело),
-      "ручка снова кладёт email в ответ — это адреса живых покупателей, "
-      + "и роутер /api/revenue анонимен",
-    ).toBe(false);
-
-    expect(
-      тело,
-      "признак internal исчез: внутренние покупки перестанут отделяться",
-    ).toContain("internal: isInternalPurchase");
-  });
+  /*
+   * ОБЕ кассы, а не одна. Первая редакция стерегла только /gumroad/recent —
+   * ту ручку, где утечку нашли. Полный обход периметра 08.09 нашёл ТУ ЖЕ
+   * строку в /lemonsqueezy/recent, двадцатью строками ниже в этом же файле,
+   * и сторож молчал: он смотрел не туда. Чинить класс — значит перечислить
+   * все его места, а не то, где он проявился.
+   */
+  for (const ручка of ["/gumroad/recent", "/lemonsqueezy/recent"]) {
+    it(`${ручка}: в ответе признак internal, а не адрес`, () => {
+      const at = src.indexOf(`get("${ручка}"`);
+      expect(at, "ручка не найдена").toBeGreaterThan(-1);
+      const след = src.indexOf("revenueRouter.", at + 10);
+      const тело = src.slice(at, след < 0 ? src.length : след);
+      expect(
+        /^s*email:/m.test(тело),
+        "ручка снова кладёт email в ответ — это адреса живых покупателей",
+      ).toBe(false);
+      expect(
+        тело,
+        "признак internal исчез: внутренние покупки перестанут отделяться",
+      ).toContain("internal: isInternalPurchase");
+    });
+  }
 });

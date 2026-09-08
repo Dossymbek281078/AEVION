@@ -4,7 +4,6 @@ import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 import { probeJson } from "@/lib/probeLive";
 import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
-import { LandingView } from "@/components/LandingView";
 import { PageTracking } from "@/components/PageTracking";
 
 // Посадочная запуска DevHub.
@@ -151,8 +150,6 @@ export default async function DevhubLaunchPage({
               : " Уже открыто — заходите."}
           </p>
         </header>
-
-        <LandingView source={source} />
 
         <WaitlistCapture
           // Язык НЕ задан жёстко (было lang="ru", снято 06.09.2026 по живому

@@ -3,7 +3,6 @@ import { getApiBase } from "@/lib/apiBase";
 import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
-import { LandingView } from "@/components/LandingView";
 import { PageTracking } from "@/components/PageTracking";
 
 // Посадочная запуска «патентного бюро» (QRight + QSign + IP Bureau) — 10 сентября.
@@ -98,8 +97,6 @@ export default async function BureauLaunchPage({
             {left > 0 ? ` Открываем ${left === 1 ? "завтра" : `через ${left} дн.`} — 10 сентября.` : " Уже открыто."}
           </p>
         </header>
-
-        <LandingView source={source} />
 
 
         <WaitlistCapture

@@ -4,7 +4,6 @@ import { redirect } from "next/navigation";
 import { getApiBase } from "@/lib/apiBase";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
-import { LandingView } from "@/components/LandingView";
 import {
   GUIDES,
   SUBSCRIPTIONS,
@@ -264,7 +263,6 @@ export default async function GoPage({
           />
         </section>
         <section style={styles.section}>
-          <LandingView source={goSource} />
           <WaitlistCapture
             // Язык НЕ задан жёстко (было lang="ru", снято 06.09.2026 по тому
             // же живому замеру, что на /devhub/launch): машинный доводчик

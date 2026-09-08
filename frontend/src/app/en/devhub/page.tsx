@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { LandingView } from "@/components/LandingView";
 import { BuyLink } from "@/components/BuyLink";
 import { PageTracking } from "@/components/PageTracking";
 import { productById, channelFrom, withChannel, keepChannel } from "@/lib/products";
@@ -60,7 +59,6 @@ export default async function EnDevhubPage({
   return (
     <main style={styles.page}>
       <PageTracking page="en-devhub" />
-      <LandingView source="en-devhub" />
       <div style={styles.wrap}>
         <header style={styles.head}>
           <div style={styles.brand}>AEVION</div>

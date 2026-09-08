@@ -4513,10 +4513,17 @@ export default function CyberChessPage(){
 
   /* ── Autosave in-progress game ── */
   useEffect(()=>{
-    if(tab!=="play"||!on||over||setup||hist.length===0)return;
+    // Только СТАНДАРТ. ResumeSnap не хранит вариант и вариант-специфичное
+    // состояние (армии asymmetric, пул дропов crazyhouse/powerdrop, счётчики
+    // three-check, кубик diceblade), поэтому возобновление вариантной партии
+    // молча играло бы по СТАНДАРТУ из той позиции — правила варианта пропадали.
+    // Лучше не предлагать resume варианту, чем воскресить его с чужими
+    // правилами. Полное восстановление вариантов — отдельная задача (нужно
+    // расширить ResumeSnap и resumeGame). 08.09.2026.
+    if(tab!=="play"||!on||over||setup||hist.length===0||variant!=="standard")return;
     const snap:ResumeSnap={v:1,fen:game.fen(),hist,fenHist,pCol,aiI,tcI,useCustom,customMin,customInc,timeP:Math.round(pT.getSeconds()),timeA:Math.round(aT.getSeconds()),capW,capB,ts:Date.now()};
     saveResume(snap);
-  },[bk,tab,on,over,setup,hist.length]);
+  },[bk,tab,on,over,setup,hist.length,variant]);
   useEffect(()=>{if(over)clearResume()},[over]);
 
   /* ── Auto post-game analysis in Play/Coach for instant accuracy card ── */

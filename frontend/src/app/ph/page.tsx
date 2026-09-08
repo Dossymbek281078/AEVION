@@ -26,5 +26,8 @@ export const metadata: Metadata = {
 export const dynamic = "force-static";
 
 export default function Page() {
-  redirect("/go?c=ph");
+  // Ведём на СТРАНИЦУ ПРОДУКТА, а не на общий вход: карточка Product Hunt — тот же продукт («Describe it. Get a deployed project»).
+  // Проверено 08.09.2026 — эта страница читает ?c= (channelFrom) и доносит
+  // метку до кассы, как /go.
+  redirect("/en/devhub?c=ph");
 }

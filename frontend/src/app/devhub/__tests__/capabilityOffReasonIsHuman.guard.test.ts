@@ -1,6 +1,9 @@
 import { describe, test, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import { DEVHUB_DICT } from "../i18n";
+
+const RU_DICT = DEVHUB_DICT.ru as Record<string, string>;
 
 /**
  * Причина отключения возможности — словами человека, а не машинным токеном.
@@ -50,19 +53,49 @@ describe("причина отключения понятна человеку", 
   });
 
   test("объяснение идёт через отдельный помощник", () => {
-    expect(SRC).toContain("capabilityOffReason(c.status)");
+    expect(SRC).toContain("capabilityOffReason(c.status, c.offCode, t)");
     expect(SRC).toContain("function capabilityOffReason");
   });
 
   test("различаются «нет ключа» и «не сделано»", () => {
     // Человеку это разные новости: первое мы настроим, второго ещё нет.
-    expect(SRC).toContain("не настроено на сервере");
-    expect(SRC).toContain("пока не сделано");
+    // 08.09.2026 тексты уехали в словарь — подсказка живёт в атрибуте title,
+    // а атрибуты машинный доводчик не переводит. Поэтому проверяем СВЯЗКУ:
+    // фразы есть в русской ветке словаря И страница берёт их через t().
+    expect(RU_DICT["caps.off.needsToken"]).toContain("не настроено на сервере");
+    expect(RU_DICT["caps.off.notAvailable"]).toContain("пока не сделано");
+    expect(CODE).toContain('t("caps.off.needsToken")');
+    expect(CODE).toContain('t("caps.off.notAvailable")');
+  });
+
+  test("сырой текст поставщика в подсказку не уходит", () => {
+    // Замер прода 08.09.2026: ручка ПУБЛИЧНАЯ, и в lastError лежало сырое тело
+    // ответа ElevenLabs с authentication_error, а также «провайдер-проба:
+    // HTTP 401». Подсказка показывала это посетителю витрины — ворота §3.4
+    // («тексты ошибок человеческие, без кодов и адресов») и утечка устройства.
+    expect(
+      CODE.includes("c.lastError"),
+      "подсказка снова показывает текст поставщика вместо наших слов",
+    ).toBe(false);
+  });
+
+  test("у каждого кода причины есть слова во ВСЕХ трёх языках", () => {
+    // Незаведённая подпись не падает и не краснеет — она печатает жаргон.
+    const codes = ["quota", "auth", "zone", "provider", "needsToken", "notAvailable", "unknown", "state"];
+    for (const code of codes) {
+      for (const [lang, dict] of Object.entries(DEVHUB_DICT)) {
+        const value = (dict as Record<string, string>)[`caps.off.${code}`];
+        expect(value, `caps.off.${code} пуст в языке ${lang}`).toBeTruthy();
+      }
+    }
   });
 
   test("незнакомое состояние показывается, а не прячется", () => {
     // Спрятать хуже: ни человек, ни мы не поймём, о чём речь.
-    expect(SRC).toContain("состояние: ${status}");
+    // Слово «состояние» с 08.09 берётся из словаря (подсказка в атрибуте, а их
+    // доводчик не переводит), но САМО значение обязано доезжать до экрана.
+    expect(CODE).toContain('${t("caps.off.state")}: ${status}');
+    expect(RU_DICT["caps.off.state"]).toBe("состояние");
   });
 
   test("даты не форматируются американской локалью", () => {

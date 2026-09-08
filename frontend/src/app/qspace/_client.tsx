@@ -25,6 +25,7 @@ import { estimatePlan } from "./estimate";
 import { planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
 import { drawMaterial, materialById, materialsFor } from "./materials";
 import RasterReview from "./RasterReview";
+import { nearestWall, placeOpening, removeOpeningNear } from "./openings";
 import {
   CEILING_STRETCH,
   FLOOR_WET,
@@ -251,6 +252,9 @@ export default function QSpaceClient() {
 
   const [plan, setPlan] = useState<Plan>(() => demoPlan());
   const [layers, setLayers] = useState({ rough: false, finish: true, decor: true });
+  // Режим расстановки проёмов: из DXF/PDF/картинки приходят только стены,
+  // окна и двери человек ставит сам кликом по стене.
+  const [openingMode, setOpeningMode] = useState<"off" | "door" | "window" | "erase">("off");
   const [partition, setPartition] = useState("wall-block");
   const [wallMatId, setWallMatId] = useState("paint-warm-white");
   const [floorMatId, setFloorMatId] = useState("parquet-oak");
@@ -286,6 +290,12 @@ export default function QSpaceClient() {
 
   const selRef = useRef<number | null>(null);
   selRef.current = selectedUid;
+
+  // Обработчик мыши создаётся один раз вместе со сценой, поэтому режим и
+  // действие он должен читать через ref, а не из замкнутого состояния.
+  const openingModeRef = useRef<"off" | "door" | "window" | "erase">("off");
+  openingModeRef.current = openingMode;
+  const openingClickRef = useRef<((x: number, y: number, mode: "door" | "window" | "erase") => void) | null>(null);
 
   // ---- начальная сцена ----------------------------------------------------
   useEffect(() => {
@@ -369,6 +379,19 @@ export default function QSpaceClient() {
     const onDown = (e: PointerEvent) => {
       const t = three.current; if (!t) return;
       t.raycaster.setFromCamera(ndc(e), t.camera);
+
+      // Режим проёмов перехватывает клик: он про стены, а не про мебель.
+      // Читаем режим из ref, потому что обработчик вешается один раз при
+      // создании сцены и замкнул бы начальное значение состояния.
+      const mode = openingModeRef.current;
+      if (mode !== "off") {
+        const p = new THREE.Vector3();
+        if (!t.raycaster.ray.intersectPlane(floorPlane, p)) return;
+        // в плане ось Y — это Z сцены
+        openingClickRef.current?.(p.x, p.z, mode);
+        return;
+      }
+
       const hits = t.raycaster.intersectObjects(t.gDecor.children, true);
       if (hits.length > 0) {
         const g = topGroup(hits[0].object);
@@ -640,6 +663,29 @@ export default function QSpaceClient() {
     setSelectedUid(uid);
     setLayers((l) => ({ ...l, decor: true }));
   }, [plan]);
+
+  // Клик по стене в режиме проёмов. План пересобирается целиком, поэтому
+  // сцена перестроится сама (эффект на [plan]).
+  const onOpeningClick = useCallback(
+    (x: number, y: number, mode: "door" | "window" | "erase") => {
+      const hit = nearestWall(plan, x, y, 0.7);
+      if (!hit) {
+        setWarnings(["Мимо стены — нажмите ближе к стене (не дальше 0.7 м)."]);
+        return;
+      }
+      const r = mode === "erase"
+        ? removeOpeningNear(plan, hit)
+        : placeOpening(plan, hit, mode);
+      if (r.ok) {
+        setPlan(r.plan);
+        setWarnings([]);
+      } else {
+        setWarnings([r.reason]);
+      }
+    },
+    [plan],
+  );
+  openingClickRef.current = onOpeningClick;
 
   const withSelected = useCallback((fn: (g: THREE.Object3D) => void) => {
     const t = three.current; if (!t || selRef.current === null) return;
@@ -955,6 +1001,40 @@ export default function QSpaceClient() {
               </button>
             ))}
           </div>
+
+          <h2 style={S.h2}>Окна и двери</h2>
+          <p style={S.hint}>
+            Из чертежа и картинки приходят только стены — проёмы поставьте сами:
+            выберите, что ставить, и нажмите на стену в 3D.
+          </p>
+          <div style={S.swatchRow} role="group" aria-label="Расстановка проёмов">
+            {([
+              ["door", "Дверь"],
+              ["window", "Окно"],
+              ["erase", "Убрать"],
+            ] as const).map(([m, label]) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setOpeningMode((cur) => (cur === m ? "off" : m))}
+                aria-pressed={openingMode === m}
+                style={{
+                  ...S.btn,
+                  fontWeight: openingMode === m ? 700 : 400,
+                  borderColor: openingMode === m ? "#2f5e2a" : "#c9c4bb",
+                  background: openingMode === m ? "#eef4ea" : "#fff",
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {openingMode !== "off" && (
+            <p style={S.hint}>
+              Режим включён: нажмите на стену в 3D-виде.
+              {" "}Нажмите кнопку ещё раз, чтобы выйти.
+            </p>
+          )}
 
           <h2 style={S.h2}>Мебель и оборудование</h2>
           {groups.map((grp) => (

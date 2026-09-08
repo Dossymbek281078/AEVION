@@ -62,6 +62,44 @@ function formatRelative(ms: number, lang: Lang): string {
   return lang === "ru" ? `${h}ч ${m % 60}м` : `${h}h ${m % 60}m`;
 }
 
+/**
+ * Подпись «когда получены данные».
+ *
+ * ЗАЧЕМ ОТДЕЛЬНАЯ ФУНКЦИЯ. Здесь легко повторить ту же ошибку, от которой файл
+ * уже бережётся выше: `enabled` намеренно стартует с `false`, чтобы сервер и
+ * клиент отрисовали одно и то же. С этой подписью так не сделали — она считалась
+ * прямо в отрисовке через `Date.now()`, а он на сервере и при гидратации разный.
+ *
+ * ЗАМЕР (прод, 28.08.2026): `/modules` бросала `Minified React error #418` —
+ * «текст не совпал с серверным». Страница выглядит нормально, ошибка видна
+ * только в консоли, но React выбрасывает разметку и перерисовывает поддерево.
+ *
+ * Пока не смонтировались, отдаём время из самого `generatedAt` — оно приходит
+ * пропом и на обеих сторонах одинаково. После монтирования переключаемся на
+ * «сколько прошло», которое и нужно человеку.
+ *
+ * Вынесено наружу ради проверки: главное свойство — до монтирования результат
+ * НЕ зависит от часов — иначе пришлось бы утверждать его по тексту исходника.
+ */
+export function lastUpdatedLabel(args: {
+  generatedAt?: string;
+  now: number;
+  lang: Lang;
+  mounted: boolean;
+}): string | null {
+  const { generatedAt, now, lang, mounted } = args;
+  if (!generatedAt) return null;
+  const at = new Date(generatedAt);
+  if (Number.isNaN(at.getTime())) return null;
+  if (!mounted) {
+    // Детерминировано: считается только из пропа, часов не касается.
+    return at.toISOString().slice(11, 16) + " UTC";
+  }
+  const ago = now - at.getTime();
+  if (ago < 60_000) return lang === "ru" ? "только что" : "just now";
+  return formatRelative(ago, lang) + (lang === "ru" ? " назад" : " ago");
+}
+
 export default function AutoRefreshToggle({
   lang = "en",
   generatedAt,
@@ -75,10 +113,17 @@ export default function AutoRefreshToggle({
   // Hydrate from localStorage. We start "off" on first paint to avoid
   // hydration mismatch — the actual stored preference is read in effect.
   const [enabled, setEnabled] = useState(false);
+  // Отрисовка до и после гидратации обязана совпадать; всё, что зависит от
+  // часов, включается только после монтирования.
+  const [mounted, setMounted] = useState(false);
   const [tick, setTick] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const lastRefreshRef = useRef<number>(Date.now());
   const nextRefreshRef = useRef<number>(Date.now() + DEFAULT_INTERVAL_MS);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     try {
@@ -136,7 +181,7 @@ export default function AutoRefreshToggle({
   void tick;
 
   const fetchedAt = generatedAt ? new Date(generatedAt) : null;
-  const fetchedAgo = fetchedAt ? Date.now() - fetchedAt.getTime() : null;
+  const fetchedLabel = lastUpdatedLabel({ generatedAt, now: Date.now(), lang, mounted });
 
   return (
     <div
@@ -223,14 +268,7 @@ export default function AutoRefreshToggle({
           }}
           title={fetchedAt.toISOString()}
         >
-          {t.lastUpdated}:{" "}
-          {fetchedAgo !== null && fetchedAgo < 60_000
-            ? lang === "ru"
-              ? "только что"
-              : "just now"
-            : fetchedAgo !== null
-              ? `${formatRelative(fetchedAgo, lang)} ${lang === "ru" ? "назад" : "ago"}`
-              : fetchedAt.toLocaleTimeString()}
+          {t.lastUpdated}: {fetchedLabel}
         </span>
       )}
 

@@ -293,6 +293,7 @@ export default function DevHubPage() {
   // at 18.7s. For those ~12 seconds every control here looked ready and did
   // nothing. Say so instead.
   const [hydrated, setHydrated] = useState(false);
+  const [howtoBroken, setHowtoBroken] = useState(false);
   useEffect(() => setHydrated(true), []);
 
   // Anything typed into either form before hydration lives only in the DOM;
@@ -512,6 +513,52 @@ export default function DevHubPage() {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Обучающее видео (вкладка Video·HowTo, 07.09.2026).
+            ПОЧЕМУ ЛЕЖИТ У НАС, А НЕ НА CDN ГЕНЕРАТОРА: мастер оттуда весит
+            202 563 318 байт (193 МиБ, 2560x1440, 13.3 Мбит/с) — это экспорт
+            генеративного сервиса, а не веб-файл, и preload="none" откладывает
+            беду до клика, но не отменяет её. Здесь лежит перекодированная
+            копия: 720p, CRF 28 с подавлением зерна, 14.3 МБ. Субтитры после
+            сжатия проверены глазами — читаются.
+            ЯЗЫК: озвучка и вшитые субтитры РУССКИЕ, английской версии нет.
+            Секцию всё равно показываем всем, но постер — чистый кадр без
+            субтитров, а подпись из словаря честно называет язык: кириллица
+            появится на экране только по осознанному клику, и путь EN-новичка
+            (0 % кириллицы, принят живьём 07.09) остаётся стерильным. */}
+        <div style={{
+          border: "1px solid #e2e8f0", background: "#f8fafc", borderRadius: 12,
+          padding: "16px 20px", marginBottom: 20,
+        }}>
+          <p style={{ fontWeight: 800, fontSize: 15, margin: 0, color: "#0f172a" }}>
+            {t("howto.title")}
+          </p>
+          <p style={{ fontSize: 13, color: "#475569", margin: "4px 0 12px", lineHeight: 1.5, maxWidth: 640 }}>
+            {t("howto.body")}
+          </p>
+          {howtoBroken ? (
+            /* Отказ показывается отказом: файл не доехал до выкатки — говорим
+               об этом словами, а не оставляем мёртвую кнопку «play». */
+            <p style={{ fontSize: 13, color: "#b45309", margin: 0 }}>{t("howto.missing")}</p>
+          ) : (
+            <video
+              controls
+              preload="none"
+              playsInline
+              poster="/devhub/howto-poster.jpg"
+              aria-label={t("howto.aria")}
+              onError={() => setHowtoBroken(true)}
+              /* Источник ПРЯМО на video, а не дочерним <source>: при дочернем
+                 ошибка срабатывает на нём, и до onError видео доходит не
+                 всегда — отказ остался бы молчаливым. Тот же приём на /acquire. */
+              src="/devhub/howto-ru.mp4"
+              style={{ width: "100%", maxWidth: 720, borderRadius: 10, display: "block", background: "#0f172a" }}
+            />
+          )}
+          <p style={{ fontSize: 12, color: "#64748b", margin: "8px 0 0" }}>
+            {t("howto.lang")}
+          </p>
         </div>
 
         {/* ОСТАТОК ЗА МЕСЯЦ. Модуль знал числа и молчал: человек упирался в предел,

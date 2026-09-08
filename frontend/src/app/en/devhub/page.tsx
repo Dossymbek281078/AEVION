@@ -122,6 +122,31 @@ export default async function EnDevhubPage({
           <PaymentReachNotice style={styles.note} lang="en" />
         </section>
 
+        {/*
+          Провенанс генераций. Добавлен 08.09.2026 сверкой ЧЕРНОВИКА
+          ОБЪЯВЛЕНИЯ с этой страницей: текст Show HN обещает «provenance
+          stamps … only its sha256 is stored», а страница о них молчала —
+          человек пришёл бы по ссылке за тем, чего здесь нет. Русская
+          /devhub про них рассказывает, английская была вчетверо короче.
+
+          Формулировки сверены с реализацией (lib/devhubProvenance.ts), а не
+          с объявлением: отметка ставится ПО ЗАПРОСУ на генерацию, а не
+          автоматически (флаг provenance: true, v1 без миграции схемы), и
+          только для настоящих ИИ-генераций — у заглушки отметки не будет.
+          Обещать «automatic» здесь значило бы повторить ошибку объявления.
+        */}
+        <section style={styles.section}>
+          <h2 style={styles.h2}>Provenance for AI generations</h2>
+          <p style={styles.note}>
+            Ask for it on a generation and DevHub records where the result came
+            from: which model produced it, when, and a hash of the files — a
+            verifiable page you can link to. Your prompt never leaves the
+            system; only its SHA-256 is stored. Built for the EU AI Act era,
+            where &laquo;an AI made this&raquo; has to be provable rather than
+            claimed.
+          </p>
+        </section>
+
         <section style={styles.section}>
           <h2 style={styles.h2}>Why trust the numbers</h2>
           <p style={styles.note}>

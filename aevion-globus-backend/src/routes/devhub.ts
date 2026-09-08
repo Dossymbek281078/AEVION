@@ -865,10 +865,32 @@ async function dbSaveProject(p: DevHubProject): Promise<void> {
   memProjects.delete(p.id);
 }
 
+/**
+ * Удаление проекта. Сносит ВСЁ, что содержит его файлы, а не только таблицу
+ * файлов.
+ *
+ * Замер 08.09.2026: сносились `DevHubFile` и `DevHubProject`, а
+ * `DevHubCheckpoint` оставался. В нём поле `files` — JSONB с ПОЛНЫМ
+ * содержимым файлов на момент снимка (это история отката), то есть копии кода
+ * человека жили дальше в другой таблице. Согласие при этом обещает: «файлы и
+ * база исчезнут навсегда». Обещание было неверным, и неверным на пути
+ * УДАЛЕНИЯ — там, где человек и рассчитывает, что за него сделают ровно то,
+ * что сказано.
+ *
+ * `DevHubDeployment` тоже привязан к проекту и иначе остаётся сиротой
+ * навсегда. `DevHubUsage` и `DevHubTier` НЕ трогаем намеренно: это счётчики
+ * расхода и тариф — они принадлежат человеку, а не проекту, и нужны для учёта
+ * после удаления.
+ *
+ * Публичные сниппеты тоже остаются намеренно: поделиться — отдельное действие
+ * человека, и отменять его удалением проекта мы не вправе.
+ */
 async function dbDeleteProject(id: string): Promise<void> {
   if (!isDevHubDbReady()) {
     memProjects.delete(id);
     for (const [fid, f] of memFiles) { if (f.projectId === id) memFiles.delete(fid); }
+    for (const [cid, c] of memCheckpoints) { if (c.projectId === id) memCheckpoints.delete(cid); }
+    for (const [did, d] of memDeployments) { if (d.projectId === id) memDeployments.delete(did); }
     return;
   }
   // Drop the parked copy too, or the overlay in dbGetProject resurrects a
@@ -877,6 +899,10 @@ async function dbDeleteProject(id: string): Promise<void> {
   // project the user just deleted — a hole the overlay itself opens.
   memProjects.delete(id);
   for (const [fid, f] of memFiles) { if (f.projectId === id) memFiles.delete(fid); }
+  for (const [cid, c] of memCheckpoints) { if (c.projectId === id) memCheckpoints.delete(cid); }
+  for (const [did, d] of memDeployments) { if (d.projectId === id) memDeployments.delete(did); }
+  await pool.query(`DELETE FROM "DevHubCheckpoint" WHERE "projectId"=$1`, [id]);
+  await pool.query(`DELETE FROM "DevHubDeployment" WHERE "projectId"=$1`, [id]);
   await pool.query(`DELETE FROM "DevHubFile" WHERE "projectId"=$1`, [id]);
   await pool.query(`DELETE FROM "DevHubProject" WHERE "id"=$1`, [id]);
 }

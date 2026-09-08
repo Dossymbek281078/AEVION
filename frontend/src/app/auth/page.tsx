@@ -144,7 +144,14 @@ const AUTH_A11Y: Record<string, { name: string; namePh: string; email: string; p
 };
 
 export default function AuthPage() {
-  const AA = AUTH_A11Y[useI18nOptional()?.lang ?? "ru"] ?? AUTH_A11Y.ru;
+  // Язык посетителя нужен дважды: словарю атрибутов И атрибуту lang на main.
+  // Прибитый lang="ru" при живом доводчике означал: текст переведён на
+  // английский, а блок объявлен русским — читалка читает EN-текст русским
+  // голосом (класс 28.08, 204 места; доводчик lang-атрибуты не переписывает,
+  // проверено чтением AutoTranslate 07.09). До гидрации lang="ru" честен:
+  // SSR-текст страницы русский.
+  const визитёрLang = useI18nOptional()?.lang ?? "ru";
+  const AA = AUTH_A11Y[визитёрLang] ?? AUTH_A11Y.ru;
   const { showToast } = useToast();
   const [mode, setMode] = useState<"login" | "register">("register");
   const [name, setName] = useState("");
@@ -316,7 +323,7 @@ export default function AuthPage() {
     // lang="ru" на блоке содержимого: корневой <html lang> у сайта "en", а этот
     // экран переведён на русский целиком (замер 28.08.2026 по отдаваемому HTML:
     // 547 русских букв). Ближайшая пометка выигрывает у корневой.
-    <main lang="ru">
+    <main lang={визитёрLang}>
       <ProductPageShell maxWidth={720}>
         <Wave1Nav />
         <PipelineSteps current="auth" />

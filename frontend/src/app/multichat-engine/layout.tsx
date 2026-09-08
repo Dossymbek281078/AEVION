@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Multichat Engine · parallel AI agents over QCoreAI",
+  title: "Multichat Engine — parallel AI agents · совет ИИ-агентов в одном окне",
   description:
-    "Run 6 specialised AI agents in parallel — General, Code, Finance, IP/Legal, Compliance, Translator — across Claude / GPT / Gemini / DeepSeek / Grok. Cross-agent @mention handoff, broadcast, custom prompts, MD/JSON export. Live.",
+    "Run 6 specialised AI agents in parallel — General, Code, Finance, IP/Legal, Compliance, Translator — across Claude / GPT / Gemini / DeepSeek / Grok. Cross-agent @mention handoff, broadcast, custom prompts, MD/JSON export. Шесть ИИ-агентов параллельно в одном окне: совет моделей, передача вопроса между агентами, экспорт. Live.",
   keywords: [
     "AI agents",
     "parallel chat",

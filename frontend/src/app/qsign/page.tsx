@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useI18nOptional } from "@/lib/i18n";
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -227,7 +228,20 @@ const chip = (bg: string, fg: string): CSSProperties => ({
   fontFamily: "ui-monospace, monospace",
 });
 
+
+// Busy-ярлыки — словарём (класс «busy быстрее доводчика», назначение 07.09,
+// рецепт GEN_UI.busy*). Страница англоязычная — здесь зеркальный случай:
+// РУССКИЙ посетитель видел английские busy-подписи те секунды, пока идёт
+// операция. Idle-подписи не трогаем — стабильный текст кроет доводчик.
+const QS_BUSY: Record<string, { hash: string; sign: string; verify: string; webhook: string; gps: string; refresh: string; rotate: string }> = {
+  en: { hash: "Hashing…", sign: "Signing…", verify: "Verifying…", webhook: "Creating…", gps: "Requesting…", refresh: "Refreshing…", rotate: "Rotating…" },
+  ru: { hash: "Считаю хеш…", sign: "Подписываю…", verify: "Проверяю…", webhook: "Создаю…", gps: "Запрашиваю…", refresh: "Обновляю…", rotate: "Ротация…" },
+  kk: { hash: "Хеш есептелуде…", sign: "Қол қойылуда…", verify: "Тексерілуде…", webhook: "Құрылуда…", gps: "Сұралуда…", refresh: "Жаңартылуда…", rotate: "Ротация…" },
+};
+
 export default function QSignPage() {
+  const qsLang = useI18nOptional()?.lang ?? "en";
+  const QS = QS_BUSY[qsLang] ?? QS_BUSY.en;
   const { showToast } = useToast();
 
   // payload + client-side canonical preview
@@ -937,7 +951,7 @@ export default function QSignPage() {
                       padding: 0,
                     }}
                   >
-                    {hashingFile ? "Hashing…" : "📎 Hash a file"}
+                    {hashingFile ? QS.hash : "📎 Hash a file"}
                     <input
                       type="file"
                       onChange={(e) => {
@@ -1134,7 +1148,7 @@ export default function QSignPage() {
                     cursor: "pointer",
                   }}
                 >
-                  {gpsStatus === "loading" ? "Requesting…" : "Attach GPS"}
+                  {gpsStatus === "loading" ? QS.gps : "Attach GPS"}
                 </button>
               )}
             </div>
@@ -1156,7 +1170,7 @@ export default function QSignPage() {
                   signing || !!parseError || !token ? "default" : "pointer",
               }}
             >
-              {signing ? "Signing…" : "Sign with HMAC + Ed25519"}
+              {signing ? QS.sign : "Sign with HMAC + Ed25519"}
             </button>
 
             {rateLimit ? <RateLimitBadge rateLimit={rateLimit} /> : null}
@@ -1236,7 +1250,9 @@ export default function QSignPage() {
                       geo: {signed.geo.source}
                       {signed.geo.country ? ` · ${signed.geo.country}` : ""}
                       {signed.geo.city ? ` · ${signed.geo.city}` : ""}
-                      {signed.geo.lat !== null && signed.geo.lng !== null
+                      {/* `!= null` — переживает и null, и отсутствие поля;
+                          см. разбор в verify/[id]/page.tsx */}
+                      {signed.geo.lat != null && signed.geo.lng != null
                         ? ` · ${signed.geo.lat.toFixed(3)}, ${signed.geo.lng.toFixed(3)}`
                         : ""}
                     </div>
@@ -1407,7 +1423,7 @@ export default function QSignPage() {
                   verifying || !verifyHmacSig || !verifyPayload ? "default" : "pointer",
               }}
             >
-              {verifying ? "Verifying…" : "Verify"}
+              {verifying ? QS.verify : "Verify"}
             </button>
 
             {verifyResult ? (
@@ -1714,7 +1730,7 @@ export default function QSignPage() {
                   whiteSpace: "nowrap",
                 }}
               >
-                {creatingWebhook ? "Creating…" : "Add webhook"}
+                {creatingWebhook ? QS.webhook : "Add webhook"}
               </button>
             </div>
 

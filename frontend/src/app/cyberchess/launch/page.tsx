@@ -5,7 +5,6 @@ import { CHESS_LAUNCH_UTC } from "../launchDate";
 import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 import { ccPlural } from "../ccPlural";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
-import { LandingView } from "@/components/LandingView";
 import { PageTracking } from "@/components/PageTracking";
 
 // Посадочная страница запуска CyberChess — 30 сентября 2026.
@@ -134,14 +133,14 @@ export default async function CyberChessLaunchPage({
           </p>
         </header>
 
-        <LandingView source={source} />
-
 
         <WaitlistCapture
-          // Язык задан ЯВНО: страница объявлена lang="ru" на <main>.
-          // Без этого форма пошла бы за языком посетителя и на русской
-          // странице показала бы английские подписи.
-          lang="ru"
+          // Язык НЕ задан жёстко (было lang="ru", снято 06.09.2026 по образцу
+          // /devhub/launch a9e43e96d). Браузер авто-переводит русскую прозу
+          // страницы EN-визитёру, но НЕ атрибуты формы: с lang="ru" плейсхолдер
+          // оставался «вы@почта.рф» на переведённой странице. Без пропа форма
+          // идёт за языком посетителя своими переводами; ru-визитёру, как и
+          // прежде, показывается русский (переводы в компоненте уже есть).
           source={source}
           tone="light"
           title={left > 0

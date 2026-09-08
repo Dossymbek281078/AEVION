@@ -9,9 +9,14 @@ import type { Metadata } from "next";
 // предпросмотре ссылки в мессенджере, то есть ВСТРЕЧАЕТ модуль ещё до того,
 // как открыл его. Английское описание у русской страницы означает, что первое
 // впечатление — на чужом языке. Замер 04.09.2026.
-const TITLE = "QVenture — ИИ-аналитик инвестиций для любого бизнеса";
+// Титул двуязычный НАМЕРЕННО (06.09.2026): metadata у Next статична на
+// маршрут, языка читателя здесь нет, а доводчик <title> не переводит.
+// EN-визитёр раньше видел чисто русскую вкладку у «fund-grade English tool».
+const TITLE = "QVenture — AI Deal Analyzer · ИИ-аналитик инвестиций";
 const DESCRIPTION =
-  "Проверка сделки уровня фонда за секунды. Прозрачная оценка 0–100 по восьми факторам, "
+  "Fund-grade deal screening in seconds: a transparent 0–100 score across eight factors, "
+  + "a four-role AI council and a concrete entry strategy. "
+  + "Проверка сделки уровня фонда за секунды. Прозрачная оценка 0–100 по восьми факторам, "
   + "совет из четырёх ролей (учёный, аналитик данных, экономист, юрист) и конкретная "
   + "стратегия входа — размер чека, диапазон оценки, этапы траншей, доходность с поправкой на риск.";
 
@@ -43,17 +48,14 @@ export const metadata: Metadata = {
 };
 
 export default function QVentureLayout({ children }: { children: React.ReactNode }) {
-  // QVenture is a fund-grade English tool: memos, factor rationales, and the
-  // financial vocabulary it speaks (MRR, IRR, LTV/CAC, MoIC, pre-money) are
-  // generated in English and only read as a coherent whole in English. The
-  // site-wide live DOM translator (AutoTranslate) would translate this dense,
-  // jargon-heavy prose asynchronously and only partially — producing the
-  // EN/RU "Runglish" mix a first-time investor sees. Opt the entire QVenture
-  // surface out of DOM translation (AutoTranslate honors translate="no") so the
-  // visitor gets one clean language. display:contents keeps layout untouched.
-  return (
-    <div translate="no" className="notranslate" style={{ display: "contents" }}>
-      {children}
-    </div>
-  );
+  // 06.09.2026: обёртка translate="no" снята С МОДУЛЯ ЦЕЛИКОМ. Опт-аут
+  // переехал ТОЧЕЧНО на ResultView (_result.tsx): мемо и обоснования
+  // факторов генерятся английской прозой — там notranslate законен и
+  // защищает инвестора от EN/RU-«рунглиша». Витрина и форма отданы
+  // доводчику: с обёрткой здесь EN-гость видел русскую страницу ЦЕЛИКОМ
+  // (замер 06.09 — 2013 знаков кириллицы, доводчик уважает notranslate и
+  // не трогал ничего; ветка attrs-wave добавила точечный опт-аут, но эту
+  // обёртку снять забыла — числа RU-доли не сдвинулись). Регрессию
+  // стережёт attrDictionariesSpeakTheirLang: у layout notranslate запрещён.
+  return <>{children}</>;
 }

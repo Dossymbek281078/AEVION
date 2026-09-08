@@ -184,7 +184,7 @@ export default function PsyAppDepsPage() {
       </section>
 
       <section style={{ maxWidth: 960, margin: "0 auto", padding: "0 20px 16px" }}>
-        <PaddleUpgradeButton variant="banner" appId="psyapp-deps" label="Разблокировать PsyApp Pro — 14 дней бесплатно" />
+        <PaddleUpgradeButton variant="banner" appId="psyapp-deps" label="Разблокировать PsyApp Pro" />
       </section>
 
       <section style={{ maxWidth: 960, margin: "0 auto", padding: "0 20px 32px" }}>

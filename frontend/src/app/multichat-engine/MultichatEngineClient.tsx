@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18nOptional } from "@/lib/i18n";
+
 // Страница модуля «Мультичат» — рабочая консоль плюс витрина вокруг неё.
 //
 // Из файла удалён неиспользуемый рабочий стол агентов (AgentPanel и всё, что
@@ -57,7 +59,19 @@ type LiveProviderStatus = {
   defaultModel: string | null;
 };
 
+// Статус пинга поставщиков мигает БЫСТРЕЕ доводчика (gated/loading — те же
+// секунды, что busy-ярлыки; класс и рецепт — назначение 07.09, образец
+// GEN_UI.busy*). Заодно «loading…» перестал быть английским на русской
+// странице — отдельная строка того же свипа.
+const ME_UI: Record<string, { gated: string; loading: string }> = {
+  ru: { gated: "· после входа", loading: "· загрузка…" },
+  en: { gated: "· after sign-in", loading: "· loading…" },
+  kk: { gated: "· кіргеннен кейін", loading: "· жүктелуде…" },
+};
+
 function ProviderHealthStrip() {
+  const meLang = useI18nOptional()?.lang ?? "ru";
+  const ME = ME_UI[meLang] ?? ME_UI.ru;
   const [providers, setProviders] = useState<LiveProviderStatus[] | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -165,7 +179,7 @@ function ProviderHealthStrip() {
         </button>
         )}
         <span style={{ fontSize: 10, color: T.textFaded }}>
-          {gated ? "· после входа" : updatedAt ? `· ${new Date(updatedAt).toLocaleTimeString()}` : "· loading…"}
+          {gated ? ME.gated : updatedAt ? `· ${new Date(updatedAt).toLocaleTimeString()}` : ME.loading}
         </span>
       </div>
 

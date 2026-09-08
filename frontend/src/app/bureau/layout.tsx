@@ -6,9 +6,9 @@ const SITE = getSiteUrl();
 const OG_IMAGE = `${getApiBase()}/api/bureau/og.svg`;
 
 export const metadata: Metadata = {
-  title: "AEVION Bureau — public verified registry for creators and orgs",
+  title: "AEVION Bureau — public verified registry · публичный реестр авторов",
   description:
-    "AEVION Bureau is the public registry of verified authors, organizations and notarized certificates. KYC + payment + Planet quorum stamp every entry; embed badges on your portfolio or contracts.",
+    "AEVION Bureau is the public registry of verified authors, organizations and notarized certificates. KYC + payment + Planet quorum stamp every entry; embed badges on your portfolio or contracts. Публичный реестр проверенных авторов и организаций: заверенные сертификаты, значки для портфолио и договоров.",
   openGraph: {
     title: "AEVION Bureau — verified creator + org registry",
     description:

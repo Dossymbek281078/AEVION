@@ -786,7 +786,14 @@ function SignalCoverageChip({ coverage, fields }: { coverage: number; fields: nu
 
 export function ResultView({ result, shared = false }: { result: AnalysisResult; shared?: boolean }) {
   return (
-    <>
+    // translate="no" переехал сюда С МОДУЛЯ ЦЕЛИКОМ (06.09.2026). Причина
+    // прежнего решения законна ИМЕННО ДЛЯ РЕЗУЛЬТАТА: мемо и факторы
+    // генерятся английской финансовой прозой (MRR, IRR, MoIC), и доводчик
+    // делал из них Runglish. Но опт-аут стоял на layout — и превращал ВСЮ
+    // витрину с формой в русскую для EN-визитёра (замер 06.09: 2013 знаков
+    // кириллицы, доводчик honоrs notranslate). Обещание «один чистый язык»
+    // держим там, где оно выполнимо: анализ — нетронутым, витрина — доводчику.
+    <div translate="no" className="notranslate" style={{ display: "contents" }}>
       <div style={SECTION}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
           <div>
@@ -910,6 +917,6 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
           {result.result.assumptions.map((a, i) => <li key={i} style={{ marginBottom: 3 }}>{a}</li>)}
         </ul>
       </div>
-    </>
+    </div>
   );
 }

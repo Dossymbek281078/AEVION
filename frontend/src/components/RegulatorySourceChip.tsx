@@ -100,7 +100,7 @@ export function RegulatorySourceChip({ source, labels, subject }: Props) {
       <span style={{ color, marginLeft: 4 }}>
         {headline}{marker}
       </span>
-      <InfoTip label="Источник ограничения" text={lines.join("\n")} size={13} />
+      <InfoTip label={t("reg.tip.label")} text={lines.join("\n")} size={13} />
     </span>
   );
 }

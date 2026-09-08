@@ -7,9 +7,9 @@ const SITE = getSiteUrl();
 const OG_IMAGE = `${getApiBase()}/api/qright/og.svg`;
 
 export const metadata: Metadata = {
-  title: "AEVION QRight — author rights, on-chain receipts, royalty rail",
+  title: "AEVION QRight — author rights & royalty rail · права автора и роялти",
   description:
-    "QRight is the AEVION authorship layer: register a work, get a content-hashed receipt with HMAC + Ed25519 signatures, threshold-shard the secret across Quantum Shield. Verify offline; route royalties through Bank.",
+    "QRight is the AEVION authorship layer: register a work, get a content-hashed receipt with HMAC + Ed25519 signatures, threshold-shard the secret across Quantum Shield. Verify offline; route royalties through Bank. Слой авторства AEVION: регистрация работы, подписанный чек с хешем содержимого, проверка без доверия серверу, роялти через Bank.",
   openGraph: {
     title: "AEVION QRight — proof-of-authorship rail",
     description:

@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
+import { ModuleMaturity } from "@/components/ModuleMaturity";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "LifeBox — Digital Safe for Future Self · AEVION",
+  title: "LifeBox — Digital Safe for Future Self",
   description:
     "100-летнее цифровое хранилище: документы, знания, ценности. Inheritance через QShield Shamir-разбиение, аудит каждого доступа через QSign.",
   alternates: { canonical: `${SITE}/lifebox` },
@@ -20,5 +21,6 @@ export const metadata: Metadata = {
 };
 
 export default function LifeBoxLayout({ children }: { children: ReactNode }) {
-  return <>{children}</>;
+  return <><ModuleMaturity id="lifebox" />
+      {children}</>;
 }

@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
+import { ModuleMaturity } from "@/components/ModuleMaturity";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "Kids AI Content — Safe Multi-language Learning · AEVION",
+  title: "Kids AI Content — Safe Multi-language Learning",
   description:
     "Безопасный многоязычный AI-контент для детей: фильтры, родительский dashboard, логопедический модуль, привязка к возрастной шкале.",
   alternates: { canonical: `${SITE}/kids-ai-content` },
@@ -19,5 +20,6 @@ export const metadata: Metadata = {
 };
 
 export default function KidsAILayout({ children }: { children: ReactNode }) {
-  return <>{children}</>;
+  return <><ModuleMaturity id="kids-ai-content" />
+      {children}</>;
 }

@@ -174,6 +174,40 @@ app.use(bodyLimitByPath);
 //
 // Прежний комментарий здесь называл читателем /api/checkout/webhook — тот
 // обработчик rawBody не читает вовсе (проверено грепом по src/).
+// Управляющие байты в АДРЕСЕ — ошибка запроса, а не наша авария.
+//
+// Замер прода 08.09.2026 (зонд враждебного входа, 42 пробы с контролями):
+// «%00» в пути доезжает до параметра, Postgres такую строку не принимает, и
+// catch объявляет это отказом ХРАНИЛИЩА. Наружу шло 500 у /api/qright/objects,
+// /api/planet/artifacts, /api/bureau/notaries (контроль «abc» у них честные
+// 404), а у devhub — 503 плюс ложно красная полоса здоровья: чужой кривой
+// запрос красил НАШ сигнал. Каждая такая ссылка бесплатно рождает тревогу в
+// Sentry, среди которых потом не видно настоящих аварий (§15г: 4xx — про
+// запрос, 5xx — «у нас сломалось»).
+//
+// Проверка стоит ДО роутеров, поэтому лечит все модули разом. Два условия
+// написаны буквально так, как проверены на этой машине:
+//   • charCodeAt, а не регулярка с экранированием — юникод-класс через
+//     границу вызова однажды положил в исходник сырой NUL-байт;
+//   • битая процентная последовательность (decodeURIComponent бросает) —
+//     тоже клиентская ошибка, а не наша.
+app.use((req, res, next) => {
+  const raw = req.url || "";
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    return res.status(400).json({ error: "bad request path: broken percent-encoding" });
+  }
+  for (const ch of decoded) {
+    const code = ch.charCodeAt(0);
+    if (code < 32 || code === 127) {
+      return res.status(400).json({ error: "bad request path: control characters are not allowed" });
+    }
+  }
+  next();
+});
+
 app.use(express.json({
   limit: "10mb",
   verify: (req, _res, buf) => {

@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
+import { ModuleMaturity } from "@/components/ModuleMaturity";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "QFusionAI — Hybrid AI Router · AEVION",
+  title: "QFusionAI — Hybrid AI Router",
   description:
     "Гибридный AI-движок, объединяющий лучшие LLM (OpenAI, Anthropic, Gemini, DeepSeek, Grok) с автоматическим routing по цене/скорости/качеству. Один API — пять провайдеров.",
   alternates: { canonical: `${SITE}/qfusionai` },
@@ -26,5 +27,6 @@ export const metadata: Metadata = {
 };
 
 export default function QFusionAILayout({ children }: { children: ReactNode }) {
-  return <>{children}</>;
+  return <><ModuleMaturity id="qfusionai" />
+      {children}</>;
 }

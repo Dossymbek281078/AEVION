@@ -3,7 +3,6 @@ import { getApiBase } from "@/lib/apiBase";
 import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
-import { LandingView } from "@/components/LandingView";
 import { PageTracking } from "@/components/PageTracking";
 
 // Посадочная запуска «патентного бюро» (QRight + QSign + IP Bureau) — 10 сентября.
@@ -77,29 +76,37 @@ export default async function BureauLaunchPage({
   const source = channel ? `bureau-${channel}` : "bureau";
 
   return (
-    <main lang="ru" style={{ minHeight: "100vh", background: PAPER, color: INK, padding: "clamp(16px, 4vw, 32px) 18px 56px" }}>
+    <main lang="ru" style={{ minHeight: "100vh", background: PAPER, color: INK, padding: "clamp(10px, 4vw, 32px) 18px 56px" }}>
       {/* Заходы сюда не считались до 28.08.2026: страница собирает адреса, но
           события page_view не слала. Воронка считает переходы ОТ page_view,
           поэтому её посетители не попадали в знаменатель — конверсия выглядела
           лучше, чем есть. Компонент сам читает ?c= из ссылки. */}
       <PageTracking page="bureau-launch" />
-      <div style={{ maxWidth: 560, margin: "0 auto", display: "flex", flexDirection: "column", gap: "clamp(18px, 4vw, 28px)" }}>
+      <div style={{ maxWidth: 560, margin: "0 auto", display: "flex", flexDirection: "column", gap: "clamp(14px, 4vw, 28px)" }}>
         <header>
           <div style={{ fontFamily: "monospace", fontSize: 12, letterSpacing: "0.12em", color: GOLD, textTransform: "uppercase" }}>
             AEVION · IP Bureau
           </div>
-          <h1 style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 34, lineHeight: 1.15, margin: "10px 0 0", letterSpacing: "-0.01em" }}>
+          {/* Размер заголовка и вводный абзац ужаты СПЕЦИАЛЬНО, не ради красоты.
+              Замер 08.09.2026 на живом проде: поле ввода адреса лежало на 666px,
+              то есть на экране 360×640 — ПОД СГИБОМ. Страница существует ради
+              одного действия — оставить адрес, — и человек, пришедший по письму
+              запуска, этого поля не видел. На 390×844 оно было видно, промах
+              составлял 26 пикселей.
+              Текст не потерян: те же три шага (хеш, подпись, сертификат с
+              проверкой по ссылке) подробно разобраны ниже, в «Как это работает».
+              Здесь осталась одна строка, которая обещает, а не пересказывает.
+              Возвращая fontSize: 34 или прежний абзац, перемерьте положение поля
+              на 360×640 — иначе оно уедет обратно. */}
+          <h1 style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: "clamp(26px, 7.4vw, 34px)", lineHeight: 1.15, margin: "10px 0 0", letterSpacing: "-0.01em" }}>
             Доказать, что это ваше
           </h1>
           <p style={{ color: MUTED, fontSize: 15.5, lineHeight: 1.5, margin: "10px 0 0" }}>
-            Трек, текст, макет, идея — фиксируются хешем содержимого, подписываются
-            криптографически и получают сертификат, который любой может проверить по
-            ссылке, не входя в систему.
+            Хеш содержимого, криптографическая подпись и сертификат, который
+            проверяется по ссылке без входа.
             {left > 0 ? ` Открываем ${left === 1 ? "завтра" : `через ${left} дн.`} — 10 сентября.` : " Уже открыто."}
           </p>
         </header>
-
-        <LandingView source={source} />
 
 
         <WaitlistCapture

@@ -8,7 +8,7 @@ import type { Metadata } from "next";
 // страница: в выдаче ему делать нечего, и без noindex он соревновался бы за
 // показы с той страницей, на которую ведёт.
 export const metadata: Metadata = {
-  title: "AEVION",
+  title: { absolute: "AEVION" },
   robots: { index: false, follow: true },
 };
 

@@ -7,7 +7,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: {
-    default: "Сметный тренажёр — AEVION",
+    default: "Сметный тренажёр",
     template: "%s | Смета · AEVION",
   },
   description:

@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "QChainGov — DAO Governance · AEVION",
+  title: "QChainGov — DAO Governance",
   description:
     // Было «quadratic voting + delegate-trees» — ни того, ни другого в модуле нет:
     // в роутере ноль упоминаний quadratic/sqrt/delegat при 71 упоминании vote,

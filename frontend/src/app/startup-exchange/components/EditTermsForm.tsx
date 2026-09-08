@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useI18nOptional } from "@/lib/i18n";
+import { SX_BUSY } from "./busyUi";
 import {
   ApiError,
   INTENT_LABEL,
@@ -31,6 +33,8 @@ export function EditTermsForm({
   token: string;
   onSaved: (listing: Listing, assessment: Assessment) => void;
 }) {
+  const sxLang = useI18nOptional()?.lang ?? "ru";
+  const SX = SX_BUSY[sxLang] ?? SX_BUSY.ru;
   const deal = listing.deal;
   const [intent] = useState<DealIntent>(deal?.intent ?? "raise");
   const [askUsd, setAskUsd] = useState(deal?.askUsd ? String(deal.askUsd) : "");
@@ -178,7 +182,7 @@ export function EditTermsForm({
             cursor: busy ? "wait" : "pointer",
           }}
         >
-          {busy ? "Сохраняю…" : "Сохранить и пересчитать"}
+          {busy ? SX.saving : "Сохранить и пересчитать"}
         </button>
         {saved && <span style={{ fontSize: 12.5, fontWeight: 700, color: "#166534" }}>Сохранено, балл обновлён</span>}
       </div>

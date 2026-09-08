@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
+import { ModuleMaturity } from "@/components/ModuleMaturity";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "QTradeOffline — Offline-first AEV transfers · AEVION",
+  title: "QTradeOffline — Offline-first AEV transfers",
   description:
     "P2P AEV transfers without internet: ECDSA P-256 signed offline, claim later, batch-sync to backend. For low-bandwidth, embargoed, and conflict zones.",
   alternates: { canonical: `${SITE}/qtradeoffline` },
@@ -26,5 +27,6 @@ export const metadata: Metadata = {
 };
 
 export default function QTradeOfflineLayout({ children }: { children: ReactNode }) {
-  return <>{children}</>;
+  return <><ModuleMaturity id="qtradeoffline" />
+      {children}</>;
 }

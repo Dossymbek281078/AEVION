@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "Constitution API — Developer Playground · AEVION",
+  title: "Constitution API — Developer Playground",
   description:
     "Интерактивная документация Constitution API: 22 endpoints, live curl/TypeScript/Python генерация, try-now кнопки. Public REST с 1h cache + сценарии + AI + Planet артефакты + голосование.",
   alternates: { canonical: `${SITE}/constitution/api` },

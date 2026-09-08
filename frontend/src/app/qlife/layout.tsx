@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import ComplianceBanner from "@/components/ComplianceBanner";
+import { ModuleMaturity } from "@/components/ModuleMaturity";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "QLife — Personal OS · AEVION",
+  title: "QLife — Personal OS",
   description:
     "Personal Operating System: единый интерфейс для всей жизни — финансы, здоровье, расписание, отношения, цели. AI-агент держит фокус, ты управляешь.",
   alternates: { canonical: `${SITE}/qlife` },
@@ -24,6 +25,7 @@ export default function QLifeLayout({ children }: { children: ReactNode }) {
   return (
     <>
       <ComplianceBanner variant="medical" />
+      <ModuleMaturity id="qlife" />
       {children}
     </>
   );

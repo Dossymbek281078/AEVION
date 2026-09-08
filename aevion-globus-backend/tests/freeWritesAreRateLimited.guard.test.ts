@@ -20,11 +20,19 @@ const LINES = SRC.split(String.fromCharCode(10));
 
 /** Пути, закрытые списком на уровне роутера (devhubRouter.use([...], limiter)). */
 function routerLevelPaths(): Set<string> {
+  // Смотреть надо ВСЕ вызовы use(), а не первый найденный. 08.09.2026 в файл
+  // добавили devhubRouter.use() с проверкой управляющих байтов — у неё путей
+  // нет вовсе, и разбор по первому вхождению стал возвращать пустой список.
+  // Сторож это заметил сам (утверждение «прибор исправен»), но заметил только
+  // потому, что оно есть: без него пустой список читался бы как «защищённых
+  // путей нет» и молча раздул бы список нарушителей.
   const out = new Set<string>();
-  const at = SRC.indexOf("devhubRouter.use(");
-  if (at < 0) return out;
-  const seg = SRC.slice(at, at + 400);
-  for (const m of seg.matchAll(/"(\/[^"]+)"/g)) out.add(m[1]);
+  let at = SRC.indexOf("devhubRouter.use(");
+  while (at >= 0) {
+    const seg = SRC.slice(at, at + 400);
+    for (const m of seg.matchAll(/"(\/[^"]+)"/g)) out.add(m[1]);
+    at = SRC.indexOf("devhubRouter.use(", at + 1);
+  }
   return out;
 }
 

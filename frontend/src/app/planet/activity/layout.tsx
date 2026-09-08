@@ -10,7 +10,7 @@ const CANONICAL = `${SITE}/planet/activity`;
 const OG_IMAGE = `${getApiBase()}/api/planet/og.svg`;
 
 export const metadata: Metadata = {
-  title: "Planet activity feed — public validator stream | AEVION",
+  title: "Planet activity feed — public validator stream",
   description:
     "Live chronological feed of AEVION Planet validator activity: new submissions, issued certificates, revocations and quorum votes. Public, auto-refreshing every minute.",
   alternates: { canonical: CANONICAL },

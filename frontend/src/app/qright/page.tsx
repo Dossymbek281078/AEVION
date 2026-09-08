@@ -1,6 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { useI18nOptional } from "@/lib/i18n";
+import { QR_BUSY } from "./busyUi";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
@@ -122,6 +124,8 @@ const KIND_OPTIONS = [
 type Step = "form" | "processing" | "done";
 
 export default function QRightPage() {
+  const qrLang = useI18nOptional()?.lang ?? "en";
+  const QR = QR_BUSY[qrLang] ?? QR_BUSY.en;
   const { showToast } = useToast();
   const { lang } = useI18n();
   const TOKEN_KEY = "aevion_auth_token_v1";
@@ -448,9 +452,19 @@ export default function QRightPage() {
       showToast("Your work is now protected!", "success");
     } catch (e) {
       timers.forEach(clearTimeout);
-      setErr((e as Error).message);
+      // «pipeline failed» и «Error 500» — наш жаргон, человеку он говорит
+      // только «что-то сломалось у них». Валидационные ответы (4xx) приходят
+      // уже человеческим текстом — их показываем как есть; всё серверное
+      // сводим к честному «не сохранилось, попробуйте ещё раз» (замер
+      // user-98 07.09: красная плашка "pipeline failed" после 10 с ожидания).
+      const raw = (e as Error).message || "";
+      const serverSide = /pipeline failed|^Error 5\d\d$|internal error/i.test(raw);
+      const human = serverSide
+        ? "Protection didn't complete — nothing was saved. Please try again in a minute; the failure is already visible on our side."
+        : raw;
+      setErr(human);
       setStep("form");
-      showToast("Protection failed: " + (e as Error).message, "error");
+      showToast(serverSide ? human : "Protection failed: " + human, "error");
     }
   };
 
@@ -1581,7 +1595,7 @@ export default function QRightPage() {
                       disabled={whBusy || !whUrl.trim() || webhooks.length >= 10}
                       style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: webhooks.length >= 10 ? "#cbd5e1" : "#0d9488", color: "#fff", fontSize: 12, fontWeight: 800, cursor: whBusy || !whUrl.trim() || webhooks.length >= 10 ? "not-allowed" : "pointer" }}
                     >
-                      {whBusy ? "Adding…" : "Add"}
+                      {whBusy ? QR.adding : "Add"}
                     </button>
                   </div>
                   {webhooks.length === 0 ? (
@@ -1708,7 +1722,7 @@ export default function QRightPage() {
                 disabled={revokeBusy}
                 style={{ padding: "10px 18px", borderRadius: 8, border: "none", background: "#dc2626", color: "#fff", fontWeight: 800, fontSize: 13, cursor: revokeBusy ? "not-allowed" : "pointer", opacity: revokeBusy ? 0.7 : 1 }}
               >
-                {revokeBusy ? "Revoking…" : "Revoke"}
+                {revokeBusy ? QR.revoking : "Revoke"}
               </button>
             </div>
           </div>

@@ -111,12 +111,44 @@ describe("переводимые страницы: кириллица в атр�
     expect(files.length).toBeGreaterThan(1200);
   });
 
+/**
+ * Долг ЦЕЛЫМ ФАЙЛОМ — считаем числом, а не перечисляем поимённо.
+ *
+ * 08.09.2026 шахматы получили словарь (модуль пошёл за языком сайта), и файл
+ * впервые попал в охват этого сторожа: `t(` в нём появился. Вместе с ним
+ * пришли 128 старых русских атрибутов — не новых, они лежали там всегда, но
+ * до перевода модуля были ЗАКОННЫ, потому что страница была одноязычной.
+ *
+ * Перечислять 128 строк в KNOWN бессмысленно: список станет нечитаемым, а
+ * долг спрячется в нём навсегда. Считаем количество: новые сверх этого числа
+ * сторож поймает, а починка обязана это число уменьшить.
+ */
+const DOLG_FAJLOM: Record<string, number> = {
+  "app/cyberchess/page.tsx": 128,
+};
+
   it("новых мест не появилось", () => {
     const unexpected = hits.filter((h) => !KNOWN.some((k) => key(k) === key(h)));
+    const poFajlam = unexpected.filter((h) => h.file in DOLG_FAJLOM);
+    const ostalnye = unexpected.filter((h) => !(h.file in DOLG_FAJLOM));
     expect(
-      unexpected.map(key),
+      ostalnye.map(key),
       "текст в атрибуте мимо переводов: заведите ключ и позовите t(...)",
     ).toEqual([]);
+
+    for (const [fajl, predel] of Object.entries(DOLG_FAJLOM)) {
+      const skolko = poFajlam.filter((h) => h.file === fajl).length;
+      expect(
+        skolko,
+        `${fajl}: атрибутов с кириллицей стало БОЛЬШЕ (${skolko} против ${predel}). ` +
+          "Файл в списке долга целиком, но расти он не имеет права.",
+      ).toBeLessThanOrEqual(predel);
+      expect(
+        skolko,
+        `${fajl}: их стало меньше (${skolko} против ${predel}) — почините число ` +
+          "в DOLG_FAJLOM, иначе долг заморозится на старой отметке и перестанет убывать.",
+      ).toBe(predel);
+    }
   });
 
   it("список известных не протух: всё, что в нём, ещё существует", () => {

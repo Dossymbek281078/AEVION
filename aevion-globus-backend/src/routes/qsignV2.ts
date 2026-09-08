@@ -209,6 +209,58 @@ const DILITHIUM_PREVIEW_NOTE =
 const DILITHIUM_REAL_NOTE =
   "Real ML-DSA-65 (FIPS 204 Dilithium-3) post-quantum signature. Verify with the published `publicKey` against the canonical payload.";
 
+// В публичном ответе `valid` для preview-режима ВСЕГДА null, а не true.
+//
+// В крипто-слое `valid: true` означает честное «хеш совпал» — и это правда.
+// Но наружу тот же блок отдаётся вместе с оговоркой, что digest «NOT a
+// cryptographic signature», и в таком соседстве `valid: true` читается как
+// «подпись верна». Автоматический потребитель, который смотрит только на
+// valid, получает подтверждение того, чего не было: SHA-512(canonical||kid)
+// вычислит любой, приватного ключа тут нет вовсе.
+//
+// null здесь не выдумка: тип ниже допускает его изначально, и оба наших
+// потребителя уже рисуют именно его — frontend/src/app/qsign/page.tsx
+// проверяет `valid === null` первым делом, PDF печатает «—». То есть режим
+// «нечего подтверждать» был предусмотрен, просто не выставлялся.
+//
+// Проверено на проде 11.08.2026: activeKeys = { hmac, ed25519 }, ключа
+// ML-DSA нет, значит на боевом стенде работает ровно эта ветка.
+const previewValid = null;
+
+/**
+ * Адрес подписанта наружу — только маской.
+ *
+ * 🔴 Замер 08.09.2026: публичная проверка подписи отдавала почту подписанта,
+ * его userId и координаты подписания с точностью до метров (шесть знаков),
+ * причём идентификаторы подписей мы печатаем сами в открытых списках — то
+ * есть перебирать ничего не требовалось. Восемь живых подписей, четыре
+ * посторонних человека.
+ *
+ * Почему маска, а не удаление: страница проверки показывает блок «Issuer», и
+ * вопрос «кто подписал» — часть смысла продукта. Маска сохраняет ответ и
+ * перестаёт публиковать адрес. Подлинность при этом удостоверяет КЛЮЧ, а не
+ * адрес: полный адрес не усиливает проверку ничем.
+ *
+ * Координаты и userId убраны совсем: первые говорят, ГДЕ человек был, второй
+ * позволяет связать подписи одного человека между собой. Страна оставлена —
+ * она про юрисдикцию, а не про человека.
+ *
+ * Ни одно из этих полей НЕ входит в подписанное содержимое (подписи считаются
+ * по canonicalJson(payload)), поэтому офлайн-проверка не меняется, версия
+ * схемы не растёт и прежние сертификаты остаются верными.
+ */
+export function maskIssuerEmail(email: string | null | undefined): string | null {
+  if (!email) return null;
+  const at = email.indexOf("@");
+  if (at < 1) return null;
+  const imya = email.slice(0, at);
+  const domen = email.slice(at + 1);
+  const tochka = domen.lastIndexOf(".");
+  const zona = tochka > 0 ? domen.slice(tochka) : "";
+  const telo = tochka > 0 ? domen.slice(0, tochka) : domen;
+  return `${imya[0]}***@${telo[0] ?? ""}***${zona}`;
+}
+
 type DilithiumBlock = {
   algo: "ML-DSA-65";
   kid: string;
@@ -246,7 +298,7 @@ async function dilithiumOnSign(
       kid: r.kid,
       mode: "preview",
       digest: r.signature,
-      valid: true,
+      valid: previewValid,
       note: DILITHIUM_PREVIEW_NOTE,
     },
     storedString: r.signature,
@@ -279,7 +331,7 @@ async function dilithiumOnRow(row: any): Promise<DilithiumBlock | null> {
     kid: DILITHIUM_KID_PREVIEW,
     mode: "preview",
     digest: stored,
-    valid: v.valid,
+    valid: previewValid,
     note: DILITHIUM_PREVIEW_NOTE,
   };
 }
@@ -307,7 +359,7 @@ async function dilithiumStateless(
     kid: DILITHIUM_KID_PREVIEW,
     mode: "preview",
     digest: supplied,
-    valid: v.valid,
+    valid: previewValid,
     note: DILITHIUM_PREVIEW_NOTE,
   };
 }
@@ -890,6 +942,15 @@ qsignV2Router.post("/sign", signLimiter, async (req, res) => {
               }
             : null,
           dilithium: dilithiumBlock,
+          /*
+           * Здесь маскировать НЕ надо, и это не недосмотр. Это повторный
+           * ответ на ЗАПРОС ПОДПИСАВШЕГО (idempotency-key ищется по его же
+           * issuerUserId): человек видит свои собственные данные, ровно те,
+           * что получил при первом вызове. Маска здесь сделала бы ответ
+           * непохожим на первый и ничего бы не защитила.
+           *
+           * Маска нужна на ПУБЛИЧНЫХ ручках — verify/:id и :id/public.
+           */
           issuer: { userId: row.issuerUserId, email: row.issuerEmail },
           geo:
             row.geoSource || row.geoCountry
@@ -1270,18 +1331,20 @@ qsignV2Router.get("/verify/:id", async (req, res) => {
       revocationReason: revocation?.reason ?? null,
       createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : null,
       payloadHash: row.payloadHash,
+      // Наружу — маска и страна: см. maskIssuerEmail выше.
       issuer: {
-        userId: row.issuerUserId ?? null,
-        email: row.issuerEmail ?? null,
+        email: maskIssuerEmail(row.issuerEmail),
       },
       geo:
-        row.geoSource || row.geoLat !== null || row.geoCountry
+        row.geoSource || row.geoCountry
           ? {
               source: row.geoSource ?? null,
               country: row.geoCountry ?? null,
-              city: row.geoCity ?? null,
-              lat: row.geoLat ?? null,
-              lng: row.geoLng ?? null,
+              // Явные null, а не отсутствие ключей: старый клиент сравнивает
+              // с null, и на undefined он упал бы. См. разбор в types.ts.
+              city: null,
+              lat: null,
+              lng: null,
             }
           : null,
     };
@@ -2183,18 +2246,20 @@ qsignV2Router.get("/:id/public", async (req, res) => {
           }
         : null,
       dilithium: dilithiumBlock,
+      // Наружу — маска и страна: см. maskIssuerEmail выше.
       issuer: {
-        userId: row.issuerUserId ?? null,
-        email: row.issuerEmail ?? null,
+        email: maskIssuerEmail(row.issuerEmail),
       },
       geo:
-        row.geoSource || row.geoLat !== null || row.geoCountry
+        row.geoSource || row.geoCountry
           ? {
               source: row.geoSource ?? null,
               country: row.geoCountry ?? null,
-              city: row.geoCity ?? null,
-              lat: row.geoLat ?? null,
-              lng: row.geoLng ?? null,
+              // Явные null, а не отсутствие ключей: старый клиент сравнивает
+              // с null, и на undefined он упал бы. См. разбор в types.ts.
+              city: null,
+              lat: null,
+              lng: null,
             }
           : null,
     });

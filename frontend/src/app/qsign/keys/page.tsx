@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useI18nOptional } from "@/lib/i18n";
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -55,7 +56,20 @@ function formatDate(iso: string | null): string {
   }
 }
 
+
+// Busy-ярлыки — словарём (класс «busy быстрее доводчика», назначение 07.09,
+// рецепт GEN_UI.busy*). Страница англоязычная — здесь зеркальный случай:
+// РУССКИЙ посетитель видел английские busy-подписи те секунды, пока идёт
+// операция. Idle-подписи не трогаем — стабильный текст кроет доводчик.
+const QS_BUSY: Record<string, { hash: string; sign: string; verify: string; webhook: string; gps: string; refresh: string; rotate: string }> = {
+  en: { hash: "Hashing…", sign: "Signing…", verify: "Verifying…", webhook: "Creating…", gps: "Requesting…", refresh: "Refreshing…", rotate: "Rotating…" },
+  ru: { hash: "Считаю хеш…", sign: "Подписываю…", verify: "Проверяю…", webhook: "Создаю…", gps: "Запрашиваю…", refresh: "Обновляю…", rotate: "Ротация…" },
+  kk: { hash: "Хеш есептелуде…", sign: "Қол қойылуда…", verify: "Тексерілуде…", webhook: "Құрылуда…", gps: "Сұралуда…", refresh: "Жаңартылуда…", rotate: "Ротация…" },
+};
+
 export default function QSignKeysPage() {
+  const qsLang = useI18nOptional()?.lang ?? "en";
+  const QS = QS_BUSY[qsLang] ?? QS_BUSY.en;
   const { showToast } = useToast();
   const [data, setData] = useState<KeysResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -147,7 +161,7 @@ export default function QSignKeysPage() {
               color: loading ? "#94a3b8" : "#0f172a",
             }}
           >
-            {loading ? "Refreshing…" : "Refresh"}
+            {loading ? QS.refresh : "Refresh"}
           </button>
         </div>
 
@@ -315,6 +329,8 @@ export default function QSignKeysPage() {
 }
 
 function RotationForm({ onRotated }: { onRotated: () => void }) {
+  const qsLang = useI18nOptional()?.lang ?? "en";
+  const QS = QS_BUSY[qsLang] ?? QS_BUSY.en;
   const { showToast } = useToast();
   const [token, setToken] = useState<string>("");
   const [algo, setAlgo] = useState<"HMAC-SHA256" | "Ed25519">("Ed25519");
@@ -549,7 +565,7 @@ function RotationForm({ onRotated }: { onRotated: () => void }) {
               cursor: busy ? "default" : "pointer",
             }}
           >
-            {busy ? "Rotating…" : `Rotate ${algo} key`}
+            {busy ? QS.rotate : `Rotate ${algo} key`}
           </button>
           {lastResult ? (
             <span

@@ -188,6 +188,42 @@ export default function QCoreBudgetPage() {
           <div className="text-center py-12 text-slate-500 text-sm animate-pulse">Загрузка…</div>
         )}
 
+        {/*
+          СОСТОЯНИЕ ОТКАЗА. Без него страница молчала.
+
+          Разметка ниже вся лежит в ветке `{!loading && summary && …}`, и блок с
+          `error` — тоже (он внутри неё). Значит при неудачной загрузке `summary`
+          пуст, ветка не рисуется целиком, и сообщение об ошибке вместе с ней:
+          человек видит только шапку.
+
+          Замер 28.08.2026: вышедший видит на этой странице 32 символа
+          собственного текста — «← QCoreAI · Бюджет и лимиты». Ни объяснения,
+          ни причины. Запрос при этом отвечает 401, то есть причина известна.
+
+          Текст ошибки от сервера показываем мелким и в скобках: человеку нужен
+          понятный смысл, поддержке — код.
+        */}
+        {!loading && !summary && (
+          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 text-center">
+            <p className="text-sm text-slate-300">
+              Бюджет и лимиты видны после входа в аккаунт.
+            </p>
+            <p className="mt-2 text-xs text-slate-500">
+              Здесь показываются расходы текущего месяца, установленный лимит и
+              порог оповещения.
+            </p>
+            {error && (
+              <p className="mt-3 text-xs text-slate-600">({error})</p>
+            )}
+            <Link
+              href="/qcoreai"
+              className="mt-4 inline-block text-xs text-slate-400 hover:text-white"
+            >
+              ← Вернуться к QCoreAI
+            </Link>
+          </div>
+        )}
+
         {!loading && summary && (
           <>
             {/* Current month spend */}

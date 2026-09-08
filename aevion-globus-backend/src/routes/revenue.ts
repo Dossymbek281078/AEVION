@@ -894,7 +894,21 @@ revenueRouter.get("/gumroad/recent", async (_req, res) => {
     id: s.id ?? "",
     appId: appIdForPermalink(s.product_permalink),
     product: s.product_name ?? s.product_permalink ?? "unknown",
-    email: s.email ?? null,
+    /*
+     * 🔴 АДРЕС ПОКУПАТЕЛЯ НАРУЖУ НЕ ОТДАЁМ. Замер 08.09.2026: эта ручка
+     * анонимна (роутер /api/revenue смонтирован без проверки прав, isAdmin в
+     * файле нет вовсе), и один GET без единого заголовка возвращал список
+     * покупателей с их почтой. Это персональные данные, отданные любому.
+     *
+     * Поле убрано, а не закрыто токеном: дашборд /revenue его НЕ отображает
+     * (проверено — в page.tsx оно объявлено в типе и нигде не читается), а
+     * закрывать всю ручку значило бы сломать публичную страницу выручки ради
+     * поля, которое ей не нужно.
+     *
+     * Внутренние покупки по-прежнему отделяются: isInternalPurchase считает
+     * их ВНУТРИ бэкенда, по s.email, — наружу уходит только признак.
+     */
+    internal: isInternalPurchase(s.email),
     amountUsd: s.price ? s.price / 100 : 0,
     currency: s.currency?.toUpperCase() ?? "USD",
     refunded: Boolean(s.refunded || s.disputed || s.chargedback),
@@ -969,7 +983,22 @@ revenueRouter.get("/lemonsqueezy/recent", async (_req, res) => {
     id: o.id,
     appId: appIdForLsVariant(o.variantId),
     product: o.product,
-    email: o.email || null,
+    /*
+     * 🔴 Адрес покупателя наружу не отдаём — то же решение, что у соседней
+     * ручки gumroad/recent, и по той же причине: роутер /api/revenue
+     * смонтирован без проверки прав, и один GET без заголовков возвращал
+     * список покупателей с их почтой.
+     *
+     * Найдено ПОСЛЕ починки соседней ручки, сплошным обходом публичного
+     * периметра: та же строка лежала в этом же файле двадцатью строками
+     * ниже, и сторож при этом был зелёным — он стерёг ровно то место, где
+     * утечку заметили.
+     *
+     * Урок дороже находки: починка ОДНОГО места не закрывает класс, даже
+     * когда второе место рядом. У одних данных бывает несколько выходов
+     * наружу — список, элемент по id, выгрузка файлом, соседняя касса.
+     */
+    internal: isInternalPurchase(o.email),
     amountUsd: o.total / 100,
     currency: o.currency,
     refunded: o.refunded,

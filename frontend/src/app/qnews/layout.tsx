@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "QNews — AI News Aggregator | AEVION",
+  title: "QNews — AI News Aggregator",
   description: "Stay informed with AI-powered news summaries across tech, crypto, AI, business, science, and world topics.",
   openGraph: {
     title: "QNews — AI News Aggregator",

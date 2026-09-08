@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import ComplianceBanner from "@/components/ComplianceBanner";
+import { ModuleMaturity } from "@/components/ModuleMaturity";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "QPersona — AI Personality Twin · AEVION",
+  title: "QPersona — AI Personality Twin",
   description:
     "Создайте AI-двойника по вашим текстам/голосу/решениям. Делегируйте рутинные коммуникации, сохраняя свой стиль.",
   alternates: { canonical: `${SITE}/qpersona` },
@@ -24,6 +25,7 @@ export default function QPersonaLayout({ children }: { children: ReactNode }) {
   return (
     <>
       <ComplianceBanner variant="medical" />
+      <ModuleMaturity id="qpersona" />
       {children}
     </>
   );

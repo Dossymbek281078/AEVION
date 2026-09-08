@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "prebuild": "node scripts/write-build-info.mjs",
+    "prebuild": "node scripts/write-build-info.mjs && node scripts/fetch-nnue.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

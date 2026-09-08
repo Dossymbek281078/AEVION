@@ -7,7 +7,7 @@ import { ConstitutionFunnelPing } from "@/components/ConstitutionFunnelPing";
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "Constitution Blog — research posts on political economy · AEVION",
+  title: "Constitution Blog — research posts on political economy",
   description:
     "Эссе и исследования по конституционному дизайну: почему Норвегия 90 на rule-of-law, эволюция от Magna Carta до Open Access за 8 веков, почему positiveSum — главный ползунок.",
   alternates: { canonical: `${SITE}/constitution/blog` },

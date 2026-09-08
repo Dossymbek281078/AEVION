@@ -33,14 +33,23 @@ describe("экран подключения покупки", () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  test("нейтральный ответ показывается как есть", async () => {
+  test("нейтральный ответ показывается словарной строкой, а не текстом сервера", async () => {
+    // Прежняя редакция требовала обратного — «показать сообщение сервера как
+    // есть». Контракт сменился осознанно (c4ad65c0f): сервер отвечает
+    // по-русски всем, и английский покупатель читал русскую фразу на
+    // английском экране. Нейтральность при этом не потеряна: словарная
+    // строка так же не говорит, нашлась покупка или нет.
     vi.stubGlobal("fetch", otvet(200, { ok: true, message: "нейтрально" }));
     render(<DevHubLinkPage />);
     fireEvent.change(screen.getByPlaceholderText("you@example.com"), {
       target: { value: "kupil@example.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: "link.send" }));
-    await waitFor(() => expect(screen.getByText("нейтрально")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("link.sent")).toBeTruthy());
+    expect(
+      screen.queryByText("нейтрально"),
+      "русский текст сервера доехал до экрана — английский покупатель прочитает его как есть",
+    ).toBeNull();
   });
 
   test("отказ сервера НЕ выдаётся за отправленное письмо", async () => {

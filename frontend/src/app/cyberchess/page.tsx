@@ -47,6 +47,7 @@ import { COLOR as CC_LIGHT, SPACE, RADIUS, SHADOW, MOTION, Z } from "./theme";
 import { PV, ev, mm, best } from "./chessEngine";
 import { classifyDrop } from "./moveQuality";
 import PostGameCard from "./PostGameCard";
+import DeepAnalysisPanel from "./DeepAnalysisPanel";
 import { temaZadachiRu, fazaRu } from "./puzzleLabels";
 import { tochnostSohranennoy } from "./postGameSummary";
 import { RANKS, gRank } from "./rating";
@@ -106,6 +107,7 @@ import { ldClones, svClones, fetchLichessGames, analyzeGames, profileToShareCode
 import { generateReel, pickHighlights, estimateReelSeconds } from "./reelsGen";
 import { GHOSTS, ghostBookMove, pickGhostStyleMove, type Ghost, type GhostId } from "./ghostMode";
 import { todayHunt, applyGuess, showHint, giveUp, hintFor, simulatedLeaderboard, BRILLIANCIES, type BrilliancyHunt, type BrilliancyState } from "./brilliancy";
+import { useCcI18n } from "./i18n";
 import { getTopWithMe, getFullBoardAroundMe, findMyRank, CATEGORY_LABEL, type LbCategory, type LbEntry } from "./leaderboards";
 import { createTierPaymentRequest, pollPaymentRequest, verifyPaymentRequest, type ChessyTier } from "./billing";
 import MultiPanel from "./MultiPanel";
@@ -325,7 +327,7 @@ class SF{private w:Worker|null=null;private ok=false;oshibka:string|null=null;
     this.w=null;
     if(this.retries<SF.MAX_RETRIES){this.retries++;setTimeout(()=>{try{this.init()}catch{}},800);}
   }
-  init(){if(this.w)return;try{this.w=new Worker("/stockfish-18-lite.js");this.w.onerror=e=>{e.preventDefault();this.onDead((e as ErrorEvent).message)};this.w.onmessage=e=>{const l=String(e.data||"");
+  init(){if(this.w)return;try{this.w=new Worker("/stockfish-18-lite-single.js");this.w.onerror=e=>{e.preventDefault();this.onDead((e as ErrorEvent).message)};this.w.onmessage=e=>{const l=String(e.data||"");
     // Diagnostic: log Stockfish init/feature lines so we can verify NNUE + threads in DevTools.
     // Look for: "info string NNUE evaluation using ..." and "info string Using N threads".
     if(l.startsWith("info string")||l==="readyok"||l==="uciok")try{console.log("[SF]",l)}catch{}
@@ -1054,6 +1056,10 @@ export default function CyberChessPage(){
   // прыгают, ходы / премувы / drag не работают стабильно.
   const[mounted,sMounted]=useState(false);
   useEffect(()=>{sMounted(true)},[]);
+  // Язык модуля (следует за переключателем сайта через loadLocale). Полный
+  // рендер доски за !mounted-гейтом (ниже) — до гидрации ничего не рисуем,
+  // поэтому синхронный t() не даёт вспышки ru→en на первом экране.
+  const cc=useCcI18n();
   const[game,setGame]=useState(()=>new Chess());
   const[bk,sBk]=useState(0);
   const[boardTheme,sBoardTheme]=useState(()=>{try{const v=parseInt(localStorage.getItem("aevion_chess_theme_v1")||"0");return isNaN(v)||v<0||v>=BOARD_THEMES.length?0:v}catch{return 0}});
@@ -6476,11 +6482,12 @@ export default function CyberChessPage(){
                     const sel=activeCat===c;
                     const tone={Bullet:"#dc2626",Blitz:"#f59e0b",Rapid:"#10b981",Custom:CC.accent}[c];
                     const emoji={Bullet:"💨",Blitz:"⚡",Rapid:"🕐",Custom:"⚙"}[c];
-                    // Подписи по-русски В КОДЕ, а не машинным переводом на лету:
-                    // 21.08 на телефоне стояло «Custom», на десктопе в ту же
-                    // минуту — «Пользовательский». Перевод интерфейсной метки
-                    // асинхронный, и до него человек видит английское слово.
-                    const label={Bullet:"Пуля",Blitz:"Блиц",Rapid:"Рапид",Custom:"Свой"}[c];
+                    // Подписи через СИНХРОННЫЙ словарь (cc.t → tFor), а не
+                    // машинный перевод на лету: 21.08 асинхронный перевод давал
+                    // вспышку («Custom»→«Пользовательский»). Синхронный t() +
+                    // !mounted-гейт вспышки не дают и следуют выбранному языку
+                    // (08.09: при en-куке метки оставались русскими — хардкод).
+                    const label={Bullet:cc.t("tc.bullet"),Blitz:cc.t("tc.blitz"),Rapid:cc.t("tc.rapid"),Custom:cc.t("tc.custom")}[c];
                     return <button key={c} onClick={()=>{
                       if(c==="Custom"){sUseCustom(true);sShowCustom(true);return}
                       sUseCustom(false);
@@ -7160,7 +7167,7 @@ export default function CyberChessPage(){
             const killer:Array<{emoji:string;title:string;desc:string;cta:string;accent:string;onClick:()=>void}>=[
               {emoji:"🏆",title:"Турниры онлайн",desc:"Швейцарская · круговой · нокаут. Призовой фонд в Chessy.",cta:"К турнирам",accent:"#d97706",onClick:()=>{try{window.location.href="/cyberchess/tournaments"}catch{}}},
               {emoji:"📈",title:"CPI рейтинг",desc:"Составной рейтинг по 11 факторам — такого нет ни у lichess, ни у chess.com.",cta:"Открыть",accent:"#0891b2",onClick:()=>{try{window.location.href="/cyberchess/cpi/dashboard"}catch{}}},
-              {emoji:"🪙",title:"Chessy Экономика",desc:"Аукцион, аренда коуча, подписки на стримеров — на нашей валюте.",cta:"Войти",accent:"#ca8a04",onClick:()=>{try{window.location.href="/cyberchess/economy"}catch{}}},
+              {emoji:"🪙",title:"Chessy Экономика",desc:"Аукцион, аренда коуча, подписки на стримеров на нашей валюте. Пока превью замысла — скоро.",cta:"Смотреть",accent:"#ca8a04",onClick:()=>{try{window.location.href="/cyberchess/economy"}catch{}}},
               {emoji:"🎲",title:"12 вариантов",desc:"Атомные · Шахматы Фишера · Царь горы · Крейзихаус · Только кони и др.",cta:"Выбрать",accent:"#7c3aed",onClick:()=>sShowVariants(true)},
             ];
             return <Card padding={SPACE[3]} elevation="sm">
@@ -8255,12 +8262,17 @@ export default function CyberChessPage(){
               const parseVoice=(text:string):{from?:string;to?:string;san?:string;special?:string}=>{
                 let t=text.toLowerCase().trim().replace(/ё/g,"е");
                 // Special commands
-                if(/\b(новая\s+партия|новую\s+партию|new\s+game|начать\s+заново)\b/.test(t))return{special:"new"};
-                if(/\b(сдаюсь|сдаться|resign|признаю\s+поражение)\b/.test(t))return{special:"resign"};
-                if(/\b(переверни|переверни\s+доску|flip|flip\s+board)\b/.test(t))return{special:"flip"};
-                if(/\b(отмена|отмени|отменить|undo|отмени\s+ход)\b/.test(t))return{special:"undo"};
-                if(/\b(анализ|проанализируй|analyze|analysis)\b/.test(t))return{special:"analyze"};
-                if(/\b(выкл(ючи)?\s+голос|выключи\s+микрофон|stop\s+listening)\b/.test(t))return{special:"stopvoice"};
+                // ⚠️ JS \b — граница класса [A-Za-z0-9_], кириллица в него НЕ входит:
+                // /\b(сдаюсь)\b/.test("сдаюсь") === false. Русские команды не
+                // распознавались вовсе (замер 08.09.2026). У многосимвольных
+                // команд \b просто убран — подстрока в коротком транскрипте
+                // голоса безопасна; латинские альтернативы работают как прежде.
+                if(/(новая\s+партия|новую\s+партию|new\s+game|начать\s+заново)/.test(t))return{special:"new"};
+                if(/(сдаюсь|сдаться|resign|признаю\s+поражение)/.test(t))return{special:"resign"};
+                if(/(переверни|переверни\s+доску|flip|flip\s+board)/.test(t))return{special:"flip"};
+                if(/(отмена|отмени|отменить|undo|отмени\s+ход)/.test(t))return{special:"undo"};
+                if(/(анализ|проанализируй|analyze|analysis)/.test(t))return{special:"analyze"};
+                if(/(выкл(ючи)?\s+голос|выключи\s+микрофон|stop\s+listening)/.test(t))return{special:"stopvoice"};
                 // Castling — broad coverage
                 if(/(коротк(ая|ую)\s+рокировк|короткая|short\s+castle|castle\s+short|king[-\s]?side|o-?o(?!-?o))/i.test(t))return{san:"O-O"};
                 if(/(длинн(ая|ую)\s+рокировк|длинная|long\s+castle|castle\s+long|queen[-\s]?side|o-?o-?o)/i.test(t))return{san:"O-O-O"};
@@ -8281,17 +8293,27 @@ export default function CyberChessPage(){
                 };
                 // Strip capture / connector words — they're fluff for parsing
                 t=t.replace(/\s+/g," ");
-                t=t.replace(/\b(идёт|идет|на|берёт|берет|бьёт|бьет|рубит|съест|съедает|съесть|captures|takes|to|move|move\s+to|-|—|—>|->|→|идет\s+на|идёт\s+на|играет)\b/g," ");
+                // \b глотал кириллицу (идёт/берёт/бьёт/рубит/съест не стрипались) —
+                // границу заменил на кириллице-осведомлённый lookaround, чтобы и
+                // короткие слова («на») не резались внутри других слов.
+                t=t.replace(/(?<![\wА-Яа-яЁё])(идёт|идет|на|берёт|берет|бьёт|бьет|рубит|съест|съедает|съесть|captures|takes|to|move|move\s+to|-|—|—>|->|→|идет\s+на|идёт\s+на|играет)(?![\wА-Яа-яЁё])/g," ");
                 t=t.replace(/\s+/g," ");
-                for(const[k,v]of Object.entries(rusMap))t=t.replace(new RegExp("\\b"+k+"\\b","g"),v);
-                for(const[k,v]of Object.entries(engFileMap))t=t.replace(new RegExp("\\b"+k+"\\b","g"),v);
-                for(const[k,v]of Object.entries(numMap))t=t.replace(new RegExp("\\b"+k+"\\b","g"),v);
+                // \b не совпадает с кириллицей → «эф»→f, «три»→3 и русские буквы
+                // не мапились. Кириллице-осведомлённая граница: не режем внутри
+                // слова (важно для одиночных «а/в/г»), но ловим отдельное слово.
+                // Класс включает ЗАГЛАВНЫЕ (А-ЯЁ) намеренно: вход здесь в нижнем
+                // регистре (toLowerCase выше) и флага i нет, но со строчным
+                // классом добавление i кем-то позже тихо пропустило бы «ШЭФЕР».
+                const cyrBound=(w:string)=>new RegExp("(?<![\\wА-Яа-яЁё])"+w+"(?![\\wА-Яа-яЁё])","g");
+                for(const[k,v]of Object.entries(rusMap))t=t.replace(cyrBound(k),v);
+                for(const[k,v]of Object.entries(engFileMap))t=t.replace(cyrBound(k),v);
+                for(const[k,v]of Object.entries(numMap))t=t.replace(cyrBound(k),v);
                 // Promotion
                 let promo:"q"|"r"|"b"|"n"|undefined;
-                if(/(ферзь|ферзя|queen)\s*$/.test(t)||/\bв\s*(ферз[ьяеем]|queen)/.test(text)){promo="q";t=t.replace(/(ферзь|ферзя|queen)/g,"")}
-                else if(/(конь|коня|knight)\s*$/.test(t)||/\bв\s*(кон[ьяем]|knight)/.test(text)){promo="n";t=t.replace(/(конь|коня|knight)/g,"")}
-                else if(/(ладья|ладью|rook)\s*$/.test(t)||/\bв\s*(ладь[юея]|rook)/.test(text)){promo="r";t=t.replace(/(ладья|ладью|rook)/g,"")}
-                else if(/(слон|слона|bishop)\s*$/.test(t)||/\bв\s*(слон[ае]|bishop)/.test(text)){promo="b";t=t.replace(/(слон|слона|bishop)/g,"")}
+                if(/(ферзь|ферзя|queen)\s*$/.test(t)||/(?<![\wА-Яа-яЁё])в\s*(ферз[ьяеем]|queen)/.test(text)){promo="q";t=t.replace(/(ферзь|ферзя|queen)/g,"")}
+                else if(/(конь|коня|knight)\s*$/.test(t)||/(?<![\wА-Яа-яЁё])в\s*(кон[ьяем]|knight)/.test(text)){promo="n";t=t.replace(/(конь|коня|knight)/g,"")}
+                else if(/(ладья|ладью|rook)\s*$/.test(t)||/(?<![\wА-Яа-яЁё])в\s*(ладь[юея]|rook)/.test(text)){promo="r";t=t.replace(/(ладья|ладью|rook)/g,"")}
+                else if(/(слон|слона|bishop)\s*$/.test(t)||/(?<![\wА-Яа-яЁё])в\s*(слон[ае]|bishop)/.test(text)){promo="b";t=t.replace(/(слон|слона|bishop)/g,"")}
                 // Extract piece
                 let piece="";
                 for(const[k,v]of Object.entries(pieceMap))if(t.includes(k)){piece=v;t=t.replace(k," ");break;}
@@ -9707,6 +9729,11 @@ export default function CyberChessPage(){
               </div>}
             </>}
           </div>}
+
+          {/* Глубокий анализ (opt-in): Stockfish 17.1 + полный NNUE, сила уровня
+              lichess. Лёгкий игровой движок не трогает; сети (~75МБ) грузятся по
+              кнопке и кэшируются. См. NNUE-DEEP-ANALYSIS.md. */}
+          {tab==="analysis"&&<div style={{marginTop:8}}><DeepAnalysisPanel fen={game.fen()} /></div>}
 
           {/* Analyze Game button - when game has history */}
           {tab==="analysis"&&hist.length>0&&!showAnal&&!analyzing&&<button onClick={()=>runAnalysis()} style={{padding:"10px 14px",borderRadius:10,border:"none",background:T.purple,color:"#fff",fontSize:13,fontWeight:800,cursor:"pointer",boxShadow:"0 2px 6px rgba(124,58,237,0.2)"}}>

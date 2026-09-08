@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "Welcome to Constitution — 4-step onboarding · AEVION",
+  title: "Welcome to Constitution — 4-step onboarding",
   description:
     "Первый раз тут? 4 коротких шага: что это, выбери страну, подкрути ползунок, увидь свой регим. Пропустить можно в любой момент.",
   alternates: { canonical: `${SITE}/constitution/welcome` },

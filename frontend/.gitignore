@@ -45,3 +45,8 @@ next-env.d.ts
 
 # временный стенд для просмотра компонентов глазами
 .stend-razbor/
+
+.vercel
+
+# NNUE-сети «Глубокого анализа» (~75МБ) — не в git; кладутся cyberchess-fetch-nnue.sh
+/public/nnue/

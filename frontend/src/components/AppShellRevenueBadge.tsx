@@ -8,6 +8,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRevenueGoal } from "@/lib/useRevenueGoal";
+import { useI18nOptional } from "@/lib/i18n";
+import { revenueTip } from "@/lib/revenueTip";
 
 /**
  * Порог, ниже которого плашка не рисуется.
@@ -27,6 +29,7 @@ import { useRevenueGoal } from "@/lib/useRevenueGoal";
 const MIN_WIDTH_PX = 420;
 
 export function AppShellRevenueBadge() {
+  const shellLang = useI18nOptional()?.lang ?? "ru";
   const { goals, summary, pct, days } = useRevenueGoal();
   // На сервере ширины нет. Начинаем со «слишком узко» и включаем плашку уже
   // в браузере: иначе на телефоне она мелькнёт поверх навигации до гидрации.
@@ -83,7 +86,8 @@ export function AppShellRevenueBadge() {
   if (!wideEnough) return null;
   if (!goals || !summary || pct === null || days === null) return null;
 
-  const tip = `$${summary.grossUsd.toLocaleString("ru-RU", { maximumFractionDigits: 0 })} собрано из $1M · ${days} дн. до срока ($20M stretch goal)`;
+  // Общий revenueTip — см. RevenueGoalBadge; здесь жила вторая копия строки.
+  const tip = revenueTip(shellLang, summary.grossUsd, days);
 
   return (
     <Link

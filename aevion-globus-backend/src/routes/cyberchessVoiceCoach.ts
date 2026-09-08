@@ -34,7 +34,8 @@
 
 import { Router, Request, Response } from 'express';
 import { createInMemoryRateLimiter } from '../lib/rateLimit/inMemoryWindow';
-import { clientIp } from '../lib/rateLimit';
+import { clientIp, rateLimit } from '../lib/rateLimit';
+import { isAnonymousRequest } from '../lib/aiInputBudget';
 import { createHash } from 'crypto';
 import { makeServiceCapture } from '../lib/sentry/platform';
 
@@ -255,6 +256,31 @@ function upstreamErrorKind(err: unknown): string {
 const coachLimiter = createInMemoryRateLimiter({ max: 20, windowMs: 60_000 });
 const ttsLimiter = createInMemoryRateLimiter({ max: 10, windowMs: 60_000 });
 
+// 🔴 08.09.2026: ПЛАТФОРМЕННЫЙ потолок расхода на анонимов — как anonCoachCeiling
+// в coach.ts. Лимитеры выше по clientIp настоящего потолка НЕ дают: на Railway
+// clientIp схлопывается в ~7 внутренних адресов («ИТОГ ЗАМЕРА 28.08» в
+// lib/rateLimit.ts — «считать посетителя по адресу НЕЧЕМ»), поэтому один человек
+// получает семь корзин, а расход платформы ничем не ограничен. Текстовый коуч это
+// усвоил (anonCoachCeiling), голосовой — нет. Он зовёт Anthropic (/ask,/comment)
+// и ДОРОГОЙ ElevenLabs TTS (/tts,/broadcast), значит потолок нужен ему не меньше.
+// Авторизованные считаются по своему id и в общую корзину не попадают.
+// Числа: /ask как у текстового коуча (та же модель); /tts туже (TTS дороже) —
+// это число под ревью основателя по толерантности к расходу.
+const anonVoiceAskCeiling = rateLimit({
+  windowMs: 60_000,
+  max: 120,
+  keyPrefix: "voicecoach:anon-ask",
+  keyFn: (req) => (isAnonymousRequest(req) ? "anon" : `u:${String((req as { auth?: { sub?: string } }).auth?.sub || "user")}`),
+  message: "rate_limit_exceeded: too many anonymous voice-coach requests platform-wide, sign in to continue",
+});
+const anonVoiceTtsCeiling = rateLimit({
+  windowMs: 60_000,
+  max: 40,
+  keyPrefix: "voicecoach:anon-tts",
+  keyFn: (req) => (isAnonymousRequest(req) ? "anon" : `u:${String((req as { auth?: { sub?: string } }).auth?.sub || "user")}`),
+  message: "rate_limit_exceeded: too many anonymous voice-coach TTS requests platform-wide, sign in to continue",
+});
+
 /** Общий отказ: 429 с честным «когда можно снова», а не молчаливый провал. */
 function tooMany(res: Response, retryAfterMs: number): void {
   const sec = Math.max(1, Math.ceil(retryAfterMs / 1000));
@@ -263,7 +289,7 @@ function tooMany(res: Response, retryAfterMs: number): void {
 }
 
 
-router.post('/comment', async (req: Request, res: Response) => {
+router.post('/comment', anonVoiceAskCeiling, async (req: Request, res: Response) => {
   const gate = coachLimiter.check(clientIp(req));
   if (!gate.allowed) return tooMany(res, gate.retryAfterMs);
   try {
@@ -333,7 +359,7 @@ router.post('/comment', async (req: Request, res: Response) => {
 // Body: { question, fen?, lastMove?, history?, sessionId?, eval?, userSide?,
 //         legalMoves?, bestMove?, model?, temperature? }
 // Returns: { text: string, sessionId: string }
-router.post('/ask', async (req: Request, res: Response) => {
+router.post('/ask', anonVoiceAskCeiling, async (req: Request, res: Response) => {
   const gate = coachLimiter.check(clientIp(req));
   if (!gate.allowed) return tooMany(res, gate.retryAfterMs);
   try {
@@ -462,7 +488,7 @@ router.post('/sessions/:id/clear', (req: Request, res: Response) => {
 // ─── POST /tts ──────────────────────────────────────────────────────────
 // Body: { text: string, voiceId?: string }
 // Returns: audio/mpeg stream (mp3)
-router.post('/tts', async (req: Request, res: Response) => {
+router.post('/tts', anonVoiceTtsCeiling, async (req: Request, res: Response) => {
   const gate = ttsLimiter.check(clientIp(req));
   if (!gate.allowed) return tooMany(res, gate.retryAfterMs);
   const apiKey = process.env.ELEVENLABS_API_KEY;
@@ -608,7 +634,7 @@ async function generateTtsDataUrl(text: string, voiceId: string): Promise<string
 // invariant the feature needs.
 //
 // Returns: { ok, text, source, audioUrl?, viewers? }
-router.post('/broadcast', async (req: Request, res: Response) => {
+router.post('/broadcast', anonVoiceTtsCeiling, async (req: Request, res: Response) => {
   const gate = ttsLimiter.check(clientIp(req));
   if (!gate.allowed) return tooMany(res, gate.retryAfterMs);
   try {

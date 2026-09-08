@@ -170,3 +170,34 @@ describe("предмет внутри стены", () => {
     expect(checkClearance(room(), [item(3, 0.44)])).toEqual([]);
   });
 });
+
+describe("тонкая стена не даёт зону БОЛЬШЕ толстой", () => {
+  // Найдено вычиткой: прощение 2 см вычиталось из полутолщины без нижней
+  // границы, и у стены тоньше 4 см зона начинала расти обратно.
+  const thin = (t: number): Plan => ({
+    name: "тонкая",
+    walls: [
+      { x1: 0, y1: 0, x2: 6, y2: 0, thickness: t, height: 2.7 },
+      { x1: 6, y1: 0, x2: 6, y2: 4, thickness: t, height: 2.7 },
+      { x1: 6, y1: 4, x2: 0, y2: 4, thickness: t, height: 2.7 },
+      { x1: 0, y1: 4, x2: 0, y2: 0, thickness: t, height: 2.7 },
+    ],
+    openings: [],
+    source: "demo",
+  });
+  const item = (y: number): Placed =>
+    ({ uid: 1, name: "Шкаф", x: 3, y, rotY: 0, size: [1.0, 0.6, 2.0] });
+
+  it("у стены нулевой толщины предмет вплотную к оси замечаний не даёт", () => {
+    // при отрицательном прощении здесь было бы «заходит в стену»
+    expect(checkClearance(thin(0), [item(0.31)])).toEqual([]);
+  });
+
+  it("чем тоньше стена, тем МЕНЬШЕ запретная зона, а не больше", () => {
+    const мешает = (t: number) => checkClearance(thin(t), [item(0.31)]).length;
+    expect(мешает(0.6), "толстая стена обязана мешать — иначе проверка пуста")
+      .toBeGreaterThan(0);
+    expect(мешает(0.02)).toBe(0);
+    expect(мешает(0)).toBe(0);
+  });
+});

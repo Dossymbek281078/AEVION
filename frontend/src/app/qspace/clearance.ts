@@ -70,8 +70,13 @@ function corners(p: Placed): Array<[number, number]> {
 function wallRect(w: Wall, shrink = 0.02): Array<[number, number]> {
   const dx = w.x2 - w.x1, dy = w.y2 - w.y1;
   const L = Math.hypot(dx, dy) || 1;
-  const hx = (-dy / L) * (w.thickness / 2 - shrink);
-  const hy = (dx / L) * (w.thickness / 2 - shrink);
+  // ⚠️ Без Math.max прощение уходит в МИНУС на тонкой стене, и зона начинает
+  // РАСТИ по мере утоньшения: у стены 0 мм зона была бы 2 см вместо нуля.
+  // Сегодня недостижимо (парсеры дают 0.15 и 0.3), но толщина приходит и из
+  // сохранённого файла проекта, который человек может поправить руками.
+  const half = Math.max(0, w.thickness / 2 - shrink);
+  const hx = (-dy / L) * half;
+  const hy = (dx / L) * half;
   return [
     [w.x1 + hx, w.y1 + hy], [w.x2 + hx, w.y2 + hy],
     [w.x2 - hx, w.y2 - hy], [w.x1 - hx, w.y1 - hy],

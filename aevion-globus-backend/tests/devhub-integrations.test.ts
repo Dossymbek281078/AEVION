@@ -405,7 +405,12 @@ describe("verifyDeploymentServes — post-deploy serve check", () => {
   test("reports false after 5 non-2xx attempts (assets never stored — the live CF bug)", async () => {
     const { verifyDeploymentServes } = await import("../src/routes/devhub");
     fetchMock.mockResolvedValue({ ok: false, status: 500 });
-    await expect(verifyDeploymentServes("https://x.pages.dev", 1)).resolves.toBe(false);
+    // Число попыток передаём ЯВНО (см. тот же тест в devhub-deploy.test.ts):
+    // замысел — «сдаётся и честно отвечает false», а не «делает ровно пять
+    // попыток». 08.09.2026 окно расширили с 25 секунд до ~2 минут, потому что
+    // новый Pages-проект не успевал подняться и ЖИВЫЕ страницы записывались
+    // как неудачные.
+    await expect(verifyDeploymentServes("https://x.pages.dev", 1, 5)).resolves.toBe(false);
     expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 });

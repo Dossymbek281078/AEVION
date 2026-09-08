@@ -403,6 +403,14 @@ export const CHANNELS: Record<string, string> = {
   // добавление сюда — единственный способ научить систему новому каналу.
   dz: "dzen",
   vk: "vk",
+  // Западные каналы добавлены 08.09.2026, до публикации. Тексты для Show HN и
+  // Product Hunt готовы и ждут руки основателя; без метки переход с них
+  // вернул бы из channelFrom null, продажа ушла бы в "unattributed", и на
+  // вопрос «окупился ли западный канал» ответа бы не было — ровно то, ради
+  // чего метки и заводились. Проверять это ПОСЛЕ публикации поздно: канал
+  // отрабатывает один раз.
+  hn: "hacker-news",
+  ph: "product-hunt",
 };
 
 /** Нормализует ?c= в известный канал; всё неизвестное → null (метки не будет). */
@@ -435,7 +443,13 @@ export function channelFrom(raw: string | string[] | undefined): string | null {
  *  завысить их вклад. Выводится из самой метки, отдельного списка не заводим —
  *  иначе он разъедется с CHANNELS. */
 function utmMedium(channel: string): string {
-  return channel === "qr-code" ? "qr" : "social";
+  if (channel === "qr-code") return "qr";
+  // Hacker News и Product Hunt — площадки-агрегаторы, а не соцсети: там не
+  // подписка на нас, а разовый переход из ленты обсуждений. Смешивать их с
+  // instagram/tiktok значит завысить вклад соцсетей ровно на объём западного
+  // запуска. Список отдельный не заводим — вывод по-прежнему из самой метки.
+  if (channel === "hacker-news" || channel === "product-hunt") return "referral";
+  return "social";
 }
 
 /**

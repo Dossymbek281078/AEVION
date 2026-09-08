@@ -75,12 +75,20 @@ export type QSignVerifyResult = {
   revocationReason: string | null;
   createdAt: string | null;
   payloadHash: string;
-  issuer: { userId: string | null; email: string | null } | null;
+  /*
+   * Публичный ответ проверки. Полей `userId`, `city`, `lat`, `lng` здесь
+   * больше НЕТ — и это не упрощение типа, а граница: тип и есть то место,
+   * где видно, что уходит наружу.
+   *
+   * 08.09.2026 наружу уходили почта подписанта, его userId и координаты
+   * подписания с точностью до метров — по идентификаторам, которые мы сами
+   * печатаем в открытых списках. Подлинность удостоверяет КЛЮЧ: ни адрес,
+   * ни точка на карте проверку не усиливают. Адрес остаётся маской, чтобы
+   * страница проверки могла ответить на вопрос «кто подписал».
+   */
+  issuer: { email: string | null } | null;
   geo: {
     source: QSignGeoSource | null;
     country: string | null;
-    city: string | null;
-    lat: number | null;
-    lng: number | null;
   } | null;
 };

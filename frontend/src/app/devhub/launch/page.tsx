@@ -4,8 +4,8 @@ import { probeJson } from "@/lib/probeLive";
 import { voiceIsKnownDown } from "../capabilityRows";
 import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
-import { LandingView } from "@/components/LandingView";
 import { PageTracking } from "@/components/PageTracking";
+import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 
 // Посадочная запуска DevHub.
 //
@@ -123,6 +123,13 @@ export default async function DevhubLaunchPage({
   // без неё после запуска не ответить, какой источник привёл людей именно сюда.
   const channel = channelFrom((await searchParams).c);
   const source = channel ? `devhub-${channel}` : "devhub";
+  // Дней до открытия. 10 сентября 2026 — документ основателя
+  // 00-НАЧНИ-ОТСЮДА/2026-08-30-ПЛАН-даты-запуска-новые.md.
+  //
+  // Вернул при сборке цикла 11: перестройка страницы (поле выше сгиба) шла от
+  // ветки, где этой строки ещё не было, и разрешение конфликта в пользу
+  // чужой стороны увезло её вместе с макетом. Сторож поймал.
+  const left = daysUntilLaunch(Date.UTC(2026, 8, 10));
 
   return (
     <main lang="ru" className={paper.paper} style={{ minHeight: "100vh", padding: "clamp(16px, 4vw, 32px) 18px 56px" }}>
@@ -143,10 +150,18 @@ export default async function DevhubLaunchPage({
           <p style={{ color: "var(--ink-soft)", fontSize: 15.5, lineHeight: 1.5, margin: "10px 0 0" }}>
             «Сделай таймер помодоро с настройкой длительности» — и DevHub соберёт
             проект: код, страницы, а при необходимости картинки и озвучку к ним.
+            {/*
+              Строка, которая ОБЯЗАНА стать другой в назначенный день, не может
+              быть статической: 10 сентября подписчик получит письмо «DevHub
+              открыт», придёт сюда и прочтёт «откроем скоро». Менять её руками
+              в день запуска никто не успеет.
+            */}
+            {left > 0
+              ? ` Открываем ${left === 1 ? "завтра" : `через ${left} дн.`}. Оставьте адрес, и письмо придёт в день запуска.`
+              : " Уже открыто — заходите."}
           </p>
         </header>
 
-        <LandingView source={source} />
 
         <WaitlistCapture
           // Язык НЕ задан жёстко (было lang="ru", снято 06.09.2026 по живому

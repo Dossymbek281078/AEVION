@@ -581,14 +581,37 @@ function siteLangToCc(v: string | null): CcLocale | null {
   return null;
 }
 
+/** Выбор языка платформы приходит КУКОЙ `aevion_lang_v1` (её ставит setLang в
+ *  lib/i18n.tsx и SSR-страницы читают её на сервере). Раньше шахматы читали
+ *  выбор только из localStorage — а выбор из ДРУГОЙ сессии/через SSR живёт в
+ *  куке, и /cyberchess (клиентский) его не видел: оставался на языке браузера,
+ *  пока /qventure и /bureau (SSR, читают куку) слушались. Замер соседнего окна
+ *  08.09.2026: cookie=en, браузер RU → /cyberchess 88% кириллицы. */
+function readSiteLangCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  try {
+    for (const part of document.cookie.split("; ")) {
+      const eq = part.indexOf("=");
+      if (eq > 0 && part.slice(0, eq) === SITE_LANG_KEY) {
+        return decodeURIComponent(part.slice(eq + 1) || "");
+      }
+    }
+  } catch {}
+  return null;
+}
+
 export function loadLocale(): CcLocale {
   if (typeof window === "undefined") return DEFAULT_LOCALE;
   try {
     // 1. Свой явный выбор — старше всех: человек выбрал язык именно для шахмат.
     const stored = localStorage.getItem(LOCALE_KEY);
     if (stored === "ru" || stored === "en" || stored === "kk") return stored;
-    // 2. Выбор в шапке сайта. Раньше этой ступени не было, и общий
-    //    переключатель на панели шахмат не действовал вовсе.
+    // 2. Выбор языка платформы. КУКА старше localStorage: выбор из другой
+    //    сессии/через SSR приходит именно кукой (setLang пишет и то, и другое,
+    //    но localStorage — только в той вкладке, где переключали). Без чтения
+    //    куки общий переключатель на /cyberchess не действовал в cookie-сценарии.
+    const siteCookie = siteLangToCc(readSiteLangCookie());
+    if (siteCookie) return siteCookie;
     const site = siteLangToCc(localStorage.getItem(SITE_LANG_KEY));
     if (site) return site;
   } catch {}

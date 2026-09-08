@@ -28,6 +28,15 @@ import { drawMaterial, materialById, materialsFor } from "./materials";
 import RasterReview from "./RasterReview";
 import { nearestWall, placeOpening, removeOpeningNear } from "./openings";
 import {
+  clearLocal,
+  loadLocal,
+  parseProjectFile,
+  projectFileName,
+  saveLocal,
+  type PlacedSnapshot,
+  type Project,
+} from "./project";
+import {
   CEILING_STRETCH,
   FLOOR_WET,
   WALL_BLOCK,
@@ -265,6 +274,11 @@ export default function QSpaceClient() {
   const [selectedUid, setSelectedUid] = useState<number | null>(null);
   const [webglOk, setWebglOk] = useState(true);
   const [exporting, setExporting] = useState(false);
+  // Состояние сохранения: человек должен ВИДЕТЬ, сохранена ли его работа.
+  const [saveNote, setSaveNote] = useState<string>("");
+  // Восстановление возможно только после того, как сцена собрана, поэтому
+  // прочитанный проект ждёт здесь.
+  const [pendingRestore, setPendingRestore] = useState<Project | null>(null);
   // PDF разобран, но масштаб ещё не назван человеком — план не строим.
   const [pdfPending, setPdfPending] = useState<PdfSegments | null>(null);
   // Растровый план ждёт проверки человеком: строить 3D молча по
@@ -591,6 +605,57 @@ export default function QSpaceClient() {
     t.controls.update();
   }, [plan]);
 
+  // ---- восстановление при открытии страницы --------------------------------
+  // Читается ОДИН раз. Три исхода различаются: ничего не сохранено — молчим и
+  // показываем демо; прочитано — восстанавливаем и говорим об этом; не
+  // читается — говорим прямо, потому что молчание тут значит «ваша работа
+  // пропала, и мы не сказали».
+  useEffect(() => {
+    const r = loadLocal();
+    if (r.kind === "ok") {
+      applyProject(r.project);
+      const when = new Date(r.project.savedAt);
+      setSaveNote(
+        "Восстановлен ваш проект от "
+        + when.toLocaleString("ru-RU", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })
+        + ". Нажмите «Начать заново», чтобы вернуться к демо.",
+      );
+    } else if (r.kind === "broken") {
+      setWarnings([r.reason + " Показан демо-план."]);
+    }
+    // намеренно один раз при монтировании: перечитывать сохранённое поверх
+    // работы человека нельзя
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ---- доставка мебели после пересборки сцены ------------------------------
+  // Смена плана очищает слой декора, поэтому предметы ставятся ТОЛЬКО после
+  // того, как эффект плана отработал. Иначе восстановленная мебель исчезала бы
+  // молча — и это выглядело бы как «сохранилось не всё».
+  useEffect(() => {
+    if (!pendingRestore) return;
+    const t = three.current;
+    if (!t) return;
+    const added: PlacedItem[] = [];
+    for (const it of pendingRestore.placed) {
+      const item = CATALOG.find((c) => c.id === it.catalogId);
+      if (!item) continue; // предмет исчез из каталога — пропускаем, а не падаем
+      const g = item.build();
+      const uid = t.uidSeq++;
+      g.userData.uid = uid;
+      g.position.set(it.x, 0, it.z);
+      g.rotation.y = it.rotY;
+      t.gDecor.add(g);
+      added.push({ uid, catalogId: item.id, name: item.name });
+    }
+    const lost = pendingRestore.placed.length - added.length;
+    setPlaced(added);
+    if (lost > 0) {
+      setWarnings((w) => [...w, `Не удалось восстановить предметов: ${lost} — их больше нет в каталоге.`]);
+    }
+    setPendingRestore(null);
+  }, [pendingRestore, plan]);
+
   // ---- синхронизация ref-ов -----------------------------------------------
   // Обработчики мыши создаются ОДИН раз вместе со сценой и не видят
   // последующих состояний, поэтому актуальные значения им передаются через
@@ -816,6 +881,90 @@ export default function QSpaceClient() {
     );
   }, []);
 
+  // ---- сохранение проекта --------------------------------------------------
+
+  /** Снимок сцены: план, расставленная мебель, выбранная отделка, слои. */
+  const snapshot = useCallback((): Project => {
+    const t = three.current;
+    const items: PlacedSnapshot[] = [];
+    if (t) {
+      for (const g of t.gDecor.children) {
+        const uid = g.userData.uid as number;
+        const rec = placed.find((x) => x.uid === uid);
+        if (!rec) continue;
+        items.push({
+          catalogId: rec.catalogId,
+          x: g.position.x,
+          z: g.position.z,
+          rotY: g.rotation.y,
+        });
+      }
+    }
+    return {
+      version: 1,
+      savedAt: new Date().toISOString(),
+      plan,
+      placed: items,
+      wallMatId,
+      floorMatId,
+      partition,
+      layers,
+    };
+  }, [plan, placed, wallMatId, floorMatId, partition, layers]);
+
+  /** Ставит сцену по сохранённому проекту. План идёт первым: он пересобирает сцену. */
+  const applyProject = useCallback((pr: Project) => {
+    setPlan(pr.plan);
+    setWallMatId(pr.wallMatId);
+    setFloorMatId(pr.floorMatId);
+    setPartition(pr.partition);
+    setLayers(pr.layers);
+    // мебель ставится ПОСЛЕ пересборки сцены — иначе её сотрёт очистка слоёв
+    setPendingRestore(pr);
+  }, []);
+
+  const saveProjectFile = useCallback(() => {
+    const data = JSON.stringify(snapshot(), null, 2);
+    const blob = new Blob([data], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a2 = document.createElement("a");
+    a2.href = url;
+    a2.download = projectFileName();
+    a2.click();
+    URL.revokeObjectURL(url);
+    setSaveNote("Проект выгружен файлом — его можно хранить и переносить.");
+  }, [snapshot]);
+
+  const openProjectFile = useCallback(async (f: File) => {
+    const r = parseProjectFile(await f.text());
+    if (!r.ok) {
+      setWarnings([r.reason]);
+      return;
+    }
+    applyProject(r.project);
+    setWarnings([]);
+    setSaveNote("Проект открыт из файла.");
+  }, [applyProject]);
+
+  const forgetSaved = useCallback(() => {
+    clearLocal();
+    setSaveNote("Сохранённое в браузере удалено. Файлы проектов не тронуты.");
+  }, []);
+
+  // ---- автосохранение ------------------------------------------------------
+  // С задержкой: перетаскивание мебели меняет состояние часто, а запись в
+  // хранилище синхронная. Отказ показывается человеку, а не глотается: иначе
+  // он будет уверен, что проект сохранён.
+  useEffect(() => {
+    if (pendingRestore) return; // не сохранять промежуточное состояние восстановления
+    const id = setTimeout(() => {
+      const r = saveLocal(snapshot());
+      if (r.ok) setSaveNote("Сохранено в этом браузере. Для надёжности выгрузите файлом.");
+      else setSaveNote(r.reason);
+    }, 1200);
+    return () => clearTimeout(id);
+  }, [snapshot, pendingRestore]);
+
   const screenshot = useCallback(() => {
     const t = three.current; if (!t) return;
     t.renderer.render(t.scene, t.camera);
@@ -889,6 +1038,25 @@ export default function QSpaceClient() {
           Демо-план
         </button>
         <button type="button" style={S.btn} onClick={screenshot}>Скачать кадр (PNG)</button>
+        <button type="button" style={S.btn} onClick={saveProjectFile}>
+          Сохранить проект (файл)
+        </button>
+        <label style={S.btnLabel}>
+          Открыть проект
+          <input
+            type="file"
+            accept=".json,.qspace.json,application/json"
+            style={{ display: "none" }}
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) openProjectFile(f); e.target.value = ""; }}
+          />
+        </label>
+        <button
+          type="button"
+          style={S.btn}
+          onClick={() => { forgetSaved(); setPlan(demoPlan()); setWarnings([]); setUnitLabel(""); }}
+        >
+          Начать заново
+        </button>
         <button type="button" style={S.btn} onClick={exportGlb} disabled={exporting}>
           {exporting ? "Собираю GLB…" : "Скачать модель (GLB)"}
         </button>
@@ -896,6 +1064,8 @@ export default function QSpaceClient() {
           {plan.name} · {dims}{unitLabel ? ` · единицы: ${unitLabel}` : ""}
         </span>
       </section>
+
+      {saveNote && <p style={S.saveNote} role="status">{saveNote}</p>}
 
       {warnings.length > 0 && (
         <ul style={S.warnings}>
@@ -1237,6 +1407,16 @@ const styles: Record<string, React.CSSProperties> = {
   },
   selRow: { display: "flex", flexWrap: "wrap", gap: 6 },
   hint: { fontSize: 12.5, color: "#6a645a", margin: "8px 0 0" },
+  btnLabel: {
+    display: "inline-block", padding: "7px 12px", background: "#fff",
+    border: "1px solid #c9c4bb", borderRadius: 8, cursor: "pointer",
+    fontSize: 14, color: "#1f1d1a",
+  },
+  saveNote: {
+    fontSize: 13, color: "#3f5c3a", background: "#eef4ea",
+    border: "1px solid #cfdec7", borderRadius: 8,
+    padding: "6px 10px", margin: "6px 0",
+  },
   scaleBox: {
     display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center",
     background: "#eef4ea", border: "1px solid #cfdec7", borderRadius: 8,

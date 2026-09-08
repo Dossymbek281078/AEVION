@@ -983,7 +983,18 @@ revenueRouter.get("/lemonsqueezy/recent", async (_req, res) => {
     id: o.id,
     appId: appIdForLsVariant(o.variantId),
     product: o.product,
-    email: o.email || null,
+    /*
+     * 🔴 Адрес покупателя наружу не отдаём — то же решение, что у соседней
+     * ручки gumroad/recent, и по той же причине: роутер /api/revenue
+     * смонтирован без проверки прав, и один GET без заголовков возвращал
+     * список покупателей с их почтой.
+     *
+     * Найдено сплошным обходом 484 публичных GET-адресов: починка соседней
+     * ручки эту НЕ закрывала — симметричные имена, симметричный дефект, а
+     * правка была в одном месте из двух. Класс: у одних данных бывает
+     * несколько выходов наружу.
+     */
+    internal: isInternalPurchase(o.email),
     amountUsd: o.total / 100,
     currency: o.currency,
     refunded: o.refunded,

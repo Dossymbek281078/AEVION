@@ -8013,11 +8013,61 @@ devhubRouter.get("/studio/capabilities", async (_req, res) => {
   // A configured key is not a working capability — fold in what the last real
   // call to each provider actually did (lib/providerHealth).
   const withHealth = caps.map(applyHealth);
+
+  // Ручка ПУБЛИЧНАЯ (проверено curl без ключа), и её lastError уходит прямо в
+  // подсказку на витрине. Замер 08.09.2026 на проде: там лежал сырой ответ
+  // поставщика — `ElevenLabs HTTP 400: {"detail":{"type":"authentication_error",
+  // "code":"invalid_api_key",...}}` и `провайдер-проба: HTTP 401`. Это ворота §3.4
+  // («тексты ошибок человеческие, без кодов и адресов») и заодно утечка нашего
+  // устройства наружу.
+  //
+  // Поэтому наружу идёт КОД, а слова подбирает витрина на языке читателя:
+  // подсказка живёт в атрибуте title, а его машинный доводчик НЕ переводит —
+  // русский текст отсюда EN-посетитель увидел бы как есть.
+  const offCodeOf = (c: { status?: string; lastError?: string }): string | undefined => {
+    if (c.status === "live") return undefined;
+    const raw = (c.lastError ?? "").toLowerCase();
+    if (/quota|exhaust|limit exceeded|исчерпан/.test(raw)) return "quota_exhausted";
+    if (/401|403|invalid.?api.?key|authentication|unauthor/.test(raw)) return "auth_rejected";
+    if (/не делегирован|not delegated/.test(raw)) return "zone_not_delegated";
+    if (raw.includes("{") || /http \d{3}/.test(raw)) return "provider_error";
+    if (c.status === "needs_token") return "needs_token";
+    if (c.status === "not_available") return "not_available";
+    if (c.status === "degraded") return "provider_error";
+    return undefined;
+  };
+
+  // Текст оставляем только СВОЙ: всё, что похоже на ответ поставщика (тело JSON
+  // или код HTTP), заменяется классом. Наши выверенные фразы — например про
+  // неделегированную зону — проходят, они написаны для человека.
+  const publicReason = (reason: string | undefined): string | undefined => {
+    if (!reason) return undefined;
+    if (reason.includes("{") || /HTTP \d{3}/i.test(reason)) return undefined;
+    return reason.slice(0, 160);
+  };
+
+  const publicCaps = withHealth.map((c) => {
+    const offCode = offCodeOf(c);
+    const lastError = publicReason((c as { lastError?: string }).lastError);
+    const out = { ...c, ...(offCode ? { offCode } : {}) } as Record<string, unknown>;
+    if (lastError) out.lastError = lastError;
+    else delete out.lastError;
+    return out;
+  });
+
   const live = withHealth.filter((c) => c.status === "live").length;
   const degraded = withHealth.filter((c) => c.status === "degraded").length;
+  // needsToken считался ОСТАТКОМ (всего минус live минус degraded), и потому
+  // втягивал not_available. Следствие видел человек: баннер /studio писал
+  // «3 capabilities need Railway env vars», а список рядом фильтрует по
+  // status === "needs_token" и показывал ОДНУ переменную. Заголовок спорил с
+  // собственным списком, и «нужен ключ» обещало починку там, где ключ ни при
+  // чём: Railway не сделан, зона домена не делегирована.
+  const needsToken = withHealth.filter((c) => c.status === "needs_token").length;
+  const notAvailable = withHealth.filter((c) => c.status === "not_available").length;
   return res.json({
-    capabilities: withHealth,
-    summary: { total: withHealth.length, live, degraded, needsToken: withHealth.length - live - degraded },
+    capabilities: publicCaps,
+    summary: { total: withHealth.length, live, degraded, needsToken, notAvailable },
   });
 });
 

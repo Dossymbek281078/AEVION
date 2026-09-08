@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { СОБЫТИЕ_ПЕРЕНОСА } from "@/components/DevHubGuestIdentity";
 import { apiUrl } from "@/lib/apiBase";
-import { useDevhubT } from "./i18n";
+import { useDevhubT, type DevhubKey } from "./i18n";
 import { useI18n } from "@/lib/i18n";
 import { catalog } from "@/lib/aevionCatalog";
 import { fixDoubledScheme } from "@/lib/urls";
@@ -118,21 +118,34 @@ const USAGE_LABELS: Record<string, Record<string, string>> = {
   kk: { video: "бейне", image: "сурет", tts: "дыбыстау таңбасы", music: "музыка", deploy: "жарияланым", generate: "код генерациясы", speech: "тану және дауыс клоны", translate: "аударма" },
 };
 
-function capabilityOffReason(status: string | undefined): string {
+function capabilityOffReason(
+  status: string | undefined,
+  offCode: string | undefined,
+  t: (key: DevhubKey) => string,
+): string {
+  // Слова берутся из словаря, а не зашиты здесь: подсказка живёт в атрибуте
+  // title, а атрибуты машинный доводчик НЕ переводит — зашитый русский текст
+  // EN-посетитель увидел бы как есть. Тот же класс, что placeholder поля ИИ.
+  switch (offCode) {
+    case "quota_exhausted": return t("caps.off.quota");
+    case "auth_rejected": return t("caps.off.auth");
+    case "zone_not_delegated": return t("caps.off.zone");
+    case "provider_error": return t("caps.off.provider");
+    case "needs_token": return t("caps.off.needsToken");
+    case "not_available": return t("caps.off.notAvailable");
+  }
+  // Кода нет — значит отвечает сборка бэкенда старее 08.09. Тогда судим по
+  // статусу: беднее, но честно, и человек не остаётся без объяснения.
   switch (status) {
-    case "needs_token":
-      return "не настроено на сервере — подключим";
-    case "not_available":
-      return "пока не сделано, а не «забыли ключ»";
-    case "error":
-      return "провайдер отвечает ошибкой";
+    case "needs_token": return t("caps.off.needsToken");
+    case "not_available": return t("caps.off.notAvailable");
+    case "degraded": return t("caps.off.provider");
     case undefined:
-    case "":
-      return "состояние неизвестно";
+    case "": return t("caps.off.unknown");
     default:
       // Незнакомое состояние показываем как есть — прятать хуже, чем показать
       // непонятное: иначе ни человек, ни мы не поймём, о чём речь.
-      return `состояние: ${status}`;
+      return `${t("caps.off.state")}: ${status}`;
   }
 }
 
@@ -156,7 +169,7 @@ export default function DevHubPage() {
   // video on an empty balance, images with every provider blocked, voice on a
   // model the vendor had removed. Better to say so on the way in than to let
   // someone discover it after typing their idea.
-  const [caps, setCaps] = useState<Array<{ id: string; name: string; status: string; lastError?: string }>>([]);
+  const [caps, setCaps] = useState<Array<{ id: string; name: string; status: string; offCode?: string }>>([]);
 
   // Prompt-first entry: one phrase → project created → generation auto-runs
   // in the IDE (the prompt travels via localStorage; the IDE picks it up,
@@ -750,21 +763,22 @@ export default function DevHubPage() {
                 <>
                   <span style={{ color: "#64748b" }}>{t("caps.off")}</span>
                   {/* ПОПРАВЛЕНО 30.08.2026: прежний текст говорил, что настоящие ошибки
-                        сюда НЕ подключены и это «отдельная работа». Подключены.
-                        Ручка применяет applyHealth к каждой возможности: если
-                        поставщик недавно отказал, статус понижается с live до
-                        degraded, а причина кладётся в lastError. Сюда она и
-                        приходит подсказкой; запасная ветка нужна только когда
-                        отказов не было.
+                        сюда НЕ подключены и это «отдельная работа». Подключены:
+                        ручка применяет applyHealth, и отказ поставщика понижает
+                        статус до degraded.
 
-                        Проверено прогоном, а не чтением: отказ поставщика даёт
-                        degraded с причиной, успех статус не трогает.
+                        ПОПРАВЛЕНО 08.09.2026: сюда приходит КОД причины
+                        (offCode), а не текст поставщика. Замер на проде показал
+                        в этой подсказке сырое тело ответа ElevenLabs с
+                        authentication_error и «провайдер-проба: HTTP 401» — на
+                        публичной витрине, в атрибуте, который доводчик не
+                        переводит. Слова теперь подбирает словарь по коду.
 
                         Комментарий, утверждающий состояние, стареет как отчёт, а
-                        тестов у него нет — этот пролежал устаревшим и говорил
-                        следующему читателю делать сделанное. */}
+                        тестов у него нет — этот уже пролежал устаревшим однажды.
+                    */}
                   {off.map((c, i) => (
-                    <span key={c.id} title={c.lastError || capabilityOffReason(c.status)}>
+                    <span key={c.id} title={capabilityOffReason(c.status, c.offCode, t)}>
                       <span style={{ color: "#92400e", borderBottom: "1px dotted #d97706", cursor: "help" }}>{c.name}</span>
                       {i < off.length - 1 ? <span style={{ color: "#64748b" }}>, </span> : null}
                     </span>

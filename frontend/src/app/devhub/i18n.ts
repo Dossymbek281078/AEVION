@@ -25,6 +25,10 @@ import { useI18n } from "@/lib/i18n";
 
 type Key = keyof typeof EN;
 
+/** Тип ключа наружу: помощники витрины принимают t() и должны быть типизированы
+ *  тем же набором, иначе опечатка в ключе доедет до экрана как пустая строка. */
+export type DevhubKey = Key;
+
 const EN = {
   "cmp.app": "App from a description",
   "cmp.video": "Video",
@@ -40,6 +44,14 @@ const EN = {
   "howto.lang": "Voice-over and subtitles are in Russian.",
   "howto.aria": "Two-minute video: how to work with AI effectively",
   "howto.missing": "The video is temporarily unavailable — the file did not reach this build.",
+  "caps.off.needsToken": "not configured on the server yet — we will connect it",
+  "caps.off.notAvailable": "not built yet — this is not a missing key",
+  "caps.off.quota": "the provider's quota for this month is used up",
+  "caps.off.auth": "the provider did not accept our key",
+  "caps.off.zone": "the keys are in place, but the domain zone is not delegated — issued addresses do not resolve",
+  "caps.off.provider": "the provider is answering with an error right now",
+  "caps.off.unknown": "state unknown",
+  "caps.off.state": "state",
   "value.title": "One window instead of seven subscriptions",
   "value.body": "App, database, texts, images, voice-over, music, video and 3D — in one project, with no moving files between services and no seven separate logins.",
   "hero.orStart": "Or start with an example:",
@@ -173,6 +185,14 @@ const RU: Record<Key, string> = {
   "howto.lang": "Озвучка и субтитры на русском языке.",
   "howto.aria": "Двухминутное видео: как эффективно работать с ИИ",
   "howto.missing": "Видео сейчас недоступно — файл не доехал до этой сборки.",
+  "caps.off.needsToken": "не настроено на сервере — подключим",
+  "caps.off.notAvailable": "пока не сделано, а не «забыли ключ»",
+  "caps.off.quota": "у поставщика исчерпана квота на этот месяц",
+  "caps.off.auth": "поставщик не принял наш ключ",
+  "caps.off.zone": "ключи заданы, но зона домена не делегирована — выданные адреса не разрешаются",
+  "caps.off.provider": "поставщик сейчас отвечает ошибкой",
+  "caps.off.unknown": "состояние неизвестно",
+  "caps.off.state": "состояние",
   "value.title": "Одно окно вместо семи подписок",
   "value.body": "Приложение, база данных, тексты, картинки, озвучка, музыка, видео и 3D — в одном проекте, без переноса файлов между сервисами и без семи отдельных логинов.",
   "hero.orStart": "Или начните с примера:",
@@ -306,6 +326,14 @@ const KK: Record<Key, string> = {
   "howto.lang": "Дыбыстау мен субтитрлер орыс тілінде.",
   "howto.aria": "Екі минуттық бейне: жасанды интеллектпен тиімді жұмыс істеу",
   "howto.missing": "Бейне уақытша қолжетімсіз — файл осы құрастыруға жеткен жоқ.",
+  "caps.off.needsToken": "серверде әлі бапталмаған — қосамыз",
+  "caps.off.notAvailable": "әзірше жасалмаған, кілт ұмытылған жоқ",
+  "caps.off.quota": "жеткізушінің осы айға арналған квотасы бітті",
+  "caps.off.auth": "жеткізуші біздің кілтті қабылдамады",
+  "caps.off.zone": "кілттер бар, бірақ домен аймағы делегацияланбаған — берілген мекенжайлар шешілмейді",
+  "caps.off.provider": "жеткізуші қазір қатемен жауап беруде",
+  "caps.off.unknown": "күйі белгісіз",
+  "caps.off.state": "күйі",
   "value.title": "Жеті жазылымның орнына бір терезе",
   "value.body": "Қосымша, дерекқор, мәтіндер, суреттер, дыбыстау, музыка, бейне және 3D — бір жобада, файлдарды сервистер арасында тасымалдамай және жеті бөлек логинсіз.",
   "hero.orStart": "Немесе мысалдан бастаңыз:",

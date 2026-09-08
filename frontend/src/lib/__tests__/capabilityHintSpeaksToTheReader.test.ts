@@ -1,5 +1,13 @@
 import { describe, test, expect } from "vitest";
 import { capabilityHint, indexCapabilities, isCapabilityBlocked } from "../devhubCapabilities";
+import fs from "node:fs";
+import path from "node:path";
+
+/** Список возможностей берём у СЕРВЕРА: свой устареет молча. */
+const BACKEND = path.resolve(
+  __dirname, "..", "..", "..", "..",
+  "aevion-globus-backend", "src", "routes", "devhub.ts",
+);
 
 /**
  * Подсказка о недоступной возможности живёт в ТОСТЕ, а тост — слепая зона
@@ -57,5 +65,41 @@ describe("подсказка говорит на языке читателя", (
     // узнавал о выжженной квоте DeepL только после нажатия.
     expect(isCapabilityBlocked(caps, "translate")).toBe(true);
     expect(capabilityHint(caps, "translate", "en")).toContain("Translation");
+  });
+
+  /**
+   * Замер 08.09.2026: прогнал capabilityHint по ВСЕМ 17 возможностям, которые
+   * прод отдаёт на /studio/capabilities, в трёх языках — и у ПЯТИ подписи не
+   * было вовсе (code, domain, screenshot_code, sms, whatsapp). Вместо имени
+   * человек читал идентификатор: «domain: канал пока не подключён на нашей
+   * стороне». Один из них — domain — на проде именно в этом состоянии, то
+   * есть жаргон был виден живьём.
+   *
+   * Проверка ведётся по СПИСКУ СЕРВЕРА (файл маршрутов), а не по списку
+   * внутри теста: свой список устареет молча ровно тогда, когда добавят
+   * новую возможность.
+   */
+  test("у КАЖДОЙ возможности сервера есть человеческое имя на трёх языках", () => {
+    const src = fs.readFileSync(BACKEND, "utf8");
+    const ids = new Set<string>();
+    // Берём ТОЛЬКО строки построения возможностей: у них рядом стоит `name:`
+    // и `status:`. Без этого сужения в список попадали id шаблонов проектов
+    // (landing, dashboard, blog) — прибор давал три ложных находки на язык.
+    for (const m of src.matchAll(/\{ id: "([a-z][a-z0-9_]{1,24})", name: "[^"]+", description:/g)) {
+      ids.add(m[1]);
+    }
+    expect(ids.size, "идентификаторов не нашлось — дальше любой ноль был бы зелёным").toBeGreaterThan(8);
+    expect([...ids], "контроль: заведомо существующая возможность").toContain("audio_tts");
+
+    const bezImeni: string[] = [];
+    for (const lang of ["ru", "en", "kk"]) {
+      for (const id of ids) {
+        const h = capabilityHint({ [id]: { status: "not_available" } } as never, id, lang);
+        // Имя считается человеческим, если подсказка НЕ начинается с самого
+        // идентификатора: именно так выглядит запасной путь «имя от сервера».
+        if (h.startsWith(id + ":") || h.startsWith(id + " ")) bezImeni.push(`${lang}:${id}`);
+      }
+    }
+    expect(bezImeni, "человек прочитает идентификатор вместо названия").toEqual([]);
   });
 });

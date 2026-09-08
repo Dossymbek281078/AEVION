@@ -92,18 +92,24 @@ const CAP_LABEL: Record<string, Record<string, string>> = {
     vercel: "Выкатка на Vercel", image: "Генерация картинок", audio_music: "Генерация музыки",
     audio_tts: "Озвучка", github: "Отправка в GitHub", video: "Генерация видео",
     "3d": "3D-генерация", translate: "Перевод", email: "Отправка почты",
+    code: "Генерация кода", domain: "Свой домен", screenshot_code: "Код по скриншоту",
+    sms: "Отправка SMS", whatsapp: "Отправка в WhatsApp",
   },
   en: {
     database: "Database", railway: "Railway deploy", pages: "Cloudflare Pages publishing",
     vercel: "Vercel deploy", image: "Image generation", audio_music: "Music generation",
     audio_tts: "Voice-over", github: "Push to GitHub", video: "Video generation",
     "3d": "3D generation", translate: "Translation", email: "Sending email",
+    code: "Code generation", domain: "Custom domain", screenshot_code: "Code from a screenshot",
+    sms: "Sending SMS", whatsapp: "Sending to WhatsApp",
   },
   kk: {
     database: "Дерекқор", railway: "Railway-ге жариялау", pages: "Cloudflare Pages-ке жариялау",
     vercel: "Vercel-ге жариялау", image: "Сурет генерациясы", audio_music: "Музыка генерациясы",
     audio_tts: "Дыбыстау", github: "GitHub-қа жіберу", video: "Бейне генерациясы",
     "3d": "3D генерация", translate: "Аударма", email: "Хат жіберу",
+    code: "Код генерациясы", domain: "Жеке домен", screenshot_code: "Скриншоттан код",
+    sms: "SMS жіберу", whatsapp: "WhatsApp-қа жіберу",
   },
 };
 

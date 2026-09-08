@@ -48,9 +48,23 @@ export function estimatePlan(
   wiring: WiringDraft,
   plumbing: PlumbingDraft,
   ceilingLights: number,
+  /**
+   * Сумма площадей ПОМЕЩЕНИЙ, м². Когда известна — считаем по ней.
+   *
+   * Прежде площадь пола бралась габаритом плана, и это было написано до того,
+   * как модуль научился выделять помещения. Замер на демо-квартире: габарит
+   * 48 м² против 41.1 м² по комнатам — покрытия человек купил бы на 17 %
+   * больше, а это деньги. Стены не застилают.
+   *
+   * Габарит остаётся запасным путём: если помещения не выделились (открытый
+   * контур, картинка с разрывами), лучше завышенная оценка, чем никакой.
+   */
+  roomArea?: number,
 ): Estimate {
   const b = planBounds(plan);
-  const floorArea = (b.maxX - b.minX) * (b.maxY - b.minY);
+  const floorArea = roomArea && roomArea > 0
+    ? roomArea
+    : (b.maxX - b.minX) * (b.maxY - b.minY);
 
   let wallArea = 0;
   for (const w of plan.walls) {

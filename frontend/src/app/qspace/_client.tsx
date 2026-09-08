@@ -855,8 +855,15 @@ export default function QSpaceClient() {
   const est = useMemo(() => {
     const w = generateWiring(plan);
     const pl = generatePlumbing(plan);
-    return estimatePlan(plan, w, pl, generateLights(plan).length);
-  }, [plan]);
+    // ⚠️ ГРАНИЦА ПОКРЫТИЯ: мутация «не передавать площадь» здесь НЕ ловится —
+    // смета отрисовывается внутри этой страницы, отдельного компонента у неё
+    // нет. Сама формула закреплена в estimate.test.ts, а проводка проверяется
+    // браузером после сборки (число покрытия на экране ~43 м², не ~50).
+    // Площадь пола — по ПОМЕЩЕНИЯМ, а не по габариту: стены не застилают.
+    // На демо-квартире разница 48 против 41.1 м², то есть 17 % лишнего
+    // покрытия в закупке.
+    return estimatePlan(plan, w, pl, generateLights(plan).length, roomsInfo.totalArea);
+  }, [plan, roomsInfo]);
 
   const S = styles;
   const catalogGroups = groups();

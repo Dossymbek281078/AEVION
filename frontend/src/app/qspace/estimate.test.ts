@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { demoPlan, generateLights, generatePlumbing, generateWiring } from "./planModel";
 import { estimatePlan } from "./estimate";
+import { findRooms } from "./rooms";
 
 describe("спецификация из демо-плана", () => {
   const p = demoPlan();
@@ -48,5 +49,38 @@ describe("спецификация из демо-плана", () => {
     const est2 = estimatePlan(p2, w, pl, 6);
     expect(est2.wallArea).toBeCloseTo(est.wallArea + 2 * 2.7, 6);
     expect(est2.paintLitres).toBeGreaterThan(est.paintLitres);
+  });
+});
+
+describe("площадь пола берётся по помещениям, а не по габариту", () => {
+  // Прежде площадь бралась габаритом плана — это было написано до того, как
+  // модуль научился выделять помещения. Замер на демо: 48 м² габарит против
+  // 41.1 м² по комнатам, то есть 17 % лишнего покрытия в закупке. Деньги.
+  const plan = demoPlan();
+  const парам = () => [generateWiring(plan), generatePlumbing(plan), generateLights(plan).length] as const;
+
+  it("с площадью помещений покрытия нужно МЕНЬШЕ, чем по габариту", () => {
+    const [w, pl, l] = парам();
+    const поГабариту = estimatePlan(plan, w, pl, l);
+    const поКомнатам = estimatePlan(plan, w, pl, l, findRooms(plan).totalArea);
+    expect(поКомнатам.flooringArea, "площадь помещений не повлияла — параметр не доехал")
+      .toBeLessThan(поГабариту.flooringArea);
+    // разница должна быть заметной, а не косметической
+    expect(поГабариту.flooringArea - поКомнатам.flooringArea).toBeGreaterThan(3);
+  });
+
+  it("запас на подрезку сохраняется — покрытия НЕ меньше самих комнат", () => {
+    const [w, pl, l] = парам();
+    const area = findRooms(plan).totalArea;
+    expect(estimatePlan(plan, w, pl, l, area).flooringArea).toBeGreaterThan(area);
+  });
+
+  it("без помещений остаётся запасной путь по габариту, а не ноль", () => {
+    // открытый контур или картинка с разрывами: завышенная оценка лучше пустой
+    const [w, pl, l] = парам();
+    for (const плохо of [undefined, 0, -5]) {
+      expect(estimatePlan(plan, w, pl, l, плохо).flooringArea,
+        `при значении ${плохо} смета обнулилась`).toBeGreaterThan(40);
+    }
   });
 });

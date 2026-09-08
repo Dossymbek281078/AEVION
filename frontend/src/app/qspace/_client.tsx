@@ -32,6 +32,7 @@ import { checkPassage } from "./passage";
 import { roomSpec, roomSpecText } from "./roomSpec";
 import RasterReview from "./RasterReview";
 import HeatingPanel from "./HeatingPanel";
+import VentilationPanel from "./VentilationPanel";
 import { nearestWall, placeOpening, removeOpeningNear } from "./openings";
 import {
   clearLocal,
@@ -1065,6 +1066,9 @@ export default function QSpaceClient() {
               </table>
               <h2 style={S.h2}>Тёплый пол</h2>
               <HeatingPanel rooms={roomsInfo.rooms} />
+
+              <h2 style={S.h2}>Вентиляция и влажность</h2>
+              <VentilationPanel rooms={roomsInfo.rooms} />
 
               <p style={S.hint}>
                 Наведите на слой — покажет, за что он отвечает. Толщины типовые

@@ -64,7 +64,12 @@ function parse(transcript: string): CommandResult {
   if (!t) return { kind: "unknown", raw: transcript };
 
   // Balance — short circuit
-  if (/\b(balance|баланс|әмиян)\b/.test(t)) {
+  // 🔴 Границ слова тут НЕТ намеренно. \b в JavaScript — это граница
+  // класса [A-Za-z0-9_], в который кириллица НЕ входит, поэтому шаблон с
+  // ней не совпадал НИКОГДА: «баланс» и «әмиян» не распознавались, а
+  // «balance» работал — оттого дефект и не замечали.
+  // Замер: /\b(balance|баланс)\b/.test("баланс") === false.
+  if (/(balance|баланс|әмиян)/.test(t)) {
     return { kind: "balance", reply: "balance" };
   }
 

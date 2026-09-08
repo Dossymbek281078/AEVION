@@ -77,3 +77,26 @@ describe("площадь под встроенной мебелью доезжа
     expect(totalPipe(y)).toBe(totalPipe(x));
   });
 });
+
+describe("подсказка не просит вычитать то, что уже вычтено", () => {
+  // Прежде подсказка говорила «эту площадь вычтите сами» всегда. Правда до
+  // того, как модуль научился вычитать её сам, и вредная ложь после:
+  // послушавшись, человек вычел бы дважды и купил меньше трубы.
+  const rooms = [room(1, 10, 13), room(2, 8, 11)];
+
+  it("когда мебель учтена — говорит, что вычитать не нужно", () => {
+    const { container } = render(
+      <HeatingPanel rooms={rooms} blockedAreaByRoom={{ 1: 3, 2: 2 }} />);
+    const t = (container.textContent ?? "").replace(/\s+/g, " ");
+    expect(t, "подсказка не называет, сколько уже вычтено").toMatch(/уже вычтено/);
+    expect(t, "подсказка всё ещё просит вычесть вручную").not.toMatch(/вычтите сами/);
+    expect(t, "не названо само число вычтенного").toMatch(/5\.0 м²/);
+  });
+
+  it("когда мебели нет — зовёт расставить, а не вычитать руками", () => {
+    const { container } = render(<HeatingPanel rooms={rooms} />);
+    const t = (container.textContent ?? "").replace(/\s+/g, " ");
+    expect(t).toMatch(/вычтется сама/);
+    expect(t).not.toMatch(/уже вычтено/);
+  });
+});

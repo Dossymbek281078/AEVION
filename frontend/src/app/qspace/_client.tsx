@@ -25,6 +25,8 @@ import { parseDxf } from "./dxf";
 import { estimatePlan } from "./estimate";
 import { planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
 import { drawMaterial, materialById, materialsFor } from "./materials";
+import { CATALOG, groups, itemById, type CatalogItem } from "./furniture";
+import { checkClearance, type Issue, type Placed } from "./clearance";
 import RasterReview from "./RasterReview";
 import { nearestWall, placeOpening, removeOpeningNear } from "./openings";
 import {
@@ -44,190 +46,6 @@ import {
   finishedHeightM,
   totalMm,
 } from "./wallStructure";
-
-// ---------------------------------------------------------------------------
-// Каталог мебели и оборудования. Размеры в метрах. Каждый предмет — группа
-// из простых объёмов: это осознанный выбор MVP (грузится мгновенно, не
-// требует внешних моделей), а не временный мусор.
-
-interface CatalogItem {
-  id: string;
-  name: string;
-  group: string;
-  build: () => THREE.Group;
-}
-
-function box(
-  g: THREE.Group,
-  w: number, h: number, d: number,
-  color: number,
-  x = 0, y = 0, z = 0,
-): THREE.Mesh {
-  const m = new THREE.Mesh(
-    new THREE.BoxGeometry(w, h, d),
-    new THREE.MeshLambertMaterial({ color }),
-  );
-  m.position.set(x, y + h / 2, z);
-  g.add(m);
-  return m;
-}
-
-function cyl(g: THREE.Group, r: number, h: number, color: number, x = 0, y = 0, z = 0): THREE.Mesh {
-  const m = new THREE.Mesh(
-    new THREE.CylinderGeometry(r, r, h, 20),
-    new THREE.MeshLambertMaterial({ color }),
-  );
-  m.position.set(x, y + h / 2, z);
-  g.add(m);
-  return m;
-}
-
-const CATALOG: CatalogItem[] = [
-  { id: "sofa", name: "Диван", group: "Гостиная", build: () => {
-    const g = new THREE.Group();
-    box(g, 2.2, 0.4, 0.9, 0x8a9bb0);          // основание
-    box(g, 2.2, 0.5, 0.2, 0x7b8ca1, 0, 0.4, -0.35); // спинка
-    box(g, 0.2, 0.35, 0.9, 0x7b8ca1, -1.0, 0.4);    // подлокотники
-    box(g, 0.2, 0.35, 0.9, 0x7b8ca1, 1.0, 0.4);
-    return g;
-  }},
-  { id: "armchair", name: "Кресло", group: "Гостиная", build: () => {
-    const g = new THREE.Group();
-    box(g, 0.9, 0.4, 0.85, 0xa98d6f);
-    box(g, 0.9, 0.45, 0.18, 0x9a7e60, 0, 0.4, -0.33);
-    return g;
-  }},
-  { id: "coffee", name: "Журнальный стол", group: "Гостиная", build: () => {
-    const g = new THREE.Group();
-    box(g, 0.9, 0.05, 0.55, 0x8b6f4e, 0, 0.4);
-    cyl(g, 0.03, 0.4, 0x6f5638, -0.38, 0, -0.2); cyl(g, 0.03, 0.4, 0x6f5638, 0.38, 0, -0.2);
-    cyl(g, 0.03, 0.4, 0x6f5638, -0.38, 0, 0.2); cyl(g, 0.03, 0.4, 0x6f5638, 0.38, 0, 0.2);
-    return g;
-  }},
-  { id: "tv", name: "ТВ-тумба + телевизор", group: "Гостиная", build: () => {
-    const g = new THREE.Group();
-    box(g, 1.6, 0.45, 0.4, 0x5a4632);
-    box(g, 1.3, 0.75, 0.05, 0x1c1c22, 0, 0.55, 0);
-    return g;
-  }},
-  { id: "shelf", name: "Стеллаж", group: "Гостиная", build: () => {
-    const g = new THREE.Group();
-    box(g, 0.9, 1.9, 0.3, 0x8b6f4e);
-    box(g, 0.8, 0.03, 0.26, 0xd9cbb8, 0, 0.5); box(g, 0.8, 0.03, 0.26, 0xd9cbb8, 0, 1.0);
-    box(g, 0.8, 0.03, 0.26, 0xd9cbb8, 0, 1.5);
-    return g;
-  }},
-  { id: "bed", name: "Кровать", group: "Спальня", build: () => {
-    const g = new THREE.Group();
-    box(g, 1.6, 0.35, 2.0, 0xb6a58e);
-    box(g, 1.6, 0.12, 1.9, 0xe9e2d5, 0, 0.35, 0.02); // матрас
-    box(g, 1.6, 0.6, 0.08, 0x8b6f4e, 0, 0, -1.0);    // изголовье
-    box(g, 0.5, 0.05, 0.7, 0xdcd3c2, -0.35, 0.47, 0.45); // одеяло-плед
-    return g;
-  }},
-  { id: "nightstand", name: "Тумбочка", group: "Спальня", build: () => {
-    const g = new THREE.Group(); box(g, 0.45, 0.5, 0.4, 0x8b6f4e); return g;
-  }},
-  { id: "wardrobe", name: "Шкаф", group: "Спальня", build: () => {
-    const g = new THREE.Group();
-    box(g, 1.8, 2.3, 0.6, 0x9d8265);
-    box(g, 0.02, 2.1, 0.02, 0x5a4632, 0, 0.1, 0.31);
-    return g;
-  }},
-  { id: "kitchen", name: "Кухонный гарнитур", group: "Кухня", build: () => {
-    const g = new THREE.Group();
-    box(g, 2.4, 0.85, 0.6, 0xdad5cc);             // нижний ряд
-    box(g, 2.4, 0.04, 0.62, 0x6f6a63, 0, 0.85);   // столешница
-    box(g, 2.4, 0.7, 0.35, 0xe6e1d8, 0, 1.5, -0.12); // верхние шкафы
-    box(g, 0.5, 0.02, 0.4, 0x9fb3c8, 0.6, 0.89);  // мойка
-    return g;
-  }},
-  { id: "fridge", name: "Холодильник", group: "Кухня", build: () => {
-    const g = new THREE.Group(); box(g, 0.6, 1.85, 0.65, 0xcfd4d9); return g;
-  }},
-  { id: "stove", name: "Плита", group: "Кухня", build: () => {
-    const g = new THREE.Group();
-    box(g, 0.6, 0.85, 0.6, 0xd8d8d8);
-    cyl(g, 0.09, 0.02, 0x333333, -0.15, 0.85, -0.12); cyl(g, 0.09, 0.02, 0x333333, 0.15, 0.85, -0.12);
-    cyl(g, 0.07, 0.02, 0x333333, -0.15, 0.85, 0.15); cyl(g, 0.07, 0.02, 0x333333, 0.15, 0.85, 0.15);
-    return g;
-  }},
-  { id: "dining", name: "Обеденный стол", group: "Кухня", build: () => {
-    const g = new THREE.Group();
-    box(g, 1.4, 0.05, 0.8, 0x8b6f4e, 0, 0.72);
-    cyl(g, 0.035, 0.72, 0x6f5638, -0.6, 0, -0.3); cyl(g, 0.035, 0.72, 0x6f5638, 0.6, 0, -0.3);
-    cyl(g, 0.035, 0.72, 0x6f5638, -0.6, 0, 0.3); cyl(g, 0.035, 0.72, 0x6f5638, 0.6, 0, 0.3);
-    return g;
-  }},
-  { id: "chair", name: "Стул", group: "Кухня", build: () => {
-    const g = new THREE.Group();
-    box(g, 0.45, 0.05, 0.45, 0xa98d6f, 0, 0.45);
-    box(g, 0.45, 0.5, 0.05, 0xa98d6f, 0, 0.5, -0.2);
-    cyl(g, 0.02, 0.45, 0x6f5638, -0.19, 0, -0.19); cyl(g, 0.02, 0.45, 0x6f5638, 0.19, 0, -0.19);
-    cyl(g, 0.02, 0.45, 0x6f5638, -0.19, 0, 0.19); cyl(g, 0.02, 0.45, 0x6f5638, 0.19, 0, 0.19);
-    return g;
-  }},
-  { id: "bathtub", name: "Ванна", group: "Санузел", build: () => {
-    const g = new THREE.Group();
-    box(g, 1.7, 0.6, 0.75, 0xf2f2f0);
-    const inner = box(g, 1.5, 0.1, 0.55, 0xdde8ee, 0, 0.51, 0);
-    inner.position.y = 0.56;
-    return g;
-  }},
-  { id: "toilet", name: "Унитаз", group: "Санузел", build: () => {
-    const g = new THREE.Group();
-    box(g, 0.38, 0.4, 0.55, 0xf2f2f0, 0, 0, 0.05);
-    box(g, 0.38, 0.4, 0.18, 0xeeeeec, 0, 0.4, -0.18);
-    return g;
-  }},
-  { id: "sink", name: "Раковина", group: "Санузел", build: () => {
-    const g = new THREE.Group();
-    cyl(g, 0.09, 0.8, 0xf2f2f0);
-    box(g, 0.5, 0.12, 0.42, 0xf5f5f3, 0, 0.8);
-    return g;
-  }},
-  { id: "washer", name: "Стиральная машина", group: "Санузел", build: () => {
-    const g = new THREE.Group();
-    box(g, 0.6, 0.85, 0.6, 0xe8e8e6);
-    cyl(g, 0.18, 0.02, 0x4a5560, 0, 0.45, 0.3).rotation.x = Math.PI / 2;
-    return g;
-  }},
-  { id: "split", name: "Сплит-система", group: "Климат", build: () => {
-    const g = new THREE.Group();
-    box(g, 0.85, 0.29, 0.21, 0xf4f4f2, 0, 2.25, 0);
-    box(g, 0.8, 0.03, 0.02, 0xb9c2cc, 0, 2.26, 0.1);
-    return g;
-  }},
-  { id: "radiator", name: "Радиатор", group: "Климат", build: () => {
-    const g = new THREE.Group();
-    for (let i = 0; i < 8; i++) box(g, 0.08, 0.5, 0.06, 0xe6e6e4, -0.42 + i * 0.12, 0.15);
-    return g;
-  }},
-  { id: "rug", name: "Ковёр", group: "Декор", build: () => {
-    const g = new THREE.Group(); box(g, 2.0, 0.02, 1.4, 0xb0655a); return g;
-  }},
-  { id: "plant", name: "Растение", group: "Декор", build: () => {
-    const g = new THREE.Group();
-    cyl(g, 0.16, 0.3, 0xa9743e);
-    const crown = new THREE.Mesh(
-      new THREE.SphereGeometry(0.32, 14, 12),
-      new THREE.MeshLambertMaterial({ color: 0x5a8a53 }),
-    );
-    crown.position.y = 0.85; g.add(crown);
-    return g;
-  }},
-  { id: "lamp", name: "Торшер", group: "Декор", build: () => {
-    const g = new THREE.Group();
-    cyl(g, 0.14, 0.02, 0x555555);
-    cyl(g, 0.015, 1.5, 0x555555, 0, 0.02);
-    const shade = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.12, 0.17, 0.25, 18, 1, true),
-      new THREE.MeshLambertMaterial({ color: 0xf0e0b8, side: THREE.DoubleSide }),
-    );
-    shade.position.y = 1.55; g.add(shade);
-    return g;
-  }},
-];
 
 // ---------------------------------------------------------------------------
 // Текстуры отделки берутся из каталога materials.ts — данные отдельно от
@@ -310,6 +128,7 @@ export default function QSpaceClient() {
   // действие он должен читать через ref, а не из замкнутого состояния.
   const openingModeRef = useRef<"off" | "door" | "window" | "erase">("off");
   const openingClickRef = useRef<((x: number, y: number, mode: "door" | "window" | "erase") => void) | null>(null);
+  const recheckRef = useRef<(() => void) | null>(null);
 
   // ---- начальная сцена ----------------------------------------------------
   useEffect(() => {
@@ -427,8 +246,12 @@ export default function QSpaceClient() {
     };
     const onUp = () => {
       const t = three.current; if (!t) return;
+      const moved = t.dragUid !== null;
       t.dragUid = null;
       t.controls.enabled = true;
+      // перетаскивание меняет положение в обход состояния — пересчитываем
+      // замечания, иначе они описывали бы прежнюю расстановку
+      if (moved) recheckRef.current?.();
     };
     renderer.domElement.addEventListener("pointerdown", onDown);
     renderer.domElement.addEventListener("pointermove", onMove);
@@ -986,7 +809,31 @@ export default function QSpaceClient() {
   }, [plan]);
 
   const S = styles;
-  const groups = [...new Set(CATALOG.map((c) => c.group))];
+  const catalogGroups = groups();
+
+  // ---- проверка расстановки -------------------------------------------------
+  // Пересчитывается при каждом изменении сцены. Читается ПОЛОЖЕНИЕ из three,
+  // а не из состояния: мебель двигают мышью, и состояние о перетаскивании не
+  // знает — иначе замечания отставали бы на один шаг и вводили в заблуждение.
+  const [issues, setIssues] = useState<Issue[]>([]);
+  const recheck = useCallback(() => {
+    const t = three.current;
+    if (!t) { setIssues([]); return; }
+    const list: Placed[] = [];
+    for (const g of t.gDecor.children) {
+      const uid = g.userData.uid as number;
+      const rec = placed.find((x) => x.uid === uid);
+      if (!rec) continue;
+      const item = itemById(rec.catalogId);
+      if (!item) continue;
+      list.push({ uid, name: item.name, x: g.position.x, y: g.position.z, rotY: g.rotation.y, size: item.size });
+    }
+    setIssues(checkClearance(plan, list));
+  }, [placed, plan]);
+
+  useEffect(() => { recheck(); }, [recheck]);
+  useEffect(() => { recheckRef.current = recheck; }, [recheck]);
+
 
   return (
     <main style={S.page}>
@@ -1267,7 +1114,7 @@ export default function QSpaceClient() {
           )}
 
           <h2 style={S.h2}>Мебель и оборудование</h2>
-          {groups.map((grp) => (
+          {catalogGroups.map((grp) => (
             <div key={grp}>
               <h3 style={S.h3}>{grp}</h3>
               <div style={S.catalogGrid}>
@@ -1302,6 +1149,20 @@ export default function QSpaceClient() {
 
           {placed.length > 0 && (
             <p style={S.hint}>Предметов в сцене: {placed.length}</p>
+          )}
+
+          {issues.length > 0 && (
+            <>
+              <h2 style={S.h2}>Проверка расстановки</h2>
+              <ul style={S.issues}>
+                {issues.map((it, i) => <li key={i}>{it.text}</li>)}
+              </ul>
+              <p style={S.hint}>
+                Это подсказка, а не приговор: предметы меряются прямоугольником
+                по габариту, поэтому круглый стол и угловой диван считаются с
+                запасом. Посмотрите глазами.
+              </p>
+            </>
           )}
 
           <h2 style={S.h2}>Спецификация (черновик)</h2>
@@ -1425,6 +1286,11 @@ const styles: Record<string, React.CSSProperties> = {
   scaleInput: {
     width: 90, padding: "6px 8px", border: "1px solid #b8c9ae",
     borderRadius: 6, fontSize: 14,
+  },
+  issues: {
+    fontSize: 13, color: "#7a3f1f", background: "#fbeee2",
+    border: "1px solid #eccfb2", borderRadius: 8,
+    padding: "8px 12px 8px 26px", margin: "6px 0",
   },
   estTable: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
   estTd: { padding: "3px 6px 3px 0", borderBottom: "1px solid #eee9df", color: "#4a453d" },

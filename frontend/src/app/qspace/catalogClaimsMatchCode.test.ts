@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { MATERIALS } from "./materials";
+import { CATALOG } from "./furniture";
 import { CEILING_STRETCH, FLOOR_WET, WALL_BLOCK, WALL_FRAME, finishedHeightM, totalMm } from "./wallStructure";
 import { WALL_HEIGHT } from "./planModel";
 
@@ -48,10 +49,10 @@ describe("описание QSpace в реестре не расходится с
   it("число предметов мебели равно каталогу в клиенте", () => {
     const claimed = claimedNumber(text, /(\d+) предмет/);
     expect(claimed, "в описании нет фразы «N предметов»").not.toBeNull();
-    const client = readFileSync(path.join(__dirname, "_client.tsx"), "utf8");
-    // считаем позиции каталога мебели по их обязательному полю group
-    const actual = (client.match(/\bgroup:\s*"/g) || []).length;
-    expect(actual, "каталог мебели не найден в _client.tsx").toBeGreaterThan(5);
+    // каталог живёт в furniture.ts — не в компоненте: он растёт, а страница
+    // расти вместе с ним не должна
+    const actual = CATALOG.length;
+    expect(actual, "каталог мебели пуст").toBeGreaterThan(5);
     expect(claimed).toBe(actual);
   });
 

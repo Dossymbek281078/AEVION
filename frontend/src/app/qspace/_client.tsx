@@ -28,6 +28,7 @@ import { drawMaterial, materialById, materialsFor } from "./materials";
 import { CATALOG, groups, itemById, type CatalogItem } from "./furniture";
 import { checkClearance, type Issue, type Placed } from "./clearance";
 import { findRooms } from "./rooms";
+import { floorPlanSvg } from "./floorPlanSvg";
 import { checkPassage } from "./passage";
 import { roomSpec, roomSpecText } from "./roomSpec";
 import RasterReview from "./RasterReview";
@@ -821,6 +822,20 @@ export default function QSpaceClient() {
     [roomsInfo],
   );
 
+  // Чертёж сверху — то, что печатают и берут на стройку. SVG: печатается без
+  // потери качества и открывается без нашего сайта.
+  const downloadPlanSvg = useCallback(() => {
+    const svg = floorPlanSvg(plan, { rooms: roomsInfo.rooms, title: plan.name });
+    const blob = new Blob([svg], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(blob);
+    const a2 = document.createElement("a");
+    a2.href = url;
+    a2.download = "qspace-чертёж.svg";
+    a2.click();
+    URL.revokeObjectURL(url);
+    setSaveNote("Чертёж сохранён. Откройте файл и печатайте — он векторный.");
+  }, [plan, roomsInfo]);
+
   const est = useMemo(() => {
     const w = generateWiring(plan);
     const pl = generatePlumbing(plan);
@@ -914,6 +929,9 @@ export default function QSpaceClient() {
         </label>
         <button type="button" style={S.btn} onClick={() => { setPlan(demoPlan()); setWarnings([]); setUnitLabel(""); }}>
           Демо-план
+        </button>
+        <button type="button" style={S.btn} onClick={downloadPlanSvg}>
+          Чертёж сверху (SVG, для печати)
         </button>
         <button type="button" style={S.btn} onClick={screenshot}>Скачать кадр (PNG)</button>
         <button type="button" style={S.btn} onClick={saveProjectFile}>

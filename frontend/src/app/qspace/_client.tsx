@@ -870,12 +870,17 @@ export default function QSpaceClient() {
     const t = three.current;
     if (!t) { setIssues([]); return; }
     const list: Placed[] = [];
+    // Предмет каталога запоминается здесь же: ниже он нужен второй раз, а
+    // повторный поиск по uid пришлось бы писать с непроверяемым `!` — сегодня
+    // верным, но падающим при первой правке, которая наполнит list иначе.
+    const byUid = new Map<number, CatalogItem>();
     for (const g of t.gDecor.children) {
       const uid = g.userData.uid as number;
       const rec = placed.find((x) => x.uid === uid);
       if (!rec) continue;
       const item = itemById(rec.catalogId);
       if (!item) continue;
+      byUid.set(uid, item);
       list.push({ uid, name: item.name, x: g.position.x, y: g.position.z, rotY: g.rotation.y, size: item.size });
     }
     const clear = checkClearance(plan, list);
@@ -904,7 +909,7 @@ export default function QSpaceClient() {
     // источником правды. Пересчёт идёт после каждой постановки и перетаскивания.
     const blocked: Record<number, number> = {};
     for (const it of list) {
-      const item = itemById(placed.find((x) => x.uid === it.uid)!.catalogId);
+      const item = byUid.get(it.uid);
       if (!item?.blocksFloor) continue;
       const idx = roomsRef.current?.roomAt(it.x, it.y) ?? null;
       if (idx === null) continue;

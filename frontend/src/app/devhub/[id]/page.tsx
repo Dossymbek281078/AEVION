@@ -361,6 +361,7 @@ const TOAST_UI: Record<string, Record<string, string>> = {
     collabProOnly: "Соавторы доступны в Studio Pro — оформите, чтобы добавлять",
     collabAddFail: "Не удалось добавить соавтора",
     accessRevoked: "Доступ отозван",
+    pushFailed: "Отправить в репозиторий не удалось",
     repoPartial: "Часть файлов не попала в репозиторий",
     publishingCf: "Публикую на Cloudflare Pages…",
     deployingVercel: "Выкатываю на Vercel…",
@@ -401,6 +402,7 @@ const TOAST_UI: Record<string, Record<string, string>> = {
     collabProOnly: "Collaborators are available in Studio Pro — subscribe to add them",
     collabAddFail: "Could not add the collaborator",
     accessRevoked: "Access revoked",
+    pushFailed: "Could not push to the repository",
     repoPartial: "Some files did not make it into the repository",
     publishingCf: "Publishing to Cloudflare Pages…",
     deployingVercel: "Deploying to Vercel…",
@@ -441,6 +443,7 @@ const TOAST_UI: Record<string, Record<string, string>> = {
     collabProOnly: "Тең авторлар Studio Pro-да қолжетімді — қосу үшін жазылыңыз",
     collabAddFail: "Тең авторды қосу мүмкін болмады",
     accessRevoked: "Қолжетімділік қайтарып алынды",
+    pushFailed: "Репозиторийге жіберу мүмкін болмады",
     repoPartial: "Файлдардың бір бөлігі репозиторийге түспеді",
     publishingCf: "Cloudflare Pages-ке жариялап жатырмын…",
     deployingVercel: "Vercel-ге жариялап жатырмын…",
@@ -2598,7 +2601,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         await fetchGithubStatus();
         await fetchGithubBranches();
       } else {
-        setGithubMsg(d.message || "Push failed");
+        // Через границу показа, как и остальные 50 отказов модуля. Замер
+        // 08.09.2026: ручка отвечает 200 с ok:false и полем message «Set
+        // GITHUB_TOKEN in project Env Vars or server env…» — это инструкция
+        // ОПЕРАТОРУ, по-английски, в платном модуле. serverError узнаёт имя
+        // переменной окружения и заменяет её человеческой фразой, а
+        // техническую строку кладёт в консоль, чтобы разбор не потерялся.
+        setGithubMsg(serverError(d.message, TL.pushFailed));
         setGithubMsgTone("error");
       }
     } catch (e: any) {

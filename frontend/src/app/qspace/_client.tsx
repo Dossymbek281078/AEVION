@@ -28,6 +28,7 @@ import { drawMaterial, materialById, materialsFor } from "./materials";
 import { CATALOG, groups, itemById, type CatalogItem } from "./furniture";
 import { checkClearance, type Issue, type Placed } from "./clearance";
 import { findRooms } from "./rooms";
+import { checkPassage } from "./passage";
 import { roomSpec, roomSpecText } from "./roomSpec";
 import RasterReview from "./RasterReview";
 import { nearestWall, placeOpening, removeOpeningNear } from "./openings";
@@ -844,7 +845,19 @@ export default function QSpaceClient() {
       if (!item) continue;
       list.push({ uid, name: item.name, x: g.position.x, y: g.position.z, rotY: g.rotation.y, size: item.size });
     }
-    setIssues(checkClearance(plan, list));
+    const clear = checkClearance(plan, list);
+    // Проход считается отдельно: он отвечает на другой вопрос — не «влезет
+    // ли», а «дойду ли». Замечания складываются в один список: человеку
+    // важно увидеть все препятствия сразу, а не переключать вкладки.
+    const pass = checkPassage(plan, list);
+    setIssues([
+      ...clear,
+      ...pass.issues.map((p) => ({
+        kind: "passage" as const,
+        uids: [] as number[],
+        text: p.text,
+      })),
+    ]);
   }, [placed, plan]);
 
   useEffect(() => { recheck(); }, [recheck]);

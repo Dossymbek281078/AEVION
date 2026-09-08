@@ -59,3 +59,36 @@ describe("управляющий байт в адресе — разговор �
     expect(Array.isArray(r.body.capabilities)).toBe(true);
   });
 });
+
+describe("отказ поставщика перевода не выносит наружу его ответ", () => {
+  test("тело ответа DeepL заменено категорией, код наш", async () => {
+    // Замер 08.09.2026: общая ветка отдавала `DeepL error: <300 знаков чужого
+    // JSON>` и код ответа поставщика КАК СВОЙ. Граница показа на клиенте такой
+    // текст не узнаёт — она ловит имена переменных и панели, — поэтому человек
+    // читал бы чужой JSON в скобках после «Не удалось перевести».
+    //
+    // Ветку 456 намеренно НЕ трогаем: её текст называет DEEPL_API_KEY, и
+    // именно поэтому граница его прячет, а подробность (их /v2/usage врёт)
+    // остаётся нам. Это закреплено отдельным тестом в devhub-integrations.
+    process.env.DEEPL_API_KEY = "key:fx";
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () => ({
+      ok: false,
+      status: 403,
+      text: async () => '{"message":"Wrong endpoint. Use api.deepl.com","detail":"internal-7"}',
+    })) as unknown as typeof fetch;
+    try {
+      const r = await request(makeApp())
+        .post("/api/devhub/media/translate")
+        .send({ text: "Привет", targetLang: "EN" });
+      expect(r.status, "код поставщика выдан за наш").toBe(502);
+      expect(r.body.code).toBe("provider_error");
+      expect(JSON.stringify(r.body), "тело ответа поставщика ушло наружу").not.toContain("Wrong endpoint");
+      expect(JSON.stringify(r.body)).not.toContain("internal-7");
+      expect(String(r.body.error).length, "человек остался без объяснения").toBeGreaterThan(10);
+    } finally {
+      globalThis.fetch = realFetch;
+      delete process.env.DEEPL_API_KEY;
+    }
+  });
+});

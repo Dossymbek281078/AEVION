@@ -44,7 +44,7 @@ import { extractJsonObject, salvageCompleteArrayObjects } from "../services/qcor
 import { smartComplete } from "../services/qcoreai/smartComplete";
 import { insertSmartRun, aggregateSmartRunsForUser } from "../lib/smartRunLog";
 import { costUsd } from "../services/qcoreai/pricing";
-import { applyHealth, noteProviderFailure, noteProviderSuccess } from "../lib/providerHealth";
+import { applyHealth, getProviderHealth, noteProviderFailure, noteProviderSuccess } from "../lib/providerHealth";
 import { captureException } from "../lib/sentry";
 import { degraded } from "../lib/degradedResponse";
 import { classifyGithubResponse, githubUnreachable } from "../lib/githubFailure";
@@ -8046,28 +8046,71 @@ devhubRouter.get("/studio/capabilities", async (_req, res) => {
     return reason.slice(0, 160);
   };
 
-  const publicCaps = withHealth.map((c) => {
-    const offCode = offCodeOf(c);
+  // Отказ поставщика бывает про ВЫЗОВ, а бывает про КЛЮЧ. Отвергнутый ключ и
+  // выжженная квота ломают все возможности, которые на этом ключе висят, —
+  // а показывается это только у той, которую случилось позвать.
+  //
+  // Замер прода 08.09.2026, два снимка с разницей в 40 минут: сперва audio_tts
+  // и audio_music оба degraded, потом audio_music стал live, а audio_tts остался
+  // degraded — при ОДНОМ ключе ELEVENLABS_API_KEY. Разошлись они не по существу,
+  // а по сроку памяти об отказе (30 минут в providerHealth): у одной запись
+  // состарилась, у другой нет. Человек читал «настроено 12 из 17», и музыка была
+  // среди работающих, хотя ключ тот же и он отвергнут. Групп таких три:
+  // озвучка+музыка, видео+3D, почта+SMS+WhatsApp.
+  //
+  // Переносим ТОЛЬКО отказ уровня ключа и ТОЛЬКО между возможностями с одним
+  // единственным токеном. У кого список токенов (image, screenshot_code,
+  // pages) — там запасная цепочка поставщиков, и падение одного звена
+  // возможность не убивает: понижать её было бы клеветой.
+  const keyLevelFailure = new Map<string, { code: string; at: number }>();
+  for (const c of withHealth) {
+    const token = (c as { token?: string }).token;
+    if (!token) continue;
+    const h = getProviderHealth(c.id);
+    if (!h || h.ok) continue;
+    const code = offCodeOf({ status: "degraded", lastError: h.reason });
+    if (code !== "auth_rejected" && code !== "quota_exhausted") continue;
+    const at = Date.parse(h.at);
+    const prev = keyLevelFailure.get(token);
+    if (!prev || at > prev.at) keyLevelFailure.set(token, { code, at });
+  }
+
+  const withSiblings = withHealth.map((c) => {
+    if (c.status !== "live") return c;
+    const token = (c as { token?: string }).token;
+    const failure = token ? keyLevelFailure.get(token) : undefined;
+    if (!failure) return c;
+    // Свой УСПЕХ новее чужого отказа — верим ему: ключ могли поправить между
+    // вызовами, и тогда понижение было бы враньём в другую сторону.
+    const own = getProviderHealth(c.id);
+    if (own && own.ok && Date.parse(own.at) > failure.at) return c;
+    return { ...c, status: "degraded", sharedKeyFailure: failure.code };
+  });
+
+  const publicCaps = withSiblings.map((c) => {
+    const shared = (c as { sharedKeyFailure?: string }).sharedKeyFailure;
+    const offCode = shared ?? offCodeOf(c);
     const lastError = publicReason((c as { lastError?: string }).lastError);
     const out = { ...c, ...(offCode ? { offCode } : {}) } as Record<string, unknown>;
+    delete out.sharedKeyFailure;
     if (lastError) out.lastError = lastError;
     else delete out.lastError;
     return out;
   });
 
-  const live = withHealth.filter((c) => c.status === "live").length;
-  const degraded = withHealth.filter((c) => c.status === "degraded").length;
+  const live = withSiblings.filter((c) => c.status === "live").length;
+  const degraded = withSiblings.filter((c) => c.status === "degraded").length;
   // needsToken считался ОСТАТКОМ (всего минус live минус degraded), и потому
   // втягивал not_available. Следствие видел человек: баннер /studio писал
   // «3 capabilities need Railway env vars», а список рядом фильтрует по
   // status === "needs_token" и показывал ОДНУ переменную. Заголовок спорил с
   // собственным списком, и «нужен ключ» обещало починку там, где ключ ни при
   // чём: Railway не сделан, зона домена не делегирована.
-  const needsToken = withHealth.filter((c) => c.status === "needs_token").length;
-  const notAvailable = withHealth.filter((c) => c.status === "not_available").length;
+  const needsToken = withSiblings.filter((c) => c.status === "needs_token").length;
+  const notAvailable = withSiblings.filter((c) => c.status === "not_available").length;
   return res.json({
     capabilities: publicCaps,
-    summary: { total: withHealth.length, live, degraded, needsToken, notAvailable },
+    summary: { total: withSiblings.length, live, degraded, needsToken, notAvailable },
   });
 });
 

@@ -105,7 +105,15 @@ export default function QSpaceClient() {
   const [webglOk, setWebglOk] = useState(true);
   const [exporting, setExporting] = useState(false);
   // Состояние сохранения: человек должен ВИДЕТЬ, сохранена ли его работа.
-  const [saveNote, setSaveNote] = useState<string>("");
+  // Плашка сообщений о сохранении несёт ПРИЗНАК отказа, а не только текст.
+  // Прежде отказ («браузер не даёт сохранять данные сайта») показывался в
+  // той же зелёной рамке, что и успех, — а зелёное читается как «всё
+  // хорошо» раньше, чем читается текст. Ворота запуска требуют обратного:
+  // отказ показывается отказом.
+  const [saveNote, setSaveNote] = useState<{ text: string; failed: boolean }>(
+    { text: "", failed: false },
+  );
+  const скажи = (text: string, failed = false) => setSaveNote({ text, failed });
   // Сообщение о восстановлении держится отдельно: автосохранение срабатывает
   // через секунду и затирало его — человек не успевал прочитать, что его
   // проект вернули (поймано браузерной пробой, а не чтением кода).
@@ -784,7 +792,7 @@ export default function QSpaceClient() {
     a2.download = projectFileName();
     a2.click();
     URL.revokeObjectURL(url);
-    setSaveNote("Проект выгружен файлом — его можно хранить и переносить.");
+    скажи("Проект выгружен файлом — его можно хранить и переносить.");
   }, [snapshot]);
 
   const openProjectFile = useCallback(async (f: File) => {
@@ -795,13 +803,13 @@ export default function QSpaceClient() {
     }
     applyProject(r.project);
     setWarnings([]);
-    setSaveNote("Проект открыт из файла.");
+    скажи("Проект открыт из файла.");
   }, [applyProject]);
 
   const forgetSaved = useCallback(() => {
     clearLocal();
     setRestoreNote("");
-    setSaveNote("Сохранённое в браузере удалено. Файлы проектов не тронуты.");
+    скажи("Сохранённое в браузере удалено. Файлы проектов не тронуты.");
   }, []);
 
   // ---- автосохранение ------------------------------------------------------
@@ -812,8 +820,8 @@ export default function QSpaceClient() {
     if (pendingRestore) return; // не сохранять промежуточное состояние восстановления
     const id = setTimeout(() => {
       const r = saveLocal(snapshot());
-      if (r.ok) setSaveNote("Сохранено в этом браузере. Для надёжности выгрузите файлом.");
-      else setSaveNote(r.reason);
+      if (r.ok) скажи("Сохранено в этом браузере. Для надёжности выгрузите файлом.");
+      else скажи(r.reason, true);
     }, 1200);
     return () => clearTimeout(id);
   }, [snapshot, pendingRestore]);
@@ -851,7 +859,7 @@ export default function QSpaceClient() {
     a2.download = "qspace-чертёж.svg";
     a2.click();
     URL.revokeObjectURL(url);
-    setSaveNote("Чертёж сохранён. Откройте файл и печатайте — он векторный.");
+    скажи("Чертёж сохранён. Откройте файл и печатайте — он векторный.");
   }, [plan, roomsInfo]);
 
   const est = useMemo(() => {
@@ -1026,7 +1034,10 @@ export default function QSpaceClient() {
       </section>
 
       {restoreNote && <p style={S.restoreNote} role="status">{restoreNote}</p>}
-      {saveNote && <p style={S.saveNote} role="status">{saveNote}</p>}
+      {saveNote.text && (
+        <p style={saveNote.failed ? S.saveFail : S.saveNote}
+           role={saveNote.failed ? "alert" : "status"}>{saveNote.text}</p>
+      )}
 
       {warnings.length > 0 && (
         <ul style={S.warnings}>
@@ -1361,7 +1372,7 @@ export default function QSpaceClient() {
                 onClick={() => {
                   const text = roomSpecText(perRoom, plan.name);
                   navigator.clipboard?.writeText(text).then(
-                    () => setSaveNote("Спецификация скопирована — вставьте её в сообщение подрядчику."),
+                    () => скажи("Спецификация скопирована — вставьте её в сообщение подрядчику."),
                     // отказ показывается отказом: человек нажал и ждёт результата
                     () => setWarnings(["Браузер не дал скопировать. Выделите текст в спецификации вручную."]),
                   );
@@ -1517,6 +1528,11 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13.5, color: "#2f5e2a", background: "#e6f0e2",
     border: "1px solid #b9d0af", borderRadius: 8,
     padding: "8px 12px", margin: "6px 0", fontWeight: 600,
+  },
+  saveFail: {
+    fontSize: 13, color: "#7a3a2f", background: "#fbeeea",
+    border: "1px solid #e6c4ba", borderRadius: 8,
+    padding: "6px 10px", margin: "6px 0",
   },
   saveNote: {
     fontSize: 13, color: "#3f5c3a", background: "#eef4ea",

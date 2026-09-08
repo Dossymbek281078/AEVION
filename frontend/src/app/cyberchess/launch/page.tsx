@@ -5,7 +5,6 @@ import { CHESS_LAUNCH_UTC } from "../launchDate";
 import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 import { ccPlural } from "../ccPlural";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
-import { LandingView } from "@/components/LandingView";
 import { PageTracking } from "@/components/PageTracking";
 
 // Посадочная страница запуска CyberChess — 30 сентября 2026.
@@ -133,8 +132,6 @@ export default async function CyberChessLaunchPage({
               : "Уже открыто. Оставьте адрес, если хотите получать разборы и новости о турнирах."}
           </p>
         </header>
-
-        <LandingView source={source} />
 
 
         <WaitlistCapture

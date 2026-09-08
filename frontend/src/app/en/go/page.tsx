@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
-import { LandingView } from "@/components/LandingView";
 import { BuyLink } from "@/components/BuyLink";
 import { PageTracking } from "@/components/PageTracking";
 import { productById, channelFrom, withChannel, keepChannel, type Product } from "@/lib/products";
@@ -126,7 +125,6 @@ export default async function EnGoPage({
       <PageTracking page="en-go" />
       {/* source обязателен: по нему просмотр посадочной отличается от других
           страниц в отчёте, иначе английский трафик сольётся с русским. */}
-      <LandingView source="en-go" />
       <div style={styles.wrap}>
         <header style={styles.head}>
           <div style={styles.brand}>AEVION</div>

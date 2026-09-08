@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
-import { LandingView } from "@/components/LandingView";
 import { BuyLink } from "@/components/BuyLink";
 import { PageTracking } from "@/components/PageTracking";
 import { productById, channelFrom, withChannel } from "@/lib/products";
@@ -207,7 +206,6 @@ export default async function EnLongevityPage({
   return (
     <main style={styles.page}>
       <PageTracking page="en-longevity" />
-      <LandingView source="en-longevity" />
       <div style={styles.wrap}>
         <header style={styles.head}>
           <div style={styles.brand}>AEVION</div>

@@ -4,7 +4,6 @@ import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 import { probeJson, probeLive } from "@/lib/probeLive";
 import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
-import { LandingView } from "@/components/LandingView";
 import { PageTracking } from "@/components/PageTracking";
 
 // Посадочная запуска Multichat.
@@ -181,8 +180,6 @@ export default async function MultichatLaunchPage({
               : " Уже открыто — заходите."}
           </p>
         </header>
-
-        <LandingView source={source} />
 
         <WaitlistCapture
           source={source}

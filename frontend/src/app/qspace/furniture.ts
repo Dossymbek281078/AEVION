@@ -307,7 +307,7 @@ export const CATALOG: CatalogItem[] = [
     for (let i = 0; i < 8; i++) box(g, 0.08, 0.5, 0.06, 0xe6e6e4, -0.42 + i * 0.12, 0.15);
     return g;
   }},
-  { id: "boiler", name: "Водонагреватель", group: "Климат", size: [0.9, 0.45, 0.45], blocksFloor: true, build: () => {
+  { id: "boiler", name: "Водонагреватель", group: "Климат", size: [0.9, 0.45, 0.45], build: () => {
     const g = new THREE.Group();
     const t = cyl(g, 0.22, 0.9, 0xeeeeec, 0, 1.2);
     t.rotation.z = Math.PI / 2;

@@ -286,3 +286,29 @@ describe("отказ сохранения показывается отказо�
       .toBe(1);
   });
 });
+
+describe("сообщения объявляются экранному диктору", () => {
+  // Предупреждения появляются В ОТВЕТ на действие: «мимо стены», «файл не
+  // разобрался», «масштаб не задан». Человек в этот момент смотрит на то
+  // место, куда нажал; без роли диктор промолчит, и отказ останется невидимым
+  // для того, кто не видит экрана.
+  const client = readFileSync(path.join(__dirname, "_client.tsx"), "utf8");
+
+  it("у списка предупреждений есть роль", () => {
+    const кусок = client.slice(client.indexOf("{warnings.length > 0 && ("),
+                               client.indexOf("{pdfPending && ("));
+    expect(кусок, "список предупреждений без role").toMatch(/role="status"/);
+  });
+
+  it("у плашки восстановления и у отказа сохранения роли тоже есть", () => {
+    expect(client).toMatch(/restoreNote[\s\S]{0,200}role="status"/);
+    expect(client).toMatch(/failed \? "alert" : "status"/);
+  });
+
+  it("контроль прибора: срез действительно вырезан, а не пуст", () => {
+    const кусок = client.slice(client.indexOf("{warnings.length > 0 && ("),
+                               client.indexOf("{pdfPending && ("));
+    expect(кусок.length, "срез пуст — проверка смотрит в пустоту").toBeGreaterThan(80);
+    expect(кусок).toContain("warnings.map");
+  });
+});

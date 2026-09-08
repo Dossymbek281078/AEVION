@@ -1039,8 +1039,13 @@ export default function QSpaceClient() {
            role={saveNote.failed ? "alert" : "status"}>{saveNote.text}</p>
       )}
 
+      {/* role="status" обязателен: предупреждения появляются В ОТВЕТ на
+          действие (мимо стены, файл не разобрался, масштаб не задан), а
+          человек в этот момент смотрит на то место, куда нажал. Без роли
+          экранный диктор промолчит, и отказ останется невидимым для того,
+          кто не видит экрана. */}
       {warnings.length > 0 && (
-        <ul style={S.warnings}>
+        <ul style={S.warnings} role="status">
           {warnings.map((w, i) => <li key={i}>{w}</li>)}
         </ul>
       )}

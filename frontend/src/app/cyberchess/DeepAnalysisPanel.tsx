@@ -2,6 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 import { DeepEngine, type DeepEngineState } from "./deepEngine";
 import { checkAppAccess, type AppAccess } from "@/lib/appAccess";
+import { keepChannel } from "@/lib/products";
+import { channelNow } from "@/lib/channelNow";
 
 /**
  * Opt-in «Глубокий анализ» (Stockfish 17.1 + полный NNUE, сила уровня lichess).
@@ -127,7 +129,11 @@ export default function DeepAnalysisPanel({ fen }: { fen: string }) {
           Игра, 500&nbsp;000 задач, ИИ-коуч и лёгкий анализ остаются бесплатными.
         </div>
         <a
-          href="/pricing"
+          // Метка канала переживает переход: человек пришёл с ролика или
+          // рекламы, и если она теряется здесь, покупка Pro запишется в
+          // direct — а именно этот переход мы и хотим считать (сторож
+          // channelSurvivesInternalLinks поймал потерю сразу).
+          href={keepChannel("/pricing", channelNow())}
           style={{
             display: "inline-block", marginTop: 10, padding: "8px 14px", borderRadius: 8,
             background: "#5b7a00", color: "#fff", fontWeight: 700, textDecoration: "none",

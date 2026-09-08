@@ -90,6 +90,21 @@ describe("readPdfSegments — что нашлось в файле", () => {
     expect(r.extentPt).toBe(400);
   });
 
+  // В настоящих PDF /Length сплошь и рядом КОСВЕННАЯ ссылка: «/Length 12 0 R»
+  // — это номер объекта, а не размер. Взяв его за длину, разбор обрезал бы
+  // поток до 12 байт и объявил обычный чертёж сканом.
+  it("косвенная ссылка /Length N 0 R не принимается за размер потока", async () => {
+    const content = "0 0 400 300 re S";
+    const NL = String.fromCharCode(10);
+    const pdf =
+      "%PDF-1.4" + NL + "1 0 obj" + NL + "<< /Length 12 0 R >>" + NL + "stream" + NL +
+      content + NL + "endstream" + NL + "endobj" + NL + "%%EOF" + NL;
+    const r = await readPdfSegments(new TextEncoder().encode(pdf));
+    // содержимое длиной 16 символов; взяли бы 12 — «re» не разобралось бы
+    expect(r.segments.length).toBe(4);
+    expect(r.extentPt).toBe(400);
+  });
+
   // Отрицательный контроль прибора: если бы распаковка «работала» на любом
   // мусоре, предыдущая проверка ничего не доказывала бы.
   it("битый Flate-поток не выдаётся за успешный разбор", async () => {

@@ -50,7 +50,13 @@ export default function RasterReview({ imageUrl, onCancel, onAccept }: Props) {
     off.width = w; off.height = h;
     const ctx = off.getContext("2d");
     if (!ctx) {
-      setWarnings(["Браузер не дал холст для разбора картинки."]);
+      // «Холст» — наше слово, а не человеческое: canvas. Человек должен
+      // понять, что делать, а не что у нас внутри называется холстом.
+      setWarnings([
+        "Браузер не дал разобрать картинку. Так бывает в режиме экономии "
+        + "или при строгих настройках приватности: попробуйте другой браузер "
+        + "или загрузите чертёж в DXF либо PDF.",
+      ]);
       setBusy(false);
       return;
     }

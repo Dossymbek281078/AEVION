@@ -173,9 +173,14 @@ export function floorPlanSvg(plan: Plan, opts: PlanSvgOptions = {}): string {
     const off = Math.max(10, w.thickness * scale * 0.5 + 8);
     const nx = (-dy / L) * off;
     const ny = (dx / L) * off;
+    // У ВЕРТИКАЛЬНОЙ стены нормаль горизонтальна, и подпись по центру растёт
+    // вбок — то есть обратно НА стену: замер по снимку дал 13 px отступа при
+    // 5 px полустены и ±10 px полуширины текста, буквы заходили на чёрное.
+    // Точки привязки хватает: текст растёт ОТ стены, а не сквозь неё.
+    const anchor = nx > 1 ? "start" : nx < -1 ? "end" : "middle";
     parts.push(
       `<text x="${(mx + nx).toFixed(1)}" y="${(my + ny + 3).toFixed(1)}" font-size="10" `
-      + `text-anchor="middle" fill="#4a453d" stroke="#ffffff" stroke-width="3" `
+      + `text-anchor="${anchor}" fill="#4a453d" stroke="#ffffff" stroke-width="3" `
       + `paint-order="stroke" stroke-linejoin="round">${len.toFixed(2)}</text>`,
     );
   }

@@ -103,3 +103,47 @@ describe("чертёж сверху", () => {
     expect(svg).not.toContain("NaN");
   });
 });
+
+describe("подписи длин не налезают на стену", () => {
+  // Найдено СНИМКОМ, а не тестом: у вертикальной стены подпись по центру
+  // росла вбок и заходила на чёрное. Тест закрепляет следствие — точку
+  // привязки, — потому что она однозначно определяет, куда растёт текст.
+  const anchorsOf = (svg: string) =>
+    [...svg.matchAll(/<text [^>]*text-anchor="(\w+)"[^>]*>(\d+\.\d{2})<\/text>/g)]
+      .map((m) => m[1]);
+
+  it("у вертикальной стены подпись растёт ОТ стены, а не по центру", () => {
+    // П-образный план: вертикальная перегородка внутри, её длина подписывается
+    const plan: Plan = {
+      name: "с перегородкой",
+      walls: [
+        { x1: 0, y1: 0, x2: 8, y2: 0, thickness: 0.2, height: 2.7 },
+        { x1: 8, y1: 0, x2: 8, y2: 6, thickness: 0.2, height: 2.7 },
+        { x1: 8, y1: 6, x2: 0, y2: 6, thickness: 0.2, height: 2.7 },
+        { x1: 0, y1: 6, x2: 0, y2: 0, thickness: 0.2, height: 2.7 },
+        { x1: 5, y1: 0, x2: 5, y2: 3.5, thickness: 0.2, height: 2.7 }, // перегородка
+      ],
+      openings: [],
+      source: "demo",
+    };
+    const anchors = anchorsOf(floorPlanSvg(plan));
+    expect(anchors.length, "подписей длин нет — проверка пуста").toBeGreaterThan(0);
+    expect(anchors, "подпись вертикальной стены осталась по центру").not.toContain("middle");
+  });
+
+  it("у горизонтальной стены подпись остаётся по центру — сдвиг ей не нужен", () => {
+    const plan: Plan = {
+      name: "с полкой",
+      walls: [
+        { x1: 0, y1: 0, x2: 8, y2: 0, thickness: 0.2, height: 2.7 },
+        { x1: 8, y1: 0, x2: 8, y2: 6, thickness: 0.2, height: 2.7 },
+        { x1: 8, y1: 6, x2: 0, y2: 6, thickness: 0.2, height: 2.7 },
+        { x1: 0, y1: 6, x2: 0, y2: 0, thickness: 0.2, height: 2.7 },
+        { x1: 1, y1: 3, x2: 4.5, y2: 3, thickness: 0.2, height: 2.7 }, // горизонтальная
+      ],
+      openings: [],
+      source: "demo",
+    };
+    expect(anchorsOf(floorPlanSvg(plan))).toContain("middle");
+  });
+});

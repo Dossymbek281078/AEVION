@@ -45,7 +45,10 @@ export default function VentilationPanel({ rooms }: Props) {
           {plan.rooms.map((r) => (
             <tr key={r.index}>
               <td style={S.td}>
-                <label style={S.rowLabel}>
+                {/* не label: внутри уже есть свой label у флажка, а вложенные
+                    label — недопустимая разметка и путают экранный диктор.
+                    У select имя задано через aria-label. */}
+                <div style={S.rowLabel}>
                   <span style={{ minWidth: 92, display: "inline-block" }}>
                     Помещение {r.index}
                   </span>
@@ -73,7 +76,7 @@ export default function VentilationPanel({ rooms }: Props) {
                     />{" "}
                     без окна
                   </label>
-                </label>
+                </div>
                 <br />
                 <span style={S.small}>{r.how}</span>
               </td>

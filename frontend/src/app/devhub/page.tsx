@@ -584,8 +584,12 @@ export default function DevHubPage() {
               {t("howto.transcript")}
             </summary>
             <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-              {howtoTranscript(lang).map((строка, i) => (
-                <p key={i} style={{ fontSize: 12.5, color: "#475569", margin: 0, lineHeight: 1.55 }}>{строка}</p>
+              {/* Имя переменной ЛАТИНИЦЕЙ намеренно: сторож витрины ищет
+                  кириллицу в фигурных скобках JSX и не отличает имя от текста —
+                  `{строка}` он честно посчитал зашитой русской строкой. Спорить
+                  со сторожем ради имени переменной дороже, чем переименовать. */}
+              {howtoTranscript(lang).map((line, i) => (
+                <p key={i} style={{ fontSize: 12.5, color: "#475569", margin: 0, lineHeight: 1.55 }}>{line}</p>
               ))}
             </div>
           </details>

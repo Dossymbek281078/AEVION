@@ -191,18 +191,21 @@ function DeploymentRow({
  * устройству, это его слепая зона. Существующий сторож экрана проверяет
  * ОТРИСОВКУ начального состояния и по своей же оговорке сюда не смотрит.
  */
-const DEPLOY_UI: Record<string, { started: string; failed: string; loadFailed: string }> = {
+const DEPLOY_UI: Record<string, { started: string; failed: string; loadFailed: string; failedButUrl: string }> = {
   ru: {
+    failedButUrl: "Сборка помечена неудачной, но адрес был выдан. Проверка ждала ответа всего 25 секунд, а новый адрес поднимается дольше — откройте ссылку: сайт может быть уже живым.",
     started: "Выкатка запущена",
     failed: "Выкатить не удалось",
     loadFailed: "Не удалось загрузить данные проекта",
   },
   en: {
+    failedButUrl: "The build is marked failed, but an address was issued. The check waited only 25 seconds while a fresh address takes longer to come up — open the link: the site may already be live.",
     started: "Deployment started",
     failed: "Deploy failed",
     loadFailed: "Could not load the project data",
   },
   kk: {
+    failedButUrl: "Құрастыру сәтсіз деп белгіленген, бірақ мекенжай берілген. Тексеру бар болғаны 25 секунд күтті, ал жаңа мекенжай ұзағырақ көтеріледі — сілтемені ашыңыз: сайт тірі болуы мүмкін.",
     started: "Жариялау басталды",
     failed: "Жариялау сәтсіз аяқталды",
     loadFailed: "Жоба деректерін жүктеу мүмкін болмады",
@@ -531,6 +534,24 @@ export default function DevHubDeployPage({ params }: { params: Promise<{ id: str
                       )}
                     </div>
                   </div>
+
+                  {/* «Неудача» при выданном адресе — почти всегда НЕ неудача.
+                      Замер прода 08.09.2026: у четырёх записей 06.09 статус
+                      failed, а их адреса отвечают 200 до сих пор (контроль:
+                      выдуманный поддомен того же проекта — 404). Проверка ждала
+                      25 секунд, а НОВЫЙ проект Cloudflare Pages поднимается
+                      дольше. Окно расширено, но записи, сделанные до этого,
+                      останутся с прежним статусом — и человек прочитает «не
+                      вышло» о работающем сайте.
+                      Данные на проде не правим; говорим правду на экране. */}
+                  {selectedDeployment.status === "failed" && selectedDeployment.deployUrl && (
+                    <div style={{
+                      padding: "10px 14px", marginBottom: 10, fontSize: 12, lineHeight: 1.5,
+                      color: "#92400e", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8,
+                    }}>
+                      {DL.failedButUrl}
+                    </div>
+                  )}
 
                   {/* Deploy URL for this deployment */}
                   {selectedDeployment.deployUrl && (

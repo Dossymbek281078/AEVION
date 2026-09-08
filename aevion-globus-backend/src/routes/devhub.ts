@@ -6034,13 +6034,34 @@ devhubRouter.post("/media/upload-image", dhCostlyLimit("dhmedia_upload"), async 
 // ── Helper: auto-upload DALL-E URL to Cloudflare Images if env set ───────────
 /** Polls a freshly deployed URL until it returns 2xx (5 tries, 5s apart).
  * Exported for tests. attemptDelayMs is overridable so tests don't sleep. */
-export async function verifyDeploymentServes(url: string, attemptDelayMs = 5000): Promise<boolean> {
-  for (let attempt = 0; attempt < 5; attempt++) {
+/**
+ * Ждёт, пока опубликованный адрес начнёт отвечать 2xx.
+ *
+ * ОКНО БЫЛО 25 СЕКУНД (5 попыток по 5), и этого не хватало. Замер 08.09.2026:
+ * за неделю пять выкаток, успешных ноль — а соседнее окно открыло адреса
+ * четырёх «упавших» и получило 200 (контроль: выдуманный поддомен того же
+ * проекта — 404). То есть страницы гостей были ОПУБЛИКОВАНЫ и живы, а мы
+ * записали им «не удалось» и так и сказали человеку.
+ *
+ * Причина в устройстве: у гостя каждый проект — НОВЫЙ проект Cloudflare Pages,
+ * а новый домен `*.pages.dev` расходится по краю сети дольше, чем повторная
+ * выкатка в существующий. Июльские успехи это не опровергали: там были
+ * повторные выкатки.
+ *
+ * Окно расширено до ~2 минут. Расширять почти свободно можно потому, что
+ * проверка живёт в отложенной части: ответ человеку уже ушёл, и всё это время
+ * запись честно остаётся `pending`, а не превращается в `failed` раньше срока.
+ *
+ * Число попыток — ПАРАМЕТР, а не константа: тесты гоняют его с единицей, и
+ * закреплять в них конкретное число попыток значит закреплять не то свойство.
+ */
+export async function verifyDeploymentServes(url: string, attemptDelayMs = 5000, attempts = 24): Promise<boolean> {
+  for (let attempt = 0; attempt < attempts; attempt++) {
     try {
       const check = await fetch(url, { method: "GET", redirect: "follow" });
       if (check.ok) return true;
     } catch { /* network — retry */ }
-    if (attempt < 4) await new Promise((r) => setTimeout(r, attemptDelayMs));
+    if (attempt < attempts - 1) await new Promise((r) => setTimeout(r, attemptDelayMs));
   }
   return false;
 }

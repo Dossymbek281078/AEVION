@@ -24,7 +24,11 @@ const t = (k: string) => k; // подписи не важны: сверяем К
 vi.mock("@/lib/i18n", () => ({ useI18n: () => ({ t, lang: "ru" }) }));
 vi.mock("@/lib/track", () => ({ track: vi.fn() }));
 vi.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams("tier=pro&provider=paybox"),
+  // session_id добавлен 08.09.2026: эти тесты про «сервер не подтвердил»,
+  // то есть человек ПРИШЁЛ ИЗ КАССЫ. Без номера платежа страница теперь
+  // отвечает «проверяем, была ли оплата» — это отдельный, третий случай, и
+  // проверять его надо отдельным тестом, а не здесь.
+  useSearchParams: () => new URLSearchParams("tier=pro&provider=paybox&session_id=cs_test_zzz"),
 }));
 
 function mockPlan(plan: string | null) {
@@ -43,8 +47,12 @@ describe("экран после оплаты не обещает того, че�
     mockPlan("pro");
     render(<SuccessPage />);
     await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
-    const url = String((globalThis.fetch as any).mock.calls[0][0]);
-    expect(url, "спрашиваем не про доступ").toContain("entitlements");
+    // Смотрим ВСЕ вызовы, а не первый: с 08.09.2026 страница при наличии
+    // номера платежа сперва спрашивает checkout/status (выдача по этому
+    // платежу), и оба вопроса законны. Проверка «первый вызов» ловила бы
+    // порядок, а не суть.
+    const urls = (globalThis.fetch as any).mock.calls.map((c: unknown[]) => String(c[0]));
+    expect(urls.join(" | "), "страница не спросила сервер про доступ").toContain("entitlements");
   });
 
   it("сервер подтвердил тариф — говорим «активирован»", async () => {

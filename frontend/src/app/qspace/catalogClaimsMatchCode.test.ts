@@ -86,7 +86,7 @@ describe("описание QSpace в реестре не расходится с
     const пары: Array<[string, RegExp, RegExp]> = [
       ["ручная установка проёмов", /placeOpening/, /ставит человек|нажатием на стену/i],
       ["экспорт GLB", /GLTFExporter/, /GLB/],
-      ["сохранение проекта", /saveLocal|loadLocal/, /сохран\w+ в браузере|qspace\.json/i],
+      ["сохранение проекта", /saveLocal|loadLocal/, /сохраняется в браузере|qspace\.json/i],
       ["распознавание картинки", /RasterReview/, /РАСТРОВЫЙ|картинк/i],
       ["чтение PDF", /readPdfSegments/, /PDF/],
       ["площади помещений", /findRooms/, /помещени|комнат/i],

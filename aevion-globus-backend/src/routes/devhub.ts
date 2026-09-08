@@ -814,10 +814,45 @@ function canEdit(project: DevHubProject, userId: string): boolean {
 }
 
 // ── Project helpers (DB or memory) ────────────────────────────────────────────
+/**
+ * Наши собственные тестовые прогоны в ОБЩЕЙ корзине — прячем из списка.
+ *
+ * Замер прода 08.09.2026: гость, у которого браузер блокирует хранилище,
+ * получает общую личность `anonymous`, и список отдавал ему 17 наших июльских
+ * прогонов («таймер помодоро» в семи вариантах, cf-pages-test, prod-smoke-test).
+ * Человек открывает модуль впервые и видит два десятка чужих проектов как свои
+ * — худшее первое впечатление, какое можно устроить на витрине.
+ *
+ * ФИЛЬТР, А НЕ УДАЛЕНИЕ. Удаление данных на проде необратимо и остаётся руке
+ * основателя; фильтр даёт тот же вид витрины, ничего не теряет и снимается
+ * одной строкой. Приём взят у соседнего модуля: в QRight публичные выдачи так
+ * же прячут смоук-записи вместо того, чтобы их стирать.
+ *
+ * ГРАНИЦА ВЫБРАНА ДАТОЙ, а не списком идентификаторов: все 17 записей созданы в
+ * июле (самая свежая 26.07), августовских в корзине нет вовсе — проверено. Так
+ * фильтр самоочевиден и не может однажды спрятать работу настоящего человека:
+ * она создаётся после этой границы.
+ *
+ * ПО ИДЕНТИФИКАТОРУ записи остаются доступны НАМЕРЕННО, и это не половинчатость.
+ * Наткнуться на них нельзя — нужен точный UUID, — зато их можно будет удалить
+ * через ту же ручку, когда основатель решит. Спрятать и лишить возможности
+ * убрать значило бы закрепить мусор навсегда.
+ */
+// Предикат ЭКСПОРТИРОВАН намеренно: старую запись через ручки не создать
+// (дату ставит сервер), поэтому проверить, что фильтр действительно ПРЯЧЕТ, а
+// не просто присутствует в коде, можно только вызвав его напрямую. Первая
+// редакция сторожа мутацию «фильтр обезврежен» не поймала — проверяла наличие
+// вызовов, а не следствие.
+const ОБЩАЯ_ЛИЧНОСТЬ = "anonymous";
+const НАШИ_ПРОГОНЫ_ДО = "2026-09-01T00:00:00.000Z";
+export function нашТестовыйПрогон(p: { userId: string; createdAt: string }): boolean {
+  return p.userId === ОБЩАЯ_ЛИЧНОСТЬ && p.createdAt < НАШИ_ПРОГОНЫ_ДО;
+}
+
 async function dbListProjects(userId: string): Promise<DevHubProject[]> {
   if (!isDevHubDbReady()) {
     return [...memProjects.values()]
-      .filter((p) => p.userId === userId)
+      .filter((p) => p.userId === userId && !нашТестовыйПрогон(p))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
   const r = await pool.query(
@@ -826,8 +861,8 @@ async function dbListProjects(userId: string): Promise<DevHubProject[]> {
   );
   // Same overlay as dbGetProject: a project whose save failed has to be listed,
   // or the shelf shows the user one fewer project than they have.
-  const rows: DevHubProject[] = r.rows.map(rowToProject);
-  const parked = [...memProjects.values()].filter((p) => p.userId === userId);
+  const rows: DevHubProject[] = r.rows.map(rowToProject).filter((p: DevHubProject) => !нашТестовыйПрогон(p));
+  const parked = [...memProjects.values()].filter((p) => p.userId === userId && !нашТестовыйПрогон(p));
   if (parked.length === 0) return rows;
   const byId = new Map<string, DevHubProject>(rows.map((p) => [p.id, p]));
   for (const p of parked) byId.set(p.id, p);

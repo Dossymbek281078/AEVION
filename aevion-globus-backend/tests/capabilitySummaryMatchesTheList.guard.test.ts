@@ -3,7 +3,7 @@ import express from "express";
 import request from "supertest";
 
 import { devhubRouter } from "../src/routes/devhub";
-import { noteProviderFailure, __resetProviderHealth } from "../src/lib/providerHealth";
+import { noteProviderFailure, noteProviderSuccess, __resetProviderHealth } from "../src/lib/providerHealth";
 
 /**
  * Два наших собственных ответа об одном — в ОДНОМ ответе ручки.
@@ -101,5 +101,57 @@ describe("наружу уходит код причины, а не ответ п
     const live = (r.body.capabilities as Array<Record<string, string>>).filter((c) => c.status === "live");
     expect(live.length, "контроль: живых возможностей нет — проверять нечего").toBeGreaterThan(0);
     for (const c of live) expect(c.offCode, `${c.id}: живая возможность несёт причину отказа`).toBeUndefined();
+  });
+});
+
+describe("отказ ключа ломает всю группу, а не одну возможность", () => {
+  test("отвергнутый ключ ElevenLabs понижает и озвучку, и музыку", async () => {
+    process.env.ELEVENLABS_API_KEY = "key-id-pasted-instead-of-key";
+    // Позвали ОДНУ — озвучку. Музыка на том же ключе, её никто не звал.
+    noteProviderFailure("audio_tts", 'ElevenLabs HTTP 401: {"detail":{"type":"authentication_error"}}');
+
+    const r = await request(makeApp()).get("/api/devhub/studio/capabilities");
+    const by = (id: string) => (r.body.capabilities as Array<Record<string, string>>).find((c) => c.id === id);
+
+    expect(by("audio_tts")?.status).toBe("degraded");
+    expect(
+      by("audio_music")?.status,
+      "музыка на том же ключе объявлена живой — витрина обещает то, чего нет",
+    ).toBe("degraded");
+    expect(by("audio_music")?.offCode).toBe("auth_rejected");
+  });
+
+  test("отказ ВЫЗОВА (не ключа) на соседа не переносится", async () => {
+    process.env.ELEVENLABS_API_KEY = "good-key";
+    // Пятисотка поставщика — это про вызов: соседняя возможность может работать.
+    noteProviderFailure("audio_tts", "provider-probe: HTTP 503");
+
+    const r = await request(makeApp()).get("/api/devhub/studio/capabilities");
+    const by = (id: string) => (r.body.capabilities as Array<Record<string, string>>).find((c) => c.id === id);
+    expect(by("audio_tts")?.status).toBe("degraded");
+    expect(by("audio_music")?.status, "разовый отказ вызова оклеветал соседа").toBe("live");
+  });
+
+  test("свой успех НОВЕЕ чужого отказа — понижения нет", async () => {
+    process.env.ELEVENLABS_API_KEY = "key-fixed-midway";
+    noteProviderFailure("audio_tts", "ElevenLabs authentication_error: invalid_api_key");
+    await new Promise((r) => setTimeout(r, 5));
+    noteProviderSuccess("audio_music");
+
+    const r = await request(makeApp()).get("/api/devhub/studio/capabilities");
+    const music = (r.body.capabilities as Array<Record<string, string>>).find((c) => c.id === "audio_music");
+    expect(music?.status, "ключ починили, а витрина всё ещё жалуется").toBe("live");
+  });
+
+  test("возможность с ЦЕПОЧКОЙ поставщиков не понижается чужим отказом", async () => {
+    // У картинок список токенов: OpenAI → Workers AI → Together. Падение одного
+    // звена возможность не убивает, и понижать её было бы клеветой.
+    process.env.OPENAI_API_KEY = "rejected";
+    noteProviderFailure("screenshot_code", "authentication_error: invalid_api_key");
+
+    const r = await request(makeApp()).get("/api/devhub/studio/capabilities");
+    const image = (r.body.capabilities as Array<Record<string, string>>).find((c) => c.id === "image");
+    expect(image?.status === "degraded" && image?.offCode === "auth_rejected").toBe(false);
+    delete process.env.OPENAI_API_KEY;
   });
 });

@@ -6431,6 +6431,7 @@ const kk: Record<string, string> = {
   "referralLanding.headlineNamed": "{name} сізді AEVION-ға шақырып отыр",
   "reg.tier.illustrative": "иллюстрациялық",
   "reg.tier.none": "дереккөз жоқ",
+  "reg.tip.label": "Шектеу дереккөзі",
   "reg.tier.official": "ресми дереккөз",
   "reg.tip.attested": "Ed25519 қолтаңбасы — қай редакция қолданылғанын дәлелдеуге болады.",
   "reg.tip.drift": "⚠ Жанды фид снимокпен сәйкес емес — деректерді жаңарту керек.",

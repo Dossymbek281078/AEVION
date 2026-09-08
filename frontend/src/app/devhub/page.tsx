@@ -10,6 +10,7 @@ import { apiUrl } from "@/lib/apiBase";
 import { useDevhubT, type DevhubKey } from "./i18n";
 import { COMPARISON_ROWS, capabilityIsKnownOff, comparisonTotalUsd } from "./capabilityRows";
 import { howtoTranscript } from "./howtoTranscript";
+import { getDevhubGuestId } from "@/lib/devhubGuest";
 import { useI18n } from "@/lib/i18n";
 import { catalog } from "@/lib/aevionCatalog";
 import { fixDoubledScheme } from "@/lib/urls";
@@ -223,6 +224,17 @@ export default function DevHubPage() {
     }
   }, []);
 
+  useEffect(() => {
+    // getDevhubGuestId сам создаёт личность при первом заходе; null он
+    // возвращает ровно тогда, когда записать её некуда — то есть когда
+    // хранилище сайта заблокировано.
+    try {
+      setХранилищеБлокировано(getDevhubGuestId() === null);
+    } catch {
+      setХранилищеБлокировано(true);
+    }
+  }, []);
+
   useEffect(() => { fetchProjects(); }, [fetchProjects]);
 
   // Перенос гостевой работы в аккаунт идёт ПАРАЛЛЕЛЬНО первой загрузке списка
@@ -309,6 +321,7 @@ export default function DevHubPage() {
   // nothing. Say so instead.
   const [hydrated, setHydrated] = useState(false);
   const [howtoBroken, setHowtoBroken] = useState(false);
+  const [хранилищеБлокировано, setХранилищеБлокировано] = useState(false);
   useEffect(() => setHydrated(true), []);
 
   // Anything typed into either form before hydration lives only in the DOM;
@@ -935,7 +948,15 @@ export default function DevHubPage() {
           }}
         >
           <span aria-hidden="true">💾</span>
-          {t("proj.browserBound")}
+          {/* Когда хранилище сайта заблокировано, обычная строка «проекты живут
+              в ЭТОМ браузере» — НЕПРАВДА, и неправда в опасную сторону.
+              Замер 08.09.2026: без личности гостя сервер считает запрос общей
+              строкой "anonymous", и в этой корзине лежат ВСЕ такие проекты —
+              их видит и может удалить любой, кто откроет модуль так же
+              (проверено на проде: список без заголовка отдал 17 записей).
+              Человек об этом узнать не мог: заголовок ставит перехватчик
+              молча, а браузер о блокировке не сообщает. */}
+          {хранилищеБлокировано ? t("proj.storageBlocked") : t("proj.browserBound")}
         </p>
 
         {/* Loading */}

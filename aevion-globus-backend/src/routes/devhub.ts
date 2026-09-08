@@ -814,10 +814,45 @@ function canEdit(project: DevHubProject, userId: string): boolean {
 }
 
 // ── Project helpers (DB or memory) ────────────────────────────────────────────
+/**
+ * Наши собственные тестовые прогоны в ОБЩЕЙ корзине — прячем из списка.
+ *
+ * Замер прода 08.09.2026: гость, у которого браузер блокирует хранилище,
+ * получает общую личность `anonymous`, и список отдавал ему 17 наших июльских
+ * прогонов («таймер помодоро» в семи вариантах, cf-pages-test, prod-smoke-test).
+ * Человек открывает модуль впервые и видит два десятка чужих проектов как свои
+ * — худшее первое впечатление, какое можно устроить на витрине.
+ *
+ * ФИЛЬТР, А НЕ УДАЛЕНИЕ. Удаление данных на проде необратимо и остаётся руке
+ * основателя; фильтр даёт тот же вид витрины, ничего не теряет и снимается
+ * одной строкой. Приём взят у соседнего модуля: в QRight публичные выдачи так
+ * же прячут смоук-записи вместо того, чтобы их стирать.
+ *
+ * ГРАНИЦА ВЫБРАНА ДАТОЙ, а не списком идентификаторов: все 17 записей созданы в
+ * июле (самая свежая 26.07), августовских в корзине нет вовсе — проверено. Так
+ * фильтр самоочевиден и не может однажды спрятать работу настоящего человека:
+ * она создаётся после этой границы.
+ *
+ * ПО ИДЕНТИФИКАТОРУ записи остаются доступны НАМЕРЕННО, и это не половинчатость.
+ * Наткнуться на них нельзя — нужен точный UUID, — зато их можно будет удалить
+ * через ту же ручку, когда основатель решит. Спрятать и лишить возможности
+ * убрать значило бы закрепить мусор навсегда.
+ */
+// Предикат ЭКСПОРТИРОВАН намеренно: старую запись через ручки не создать
+// (дату ставит сервер), поэтому проверить, что фильтр действительно ПРЯЧЕТ, а
+// не просто присутствует в коде, можно только вызвав его напрямую. Первая
+// редакция сторожа мутацию «фильтр обезврежен» не поймала — проверяла наличие
+// вызовов, а не следствие.
+const ОБЩАЯ_ЛИЧНОСТЬ = "anonymous";
+const НАШИ_ПРОГОНЫ_ДО = "2026-09-01T00:00:00.000Z";
+export function нашТестовыйПрогон(p: { userId: string; createdAt: string }): boolean {
+  return p.userId === ОБЩАЯ_ЛИЧНОСТЬ && p.createdAt < НАШИ_ПРОГОНЫ_ДО;
+}
+
 async function dbListProjects(userId: string): Promise<DevHubProject[]> {
   if (!isDevHubDbReady()) {
     return [...memProjects.values()]
-      .filter((p) => p.userId === userId)
+      .filter((p) => p.userId === userId && !нашТестовыйПрогон(p))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
   const r = await pool.query(
@@ -826,8 +861,8 @@ async function dbListProjects(userId: string): Promise<DevHubProject[]> {
   );
   // Same overlay as dbGetProject: a project whose save failed has to be listed,
   // or the shelf shows the user one fewer project than they have.
-  const rows: DevHubProject[] = r.rows.map(rowToProject);
-  const parked = [...memProjects.values()].filter((p) => p.userId === userId);
+  const rows: DevHubProject[] = r.rows.map(rowToProject).filter((p: DevHubProject) => !нашТестовыйПрогон(p));
+  const parked = [...memProjects.values()].filter((p) => p.userId === userId && !нашТестовыйПрогон(p));
   if (parked.length === 0) return rows;
   const byId = new Map<string, DevHubProject>(rows.map((p) => [p.id, p]));
   for (const p of parked) byId.set(p.id, p);
@@ -5999,13 +6034,34 @@ devhubRouter.post("/media/upload-image", dhCostlyLimit("dhmedia_upload"), async 
 // ── Helper: auto-upload DALL-E URL to Cloudflare Images if env set ───────────
 /** Polls a freshly deployed URL until it returns 2xx (5 tries, 5s apart).
  * Exported for tests. attemptDelayMs is overridable so tests don't sleep. */
-export async function verifyDeploymentServes(url: string, attemptDelayMs = 5000): Promise<boolean> {
-  for (let attempt = 0; attempt < 5; attempt++) {
+/**
+ * Ждёт, пока опубликованный адрес начнёт отвечать 2xx.
+ *
+ * ОКНО БЫЛО 25 СЕКУНД (5 попыток по 5), и этого не хватало. Замер 08.09.2026:
+ * за неделю пять выкаток, успешных ноль — а соседнее окно открыло адреса
+ * четырёх «упавших» и получило 200 (контроль: выдуманный поддомен того же
+ * проекта — 404). То есть страницы гостей были ОПУБЛИКОВАНЫ и живы, а мы
+ * записали им «не удалось» и так и сказали человеку.
+ *
+ * Причина в устройстве: у гостя каждый проект — НОВЫЙ проект Cloudflare Pages,
+ * а новый домен `*.pages.dev` расходится по краю сети дольше, чем повторная
+ * выкатка в существующий. Июльские успехи это не опровергали: там были
+ * повторные выкатки.
+ *
+ * Окно расширено до ~2 минут. Расширять почти свободно можно потому, что
+ * проверка живёт в отложенной части: ответ человеку уже ушёл, и всё это время
+ * запись честно остаётся `pending`, а не превращается в `failed` раньше срока.
+ *
+ * Число попыток — ПАРАМЕТР, а не константа: тесты гоняют его с единицей, и
+ * закреплять в них конкретное число попыток значит закреплять не то свойство.
+ */
+export async function verifyDeploymentServes(url: string, attemptDelayMs = 5000, attempts = 24): Promise<boolean> {
+  for (let attempt = 0; attempt < attempts; attempt++) {
     try {
       const check = await fetch(url, { method: "GET", redirect: "follow" });
       if (check.ok) return true;
     } catch { /* network — retry */ }
-    if (attempt < 4) await new Promise((r) => setTimeout(r, attemptDelayMs));
+    if (attempt < attempts - 1) await new Promise((r) => setTimeout(r, attemptDelayMs));
   }
   return false;
 }
@@ -7061,6 +7117,18 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       // Pages is the one deploy path that actually works, so when it stops
       // working the shop window should be the first to say it — not the user
       // whose page never came up.
+      // ТЕКСТ НЕУДАЧИ НАЗЫВАЛ МЁРТВУЮ ПРИЧИНУ. До 08.09.2026 здесь стояло
+      // «CF direct-upload via raw REST is deprecated, wrangler-based upload
+      // needed» — а загрузка идёт ЧЕРЕЗ WRANGLER (строка с deployViaWrangler
+      // выше), и этот путь давно единственный. Сообщение уводило разбирающего
+      // к замене загрузчика, который менять не надо.
+      //
+      // Замер, ради которого это нашлось: за 7 дней 5 выкаток, успешных ноль
+      // (`/studio/deploy-stats`). Разбирать их будут по этому самому журналу,
+      // и ложная причина в нём стоит дороже самой неудачи.
+      //
+      // Отличать ветки просто: `wrangler: ...` — упала загрузка;
+      // `verify: ...` — загрузка прошла, а адрес не ответил.
       if (serves) noteProviderSuccess("pages");
       else noteProviderFailure("pages", "the deployed page does not serve (2xx never came back after retries)");
       if (serves) {
@@ -7068,7 +7136,9 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       } else {
         d.status = "failed";
         d.buildLog = (d.buildLog || "") +
-          " | verify: deployed assets are not serving (upstream accepted the upload but the page returns non-2xx — CF direct-upload via raw REST is deprecated, wrangler-based upload needed)";
+          " | verify: wrangler upload finished, but the page did not answer 2xx within ~25s " +
+          "(5 attempts, 5s apart). Either the new Pages project has not propagated yet, or it " +
+          "really does not serve. Check the address by hand before blaming the upload.";
         d.completedAt = now();
       }
       try { await dbSaveDeployment(d); } catch { memDeployments.set(d.id, d); }

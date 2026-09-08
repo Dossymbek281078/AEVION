@@ -6472,6 +6472,7 @@ const en: Record<string, string> = {
   "referralLanding.headlineNamed": "{name} invited you to AEVION",
   "reg.tier.illustrative": "illustrative",
   "reg.tier.none": "no source",
+  "reg.tip.label": "Source of the restriction",
   "reg.tier.official": "official source",
   "reg.tip.attested": "Ed25519-signed — which edition was used is provable.",
   "reg.tip.drift": "⚠ The live feed differs from our snapshot — the data needs regenerating.",

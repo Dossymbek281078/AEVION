@@ -6472,6 +6472,7 @@ const ru: Record<string, string> = {
   "referralLanding.headlineNamed": "{name} приглашает вас в AEVION",
   "reg.tier.illustrative": "иллюстративно",
   "reg.tier.none": "источника нет",
+  "reg.tip.label": "Источник ограничения",
   "reg.tier.official": "официальный источник",
   "reg.tip.attested": "Подписано Ed25519 — можно доказать, по какой редакции считали.",
   "reg.tip.drift": "⚠ Живой фид расходится со снимком — данные требуют обновления.",

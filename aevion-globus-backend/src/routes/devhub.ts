@@ -1333,6 +1333,11 @@ interface GeneratedCodeResult {
   // were salvaged and one continuation call fetched (or tried to fetch) the
   // rest. Surfaces in the chat as an honest process note, not hidden.
   continued?: boolean;
+  /** Обрыв БЕЗ восстановления: дозапрос не удался, набор файлов неполный.
+   *  Отдельно от `continued` намеренно — это разные новости для человека. */
+  truncated?: boolean;
+  /** Сколько файлов уцелело при обрыве: без числа «оборвалось» не действие. */
+  recoveredFiles?: number;
   // Present (non-empty) only when a generated JS/TS/JSON file STILL fails a
   // syntax check after self-correction was attempted — the file is still
   // written (the model may have gotten close, and an empty diff is worse
@@ -1677,6 +1682,11 @@ async function generateCodeWithAI(
   }
 
   let wasContinued = false;
+  // Два РАЗНЫХ исхода обрыва, и раньше они назывались одним словом.
+  // `continued` ставился в обоих случаях, а экран печатал по нему
+  // «недостающие файлы дозагружены» — то есть при неудачном дозапросе человеку
+  // сообщался результат, которого не было, поверх обрезанного набора файлов.
+  let wasTruncated = false;
   let parsed = parseGeneratedFiles(result.reply, targetFiles);
   // Salvage means the reply was cut off and its tail file was lost — ask the
   // model to CONTINUE with just the missing files (one attempt; completed
@@ -1702,9 +1712,17 @@ async function generateCodeWithAI(
       if (contParsed.mode !== "fallback") {
         const have = new Set(parsed.files.map((f) => f.path));
         parsed = { mode: "parsed", files: [...parsed.files, ...contParsed.files.filter((f) => !have.has(f.path))] };
+        wasContinued = true;
+      } else {
+        // Дозапрос состоялся и не дал разбираемого ответа: у человека на руках
+        // ОБРЕЗАННЫЙ набор, и знать об этом он должен.
+        wasTruncated = true;
       }
-    } catch { /* keep the salvaged prefix — better than losing everything */ }
-    wasContinued = true;
+    } catch {
+      // Дозапрос не состоялся вовсе. Спасённый префикс оставляем — он лучше,
+      // чем ничего, — но выдавать его за целый результат нельзя.
+      wasTruncated = true;
+    }
   }
   let files = parsed.files;
   onProgress?.("syntax_check");
@@ -1748,6 +1766,7 @@ async function generateCodeWithAI(
     runTokens: { in: токВх, out: токИсх },
     runCostUsd: costUsd(provider.id, provider.defaultModel, токВх, токИсх),
     ...(wasContinued ? { continued: true } : {}),
+    ...(wasTruncated ? { truncated: true, recoveredFiles: files.length } : {}),
     ...(syntaxProblems.length > 0 ? { syntaxErrors: syntaxProblems } : {}),
     ...(selfCorrected > 0 && syntaxProblems.length === 0 ? { selfCorrected } : {}),
   };
@@ -2511,7 +2530,7 @@ devhubRouter.post("/projects/:id/generate", dhCostlyLimit("dhgenerate"), async (
 /** Shared by /generate and /database/design: generate → checkpoint → save. */
 async function runProjectGeneration(project: DevHubProject, userId: string, prompt: string, stack: string, targetFiles: string[], images?: ChatImage[], history?: ChatTurn[], onProgress?: (stage: string, extra?: Record<string, unknown>) => void) {
   const existingFiles = await dbListFiles(project.id);
-  const { files: generatedFiles, aiGenerated, continued, syntaxErrors, selfCorrected, provider: genProvider, model: genModel, runTokens, runCostUsd } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history, onProgress,
+  const { files: generatedFiles, aiGenerated, continued, truncated, recoveredFiles, syntaxErrors, selfCorrected, provider: genProvider, model: genModel, runTokens, runCostUsd } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history, onProgress,
       меткаГенерации(userId), userId);
   // Модель отработала — вот теперь генерация потрачена. Списание здесь, в
   // общем помощнике, покрывает все точки генерации разом: обычную, потоковую
@@ -2554,6 +2573,9 @@ async function runProjectGeneration(project: DevHubProject, userId: string, prom
   }
   return {
     files: generatedFiles, aiGenerated, ...(continued ? { continued } : {}),
+    // Признак обрыва ТЕРЯЛСЯ ровно здесь: ответ собирается заново
+    // перечислением, и tsc такого не ловит — объект не сужается, а строится.
+    ...(truncated ? { truncated, recoveredFiles } : {}),
     ...(syntaxErrors ? { syntaxErrors } : {}), ...(selfCorrected ? { selfCorrected } : {}),
     ...(genProvider ? { provider: genProvider, model: genModel } : {}),
     ...(runTokens ? { runTokens, runCostUsd } : {}),

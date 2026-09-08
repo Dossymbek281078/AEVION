@@ -82,9 +82,13 @@ const PODPIS_VKLADKI: Record<Vkladka, string> = {
 // словарь IDE (~400 строк) ждёт языкового решения основателя; здесь
 // НАМЕРЕННО только замеренный поимённо остаток пути новичка (проба
 // en-newcomer-probe, 06.09.2026: 66 знаков до генерации + тосты после).
-const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; syntaxWarn: string; memoryWarn: string; runCost: string; runTokens: string; stCalling: string; stWriting: string; stContinue: string; stSyntax: string; stSelfFix: string; stSaving: string; busyDb: string; busyDesign: string; busyGen: string; busyUndo: string; busyPublish: string; busyPull: string; busyDeploy: string; busyPlan: string; busyImg: string; busySave: string; busyApply: string; busyPush: string; busySync: string; busyCompose: string; busySend: string; busyTranslate: string; busyCreate: string; busyPreview: string; busyUpload: string; busyStt: string; busyAgent: string; busySetup: string; confirmDelFile: string }> = {
+const GEN_UI: Record<string, { ph: string; noteContinued: string; noteTruncated: string; noteNoProvider: string; noteSyntax: string; created: string; noChanges: string; syntaxWarn: string; memoryWarn: string; runCost: string; runTokens: string; stCalling: string; stWriting: string; stContinue: string; stSyntax: string; stSelfFix: string; stSaving: string; busyDb: string; busyDesign: string; busyGen: string; busyUndo: string; busyPublish: string; busyPull: string; busyDeploy: string; busyPlan: string; busyImg: string; busySave: string; busyApply: string; busyPush: string; busySync: string; busyCompose: string; busySend: string; busyTranslate: string; busyCreate: string; busyPreview: string; busyUpload: string; busyStt: string; busyAgent: string; busySetup: string; confirmDelFile: string }> = {
   ru: {
     ph: "Опишите, что нужно построить…\nНапример: «REST API с входом пользователей и ручкой товаров»",
+    noteContinued: "Ответ упёрся в предел длины — недостающие файлы дозагружены отдельным вызовом",
+    noteTruncated: "Ответ оборвался, а дозагрузить недостающее не вышло. Файлов сохранено:",
+    noteNoProvider: "Провайдер ИИ не настроен — вместо настоящего кода вставлена заглушка",
+    noteSyntax: "Проверка синтаксиса не прошла:",
     created: "Создано файлов",
     runCost: "Этот запуск",
     runTokens: "токенов",
@@ -108,6 +112,10 @@ const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; s
   },
   en: {
     ph: "Describe what to build…\nFor example: \"a REST API with user sign-in and a products endpoint\"",
+    noteContinued: "Reply hit the length cap — the missing files were fetched in a follow-up call",
+    noteTruncated: "The reply was cut off and the rest could not be fetched. Files saved:",
+    noteNoProvider: "No AI provider configured — placeholder inserted instead of real code",
+    noteSyntax: "Syntax check failed:",
     created: "Files created",
     runCost: "This run",
     runTokens: "tokens",
@@ -131,6 +139,10 @@ const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; s
   },
   kk: {
     ph: "Не құру керегін сипаттаңыз…\nМысалы: «пайдаланушы кірісі мен тауарлар жолы бар REST API»",
+    noteContinued: "Жауап ұзындық шегіне жетті — жетіспейтін файлдар бөлек сұраумен жүктелді",
+    noteTruncated: "Жауап үзілді, қалғанын жүктеу мүмкін болмады. Сақталған файлдар:",
+    noteNoProvider: "Жасанды интеллект жеткізушісі бапталмаған — нағыз кодтың орнына толтырғыш қойылды",
+    noteSyntax: "Синтаксис тексерісі өтпеді:",
     created: "Жасалған файлдар",
     runCost: "Бұл іске қосу",
     runTokens: "токен",
@@ -1712,15 +1724,21 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         return { path: gf.path, language: gf.language || "text", isNew: before === "", added: d.added, removed: d.removed, diff: d.text };
       });
       let note: string | undefined;
-      if (data.continued) {
-        note = "Reply hit the length cap — the missing files were fetched in a follow-up call";
+      // ДВА разных исхода обрыва. Раньше оба назывались `continued`, и при
+      // НЕУДАЧНОМ дозапросе человек читал «недостающие файлы дозагружены» —
+      // поверх обрезанного набора. Сообщать о результате, которого не было,
+      // хуже, чем не сообщать ничего: человек не пойдёт проверять.
+      if (data.truncated) {
+        note = `${GL.noteTruncated} ${data.recoveredFiles ?? newGenerated.length}`;
+      } else if (data.continued) {
+        note = GL.noteContinued;
       }
       if (data.aiGenerated === false) {
-        note = "No AI provider configured — placeholder inserted instead of real code";
+        note = GL.noteNoProvider;
         showToast(TL.stubCode, "error");
       } else if (Array.isArray(data.syntaxErrors) && data.syntaxErrors.length > 0) {
         const paths = data.syntaxErrors.map((s: { path: string }) => s.path).join(", ");
-        note = `Syntax check failed: ${paths}`;
+        note = `${GL.noteSyntax} ${paths}`;
         showToast(`${GL.created}: ${newGenerated.length}, ${paths} ${GL.syntaxWarn}`, "warning");
       } else if (data.storage === "memory") {
         // Генерация — платный шаг. Сервер говорит, куда легли файлы; "memory"

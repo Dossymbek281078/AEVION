@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coolingPlan, totalPickedWatt, type SunLoad } from "./cooling";
+import { coolingPlan, sizesForGuard, totalPickedWatt, type SunLoad } from "./cooling";
 import { peopleFrom } from "./CoolingPanel";
 import type { Room } from "./rooms";
 
@@ -109,5 +109,21 @@ describe("число людей из поля ввода", () => {
       coolingPlan([{ index: 1, area: 20, perimeter: 18, cx: 0, cy: 0 }], { people: { 1: n } })
         .rooms[0].needWatt;
     expect(need(peopleFrom(""))).toBeGreaterThan(need(0));
+  });
+});
+
+describe("список типоразмеров", () => {
+  it("отсортирован по возрастанию мощности", () => {
+    // подбор берёт ПЕРВЫЙ подходящий; перестановка строк не роняет сборку и не
+    // ловится проверкой «не слабее нужного» — она молча продаёт прибор дороже
+    const w = sizesForGuard().map((s) => s.watt);
+    expect(w, "порядок сломан — подбор перестанет быть самым дешёвым достаточным")
+      .toEqual([...w].sort((a, b) => a - b));
+  });
+
+  it("подобран САМЫЙ СЛАБЫЙ из достаточных, а не любой достаточный", () => {
+    const r = coolingPlan([{ index: 1, area: 30, perimeter: 22, cx: 0, cy: 0 }]).rooms[0];
+    const enough = sizesForGuard().filter((s) => s.watt >= r.needWatt);
+    expect(r.pick?.watt).toBe(Math.min(...enough.map((s) => s.watt)));
   });
 });

@@ -50,6 +50,10 @@ const WATT_PER_APPLIANCE = 200;
  * Типоразмеры сплит-систем, которые реально стоят на полке.
  * `btu` — то, как их называют в магазине; `watt` — холодопроизводительность.
  */
+// ⚠️ ПОРЯДОК ЗНАЧИМ: подбор берёт ПЕРВЫЙ подходящий, то есть самый слабый из
+// достаточных. Перестановка строк не сломает сборку и не уронит тест про
+// «не слабее нужного» — она просто начнёт продавать людям прибор дороже
+// необходимого. Порядок стережёт отдельная проверка в cooling.test.ts.
 const SIZES: Array<{ btu: number; watt: number; name: string }> = [
   { btu: 7000, watt: 2100, name: "«семёрка» (07)" },
   { btu: 9000, watt: 2600, name: "«девятка» (09)" },
@@ -137,6 +141,9 @@ export function coolingPlan(
 
   return { rooms: out, warnings, notes };
 }
+
+/** Типоразмеры, как их видит подбор — только для проверки порядка. */
+export const sizesForGuard = (): ReadonlyArray<{ btu: number; watt: number }> => SIZES;
 
 /** Суммарная мощность всех подобранных приборов, Вт — для прикидки нагрузки. */
 export function totalPickedWatt(res: CoolingResult): number {

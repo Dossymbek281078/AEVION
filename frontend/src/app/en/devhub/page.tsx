@@ -152,8 +152,9 @@ export default async function EnDevhubPage({
           <p style={styles.note}>
             Every metric we publish is a live API response, not a slide: the
             platform registry, uptime and revenue are all queryable. DevHub is
-            built the way it sells — this 41-module platform is developed by a
-            founder working with AI agents in DevHub-style loops.
+            built the way it sells — this platform, 40+ modules and counting, is
+            developed by a founder working with AI agents in DevHub-style loops.
+            The exact count comes from the live registry, not from this page.
           </p>
         </section>
 

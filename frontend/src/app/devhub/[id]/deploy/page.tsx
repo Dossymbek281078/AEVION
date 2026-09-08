@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
 import { devhubServerError, useDevhubServerError } from "@/lib/devhubServerError";
+import { useI18nOptional } from "@/lib/i18n";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -179,9 +180,40 @@ function DeploymentRow({
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+/**
+ * Тексты экрана выкатки. Заводятся 08.09.2026, потому что здесь их не было
+ * вовсе: три строки уходили человеку зашитыми по-английски, и главная из них —
+ * «Deployment started» — не запасная, а ОБЫЧНАЯ: её видит каждый платящий при
+ * каждой публикации.
+ *
+ * Экран смотрят в самый напряжённый момент: только что нажали «опубликовать» и
+ * ждут. Тост живёт секунды — машинный доводчик до него не успевает по
+ * устройству, это его слепая зона. Существующий сторож экрана проверяет
+ * ОТРИСОВКУ начального состояния и по своей же оговорке сюда не смотрит.
+ */
+const DEPLOY_UI: Record<string, { started: string; failed: string; loadFailed: string }> = {
+  ru: {
+    started: "Выкатка запущена",
+    failed: "Выкатить не удалось",
+    loadFailed: "Не удалось загрузить данные проекта",
+  },
+  en: {
+    started: "Deployment started",
+    failed: "Deploy failed",
+    loadFailed: "Could not load the project data",
+  },
+  kk: {
+    started: "Жариялау басталды",
+    failed: "Жариялау сәтсіз аяқталды",
+    loadFailed: "Жоба деректерін жүктеу мүмкін болмады",
+  },
+};
+
 // Next 16: params — Promise (см. заметку в src/app/[id]/page.tsx).
 export default function DevHubDeployPage({ params }: { params: Promise<{ id: string }> }) {
   const serverError = useDevhubServerError();
+  const uiLang = useI18nOptional()?.lang ?? "ru";
+  const DL = DEPLOY_UI[uiLang] ?? DEPLOY_UI.ru;
   const { id } = use(params);
 
   const [project, setProject] = useState<Project | null>(null);
@@ -229,7 +261,7 @@ export default function DevHubDeployPage({ params }: { params: Promise<{ id: str
         });
       }
     } catch (e: any) {
-      if (!silent) setError(e?.message || "Failed to load");
+      if (!silent) setError(e?.message || DL.loadFailed);
     } finally {
       if (!silent) setLoading(false);
     }
@@ -271,11 +303,11 @@ export default function DevHubDeployPage({ params }: { params: Promise<{ id: str
         const body = await r.json().catch(() => ({}));
         throw new Error(serverError(body.error, "Выкатка не удалась."));
       }
-      showToast("Deployment started", true);
+      showToast(DL.started, true);
       // Immediately refresh so the new pending deployment appears
       await fetchData(true);
     } catch (e: any) {
-      showToast(e?.message || "Deploy failed", false);
+      showToast(e?.message || DL.failed, false);
     } finally {
       setDeploying(false);
     }

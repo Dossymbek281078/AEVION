@@ -31,6 +31,17 @@ const PAGES = [
   "/",
   "/explore",
   "/devhub",
+  // Английский вход модуля — дверь для Show HN и западных писем. Замер
+  // 08.09.2026: английских страниц в выкаченном дереве десять, под присмотром
+  // было ЧЕТЫРЕ (/en/go, /en/ig, /en/longevity, /en/tt). Русские двери DevHub
+  // здесь с самого начала, английская — нет, хотя ломается она так же и
+  // узнали бы мы об этом от посетителя, а не от сторожа.
+  //
+  // Остальные пять неприсмотренных (/en/qrenew, /en/qskyway, /en/shop,
+  // /en/smeta-trainer, /en/yt) НЕ добавляю намеренно: это чужие модули, а
+  // /en/shop прямо сейчас правит соседняя ветка. Все пять живы на 08.09 —
+  // замер передан их окнам, добавлять должны они.
+  "/en/devhub",
   // The comparison page states what the product does against named rivals — a
   // page that quietly 404s or empties out is worse than one that never
   // existed, because it is the page an investor is sent to.

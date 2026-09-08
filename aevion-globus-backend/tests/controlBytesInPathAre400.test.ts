@@ -67,3 +67,26 @@ describe("управляющие байты в адресе", () => {
     expect(r.status).toBe(200);
   });
 });
+
+describe("прослойка не перегибает: обычные адреса живут", () => {
+  it("латиница, цифры, дефисы, подчёркивания, точки — проходят", async () => {
+    const app = приложение();
+    for (const id of ["abc", "cert-4bc586a1af49", "qs_0dfba1bf", "v2.1", "a1b2c3"]) {
+      const r = await request(app).get("/api/probe/" + id);
+      expect(r.status, `обычный id «${id}» отбит — это перегиб`).toBe(200);
+    }
+  });
+
+  it("процентное кодирование безобидных символов проходит", async () => {
+    // %20 (пробел) и %2F в значении — законные адреса, а не атака.
+    const r = await request(приложение()).get("/api/probe/" + encodeURIComponent("hello world"));
+    expect(r.status).toBe(200);
+  });
+
+  it("эмодзи и китайский проходят: правило про управляющие, не про алфавит", async () => {
+    for (const s of ["日本語", "🎯"]) {
+      const r = await request(приложение()).get("/api/probe/" + encodeURIComponent(s));
+      expect(r.status, `«${s}» отбит — правило слишком широкое`).toBe(200);
+    }
+  });
+});

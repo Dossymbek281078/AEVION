@@ -26,5 +26,8 @@ export const metadata: Metadata = {
 export const dynamic = "force-static";
 
 export default function Page() {
-  redirect("/go?c=hn");
+  // Ведём на СТРАНИЦУ ПРОДУКТА, а не на общий вход: объявление Show HN — про DevHub («describe an app in plain words»), и вести его надо на страницу DevHub, а не на общий вход «что почитать и попробовать».
+  // Проверено 08.09.2026 — эта страница читает ?c= (channelFrom) и доносит
+  // метку до кассы, как /go.
+  redirect("/en/devhub?c=hn");
 }

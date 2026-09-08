@@ -1189,7 +1189,7 @@ export default function DevHubPage() {
                 onChange={(e) =>
                   setSnippetForm((f) => ({ ...f, title: e.target.value }))
                 }
-                aria-label="Title"
+                aria-label={t("field.title")}
                 placeholder={t("field.title")}                className="px-3 py-2 rounded-md bg-slate-950 border border-slate-800 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-700"
               />
               <input

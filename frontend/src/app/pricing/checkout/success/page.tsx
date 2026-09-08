@@ -331,7 +331,18 @@ function SuccessInner() {
                    * прошла, он узнает об этом сам, наткнувшись на платную
                    * стену, и уже не свяжет одно с другим.
                    */
-                  t("pricing.checkoutSuccess.titlePending")}
+                  intentId
+                    ? t("pricing.checkoutSuccess.titlePending")
+                    /*
+                     * Признака платежа нет вовсе — ни session_id, ни sale_id.
+                     * Замер 08.09.2026: по адресу без параметров страница
+                     * бессрочно утверждала «Оплата принята. Деньги получены»,
+                     * хотя сервер на такой запрос отвечает ready:false, а
+                     * спрашивать нам даже нечего. Тот же класс уже вычищен в
+                     * кабинете (account/page.tsx: «утверждение об успехе,
+                     * ничем не проверенное») — здесь он оставался.
+                     */
+                    : t("pricing.checkoutSuccess.titleNoPayment")}
         </h1>
 
         {/* Subtitle */}
@@ -344,7 +355,9 @@ function SuccessInner() {
                 ? tierName
                   ? t("pricing.checkoutSuccess.subtitleActivated", { tier: tierName })
                   : t("pricing.checkoutSuccess.subtitleActivatedNoTier")
-                : t("pricing.checkoutSuccess.subtitlePending")}
+                : intentId
+                  ? t("pricing.checkoutSuccess.subtitlePending")
+                  : t("pricing.checkoutSuccess.subtitleNoPayment")}
         </p>
 
         {/* Trial end date badge */}

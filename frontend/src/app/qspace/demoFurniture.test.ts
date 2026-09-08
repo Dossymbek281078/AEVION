@@ -84,3 +84,56 @@ describe("обещание страницы про демо подкреплен
     expect(text).toContain("пусто, добавьте из каталога");
   });
 });
+
+describe("предметы демо действительно строят геометрию", () => {
+  // «13 предметов расставлено» ничего не значит, если build() вернёт пустую
+  // группу: слой снова покажет ничего, а счётчик будет говорить «13».
+  // Проверяется тем же вызовом, которым пользуется страница.
+  const meshCount = (g: { children: Array<{ children?: unknown[] }> }): number => {
+    let n = 0;
+    const walk = (o: { children?: unknown[] }) => {
+      n++;
+      for (const c of (o.children ?? []) as Array<{ children?: unknown[] }>) walk(c);
+    };
+    for (const c of g.children) walk(c);
+    return n;
+  };
+
+  it("каждый предмет строит непустую группу", () => {
+    for (const d of demoFurniture()) {
+      const item = CATALOG.find((c) => c.id === d.catalogId)!;
+      const g = item.build();
+      expect(meshCount(g), `«${item.name}» строит пустую группу — слой покажет пустоту`)
+        .toBeGreaterThan(0);
+    }
+  });
+
+  it("ВЕСЬ каталог строит непустые группы, а не только демо", () => {
+    // человек может поставить любой из них, и пустой предмет читался бы как
+    // «нажал и ничего не появилось» — тот же класс, что пустой слой
+    const пустые = CATALOG.filter((c) => meshCount(c.build()) === 0).map((c) => c.name);
+    expect(пустые, "предметы каталога, которые ничего не рисуют").toEqual([]);
+    expect(CATALOG.length, "каталог пуст — проверка ничего не смотрит").toBeGreaterThan(30);
+  });
+
+  it("у каждого предмета габарит — три положительных числа", () => {
+    // нулевой габарит не падает: предмет рисуется, но проверка расстановки
+    // считает его точкой и перестаёт видеть пересечения
+    for (const c of CATALOG) {
+      for (const [i, v] of c.size.entries()) {
+        expect(v, `«${c.name}»: габарит ${i} равен ${v}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("два одинаковых предмета — РАЗНЫЕ объекты", () => {
+    // иначе поставленный дважды диван был бы одним и тем же телом, и второй
+    // «переехал» бы вместе с первым
+    const sofa = CATALOG.find((c) => c.id === "sofa")!;
+    expect(sofa.build()).not.toBe(sofa.build());
+  });
+
+  it("контроль прибора: пустая группа НАХОДИТСЯ", () => {
+    expect(meshCount({ children: [] })).toBe(0);
+  });
+});

@@ -79,9 +79,13 @@ export const LANG_COOKIE = "aevion_lang_v1";
 export const LANG_KEY_COUNT: Record<Lang, number> = {
   // 06.09: +2 (chargedRevenueByChannel, errorGeneric — возвращены потерянные
   // при мерже ключи денежных веток; usdNote уже был на месте).
-  ru: 7445,
-  en: 7445,
-  kk: 7404,
+  // 08.09: +2 в каждом словаре — titleNoPayment / subtitleNoPayment для
+  // страницы успеха: она утверждала «Оплата принята. Деньги получены» даже
+  // без всякого признака платежа, и случаю «признака нет» понадобился свой
+  // честный текст.
+  ru: 7447,
+  en: 7447,
+  kk: 7406,
   de: 134,
   fr: 134,
   es: 134,

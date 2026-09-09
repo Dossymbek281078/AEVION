@@ -715,19 +715,35 @@ describe("POST /api/devhub/media/sms (Brevo)", () => {
     expect(r.status).toBe(400);
   });
 
-  test("calls Brevo SMS API with sender + recipient", async () => {
+  /*
+   * ⚠️ ПЕРЕПИСАН 09.09.2026 под новый договор, и прежняя редакция закрепляла
+   * ДЕФЕКТ. Она посылала `sender: "MyApp"` и требовала, чтобы именно это имя
+   * ушло в Brevo, — то есть охраняла возможность назваться кем угодно на нашем
+   * аккаунте. Ручка при этом открыта без входа.
+   *
+   * Теперь имя отправителя берётся только из окружения, а поле из тела
+   * игнорируется. Проверяем обе половины: что уходит наше имя И что чужое не
+   * уходит — одного первого мало, оно прошло бы и при подстановке чужого
+   * значения в другое поле.
+   */
+  test("имя отправителя SMS берётся из окружения, а чужое из тела игнорируется", async () => {
     process.env.BREVO_API_KEY = "brevo-fake";
+    process.env.BREVO_SMS_SENDER = "AEVION";
     fetchMock.mockResolvedValueOnce(jsonResp(201, {
       reference: "ref-123", messageId: 999, smsCount: 1,
     }));
 
     const r = await request(makeApp())
       .post("/api/devhub/media/sms")
-      .send({ recipient: "+14155552671", content: "Test SMS", sender: "MyApp" });
+      .send({ recipient: "+14155552671", content: "Test SMS", sender: "SberBank" });
     expect(r.status).toBe(200);
     expect(r.body).toMatchObject({ ok: true, reference: "ref-123", smsCount: 1 });
     const body = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
-    expect(body.sender).toBe("MyApp");
+    expect(body.sender, "имя отправителя обязано приходить из окружения").toBe("AEVION");
+    expect(
+      JSON.stringify(body).includes("SberBank"),
+      "имя из тела запроса просочилось в вызов Brevo — это подмена бренда",
+    ).toBe(false);
     expect(body.recipient).toBe("+14155552671");
     expect(body.type).toBe("transactional");
   });

@@ -4457,7 +4457,7 @@ devhubRouter.post("/media/tts", async (req, res) => {
 
 // POST /api/devhub/media/email — send email via Brevo
 devhubRouter.post("/media/email", async (req, res) => {
-  const { to, subject, htmlBody, from } = req.body || {};
+  const { to, subject, htmlBody } = req.body || {}; // `from` намеренно НЕ читается — см. ниже
   if (!to || typeof to !== "string") return res.status(400).json({ error: "to (email) required" });
   if (!subject || typeof subject !== "string") return res.status(400).json({ error: "subject required" });
   if (!htmlBody || typeof htmlBody !== "string") return res.status(400).json({ error: "htmlBody required" });
@@ -4473,9 +4473,16 @@ devhubRouter.post("/media/email", async (req, res) => {
     });
   }
 
-  const senderEmail = (from && typeof from === "string" && emailRe.test(from.trim()))
-    ? from.trim()
-    : (process.env.BREVO_DEFAULT_SENDER || "noreply@aevion.app");
+  /*
+   * Адрес отправителя — ТОЛЬКО из окружения. Тот же разбор, что у /media/sms
+   * рядом: ручка открыта без входа, и поле `from` уходило в Brevo как есть.
+   *
+   * Проверка формата адреса от подмены не защищает: она отвечает на вопрос
+   * «похоже ли это на адрес», а не «наш ли он». Письмо с чужого адреса с
+   * нашего аккаунта бьёт по репутации домена — а ею мы отправляем письма
+   * запуска.
+   */
+  const senderEmail = process.env.BREVO_DEFAULT_SENDER || "noreply@aevion.app";
 
   try {
     const r = await fetch("https://api.brevo.com/v3/smtp/email", {
@@ -5840,7 +5847,7 @@ devhubRouter.post("/projects/:id/agent/workflow/stream", dhCostlyLimit("dhworkfl
 
 // POST /api/devhub/media/sms — Brevo transactional SMS
 devhubRouter.post("/media/sms", async (req, res) => {
-  const { recipient, content, sender } = req.body || {};
+  const { recipient, content } = req.body || {}; // `sender` намеренно НЕ читается — см. ниже
   if (!recipient || typeof recipient !== "string") return res.status(400).json({ error: "recipient (E.164 phone) required" });
   if (!/^\+\d{6,18}$/.test(recipient.trim())) return res.status(400).json({ error: "recipient must be E.164 format (e.g. +14155552671)" });
   if (!content || typeof content !== "string") return res.status(400).json({ error: "content required" });
@@ -5854,7 +5861,29 @@ devhubRouter.post("/media/sms", async (req, res) => {
     });
   }
 
-  const senderName = (typeof sender === "string" && sender.trim()) ? sender.trim().slice(0, 11) : (process.env.BREVO_SMS_SENDER || "AEVION");
+  /*
+   * Имя отправителя берётся ТОЛЬКО из окружения, а не из тела запроса.
+   *
+   * Замер 09.09.2026: ручка открыта без входа (проверки прав здесь нет, в
+   * отличие от соседней /media/image), и поле `sender` уходило в Brevo как
+   * есть.
+   *
+   * ⚠️ Имя проверяющей функции в этом объяснении НЕ пишем намеренно: соседний
+   * сторож `devhubWriteRoutesWithoutAuth` ищет его как признак защиты по
+   * тексту файла, и упоминание в комментарии О ДЕФЕКТЕ гасило сторожа —
+   * ручка выпадала из списка как «защищённая». Проверено на себе. То есть кто угодно отправлял SMS на любой номер мира с
+   * ЛЮБЫМ именем отправителя, за наш счёт и с нашего аккаунта. Одиннадцать
+   * знаков хватает, чтобы назваться банком.
+   *
+   * Предел темпа здесь есть и работает (5/мин, роутер, строка ~215) — он
+   * ограничивает объём, но подмену имени не ограничивает вовсе: одного
+   * сообщения достаточно.
+   *
+   * Своё имя отправителя у пользователя платформы появится тогда, когда его
+   * можно будет подтвердить на нашем аккаунте Brevo. Пока такого механизма
+   * нет, и принимать имя на слово — значит раздавать наш бренд.
+   */
+  const senderName = process.env.BREVO_SMS_SENDER || "AEVION";
 
   try {
     const r = await fetch("https://api.brevo.com/v3/transactionalSMS/sms", {

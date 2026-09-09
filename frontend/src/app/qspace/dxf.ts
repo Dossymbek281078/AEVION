@@ -105,6 +105,8 @@ function readBlockSizes(ps: Array<[number, string]>): Map<string, Extent> {
   const out = new Map<string, Extent>();
   let inBlocks = false;
   let name = "";
+  /** текущая сущность внутри определения блока */
+  let ent = "";
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   const flush = () => {
     const dx = maxX - minX, dy = maxY - minY;
@@ -112,6 +114,7 @@ function readBlockSizes(ps: Array<[number, string]>): Map<string, Extent> {
       out.set(name, { dx, dy });
     }
     name = "";
+    ent = "";
     minX = Infinity; maxX = -Infinity; minY = Infinity; maxY = -Infinity;
   };
   for (let i = 0; i < ps.length; i++) {
@@ -127,6 +130,17 @@ function readBlockSizes(ps: Array<[number, string]>): Map<string, Extent> {
       }
       continue;
     }
+    // Габарит считается ТОЛЬКО по геометрии, которую мы понимаем.
+    //
+    // Коды 10/20 есть не только у отрезков: их несёт и заголовок BLOCK
+    // (базовая точка), и ВЛОЖЕННАЯ вставка INSERT, и текст, и размерная
+    // линия. В настоящем чертеже блок двери часто содержит вложенный
+    // блок петли или выноску, и её точка может лежать далеко от полотна.
+    // Считая их, мы получили бы ширину больше настоящей — и не всегда
+    // настолько, чтобы её отсекла полоса правдоподобия. То есть худший
+    // класс этого модуля: правдоподобно неверное число.
+    if (c === 0) { ent = v; continue; }
+    if (ent !== "LINE" && ent !== "LWPOLYLINE") continue;
     if (c === 10 || c === 11) {
       const x = parseFloat(v);
       if (Number.isFinite(x)) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); }

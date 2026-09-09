@@ -119,7 +119,15 @@ function записатьОтправку(email: string): void {
 }
 
 async function читатьПодписчиков(): Promise<Array<{ email: string; source: string }>> {
-  const res = await fetch(`${BASE}/api/constitution/waitlist/list`, {
+  // Путь ИМЕННО админский. Замер 09.09.2026 на проде:
+  //   /api/constitution/waitlist/list        → 404 (как выдуманный адрес)
+  //   /api/admin/constitution/waitlist/list  → 403 (существует, нужен доступ)
+  // Публичный роутер выгрузки не имеет вовсе: `/list` живёт только на
+  // админском, смонтированном отдельной строкой в index.ts с мая. Скрипты
+  // написаны в августе и с самого начала звали несуществующий адрес — то
+  // есть рассылка не запускалась ни разу и завтра остановилась бы на
+  // «HTTP 404», честно, но намертво.
+  const res = await fetch(`${BASE}/api/admin/constitution/waitlist/list`, {
     headers: { Authorization: `Bearer ${TOKEN}` },
   });
   if (!res.ok) стоп(2, `Список подписчиков не отдан: HTTP ${res.status}`);

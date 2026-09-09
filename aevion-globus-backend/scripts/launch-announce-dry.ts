@@ -95,7 +95,9 @@ export function extractRows(body: Record<string, unknown>): Row[] | null {
 
 
 async function readSubscribers(): Promise<{ rows: Row[]; source: string; truncated: boolean }> {
-  const url = `${BASE}/api/constitution/waitlist/list`;
+  // Путь админский — см. разбор в launch-announce-send.ts: публичный роутер
+  // выгрузки не имеет, и прежний адрес отвечал 404.
+  const url = `${BASE}/api/admin/constitution/waitlist/list`;
   let res: Response;
   try {
     res = await fetch(url, { headers: { Authorization: `Bearer ${TOKEN}` } });

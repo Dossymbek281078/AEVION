@@ -207,7 +207,9 @@ fi
 # каталоги с именем src и они .mjs, тогда как исходник сайта там весь .ts/.tsx.
 # Замер по циклу 12: под frontend/src ноль .mjs, а .mjs вне src в репозитории
 # 126 — значит запрет узкий и на здоровом коде не срабатывает.
-PODKIDYSHI="$(git ls-tree -r --name-only HEAD -- frontend/src | grep -E '\.mjs$' | head -20)"
+# `|| true` — см. разбор в railway-deploy.sh: под `set -euo pipefail` grep без
+# совпадений роняет конвейер и весь скрипт, молча и до первого вывода.
+PODKIDYSHI="$(git ls-tree -r --name-only HEAD -- frontend/src | grep -E '\.mjs$' | head -20 || true)"
 if [ -n "$PODKIDYSHI" ]; then
   echo "ОСТАНОВКА: в frontend/src есть .mjs — у сайта там только .ts и .tsx." >&2
   echo "Похоже на чужой файл, уже подхваченный автосейвом:" >&2

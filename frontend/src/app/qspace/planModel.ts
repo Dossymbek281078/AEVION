@@ -87,7 +87,24 @@ export interface CeilingLight {
 const WALL_H = 2.7;
 const OUTLET_H = 0.3; // розетки — 30 см от пола (евростандарт)
 const SWITCH_H = 0.9; // выключатели — 90 см
-const TRUNK_H = WALL_H - 0.25; // магистраль кабеля под потолком
+const TRUNK_DROP = 0.25; // магистраль кабеля идёт на столько ниже потолка
+const TRUNK_H = WALL_H - TRUNK_DROP; // при высоте по умолчанию
+
+/**
+ * Высота стен ЭТОГО плана, м.
+ *
+ * Высоту 2.70 нельзя держать константой модуля: в квартирах она от 2.5 до 3.2,
+ * а от неё прямо считается площадь под покраску и штукатурку. Разница между
+ * 2.5 и 3.0 — это 20 % материала, то есть деньги, и ошибка была бы тихой:
+ * модель выглядит правильной, просто числа не те.
+ *
+ * В плане высота уже хранится У КАЖДОЙ СТЕНЫ — брать её надо оттуда, а не из
+ * константы. Константа остаётся значением ПО УМОЛЧАНИЮ для нового плана.
+ */
+export function planWallHeight(plan: Plan): number {
+  const h = plan.walls[0]?.height;
+  return Number.isFinite(h) && (h as number) > 0 ? (h as number) : WALL_H;
+}
 const OUTLET_STEP = 2.5; // шаг розеток вдоль стены
 
 function wallLen(w: Wall): number {
@@ -140,6 +157,7 @@ function freeSegments(plan: Plan, wallIdx: number): Array<[number, number]> {
  * дверей, щиток у входной двери, магистрали под потолком со спусками.
  */
 export function generateWiring(plan: Plan): WiringDraft {
+  const TRUNK = planWallHeight(plan) - TRUNK_DROP;
   const points: WirePoint[] = [];
   const runs: Run[] = [];
 
@@ -164,12 +182,12 @@ export function generateWiring(plan: Plan): WiringDraft {
         const p = pointOnWall(w, t);
         points.push({ x: p.x, y: p.y, z: OUTLET_H, kind: "outlet" });
         // спуск кабеля от магистрали к розетке
-        runs.push([[p.x, p.y, TRUNK_H], [p.x, p.y, OUTLET_H]]);
+        runs.push([[p.x, p.y, TRUNK], [p.x, p.y, OUTLET_H]]);
       }
     }
     // магистраль под потолком вдоль всей стены
     if (wallLen(w) >= 0.6) {
-      runs.push([[w.x1, w.y1, TRUNK_H], [w.x2, w.y2, TRUNK_H]]);
+      runs.push([[w.x1, w.y1, TRUNK], [w.x2, w.y2, TRUNK]]);
     }
   });
 
@@ -180,7 +198,7 @@ export function generateWiring(plan: Plan): WiringDraft {
     const t = Math.max(0.15, o.offset - 0.2);
     const p = pointOnWall(w, t);
     points.push({ x: p.x, y: p.y, z: SWITCH_H, kind: "switch" });
-    runs.push([[p.x, p.y, TRUNK_H], [p.x, p.y, SWITCH_H]]);
+    runs.push([[p.x, p.y, TRUNK], [p.x, p.y, SWITCH_H]]);
   }
 
   return { points, runs };
@@ -193,6 +211,7 @@ export function generateWiring(plan: Plan): WiringDraft {
  * Канализация — с уклоном 2 см/м от дальней точки к стояку.
  */
 export function generatePlumbing(plan: Plan): PlumbingDraft {
+  const H = planWallHeight(plan);
   const b = planBounds(plan);
   // ближайший к (maxX, maxY) угол какой-либо стены — правый верхний угол
   // (на демо-плане там санузел; для DXF это честное допущение черновика)
@@ -213,9 +232,9 @@ export function generatePlumbing(plan: Plan): PlumbingDraft {
   const drain: Run[] = [];
 
   // стояк вертикально
-  cold.push([[rx, ry, 0], [rx, ry, WALL_H]]);
-  hot.push([[rx + 0.08, ry, 0], [rx + 0.08, ry, WALL_H]]);
-  drain.push([[rx - 0.12, ry, 0], [rx - 0.12, ry, WALL_H]]);
+  cold.push([[rx, ry, 0], [rx, ry, H]]);
+  hot.push([[rx + 0.08, ry, 0], [rx + 0.08, ry, H]]);
+  drain.push([[rx - 0.12, ry, 0], [rx - 0.12, ry, H]]);
 
   // подводка вдоль стены к кухонной зоне (влево от стояка) на высоте 0.5 м
   const spanX = Math.min(3, rx - b.minX - 0.4);

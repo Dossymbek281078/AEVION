@@ -19,6 +19,7 @@ import {
   planBounds,
   pointOnWall,
   WALL_HEIGHT,
+  planWallHeight,
   type Plan,
 } from "./planModel";
 import { parseDxf } from "./dxf";
@@ -138,6 +139,10 @@ export default function QSpaceClient() {
   // распознанному нельзя (см. RasterReview).
   const [rasterUrl, setRasterUrl] = useState<string | null>(null);
   const [pdfExtent, setPdfExtent] = useState("10");
+  // Высота потолка — число, от которого прямо зависит площадь под покраску.
+  // В квартирах она от 2.5 до 3.2 м: разница между краями — пятая часть
+  // материала. До 09.09.2026 она была зашита числом и человек не мог её назвать.
+  const [heightM, setHeightM] = useState(String(WALL_HEIGHT));
 
   // three-объекты живут в ref, React ими не управляет
   const three = useRef<{
@@ -417,7 +422,7 @@ export default function QSpaceClient() {
       );
       bulb.position.y = -0.06;
       fixture.add(base, bulb);
-      fixture.position.set(l.x, WALL_HEIGHT - 0.03, l.y);
+      fixture.position.set(l.x, planWallHeight(plan) - 0.03, l.y);
       t.gFinish.add(fixture);
     }
 
@@ -556,7 +561,7 @@ export default function QSpaceClient() {
         t.wallMat.color.set(wm.colors[0]);
         t.wallMat.map = null;
       } else {
-        const wt = textureFor(wallMatId, W, WALL_HEIGHT);
+        const wt = textureFor(wallMatId, W, planWallHeight(plan));
         t.wallMat.color.set(0xffffff);
         t.wallMat.map = wt;
       }
@@ -708,6 +713,14 @@ export default function QSpaceClient() {
     setWarnings(r.warnings);
     setUnitLabel(r.plan ? r.unitLabel : "");
     if (r.plan) setPlan(r.plan);
+  }, []);
+
+  /** Переписать высоту у всех стен плана — она хранится у стены, не глобально. */
+  const applyHeight = useCallback((v: string) => {
+    setHeightM(v);
+    const h = Number(v);
+    if (!Number.isFinite(h) || h < 2 || h > 5) return; // за этими краями не бывает
+    setPlan((p) => ({ ...p, walls: p.walls.map((w) => ({ ...w, height: h })) }));
   }, []);
 
   const applyPdfScale = useCallback(() => {
@@ -886,7 +899,7 @@ export default function QSpaceClient() {
   // помещения — это то, по чему покупают плитку и обои, и она обязана
   // меняться, когда меняется план.
   const perRoom = useMemo(
-    () => roomSpec(roomsInfo.rooms, WALL_HEIGHT),
+    () => roomSpec(roomsInfo.rooms, planWallHeight(plan)),
     [roomsInfo],
   );
 
@@ -1171,6 +1184,26 @@ export default function QSpaceClient() {
           {layers.rough && (
             <>
               <h2 style={S.h2}>Черновая: состав конструкций</h2>
+              <div style={S.scaleBox}>
+                <label htmlFor="qspace-height" style={{ fontSize: 14 }}>
+                  Высота потолка (в бетоне), м:
+                </label>
+                <input
+                  id="qspace-height"
+                  type="number"
+                  min={2}
+                  max={5}
+                  step={0.05}
+                  value={heightM}
+                  onChange={(e) => applyHeight(e.target.value)}
+                  style={S.scaleInput}
+                />
+              </div>
+              <p style={S.hint}>
+                Из плана высоту узнать нельзя — чертёж плоский. Поставьте свою:
+                от неё считается площадь под покраску и штукатурку, и разница
+                между 2.5 и 3.0 м — это пятая часть материала.
+              </p>
               <div style={S.swatchRow} role="group" aria-label="Тип перегородки">
                 {[WALL_BLOCK, WALL_FRAME].map((w) => (
                   <button
@@ -1206,12 +1239,12 @@ export default function QSpaceClient() {
                   </tr>
                   <tr>
                     <td style={S.estTd}>Высота «в бетоне»</td>
-                    <td style={S.estTdNum}>{WALL_HEIGHT.toFixed(2)} м</td>
+                    <td style={S.estTdNum}>{planWallHeight(plan).toFixed(2)} м</td>
                   </tr>
                   <tr>
                     <td style={S.estTd}><strong>Чистовая высота после ремонта</strong></td>
                     <td style={S.estTdNum}>
-                      <strong>{finishedHeightM(WALL_HEIGHT, FLOOR_WET, CEILING_STRETCH).toFixed(2)} м</strong>
+                      <strong>{finishedHeightM(planWallHeight(plan), FLOOR_WET, CEILING_STRETCH).toFixed(2)} м</strong>
                     </td>
                   </tr>
                 </tbody>

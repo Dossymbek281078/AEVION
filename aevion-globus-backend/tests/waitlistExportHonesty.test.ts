@@ -63,8 +63,20 @@ async function mount() {
   // Публичный роут подписки нужен, чтобы проверить путь целиком: подписка →
   // склейка метки → разбивка в выгрузке. Письма при этом не уходят — без
   // BREVO_API_KEY отправка возвращает отказ ещё до сетевого вызова.
+  /*
+   * Префиксы РОВНО как в проде, и это не педантизм.
+   *
+   * 🔴 Замер 09.09.2026: стенд вешал админский роутер на ПУБЛИЧНЫЙ префикс, а
+   * в index.ts (строки 1293–1294) он живёт под `/api/admin/...`. Из-за этого
+   * восемь тестов здесь три недели были ЗЕЛЁНЫМИ на адресе, которого на проде
+   * НЕТ, — и оба скрипта рассылки, написанные по этому же адресу, получали
+   * 404. Рассылка не запускалась ни разу и в утро запуска остановилась бы.
+   *
+   * То есть стенд строил себе другую платформу, и проверка честности выгрузки
+   * проверяла честность на несуществующей поверхности.
+   */
   app.use("/api/constitution/waitlist", constitutionWaitlistRouter);
-  app.use("/api/constitution/waitlist", constitutionWaitlistAdminRouter);
+  app.use("/api/admin/constitution/waitlist", constitutionWaitlistAdminRouter);
   return app;
 }
 
@@ -74,7 +86,7 @@ describe("выгрузка заявок — признаки честности"
     async () => {
       // Список адресов — персональные данные: закрыт он не «на всякий случай».
       const app = await mount();
-      const r = await request(app).get("/api/constitution/waitlist/list");
+      const r = await request(app).get("/api/admin/constitution/waitlist/list");
       expect(r.status).toBe(403);
       expect(r.body.error).toBe("admin_required");
     },
@@ -85,7 +97,7 @@ describe("выгрузка заявок — признаки честности"
   test("JSON называет источник данных, а не только строки", async () => {
     const app = await mount();
     const r = await request(app)
-      .get("/api/constitution/waitlist/list")
+      .get("/api/admin/constitution/waitlist/list")
       .set("Authorization", `Bearer ${adminToken()}`);
 
     expect(r.status).toBe(200);
@@ -106,7 +118,7 @@ describe("выгрузка заявок — признаки честности"
     // обязан признаться, что список из памяти.
     const app = await mount();
     const r = await request(app)
-      .get("/api/constitution/waitlist/list")
+      .get("/api/admin/constitution/waitlist/list")
       .set("Authorization", `Bearer ${adminToken()}`);
 
     expect(r.body.source).toBe("memory");
@@ -118,7 +130,7 @@ describe("выгрузка заявок — признаки честности"
   test("CSV несёт те же признаки заголовками — в файл их не положить", async () => {
     const app = await mount();
     const r = await request(app)
-      .get("/api/constitution/waitlist/list?format=csv")
+      .get("/api/admin/constitution/waitlist/list?format=csv")
       .set("Authorization", `Bearer ${adminToken()}`);
 
     expect(r.status).toBe(200);
@@ -133,7 +145,7 @@ describe("выгрузка заявок — признаки честности"
     // Иначе браузер покажет его текстом, и человек скопирует руками с потерями.
     const app = await mount();
     const r = await request(app)
-      .get("/api/constitution/waitlist/list?format=csv")
+      .get("/api/admin/constitution/waitlist/list?format=csv")
       .set("Authorization", `Bearer ${adminToken()}`);
 
     expect(r.headers["content-disposition"]).toMatch(/attachment/);
@@ -146,7 +158,7 @@ describe("выгрузка заявок — признаки честности"
     // истолковать.
     const app = await mount();
     const r = await request(app)
-      .get("/api/constitution/waitlist/list")
+      .get("/api/admin/constitution/waitlist/list")
       .set("Authorization", `Bearer ${adminToken()}`);
 
     if ("total" in r.body) {
@@ -218,7 +230,7 @@ describe("разбивка по источникам после склейки �
   test("ответ несёт uniqueEmails и пояснение про сумму", async () => {
     const app = await mount();
     const r = await request(app)
-      .get("/api/constitution/waitlist/list")
+      .get("/api/admin/constitution/waitlist/list")
       .set("Authorization", `Bearer ${adminToken()}`);
 
     expect(r.status).toBe(200);
@@ -247,7 +259,7 @@ describe("разбивка по источникам после склейки �
     }
 
     const list = await request(app)
-      .get("/api/constitution/waitlist/list")
+      .get("/api/admin/constitution/waitlist/list")
       .set("Authorization", `Bearer ${adminToken()}`);
 
     const groups = (list.body.bySource ?? []) as Array<{ source: string; count: number }>;

@@ -33,6 +33,20 @@ export type MvpConceptBoardProps = {
   sectionTitle: string;
   sectionHint?: string;
   accent?: "emerald" | "sky" | "violet" | "amber" | "rose" | "teal";
+  /**
+   * Не показывать записи этих авторов (поле `author` внутри payload).
+   *
+   * Заведено 09.09.2026 для биржи стартапов: в её доске предложений лежали
+   * ТРИ записи, и все три сделаны автором `ci` — нашим роботом сборки
+   * («smoke 20260519T064745Z», обоснование «auto-smoke»). Витрина показывала
+   * их в блоке «Последние» — то есть обещала свежесть, а выдавала пробы
+   * возрастом 112 дней. Читалось как «здесь ничего не происходит с мая».
+   *
+   * Почему параметром, а не фильтром внутри: компонент общий, его используют
+   * 17 страниц, и у каждой свои авторы. Скрывать чужие записи по умолчанию
+   * нельзя — однажды так спрячется настоящая.
+   */
+  hideAuthors?: readonly string[];
 };
 
 const ACCENTS: Record<NonNullable<MvpConceptBoardProps["accent"]>, {
@@ -61,6 +75,7 @@ function timeAgo(iso: string): string {
 export default function MvpConceptBoard({
   moduleId,
   noun,
+  hideAuthors,
   fields,
   titleField,
   summaryField,
@@ -87,7 +102,17 @@ export default function MvpConceptBoard({
       ]);
       if (listRes.ok) {
         const j = await listRes.json();
-        setItems(Array.isArray(j.items) ? j.items : []);
+        const сырые: Item[] = Array.isArray(j.items) ? j.items : [];
+        // Фильтр применяется ПОСЛЕ выдачи сервера, поэтому список может стать
+        // короче запрошенного предела — это лучше, чем показать пробу робота.
+        setItems(
+          hideAuthors && hideAuthors.length
+            ? сырые.filter((it) => {
+                const автор = it?.payload?.author;
+                return typeof автор !== "string" || !hideAuthors.includes(автор);
+              })
+            : сырые,
+        );
       }
       if (statsRes.ok) {
         const s = await statsRes.json();
@@ -102,7 +127,7 @@ export default function MvpConceptBoard({
     } finally {
       setLoading(false);
     }
-  }, [moduleId, noun]);
+  }, [moduleId, noun, hideAuthors]);
 
   useEffect(() => {
     void refresh();

@@ -269,23 +269,36 @@ export function parseDxf(text: string): DxfResult {
   let recognised = 0;
   let unattached = 0;
   let byLayer = 0;
+  let rejected = 0;
+  const rejectReasons = new Set<string>();
   const unknownNames = new Set<string>();
   for (const b of blocks) {
     const guess = kindOfBlock(b.name, b.layer);
     if (!guess) { unknownNames.add(b.name || "(без имени)"); continue; }
     const hit = nearestWall(plan, (b.x - minX) * scale, (b.y - minY) * scale, 0.7);
+    // ⚠️ Два РАЗНЫХ отказа, и человеку нужны разные слова. «Стены рядом нет» —
+    // скорее всего блок не на плане (штамп, условное обозначение). «Не влез» —
+    // стена найдена, но проём в неё не помещается или налезает на соседний, и
+    // это уже про сам чертёж. Считать их одним числом значило бы сказать про
+    // половину случаев неправду.
     if (!hit) { unattached++; continue; }
     const res = placeOpening(plan, hit, guess.kind);
     if (res.ok) {
       plan = res.plan;
       recognised++;
       if (guess.byLayer) byLayer++;
-    } else unattached++;
+    } else {
+      rejected++;
+      if (rejectReasons.size < 3) rejectReasons.add(res.reason);
+    }
   }
   if (blocks.length > 0) {
     warnings.push(
       `Блоков в чертеже: ${blocks.length}. Проёмов распознано: ${recognised}`
-      + (unattached > 0 ? `, не привязано к стене: ${unattached}` : "")
+      + (unattached > 0 ? `, рядом нет стены: ${unattached}` : "")
+      + (rejected > 0
+        ? `, не помещается в стену: ${rejected} (${[...rejectReasons].join("; ")})`
+        : "")
       + (byLayer > 0
         ? `, из них по СЛОЮ (имя блока молчит): ${byLayer} — проверьте, не мебель ли это`
         : "")

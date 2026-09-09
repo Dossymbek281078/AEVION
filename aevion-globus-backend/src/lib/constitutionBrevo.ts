@@ -191,7 +191,17 @@ export function buildWaitlistConfirmEmail(email: string, source?: string): Const
 const LAUNCH_MODULES: Array<{ prefix: string; name: string; plan: string; page: string; planUtc: number }> = [
   { prefix: "cyberchess", name: "CyberChess", plan: "30 сентября", page: "https://aevion.app/cyberchess/launch", planUtc: Date.UTC(2026, 8, 30) },
   { prefix: "bureau", name: "AEVION IP Bureau", plan: "10 сентября", page: "https://aevion.app/bureau/launch", planUtc: Date.UTC(2026, 8, 10) },
-  { prefix: "qright", name: "AEVION IP Bureau", plan: "10 сентября", page: "https://aevion.app/bureau/launch", planUtc: Date.UTC(2026, 8, 10) },
+  // ⚠️ 09.09.2026: строка была скопирована с соседней (bureau) и не поправлена —
+  // подписчик со страницы QRight получал письмо про ЧУЖОЙ модуль («AEVION IP
+  // Bureau») и ссылку на чужую страницу запуска, накануне собственного запуска
+  // QRight. Нашлось расхождением двух НАШИХ списков: в launchAnnounce.ts тот же
+  // модуль называется «QRight» и ведёт на /qright.
+  //
+  // Адрес — страница МОДУЛЯ, а не /qright/launch: страницы запуска у него нет
+  // (проверено 09.09: /qright 200, /qright/launch 404). Выдумывать адрес нельзя,
+  // это увело бы человека из письма в 404. Тот же выбор и по той же причине
+  // сделан у qskyway выше.
+  { prefix: "qright", name: "QRight", plan: "10 сентября", page: "https://aevion.app/qright", planUtc: Date.UTC(2026, 8, 10) },
   { prefix: "devhub", name: "DevHub Studio", plan: "10 сентября", page: "https://aevion.app/devhub/launch", planUtc: Date.UTC(2026, 8, 10) },
   { prefix: "multichat", name: "AEVION Multichat", plan: "10 сентября", page: "https://aevion.app/multichat-engine/launch", planUtc: Date.UTC(2026, 8, 10) },
   // ⚠️ Добавлено 31.08.2026. Найдено сторожем воронки при сборке: подписчик со

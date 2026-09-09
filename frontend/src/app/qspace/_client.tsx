@@ -1181,29 +1181,34 @@ export default function QSpaceClient() {
 
       <div style={S.body}>
         <aside style={S.panel}>
+          {/* Высота нужна ВСЕМ слоям: по ней считается и штукатурка (черновая),
+              и краска (чистовая). Первая редакция стояла внутри блока черновой
+              отделки — человек, смотрящий чистовую, поля не видел вовсе, хотя
+              именно его расход от высоты и зависит. */}
+          <div style={S.scaleBox}>
+            <label htmlFor="qspace-height" style={{ fontSize: 14 }}>
+              Высота потолка (в бетоне), м:
+            </label>
+            <input
+              id="qspace-height"
+              type="number"
+              min={2}
+              max={5}
+              step={0.05}
+              value={heightM}
+              onChange={(e) => applyHeight(e.target.value)}
+              style={S.scaleInput}
+            />
+          </div>
+          <p style={S.hint}>
+            Из плана высоту узнать нельзя — чертёж плоский. Поставьте свою:
+            от неё считается площадь под покраску и штукатурку, и разница
+            между 2.5 и 3.0 м — это пятая часть материала.
+          </p>
+
           {layers.rough && (
             <>
               <h2 style={S.h2}>Черновая: состав конструкций</h2>
-              <div style={S.scaleBox}>
-                <label htmlFor="qspace-height" style={{ fontSize: 14 }}>
-                  Высота потолка (в бетоне), м:
-                </label>
-                <input
-                  id="qspace-height"
-                  type="number"
-                  min={2}
-                  max={5}
-                  step={0.05}
-                  value={heightM}
-                  onChange={(e) => applyHeight(e.target.value)}
-                  style={S.scaleInput}
-                />
-              </div>
-              <p style={S.hint}>
-                Из плана высоту узнать нельзя — чертёж плоский. Поставьте свою:
-                от неё считается площадь под покраску и штукатурку, и разница
-                между 2.5 и 3.0 м — это пятая часть материала.
-              </p>
               <div style={S.swatchRow} role="group" aria-label="Тип перегородки">
                 {[WALL_BLOCK, WALL_FRAME].map((w) => (
                   <button

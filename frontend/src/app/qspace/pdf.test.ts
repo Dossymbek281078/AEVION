@@ -124,6 +124,59 @@ describe("readPdfSegments — что нашлось в файле", () => {
   });
 });
 
+describe("стены двумя линиями сводятся и в PDF", () => {
+  // PDF приходит из той же CAD-программы, что и DXF, — просто напечатан. Значит
+  // и манера черчения та же: у стены рисуют две грани. Путь PDF оставался без
+  // сведения после того, как его получил DXF, и это ровно тот случай, когда
+  // «починили аналог, а не все места».
+  const пара = (t: number): PdfSegments => ({
+    // 400 пт = 8 м, значит 1 пт = 0.02 м; зазор t пт = t*0.02 м
+    segments: [
+      { x1: 0, y1: 0, x2: 400, y2: 0 },
+      { x1: 0, y1: -t, x2: 400, y2: -t },
+      { x1: 400, y1: 0, x2: 400, y2: 300 },
+      { x1: 400 + t, y1: 0, x2: 400 + t, y2: 300 },
+      { x1: 0, y1: 300, x2: 400, y2: 300 },
+      { x1: 0, y1: 0, x2: 0, y2: 300 },
+    ],
+    warnings: [],
+    extentPt: 400,
+  });
+
+  it("пара граней становится одной стеной, толщина из чертежа", () => {
+    // зазор 10 пт × 0.02 = 0.2 м — правдоподобная толщина стены
+    const r = planFromPdfSegments(пара(10), 8);
+    expect(r.plan, "план не построился").not.toBeNull();
+    expect(r.plan!.walls.length, "грани не сведены").toBe(4);
+    const сведённые = r.plan!.walls.filter((w) => Math.abs(w.thickness - 0.2) < 1e-6);
+    expect(сведённые.length, "толщина не взята из чертежа").toBe(2);
+    expect(r.warnings.join(" ")).toMatch(/двумя линиями/);
+  });
+
+  it("контроль: одиночные линии НЕ сводятся и сообщения нет", () => {
+    const r = planFromPdfSegments({
+      segments: [
+        { x1: 0, y1: 0, x2: 400, y2: 0 },
+        { x1: 400, y1: 0, x2: 400, y2: 300 },
+        { x1: 0, y1: 300, x2: 400, y2: 300 },
+        { x1: 0, y1: 0, x2: 0, y2: 300 },
+      ],
+      warnings: [],
+      extentPt: 400,
+    }, 8);
+    expect(r.plan!.walls.length).toBe(4);
+    expect(r.warnings.join(" ")).not.toMatch(/двумя линиями/);
+    for (const w of r.plan!.walls) expect(w.thickness).toBeCloseTo(0.15, 6);
+  });
+
+  it("план из PDF называет себя pdf, а не dxf", () => {
+    // поле уезжает в сохранённый файл проекта — то есть врёт в том, что
+    // человек уносит с собой и отдаёт подрядчику
+    const r = planFromPdfSegments(пара(10), 8);
+    expect(r.plan!.source).toBe("pdf");
+  });
+});
+
 describe("planFromPdfSegments — масштаб задаёт человек", () => {
   const src: PdfSegments = {
     segments: [

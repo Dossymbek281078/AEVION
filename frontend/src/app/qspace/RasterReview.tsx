@@ -204,7 +204,7 @@ export default function RasterReview({ imageUrl, onCancel, onAccept }: Props) {
       walls.push(w);
     }
     if (walls.length === 0) return;
-    onAccept({ name: "Импорт картинки (проверено вами)", walls, openings: [], source: "dxf" });
+    onAccept({ name: "Импорт картинки (проверено вами)", walls, openings: [], source: "raster" });
   }, [kept, extentM, onAccept]);
 
   const S = styles;

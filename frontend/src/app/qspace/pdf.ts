@@ -21,6 +21,7 @@
 
 import type { Plan, Wall } from "./planModel";
 import { WALL_HEIGHT } from "./planModel";
+import { mergeDoubleWalls } from "./wallMerge";
 
 export interface PdfSegments {
   segments: Array<{ x1: number; y1: number; x2: number; y2: number }>;
@@ -303,13 +304,29 @@ export function planFromPdfSegments(src: PdfSegments, knownExtentM: number): Pdf
     };
   }
 
+  // Та же манера черчения, что и в DXF: чертёж пришёл из той же программы,
+  // просто напечатан в PDF. Сведение общим механизмом, а не второй копией
+  // правила — иначе два пути разойдутся молча.
+  const сведение = mergeDoubleWalls(walls);
+  if (сведение.merged > 0) {
+    const толщины = сведение.walls
+      .filter((w) => Math.abs(w.thickness - 0.15) > 1e-9)
+      .map((w) => w.thickness);
+    const мин = Math.min(...толщины), макс = Math.max(...толщины);
+    warnings.push(
+      `Стены начерчены двумя линиями — ${сведение.merged} пар сведены в одну стену каждая. `
+      + `Толщина взята из чертежа: ${мин === макс ? `${мин.toFixed(2)} м` : `${мин.toFixed(2)}–${макс.toFixed(2)} м`}, `
+      + "а не типовые 0.15 м. Если у вас были ДВЕ отдельные стены рядом — сверьте с чертежом.",
+    );
+  }
+
   warnings.push(
     "PDF не хранит масштаб чертежа — модель построена по указанному вами габариту "
     + `${knownExtentM} м. Если размеры не сходятся, поправьте это число.`,
   );
 
   return {
-    plan: { name: "Импорт PDF", walls, openings: [], source: "dxf" },
+    plan: { name: "Импорт PDF", walls: сведение.walls, openings: [], source: "pdf" },
     warnings,
     metersPerPt,
     extentPt: src.extentPt,

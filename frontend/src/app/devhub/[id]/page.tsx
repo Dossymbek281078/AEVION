@@ -15,6 +15,7 @@ import { newFilePathError, renamePathError, normalizeFilePath } from "@/lib/devh
 import { devhubServerError, useDevhubServerError } from "@/lib/devhubServerError";
 import { track } from "@/lib/track";
 import { useI18nOptional } from "@/lib/i18n";
+import { tDevhub, type DevhubKey } from "../i18n";
 import { productById } from "@/lib/products";
 
 /**
@@ -858,6 +859,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const uiLang = useI18nOptional()?.lang ?? "ru";
   const GL = GEN_UI[uiLang] ?? GEN_UI.ru;
   const AL = useAttrL();
+  // Денежная плашка берёт подписи из СЛОВАРЯ МОДУЛЯ, а не из своих литералов:
+  // те же три строки уже живут на витрине (pro.upgrade / pro.perMonth /
+  // pro.linkPurchase), и второй их источник однажды разошёлся бы с первым.
+  // Не useDevhubT: тот зовёт useI18n, который БРОСАЕТ вне провайдера, а это
+  // окно намеренно берёт язык необязательно (useI18nOptional) и обязано
+  // отрисовываться без него. Поймал сторож devhubWorkspaceRenderedTextIsRussian.
+  const tPro = (key: DevhubKey) => tDevhub(uiLang, key);
   const TL = TOAST_UI[uiLang] ?? TOAST_UI.ru;
   const serverError = useDevhubServerError();
   const [project, setProject] = useState<Project | null>(null);
@@ -6733,11 +6741,11 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                 whiteSpace: "nowrap",
               }}
             >
-              Оформить Pro — ${STUDIO_PRO.priceUsd}/мес
+              {tPro("pro.upgrade")} — ${STUDIO_PRO.priceUsd}{tPro("pro.perMonth")}
             </a>
           )}
           <Link href="/devhub/link" style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, textDecoration: "underline", whiteSpace: "nowrap" }}>
-            Уже оплатили?
+            {tPro("pro.linkPurchase")}
           </Link>
           <button
             onClick={() => setUpgradeNudge(null)}

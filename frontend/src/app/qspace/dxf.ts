@@ -2,8 +2,9 @@
  * QSpace — минимальный разбор DXF (ASCII) в план стен.
  *
  * Понимает сущности LINE и LWPOLYLINE из секции ENTITIES — этого достаточно
- * для планировок, экспортированных из AutoCAD «как чертёж». Дуги, блоки и
- * штриховки НЕ разбираются (честно сообщается в warnings).
+ * для планировок, экспортированных из AutoCAD «как чертёж». Вставки блоков
+ * (`INSERT`) разбираются ради ПРОЁМОВ: окна и двери в чертеже — это блоки,
+ * а не отрезки. Дуги и штриховки НЕ разбираются (честно в warnings).
  *
  * Единицы: сперва читается $INSUNITS из HEADER; если её нет — эвристика по
  * габариту (>1000 → мм, >100 → см, иначе метры). Выбранная единица
@@ -13,6 +14,7 @@
 
 import type { Plan, Wall } from "./planModel";
 import { WALL_HEIGHT } from "./planModel";
+import { nearestWall, placeOpening } from "./openings";
 
 export interface DxfResult {
   plan: Plan | null;
@@ -25,7 +27,56 @@ export interface DxfResult {
 
 interface Seg { x1: number; y1: number; x2: number; y2: number; layer: string }
 
+/** Вставка блока: точка и имя. Из неё выводятся окна и двери. */
+interface Block { x: number; y: number; name: string; layer: string }
+
 const MAX_SEGMENTS = 400;
+
+/**
+ * Как распознаётся дверь и окно среди блоков чертежа.
+ *
+ * В AutoCAD проём — это ВСТАВКА БЛОКА (`INSERT`), а не отрезок: у неё есть
+ * точка и имя, но нет ни ширины, ни привязки к стене. Поэтому:
+ *
+ *  - вид (дверь или окно) берётся из ИМЕНИ блока и слоя — других сведений в
+ *    файле нет; чертёжники называют их по-разному, и незнакомые имена мы
+ *    честно считаем и НЕ угадываем;
+ *  - ШИРИНА берётся из типового размера, а не из чертежа. Масштаб блока
+ *    (коды 41/42) описывает растяжение символа, а не проёма, и выводить из
+ *    него ширину значило бы получить правдоподобно неверное число;
+ *  - точка вставки привязывается к БЛИЖАЙШЕЙ стене; если стены рядом нет,
+ *    проём не ставится и попадает в счёт непривязанных.
+ *
+ * Всё это говорится человеку на странице: он видит, сколько блоков найдено,
+ * сколько распознано и почему остальные нет.
+ */
+const DOOR_RE = /(дверь|двер|door|dr[-_]|d[-_]?\d)/i;
+const WINDOW_RE = /(окно|окн|window|win[-_]|w[-_]?\d)/i;
+
+/**
+ * Вид проёма по блоку: сперва по ИМЕНИ, и только потом по слою.
+ *
+ * ⚠️ Порядок не косметика. Первая версия склеивала имя со слоем в одну строку
+ * и спрашивала «есть ли где-нибудь слово door» — окно с именем «ОКНО-1400»,
+ * лежащее на слое `A-DOOR` (в реальных чертежах проёмы часто на одном слое),
+ * становилось ДВЕРЬЮ. Имя конкретнее слоя: слой описывает группу, имя —
+ * предмет. Поймал тест, где имя и слой спорят.
+ */
+function kindOfBlock(
+  name: string,
+  layer: string,
+): { kind: "door" | "window"; byLayer: boolean } | null {
+  if (WINDOW_RE.test(name)) return { kind: "window", byLayer: false };
+  if (DOOR_RE.test(name)) return { kind: "door", byLayer: false };
+  // ⚠️ Слой — ДОГАДКА, и она бывает неверной: шкаф-купе, попавший на слой
+  // дверей, стал бы дверью в стене. Отказаться от неё нельзя (блоки часто
+  // зовут «BLK17»), поэтому такие проёмы считаются ОТДЕЛЬНО и человеку
+  // говорится, сколько их и почему: молча угадывать нельзя, а подсказку
+  // выбрасывать жалко.
+  if (WINDOW_RE.test(layer)) return { kind: "window", byLayer: true };
+  if (DOOR_RE.test(layer)) return { kind: "door", byLayer: true };
+  return null;
+}
 
 /** Разбор пар «код группы / значение». */
 function pairs(text: string): Array<[number, string]> {
@@ -65,6 +116,7 @@ export function parseDxf(text: string): DxfResult {
 
   // --- сущности ----------------------------------------------------------
   const segs: Seg[] = [];
+  const blocks: Block[] = [];
   const skipped = new Set<string>();
   let i = 0;
   // границы секции ENTITIES
@@ -114,14 +166,35 @@ export function parseDxf(text: string): DxfResult {
       continue;
     }
 
+    if (inEntities && code === 0 && val === "INSERT") {
+      let name = "", layer = "", x = NaN, y = NaN;
+      let j = i + 1;
+      for (; j < ps.length && ps[j][0] !== 0; j++) {
+        const [c, v] = ps[j];
+        if (c === 2) name = v;
+        else if (c === 8) layer = v;
+        else if (c === 10) x = parseFloat(v);
+        else if (c === 20) y = parseFloat(v);
+      }
+      if (Number.isFinite(x) && Number.isFinite(y)) blocks.push({ x, y, name, layer });
+      i = j;
+      continue;
+    }
+
     if (inEntities && code === 0 && val !== "ENDSEC" && val !== "SECTION") {
-      if (["ARC", "CIRCLE", "SPLINE", "INSERT", "HATCH", "ELLIPSE"].includes(val)) skipped.add(val);
+      if (["ARC", "CIRCLE", "SPLINE", "HATCH", "ELLIPSE"].includes(val)) skipped.add(val);
     }
     i++;
   }
 
   if (skipped.size > 0) {
-    warnings.push(`Пропущены сущности: ${[...skipped].sort().join(", ")} — разбираются только LINE и LWPOLYLINE (дуги и блоки — этап 2).`);
+    // Список пропущенного берётся из ТОГО ЖЕ набора, что и проверка выше:
+    // фраза «блоки не разбираются» пережила бы правку, которая их разбирать
+    // научила, и сутки говорила бы человеку неправду о его же чертеже.
+    warnings.push(
+      `Пропущены сущности: ${[...skipped].sort().join(", ")} — стены строятся из`
+      + " LINE и LWPOLYLINE, проёмы из блоков INSERT, остальное не разбирается.",
+    );
   }
   if (segs.length === 0) {
     return { plan: null, warnings: [...warnings, "Не найдено ни одного отрезка LINE/LWPOLYLINE."], unitLabel: "—", truncated: 0 };
@@ -183,10 +256,47 @@ export function parseDxf(text: string): DxfResult {
     return { plan: null, warnings: [...warnings, "После пересчёта масштаба стен не осталось (все отрезки короче 5 см)."], unitLabel, truncated };
   }
 
-  return {
-    plan: { name: "Импорт DXF", walls, openings: [], source: "dxf" },
-    warnings,
-    unitLabel,
-    truncated,
-  };
+  // ⚠️ `placeOpening` НЕ меняет план на месте, а возвращает новый: страница
+  // работает через состояние React, где менять объект нельзя. Первая версия
+  // этого разбора звала его как изменяющий — счётчик честно печатал
+  // «распознано 1», а в плане был ноль проёмов. Поймал тест, чтением не видно.
+  let plan: Plan = { name: "Импорт DXF", walls, openings: [], source: "dxf" };
+
+  // --- проёмы из блоков ---------------------------------------------------
+  // Ставятся ТЕМИ ЖЕ функциями, что и клик человека по стене: они уже умеют
+  // отказать, если проём не влезает или налезает на соседний. Второй способ
+  // ставить проёмы стал бы вторым источником правды.
+  let recognised = 0;
+  let unattached = 0;
+  let byLayer = 0;
+  const unknownNames = new Set<string>();
+  for (const b of blocks) {
+    const guess = kindOfBlock(b.name, b.layer);
+    if (!guess) { unknownNames.add(b.name || "(без имени)"); continue; }
+    const hit = nearestWall(plan, (b.x - minX) * scale, (b.y - minY) * scale, 0.7);
+    if (!hit) { unattached++; continue; }
+    const res = placeOpening(plan, hit, guess.kind);
+    if (res.ok) {
+      plan = res.plan;
+      recognised++;
+      if (guess.byLayer) byLayer++;
+    } else unattached++;
+  }
+  if (blocks.length > 0) {
+    warnings.push(
+      `Блоков в чертеже: ${blocks.length}. Проёмов распознано: ${recognised}`
+      + (unattached > 0 ? `, не привязано к стене: ${unattached}` : "")
+      + (byLayer > 0
+        ? `, из них по СЛОЮ (имя блока молчит): ${byLayer} — проверьте, не мебель ли это`
+        : "")
+      + (unknownNames.size > 0
+        ? `, имена не опознаны: ${[...unknownNames].slice(0, 5).join(", ")}`
+          + (unknownNames.size > 5 ? ` и ещё ${unknownNames.size - 5}` : "")
+        : "")
+      + ". Ширина проёма взята ТИПОВАЯ, а не из чертежа: масштаб блока описывает"
+      + " растяжение символа, а не размер проёма. Проверьте и поправьте кликом.",
+    );
+  }
+
+  return { plan, warnings, unitLabel, truncated };
 }

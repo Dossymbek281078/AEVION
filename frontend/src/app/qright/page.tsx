@@ -1,6 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { useI18nOptional } from "@/lib/i18n";
+import { QR_BUSY } from "./busyUi";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
@@ -122,6 +124,8 @@ const KIND_OPTIONS = [
 type Step = "form" | "processing" | "done";
 
 export default function QRightPage() {
+  const qrLang = useI18nOptional()?.lang ?? "en";
+  const QR = QR_BUSY[qrLang] ?? QR_BUSY.en;
   const { showToast } = useToast();
   const { lang } = useI18n();
   const TOKEN_KEY = "aevion_auth_token_v1";
@@ -1591,7 +1595,7 @@ export default function QRightPage() {
                       disabled={whBusy || !whUrl.trim() || webhooks.length >= 10}
                       style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: webhooks.length >= 10 ? "#cbd5e1" : "#0d9488", color: "#fff", fontSize: 12, fontWeight: 800, cursor: whBusy || !whUrl.trim() || webhooks.length >= 10 ? "not-allowed" : "pointer" }}
                     >
-                      {whBusy ? "Adding…" : "Add"}
+                      {whBusy ? QR.adding : "Add"}
                     </button>
                   </div>
                   {webhooks.length === 0 ? (
@@ -1718,7 +1722,7 @@ export default function QRightPage() {
                 disabled={revokeBusy}
                 style={{ padding: "10px 18px", borderRadius: 8, border: "none", background: "#dc2626", color: "#fff", fontWeight: 800, fontSize: 13, cursor: revokeBusy ? "not-allowed" : "pointer", opacity: revokeBusy ? 0.7 : 1 }}
               >
-                {revokeBusy ? "Revoking…" : "Revoke"}
+                {revokeBusy ? QR.revoking : "Revoke"}
               </button>
             </div>
           </div>

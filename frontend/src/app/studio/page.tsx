@@ -452,17 +452,24 @@ export default function StudioPage() {
           ))}
         </div>
 
-        {/* Upgrade section */}
+        {/* Upgrade section.
+            ⚠️ Числа здесь — ВТОРОЙ ответ о пределах: первый живёт в TIER_LIMITS
+            на бэкенде и приезжает в этой же странице ручкой /studio/credits.
+            08.09.2026 они разошлись, и в обе стороны сразу: Free обещал 100k
+            знаков озвучки при пределе 10k (переобещание вдесятеро), Pro — 30k
+            при 200k, из-за чего платный тариф на этой строке выглядел ВТРОЕ
+            ХУЖЕ бесплатного. Сверку держит сторож proPerksMatchTierLimits;
+            меняя числа, меняй TIER_LIMITS, а не только текст. */}
         <div id="upgrade" style={{ marginTop: 64, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 20 }}>
           {[
             {
               tier: "Free", price: "$0", color: "#64748b",
-              features: ["3 videos / month", "10 images / month", "100k TTS chars", "5 music tracks", "10 deploys", "Monaco IDE", "GitHub push"],
+              features: ["3 videos / month", "10 images / month", "10k TTS chars", "5 music tracks", "10 deploys", "Monaco IDE", "GitHub push"],
               cta: "Current plan", ctaHref: "#", disabled: true,
             },
             {
               tier: "Pro", price: `$${STUDIO_PRO?.priceUsd ?? 149}`, color: "#0d9488",
-              features: ["50 videos / month", "200 images / month", "30k TTS chars", "100 music tracks", "Unlimited deploys", "Public *.pages.dev URL for every project", "Everything in Free", "Priority support"],
+              features: ["50 videos / month", "200 images / month", "200k TTS chars", "100 music tracks", "Unlimited deploys", "Public *.pages.dev URL for every project", "Everything in Free", "Priority support"],
               cta: "Upgrade to Pro", ctaHref: STUDIO_PRO?.href ?? "#", disabled: false,
               onCta: () =>
                 track({

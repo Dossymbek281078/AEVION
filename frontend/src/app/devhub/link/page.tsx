@@ -50,16 +50,14 @@ export default function DevHubLinkPage() {
          * Формулировку беру из двух других мест DevHub, а не завожу третью.
          */
         const вПамяти = j?.storage === "memory";
-        setNote(
-          вПамяти
-            ? t("link.confirmedButMemory")
-            : typeof j.message === "string"
-              ? j.message
-              : t("link.confirmed"),
-        );
+        // Текст берём ИЗ СЛОВАРЯ, а не из ответа сервера. Ручки этой страницы
+        // отвечают по-русски, и раньше их текст ПОБЕЖДАЛ словарь: покупатель
+        // с английским интерфейсом читал русскую фразу в момент подключения
+        // покупки за $149. Смысл словарной строки тот же — сверено дословно.
+        setNote(вПамяти ? t("link.confirmedButMemory") : t("link.confirmed"));
       } else {
         setConfirmState("failed");
-        setNote(typeof j?.message === "string" ? j.message : t("link.confirmFailed"));
+        setNote(r.status === 429 ? t("link.tooOften") : t("link.confirmFailed"));
       }
     } catch {
       setConfirmState("failed");
@@ -91,12 +89,17 @@ export default function DevHubLinkPage() {
       });
       const j = await r.json().catch(() => null);
       if (r.ok && j?.ok) {
-        setNote(typeof j.message === "string" ? j.message : t("link.sent"));
+        // Нейтральность сохранена: словарная строка, как и ответ сервера, не
+        // говорит, нашлась покупка или нет.
+        setNote(t("link.sent"));
       } else {
         // Отказ показываем отказом. Молчаливое «письмо отправлено» заставило
         // бы человека ждать письма, которого не будет.
         setFailed(true);
-        setNote(typeof j?.message === "string" ? j.message : t("link.requestFailed"));
+        // 429 — отдельная новость: у ограничителя формы свой предел (три
+        // попытки за десять минут), и «попробуйте позже» вместо «подождите
+        // десять минут» заставляет человека долбиться в закрытую дверь.
+        setNote(r.status === 429 ? t("link.tooOften") : t("link.requestFailed"));
       }
     } catch {
       setFailed(true);

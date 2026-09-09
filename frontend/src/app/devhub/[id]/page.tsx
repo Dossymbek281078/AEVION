@@ -82,9 +82,13 @@ const PODPIS_VKLADKI: Record<Vkladka, string> = {
 // словарь IDE (~400 строк) ждёт языкового решения основателя; здесь
 // НАМЕРЕННО только замеренный поимённо остаток пути новичка (проба
 // en-newcomer-probe, 06.09.2026: 66 знаков до генерации + тосты после).
-const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; syntaxWarn: string; memoryWarn: string; runCost: string; runTokens: string; stCalling: string; stWriting: string; stContinue: string; stSyntax: string; stSelfFix: string; stSaving: string; busyDb: string; busyDesign: string; busyGen: string; busyUndo: string; busyPublish: string; busyPull: string; busyDeploy: string; busyPlan: string; busyImg: string; busySave: string; busyApply: string; busyPush: string; busySync: string; busyCompose: string; busySend: string; busyTranslate: string; busyCreate: string; busyPreview: string; busyUpload: string; busyStt: string; busyAgent: string; busySetup: string }> = {
+const GEN_UI: Record<string, { ph: string; noteContinued: string; noteTruncated: string; noteNoProvider: string; noteSyntax: string; created: string; noChanges: string; syntaxWarn: string; memoryWarn: string; runCost: string; runTokens: string; stCalling: string; stWriting: string; stContinue: string; stSyntax: string; stSelfFix: string; stSaving: string; busyDb: string; busyDesign: string; busyGen: string; busyUndo: string; busyPublish: string; busyPull: string; busyDeploy: string; busyPlan: string; busyImg: string; busySave: string; busyApply: string; busyPush: string; busySync: string; busyCompose: string; busySend: string; busyTranslate: string; busyCreate: string; busyPreview: string; busyUpload: string; busyStt: string; busyAgent: string; busySetup: string; confirmDelFile: string }> = {
   ru: {
     ph: "Опишите, что нужно построить…\nНапример: «REST API с входом пользователей и ручкой товаров»",
+    noteContinued: "Ответ упёрся в предел длины — недостающие файлы дозагружены отдельным вызовом",
+    noteTruncated: "Ответ оборвался, а дозагрузить недостающее не вышло. Файлов сохранено:",
+    noteNoProvider: "Провайдер ИИ не настроен — вместо настоящего кода вставлена заглушка",
+    noteSyntax: "Проверка синтаксиса не прошла:",
     created: "Создано файлов",
     runCost: "Этот запуск",
     runTokens: "токенов",
@@ -101,12 +105,17 @@ const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; s
     busyCompose: "Сочиняю…", busySend: "Отправляю…", busyTranslate: "Перевожу…",
     busyCreate: "Создаю…", busyPreview: "Слушаю образец…", busyUpload: "Загружаю…",
     busyStt: "Расшифровываю…", busyAgent: "Выполняю сценарий…", busySetup: "Настраиваю…",
+    confirmDelFile: "Удалить файл {path}? Кнопка отмены правок ИИ его не вернёт.",
     noChanges: "Без изменений",
     syntaxWarn: "не прошли проверку синтаксиса — просмотрите перед выкаткой",
     memoryWarn: "но база была недоступна — они пока в памяти и могут пропасть при перезапуске. Сохраните копию.",
   },
   en: {
     ph: "Describe what to build…\nFor example: \"a REST API with user sign-in and a products endpoint\"",
+    noteContinued: "Reply hit the length cap — the missing files were fetched in a follow-up call",
+    noteTruncated: "The reply was cut off and the rest could not be fetched. Files saved:",
+    noteNoProvider: "No AI provider configured — placeholder inserted instead of real code",
+    noteSyntax: "Syntax check failed:",
     created: "Files created",
     runCost: "This run",
     runTokens: "tokens",
@@ -123,12 +132,17 @@ const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; s
     busyCompose: "Composing…", busySend: "Sending…", busyTranslate: "Translating…",
     busyCreate: "Creating…", busyPreview: "Previewing…", busyUpload: "Uploading…",
     busyStt: "Transcribing…", busyAgent: "Running the scenario…", busySetup: "Setting up…",
+    confirmDelFile: "Delete {path}? The AI-undo button will not bring it back.",
     noChanges: "No changes",
     syntaxWarn: "failed the syntax check — review before deploying",
     memoryWarn: "but the database was unavailable — they live in memory for now and may vanish on restart. Save a copy.",
   },
   kk: {
     ph: "Не құру керегін сипаттаңыз…\nМысалы: «пайдаланушы кірісі мен тауарлар жолы бар REST API»",
+    noteContinued: "Жауап ұзындық шегіне жетті — жетіспейтін файлдар бөлек сұраумен жүктелді",
+    noteTruncated: "Жауап үзілді, қалғанын жүктеу мүмкін болмады. Сақталған файлдар:",
+    noteNoProvider: "Жасанды интеллект жеткізушісі бапталмаған — нағыз кодтың орнына толтырғыш қойылды",
+    noteSyntax: "Синтаксис тексерісі өтпеді:",
     created: "Жасалған файлдар",
     runCost: "Бұл іске қосу",
     runTokens: "токен",
@@ -145,6 +159,7 @@ const GEN_UI: Record<string, { ph: string; created: string; noChanges: string; s
     busyCompose: "Шығарылуда…", busySend: "Жіберілуде…", busyTranslate: "Аударылуда…",
     busyCreate: "Жасалуда…", busyPreview: "Үлгі тыңдалуда…", busyUpload: "Жүктелуде…",
     busyStt: "Мәтінге айналдырылуда…", busyAgent: "Сценарий орындалуда…", busySetup: "Бапталуда…",
+    confirmDelFile: "{path} файлын жою керек пе? ЖИ болдырмау түймесі оны қайтармайды.",
     noChanges: "Өзгеріс жоқ",
     syntaxWarn: "синтаксис тексеруінен өтпеді — жариялау алдында қараңыз",
     memoryWarn: "бірақ дерекқор қолжетімсіз болды — олар әзірге жадта және қайта іске қосқанда жоғалуы мүмкін. Көшірмесін сақтаңыз.",
@@ -358,6 +373,7 @@ const TOAST_UI: Record<string, Record<string, string>> = {
     collabProOnly: "Соавторы доступны в Studio Pro — оформите, чтобы добавлять",
     collabAddFail: "Не удалось добавить соавтора",
     accessRevoked: "Доступ отозван",
+    pushFailed: "Отправить в репозиторий не удалось",
     repoPartial: "Часть файлов не попала в репозиторий",
     publishingCf: "Публикую на Cloudflare Pages…",
     deployingVercel: "Выкатываю на Vercel…",
@@ -398,6 +414,7 @@ const TOAST_UI: Record<string, Record<string, string>> = {
     collabProOnly: "Collaborators are available in Studio Pro — subscribe to add them",
     collabAddFail: "Could not add the collaborator",
     accessRevoked: "Access revoked",
+    pushFailed: "Could not push to the repository",
     repoPartial: "Some files did not make it into the repository",
     publishingCf: "Publishing to Cloudflare Pages…",
     deployingVercel: "Deploying to Vercel…",
@@ -438,6 +455,7 @@ const TOAST_UI: Record<string, Record<string, string>> = {
     collabProOnly: "Тең авторлар Studio Pro-да қолжетімді — қосу үшін жазылыңыз",
     collabAddFail: "Тең авторды қосу мүмкін болмады",
     accessRevoked: "Қолжетімділік қайтарып алынды",
+    pushFailed: "Репозиторийге жіберу мүмкін болмады",
     repoPartial: "Файлдардың бір бөлігі репозиторийге түспеді",
     publishingCf: "Cloudflare Pages-ке жариялап жатырмын…",
     deployingVercel: "Vercel-ге жариялап жатырмын…",
@@ -1506,7 +1524,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     // создаёт точки, поэтому кнопка отмены правок его не отменит. Об этом и
     // говорим: обещание невозможности в диалоге — такая же неправда, как
     // умолчание о потере.
-    if (!confirm(`Удалить файл ${path}? Кнопка отмены правок ИИ его не вернёт.`)) return;
+    // Нативный confirm — слепая зона доводчика ЦЕЛИКОМ (браузерный диалог
+    // не переводится никем) — только словарь.
+    if (!confirm(GL.confirmDelFile.replace("{path}", path))) return;
     try {
       await writeOrThrow(apiUrl(`/api/devhub/projects/${project.id}/file?path=${encodeURIComponent(path)}`), { method: "DELETE" });
       const remaining = files.filter((f) => f.path !== path);
@@ -1704,15 +1724,21 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         return { path: gf.path, language: gf.language || "text", isNew: before === "", added: d.added, removed: d.removed, diff: d.text };
       });
       let note: string | undefined;
-      if (data.continued) {
-        note = "Reply hit the length cap — the missing files were fetched in a follow-up call";
+      // ДВА разных исхода обрыва. Раньше оба назывались `continued`, и при
+      // НЕУДАЧНОМ дозапросе человек читал «недостающие файлы дозагружены» —
+      // поверх обрезанного набора. Сообщать о результате, которого не было,
+      // хуже, чем не сообщать ничего: человек не пойдёт проверять.
+      if (data.truncated) {
+        note = `${GL.noteTruncated} ${data.recoveredFiles ?? newGenerated.length}`;
+      } else if (data.continued) {
+        note = GL.noteContinued;
       }
       if (data.aiGenerated === false) {
-        note = "No AI provider configured — placeholder inserted instead of real code";
+        note = GL.noteNoProvider;
         showToast(TL.stubCode, "error");
       } else if (Array.isArray(data.syntaxErrors) && data.syntaxErrors.length > 0) {
         const paths = data.syntaxErrors.map((s: { path: string }) => s.path).join(", ");
-        note = `Syntax check failed: ${paths}`;
+        note = `${GL.noteSyntax} ${paths}`;
         showToast(`${GL.created}: ${newGenerated.length}, ${paths} ${GL.syntaxWarn}`, "warning");
       } else if (data.storage === "memory") {
         // Генерация — платный шаг. Сервер говорит, куда легли файлы; "memory"
@@ -2123,7 +2149,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const provisionDatabase = async () => {
     if (!project || provisioningDb) return;
     if (isCapabilityBlocked(caps, "database")) {
-      showToast(capabilityHint(caps, "database", "База данных"), "warning");
+      showToast(capabilityHint(caps, "database", uiLang), "warning");
       return;
     }
     setProvisioningDb(true);
@@ -2271,7 +2297,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const deploy = async () => {
     if (!project) return;
     if (isCapabilityBlocked(caps, "railway")) {
-      showToast(capabilityHint(caps, "railway", "Выкатка на Railway"), "warning");
+      showToast(capabilityHint(caps, "railway", uiLang), "warning");
       return;
     }
     deployPollGenRef.current += 1;
@@ -2593,7 +2619,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         await fetchGithubStatus();
         await fetchGithubBranches();
       } else {
-        setGithubMsg(d.message || "Push failed");
+        // Через границу показа, как и остальные 50 отказов модуля. Замер
+        // 08.09.2026: ручка отвечает 200 с ok:false и полем message «Set
+        // GITHUB_TOKEN in project Env Vars or server env…» — это инструкция
+        // ОПЕРАТОРУ, по-английски, в платном модуле. serverError узнаёт имя
+        // переменной окружения и заменяет её человеческой фразой, а
+        // техническую строку кладёт в консоль, чтобы разбор не потерялся.
+        setGithubMsg(serverError(d.message, TL.pushFailed));
         setGithubMsgTone("error");
       }
     } catch (e: any) {
@@ -2633,7 +2665,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const deployToPages = async () => {
     if (!project) return;
     if (isCapabilityBlocked(caps, "pages")) {
-      showToast(capabilityHint(caps, "pages", "Публикация на Cloudflare Pages"), "warning");
+      showToast(capabilityHint(caps, "pages", uiLang), "warning");
       return;
     }
     setPagesDeploying(true);
@@ -2680,7 +2712,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const deployToVercel = async () => {
     if (!project) return;
     if (isCapabilityBlocked(caps, "vercel")) {
-      showToast(capabilityHint(caps, "vercel", "Выкатка на Vercel"), "warning");
+      showToast(capabilityHint(caps, "vercel", uiLang), "warning");
       return;
     }
     setVercelDeploying(true);
@@ -2801,7 +2833,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const generateImage = async () => {
     if (!imgPrompt.trim()) return;
     if (isCapabilityBlocked(caps, "image")) {
-      setImgError(capabilityHint(caps, "image", "Генерация картинок"));
+      setImgError(capabilityHint(caps, "image", uiLang));
       return;
     }
     setImgLoading(true);
@@ -2873,7 +2905,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const generateMusic = async () => {
     if (!musicPrompt.trim()) return;
     if (isCapabilityBlocked(caps, "audio_music")) {
-      setMusicError(capabilityHint(caps, "audio_music", "Генерация музыки"));
+      setMusicError(capabilityHint(caps, "audio_music", uiLang));
       return;
     }
     setMusicLoading(true);
@@ -3120,6 +3152,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
   const translateText = async () => {
     if (!trText.trim() || !trTarget.trim()) return;
+    // Спрашиваем состояние возможности ПЕРЕД вызовом — как это делают пять
+    // соседних кнопок. Замер прода 08.09.2026: `translate` в degraded (у DeepL
+    // выжжена месячная квота), и человек узнавал об этом только после нажатия,
+    // общей фразой «Не удалось перевести». Причина известна заранее — значит и
+    // сказать её надо заранее.
+    if (isCapabilityBlocked(caps, "translate")) {
+      setTrError(capabilityHint(caps, "translate", uiLang));
+      return;
+    }
     setTrLoading(true);
     setTrError(null);
     setTrResult(null);
@@ -3681,7 +3722,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const generateTts = async () => {
     if (!mediaTtsText.trim()) return;
     if (isCapabilityBlocked(caps, "audio_tts")) {
-      setMediaTtsError(capabilityHint(caps, "audio_tts", "Озвучка"));
+      setMediaTtsError(capabilityHint(caps, "audio_tts", uiLang));
       return;
     }
     setMediaTtsLoading(true);
@@ -3794,7 +3835,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           <button
             onClick={deploy}
             disabled={deploying}
-            title={capabilityHint(caps, "railway", "Выкатка на Railway")}
+            title={capabilityHint(caps, "railway", uiLang)}
             style={{
               padding: "8px 18px", background: deploying ? "#99f6e4" : "#0d9488",
               color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
@@ -3807,7 +3848,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           <button
             onClick={deployToVercel}
             disabled={vercelDeploying}
-            title={capabilityHint(caps, "vercel", "Выкатка на Vercel")}
+            title={capabilityHint(caps, "vercel", uiLang)}
             style={{
               padding: "8px 14px", background: vercelDeploying ? "#e2e8f0" : "#000",
               color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
@@ -4178,7 +4219,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                               <button
                                 onClick={provisionDatabase}
                                 disabled={provisioningDb}
-                                title={capabilityHint(caps, "database", "Создание базы данных")}
+                                title={capabilityHint(caps, "database", uiLang)}
                                 style={{ padding: "7px 14px", background: provisioningDb ? "#a5b4fc" : "#4f46e5", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 12.5, cursor: provisioningDb ? "not-allowed" : "pointer", opacity: isCapabilityBlocked(caps, "database") ? 0.45 : 1 }}
                               >
                                 {provisioningDb ? GL.busyDb : "Создать базу данных"}
@@ -5001,7 +5042,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     <button
                       onClick={pushToGithub}
                       disabled={githubPushing || isCapabilityBlocked(caps, "github")}
-                      title={capabilityHint(caps, "github", "Отправка в GitHub")}
+                      title={capabilityHint(caps, "github", uiLang)}
                       style={{
                         padding: "9px 18px", background: githubPushing ? "#99f6e4" : "#0f172a",
                         color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
@@ -5144,7 +5185,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           onClick={async () => {
                             if (!videoPrompt.trim()) { setVideoError("Сначала опишите, что нужно"); return; }
                             if (isCapabilityBlocked(caps, "video")) {
-                              setVideoError(capabilityHint(caps, "video", "Генерация видео"));
+                              setVideoError(capabilityHint(caps, "video", uiLang));
                               return;
                             }
                             setVideoLoading(true); setVideoError(null); setVideoUrl(null); setVideoPredictionId(null); setVideoStatus("starting");
@@ -5184,7 +5225,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                             } catch (e: any) { setVideoError(e.message || "Не удалось"); setVideoLoading(false); }
                           }}
                           disabled={videoLoading || !videoPrompt.trim()}
-                          title={capabilityHint(caps, "video", "Генерация видео")}
+                          title={capabilityHint(caps, "video", uiLang)}
                           style={{ padding: "8px 20px", background: videoLoading ? "#94a3b8" : "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: videoLoading ? "default" : "pointer", whiteSpace: "nowrap", opacity: isCapabilityBlocked(caps, "video") ? 0.45 : 1 }}
                         >
                           {videoLoading ? `${videoStatus || "генерирую..."}` : "Сделать видео"}
@@ -5243,7 +5284,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       <button
                         onClick={async () => {
                           if (!threeDImageUrl.trim()) { setThreeDError("Вставьте ссылку на картинку"); return; }
-                          if (isCapabilityBlocked(caps, "3d")) { setThreeDError(capabilityHint(caps, "3d", "3D-генерация")); return; }
+                          if (isCapabilityBlocked(caps, "3d")) { setThreeDError(capabilityHint(caps, "3d", uiLang)); return; }
                           setThreeDLoading(true); setThreeDError(null); setThreeDUrl(null); setThreeDStatus("starting");
                           try {
                             const r = await fetch(apiUrl("/api/devhub/media/3d"), {
@@ -5278,7 +5319,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                           } catch (e: any) { setThreeDError(e.message || "Не удалось"); setThreeDLoading(false); }
                         }}
                         disabled={threeDLoading || !threeDImageUrl.trim()}
-                        title={capabilityHint(caps, "3d", "Сгенерировать 3D")}
+                        title={capabilityHint(caps, "3d", uiLang)}
                         style={{ padding: "8px 20px", background: threeDLoading ? "#94a3b8" : "#0d9488", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: 13, cursor: threeDLoading ? "default" : "pointer", opacity: isCapabilityBlocked(caps, "3d") ? 0.45 : 1 }}
                       >
                         {threeDLoading ? (threeDStatus || "generating…") : "Сделать 3D-модель"}

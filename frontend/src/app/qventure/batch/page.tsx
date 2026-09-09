@@ -6,6 +6,8 @@
 // funnel PDF. Turns "a folder of decks" into "a triaged shortlist".
 
 import { useCallback, useRef, useState } from "react";
+import { useI18nOptional } from "@/lib/i18n";
+import { QV_BUSY } from "../busyUi";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -29,6 +31,8 @@ type SortKey = "composite" | "name" | "redFlags";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export default function BatchPage() {
+  const qvLang = useI18nOptional()?.lang ?? "ru";
+  const QV = QV_BUSY[qvLang] ?? QV_BUSY.ru;
   const [rows, setRows] = useState<Row[]>([]);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number; current: string } | null>(null);
@@ -166,7 +170,7 @@ export default function BatchPage() {
             padding: "11px 20px", background: busy ? "var(--teal, #0a7d72)" : "var(--teal-deep, #075b53)", color: "#fff", border: "none",
             borderRadius: 9, fontSize: 14, fontWeight: 700, cursor: busy ? "wait" : "pointer", whiteSpace: "nowrap",
           }}>
-            {busy ? "Analyzing…" : "📄 Upload decks (PDF, up to 20)"}
+            {busy ? QV.analyzing : "📄 Upload decks (PDF, up to 20)"}
           </button>
           {progress && (
             <span style={{ fontSize: 13.5, color: "var(--teal-deep, #075b53)", fontWeight: 600 }}>

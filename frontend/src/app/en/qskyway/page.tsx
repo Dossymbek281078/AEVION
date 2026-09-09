@@ -47,8 +47,8 @@ export default async function EnQskywayPage({
         <p style={styles.note}>
           Live METAR wind, height-data provenance, an airspace-slot rights
           market, and every flight exportable as a signed justification
-          document. The interface is currently in Russian; the site&apos;s
-          language toggle offers machine translation for the rest.
+          document. The interface follows your browser language — English out
+          of the box, with a switcher in the header for Russian and Kazakh.
         </p>
         <div style={styles.row}>
           <a href={keepChannel("/qskyway", channel)} style={styles.cta}>

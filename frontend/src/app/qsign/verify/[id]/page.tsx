@@ -514,12 +514,14 @@ export default async function QSignVerifyPage({ params }: Props) {
                 </div>
               </>
             ) : null}
-            {pub.issuer.userId ? (
-              <>
-                <div style={label}>user id</div>
-                <code style={mono}>{pub.issuer.userId}</code>
-              </>
-            ) : (
+            {/*
+              * Внутренний идентификатор подписанта наружу больше не уходит
+              * (08.09.2026: он позволял связать подписи одного человека между
+              * собой). «Anonymous issuer» теперь пишем только когда о
+              * подписанте не известно НИЧЕГО — иначе строка говорила бы
+              * «аноним» под маской адреса, то есть противоречила соседней.
+              */}
+            {pub.issuer.email ? null : (
               <div style={{ color: "#94a3b8", fontSize: 12 }}>Anonymous issuer</div>
             )}
           </div>
@@ -543,7 +545,16 @@ export default async function QSignVerifyPage({ params }: Props) {
                   </div>
                 </>
               )}
-              {pub.geo.lat !== null && pub.geo.lng !== null ? (
+              {/*
+                * Сравнение `!= null`, а не `!== null`, и это не косметика.
+                * 08.09.2026 публичный ответ перестал отдавать координаты
+                * подписания — их публиковать нельзя. Со строгим сравнением
+                * ОТСУТСТВУЮЩЕЕ поле (`undefined !== null` истинно) провело бы
+                * страницу в блок и уронило её на `.toFixed` — и уронило бы
+                * именно ту страницу, куда ведёт публичная ссылка проверки.
+                * Мягкое сравнение переживает оба вида «нет значения».
+                */}
+              {pub.geo.lat != null && pub.geo.lng != null ? (
                 <>
                   <div style={label}>coords</div>
                   <code style={mono}>

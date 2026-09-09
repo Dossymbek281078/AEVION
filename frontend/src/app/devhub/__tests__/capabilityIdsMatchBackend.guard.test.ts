@@ -41,7 +41,16 @@ function backendIds(): string[] {
 function askedIds(): string[] {
   const src = [IDE, MAIN].map((f) => fs.readFileSync(f, "utf8")).join("\n");
   const ids = new Set<string>();
-  for (const m of src.matchAll(/(?:isCapabilityBlocked|capabilityHint)\(caps,\s*"([a-z0-9_]+)"/g)) {
+  // Класс символов ШИРЕ, чем принятый на сервере (там только строчные с
+  // подчёркиванием), и это не небрежность. Мутационная проверка 08.09.2026:
+  // подмена «translate» на «translateX» проходила МОЛЧА — шаблон просто не
+  // подбирал такой идентификатор, и сверять становилось нечего. То есть
+  // опечатка с заглавной буквой или дефисом была невидима ровно тому стражу,
+  // который для опечаток и написан. Строчную «translait» он ловил.
+  //
+  // Собираем ЛЮБОЙ идентификатор, а несоответствие соглашению всплывёт само:
+  // на сервере такого нет, значит проверка ниже покраснеет.
+  for (const m of src.matchAll(/(?:isCapabilityBlocked|capabilityHint)\(caps,\s*"([A-Za-z0-9_-]+)"/g)) {
     ids.add(m[1]);
   }
   return [...ids].sort();

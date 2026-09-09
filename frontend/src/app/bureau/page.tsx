@@ -1,6 +1,8 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
+import { useI18nOptional } from "@/lib/i18n";
+import { BU_BUSY } from "./busyUi";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -128,6 +130,8 @@ export default function BureauPage() {
 }
 
 function BureauPageInner() {
+  const buLang = useI18nOptional()?.lang ?? "en";
+  const BU = BU_BUSY[buLang] ?? BU_BUSY.en;
   const { showToast } = useToast();
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   // «Сертификатов нет» и «не удалось узнать» — разные вещи. При сбое загрузки
@@ -582,7 +586,7 @@ function BureauPageInner() {
                           onClick={() => claimAec(e.id)}
                           style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: isClaiming ? "#a8a29e" : "linear-gradient(135deg, #d97706, #ea580c)", color: "#fff", fontWeight: 800, fontSize: 12, cursor: isClaiming ? "default" : "pointer" }}
                         >
-                          {isClaiming ? "Claiming…" : "Claim AEC"}
+                          {isClaiming ? BU.claiming : "Claim AEC"}
                         </button>
                       ) : (
                         <span style={{ fontSize: 11, color: "#a8a29e" }}>no reward</span>
@@ -805,10 +809,10 @@ function BureauPageInner() {
             <span style={{ fontSize: 20 }}>{fileChecking ? "⏳" : "📂"}</span>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: "#334155" }}>
-                {fileChecking ? "Computing SHA-256…" : "Drop a file here to check prior art"}
+                {fileChecking ? BU.hashing : "Drop a file here to check prior art"}
               </div>
               <div style={{ fontSize: 11, color: "#94a3b8" }}>
-                {fileChecking ? "Searching registry…" : "Any format — computes SHA-256 in your browser, then searches the registry instantly"}
+                {fileChecking ? BU.searching : "Any format — computes SHA-256 in your browser, then searches the registry instantly"}
               </div>
             </div>
             <label style={{ padding: "6px 12px", borderRadius: 7, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 11, fontWeight: 700, color: "#475569", cursor: "pointer", flexShrink: 0 }}>

@@ -40,29 +40,32 @@ describe("devhubCapabilities", () => {
   // задумано» для того, что задумано неверно.
   it("не показывает покупателю имена серверных переменных", () => {
     const idx = indexCapabilities(LIVE_SHAPE);
-    const hint = capabilityHint(idx, "vercel", "Выкатка на Vercel");
+    const hint = capabilityHint(idx, "vercel", "ru");
     expect(hint).not.toContain("VERCEL_API_TOKEN");
     expect(hint).not.toContain("env");
     expect(hint).toContain("канал пока не подключён");
-    expect(capabilityHint(idx, "video", "Генерация видео")).not.toContain("REPLICATE_API_TOKEN");
+    expect(capabilityHint(idx, "video", "ru")).not.toContain("REPLICATE_API_TOKEN");
   });
 
   it("называет рабочую замену там, где она есть", () => {
     // Сообщение «нельзя» без «а можно вот так» честное, но бесполезное.
     const idx = indexCapabilities(LIVE_SHAPE);
-    expect(capabilityHint(idx, "vercel", "Выкатка на Vercel")).toContain("Cloudflare Pages");
+    expect(capabilityHint(idx, "vercel", "ru")).toContain("Cloudflare Pages");
     // Там, где замены нет, ничего не выдумываем.
     const noAlt = indexCapabilities([{ id: "image", status: "needs_token", token: "OPENAI_API_KEY" }]);
-    expect(capabilityHint(noAlt, "image", "Картинки")).toBe(
-      "Картинки: канал пока не подключён на нашей стороне."
+    // Подпись с 08.09.2026 берётся из справочника внутри помощника, а не от
+    // вызывающего: пятнадцать вызовов передавали её зашитой русской строкой, и
+    // EN-читатель получал русский текст в тосте.
+    expect(capabilityHint(noAlt, "image", "ru")).toBe(
+      "Генерация картинок: канал пока не подключён на нашей стороне."
     );
   });
 
   it("доступная возможность остаётся просто подписью", () => {
     const idx = indexCapabilities(LIVE_SHAPE);
     // Live capability keeps its plain label; unknown ones do too (fail open).
-    expect(capabilityHint(idx, "railway", "Выкатка на Railway")).toBe("Выкатка на Railway");
-    expect(capabilityHint(null, "vercel", "Выкатка на Vercel")).toBe("Выкатка на Vercel");
+    expect(capabilityHint(idx, "railway", "ru")).toBe("Выкатка на Railway");
+    expect(capabilityHint(null, "vercel", "ru")).toBe("Выкатка на Vercel");
   });
 
   it("uses the capability ids the backend actually emits", () => {
@@ -84,10 +87,15 @@ describe("devhubCapabilities", () => {
     const idx = indexCapabilities([
       { id: "domain", status: "needs_token", tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_ZONE_ID"] },
     ]);
-    const hint = capabilityHint(idx, "domain", "Свой домен");
+    const hint = capabilityHint(idx, "domain", "ru");
     for (const t of ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_ZONE_ID"]) {
       expect(hint, `наружу ушло имя ${t}`).not.toContain(t);
     }
+    // Было «domain: канал пока не подключён…» — то есть человек читал
+    // служебное имя. Замер 08.09.2026: таких возможностей было пять, и domain
+    // на проде именно в этом состоянии. Утверждение теперь про СУТЬ этого
+    // теста (имена переменных наружу не уходят) плюс про человеческое имя.
     expect(hint).toBe("Свой домен: канал пока не подключён на нашей стороне.");
+    expect(hint, "идентификатор снова доехал до экрана").not.toContain("domain:");
   });
 });

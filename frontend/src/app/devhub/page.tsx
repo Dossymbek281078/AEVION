@@ -7,7 +7,10 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { СОБЫТИЕ_ПЕРЕНОСА } from "@/components/DevHubGuestIdentity";
 import { apiUrl } from "@/lib/apiBase";
-import { useDevhubT } from "./i18n";
+import { useDevhubT, type DevhubKey } from "./i18n";
+import { COMPARISON_ROWS, capabilityIsKnownOff, comparisonTotalUsd } from "./capabilityRows";
+import { howtoTranscript } from "./howtoTranscript";
+import { getDevhubGuestId } from "@/lib/devhubGuest";
 import { useI18n } from "@/lib/i18n";
 import { catalog } from "@/lib/aevionCatalog";
 import { fixDoubledScheme } from "@/lib/urls";
@@ -118,21 +121,34 @@ const USAGE_LABELS: Record<string, Record<string, string>> = {
   kk: { video: "бейне", image: "сурет", tts: "дыбыстау таңбасы", music: "музыка", deploy: "жарияланым", generate: "код генерациясы", speech: "тану және дауыс клоны", translate: "аударма" },
 };
 
-function capabilityOffReason(status: string | undefined): string {
+function capabilityOffReason(
+  status: string | undefined,
+  offCode: string | undefined,
+  t: (key: DevhubKey) => string,
+): string {
+  // Слова берутся из словаря, а не зашиты здесь: подсказка живёт в атрибуте
+  // title, а атрибуты машинный доводчик НЕ переводит — зашитый русский текст
+  // EN-посетитель увидел бы как есть. Тот же класс, что placeholder поля ИИ.
+  switch (offCode) {
+    case "quota_exhausted": return t("caps.off.quota");
+    case "auth_rejected": return t("caps.off.auth");
+    case "zone_not_delegated": return t("caps.off.zone");
+    case "provider_error": return t("caps.off.provider");
+    case "needs_token": return t("caps.off.needsToken");
+    case "not_available": return t("caps.off.notAvailable");
+  }
+  // Кода нет — значит отвечает сборка бэкенда старее 08.09. Тогда судим по
+  // статусу: беднее, но честно, и человек не остаётся без объяснения.
   switch (status) {
-    case "needs_token":
-      return "не настроено на сервере — подключим";
-    case "not_available":
-      return "пока не сделано, а не «забыли ключ»";
-    case "error":
-      return "провайдер отвечает ошибкой";
+    case "needs_token": return t("caps.off.needsToken");
+    case "not_available": return t("caps.off.notAvailable");
+    case "degraded": return t("caps.off.provider");
     case undefined:
-    case "":
-      return "состояние неизвестно";
+    case "": return t("caps.off.unknown");
     default:
       // Незнакомое состояние показываем как есть — прятать хуже, чем показать
       // непонятное: иначе ни человек, ни мы не поймём, о чём речь.
-      return `состояние: ${status}`;
+      return `${t("caps.off.state")}: ${status}`;
   }
 }
 
@@ -156,7 +172,7 @@ export default function DevHubPage() {
   // video on an empty balance, images with every provider blocked, voice on a
   // model the vendor had removed. Better to say so on the way in than to let
   // someone discover it after typing their idea.
-  const [caps, setCaps] = useState<Array<{ id: string; name: string; status: string; lastError?: string }>>([]);
+  const [caps, setCaps] = useState<Array<{ id: string; name: string; status: string; offCode?: string }>>([]);
 
   // Prompt-first entry: one phrase → project created → generation auto-runs
   // in the IDE (the prompt travels via localStorage; the IDE picks it up,
@@ -205,6 +221,17 @@ export default function DevHubPage() {
       setError(t("err.projLoad"));
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // getDevhubGuestId сам создаёт личность при первом заходе; null он
+    // возвращает ровно тогда, когда записать её некуда — то есть когда
+    // хранилище сайта заблокировано.
+    try {
+      setХранилищеБлокировано(getDevhubGuestId() === null);
+    } catch {
+      setХранилищеБлокировано(true);
     }
   }, []);
 
@@ -293,6 +320,8 @@ export default function DevHubPage() {
   // at 18.7s. For those ~12 seconds every control here looked ready and did
   // nothing. Say so instead.
   const [hydrated, setHydrated] = useState(false);
+  const [howtoBroken, setHowtoBroken] = useState(false);
+  const [хранилищеБлокировано, setХранилищеБлокировано] = useState(false);
   useEffect(() => setHydrated(true), []);
 
   // Anything typed into either form before hydration lives only in the DOM;
@@ -406,6 +435,10 @@ export default function DevHubPage() {
     }
   };
 
+  // Строки сравнения, за которые мы сегодня можем отвечать. Отсюда берутся и
+  // сумма, и счётчик подписок — чтобы итог не спорил со строками над ним.
+  const workingRows = COMPARISON_ROWS.filter((r) => !capabilityIsKnownOff(caps, r.cap));
+
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc", fontFamily: "system-ui, sans-serif", overflowX: "hidden" }}>
       {/* Замер посещения и ухода к оплате — см. components/PageTracking.
@@ -512,6 +545,71 @@ export default function DevHubPage() {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Обучающее видео (вкладка Video·HowTo, 07.09.2026).
+            ПОЧЕМУ ЛЕЖИТ У НАС, А НЕ НА CDN ГЕНЕРАТОРА: мастер оттуда весит
+            202 563 318 байт (193 МиБ, 2560x1440, 13.3 Мбит/с) — это экспорт
+            генеративного сервиса, а не веб-файл, и preload="none" откладывает
+            беду до клика, но не отменяет её. Здесь лежит перекодированная
+            копия: 720p, CRF 28 с подавлением зерна, 14.3 МБ. Субтитры после
+            сжатия проверены глазами — читаются.
+            ЯЗЫК: озвучка и вшитые субтитры РУССКИЕ, английской версии нет.
+            Секцию всё равно показываем всем, но постер — чистый кадр без
+            субтитров, а подпись из словаря честно называет язык: кириллица
+            появится на экране только по осознанному клику, и путь EN-новичка
+            (0 % кириллицы, принят живьём 07.09) остаётся стерильным. */}
+        <div style={{
+          border: "1px solid #e2e8f0", background: "#f8fafc", borderRadius: 12,
+          padding: "16px 20px", marginBottom: 20,
+        }}>
+          <p style={{ fontWeight: 800, fontSize: 15, margin: 0, color: "#0f172a" }}>
+            {t("howto.title")}
+          </p>
+          <p style={{ fontSize: 13, color: "#475569", margin: "4px 0 12px", lineHeight: 1.5, maxWidth: 640 }}>
+            {t("howto.body")}
+          </p>
+          {howtoBroken ? (
+            /* Отказ показывается отказом: файл не доехал до выкатки — говорим
+               об этом словами, а не оставляем мёртвую кнопку «play». */
+            <p style={{ fontSize: 13, color: "#b45309", margin: 0 }}>{t("howto.missing")}</p>
+          ) : (
+            <video
+              controls
+              preload="none"
+              playsInline
+              poster="/devhub/howto-poster.jpg"
+              aria-label={t("howto.aria")}
+              onError={() => setHowtoBroken(true)}
+              /* Источник ПРЯМО на video, а не дочерним <source>: при дочернем
+                 ошибка срабатывает на нём, и до onError видео доходит не
+                 всегда — отказ остался бы молчаливым. Тот же приём на /acquire. */
+              src="/devhub/howto-ru.mp4"
+              style={{ width: "100%", maxWidth: 720, borderRadius: 10, display: "block", background: "#0f172a" }}
+            />
+          )}
+          <p style={{ fontSize: 12, color: "#64748b", margin: "8px 0 0" }}>
+            {t("howto.lang")}
+          </p>
+          {/* Расшифровка: та же польза без звука и без знания языка. Озвучка
+              русская, английской версии ролика нет — для посетителя с Show HN
+              двухминутное видео на чужом языке бесполезно, а честная подпись
+              про язык это признаёт, но не лечит. Свёрнута, чтобы не удлинять
+              страницу тем, кто просто нажмёт play. */}
+          <details style={{ marginTop: 10 }}>
+            <summary style={{ fontSize: 12.5, color: "#0d9488", cursor: "pointer", fontWeight: 600 }}>
+              {t("howto.transcript")}
+            </summary>
+            <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+              {/* Имя переменной ЛАТИНИЦЕЙ намеренно: сторож витрины ищет
+                  кириллицу в фигурных скобках JSX и не отличает имя от текста —
+                  `{строка}` он честно посчитал зашитой русской строкой. Спорить
+                  со сторожем ради имени переменной дороже, чем переименовать. */}
+              {howtoTranscript(lang).map((line, i) => (
+                <p key={i} style={{ fontSize: 12.5, color: "#475569", margin: 0, lineHeight: 1.55 }}>{line}</p>
+              ))}
+            </div>
+          </details>
         </div>
 
         {/* ОСТАТОК ЗА МЕСЯЦ. Модуль знал числа и молчал: человек упирался в предел,
@@ -703,21 +801,22 @@ export default function DevHubPage() {
                 <>
                   <span style={{ color: "#64748b" }}>{t("caps.off")}</span>
                   {/* ПОПРАВЛЕНО 30.08.2026: прежний текст говорил, что настоящие ошибки
-                        сюда НЕ подключены и это «отдельная работа». Подключены.
-                        Ручка применяет applyHealth к каждой возможности: если
-                        поставщик недавно отказал, статус понижается с live до
-                        degraded, а причина кладётся в lastError. Сюда она и
-                        приходит подсказкой; запасная ветка нужна только когда
-                        отказов не было.
+                        сюда НЕ подключены и это «отдельная работа». Подключены:
+                        ручка применяет applyHealth, и отказ поставщика понижает
+                        статус до degraded.
 
-                        Проверено прогоном, а не чтением: отказ поставщика даёт
-                        degraded с причиной, успех статус не трогает.
+                        ПОПРАВЛЕНО 08.09.2026: сюда приходит КОД причины
+                        (offCode), а не текст поставщика. Замер на проде показал
+                        в этой подсказке сырое тело ответа ElevenLabs с
+                        authentication_error и «провайдер-проба: HTTP 401» — на
+                        публичной витрине, в атрибуте, который доводчик не
+                        переводит. Слова теперь подбирает словарь по коду.
 
                         Комментарий, утверждающий состояние, стареет как отчёт, а
-                        тестов у него нет — этот пролежал устаревшим и говорил
-                        следующему читателю делать сделанное. */}
+                        тестов у него нет — этот уже пролежал устаревшим однажды.
+                    */}
                   {off.map((c, i) => (
-                    <span key={c.id} title={c.lastError || capabilityOffReason(c.status)}>
+                    <span key={c.id} title={capabilityOffReason(c.status, c.offCode, t)}>
                       <span style={{ color: "#92400e", borderBottom: "1px dotted #d97706", cursor: "help" }}>{c.name}</span>
                       {i < off.length - 1 ? <span style={{ color: "#64748b" }}>, </span> : null}
                     </span>
@@ -790,25 +889,39 @@ export default function DevHubPage() {
           <div style={{ overflowX: "auto" }}>
             <table style={{ borderCollapse: "collapse", fontSize: 12.5, minWidth: 420 }}>
               <tbody>
-                {[
-                  [t("cmp.app"), "Lovable Pro", "$25"],
-                  [t("cmp.video"), "Runway Pro", "$35"],
-                  [t("cmp.images"), "Midjourney Standard", "$30"],
-                  [t("cmp.voice"), "ElevenLabs Creator", "$22"],
-                  [t("cmp.music"), "Suno", "$10"],
-                  [t("cmp.threeD"), "Meshy Pro", "$20"],
-                  [t("cmp.hosting"), "Vercel Pro", "$20"],
-                ].map(([what, who, price]) => (
-                  <tr key={what as string}>
-                    <td style={{ padding: "3px 14px 3px 0", color: "#334155" }}>{what}</td>
-                    <td style={{ padding: "3px 14px 3px 0", color: "#64748b" }}>{who}</td>
-                    <td style={{ padding: "3px 0", color: "#334155", fontVariantNumeric: "tabular-nums" }}>{price}</td>
+                {/* Строки привязаны к тем же идентификаторам возможностей, что
+                    приходят с /studio/capabilities. Замер прода 08.09.2026:
+                    таблица обещала озвучку и музыку, а обе не работали —
+                    отвергнут ключ ElevenLabs. Полоса состояния СТРОКОЙ ВЫШЕ
+                    говорила правду, таблица нет; верят же крупному и
+                    продающему. Одно живое состояние на оба места. */}
+                {/* Итог считается по РАБОТАЮЩИМ строкам. Замер прода 08.09.2026:
+                    строки честно писали «сейчас не работает» у озвучки и музыки,
+                    а итог всё равно складывал их $22 и $8 и обещал «7 подписок».
+                    Внутри одной таблицы два наших ответа спорили, и верили бы
+                    крупному. Незнание НЕ вычитает: пока состояние не пришло,
+                    capabilityIsKnownOff даёт false, и сумма прежняя. */}
+                {COMPARISON_ROWS.map((row) => {
+                  const off = capabilityIsKnownOff(caps, row.cap);
+                  return (
+                  <tr key={row.label}>
+                    <td style={{ padding: "3px 14px 3px 0", color: off ? "#92400e" : "#334155" }}>
+                      {t(row.label)}
+                      {off ? (
+                        <span style={{ color: "#b45309", fontSize: 11.5, marginLeft: 6 }}>
+                          {"— "}{t("cmp.offNow")}
+                        </span>
+                      ) : null}
+                    </td>
+                    <td style={{ padding: "3px 14px 3px 0", color: "#64748b" }}>{row.rival}</td>
+                    <td style={{ padding: "3px 0", color: "#334155", fontVariantNumeric: "tabular-nums" }}>${row.usd}</td>
                   </tr>
-                ))}
+                  );
+                })}
                 <tr>
                   <td style={{ padding: "6px 14px 0 0", fontWeight: 800, color: "#0f172a", borderTop: "1px solid #e2e8f0" }}>{t("store.total")}</td>
-                  <td style={{ padding: "6px 14px 0 0", color: "#64748b", borderTop: "1px solid #e2e8f0" }}>{t("store.subsLogins")}</td>
-                  <td style={{ padding: "6px 0 0", fontWeight: 800, color: "#0f172a", borderTop: "1px solid #e2e8f0", fontVariantNumeric: "tabular-nums" }}>≈ $162</td>
+                  <td style={{ padding: "6px 14px 0 0", color: "#64748b", borderTop: "1px solid #e2e8f0" }}>{t("store.subsLogins")} {workingRows.length}</td>
+                  <td style={{ padding: "6px 0 0", fontWeight: 800, color: "#0f172a", borderTop: "1px solid #e2e8f0", fontVariantNumeric: "tabular-nums" }}>{`≈ $${comparisonTotalUsd(workingRows)}`}</td>
                 </tr>
               </tbody>
             </table>
@@ -845,7 +958,15 @@ export default function DevHubPage() {
           }}
         >
           <span aria-hidden="true">💾</span>
-          {t("proj.browserBound")}
+          {/* Когда хранилище сайта заблокировано, обычная строка «проекты живут
+              в ЭТОМ браузере» — НЕПРАВДА, и неправда в опасную сторону.
+              Замер 08.09.2026: без личности гостя сервер считает запрос общей
+              строкой "anonymous", и в этой корзине лежат ВСЕ такие проекты —
+              их видит и может удалить любой, кто откроет модуль так же
+              (проверено на проде: список без заголовка отдал 17 записей).
+              Человек об этом узнать не мог: заголовок ставит перехватчик
+              молча, а браузер о блокировке не сообщает. */}
+          {хранилищеБлокировано ? t("proj.storageBlocked") : t("proj.browserBound")}
         </p>
 
         {/* Loading */}
@@ -1068,7 +1189,7 @@ export default function DevHubPage() {
                 onChange={(e) =>
                   setSnippetForm((f) => ({ ...f, title: e.target.value }))
                 }
-                aria-label="Title"
+                aria-label={t("field.title")}
                 placeholder={t("field.title")}                className="px-3 py-2 rounded-md bg-slate-950 border border-slate-800 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-teal-700"
               />
               <input

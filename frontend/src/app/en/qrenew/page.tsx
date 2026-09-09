@@ -41,9 +41,9 @@ export default async function EnQrenewPage({
           intervention stack ranked by evidence, not hype.
         </p>
         <p style={styles.note}>
-          The interface is currently in Russian; the markers themselves are
-          the same in any language, and the site&apos;s language toggle offers
-          machine translation for the rest. Educational,
+          The interface follows your browser language — English out of the
+          box, with a switcher in the header for Russian and Kazakh. The
+          markers themselves are the same in any language. Educational,
           wellness-focused content — not intended to diagnose, treat or
           prevent any disease.
         </p>

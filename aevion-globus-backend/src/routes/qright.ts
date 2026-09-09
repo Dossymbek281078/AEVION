@@ -604,8 +604,22 @@ qrightRouter.get("/objects/:id", objectsRateLimit, async (req, res) => {
     await ensureQRightTable();
 
     const { id } = req.params;
+    /*
+     * 🔴 Та же утечка, что в списке, и она пережила его починку. Соседний
+     * коммит убрал почту из /objects и /objects.csv, а ЭТА ручка осталась со
+     * звёздочкой: идентификаторы объектов публичны (их отдаёт тот же список),
+     * значит адрес владельца по-прежнему доставался любому — по одному
+     * объекту за запрос.
+     *
+     * Урок общий: у одного класса бывает несколько дверей, и починка самой
+     * заметной выглядит как закрытие класса. Список полей здесь тот же, что
+     * в публичном списке.
+     */
     const result = await pool.query(
-      'SELECT * FROM "QRightObject" WHERE "id" = $1 LIMIT 1',
+      `SELECT id, title, description, kind, "contentHash", "ownerName",
+              country, city, "createdAt", "revokedAt", "revokeReason",
+              "revokeReasonCode", "embedFetches", "lastFetchedAt"
+         FROM "QRightObject" WHERE "id" = $1 LIMIT 1`,
       [id]
     );
 

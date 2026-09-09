@@ -58,7 +58,7 @@ describe("список продаж не отдаёт почту наружу", 
       const след = src.indexOf("revenueRouter.", at + 10);
       const тело = src.slice(at, след < 0 ? src.length : след);
       expect(
-        /^s*email:/m.test(тело),
+        /^\s*email:/m.test(тело),
         "ручка снова кладёт email в ответ — это адреса живых покупателей",
       ).toBe(false);
       expect(

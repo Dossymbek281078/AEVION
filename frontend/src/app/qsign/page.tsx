@@ -1250,7 +1250,9 @@ export default function QSignPage() {
                       geo: {signed.geo.source}
                       {signed.geo.country ? ` · ${signed.geo.country}` : ""}
                       {signed.geo.city ? ` · ${signed.geo.city}` : ""}
-                      {signed.geo.lat !== null && signed.geo.lng !== null
+                      {/* `!= null` — переживает и null, и отсутствие поля;
+                          см. разбор в verify/[id]/page.tsx */}
+                      {signed.geo.lat != null && signed.geo.lng != null
                         ? ` · ${signed.geo.lat.toFixed(3)}, ${signed.geo.lng.toFixed(3)}`
                         : ""}
                     </div>

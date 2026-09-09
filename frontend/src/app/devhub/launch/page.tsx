@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import paper from "@/styles/aevionPaper.module.css";
-import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 import { probeJson } from "@/lib/probeLive";
+import { voiceIsKnownDown } from "../capabilityRows";
 import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { PageTracking } from "@/components/PageTracking";
+import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 
 // Посадочная запуска DevHub.
 //
@@ -88,15 +89,35 @@ export default async function DevhubLaunchPage({
   // Обещание опирается на СОДЕРЖИМОЕ ответа, а не на то, что маршрут ответил:
   // пустой список начал тоже вернул бы 200, а каталог видеомоделей отдаётся
   // статически всегда и сам сообщает, настроен ли провайдер (`configured`).
-  const [tpl, agents, media] = await Promise.all([
+  const [tpl, agents, media, caps] = await Promise.all([
     probeJson<{ templates?: unknown[] }>("/api/devhub/templates"),
     probeJson<{ templates?: unknown[] }>("/api/devhub/agent/templates"),
     probeJson<{ models?: unknown[]; configured?: boolean }>("/api/devhub/media/video/models"),
+    probeJson<{ capabilities?: Array<{ id: string; status: string }> }>("/api/devhub/studio/capabilities"),
   ]);
   const tplUp = Array.isArray(tpl?.templates) && tpl.templates.length > 0;
   const agentsUp = Array.isArray(agents?.templates) && agents.templates.length > 0;
   // Каталог без ключа провайдера — не возможность, а список названий.
   const mediaUp = media?.configured === true && Array.isArray(media.models) && media.models.length > 0;
+
+  /**
+   * Голос страница обещает ЧЕТЫРЕЖДЫ — в заголовке шага 3 и во всех трёх
+   * сценариях шага 2 (озвучка лендинга, аудиочтение статьи, голосовой
+   * онбординг панели), — а спрашивала только каталог ВИДЕО. Замер 08.09.2026:
+   * /studio/capabilities отдаёт audio_tts как degraded (отвергнут ключ
+   * ElevenLabs), и карточка при этом писала «работает».
+   *
+   * Умолчание здесь ОБРАТНОЕ тому, что стоит у суммы в таблице сравнения, и
+   * это не небрежность: там вопрос «сколько мы стоим» и незнание не должно
+   * занижать нас, здесь вопрос «обещать ли вслух» и незнание не должно
+   * обещать за нас. Поэтому оговорка появляется, только когда состояние
+   * ПРИШЛО и оно нерабочее; молчащая ручка оставляет страницу как была.
+   */
+  const voiceStatus = caps?.capabilities?.find((c) => c.id === "audio_tts")?.status;
+  const voiceDown = voiceIsKnownDown(voiceStatus);
+  const voiceCaveat = voiceDown
+    ? "Голос сейчас недоступен: провайдер озвучки не принимает наш ключ. Остальное в этом шаге работает."
+    : null;
 
   // Метка канала — та же механика, что на посадочных бюро, шахмат и мультичата:
   // без неё после запуска не ответить, какой источник привёл людей именно сюда.
@@ -104,6 +125,10 @@ export default async function DevhubLaunchPage({
   const source = channel ? `devhub-${channel}` : "devhub";
   // Дней до открытия. 10 сентября 2026 — документ основателя
   // 00-НАЧНИ-ОТСЮДА/2026-08-30-ПЛАН-даты-запуска-новые.md.
+  //
+  // Вернул при сборке цикла 11: перестройка страницы (поле выше сгиба) шла от
+  // ветки, где этой строки ещё не было, и разрешение конфликта в пользу
+  // чужой стороны увезло её вместе с макетом. Сторож поймал.
   const left = daysUntilLaunch(Date.UTC(2026, 8, 10));
 
   return (
@@ -123,33 +148,25 @@ export default async function DevhubLaunchPage({
             Опишите приложение словами
           </h1>
           <p style={{ color: "var(--ink-soft)", fontSize: 15.5, lineHeight: 1.5, margin: "10px 0 0" }}>
-            «Сделай таймер помодоро с настройкой длительности» — и DevHub собирает
-            проект: код, страницы, а при необходимости картинки и озвучку к ним.
-            Начинать со списка возможностей не нужно, он ниже — просто чтобы вы
-            видели, из чего собирается.
+            «Сделай таймер помодоро» — и DevHub соберёт проект: код, страницы,
+            картинки и озвучку.
             {/*
-              Дата, а не «объявим отдельно». Опора — документ основателя
-              00-НАЧНИ-ОТСЮДА/2026-08-30-ПЛАН-даты-запуска-новые.md: строка
-              «10 сентября | DevHub, Мультичат, QRight, QSign, биржа
-              стартапов, анализатор бизнес-идей, QSkyway». Проверено по
-              документу 08.09.2026, а не по чужой ссылке на него.
+              Обе стороны конфликта нужны, и это не компромисс: короткий текст
+              поднимает поле выше сгиба на телефоне, а отсчёт обязан менять
+              страницу в день открытия. 10 сентября подписчик получит письмо
+              «DevHub открыт», придёт сюда и прочтёт «откроем скоро», если
+              строка останется статической; менять её руками в день запуска
+              никто не успеет.
 
-              Месяц НЕ называем: соседний ратчет launchPages.render запрещает
-              названия месяцев на этих двух страницах — он заведён против
-              выдуманных дат, и ослаблять его ради текста я не стал. Счётчика
-              дней достаточно: он меняется сам и в день открытия скажет правду.
-
-              Переключение ПО ДАТЕ, как у /bureau/launch и /cyberchess/launch:
-              иначе 10 сентября подписчик получит письмо «DevHub открыт»,
-              придёт сюда и прочтёт «дату объявим отдельно». Строка, которая
-              обязана стать другой в назначенный день, не может быть
-              статической — менять её руками в день запуска никто не успеет.
+              Отсчёт добавляет одну строку — при пороге сторожа 200 знаков
+              на три куска запас остаётся.
             */}
             {left > 0
-              ? ` Открываем ${left === 1 ? "завтра" : `через ${left} дн.`}. Оставьте адрес, и письмо придёт в день запуска.`
+              ? ` Открываем ${left === 1 ? "завтра" : `через ${left} дн.`}.`
               : " Уже открыто — заходите."}
           </p>
         </header>
+
 
         <WaitlistCapture
           // Язык НЕ задан жёстко (было lang="ru", снято 06.09.2026 по живому
@@ -159,9 +176,22 @@ export default async function DevhubLaunchPage({
           // идёт за языком посетителя: русскому — русская, как и раньше.
           source={source}
           tone="light"
-          title="Написать вам в день запуска"
-          description="Одно письмо на запуск и условия раннего доступа. Ничего больше."
+          title="Напишем в день запуска"
+          description="Одно письмо. Ничего больше."
         />
+
+        {/* Хвост объяснения стоит ПОСЛЕ формы намеренно. Замер прода
+            08.09.2026 на 360×640 (вахта нашла, я перемерил): поле адреса
+            лежало на 697px при сгибе 640 — то есть человек, пришедший по
+            письму, не видел единственного действия, ради которого страница
+            существует. Верхних 234px занимает общая шапка сайта, ещё 287 —
+            заголовок с абзацем; форме оставалось начаться за экраном.
+            На 390×844 всё было в порядке, поэтому на глаз не заметно. */}
+        <p style={{ color: "var(--ink-soft)", fontSize: 15.5, lineHeight: 1.5, margin: 0 }}>
+          Начинать со списка возможностей не нужно, он ниже — просто чтобы вы
+          видели, из чего собирается. Оставьте адрес — письмо придёт в день
+          открытия.
+        </p>
 
         <section style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div className={paper.sectionHead}>
@@ -181,17 +211,19 @@ export default async function DevhubLaunchPage({
             title="Сценарий даёт и страницу, и медиа к ней"
             note="Три сценария за один запуск: лендинг — вёрстка плюс озвучка и звуковой эффект; статья — картинка в шапке и аудиочтение; панель — карточки, график и голосовой онбординг. Файлы приходят отдельными: код и медиа ложатся рядом, связать их в разметке — последний шаг за вами. Обещать «готовую страницу целиком» мы не будем: шаг с кодом идёт первым и о будущих файлах ещё не знает."
             live={agentsUp}
+            caveat={voiceCaveat}
           />
           <Step
             n={3}
             title="Картинки, видео и голос — внутри, а не сбоку"
             note="Генерация подключена по-настоящему: видео (veo-3, veo-3-fast, seedance) и объёмные модели (trellis, hunyuan3d). Это те же ключи, что у платформы, — отдельных подписок на медиа не нужно."
             live={mediaUp}
+            caveat={voiceCaveat}
           />
 
           <p style={{ color: "var(--ink-faint)", fontSize: 13, lineHeight: 1.6, margin: 0 }}>
             Отметка «работает» ставится не вручную: страница спрашивает у боевого
-            сервера при сборке.
+            сервера и перепроверяет его раз в полчаса.
           </p>
         </section>
 
@@ -222,7 +254,7 @@ export default async function DevhubLaunchPage({
   );
 }
 
-function Step({ n, title, note, live }: { n: number; title: string; note: string; live: boolean }) {
+function Step({ n, title, note, live, caveat }: { n: number; title: string; note: string; live: boolean; caveat?: string | null }) {
   return (
     <div className={paper.card} style={{ display: "flex", gap: 12 }}>
       <div
@@ -249,6 +281,11 @@ function Step({ n, title, note, live }: { n: number; title: string; note: string
         <div style={{ color: "var(--ink-soft)", fontSize: 13.5, lineHeight: 1.55, marginTop: 4 }}>
           {note}
         </div>
+        {caveat ? (
+          <div style={{ color: "var(--amber-deep, #b45309)", fontSize: 12.5, lineHeight: 1.5, marginTop: 6 }}>
+            {caveat}
+          </div>
+        ) : null}
       </div>
     </div>
   );

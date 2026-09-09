@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useI18nOptional } from "@/lib/i18n";
+import { QR_BUSY } from "../../busyUi";
 import { use as usePromise, useCallback, useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -52,6 +54,8 @@ export default function QRightWebhookDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const qrLang = useI18nOptional()?.lang ?? "en";
+  const QR = QR_BUSY[qrLang] ?? QR_BUSY.en;
   const { id } = usePromise(params);
   const { showToast } = useToast();
   const [hasToken, setHasToken] = useState(false);
@@ -226,7 +230,7 @@ export default function QRightWebhookDetailPage({
                         cursor: savingEdit ? "not-allowed" : "pointer",
                       }}
                     >
-                      {savingEdit ? "Saving…" : "Save"}
+                      {savingEdit ? QR.saving : "Save"}
                     </button>
                     <button
                       onClick={() => {
@@ -402,7 +406,7 @@ export default function QRightWebhookDetailPage({
                               cursor: retrying.has(d.id) ? "not-allowed" : "pointer",
                             }}
                           >
-                            {retrying.has(d.id) ? "Retrying…" : "Retry"}
+                            {retrying.has(d.id) ? QR.retrying : "Retry"}
                           </button>
                         )}
                       </div>

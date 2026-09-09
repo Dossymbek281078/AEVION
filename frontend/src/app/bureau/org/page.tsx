@@ -1,6 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { useI18nOptional } from "@/lib/i18n";
+import { BU_BUSY } from "../busyUi";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
@@ -20,6 +22,8 @@ type Org = {
 };
 
 export default function BureauOrgListPage() {
+  const buLang = useI18nOptional()?.lang ?? "en";
+  const BU = BU_BUSY[buLang] ?? BU_BUSY.en;
   const { showToast } = useToast();
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [loading, setLoading] = useState(true);
@@ -234,7 +238,7 @@ export default function BureauOrgListPage() {
               disabled={creating}
               style={{ padding: "10px 16px", borderRadius: 10, border: "none", background: creating ? "#cbd5e1" : "linear-gradient(135deg, #4f46e5, #6366f1)", color: "#fff", fontWeight: 800, fontSize: 13, cursor: creating ? "not-allowed" : "pointer", justifySelf: "start" }}
             >
-              {creating ? "Creating…" : "Create organization"}
+              {creating ? BU.creating : "Create organization"}
             </button>
           </form>
         </div>

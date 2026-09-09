@@ -73,11 +73,63 @@ export function isCapabilityConfirmed(idx: CapabilityIndex | null, id: string): 
  * там, где они нужны, — в ответе `/api/devhub/studio/capabilities`, который
  * читают мы, а не покупатель.
  */
-export function capabilityHint(idx: CapabilityIndex | null, id: string, label: string): string {
+/**
+ * ПОДПИСИ ВОЗМОЖНОСТЕЙ — здесь, а не у пятнадцати вызовов.
+ *
+ * До 08.09.2026 каждый вызов передавал подпись зашитой русской строкой
+ * («Генерация видео», «Выкатка на Vercel», …). Подсказка живёт в ТОСТЕ, а тост
+ * — слепая зона машинного доводчика по устройству: он не успевает за текстом,
+ * который держится секунды. То есть EN-посетитель, нажавший недоступную
+ * кнопку, читал русскую фразу. На проде это не редкость: сегодня degraded у
+ * перевода, github и озвучки, not_available у railway и домена.
+ *
+ * Незнакомый идентификатор берёт имя из ответа сервера, а если и его нет —
+ * сам идентификатор: показать непонятное лучше, чем промолчать.
+ */
+const CAP_LABEL: Record<string, Record<string, string>> = {
+  ru: {
+    database: "База данных", railway: "Выкатка на Railway", pages: "Публикация на Cloudflare Pages",
+    vercel: "Выкатка на Vercel", image: "Генерация картинок", audio_music: "Генерация музыки",
+    audio_tts: "Озвучка", github: "Отправка в GitHub", video: "Генерация видео",
+    "3d": "3D-генерация", translate: "Перевод", email: "Отправка почты",
+    code: "Генерация кода", domain: "Свой домен", screenshot_code: "Код по скриншоту",
+    sms: "Отправка SMS", whatsapp: "Отправка в WhatsApp",
+  },
+  en: {
+    database: "Database", railway: "Railway deploy", pages: "Cloudflare Pages publishing",
+    vercel: "Vercel deploy", image: "Image generation", audio_music: "Music generation",
+    audio_tts: "Voice-over", github: "Push to GitHub", video: "Video generation",
+    "3d": "3D generation", translate: "Translation", email: "Sending email",
+    code: "Code generation", domain: "Custom domain", screenshot_code: "Code from a screenshot",
+    sms: "Sending SMS", whatsapp: "Sending to WhatsApp",
+  },
+  kk: {
+    database: "Дерекқор", railway: "Railway-ге жариялау", pages: "Cloudflare Pages-ке жариялау",
+    vercel: "Vercel-ге жариялау", image: "Сурет генерациясы", audio_music: "Музыка генерациясы",
+    audio_tts: "Дыбыстау", github: "GitHub-қа жіберу", video: "Бейне генерациясы",
+    "3d": "3D генерация", translate: "Аударма", email: "Хат жіберу",
+    code: "Код генерациясы", domain: "Жеке домен", screenshot_code: "Скриншоттан код",
+    sms: "SMS жіберу", whatsapp: "WhatsApp-қа жіберу",
+  },
+};
+
+const NOT_CONNECTED: Record<string, string> = {
+  ru: "канал пока не подключён на нашей стороне.",
+  en: "this channel is not connected on our side yet.",
+  kk: "бұл арна біздің жақта әлі қосылмаған.",
+};
+
+export function capabilityHint(
+  idx: CapabilityIndex | null,
+  id: string,
+  lang: string = "ru",
+): string {
+  const язык = CAP_LABEL[lang] ? lang : "en";
   const c = idx?.[id];
+  const label = CAP_LABEL[язык][id] ?? c?.name ?? id;
   if (!c || !c.status || c.status === "live") return `${label}`;
-  const alt = ALTERNATIVE[id];
-  return `${label}: канал пока не подключён на нашей стороне.${alt ? ` ${alt}` : ""}`;
+  const alt = ALTERNATIVE[язык]?.[id];
+  return `${label}: ${NOT_CONNECTED[язык]}${alt ? ` ${alt}` : ""}`;
 }
 
 /**
@@ -87,7 +139,17 @@ export function capabilityHint(idx: CapabilityIndex | null, id: string, label: s
  * `not_available`, а `pages` — `live`, то есть выкатка работает и обе
  * недоступные кнопки имеют куда отослать.
  */
-const ALTERNATIVE: Record<string, string> = {
-  vercel: "Публикуйте кнопкой «Опубликовать на Cloudflare Pages» — она работает.",
-  railway: "Публикуйте кнопкой «Опубликовать на Cloudflare Pages» — она работает.",
+const ALTERNATIVE: Record<string, Record<string, string>> = {
+  ru: {
+    vercel: "Публикуйте кнопкой «Опубликовать на Cloudflare Pages» — она работает.",
+    railway: "Публикуйте кнопкой «Опубликовать на Cloudflare Pages» — она работает.",
+  },
+  en: {
+    vercel: "Use the “Publish to Cloudflare Pages” button — it works.",
+    railway: "Use the “Publish to Cloudflare Pages” button — it works.",
+  },
+  kk: {
+    vercel: "«Cloudflare Pages-ке жариялау» түймесін қолданыңыз — ол жұмыс істейді.",
+    railway: "«Cloudflare Pages-ке жариялау» түймесін қолданыңыз — ол жұмыс істейді.",
+  },
 };

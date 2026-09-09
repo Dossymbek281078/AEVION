@@ -44,7 +44,7 @@ import { extractJsonObject, salvageCompleteArrayObjects } from "../services/qcor
 import { smartComplete } from "../services/qcoreai/smartComplete";
 import { insertSmartRun, aggregateSmartRunsForUser } from "../lib/smartRunLog";
 import { costUsd } from "../services/qcoreai/pricing";
-import { applyHealth, noteProviderFailure, noteProviderSuccess } from "../lib/providerHealth";
+import { applyHealth, getProviderHealth, noteProviderFailure, noteProviderSuccess } from "../lib/providerHealth";
 import { captureException } from "../lib/sentry";
 import { degraded } from "../lib/degradedResponse";
 import { classifyGithubResponse, githubUnreachable } from "../lib/githubFailure";
@@ -157,6 +157,60 @@ function dhAdoptLimit() {
     message: "Слишком много попыток подряд. Подождите минуту.",
   });
 }
+
+/**
+ * Управляющий байт в адресе — ошибка КЛИЕНТА, а не авария хранилища.
+ *
+ * Замер прода 08.09.2026, зонд враждебного входа по читающим ручкам: пять
+ * адресов с `%00` отвечали **503 «Хранилище временно недоступно. Это НЕ значит,
+ * что...»**, тогда как `%01`, перевод строки и обычный мусор давали честные 404.
+ * Разгадка: NUL доезжает до параметра запроса, Postgres такую строку не
+ * принимает, наш catch объявляет это отказом хранилища.
+ *
+ * Дефекта здесь два, и второй хуже первого.
+ *   1. Клиентская ошибка отвечает 5xx — это шум в тревогах, среди которого
+ *      потом не видно настоящих аварий (ворота §3.4).
+ *   2. Человеку сообщается НЕПРАВДА про нашу базу, а витрина по этому же
+ *      признаку рисует полосу деградации. То есть любой обход с кривой ссылкой
+ *      делал наш сигнал здоровья ложно красным — и делал это бесплатно.
+ *
+ * Проверяем ПУТЬ целиком одной прослойкой, а не каждый параметр: законный адрес
+ * управляющих байтов не содержит никогда, а перечислять места, где читается id,
+ * — значит однажды пропустить новое.
+ *
+ * ⚠️ ЭТА ПРОСЛОЙКА ВЫГЛЯДИТ МЁРТВОЙ — И НЕ ЯВЛЯЕТСЯ ЕЮ. С 08.09.2026 такая же
+ * стоит ПЛАТФОРМЕННО, до роутеров (`src/index.ts`), и срабатывает раньше:
+ * значит сюда запрос с управляющим байтом обычно не доходит, и в журналах её
+ * срабатываний не будет. Это защита в глубину, а не дубль: платформенную могут
+ * снять, обойти монтированием мимо или сломать при правке, и тогда эта
+ * останется единственной. Стоит она ноль.
+ *
+ * Не удаляйте её как неиспользуемую: «никогда не срабатывает» здесь означает
+ * «первая линия держит», а не «не нужна».
+ */
+const hasControlChar = (value: string): boolean => {
+  // Через коды символов, а не регуляркой с экранированием: escape--последовательности
+  // на этой машине уже превращались в НАСТОЯЩИЙ байт NUL прямо в исходнике.
+  for (let i = 0; i < value.length; i += 1) {
+    const code = value.charCodeAt(i);
+    if (code < 32 || code === 127) return true;
+  }
+  return false;
+};
+
+devhubRouter.use((req, res, next) => {
+  let decoded = req.path;
+  try {
+    decoded = decodeURIComponent(req.path);
+  } catch {
+    // Битая процентная последовательность — тоже разговор о запросе, не о нас.
+    return res.status(400).json({ error: "invalid_path", message: "Адрес запроса записан неверно." });
+  }
+  if (hasControlChar(decoded)) {
+    return res.status(400).json({ error: "invalid_path", message: "Адрес запроса содержит недопустимые символы." });
+  }
+  return next();
+});
 
 devhubRouter.use(
   ["/media/email", "/media/email-template-send", "/media/sms", "/media/whatsapp"],
@@ -770,10 +824,45 @@ function canEdit(project: DevHubProject, userId: string): boolean {
 }
 
 // ── Project helpers (DB or memory) ────────────────────────────────────────────
+/**
+ * Наши собственные тестовые прогоны в ОБЩЕЙ корзине — прячем из списка.
+ *
+ * Замер прода 08.09.2026: гость, у которого браузер блокирует хранилище,
+ * получает общую личность `anonymous`, и список отдавал ему 17 наших июльских
+ * прогонов («таймер помодоро» в семи вариантах, cf-pages-test, prod-smoke-test).
+ * Человек открывает модуль впервые и видит два десятка чужих проектов как свои
+ * — худшее первое впечатление, какое можно устроить на витрине.
+ *
+ * ФИЛЬТР, А НЕ УДАЛЕНИЕ. Удаление данных на проде необратимо и остаётся руке
+ * основателя; фильтр даёт тот же вид витрины, ничего не теряет и снимается
+ * одной строкой. Приём взят у соседнего модуля: в QRight публичные выдачи так
+ * же прячут смоук-записи вместо того, чтобы их стирать.
+ *
+ * ГРАНИЦА ВЫБРАНА ДАТОЙ, а не списком идентификаторов: все 17 записей созданы в
+ * июле (самая свежая 26.07), августовских в корзине нет вовсе — проверено. Так
+ * фильтр самоочевиден и не может однажды спрятать работу настоящего человека:
+ * она создаётся после этой границы.
+ *
+ * ПО ИДЕНТИФИКАТОРУ записи остаются доступны НАМЕРЕННО, и это не половинчатость.
+ * Наткнуться на них нельзя — нужен точный UUID, — зато их можно будет удалить
+ * через ту же ручку, когда основатель решит. Спрятать и лишить возможности
+ * убрать значило бы закрепить мусор навсегда.
+ */
+// Предикат ЭКСПОРТИРОВАН намеренно: старую запись через ручки не создать
+// (дату ставит сервер), поэтому проверить, что фильтр действительно ПРЯЧЕТ, а
+// не просто присутствует в коде, можно только вызвав его напрямую. Первая
+// редакция сторожа мутацию «фильтр обезврежен» не поймала — проверяла наличие
+// вызовов, а не следствие.
+const ОБЩАЯ_ЛИЧНОСТЬ = "anonymous";
+const НАШИ_ПРОГОНЫ_ДО = "2026-09-01T00:00:00.000Z";
+export function нашТестовыйПрогон(p: { userId: string; createdAt: string }): boolean {
+  return p.userId === ОБЩАЯ_ЛИЧНОСТЬ && p.createdAt < НАШИ_ПРОГОНЫ_ДО;
+}
+
 async function dbListProjects(userId: string): Promise<DevHubProject[]> {
   if (!isDevHubDbReady()) {
     return [...memProjects.values()]
-      .filter((p) => p.userId === userId)
+      .filter((p) => p.userId === userId && !нашТестовыйПрогон(p))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
   const r = await pool.query(
@@ -782,8 +871,8 @@ async function dbListProjects(userId: string): Promise<DevHubProject[]> {
   );
   // Same overlay as dbGetProject: a project whose save failed has to be listed,
   // or the shelf shows the user one fewer project than they have.
-  const rows: DevHubProject[] = r.rows.map(rowToProject);
-  const parked = [...memProjects.values()].filter((p) => p.userId === userId);
+  const rows: DevHubProject[] = r.rows.map(rowToProject).filter((p: DevHubProject) => !нашТестовыйПрогон(p));
+  const parked = [...memProjects.values()].filter((p) => p.userId === userId && !нашТестовыйПрогон(p));
   if (parked.length === 0) return rows;
   const byId = new Map<string, DevHubProject>(rows.map((p) => [p.id, p]));
   for (const p of parked) byId.set(p.id, p);
@@ -821,18 +910,42 @@ async function dbSaveProject(p: DevHubProject): Promise<void> {
   memProjects.delete(p.id);
 }
 
+/**
+ * Удаление проекта. Сносит ВСЁ, что содержит его файлы, а не только таблицу
+ * файлов.
+ *
+ * Замер 08.09.2026: сносились `DevHubFile` и `DevHubProject`, а
+ * `DevHubCheckpoint` оставался. В нём поле `files` — JSONB с ПОЛНЫМ
+ * содержимым файлов на момент снимка (это история отката), то есть копии кода
+ * человека жили дальше в другой таблице. Согласие при этом обещает: «файлы и
+ * база исчезнут навсегда». Обещание было неверным, и неверным на пути
+ * УДАЛЕНИЯ — там, где человек и рассчитывает, что за него сделают ровно то,
+ * что сказано.
+ *
+ * `DevHubDeployment` тоже привязан к проекту и иначе остаётся сиротой
+ * навсегда. `DevHubUsage` и `DevHubTier` НЕ трогаем намеренно: это счётчики
+ * расхода и тариф — они принадлежат человеку, а не проекту, и нужны для учёта
+ * после удаления.
+ *
+ * Публичные сниппеты тоже остаются намеренно: поделиться — отдельное действие
+ * человека, и отменять его удалением проекта мы не вправе.
+ */
 async function dbDeleteProject(id: string): Promise<void> {
   if (!isDevHubDbReady()) {
     memProjects.delete(id);
     for (const [fid, f] of memFiles) { if (f.projectId === id) memFiles.delete(fid); }
+    for (const [cid, c] of memCheckpoints) { if (c.projectId === id) memCheckpoints.delete(cid); }
+    for (const [did, d] of memDeployments) { if (d.projectId === id) memDeployments.delete(did); }
     return;
   }
   // Drop the parked copy too, or the overlay in dbGetProject resurrects a
   // project the user just deleted — a hole the overlay itself opens.
-  // Drop the parked copy too, or the overlay in dbGetProject resurrects a
-  // project the user just deleted — a hole the overlay itself opens.
   memProjects.delete(id);
   for (const [fid, f] of memFiles) { if (f.projectId === id) memFiles.delete(fid); }
+  for (const [cid, c] of memCheckpoints) { if (c.projectId === id) memCheckpoints.delete(cid); }
+  for (const [did, d] of memDeployments) { if (d.projectId === id) memDeployments.delete(did); }
+  await pool.query(`DELETE FROM "DevHubCheckpoint" WHERE "projectId"=$1`, [id]);
+  await pool.query(`DELETE FROM "DevHubDeployment" WHERE "projectId"=$1`, [id]);
   await pool.query(`DELETE FROM "DevHubFile" WHERE "projectId"=$1`, [id]);
   await pool.query(`DELETE FROM "DevHubProject" WHERE "id"=$1`, [id]);
 }
@@ -1289,6 +1402,11 @@ interface GeneratedCodeResult {
   // were salvaged and one continuation call fetched (or tried to fetch) the
   // rest. Surfaces in the chat as an honest process note, not hidden.
   continued?: boolean;
+  /** Обрыв БЕЗ восстановления: дозапрос не удался, набор файлов неполный.
+   *  Отдельно от `continued` намеренно — это разные новости для человека. */
+  truncated?: boolean;
+  /** Сколько файлов уцелело при обрыве: без числа «оборвалось» не действие. */
+  recoveredFiles?: number;
   // Present (non-empty) only when a generated JS/TS/JSON file STILL fails a
   // syntax check after self-correction was attempted — the file is still
   // written (the model may have gotten close, and an empty diff is worse
@@ -1633,6 +1751,11 @@ async function generateCodeWithAI(
   }
 
   let wasContinued = false;
+  // Два РАЗНЫХ исхода обрыва, и раньше они назывались одним словом.
+  // `continued` ставился в обоих случаях, а экран печатал по нему
+  // «недостающие файлы дозагружены» — то есть при неудачном дозапросе человеку
+  // сообщался результат, которого не было, поверх обрезанного набора файлов.
+  let wasTruncated = false;
   let parsed = parseGeneratedFiles(result.reply, targetFiles);
   // Salvage means the reply was cut off and its tail file was lost — ask the
   // model to CONTINUE with just the missing files (one attempt; completed
@@ -1658,9 +1781,17 @@ async function generateCodeWithAI(
       if (contParsed.mode !== "fallback") {
         const have = new Set(parsed.files.map((f) => f.path));
         parsed = { mode: "parsed", files: [...parsed.files, ...contParsed.files.filter((f) => !have.has(f.path))] };
+        wasContinued = true;
+      } else {
+        // Дозапрос состоялся и не дал разбираемого ответа: у человека на руках
+        // ОБРЕЗАННЫЙ набор, и знать об этом он должен.
+        wasTruncated = true;
       }
-    } catch { /* keep the salvaged prefix — better than losing everything */ }
-    wasContinued = true;
+    } catch {
+      // Дозапрос не состоялся вовсе. Спасённый префикс оставляем — он лучше,
+      // чем ничего, — но выдавать его за целый результат нельзя.
+      wasTruncated = true;
+    }
   }
   let files = parsed.files;
   onProgress?.("syntax_check");
@@ -1704,6 +1835,7 @@ async function generateCodeWithAI(
     runTokens: { in: токВх, out: токИсх },
     runCostUsd: costUsd(provider.id, provider.defaultModel, токВх, токИсх),
     ...(wasContinued ? { continued: true } : {}),
+    ...(wasTruncated ? { truncated: true, recoveredFiles: files.length } : {}),
     ...(syntaxProblems.length > 0 ? { syntaxErrors: syntaxProblems } : {}),
     ...(selfCorrected > 0 && syntaxProblems.length === 0 ? { selfCorrected } : {}),
   };
@@ -2467,7 +2599,7 @@ devhubRouter.post("/projects/:id/generate", dhCostlyLimit("dhgenerate"), async (
 /** Shared by /generate and /database/design: generate → checkpoint → save. */
 async function runProjectGeneration(project: DevHubProject, userId: string, prompt: string, stack: string, targetFiles: string[], images?: ChatImage[], history?: ChatTurn[], onProgress?: (stage: string, extra?: Record<string, unknown>) => void) {
   const existingFiles = await dbListFiles(project.id);
-  const { files: generatedFiles, aiGenerated, continued, syntaxErrors, selfCorrected, provider: genProvider, model: genModel, runTokens, runCostUsd } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history, onProgress,
+  const { files: generatedFiles, aiGenerated, continued, truncated, recoveredFiles, syntaxErrors, selfCorrected, provider: genProvider, model: genModel, runTokens, runCostUsd } = await generateCodeWithAI(prompt, stack, targetFiles, existingFiles, images, history, onProgress,
       меткаГенерации(userId), userId);
   // Модель отработала — вот теперь генерация потрачена. Списание здесь, в
   // общем помощнике, покрывает все точки генерации разом: обычную, потоковую
@@ -2510,6 +2642,9 @@ async function runProjectGeneration(project: DevHubProject, userId: string, prom
   }
   return {
     files: generatedFiles, aiGenerated, ...(continued ? { continued } : {}),
+    // Признак обрыва ТЕРЯЛСЯ ровно здесь: ответ собирается заново
+    // перечислением, и tsc такого не ловит — объект не сужается, а строится.
+    ...(truncated ? { truncated, recoveredFiles } : {}),
     ...(syntaxErrors ? { syntaxErrors } : {}), ...(selfCorrected ? { selfCorrected } : {}),
     ...(genProvider ? { provider: genProvider, model: genModel } : {}),
     ...(runTokens ? { runTokens, runCostUsd } : {}),
@@ -4322,7 +4457,7 @@ devhubRouter.post("/media/tts", async (req, res) => {
 
 // POST /api/devhub/media/email — send email via Brevo
 devhubRouter.post("/media/email", async (req, res) => {
-  const { to, subject, htmlBody, from } = req.body || {};
+  const { to, subject, htmlBody } = req.body || {}; // `from` намеренно НЕ читается — см. ниже
   if (!to || typeof to !== "string") return res.status(400).json({ error: "to (email) required" });
   if (!subject || typeof subject !== "string") return res.status(400).json({ error: "subject required" });
   if (!htmlBody || typeof htmlBody !== "string") return res.status(400).json({ error: "htmlBody required" });
@@ -4338,9 +4473,16 @@ devhubRouter.post("/media/email", async (req, res) => {
     });
   }
 
-  const senderEmail = (from && typeof from === "string" && emailRe.test(from.trim()))
-    ? from.trim()
-    : (process.env.BREVO_DEFAULT_SENDER || "noreply@aevion.app");
+  /*
+   * Адрес отправителя — ТОЛЬКО из окружения. Тот же разбор, что у /media/sms
+   * рядом: ручка открыта без входа, и поле `from` уходило в Brevo как есть.
+   *
+   * Проверка формата адреса от подмены не защищает: она отвечает на вопрос
+   * «похоже ли это на адрес», а не «наш ли он». Письмо с чужого адреса с
+   * нашего аккаунта бьёт по репутации домена — а ею мы отправляем письма
+   * запуска.
+   */
+  const senderEmail = process.env.BREVO_DEFAULT_SENDER || "noreply@aevion.app";
 
   try {
     const r = await fetch("https://api.brevo.com/v3/smtp/email", {
@@ -5705,7 +5847,7 @@ devhubRouter.post("/projects/:id/agent/workflow/stream", dhCostlyLimit("dhworkfl
 
 // POST /api/devhub/media/sms — Brevo transactional SMS
 devhubRouter.post("/media/sms", async (req, res) => {
-  const { recipient, content, sender } = req.body || {};
+  const { recipient, content } = req.body || {}; // `sender` намеренно НЕ читается — см. ниже
   if (!recipient || typeof recipient !== "string") return res.status(400).json({ error: "recipient (E.164 phone) required" });
   if (!/^\+\d{6,18}$/.test(recipient.trim())) return res.status(400).json({ error: "recipient must be E.164 format (e.g. +14155552671)" });
   if (!content || typeof content !== "string") return res.status(400).json({ error: "content required" });
@@ -5719,7 +5861,29 @@ devhubRouter.post("/media/sms", async (req, res) => {
     });
   }
 
-  const senderName = (typeof sender === "string" && sender.trim()) ? sender.trim().slice(0, 11) : (process.env.BREVO_SMS_SENDER || "AEVION");
+  /*
+   * Имя отправителя берётся ТОЛЬКО из окружения, а не из тела запроса.
+   *
+   * Замер 09.09.2026: ручка открыта без входа (проверки прав здесь нет, в
+   * отличие от соседней /media/image), и поле `sender` уходило в Brevo как
+   * есть.
+   *
+   * ⚠️ Имя проверяющей функции в этом объяснении НЕ пишем намеренно: соседний
+   * сторож `devhubWriteRoutesWithoutAuth` ищет его как признак защиты по
+   * тексту файла, и упоминание в комментарии О ДЕФЕКТЕ гасило сторожа —
+   * ручка выпадала из списка как «защищённая». Проверено на себе. То есть кто угодно отправлял SMS на любой номер мира с
+   * ЛЮБЫМ именем отправителя, за наш счёт и с нашего аккаунта. Одиннадцать
+   * знаков хватает, чтобы назваться банком.
+   *
+   * Предел темпа здесь есть и работает (5/мин, роутер, строка ~215) — он
+   * ограничивает объём, но подмену имени не ограничивает вовсе: одного
+   * сообщения достаточно.
+   *
+   * Своё имя отправителя у пользователя платформы появится тогда, когда его
+   * можно будет подтвердить на нашем аккаунте Brevo. Пока такого механизма
+   * нет, и принимать имя на слово — значит раздавать наш бренд.
+   */
+  const senderName = process.env.BREVO_SMS_SENDER || "AEVION";
 
   try {
     const r = await fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
@@ -5907,13 +6071,34 @@ devhubRouter.post("/media/upload-image", dhCostlyLimit("dhmedia_upload"), async 
 // ── Helper: auto-upload DALL-E URL to Cloudflare Images if env set ───────────
 /** Polls a freshly deployed URL until it returns 2xx (5 tries, 5s apart).
  * Exported for tests. attemptDelayMs is overridable so tests don't sleep. */
-export async function verifyDeploymentServes(url: string, attemptDelayMs = 5000): Promise<boolean> {
-  for (let attempt = 0; attempt < 5; attempt++) {
+/**
+ * Ждёт, пока опубликованный адрес начнёт отвечать 2xx.
+ *
+ * ОКНО БЫЛО 25 СЕКУНД (5 попыток по 5), и этого не хватало. Замер 08.09.2026:
+ * за неделю пять выкаток, успешных ноль — а соседнее окно открыло адреса
+ * четырёх «упавших» и получило 200 (контроль: выдуманный поддомен того же
+ * проекта — 404). То есть страницы гостей были ОПУБЛИКОВАНЫ и живы, а мы
+ * записали им «не удалось» и так и сказали человеку.
+ *
+ * Причина в устройстве: у гостя каждый проект — НОВЫЙ проект Cloudflare Pages,
+ * а новый домен `*.pages.dev` расходится по краю сети дольше, чем повторная
+ * выкатка в существующий. Июльские успехи это не опровергали: там были
+ * повторные выкатки.
+ *
+ * Окно расширено до ~2 минут. Расширять почти свободно можно потому, что
+ * проверка живёт в отложенной части: ответ человеку уже ушёл, и всё это время
+ * запись честно остаётся `pending`, а не превращается в `failed` раньше срока.
+ *
+ * Число попыток — ПАРАМЕТР, а не константа: тесты гоняют его с единицей, и
+ * закреплять в них конкретное число попыток значит закреплять не то свойство.
+ */
+export async function verifyDeploymentServes(url: string, attemptDelayMs = 5000, attempts = 24): Promise<boolean> {
+  for (let attempt = 0; attempt < attempts; attempt++) {
     try {
       const check = await fetch(url, { method: "GET", redirect: "follow" });
       if (check.ok) return true;
     } catch { /* network — retry */ }
-    if (attempt < 4) await new Promise((r) => setTimeout(r, attemptDelayMs));
+    if (attempt < attempts - 1) await new Promise((r) => setTimeout(r, attemptDelayMs));
   }
   return false;
 }
@@ -6022,8 +6207,20 @@ devhubRouter.post("/media/translate", dhCostlyLimit("dhtranslate"), async (req, 
           accountUrl: "https://www.deepl.com/account/usage",
         });
       }
+      // Сырое тело ответа поставщика наружу НЕ отдаём: 300 знаков чужого JSON
+      // граница показа не узнаёт (она ловит имена переменных и панели), и
+      // покупатель читал бы его в скобках после «Не удалось перевести».
+      // Ветка 456 выше — отдельный случай: её текст называет DEEPL_API_KEY, и
+      // именно поэтому граница его узнаёт и прячет, а подробность остаётся нам.
+      // Здесь такой приметы нет, поэтому категорию выбираем сами.
+      //
+      // Код ответа тоже свой: 502 — «посредник ответил ошибкой». Пропускать
+      // наружу статус поставщика значит выдавать его семантику за нашу.
       noteProviderFailure("translate", `DeepL HTTP ${r.status}: ${errText.slice(0, 100)}`);
-      return res.status(r.status).json({ error: `DeepL error: ${errText.slice(0, 300)}` });
+      return res.status(502).json({
+        error: "Translation provider returned an error — we know about it, try again later",
+        code: "provider_error",
+      });
     }
     const data = await r.json() as { translations: Array<{ text: string; detected_source_language: string }> };
     const first = data.translations?.[0];
@@ -6957,6 +7154,18 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       // Pages is the one deploy path that actually works, so when it stops
       // working the shop window should be the first to say it — not the user
       // whose page never came up.
+      // ТЕКСТ НЕУДАЧИ НАЗЫВАЛ МЁРТВУЮ ПРИЧИНУ. До 08.09.2026 здесь стояло
+      // «CF direct-upload via raw REST is deprecated, wrangler-based upload
+      // needed» — а загрузка идёт ЧЕРЕЗ WRANGLER (строка с deployViaWrangler
+      // выше), и этот путь давно единственный. Сообщение уводило разбирающего
+      // к замене загрузчика, который менять не надо.
+      //
+      // Замер, ради которого это нашлось: за 7 дней 5 выкаток, успешных ноль
+      // (`/studio/deploy-stats`). Разбирать их будут по этому самому журналу,
+      // и ложная причина в нём стоит дороже самой неудачи.
+      //
+      // Отличать ветки просто: `wrangler: ...` — упала загрузка;
+      // `verify: ...` — загрузка прошла, а адрес не ответил.
       if (serves) noteProviderSuccess("pages");
       else noteProviderFailure("pages", "the deployed page does not serve (2xx never came back after retries)");
       if (serves) {
@@ -6964,7 +7173,9 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       } else {
         d.status = "failed";
         d.buildLog = (d.buildLog || "") +
-          " | verify: deployed assets are not serving (upstream accepted the upload but the page returns non-2xx — CF direct-upload via raw REST is deprecated, wrangler-based upload needed)";
+          " | verify: wrangler upload finished, but the page did not answer 2xx within ~25s " +
+          "(5 attempts, 5s apart). Either the new Pages project has not propagated yet, or it " +
+          "really does not serve. Check the address by hand before blaming the upload.";
         d.completedAt = now();
       }
       try { await dbSaveDeployment(d); } catch { memDeployments.set(d.id, d); }
@@ -7900,6 +8111,14 @@ devhubRouter.get("/studio/deploy-stats", async (req, res) => {
   // придуманный список: иначе новый статус молча выпадет из знаменателя.
   const counts = new Map<string, number>();
   let storage: "db" | "memory" = "db";
+  // Сколько «неудач» несут ЖИВОЙ адрес. Замер 08.09.2026: за неделю ручка
+  // показывала 5 выкаток и 0 успешных, а четыре из пяти адресов отвечали 200
+  // (контроль: выдуманный поддомен того же проекта даёт 404). Причина была не
+  // в публикации: проверка ждала ответа 25 секунд, а у гостя КАЖДЫЙ проект —
+  // это новый проект Cloudflare Pages, он поднимается дольше. Ожидание
+  // исправлено, но старые записи остались, и «успешных 0» продолжает пугать
+  // человека, читающего эту цифру. Пусть цифра называет свою оговорку сама.
+  let failedWithUrl = 0;
 
   if (!isDevHubDbReady()) {
     storage = "memory";
@@ -7907,6 +8126,7 @@ devhubRouter.get("/studio/deploy-stats", async (req, res) => {
     for (const d of memDeployments.values()) {
       if (Date.parse(d.triggeredAt) >= since) {
         counts.set(d.status, (counts.get(d.status) ?? 0) + 1);
+        if (d.status === "failed" && d.deployUrl) failedWithUrl += 1;
       }
     }
   } else {
@@ -7926,6 +8146,15 @@ devhubRouter.get("/studio/deploy-stats", async (req, res) => {
       for (const row of r.rows as Array<{ status: string; n: number }>) {
         counts.set(row.status, Number(row.n));
       }
+      const f = await pool.query(
+        `SELECT COUNT(*)::int AS n
+           FROM "DevHubDeployment"
+          WHERE "triggeredAt" >= NOW() - ($1::int * INTERVAL '1 day')
+            AND "status" = 'failed'
+            AND "deployUrl" IS NOT NULL AND "deployUrl" <> ''`,
+        [days],
+      );
+      failedWithUrl = Number((f.rows[0] as { n: number } | undefined)?.n ?? 0);
     } catch {
       return replyStorageUnavailable(res);
     }
@@ -7941,6 +8170,10 @@ devhubRouter.get("/studio/deploy-stats", async (req, res) => {
     days,
     total,
     byStatus,
+    // Оговорка ЕДЕТ РЯДОМ С ЧИСЛОМ, а не живёт в чужой голове: столько
+    // «неудач» имеют живой адрес и почти наверняка были успехами, которые
+    // прежняя проверка не дождалась.
+    failedWithUrl,
     // NULL, а не 0, когда считать не из чего. Ноль здесь читался бы как
     // «ни одна публикация не удалась» — это другое утверждение, и оно
     // отправило бы человека чинить работающее.
@@ -8013,11 +8246,104 @@ devhubRouter.get("/studio/capabilities", async (_req, res) => {
   // A configured key is not a working capability — fold in what the last real
   // call to each provider actually did (lib/providerHealth).
   const withHealth = caps.map(applyHealth);
-  const live = withHealth.filter((c) => c.status === "live").length;
-  const degraded = withHealth.filter((c) => c.status === "degraded").length;
+
+  // Ручка ПУБЛИЧНАЯ (проверено curl без ключа), и её lastError уходит прямо в
+  // подсказку на витрине. Замер 08.09.2026 на проде: там лежал сырой ответ
+  // поставщика — `ElevenLabs HTTP 400: {"detail":{"type":"authentication_error",
+  // "code":"invalid_api_key",...}}` и `провайдер-проба: HTTP 401`. Это ворота §3.4
+  // («тексты ошибок человеческие, без кодов и адресов») и заодно утечка нашего
+  // устройства наружу.
+  //
+  // Поэтому наружу идёт КОД, а слова подбирает витрина на языке читателя:
+  // подсказка живёт в атрибуте title, а его машинный доводчик НЕ переводит —
+  // русский текст отсюда EN-посетитель увидел бы как есть.
+  const offCodeOf = (c: { status?: string; lastError?: string }): string | undefined => {
+    if (c.status === "live") return undefined;
+    const raw = (c.lastError ?? "").toLowerCase();
+    if (/quota|exhaust|limit exceeded|исчерпан/.test(raw)) return "quota_exhausted";
+    if (/401|403|invalid.?api.?key|authentication|unauthor/.test(raw)) return "auth_rejected";
+    if (/не делегирован|not delegated/.test(raw)) return "zone_not_delegated";
+    if (raw.includes("{") || /http \d{3}/.test(raw)) return "provider_error";
+    if (c.status === "needs_token") return "needs_token";
+    if (c.status === "not_available") return "not_available";
+    if (c.status === "degraded") return "provider_error";
+    return undefined;
+  };
+
+  // Текст оставляем только СВОЙ: всё, что похоже на ответ поставщика (тело JSON
+  // или код HTTP), заменяется классом. Наши выверенные фразы — например про
+  // неделегированную зону — проходят, они написаны для человека.
+  const publicReason = (reason: string | undefined): string | undefined => {
+    if (!reason) return undefined;
+    if (reason.includes("{") || /HTTP \d{3}/i.test(reason)) return undefined;
+    return reason.slice(0, 160);
+  };
+
+  // Отказ поставщика бывает про ВЫЗОВ, а бывает про КЛЮЧ. Отвергнутый ключ и
+  // выжженная квота ломают все возможности, которые на этом ключе висят, —
+  // а показывается это только у той, которую случилось позвать.
+  //
+  // Замер прода 08.09.2026, два снимка с разницей в 40 минут: сперва audio_tts
+  // и audio_music оба degraded, потом audio_music стал live, а audio_tts остался
+  // degraded — при ОДНОМ ключе ELEVENLABS_API_KEY. Разошлись они не по существу,
+  // а по сроку памяти об отказе (30 минут в providerHealth): у одной запись
+  // состарилась, у другой нет. Человек читал «настроено 12 из 17», и музыка была
+  // среди работающих, хотя ключ тот же и он отвергнут. Групп таких три:
+  // озвучка+музыка, видео+3D, почта+SMS+WhatsApp.
+  //
+  // Переносим ТОЛЬКО отказ уровня ключа и ТОЛЬКО между возможностями с одним
+  // единственным токеном. У кого список токенов (image, screenshot_code,
+  // pages) — там запасная цепочка поставщиков, и падение одного звена
+  // возможность не убивает: понижать её было бы клеветой.
+  const keyLevelFailure = new Map<string, { code: string; at: number }>();
+  for (const c of withHealth) {
+    const token = (c as { token?: string }).token;
+    if (!token) continue;
+    const h = getProviderHealth(c.id);
+    if (!h || h.ok) continue;
+    const code = offCodeOf({ status: "degraded", lastError: h.reason });
+    if (code !== "auth_rejected" && code !== "quota_exhausted") continue;
+    const at = Date.parse(h.at);
+    const prev = keyLevelFailure.get(token);
+    if (!prev || at > prev.at) keyLevelFailure.set(token, { code, at });
+  }
+
+  const withSiblings = withHealth.map((c) => {
+    if (c.status !== "live") return c;
+    const token = (c as { token?: string }).token;
+    const failure = token ? keyLevelFailure.get(token) : undefined;
+    if (!failure) return c;
+    // Свой УСПЕХ новее чужого отказа — верим ему: ключ могли поправить между
+    // вызовами, и тогда понижение было бы враньём в другую сторону.
+    const own = getProviderHealth(c.id);
+    if (own && own.ok && Date.parse(own.at) > failure.at) return c;
+    return { ...c, status: "degraded", sharedKeyFailure: failure.code };
+  });
+
+  const publicCaps = withSiblings.map((c) => {
+    const shared = (c as { sharedKeyFailure?: string }).sharedKeyFailure;
+    const offCode = shared ?? offCodeOf(c);
+    const lastError = publicReason((c as { lastError?: string }).lastError);
+    const out = { ...c, ...(offCode ? { offCode } : {}) } as Record<string, unknown>;
+    delete out.sharedKeyFailure;
+    if (lastError) out.lastError = lastError;
+    else delete out.lastError;
+    return out;
+  });
+
+  const live = withSiblings.filter((c) => c.status === "live").length;
+  const degraded = withSiblings.filter((c) => c.status === "degraded").length;
+  // needsToken считался ОСТАТКОМ (всего минус live минус degraded), и потому
+  // втягивал not_available. Следствие видел человек: баннер /studio писал
+  // «3 capabilities need Railway env vars», а список рядом фильтрует по
+  // status === "needs_token" и показывал ОДНУ переменную. Заголовок спорил с
+  // собственным списком, и «нужен ключ» обещало починку там, где ключ ни при
+  // чём: Railway не сделан, зона домена не делегирована.
+  const needsToken = withSiblings.filter((c) => c.status === "needs_token").length;
+  const notAvailable = withSiblings.filter((c) => c.status === "not_available").length;
   return res.json({
-    capabilities: withHealth,
-    summary: { total: withHealth.length, live, degraded, needsToken: withHealth.length - live - degraded },
+    capabilities: publicCaps,
+    summary: { total: withSiblings.length, live, degraded, needsToken, notAvailable },
   });
 });
 

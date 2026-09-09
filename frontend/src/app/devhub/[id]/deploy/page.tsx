@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
 import { devhubServerError, useDevhubServerError } from "@/lib/devhubServerError";
+import { useI18nOptional } from "@/lib/i18n";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -179,9 +180,43 @@ function DeploymentRow({
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+/**
+ * Тексты экрана выкатки. Заводятся 08.09.2026, потому что здесь их не было
+ * вовсе: три строки уходили человеку зашитыми по-английски, и главная из них —
+ * «Deployment started» — не запасная, а ОБЫЧНАЯ: её видит каждый платящий при
+ * каждой публикации.
+ *
+ * Экран смотрят в самый напряжённый момент: только что нажали «опубликовать» и
+ * ждут. Тост живёт секунды — машинный доводчик до него не успевает по
+ * устройству, это его слепая зона. Существующий сторож экрана проверяет
+ * ОТРИСОВКУ начального состояния и по своей же оговорке сюда не смотрит.
+ */
+const DEPLOY_UI: Record<string, { started: string; failed: string; loadFailed: string; failedButUrl: string }> = {
+  ru: {
+    failedButUrl: "Сборка помечена неудачной, но адрес был выдан. Проверка ждала ответа всего 25 секунд, а новый адрес поднимается дольше — откройте ссылку: сайт может быть уже живым.",
+    started: "Выкатка запущена",
+    failed: "Выкатить не удалось",
+    loadFailed: "Не удалось загрузить данные проекта",
+  },
+  en: {
+    failedButUrl: "The build is marked failed, but an address was issued. The check waited only 25 seconds while a fresh address takes longer to come up — open the link: the site may already be live.",
+    started: "Deployment started",
+    failed: "Deploy failed",
+    loadFailed: "Could not load the project data",
+  },
+  kk: {
+    failedButUrl: "Құрастыру сәтсіз деп белгіленген, бірақ мекенжай берілген. Тексеру бар болғаны 25 секунд күтті, ал жаңа мекенжай ұзағырақ көтеріледі — сілтемені ашыңыз: сайт тірі болуы мүмкін.",
+    started: "Жариялау басталды",
+    failed: "Жариялау сәтсіз аяқталды",
+    loadFailed: "Жоба деректерін жүктеу мүмкін болмады",
+  },
+};
+
 // Next 16: params — Promise (см. заметку в src/app/[id]/page.tsx).
 export default function DevHubDeployPage({ params }: { params: Promise<{ id: string }> }) {
   const serverError = useDevhubServerError();
+  const uiLang = useI18nOptional()?.lang ?? "ru";
+  const DL = DEPLOY_UI[uiLang] ?? DEPLOY_UI.ru;
   const { id } = use(params);
 
   const [project, setProject] = useState<Project | null>(null);
@@ -229,7 +264,7 @@ export default function DevHubDeployPage({ params }: { params: Promise<{ id: str
         });
       }
     } catch (e: any) {
-      if (!silent) setError(e?.message || "Failed to load");
+      if (!silent) setError(e?.message || DL.loadFailed);
     } finally {
       if (!silent) setLoading(false);
     }
@@ -271,11 +306,11 @@ export default function DevHubDeployPage({ params }: { params: Promise<{ id: str
         const body = await r.json().catch(() => ({}));
         throw new Error(serverError(body.error, "Выкатка не удалась."));
       }
-      showToast("Deployment started", true);
+      showToast(DL.started, true);
       // Immediately refresh so the new pending deployment appears
       await fetchData(true);
     } catch (e: any) {
-      showToast(e?.message || "Deploy failed", false);
+      showToast(e?.message || DL.failed, false);
     } finally {
       setDeploying(false);
     }
@@ -499,6 +534,24 @@ export default function DevHubDeployPage({ params }: { params: Promise<{ id: str
                       )}
                     </div>
                   </div>
+
+                  {/* «Неудача» при выданном адресе — почти всегда НЕ неудача.
+                      Замер прода 08.09.2026: у четырёх записей 06.09 статус
+                      failed, а их адреса отвечают 200 до сих пор (контроль:
+                      выдуманный поддомен того же проекта — 404). Проверка ждала
+                      25 секунд, а НОВЫЙ проект Cloudflare Pages поднимается
+                      дольше. Окно расширено, но записи, сделанные до этого,
+                      останутся с прежним статусом — и человек прочитает «не
+                      вышло» о работающем сайте.
+                      Данные на проде не правим; говорим правду на экране. */}
+                  {selectedDeployment.status === "failed" && selectedDeployment.deployUrl && (
+                    <div style={{
+                      padding: "10px 14px", marginBottom: 10, fontSize: 12, lineHeight: 1.5,
+                      color: "#92400e", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8,
+                    }}>
+                      {DL.failedButUrl}
+                    </div>
+                  )}
 
                   {/* Deploy URL for this deployment */}
                   {selectedDeployment.deployUrl && (

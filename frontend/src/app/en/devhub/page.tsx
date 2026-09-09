@@ -80,8 +80,9 @@ export default async function EnDevhubPage({
             <div style={styles.cardTitle}>Open DevHub</div>
             <p style={styles.cardNote}>
               Guest mode with a real generation allowance. Your work transfers
-              to your account when you sign up. The app opens in Russian —
-              switch to English with the language toggle in the header.
+              to your account when you sign up. The interface follows your
+              browser language — English out of the box, with a switcher in
+              the header for Russian and Kazakh.
             </p>
             <div style={styles.cardFoot}>
               <span style={styles.cardPrice}>$0</span>

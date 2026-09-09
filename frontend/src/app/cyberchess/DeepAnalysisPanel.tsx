@@ -1,6 +1,9 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { DeepEngine, type DeepEngineState } from "./deepEngine";
+import { checkAppAccess, type AppAccess } from "@/lib/appAccess";
+import { keepChannel } from "@/lib/products";
+import { channelNow } from "@/lib/channelNow";
 
 /**
  * Opt-in «Глубокий анализ» (Stockfish 17.1 + полный NNUE, сила уровня lichess).
@@ -47,7 +50,18 @@ export default function DeepAnalysisPanel({ fen }: { fen: string }) {
   const [cp, setCp] = useState(0);
   const [mate, setMate] = useState(0);
   const [depth, setDepth] = useState(0);
+  const [access, setAccess] = useState<AppAccess | null>(null); // null = ещё проверяю
   const engRef = useRef<DeepEngine | null>(null);
+
+  // Глубокий анализ (NNUE) — в CyberChess Pro. Остальное (игра, задачи, коуч,
+  // ЛЁГКИЙ анализ, задача дня) остаётся бесплатным. Проверяем оплату при
+  // монтировании. «unknown» — это НЕ «не куплено» (аноним мог купить в другом
+  // браузере, см. appAccess.ts): ему предлагаем вход ИЛИ Pro, не обвиняем.
+  useEffect(() => {
+    let alive = true;
+    checkAppAccess("cyberchess").then((a) => { if (alive) setAccess(a); });
+    return () => { alive = false; };
+  }, []);
 
   // Поднять движок при первом включении.
   useEffect(() => {
@@ -85,6 +99,56 @@ export default function DeepAnalysisPanel({ fen }: { fen: string }) {
       eng.stop();
     };
   }, [fen, on, state]);
+
+  // ── Гейт CyberChess Pro. Глубокий анализ (NNUE) — платный; лёгкий анализ,
+  //    игра, задачи, коуч и задача дня остаются бесплатными (гейта на них нет). ──
+  if (access === null) {
+    return (
+      <div
+        style={{
+          display: "flex", alignItems: "center", gap: 8, width: "100%",
+          padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(0,0,0,0.12)",
+          background: "rgba(0,0,0,0.03)", color: "#7a7a7a", fontWeight: 700, fontSize: 13,
+        }}
+      >
+        🧠 Глубокий анализ · проверяю доступ…
+      </div>
+    );
+  }
+  if (access !== "owned") {
+    return (
+      <div
+        style={{
+          padding: "12px", borderRadius: 8, border: "1px solid rgba(117,153,0,0.35)",
+          background: "rgba(117,153,0,0.06)", fontSize: 13,
+        }}
+      >
+        <div style={{ fontWeight: 800, color: "#5b7a00" }}>🔒 Глубокий анализ — в CyberChess Pro</div>
+        <div style={{ marginTop: 6, color: "#4a4a4a", lineHeight: 1.5 }}>
+          Stockfish 17.1 с полной нейросетью — глубина анализа уровня lichess.
+          Игра, 500&nbsp;000 задач, ИИ-коуч и лёгкий анализ остаются бесплатными.
+        </div>
+        <a
+          // Метка канала переживает переход: человек пришёл с ролика или
+          // рекламы, и если она теряется здесь, покупка Pro запишется в
+          // direct — а именно этот переход мы и хотим считать (сторож
+          // channelSurvivesInternalLinks поймал потерю сразу).
+          href={keepChannel("/pricing", channelNow())}
+          style={{
+            display: "inline-block", marginTop: 10, padding: "8px 14px", borderRadius: 8,
+            background: "#5b7a00", color: "#fff", fontWeight: 700, textDecoration: "none",
+          }}
+        >
+          Открыть Pro
+        </a>
+        {access === "unknown" && (
+          <div style={{ marginTop: 8, color: "#7a7a7a", fontSize: 12 }}>
+            Уже оформляли Pro? <a href="/auth?next=/cyberchess" style={{ color: "#5b7a00", fontWeight: 700 }}>Войти</a>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (!on) {
     return (

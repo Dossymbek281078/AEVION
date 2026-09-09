@@ -302,12 +302,39 @@ export function parseDxf(text: string): DxfResult {
   const extent = Math.max(maxX - minX, maxY - minY);
   let scale = 1;
   let unitLabel = "м (как в файле)";
-  if (insUnits === 4) { scale = 1 / 1000; unitLabel = "мм ($INSUNITS)"; }
-  else if (insUnits === 5) { scale = 1 / 100; unitLabel = "см ($INSUNITS)"; }
-  else if (insUnits === 6) { scale = 1; unitLabel = "м ($INSUNITS)"; }
-  else if (insUnits === 1) { scale = 0.0254; unitLabel = "дюймы ($INSUNITS)"; }
-  else if (extent > 1000) { scale = 1 / 1000; unitLabel = "мм (по габариту)"; }
-  else if (extent > 100) { scale = 1 / 100; unitLabel = "см (по габариту)"; }
+  // Таблица $INSUNITS по стандарту DXF. Прежде здесь были только мм, см, м и
+  // дюймы, а ФУТЫ (код 2) не значились — американские чертежи чертят в них.
+  // Молчаливое следствие было худшим из возможных: файл ЯВНО сообщал единицу,
+  // мы её не узнавали и уходили в эвристику по габариту. Квартира 40 футов
+  // получала габарит 40 и признавалась метрами — модель втрое больше
+  // настоящей, и полоса правдоподобия такое пропускает: 40 м для дома
+  // выглядит нормально. То есть файл сказал правду, а мы её не услышали.
+  const ЕДИНИЦЫ: Record<number, { scale: number; label: string }> = {
+    1: { scale: 0.0254, label: "дюймы" },
+    2: { scale: 0.3048, label: "футы" },
+    4: { scale: 1 / 1000, label: "мм" },
+    5: { scale: 1 / 100, label: "см" },
+    6: { scale: 1, label: "м" },
+    7: { scale: 1000, label: "километры" },
+    10: { scale: 0.9144, label: "ярды" },
+  };
+  const известная = insUnits === null ? undefined : ЕДИНИЦЫ[insUnits];
+  if (известная) {
+    scale = известная.scale;
+    unitLabel = `${известная.label} ($INSUNITS)`;
+  } else {
+    // Код есть, но нам неизвестен — это НЕ то же самое, что кода нет вовсе.
+    // Человек должен знать, что мы не поняли его файл, а не гадать, почему
+    // модель странного размера.
+    if (insUnits !== null && insUnits !== 0) {
+      warnings.push(
+        `В файле указана единица измерения с кодом ${insUnits}, а её мы не знаем. `
+        + "Масштаб взят по габариту чертежа — обязательно сверьте размеры.",
+      );
+    }
+    if (extent > 1000) { scale = 1 / 1000; unitLabel = "мм (по габариту)"; }
+    else if (extent > 100) { scale = 1 / 100; unitLabel = "см (по габариту)"; }
+  }
 
   // --- сборка плана -------------------------------------------------------
   let truncated = 0;

@@ -22,7 +22,31 @@ const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https
  */
 export function isBlockedForCrawlers(u: string): boolean {
   const p = u.replace(/^https?:\/\/[^/]+/, "");
-  return DISALLOWED_PATHS.some((d) => p === d || p === d.replace(/\/$/, "") || p.startsWith(d));
+  /*
+   * Сравнение по ГРАНИЦЕ СЕГМЕНТА, а не по префиксу строки.
+   *
+   * 🔴 Замер 09.09.2026, накануне запуска: `"/qright".startsWith("/qr")`
+   * истинно, а `/qr` попал в список 30.08 как короткий адрес канала. Из-за
+   * этого из карты сайта и из robots.txt выпали ПЯТЬ живых страниц:
+   * /qright, /qright/transparency, /qreal, /qrenew, /qrenew/report.
+   * QRight при этом выходит 10 сентября и продаётся.
+   *
+   * Свип по всем 774 статическим страницам: закрытых справедливо было 36 и
+   * осталось 36, закрытых по ошибке было 5 и стало 0, новых запретов ноль.
+   * То есть правка ничего не открывает сверх ошибочно закрытого — проверено
+   * поимённо, а не рассуждением.
+   *
+   * Форма взята НЕ придуманная: `x === p || x.startsWith(p + "/")` уже
+   * применяется в пяти местах платформы (ClientProviders, PwaInstall,
+   * launchAnnounce, devhub). Здесь было единственное исключение.
+   *
+   * Записи вида "/admin/" со слэшем на конце продолжают работать: слэш
+   * срезается, и сравнение идёт по тому же правилу.
+   */
+  return DISALLOWED_PATHS.some((d) => {
+    const b = d.replace(/\/$/, "");
+    return p === b || p.startsWith(b + "/");
+  });
 }
 
 const TOP_LEVEL_ROUTES: Array<{

@@ -28,9 +28,12 @@ export interface DxfResult {
 interface Seg { x1: number; y1: number; x2: number; y2: number; layer: string }
 
 /** Вставка блока: точка и имя. Из неё выводятся окна и двери. */
+/** Габарит определения блока в его собственных координатах. */
+interface Extent { dx: number; dy: number }
+
 interface Block { x: number; y: number; name: string; layer: string;
   /** масштаб вставки по X (код 41); 1, если в файле не указан */
-  sx: number }
+  sx: number; sy: number }
 
 const MAX_SEGMENTS = 400;
 
@@ -98,14 +101,16 @@ function kindOfBlock(
  * полотна — а она и равна ширине проёма. Где не вышло вовсе — ставится
  * типовая ширина, и это говорится вслух.
  */
-function readBlockSizes(ps: Array<[number, string]>): Map<string, number> {
-  const out = new Map<string, number>();
+function readBlockSizes(ps: Array<[number, string]>): Map<string, Extent> {
+  const out = new Map<string, Extent>();
   let inBlocks = false;
   let name = "";
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   const flush = () => {
-    const w = Math.max(maxX - minX, maxY - minY);
-    if (name && Number.isFinite(w) && w > 0) out.set(name, w);
+    const dx = maxX - minX, dy = maxY - minY;
+    if (name && Number.isFinite(dx) && Number.isFinite(dy) && Math.max(dx, dy) > 0) {
+      out.set(name, { dx, dy });
+    }
     name = "";
     minX = Infinity; maxX = -Infinity; minY = Infinity; maxY = -Infinity;
   };
@@ -222,7 +227,7 @@ export function parseDxf(text: string): DxfResult {
     }
 
     if (inEntities && code === 0 && val === "INSERT") {
-      let name = "", layer = "", x = NaN, y = NaN, sx = NaN;
+      let name = "", layer = "", x = NaN, y = NaN, sx = NaN, sy = NaN;
       let j = i + 1;
       for (; j < ps.length && ps[j][0] !== 0; j++) {
         const [c, v] = ps[j];
@@ -231,9 +236,14 @@ export function parseDxf(text: string): DxfResult {
         else if (c === 10) x = parseFloat(v);
         else if (c === 20) y = parseFloat(v);
         else if (c === 41) sx = parseFloat(v);
+        else if (c === 42) sy = parseFloat(v);
       }
       if (Number.isFinite(x) && Number.isFinite(y)) {
-        blocks.push({ x, y, name, layer, sx: Number.isFinite(sx) && sx > 0 ? sx : 1 });
+        blocks.push({
+          x, y, name, layer,
+          sx: Number.isFinite(sx) && sx > 0 ? sx : 1,
+          sy: Number.isFinite(sy) && sy > 0 ? sy : 1,
+        });
       }
       i = j;
       continue;
@@ -368,8 +378,15 @@ export function parseDxf(text: string): DxfResult {
     // Полоса 0.5–3 м — не вкусовщина: уже 0.5 м не пройдёт человек, шире 3 м
     // — уже не проём, а проём в полстены. За полосой берём типовую и
     // ГОВОРИМ об этом: молча подставленное число — худший класс этого модуля.
+    // Каждая сторона умножается на СВОЙ масштаб: вставка бывает растянута
+    // по осям по-разному (коды 41 и 42), и взять большую СТОРОНУ, а потом
+    // умножить её на масштаб ДРУГОЙ оси — значит получить правдоподобно
+    // неверное число. Поворот (код 50) не нужен вовсе: большая из двух
+    // сторон от него не зависит.
     const own = blockSizes.get(b.name);
-    const fromFile = own === undefined ? null : own * b.sx * scale;
+    const fromFile = own === undefined
+      ? null
+      : Math.max(own.dx * b.sx, own.dy * b.sy) * scale;
     const size = fromFile !== null && fromFile >= 0.5 && fromFile <= 3
       ? { ...PRESETS[guess.kind], width: fromFile }
       : undefined;

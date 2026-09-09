@@ -41,6 +41,36 @@ const bureauEmbedRateLimit = rateLimit({
   keyPrefix: "bureau:embed",
 });
 
+/*
+ * Ограничитель для ЗАПИСИ, которую может сделать кто угодно без входа.
+ *
+ * Замер на проде 09.09.2026: `POST /api/bureau/verify/start` без единого
+ * заголовка и с ПУСТЫМ телом отвечает 201 и вставляет строку в
+ * "BureauVerification" — `resolveUser` для анонимного возвращает
+ * userId=null, email=null, и вставка идёт всё равно. Ограничителя на этом
+ * пути не было: из 40 маршрутов модуля под лимитом 9, а из 15 ПИШУЩИХ — один
+ * (/waitlist). Одна строка мусора создана этой пробой, помечена в отчёте.
+ *
+ * `/payment/intent` попадает сюда же: он доступен анонимно и принимает
+ * verificationId, который любой может выпустить предыдущей ручкой, — то есть
+ * это продолжение той же цепочки, а не отдельная поверхность.
+ *
+ * Почему 10, а не 240 как у встраиваемых картинок: там чтение и его делает
+ * чужая страница пачками, здесь запись, и человек начинает проверку личности
+ * считанные разы. Порог выбран так, чтобы живой человек его не заметил
+ * (десять попыток в минуту с одного адреса — это уже отчаявшийся человек),
+ * а скрипт упёрся сразу.
+ *
+ * Свой keyFn НЕ задаю намеренно: умолчание помощника уникально на экземпляр
+ * лимитера и считает по адресу с нормализацией IPv6. Собственный ключ здесь
+ * означал бы отказ от безопасного умолчания — на этом уже обжигались.
+ */
+const bureauAnonWriteRateLimit = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  keyPrefix: "bureau:anon-write",
+});
+
 export const bureauRouter = Router();
 const pool = getPool();
 
@@ -539,7 +569,7 @@ async function resolveUser(
  * Creates a BureauVerification row and returns the KYC provider's hosted
  * widget URL the user must visit.
  */
-bureauRouter.post("/verify/start", async (req, res) => {
+bureauRouter.post("/verify/start", bureauAnonWriteRateLimit, async (req, res) => {
   try {
     await ensureBureauTables();
     const user = await resolveUser(req);
@@ -681,7 +711,7 @@ bureauRouter.get("/verify/status/:verificationId", async (req, res) => {
  * Body: { verificationId }
  * Creates a payment intent for the bureau Verified tier.
  */
-bureauRouter.post("/payment/intent", async (req, res) => {
+bureauRouter.post("/payment/intent", bureauAnonWriteRateLimit, async (req, res) => {
   try {
     await ensureBureauTables();
     const { verificationId } = req.body || {};

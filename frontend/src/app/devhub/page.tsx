@@ -477,14 +477,6 @@ export default function DevHubPage() {
           <div style={{ fontSize: 20, fontWeight: 800, color: "#fff", marginBottom: 6 }}>
             {t("hero.title")}
           </div>
-          <div style={{ fontSize: 13.5, color: "#99f6e4", marginBottom: 14, lineHeight: 1.5 }}>
-                {/* Порядок здесь — обещание, а не украшение: Visual Edit у стека
-                    по умолчанию включается ПОСЛЕ деплоя, и обещать правку кликами
-                    первой строкой значит отправить человека искать кнопку, которой
-                    ещё нет. Текст исправлен в словаре (hero.subtitle), а не зашит
-                    сюда: строка показывается на трёх языках. */}
-                {t("hero.subtitle")}
-          </div>
           <div ref={ideaFieldRef} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             {/* Оба атрибута нужны, и это не компромисс при сведении:
                 признак гидратации читает сторож предзаполнения, доступное имя —
@@ -519,6 +511,18 @@ export default function DevHubPage() {
             >
                   {!hydrated ? t("hero.loading") : ideaStarting ? t("hero.building") : t("hero.build")}
             </button>
+          </div>
+          {/* Подзаголовок стоит ПОД полем, а не над ним, и это замер, а не вкус.
+              На 360x640 до поля ввода лежало 859px: 218 шапка сайта + 189
+              навигация волны + 169 заголовок с подписью + 60 заголовок карточки
+              + 101 этот подзаголовок. Первые два блока не наши, а из своих
+              четырёхсот пикселей этот — единственный, который можно перенести,
+              ничего не потеряв: человек читает объяснение ПОСЛЕ того, как увидел,
+              куда писать. Модуль открывается промтом, а не абзацами.
+              Оговорка про Visual Edit остаётся внутри строки — её стережёт
+              promptEntryStaysReachable по словарю, а не по месту в разметке. */}
+          <div style={{ fontSize: 13.5, color: "#99f6e4", marginTop: 12, lineHeight: 1.5 }}>
+                {t("hero.subtitle")}
           </div>
           {/* An empty box is the hardest thing to answer. These are not
               decoration: each one exercises a different part of the pipeline

@@ -73,13 +73,48 @@ export const DISALLOWED_PATHS = [
   "/en/yt",
 ] as const;
 
+/**
+ * Из списка выше — те записи, которые обозначают ОДИН адрес, а не каталог.
+ *
+ * 🔴 Замер 09.09.2026, накануне запуска: в robots.txt уходила строка
+ * `Disallow: /qr`, а по стандарту путь в Disallow — это ПРЕФИКС. То есть
+ * запрет короткого входа канала закрывал от поисковика живые страницы
+ * /qright, /qright/transparency, /qreal, /qrenew, /qrenew/report. QRight
+ * выходит 10 сентября и продаётся.
+ *
+ * Сплошной якорь ко ВСЕМУ списку ставить нельзя: у /auth/success,
+ * /pricing/admin, /pricing/checkout/success и /pricing/checkout/cancel нет
+ * парной записи с косой чертой, и якорь отрезал бы их подкаталоги. Поэтому
+ * перечисляем явно — все тринадцать здесь одноадресные по построению: это
+ * короткие входы, которые только перенаправляют.
+ *
+ * Замер класса целиком, чтобы не пугать шире, чем есть: 28 запретов, и
+ * задевает чужие адреса РОВНО ОДИН — /qr. Остальные 27 чисты.
+ */
+export const EXACT_ONLY_PATHS: readonly string[] = [
+  "/tt", "/ig", "/yt", "/dz", "/vk", "/tg",
+  "/th", "/fb", "/x", "/qr",
+  "/en/tt", "/en/ig", "/en/yt",
+];
+
+/**
+ * Как запись выглядит В САМОМ robots.txt.
+ *
+ * Якорь понимают Google и Bing. Кто не понимает — прочтёт символ буквально и
+ * просто не закроет /qr; это безвредно, там перенаправление (замер: /qr
+ * отвечает 307), а из карты сайта его всё равно отсекает isBlockedForCrawlers.
+ */
+export function robotsLine(path: string): string {
+  return EXACT_ONLY_PATHS.includes(path) ? path + "$" : path;
+}
+
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
       {
         userAgent: "*",
         allow: "/",
-        disallow: [...DISALLOWED_PATHS],
+        disallow: DISALLOWED_PATHS.map(robotsLine),
       },
     ],
     sitemap: [

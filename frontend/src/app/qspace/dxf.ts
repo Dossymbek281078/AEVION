@@ -14,7 +14,7 @@
 
 import type { Plan, Wall } from "./planModel";
 import { WALL_HEIGHT } from "./planModel";
-import { nearestWall, placeOpening } from "./openings";
+import { PRESETS, nearestWall, placeOpening } from "./openings";
 
 export interface DxfResult {
   plan: Plan | null;
@@ -28,7 +28,9 @@ export interface DxfResult {
 interface Seg { x1: number; y1: number; x2: number; y2: number; layer: string }
 
 /** Вставка блока: точка и имя. Из неё выводятся окна и двери. */
-interface Block { x: number; y: number; name: string; layer: string }
+interface Block { x: number; y: number; name: string; layer: string;
+  /** масштаб вставки по X (код 41); 1, если в файле не указан */
+  sx: number }
 
 const MAX_SEGMENTS = 400;
 
@@ -79,6 +81,59 @@ function kindOfBlock(
 }
 
 /** Разбор пар «код группы / значение». */
+/**
+ * Габарит каждого блока в его СОБСТВЕННЫХ координатах — чтобы ширина
+ * проёма бралась ИЗ ЧЕРТЕЖА, а не из типового числа.
+ *
+ * До этого модуль говорил человеку, что ширины в файле нет вовсе. Это
+ * было неверно: блок чертят отрезками, и его собственный габарит, умноженный
+ * на масштаб вставки, и есть настоящая ширина проёма.
+ *
+ * Берётся БОЛЬШАЯ из двух сторон, а не та, что вдоль оси X: блок
+ * вставляют повёрнутым под стену, и привязываться к оси значило бы получить
+ * правдоподобно неверное число на каждом втором чертеже. У двери и у окна
+ * ширина и есть большая сторона символа.
+ *
+ * Дуги мы не разбираем, поэтому у двери со створкой-дугой остаётся линия
+ * полотна — а она и равна ширине проёма. Где не вышло вовсе — ставится
+ * типовая ширина, и это говорится вслух.
+ */
+function readBlockSizes(ps: Array<[number, string]>): Map<string, number> {
+  const out = new Map<string, number>();
+  let inBlocks = false;
+  let name = "";
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  const flush = () => {
+    const w = Math.max(maxX - minX, maxY - minY);
+    if (name && Number.isFinite(w) && w > 0) out.set(name, w);
+    name = "";
+    minX = Infinity; maxX = -Infinity; minY = Infinity; maxY = -Infinity;
+  };
+  for (let i = 0; i < ps.length; i++) {
+    const [c, v] = ps[i];
+    if (c === 2 && v === "BLOCKS" && !name) { inBlocks = true; continue; }
+    if (!inBlocks) continue;
+    if (c === 0 && v === "ENDSEC") { flush(); inBlocks = false; continue; }
+    if (c === 0 && v === "ENDBLK") { flush(); continue; }
+    if (c === 0 && v === "BLOCK") {
+      flush();
+      for (let j = i + 1; j < ps.length && ps[j][0] !== 0; j++) {
+        if (ps[j][0] === 2) { name = ps[j][1]; break; }
+      }
+      continue;
+    }
+    if (c === 10 || c === 11) {
+      const x = parseFloat(v);
+      if (Number.isFinite(x)) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); }
+    } else if (c === 20 || c === 21) {
+      const y = parseFloat(v);
+      if (Number.isFinite(y)) { minY = Math.min(minY, y); maxY = Math.max(maxY, y); }
+    }
+  }
+  flush();
+  return out;
+}
+
 function pairs(text: string): Array<[number, string]> {
   const lines = text.split(/\r?\n/);
   const out: Array<[number, string]> = [];
@@ -167,7 +222,7 @@ export function parseDxf(text: string): DxfResult {
     }
 
     if (inEntities && code === 0 && val === "INSERT") {
-      let name = "", layer = "", x = NaN, y = NaN;
+      let name = "", layer = "", x = NaN, y = NaN, sx = NaN;
       let j = i + 1;
       for (; j < ps.length && ps[j][0] !== 0; j++) {
         const [c, v] = ps[j];
@@ -175,8 +230,11 @@ export function parseDxf(text: string): DxfResult {
         else if (c === 8) layer = v;
         else if (c === 10) x = parseFloat(v);
         else if (c === 20) y = parseFloat(v);
+        else if (c === 41) sx = parseFloat(v);
       }
-      if (Number.isFinite(x) && Number.isFinite(y)) blocks.push({ x, y, name, layer });
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        blocks.push({ x, y, name, layer, sx: Number.isFinite(sx) && sx > 0 ? sx : 1 });
+      }
       i = j;
       continue;
     }
@@ -285,7 +343,12 @@ export function parseDxf(text: string): DxfResult {
   // Ставятся ТЕМИ ЖЕ функциями, что и клик человека по стене: они уже умеют
   // отказать, если проём не влезает или налезает на соседний. Второй способ
   // ставить проёмы стал бы вторым источником правды.
+  const blockSizes = readBlockSizes(ps);
   let recognised = 0;
+  /** ширина взята из чертежа */
+  let measured = 0;
+  /** ширины в чертеже не нашлось — поставлена типовая */
+  let typical = 0;
   let unattached = 0;
   let byLayer = 0;
   let rejected = 0;
@@ -301,10 +364,20 @@ export function parseDxf(text: string): DxfResult {
     // это уже про сам чертёж. Считать их одним числом значило бы сказать про
     // половину случаев неправду.
     if (!hit) { unattached++; continue; }
-    const res = placeOpening(plan, hit, guess.kind);
+    // Ширина ИЗ ЧЕРТЕЖА, если она там есть и правдоподобна.
+    // Полоса 0.5–3 м — не вкусовщина: уже 0.5 м не пройдёт человек, шире 3 м
+    // — уже не проём, а проём в полстены. За полосой берём типовую и
+    // ГОВОРИМ об этом: молча подставленное число — худший класс этого модуля.
+    const own = blockSizes.get(b.name);
+    const fromFile = own === undefined ? null : own * b.sx * scale;
+    const size = fromFile !== null && fromFile >= 0.5 && fromFile <= 3
+      ? { ...PRESETS[guess.kind], width: fromFile }
+      : undefined;
+    const res = placeOpening(plan, hit, guess.kind, size);
     if (res.ok) {
       plan = res.plan;
       recognised++;
+      if (size) measured++; else typical++;
       if (guess.byLayer) byLayer++;
     } else {
       rejected++;
@@ -325,8 +398,11 @@ export function parseDxf(text: string): DxfResult {
         ? `, имена не опознаны: ${[...unknownNames].slice(0, 5).join(", ")}`
           + (unknownNames.size > 5 ? ` и ещё ${unknownNames.size - 5}` : "")
         : "")
-      + ". Ширина проёма взята ТИПОВАЯ, а не из чертежа: масштаб блока описывает"
-      + " растяжение символа, а не размер проёма. Проверьте и поправьте кликом.",
+      + (measured > 0
+        ? `. Ширина измерена по чертежу у ${measured}`
+          + (typical > 0 ? `, типовая у ${typical}` : "")
+        : ". Ширина взята ТИПОВАЯ: в чертеже габарита блока не нашлось")
+      + ". Проверьте и поправьте кликом.",
     );
   }
 

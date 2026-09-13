@@ -772,6 +772,35 @@ export default function QSpaceClient() {
     setSelectedUid(null);
   }, []);
 
+  /**
+   * Пришёл ДРУГОЙ чертёж — мебель снимается, и человеку об этом говорят.
+   *
+   * Пересборка сцены теперь бережёт расставленное: иначе смена высоты потолка
+   * и постановка проёма стирали работу молча. Но у импорта смысл обратный —
+   * это другая квартира, и предметы остались бы висеть по старым координатам,
+   * заезжая в новые стены. Решать это сравнением геометрии нельзя: проём тоже
+   * меняет стены. Поэтому признак явный и стоит у мест импорта.
+   *
+   * Снимаем со СЛОВОМ: молчаливая потеря четырнадцати предметов и есть тот
+   * дефект, из-за которого всё это писалось. Здесь потеря законная, но
+   * человек должен узнать о ней от нас, а не по пустому разделу.
+   */
+  const поставитьЧертёж = useCallback((p: Plan) => {
+    const t = three.current;
+    const было = t ? t.gDecor.children.length : 0;
+    if (t) очиститьСлой(t.gDecor);
+    setPlaced([]);
+    setSelectedUid(null);
+    if (было > 0) {
+      setWarnings((w) => [
+        ...w,
+        `Пришёл другой чертёж — расставленные предметы сняты (было ${было}). ` +
+        "На новом плане их места не имеют смысла.",
+      ]);
+    }
+    setPlan(p);
+  }, []);
+
   const onFile = useCallback(async (f: File) => {
     setPdfPending(null);
     setИмяФайла(f.name);
@@ -822,8 +851,8 @@ export default function QSpaceClient() {
     const r = parseDxf(text);
     setWarnings(r.warnings);
     setUnitLabel(r.plan ? r.unitLabel : "");
-    if (r.plan) setPlan({ ...r.plan, name: f.name });
-  }, []);
+    if (r.plan) поставитьЧертёж({ ...r.plan, name: f.name });
+  }, [поставитьЧертёж]);
 
   /** Переписать высоту у всех стен плана — она хранится у стены, не глобально. */
   const applyHeight = useCallback((v: string) => {
@@ -853,11 +882,11 @@ export default function QSpaceClient() {
     const r = planFromPdfSegments(pdfPending, Number(pdfExtent));
     setWarnings(r.warnings);
     if (r.plan) {
-      setPlan({ ...r.plan, name: имяФайла || r.plan.name });
+      поставитьЧертёж({ ...r.plan, name: имяФайла || r.plan.name });
       setUnitLabel(`масштаб задан вами: ${pdfExtent} м по большей стороне`);
       setPdfPending(null);
     }
-  }, [pdfPending, pdfExtent, имяФайла]);
+  }, [pdfPending, pdfExtent, имяФайла, поставитьЧертёж]);
 
   // Экспорт модели в GLB — двоичный glTF, открывается в Blender, SketchUp,
   // 3ds Max и просмотрщике Windows. Экспортируются только ВИДИМЫЕ слои:
@@ -1251,7 +1280,7 @@ export default function QSpaceClient() {
             onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ""; }}
           />
         </label>
-        <button type="button" style={S.btn} onClick={() => { setPlan(demoPlan()); setWarnings([]); setUnitLabel(""); }}>
+        <button type="button" style={S.btn} onClick={() => { setWarnings([]); setUnitLabel(""); поставитьЧертёж(demoPlan()); }}>
           Демо-план
         </button>
         <button type="button" style={S.btn} onClick={downloadPlanSvg}>
@@ -1287,7 +1316,7 @@ export default function QSpaceClient() {
           type="button"
           style={S.btn}
           onClick={() => {
-            forgetSaved(); setPlan(demoPlan()); setWarnings([]); setUnitLabel("");
+            forgetSaved(); setWarnings([]); setUnitLabel(""); поставитьЧертёж(demoPlan());
             // «заново» значит демо ЦЕЛИКОМ: без этой строки квартира
             // возвращалась пустой, и третий слой снова показывал ничего
             setPendingRestore({ placed: demoPlacedSnapshots() });
@@ -1357,7 +1386,7 @@ export default function QSpaceClient() {
             setRasterUrl(null);
           }}
           onAccept={(p) => {
-            setPlan({ ...p, name: имяФайла || p.name });
+            поставитьЧертёж({ ...p, name: имяФайла || p.name });
             setUnitLabel("масштаб задан вами по картинке");
             setWarnings([
               "Модель построена по РАСПОЗНАННОЙ картинке и вашей правке — "

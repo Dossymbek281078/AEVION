@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { demoPlan } from "./planModel";
+import { demoPlan, planWallHeight } from "./planModel";
 import {
   STORAGE_KEY,
   clearLocal,
@@ -109,6 +109,32 @@ describe("файл проекта", () => {
   it("нечисловые координаты мебели не пропускаются", () => {
     const bad = { ...sample(), placed: [{ catalogId: "sofa", x: NaN, z: 0, rotY: 0 }] };
     expect(isProject(bad)).toBe(false);
+  });
+
+  // Высота потолка появилась 09.09 и хранится У КАЖДОЙ СТЕНЫ, а не полем
+  // проекта. Значит любое «нормализующее» преобразование стены способно её
+  // потерять МОЛЧА: файл откроется, модель построится, и только площадь под
+  // покраску окажется другой. Разница между 2.5 и 3.2 м — пятая часть
+  // материала, то есть это денежная потеря без единого сообщения.
+  //
+  // Замер перед закреплением: круговорот на 2.5, 3.2 и 2.7 вернул те же
+  // числа — код уже верен, проверка просто закрывает дверь.
+  it("высота потолка переживает сохранение и открытие", () => {
+    for (const h of [2.5, 3.2]) {
+      const base = demoPlan();
+      const plan = { ...base, walls: base.walls.map((w) => ({ ...w, height: h })) };
+      const r = parseProjectFile(JSON.stringify({
+        version: 1, savedAt: new Date().toISOString(), plan,
+        placed: [], wallMatId: "paint-white", floorMatId: "parquet-oak",
+        partition: "gasblock", layers: { rough: false, finish: true, decor: true },
+      }));
+      expect(r.ok, `проект с высотой ${h} отвергнут`).toBe(true);
+      if (!r.ok) continue;
+      expect(
+        planWallHeight(r.project.plan),
+        `высота ${h} не пережила круговорот — смета посчитает другую площадь`,
+      ).toBeCloseTo(h, 5);
+    }
   });
 
   it("имя файла содержит дату — чтобы версии не перезаписывали друг друга", () => {

@@ -55,7 +55,19 @@ describe("широкий холст не съедает прокрутку ст�
   it("touchAction none только там, где это ручка перетаскивания", () => {
     const najdeno: string[] = [];
     for (const f of files) {
-      if (!readFileSync(f, "utf8").includes('touchAction: "none"')) continue;
+      // ДВЕ формы записи, и вторая чуть не осталась слепой зоной. В объекте
+      // стилей пишут `touchAction: "none"` (двоеточие), а на живом элементе —
+      // `canvas.style.touchAction = "none"` (равно). Соседнее окно поймало это
+      // у себя: их сторож знал только первую форму и потому был зелёным ровно
+      // там, где дефект и жил. Комментарии вырезаем: цитата формы в пояснении
+      // иначе краснит сторожа на исправном коде — этот класс у нас уже был.
+      const tekst = readFileSync(f, "utf8")
+        .split(String.fromCharCode(10))
+        .filter((l) => !l.trim().startsWith("//"))
+        .join(String.fromCharCode(10));
+      const zapret =
+        tekst.includes('touchAction: "none"') || tekst.includes('touchAction = "none"');
+      if (!zapret) continue;
       najdeno.push(f.slice(APP.length + 1).split(String.fromCharCode(92)).join("/"));
     }
     const novye = najdeno.filter((f) => !RAZRESHENO.includes(f));

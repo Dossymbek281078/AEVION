@@ -40,8 +40,12 @@ interface FunnelRow {
   denies: number;
   last24h: number;
   byPlan: Record<string, number>;
+  /** Сколько отказов от анонима, от владельца учётной записи и от старых строк. */
+  byAudience?: Partial<Record<"anonymous" | "registered" | "unknown", number>>;
   unlockPriceUsd?: number | null;
   mrrCeilingUsd?: number | null;
+  /** Тот же потолок, но только по отказам от посетителей с учётной записью. */
+  mrrCeilingAccountUsd?: number | null;
 }
 
 interface FunnelData {
@@ -50,7 +54,22 @@ interface FunnelData {
   byModule: FunnelRow[];
   windowDays: number;
   source: "db" | "memory";
+  byAudience?: Partial<Record<"anonymous" | "registered" | "unknown", number>>;
   mrrCeilingUsd?: number;
+  mrrCeilingAccountUsd?: number;
+}
+
+/**
+ * Есть ли вообще классифицированные отказы.
+ *
+ * Пока в базе только строки, записанные ДО появления аудитории, обе категории
+ * пусты — и число «с аккаунтом» вышло бы нулём. Ноль здесь означал бы «спроса
+ * от зарегистрированных нет», тогда как правда — «ещё не измеряли». Поэтому
+ * второе число показывается только когда есть хоть один классифицированный
+ * отказ, а до тех пор экран остаётся таким, каким был.
+ */
+function естьРазбивка(b?: Partial<Record<"anonymous" | "registered" | "unknown", number>>): boolean {
+  return ((b?.anonymous ?? 0) + (b?.registered ?? 0)) > 0;
 }
 
 const PROVIDER_COLOR: Record<string, string> = {
@@ -177,8 +196,11 @@ export default function OpexPage() {
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-6">
                 <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-3">
                   {t("qcoreai.opex.funnel")} · {funnel.totalDenies} {t("qcoreai.opex.funnel.total")} · {funnel.last24h} {t("qcoreai.opex.funnel.last24h")}
+                  {естьРазбивка(funnel.byAudience) && typeof funnel.mrrCeilingAccountUsd === "number" && (
+                    <span className="text-emerald-400"> · ≤${funnel.mrrCeilingAccountUsd.toLocaleString()}/mo {t("qcoreai.opex.funnel.mrr.account")}</span>
+                  )}
                   {typeof funnel.mrrCeilingUsd === "number" && funnel.mrrCeilingUsd > 0 && (
-                    <span className="text-emerald-400"> · ≤${funnel.mrrCeilingUsd.toLocaleString()}/mo {t("qcoreai.opex.funnel.mrr")}</span>
+                    <span className={естьРазбивка(funnel.byAudience) ? "text-slate-500" : "text-emerald-400"}> · ≤${funnel.mrrCeilingUsd.toLocaleString()}/mo {t("qcoreai.opex.funnel.mrr")}</span>
                   )}
                 </p>
                 <div className="space-y-3">
@@ -190,8 +212,11 @@ export default function OpexPage() {
                           <span className="font-semibold">{f.module}</span>
                           <span className="text-slate-400 text-xs">
                             {f.denies} · {share.toFixed(0)}% · {f.last24h} {t("qcoreai.opex.funnel.last24h")}
+                            {естьРазбивка(f.byAudience) && typeof f.mrrCeilingAccountUsd === "number" && (
+                              <span className="text-emerald-400"> · ≤${f.mrrCeilingAccountUsd.toLocaleString()}/mo {t("qcoreai.opex.funnel.mrr.account")}</span>
+                            )}
                             {typeof f.mrrCeilingUsd === "number" && f.mrrCeilingUsd > 0 && (
-                              <span className="text-emerald-400"> · ≤${f.mrrCeilingUsd.toLocaleString()}/mo</span>
+                              <span className={естьРазбивка(f.byAudience) ? "text-slate-500" : "text-emerald-400"}> · ≤${f.mrrCeilingUsd.toLocaleString()}/mo</span>
                             )}
                           </span>
                         </div>

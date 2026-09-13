@@ -109,14 +109,33 @@ entitlementsRouter.get("/paywall/funnel", async (req, res) => {
     // which module to unblock/discount next.
     const byModule = summary.byModule.map((m) => {
       const unlockPriceUsd = minUnlockPriceUsd(m.module);
+      // Второй потолок, посчитанный ТОЛЬКО по отказам от посетителей с
+      // учётной записью. Первый считает все отказы подряд, и с 13.09.2026
+      // известно, чем это плохо: запрос без учётной записи вовсе — обход
+      // роботами, случайный заход — доходит до стены с тем же `free` и
+      // попадает в ту же сумму (проверено на проде одним анонимным curl).
+      //
+      // Старое число НЕ трогаем и не переопределяем: по нему уже принимали
+      // решения, и тихая смена смысла у числа с прежним именем — худшее из
+      // возможных (см. правило про владельца числа). Рядом встаёт второе,
+      // и разрыв между ними сам показывает, сколько в «спросе» шума.
+      const registeredDenies = m.byAudience?.registered ?? 0;
       return {
         ...m,
         unlockPriceUsd,
         mrrCeilingUsd: unlockPriceUsd != null ? m.denies * unlockPriceUsd : null,
+        mrrCeilingAccountUsd: unlockPriceUsd != null ? registeredDenies * unlockPriceUsd : null,
       };
     });
     const mrrCeilingUsd = byModule.reduce((s, m) => s + (m.mrrCeilingUsd ?? 0), 0);
-    res.json({ ...summary, byModule, mrrCeilingUsd, generatedAt: new Date().toISOString() });
+    const mrrCeilingAccountUsd = byModule.reduce((s, m) => s + (m.mrrCeilingAccountUsd ?? 0), 0);
+    res.json({
+      ...summary,
+      byModule,
+      mrrCeilingUsd,
+      mrrCeilingAccountUsd,
+      generatedAt: new Date().toISOString(),
+    });
   } catch {
     res.status(500).json({ error: "funnel failed" });
   }

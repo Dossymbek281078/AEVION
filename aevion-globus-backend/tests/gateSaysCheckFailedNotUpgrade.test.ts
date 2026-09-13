@@ -23,7 +23,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
  * сбой не засчитывается в спрос.
  */
 
-const denies: Array<[string, string]> = [];
+const denies: Array<[string, string, string]> = [];
 let состояние: "active" | "none" | "unknown" = "unknown";
 
 vi.mock("../src/lib/appEntitlements", () => ({
@@ -31,7 +31,7 @@ vi.mock("../src/lib/appEntitlements", () => ({
 }));
 
 vi.mock("../src/lib/paywallDenyLog", () => ({
-  recordDeny: (module: string, plan: string) => { denies.push([module, plan]); },
+  recordDeny: (module: string, plan: string, audience: string) => { denies.push([module, plan, audience]); },
   funnelSummary: async () => ({}),
 }));
 
@@ -84,6 +84,10 @@ describe("гейт различает «не куплено» и «не смог
     expect(r.status).toBe(402);
     expect(r.body.error).toBe("upgrade_required");
     expect(denies.length, "настоящий отказ обязан попасть в спрос").toBe(1);
+    // Запрос собран без заголовка Authorization — это и есть аноним. Если
+    // здесь окажется "registered", значит воронка снова считает обход
+    // роботами за спрос человека с учётной записью.
+    expect(denies[0][2], "аноним записан не как аноним").toBe("anonymous");
   });
 
   it("при «не смог проверить» — 503 и честный текст, а не «купите тариф»", async () => {

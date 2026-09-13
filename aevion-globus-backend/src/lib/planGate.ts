@@ -32,7 +32,7 @@ import type { Request, Response, NextFunction } from "express";
 import { verifyBearerOptional } from "./authJwt";
 import { readLatestSubscription } from "../routes/provisioning";
 import { MODULES_PRICING, type TierId } from "../data/pricing";
-import { recordDeny } from "./paywallDenyLog";
+import { recordDeny, type DenyAudience } from "./paywallDenyLog";
 import { appSubscriptionState } from "./appEntitlements";
 
 const PUBLIC_BASE = (process.env.AEVION_PUBLIC_BASE_URL ?? "https://aevion.app").replace(/\/+$/, "");
@@ -332,12 +332,32 @@ function isExemptPath(req: Request): boolean {
   );
 }
 
+/**
+ * Аноним или владелец учётной записи. Решает НАЛИЧИЕ адреса, а не тариф.
+ *
+ * `resolveUserPlan` берёт токен необязательно (`verifyBearerOptional`), и
+ * запрос вообще без учётной записи доходит сюда с `tier: "free"` — ровно так
+ * же, как зарегистрированный человек на бесплатном тарифе. В воронке они
+ * складывались в одно число, которое дальше умножается на цену модуля.
+ *
+ * Третьего состояния здесь намеренно НЕТ. Напрашивалось "expired", но вывести
+ * его из `plan.reason` нельзя: истёкшая подписка не даёт своего признака, она
+ * проваливается в тот же `reason: "default"`. Придумывать категорию, которой
+ * не соответствует ни одна ветка кода, — значит завести поле, всегда равное
+ * нулю, и принять его пустоту за факт.
+ */
+export function denyAudience(plan: ResolvedPlan): DenyAudience {
+  return plan.email ? "registered" : "anonymous";
+}
+
 function upgradeResponse(res: Response, moduleId: string, plan: ResolvedPlan): void {
   const requiredTiers = tiersForModule(moduleId).map(normalizeTier)
     .filter((t) => TIER_RANK[t] > TIER_RANK.free);
   // Demand signal: every 402 is someone who WANTED a paid module. Aggregate-
-  // only (module + tier, no user id), fire-and-forget — see paywallDenyLog.
-  recordDeny(moduleId, plan.tier);
+  // only (module + tier + audience, no user id), fire-and-forget — see
+  // paywallDenyLog. Аудитория добавлена 13.09.2026: без неё «спрос» считал
+  // наравне и обход роботами (проверено на проде одним анонимным запросом).
+  recordDeny(moduleId, plan.tier, denyAudience(plan));
   res.status(402).json({
     error: "upgrade_required",
     module: moduleId,

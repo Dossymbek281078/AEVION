@@ -8,7 +8,9 @@ import { PaywallScreen } from "@/components/PaywallScreen";
 import { PaywallError, apiFetchOrPaywall, type PaywallPayload } from "@/lib/paywall";
 import { repoUrl } from "@/lib/repoUrl";
 
-type Status = { phase: string; eta: string; version: string; waitlistCount: number };
+// waitlistCount может быть null: «база не ответила» — не ноль. Страница
+// показывает многоточие, а не выдуманное число.
+type Status = { phase: string; eta: string; version: string; waitlistCount: number | null };
 
 const FEATURES = [
   // Здесь стояло «🧅 Tor-routed · каждый запрос проходит минимум 3 узла Tor»

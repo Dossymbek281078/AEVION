@@ -165,7 +165,7 @@ export function daysUntil(target: Date, from: Date = new Date()): number {
   return Math.round(ms / 86_400_000);
 }
 
-async function getWaitlistCount(moduleId: string): Promise<number> {
+export async function getWaitlistCount(moduleId: string): Promise<number | null> {
   await ensureTables();
   if (dbAvailable) {
     try {
@@ -176,7 +176,19 @@ async function getWaitlistCount(moduleId: string): Promise<number> {
       );
       return r.rows[0]?.c ?? 0;
     } catch {
-      return memoryWaitlist.get(moduleId)?.size ?? 0;
+      // ПАМЯТЬ ЗДЕСЬ НЕ ХРАНИЛИЩЕ, и вернуть её размер значит соврать.
+      //
+      // Ветка `dbAvailable` означает, что записи идут В БАЗУ; `memoryWaitlist`
+      // в этом режиме почти пуст — он наполняется только тем, что прошло через
+      // ЭТОТ процесс после его запуска. После выкатки там ноль. Возврат нуля
+      // при живых сотнях подписавшихся выглядел бы как «никто не ждёт», и это
+      // число печатается людям на публичной странице как социальное
+      // доказательство.
+      //
+      // Три состояния, а не два: «база пустая» — честный ноль, «базы нет» —
+      // память и есть хранилище, «база есть, но не ответила» — НЕ ЗНАЮ.
+      // Страница уже умеет показывать многоточие вместо числа.
+      return null;
     }
   }
   return memoryWaitlist.get(moduleId)?.size ?? 0;

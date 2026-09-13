@@ -29,7 +29,8 @@ export type PlanningLandingProps = {
 type Status = {
   phase: string;
   eta: string;
-  waitlistCount: number;
+  /** null = спросить не удалось. Ноль означал бы «никто не ждёт». */
+  waitlistCount: number | null;
   principles?: string[];
   milestones?: { id: string; label: string; status: string }[];
 };

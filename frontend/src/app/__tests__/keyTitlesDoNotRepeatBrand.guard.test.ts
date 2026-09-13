@@ -51,7 +51,11 @@ const KLYUCHEVYE = [
 
 function metadataBlok(rel: string): string {
   const s = readFileSync(join(APP, rel), "utf8");
-  const i = s.indexOf("export const metadata");
+  // Метаданные бывают константой или функцией. Функция нужна там, где заголовок
+  // зависит от времени (бюро: после дня запуска «обещали», а не «запуск»), и
+  // правило «absolute с именем платформы» относится к ней точно так же.
+  const konst = s.indexOf("export const metadata");
+  const i = konst >= 0 ? konst : s.indexOf("export async function generateMetadata");
   expect(i, rel + ": в файле нет metadata — сторож смотрит не туда").toBeGreaterThan(0);
   const og = s.indexOf("openGraph", i);
   return og > i ? s.slice(i, og) : s.slice(i, i + 1400);

@@ -1,7 +1,11 @@
 import { ImageResponse } from "next/og";
+// Дата не литералом: после дня запуска карточка сама скажет «обещали» (src/app/launchDate.ts).
+import { launchHeadline } from "../../launchDate";
 
 export const runtime = "edge";
-export const alt = "AEVION DevHub — открываем 20 сентября: приложение по описанию словами";
+// Без даты: alt — статическая строка, развилку по времени в неё не вписать,
+// а дата и так нарисована на самой карточке.
+export const alt = "AEVION DevHub — приложение по описанию словами";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -38,7 +42,7 @@ export default function DevHubLaunchOg() {
             AEVION · DevHub Studio
           </div>
           <div style={{ fontSize: 72, fontWeight: 800, lineHeight: 1.06, letterSpacing: -2, display: "flex" }}>
-            Открываем 20 сентября
+            {launchHeadline()}
           </div>
           <div style={{ fontSize: 30, color: MUTED, lineHeight: 1.35, maxWidth: 940, display: "flex" }}>
             Опишите приложение словами — DevHub соберёт проект: код, страницы, картинки и озвучку.

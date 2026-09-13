@@ -30,7 +30,7 @@ const APP = join(process.cwd(), "src/app");
 
 // Список месяцев НЕ свой: берём из общего источника даты. Второй такой
 // список — это два указателя на одно, и они расходятся молча.
-import { MONTHS_RU } from "../launchDate";
+import { MONTHS_RU, PLATFORM_LAUNCH_HUMAN } from "../launchDate";
 
 const MARKERS = ["открываем ", "Открываем ", "запуск ", "Запуск "];
 
@@ -155,6 +155,35 @@ describe("обещание запуска не зовёт на прошедшу�
       "на /go снова literal-дата («" + месяц + "»). Дата берётся из " +
         "src/app/launchDate.ts: launchKicker() / launchTitle()",
     ).toBeUndefined();
+  });
+
+  test("посадочные и карточки соцсетей не держат дату запуска литералом", () => {
+    // 13.09.2026: литерал убрали с /go, а на остальных поверхностях запуска он
+    // остался — заголовок бюро, НАРИСОВАННАЯ дата на трёх карточках соцсетей и
+    // форма /qright. Тест «ни одна страница не зовёт на прошедшую дату» ниже
+    // поймал бы их только 21-го, когда люди уже увидели. Спрашиваем строку
+    // PLATFORM_LAUNCH_HUMAN, а не «любой месяц»: на больших страницах законно
+    // стоят другие даты, а шаткий признак хуже честной границы.
+    const ПОВЕРХНОСТИ = [
+      "bureau/launch/page.tsx",
+      "bureau/launch/opengraph-image.tsx",
+      "devhub/launch/opengraph-image.tsx",
+      "multichat-engine/launch/opengraph-image.tsx",
+      "qright/page.tsx",
+    ];
+    const прочитано = ПОВЕРХНОСТИ.map((rel) => ({
+      rel,
+      код: stripComments(readFileSync(join(APP, rel), "utf8")),
+    }));
+    // Контроль прибора: пустое чтение дало бы ложный зелёный.
+    for (const { rel, код } of прочитано) {
+      expect(код.length, rel + ": файл прочитан пустым — проверка слепа").toBeGreaterThan(300);
+    }
+    expect(
+      прочитано.filter((f) => f.код.includes(PLATFORM_LAUNCH_HUMAN)).map((f) => f.rel),
+      "дата запуска снова литералом. Берите её из src/app/launchDate.ts: " +
+        "launchHeadline() / launchMetaTitle() / PLATFORM_LAUNCH_HUMAN",
+    ).toEqual([]);
   });
 
   test("ни одна страница не зовёт на прошедшую дату", () => {

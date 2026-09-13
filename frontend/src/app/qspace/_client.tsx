@@ -113,6 +113,13 @@ export default function QSpaceClient() {
   /** площадь под встроенной мебелью по номеру комнаты, м² — для тёплого пола */
   const [blockedArea, setBlockedArea] = useState<Record<number, number>>({});
   const [webglOk, setWebglOk] = useState(true);
+  // Замерено 13.09.2026 на 390x844 с эмуляцией медленного 4G: DOM готов через
+  // 1784 мс, а ПЕРВЫЙ КАДР модели — только через 4721. Почти три секунды
+  // область холста была совершенно пуста: ни элемента, ни строки текста. На
+  // телефоне она занимает 94 % первого экрана, то есть человек эти три секунды
+  // смотрит на пустую рамку. Пустота неотличима от поломки, и ждать её не
+  // станут. Поэтому состояние «сцена ещё строится» показывается словами.
+  const [сценаГотова, setСценаГотова] = useState(false);
   const [exporting, setExporting] = useState(false);
   // Состояние сохранения: человек должен ВИДЕТЬ, сохранена ли его работа.
   // Плашка сообщений о сохранении несёт ПРИЗНАК отказа, а не только текст.
@@ -232,6 +239,8 @@ export default function QSpaceClient() {
       raycaster: new THREE.Raycaster(),
       dragUid: null, uidSeq: 1,
     };
+
+    setСценаГотова(true);
 
     let alive = true;
     const loop = () => {
@@ -1623,10 +1632,14 @@ export default function QSpaceClient() {
           {webglOk ? (
             <div
               ref={mountRef}
-              style={S.canvas}
+              style={{ ...S.canvas, position: "relative" }}
               aria-label="3D-модель помещения. Вращение — мышью или одним пальцем, приближение — колесом или двумя пальцами. Вертикальный свайп листает страницу."
               role="application"
-            />
+            >
+              {!сценаГотова && (
+                <p style={S.canvasLoading}>Строю 3D-модель демо-квартиры…</p>
+              )}
+            </div>
           ) : (
             <p style={S.warnings}>
               Браузер не дал создать WebGL-контекст — 3D показать не получится.
@@ -1672,6 +1685,13 @@ const styles: Record<string, React.CSSProperties> = {
   h2: { fontSize: 17, margin: "18px 0 8px" },
   h3: { fontSize: 14, margin: "10px 0 6px", color: "#4a453d" },
   lead: { fontSize: 16, lineHeight: 1.5, margin: "0 0 8px", maxWidth: 860 },
+  canvasLoading: {
+    // Поверх области холста, по центру: three.js добавляет свой canvas
+    // сюда же, и абсолютное расположение не мешает ему занять всю рамку.
+    position: "absolute", inset: 0, margin: 0,
+    display: "flex", alignItems: "center", justifyContent: "center",
+    color: "#7a746b", fontSize: 14,
+  },
   noteSummary: {
     cursor: "pointer", fontWeight: 600, color: "#4a443b",
     // Список без маркера: у summary он свой, и рядом со стрелкой выходит два.

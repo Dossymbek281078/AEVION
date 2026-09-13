@@ -988,7 +988,7 @@ export default function QSpaceClient() {
   // только разбивку по комнатам, а кабель, трубы, розетки и светильники
   // оставались на странице — в магазин человек шёл с телефоном в руке.
   const downloadEstimateCsv = useCallback(() => {
-    const csv = estimateCsv(est, plan.name);
+    const csv = estimateCsv(est, plan.name, perRoom.lines);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -997,7 +997,7 @@ export default function QSpaceClient() {
     a.click();
     URL.revokeObjectURL(url);
     скажи("Спецификация сохранена. Колонка цен пустая — впишите свои, сумма посчитается сама.");
-  }, [est, plan.name, скажи]);
+  }, [est, plan.name, perRoom.lines, скажи]);
 
 
   const S = styles;

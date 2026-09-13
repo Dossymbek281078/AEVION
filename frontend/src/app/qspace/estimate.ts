@@ -159,7 +159,21 @@ export function estimatePlan(
  * функций в таблицах переводятся, и `=SUM(...)` в русском Excel не сработает,
  * а умножение и сложение работают в любом.
  */
-export function estimateCsv(est: Estimate, planName: string): string {
+/** Строка разбивки по помещению — ровно то, что даёт roomSpec. */
+export interface RoomCsvLine {
+  index: number;
+  area: number;
+  flooring: number;
+  wallArea: number;
+  paint: number;
+  skirting: number;
+}
+
+export function estimateCsv(
+  est: Estimate,
+  planName: string,
+  rooms: RoomCsvLine[] = [],
+): string {
   const NL = String.fromCharCode(13) + String.fromCharCode(10);
   // Десятичная ЗАПЯТАЯ и разделитель «;» — пара, которую ждёт русский Excel.
   // С точкой он прочитает числа как текст, и сумма не посчитается.
@@ -201,6 +215,24 @@ export function estimateCsv(est: Estimate, planName: string): string {
   const слагаемые = [];
   for (let r = первая; r <= последняя; r++) слагаемые.push(`E${r}`);
   out.push(`"ИТОГО";;;;=${слагаемые.join("+")}`);
+  // Разбивка по помещениям — отдельным блоком и БЕЗ колонок цены.
+  //
+  // Она нужна для другого: плитку и обои покупают по комнатам, а не на всю
+  // квартиру. Ставить сюда цену значило бы предложить посчитать одно и то же
+  // дважды — итог уже посчитан выше, и два ответа об одном на одном листе
+  // расходятся первыми.
+  if (rooms.length > 0) {
+    out.push("");
+    out.push('"Разбивка по помещениям — по ней покупают плитку и обои"');
+    out.push("Помещение;Пол, м²;Покрытие, м²;Стены, м²;Краска, л;Плинтус, м");
+    for (const r of rooms) {
+      out.push(
+        `${r.index};${ч(r.area)};${ч(r.flooring)};${ч(r.wallArea)};`
+        + `${ч(r.paint)};${ч(r.skirting)}`,
+      );
+    }
+  }
+
   // BOM: без него Excel читает файл как cp1251 и вместо русских слов
   // показывает кракозябры — проверено, это не теория.
   return "\uFEFF" + out.join(NL) + NL;

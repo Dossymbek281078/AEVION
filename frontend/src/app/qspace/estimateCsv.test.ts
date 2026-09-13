@@ -78,6 +78,32 @@ describe("спецификация таблицей", () => {
     expect(опасное).not.toMatch(/\n"=cmd/);
   });
 
+  it("разбивка по помещениям: строк столько же, сколько комнат", () => {
+    const plan = demoPlan();
+    const rooms = findRooms(plan);
+    const pr = roomSpec(rooms.rooms, planWallHeight(plan));
+    const сРазбивкой = estimateCsv(смета(), "Демо", pr.lines);
+    expect(сРазбивкой).toContain("Разбивка по помещениям");
+    const строки = сРазбивкой.split(/\r?\n/).filter((s2) => /^\d+;/.test(s2));
+    expect(строки.length, "число строк разбивки разошлось с числом комнат")
+      .toBe(pr.lines.length);
+    expect(pr.lines.length, "контроль: комнат в демо больше одной").toBeGreaterThan(1);
+  });
+
+  it("у разбивки НЕТ колонок цены — иначе одно и то же считалось бы дважды", () => {
+    const plan = demoPlan();
+    const pr = roomSpec(findRooms(plan).rooms, planWallHeight(plan));
+    const csv2 = estimateCsv(смета(), "Демо", pr.lines);
+    const шапка = csv2.split(/\r?\n/).find((s2) => s2.startsWith("Помещение;"));
+    expect(шапка, "шапка разбивки не найдена").toBeTruthy();
+    expect(шапка!, "в разбивку попала цена — два ответа об одном на одном листе")
+      .not.toMatch(/Цена|Сумма/);
+  });
+
+  it("контроль: без комнат блока разбивки НЕТ, а не пустая шапка", () => {
+    expect(estimateCsv(смета(), "Демо", [])).not.toContain("Разбивка по помещениям");
+  });
+
   it("контроль: обычное имя апострофом НЕ портится", () => {
     expect(estimateCsv(смета(), "Квартира на Абая")).toContain("Квартира на Абая");
   });

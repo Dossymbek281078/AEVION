@@ -870,6 +870,12 @@ export default function QSpaceClient() {
   /** Ставит сцену по сохранённому проекту. План идёт первым: он пересобирает сцену. */
   const applyProject = useCallback((pr: Project) => {
     setPlan(pr.plan);
+    // Поле высоты — ОТДЕЛЬНОЕ состояние, а сама высота хранится у стен плана.
+    // Без этой строки после перезагрузки поле показывало умолчание 2.7, а
+    // смета считалась по восстановленным 3.1: замерено — площадь стен 132.4 м²
+    // при подписи «2.7». Человек верит полю и покупает краску не на ту
+    // площадь, а расхождение видно только тому, кто сверит два числа.
+    setHeightM(String(planWallHeight(pr.plan)));
     setWallMatId(pr.wallMatId);
     setFloorMatId(pr.floorMatId);
     setPartition(pr.partition);

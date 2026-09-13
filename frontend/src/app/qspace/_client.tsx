@@ -1530,8 +1530,18 @@ export default function QSpaceClient() {
           {placed.length > 0 && (
             <>
               <h3 style={S.h3}>Предметы в сцене: {placed.length}</h3>
+              {/* Одинаковые предметы НУМЕРУЮТСЯ. В демо стоят два стула, и обе
+                  кнопки назывались просто «Стул»: ни глазом, ни экранным
+                  диктором нельзя понять, какой из них выбираешь. Нашла это
+                  платформенная проверка имён (aevion-a11y-names): «одно имя у
+                  нескольких действий». Номер добавляется ТОЛЬКО там, где имя
+                  повторяется — единственному стулу номер не нужен и мешал бы. */}
               <div style={S.selRow} role="group" aria-label="Выбор предмета">
-                {placed.map((p) => (
+                {placed.map((p, i) => {
+                  const сколько = placed.filter((q) => q.name === p.name).length;
+                  const номер = placed.slice(0, i + 1).filter((q) => q.name === p.name).length;
+                  const подпись = сколько > 1 ? `${p.name} ${номер}` : p.name;
+                  return (
                   <button
                     key={p.uid}
                     type="button"
@@ -1539,9 +1549,10 @@ export default function QSpaceClient() {
                     aria-pressed={p.uid === selectedUid}
                     onClick={() => setSelectedUid(p.uid)}
                   >
-                    {p.name}
+                    {подпись}
                   </button>
-                ))}
+                  );
+                })}
               </div>
             </>
           )}

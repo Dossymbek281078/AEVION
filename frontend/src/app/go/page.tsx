@@ -19,6 +19,7 @@ import { PageTracking } from "@/components/PageTracking";
 // страница-хаб для ссылки в профиле занижала платформу на семь модулей
 // перед всем трафиком из соцсетей.
 import { LIVE_MODULES } from "@/data/pitchFacts";
+import { launchKicker, launchTitle } from "../launchDate";
 
 // /go — страница-хаб под ссылку в профиле соцсетей.
 //
@@ -257,8 +258,8 @@ export default async function GoPage({
           <h2 style={styles.h2}>Ближайший запуск</h2>
           <LinkCard
             href={keep("/apps")}
-            kicker="20 сентября · семь модулей"
-            title="DevHub, мультичат, QRight, QSign, бюро, биржа — открываем 20 сентября"
+            kicker={launchKicker()}
+            title={launchTitle("DevHub, мультичат, QRight, QSign, бюро, биржа")}
             note="Партия с движком, задача дня и тренер, который объясняет ход. Оставьте адрес — напишем в день запуска."
           />
         </section>

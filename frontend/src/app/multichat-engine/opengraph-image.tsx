@@ -1,7 +1,12 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "AEVION Multichat — parallel AI agents in one window";
+// 13.09.2026: подпись картинки переведена вслед за og:title и og:description
+// (см. layout.tsx). У qright и qsign соседние alt уже по-русски — этот был
+// последним английским из трёх. Названия ролей ВНУТРИ картинки намеренно
+// оставлены как есть: чем модуль называет их на самом экране, я не проверил,
+// а переводить надпись, не сверив с интерфейсом, — способ пообещать не то.
+export const alt = "AEVION Мультичат — параллельные ИИ-агенты в одном окне";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 

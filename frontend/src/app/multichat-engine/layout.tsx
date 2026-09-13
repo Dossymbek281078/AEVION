@@ -18,18 +18,22 @@ export const metadata: Metadata = {
     "AI orchestration",
   ],
   openGraph: {
-    title: "AEVION Multichat — parallel AI agents in one window",
+    // 13.09.2026: перевод англоязычного превью (см. qright/layout.tsx).
+    // Число ролей проверено по коду 09.09: их шесть и они названы поимённо;
+    // «три агента» на странице — это пресет, а не предел. locale был "en"
+    // при русском подписчике — тоже поправлен.
+    title: "AEVION Мультичат — параллельные ИИ-агенты в одном окне",
     description:
-      "6 specialised agents · 5 LLM providers · cross-agent @mention handoff · broadcast · custom prompts · MD/JSON export. Live in production.",
+      "Шесть ИИ-агентов с разными ролями в одном окне: общий, код, финансы, право, комплаенс, перевод. Пять поставщиков моделей, передача задачи через @упоминание.",
     type: "website",
     siteName: "AEVION",
     url: "/multichat-engine",
-    locale: "en",
+    locale: "ru_RU",
   },
   twitter: {
     card: "summary_large_image",
-    title: "AEVION Multichat — parallel AI agents",
-    description: "6 agents in one window. @mention handoff. Broadcast. Live.",
+    title: "AEVION Мультичат — параллельные ИИ-агенты",
+    description: "Шесть агентов в одном окне. Передача через @упоминание. Работает.",
   },
   alternates: { canonical: "/multichat-engine" },
 };

@@ -28,8 +28,15 @@ const APP = join(__dirname, "..");
 const POMOSCHNIK = readFileSync(join(APP, "..", "lib", "planningOg.tsx"), "utf8")
   .replace("planningOgContentType = ", "contentType = ");
 
-/** Восемь модулей волны 20 сентября. CyberChess идёт 30-го и здесь не считается. */
+/**
+ * Девять модулей письма запуска. Восемь идут 20 сентября, CyberChess 30-го —
+ * но карточка нужна всем девяти: ссылка на шахматы уходит из того же письма.
+ *
+ * 13.09.2026: cyberchess добавлен. Список охватывал 8 из 9 — карточка у шахмат
+ * ЕСТЬ, но её удаление не заметил бы никто.
+ */
 const VOLNA = [
+  "cyberchess",
   "qright",
   "bureau",
   "devhub",
@@ -95,9 +102,9 @@ function razvernutyjMaket(mod: string): string {
 
 describe("у каждого модуля волны своя PNG-карточка на нашем домене", () => {
   it("прибор работает: модули на месте, файлы читаются", () => {
-    expect(VOLNA.length).toBe(8);
+    expect(VOLNA.length).toBe(9);
     const est = VOLNA.filter((m) => existsSync(join(APP, m)));
-    expect(est.length, "каталоги модулей: " + est.join(", ")).toBe(8);
+    expect(est.length, "каталоги модулей: " + est.join(", ")).toBe(9);
   });
 
   for (const mod of VOLNA) {

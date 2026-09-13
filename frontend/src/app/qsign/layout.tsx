@@ -19,17 +19,19 @@ export const metadata: Metadata = {
   description:
     "QSign signs any JSON payload over an RFC 8785-canonical form: deterministic key ordering, HMAC and Ed25519 signatures, offline verification. The signing primitive under QRight receipts, Bureau certificates and Planet attestations. Подпись любого JSON-документа и проверка офлайн — тот же примитив, что заверяет чеки QRight и сертификаты Bureau.",
   openGraph: {
-    title: "AEVION QSign — deterministic signing & verification",
+    // 13.09.2026: перевод англоязычного превью — см. тот же комментарий
+    // в qright/layout.tsx. Утверждения не менялись.
+    title: "AEVION QSign — детерминированная подпись и проверка",
     description:
-      "Canonical-JSON (RFC 8785) signing with HMAC + Ed25519. Sign a payload, verify it offline, key-version rotation built in. The signature layer of the AEVION Trust OS.",
+      "Подпись канонического JSON (RFC 8785) на HMAC и Ed25519. Подписать данные, проверить их без сети, смена версий ключа встроена. Слой подписи в AEVION Trust OS.",
     type: "website",
     siteName: "AEVION",
   },
   twitter: {
     card: "summary_large_image",
-    title: "AEVION QSign",
+    title: "AEVION QSign — подпись и проверка",
     description:
-      "Canonical-JSON (RFC 8785) signing with HMAC + Ed25519 and offline verification.",
+      "Подпись канонического JSON (RFC 8785) на HMAC и Ed25519, проверка без сети.",
   },
   alternates: { canonical: "/qsign" },
 };

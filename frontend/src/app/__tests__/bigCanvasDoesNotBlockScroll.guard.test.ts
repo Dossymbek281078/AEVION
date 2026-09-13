@@ -55,7 +55,17 @@ describe("широкий холст не съедает прокрутку ст�
   it("touchAction none только там, где это ручка перетаскивания", () => {
     const najdeno: string[] = [];
     for (const f of files) {
-      if (!readFileSync(f, "utf8").includes('touchAction: "none"')) continue;
+      // Комментарии вырезаются, иначе сторож краснеет на ИСПРАВНОМ коде.
+      // 13.09.2026: qspace/_client.tsx поставил себе pan-y и рядом объяснил
+      // ПОЧЕМУ — процитировав «touchAction: "none"» как поведение библиотеки
+      // OrbitControls. Сторож прочитал цитату как признак и поднял тревогу на
+      // файле, который как раз дефект и закрыл. Текст О вещи неотличим от
+      // вещи для любого разбора по образцу.
+      const исходник = readFileSync(f, "utf8")
+        .split(/\r?\n/)
+        .filter((строка) => !/^\s*\/\//.test(строка))
+        .join(String.fromCharCode(10));
+      if (!исходник.includes('touchAction: "none"')) continue;
       najdeno.push(f.slice(APP.length + 1).split(String.fromCharCode(92)).join("/"));
     }
     const novye = najdeno.filter((f) => !RAZRESHENO.includes(f));

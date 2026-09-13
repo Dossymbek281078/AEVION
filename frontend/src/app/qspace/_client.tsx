@@ -983,20 +983,10 @@ export default function QSpaceClient() {
   /** Снимок сцены: план, расставленная мебель, выбранная отделка, слои. */
   const snapshot = useCallback((): Project => {
     const t = three.current;
-    const items: PlacedSnapshot[] = [];
-    if (t) {
-      for (const g of t.gDecor.children) {
-        const uid = g.userData.uid as number;
-        const rec = placed.find((x) => x.uid === uid);
-        if (!rec) continue;
-        items.push({
-          catalogId: rec.catalogId,
-          x: g.position.x,
-          z: g.position.z,
-          rotY: g.rotation.y,
-        });
-      }
-    }
+    // Снятие мебели живёт в ОДНОМ месте: та же петля стояла здесь копией, а
+    // копии расходятся молча. Сохранение проекта и пересборка сцены задают
+    // сцене один и тот же вопрос — «что и где стоит».
+    const items: PlacedSnapshot[] = t ? снятьМебель(t, placed) : [];
     return {
       version: 1,
       savedAt: new Date().toISOString(),
@@ -1400,12 +1390,17 @@ export default function QSpaceClient() {
             setRasterUrl(null);
           }}
           onAccept={(p) => {
-            поставитьЧертёж({ ...p, name: имяФайла || p.name });
+            // Предупреждения ставятся ДО смены чертежа, и это не косметика:
+            // setWarnings со списком ЗАМЕНЯЕТ его целиком, а помощник
+            // дописывает своё слово о снятой мебели. Стояв ниже, эта строка
+            // стирала бы его — и картинка оставалась единственным путём
+            // импорта, который забирает работу молча.
             setUnitLabel("масштаб задан вами по картинке");
             setWarnings([
               "Модель построена по РАСПОЗНАННОЙ картинке и вашей правке — "
               + "сверьте размеры с чертежом, прежде чем считать по ней закупку.",
             ]);
+            поставитьЧертёж({ ...p, name: имяФайла || p.name });
             URL.revokeObjectURL(rasterUrl);
             setRasterUrl(null);
           }}

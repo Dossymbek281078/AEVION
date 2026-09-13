@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { parseDxf } from "./dxf";
 import { readPdfSegments, planFromPdfSegments } from "./pdf";
@@ -70,6 +70,49 @@ describe("настоящие файлы из папки основателя", (
     if (!existsSync(ПАПКА)) return;
     expect(разобрано, "папка примеров есть, а разобрано файлов ноль")
       .toBeGreaterThanOrEqual(2);
+  });
+
+  /**
+   * ОБХОД ВСЕЙ ПАПКИ, а не только файлов с известными именами.
+   *
+   * Проверки выше названы поимённо — и это их слабость: положит основатель
+   * свой «мой-план.dxf», и набор ПРОПУСТИТ его, оставшись зелёным. То есть
+   * встретить настоящие файлы окажется некому именно тогда, когда они
+   * наконец появятся.
+   *
+   * Контракт здесь честный и без союза «либо»: на каждый файл модуль обязан
+   * ЛИБО построить план, ЛИБО объяснить словами, почему не смог. Второе — не
+   * поблажка: у объяснения своя проверка (по-русски, без жаргона), и молчание
+   * ни одну из веток не удовлетворяет.
+   */
+  it("каждый файл в папке либо разобран, либо объяснён — молчания нет", async () => {
+    if (!existsSync(ПАПКА)) { console.warn("ПРОПУСК: папки примеров нет"); return; }
+    const файлы = readdirSync(ПАПКА).filter((f) => /\.(dxf|pdf)$/i.test(f));
+    const отчёт: string[] = [];
+    const молчат: string[] = [];
+    for (const f of файлы) {
+      const путь = path.join(ПАПКА, f);
+      if (/\.dxf$/i.test(f)) {
+        const r = parseDxf(readFileSync(путь, "utf8"));
+        const стен = r.plan ? r.plan.walls.length : 0;
+        отчёт.push(`${f}: стен ${стен}, предупреждений ${r.warnings.length}`);
+        if (стен === 0 && r.warnings.length === 0) молчат.push(f);
+        for (const w of r.warnings) {
+          expect(w, `${f}: сообщение не по-русски: «${w}»`).toMatch(/[а-яё]/i);
+          expect(w, `${f}: в сообщении жаргон: «${w}»`)
+            .not.toMatch(/undefined|null|TypeError|at [A-Za-z]+\./);
+        }
+      } else {
+        const src = await readPdfSegments(new Uint8Array(readFileSync(путь)));
+        отчёт.push(`${f}: отрезков ${src.segments.length}, предупреждений ${src.warnings.length}`);
+        if (src.segments.length === 0 && src.warnings.length === 0) молчат.push(f);
+      }
+    }
+    // Числа печатаются всегда: человек должен видеть, ЧТО именно разобрано,
+    // а не только зелёный цвет.
+    console.warn("файлы папки примеров:" + String.fromCharCode(10) + отчёт.join(String.fromCharCode(10)));
+    expect(молчат, "файл не дал ни модели, ни объяснения — это худший исход").toEqual([]);
+    expect(файлы.length, "в папке примеров не осталось ни одного чертежа").toBeGreaterThan(0);
   });
 
   it("контроль: подделанный DXF НЕ проходит как настоящий", () => {

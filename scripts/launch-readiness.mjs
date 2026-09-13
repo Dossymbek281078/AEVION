@@ -22,20 +22,36 @@
 
 const SITE = (process.env.AEVION_SITE || "https://aevion.app").replace(/\/+$/, "");
 const API = `${SITE}/api-backend`;
-const LAUNCH = Date.UTC(2026, 7, 30); // 30 августа 2026
+// Дата запуска. ИСТОЧНИК ПРАВДЫ не здесь, а в LAUNCH_MODULES бэкенда
+// (aevion-globus-backend/src/lib/constitutionBrevo.ts): именно оттуда
+// платформа отвечает людям. Там 20 сентября у всех модулей и 30 сентября
+// у CyberChess; здесь ранняя, потому что сводка одна на все пять.
+//
+// Было Date.UTC(2026, 7, 30) - 30 августа. Замер 13.09.2026: остаток стал
+// отрицательным, сводка считала до прошедшей даты, а сторож поверх неё
+// печатал 'без ухудшений' и возвращал 0. Зелёный на устаревших критериях
+// отменяет перепроверку - поэтому дату держать в согласии с бэкендом.
+const LAUNCH = Date.UTC(2026, 8, 20); // 20 сентября 2026
 const UA = "aevion-launch-readiness";
 
+// Даты ниже сведены 13.09.2026 с LAUNCH_MODULES бэкенда
+// (aevion-globus-backend/src/lib/constitutionBrevo.ts) — это то, что
+// платформа СКАЗАЛА людям в письмах и на страницах, значит оно и есть
+// первоисточник. Расходились четыре из пяти: cyberchess 30.08 против
+// 30.09, qright и bureau 06.09 против 20.09, devhub 13.09 против 20.09.
+// Это остатки прежнего поэтапного плана. Пока они стояли здесь, сводка
+// объявляла модуль опоздавшим без причины.
 const MODULES = [
-  { id: "cyberchess", name: "CyberChess", date: "30.08", page: "/cyberchess", landing: "/cyberchess/launch", price: 19 },
-  { id: "qright", name: "QRight", date: "06.09", page: "/qright", landing: null, price: null },
-  { id: "bureau", name: "IP Bureau", date: "06.09", page: "/bureau", landing: "/bureau/launch", price: 29 },
+  { id: "cyberchess", name: "CyberChess", date: "30.09", page: "/cyberchess", landing: "/cyberchess/launch", price: 19 },
+  { id: "qright", name: "QRight", date: "20.09", page: "/qright", landing: null, price: null },
+  { id: "bureau", name: "IP Bureau", date: "20.09", page: "/bureau", landing: "/bureau/launch", price: 29 },
   // Посадочные DevHub и Multichat здесь стояли как `null` — и это было НЕВЕРНО:
   // обе написаны соседними окнами и уже отвечают 200 на проде (проверено
   // 19.08 вместе с отрицательным контролем: /qwerty/launch → 404). Сводка,
   // которая занижает готовность, толкает делать заново то, что готово, —
   // ровно этим я чуть не занялся. У QRight посадочной действительно нет:
   // пару закрывает /bureau/launch, поэтому здесь оставлен null.
-  { id: "devhub", name: "DevHub", date: "13.09", page: "/devhub", landing: "/devhub/launch", price: 149 },
+  { id: "devhub", name: "DevHub", date: "20.09", page: "/devhub", landing: "/devhub/launch", price: 149 },
   { id: "multichat-engine", name: "Multichat", date: "20.09", page: "/multichat-engine", landing: "/multichat-engine/launch", price: null },
 ];
 
@@ -123,7 +139,7 @@ async function main() {
   if (process.argv.includes("--json")) {
     console.log(JSON.stringify({ daysLeft: daysLeft(), rows, chess: { dailyHonest, dailyFallback, boardHonest, bank } }, null, 2));
   } else {
-    console.log(`Готовность к запуску · до 30 августа ${daysLeft()} дн. · ${SITE}\n`);
+    console.log(`Готовность к запуску · до 20 сентября ${daysLeft()} дн. · ${SITE}\n`);
     console.log("МОДУЛЬ        ДАТА    страница  посадочная  приём адресов  цена");
     for (const r of rows) {
       console.log(

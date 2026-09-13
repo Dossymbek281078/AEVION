@@ -81,6 +81,18 @@ export default function HomePage() {
     Array<{ id: string; title: string; country?: string; city?: string }>
   >([]);
   const [loading, setLoading] = useState(true);
+/**
+ * Что показываем, когда бэкенд не ответил. Прежде здесь подставлялись
+ * демонстрационные данные И сбрасывались оба признака ошибки в null — то есть
+ * страница показывала выдуманные числа как настоящие и молчала об этом.
+ * Отказ, выглядящий успехом, опаснее пустоты: посетитель и основатель видят
+ * цифры и верят им. Теперь заглушка называет себя (§0 п.2: числа в интерфейсе
+ * только из фактического ответа).
+ */
+const DEMO_NOTE =
+  "Живые данные сейчас недоступны. Ниже — демонстрационный пример: " +
+  "названия модулей настоящие, числа не показываем вовсе.";
+
   const [projectsError, setProjectsError] = useState<string | null>(null);
   const [qrightError, setQrightError] = useState<string | null>(null);
   const [planetStats, setPlanetStats] = useState<{
@@ -164,9 +176,13 @@ export default function HomePage() {
           {id:"auth",code:"AU",name:"Auth",description:"Identity & JWT",kind:"infra",status:"live",priority:10,tags:["auth"],runtime:{tier:"mvp_live",primaryPath:"/auth",apiHints:[],hint:"Identity"}},
         ]);
         setQRightObjects([{id:"d1",title:"AI Music Generator"},{id:"d2",title:"Quantum Shield Protocol"},{id:"d3",title:"CyberChess Engine"},{id:"d4",title:"Smart Contract"},{id:"d5",title:"Planet Validator"}]);
-        setPlanetStats({eligibleParticipants:12,distinctVotersAllTime:8,certifiedArtifactVersions:3,submissions:15});
-        setProjectsError(null);
-        setQrightError(null);
+        // 13.09.2026: выдуманные числа убраны, признаки ошибки больше не
+        // гасятся. planetStats остаётся null — блок статистики просто не
+        // рисуется, а в строке сводки стоит «…», то есть «не знаем», а не
+        // «двенадцать участников». Точки для глобуса оставлены: без них
+        // страница пустая, и они подписаны заметкой ниже.
+        setProjectsError(DEMO_NOTE);
+        setQrightError(DEMO_NOTE);
       } finally {
         setLoading(false);
       }
@@ -744,11 +760,20 @@ export default function HomePage() {
               lineHeight: 1.5,
             }}
           >
-            <b>Node list:</b> {projectsError}
-            <div style={{ marginTop: 6, fontSize: 13, color: "#722" }}>
-              Globus still renders. Start backend on 4001; if needed set{" "}
-              <code>BACKEND_PROXY_TARGET</code> in build and <code>NEXT_PUBLIC_API_BASE_URL</code> for direct URL.
-            </div>
+            {projectsError}
+            {/* Подсказка про порт и переменные — разработчику, не посетителю.
+                До 13.09.2026 она показывалась всем: указание поднять сервер
+                на локальном порту висело на главной странице платформы.
+                Дословно её здесь НЕ повторяю: сторож этого блока ищет ту
+                самую строку, и объяснение рядом с ней сделало бы его слепым
+                (уже случилось при первом прогоне — текст о вещи неотличим
+                от самой вещи). */}
+            {process.env.NODE_ENV !== "production" ? (
+              <div style={{ marginTop: 6, fontSize: 13, color: "#722" }}>
+                Globus still renders. Start backend on 4001; if needed set{" "}
+                <code>BACKEND_PROXY_TARGET</code> in build and <code>NEXT_PUBLIC_API_BASE_URL</code> for direct URL.
+              </div>
+            ) : null}
           </div>
         ) : null}
 

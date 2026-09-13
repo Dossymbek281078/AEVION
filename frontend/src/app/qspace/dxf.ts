@@ -1,0 +1,490 @@
+/**
+ * QSpace — минимальный разбор DXF (ASCII) в план стен.
+ *
+ * Понимает сущности LINE и LWPOLYLINE из секции ENTITIES — этого достаточно
+ * для планировок, экспортированных из AutoCAD «как чертёж». Вставки блоков
+ * (`INSERT`) разбираются ради ПРОЁМОВ: окна и двери в чертеже — это блоки,
+ * а не отрезки. Дуги и штриховки НЕ разбираются (честно в warnings).
+ *
+ * Единицы: сперва читается $INSUNITS из HEADER; если её нет — эвристика по
+ * габариту (>1000 → мм, >100 → см, иначе метры). Выбранная единица
+ * возвращается наружу и показывается человеку: молча угадывать масштаб
+ * нельзя, ошибка масштаба — это тихая неверная модель.
+ */
+
+import type { Plan, Wall } from "./planModel";
+import { WALL_HEIGHT } from "./planModel";
+import { PRESETS, nearestWall, placeOpening } from "./openings";
+import { mergeDoubleWalls } from "./wallMerge";
+
+export interface DxfResult {
+  plan: Plan | null;
+  warnings: string[];
+  /** во что была пересчитана координата: подпись для человека */
+  unitLabel: string;
+  /** сколько отрезков отброшено обрезкой (0 = ничего) */
+  truncated: number;
+}
+
+interface Seg { x1: number; y1: number; x2: number; y2: number; layer: string }
+
+/** Вставка блока: точка и имя. Из неё выводятся окна и двери. */
+/** Габарит определения блока в его собственных координатах. */
+interface Extent { dx: number; dy: number }
+
+interface Block { x: number; y: number; name: string; layer: string;
+  /** масштаб вставки по X (код 41); 1, если в файле не указан */
+  sx: number; sy: number }
+
+const MAX_SEGMENTS = 400;
+
+/**
+ * Как распознаётся дверь и окно среди блоков чертежа.
+ *
+ * В AutoCAD проём — это ВСТАВКА БЛОКА (`INSERT`), а не отрезок: у неё есть
+ * точка и имя, но нет ни ширины, ни привязки к стене. Поэтому:
+ *
+ *  - вид (дверь или окно) берётся из ИМЕНИ блока и слоя — других сведений в
+ *    файле нет; чертёжники называют их по-разному, и незнакомые имена мы
+ *    честно считаем и НЕ угадываем;
+ *  - ШИРИНА берётся из типового размера, а не из чертежа. Масштаб блока
+ *    (коды 41/42) описывает растяжение символа, а не проёма, и выводить из
+ *    него ширину значило бы получить правдоподобно неверное число;
+ *  - точка вставки привязывается к БЛИЖАЙШЕЙ стене; если стены рядом нет,
+ *    проём не ставится и попадает в счёт непривязанных.
+ *
+ * Всё это говорится человеку на странице: он видит, сколько блоков найдено,
+ * сколько распознано и почему остальные нет.
+ */
+const DOOR_RE = /(дверь|двер|door|dr[-_]|d[-_]?\d)/i;
+const WINDOW_RE = /(окно|окн|window|win[-_]|w[-_]?\d)/i;
+
+/**
+ * Вид проёма по блоку: сперва по ИМЕНИ, и только потом по слою.
+ *
+ * ⚠️ Порядок не косметика. Первая версия склеивала имя со слоем в одну строку
+ * и спрашивала «есть ли где-нибудь слово door» — окно с именем «ОКНО-1400»,
+ * лежащее на слое `A-DOOR` (в реальных чертежах проёмы часто на одном слое),
+ * становилось ДВЕРЬЮ. Имя конкретнее слоя: слой описывает группу, имя —
+ * предмет. Поймал тест, где имя и слой спорят.
+ */
+function kindOfBlock(
+  name: string,
+  layer: string,
+): { kind: "door" | "window"; byLayer: boolean } | null {
+  if (WINDOW_RE.test(name)) return { kind: "window", byLayer: false };
+  if (DOOR_RE.test(name)) return { kind: "door", byLayer: false };
+  // ⚠️ Слой — ДОГАДКА, и она бывает неверной: шкаф-купе, попавший на слой
+  // дверей, стал бы дверью в стене. Отказаться от неё нельзя (блоки часто
+  // зовут «BLK17»), поэтому такие проёмы считаются ОТДЕЛЬНО и человеку
+  // говорится, сколько их и почему: молча угадывать нельзя, а подсказку
+  // выбрасывать жалко.
+  if (WINDOW_RE.test(layer)) return { kind: "window", byLayer: true };
+  if (DOOR_RE.test(layer)) return { kind: "door", byLayer: true };
+  return null;
+}
+
+/** Разбор пар «код группы / значение». */
+/**
+ * Габарит каждого блока в его СОБСТВЕННЫХ координатах — чтобы ширина
+ * проёма бралась ИЗ ЧЕРТЕЖА, а не из типового числа.
+ *
+ * До этого модуль говорил человеку, что ширины в файле нет вовсе. Это
+ * было неверно: блок чертят отрезками, и его собственный габарит, умноженный
+ * на масштаб вставки, и есть настоящая ширина проёма.
+ *
+ * Берётся БОЛЬШАЯ из двух сторон, а не та, что вдоль оси X: блок
+ * вставляют повёрнутым под стену, и привязываться к оси значило бы получить
+ * правдоподобно неверное число на каждом втором чертеже. У двери и у окна
+ * ширина и есть большая сторона символа.
+ *
+ * Дуги мы не разбираем, поэтому у двери со створкой-дугой остаётся линия
+ * полотна — а она и равна ширине проёма. Где не вышло вовсе — ставится
+ * типовая ширина, и это говорится вслух.
+ */
+function readBlockSizes(ps: Array<[number, string]>): Map<string, Extent> {
+  const out = new Map<string, Extent>();
+  let inBlocks = false;
+  let name = "";
+  /** текущая сущность внутри определения блока */
+  let ent = "";
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  const flush = () => {
+    const dx = maxX - minX, dy = maxY - minY;
+    if (name && Number.isFinite(dx) && Number.isFinite(dy) && Math.max(dx, dy) > 0) {
+      out.set(name, { dx, dy });
+    }
+    name = "";
+    ent = "";
+    minX = Infinity; maxX = -Infinity; minY = Infinity; maxY = -Infinity;
+  };
+  for (let i = 0; i < ps.length; i++) {
+    const [c, v] = ps[i];
+    if (c === 2 && v === "BLOCKS" && !name) { inBlocks = true; continue; }
+    if (!inBlocks) continue;
+    if (c === 0 && v === "ENDSEC") { flush(); inBlocks = false; continue; }
+    if (c === 0 && v === "ENDBLK") { flush(); continue; }
+    if (c === 0 && v === "BLOCK") {
+      flush();
+      for (let j = i + 1; j < ps.length && ps[j][0] !== 0; j++) {
+        if (ps[j][0] === 2) { name = ps[j][1]; break; }
+      }
+      continue;
+    }
+    // Габарит считается ТОЛЬКО по геометрии, которую мы понимаем.
+    //
+    // Коды 10/20 есть не только у отрезков: их несёт и заголовок BLOCK
+    // (базовая точка), и ВЛОЖЕННАЯ вставка INSERT, и текст, и размерная
+    // линия. В настоящем чертеже блок двери часто содержит вложенный
+    // блок петли или выноску, и её точка может лежать далеко от полотна.
+    // Считая их, мы получили бы ширину больше настоящей — и не всегда
+    // настолько, чтобы её отсекла полоса правдоподобия. То есть худший
+    // класс этого модуля: правдоподобно неверное число.
+    if (c === 0) { ent = v; continue; }
+    if (ent !== "LINE" && ent !== "LWPOLYLINE") continue;
+    if (c === 10 || c === 11) {
+      const x = parseFloat(v);
+      if (Number.isFinite(x)) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); }
+    } else if (c === 20 || c === 21) {
+      const y = parseFloat(v);
+      if (Number.isFinite(y)) { minY = Math.min(minY, y); maxY = Math.max(maxY, y); }
+    }
+  }
+  flush();
+  return out;
+}
+
+function pairs(text: string): Array<[number, string]> {
+  const lines = text.split(/\r?\n/);
+  const out: Array<[number, string]> = [];
+  for (let i = 0; i + 1 < lines.length; i += 2) {
+    const code = parseInt(lines[i].trim(), 10);
+    if (Number.isNaN(code)) continue;
+    out.push([code, lines[i + 1].trim()]);
+  }
+  return out;
+}
+
+export function parseDxf(text: string): DxfResult {
+  const warnings: string[] = [];
+  if (!text || text.indexOf("ENTITIES") < 0) {
+    return {
+      plan: null,
+      warnings: ["В файле не найдена секция ENTITIES — это не ASCII-DXF. Бинарный DWG сохраните из AutoCAD как DXF (ASCII)."],
+      unitLabel: "—",
+      truncated: 0,
+    };
+  }
+
+  const ps = pairs(text);
+
+  // --- $INSUNITS из заголовка -------------------------------------------
+  let insUnits: number | null = null;
+  for (let i = 0; i < ps.length - 1; i++) {
+    if (ps[i][0] === 9 && ps[i][1] === "$INSUNITS") {
+      for (let j = i + 1; j < Math.min(i + 4, ps.length); j++) {
+        if (ps[j][0] === 70) { insUnits = parseInt(ps[j][1], 10); break; }
+      }
+      break;
+    }
+  }
+
+  // --- сущности ----------------------------------------------------------
+  const segs: Seg[] = [];
+  const blocks: Block[] = [];
+  const skipped = new Set<string>();
+  let i = 0;
+  // границы секции ENTITIES
+  let inEntities = false;
+  while (i < ps.length) {
+    const [code, val] = ps[i];
+    if (code === 2 && val === "ENTITIES") inEntities = true;
+    if (code === 0 && val === "ENDSEC") inEntities = false;
+
+    if (inEntities && code === 0 && val === "LINE") {
+      let x1 = NaN, y1 = NaN, x2 = NaN, y2 = NaN, layer = "";
+      let j = i + 1;
+      for (; j < ps.length && ps[j][0] !== 0; j++) {
+        const [c, v] = ps[j];
+        if (c === 8) layer = v;
+        else if (c === 10) x1 = parseFloat(v);
+        else if (c === 20) y1 = parseFloat(v);
+        else if (c === 11) x2 = parseFloat(v);
+        else if (c === 21) y2 = parseFloat(v);
+      }
+      if ([x1, y1, x2, y2].every(Number.isFinite)) segs.push({ x1, y1, x2, y2, layer });
+      i = j;
+      continue;
+    }
+
+    if (inEntities && code === 0 && val === "LWPOLYLINE") {
+      let layer = "";
+      let closed = false;
+      const xs: number[] = [];
+      const ys: number[] = [];
+      let j = i + 1;
+      for (; j < ps.length && ps[j][0] !== 0; j++) {
+        const [c, v] = ps[j];
+        if (c === 8) layer = v;
+        else if (c === 70) closed = (parseInt(v, 10) & 1) === 1;
+        else if (c === 10) xs.push(parseFloat(v));
+        else if (c === 20) ys.push(parseFloat(v));
+      }
+      const n = Math.min(xs.length, ys.length);
+      for (let k = 0; k + 1 < n; k++) {
+        segs.push({ x1: xs[k], y1: ys[k], x2: xs[k + 1], y2: ys[k + 1], layer });
+      }
+      if (closed && n >= 3) {
+        segs.push({ x1: xs[n - 1], y1: ys[n - 1], x2: xs[0], y2: ys[0], layer });
+      }
+      i = j;
+      continue;
+    }
+
+    if (inEntities && code === 0 && val === "INSERT") {
+      let name = "", layer = "", x = NaN, y = NaN, sx = NaN, sy = NaN;
+      let j = i + 1;
+      for (; j < ps.length && ps[j][0] !== 0; j++) {
+        const [c, v] = ps[j];
+        if (c === 2) name = v;
+        else if (c === 8) layer = v;
+        else if (c === 10) x = parseFloat(v);
+        else if (c === 20) y = parseFloat(v);
+        else if (c === 41) sx = parseFloat(v);
+        else if (c === 42) sy = parseFloat(v);
+      }
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        blocks.push({
+          x, y, name, layer,
+          sx: Number.isFinite(sx) && sx > 0 ? sx : 1,
+          sy: Number.isFinite(sy) && sy > 0 ? sy : 1,
+        });
+      }
+      i = j;
+      continue;
+    }
+
+    if (inEntities && code === 0 && val !== "ENDSEC" && val !== "SECTION") {
+      if (["ARC", "CIRCLE", "SPLINE", "HATCH", "ELLIPSE"].includes(val)) skipped.add(val);
+    }
+    i++;
+  }
+
+  if (skipped.size > 0) {
+    // Список пропущенного берётся из ТОГО ЖЕ набора, что и проверка выше:
+    // фраза «блоки не разбираются» пережила бы правку, которая их разбирать
+    // научила, и сутки говорила бы человеку неправду о его же чертеже.
+    warnings.push(
+      `Пропущены сущности: ${[...skipped].sort().join(", ")} — стены строятся из`
+      + " LINE и LWPOLYLINE, проёмы из блоков INSERT, остальное не разбирается.",
+    );
+  }
+  if (segs.length === 0) {
+    return { plan: null, warnings: [...warnings, "Не найдено ни одного отрезка LINE/LWPOLYLINE."], unitLabel: "—", truncated: 0 };
+  }
+
+  // --- фильтр по слоям стен ---------------------------------------------
+  const wallRe = /(wall|стен|перегород|w-|a-wall)/i;
+  const wallSegs = segs.filter((s) => wallRe.test(s.layer));
+  let used = segs;
+  if (wallSegs.length >= 4) {
+    used = wallSegs;
+    warnings.push(`Взят слой стен (${wallSegs.length} отрезков из ${segs.length}); остальные слои чертежа не строились.`);
+  } else {
+    warnings.push(`Слой со словом «wall/стена» не найден — взяты ВСЕ ${segs.length} отрезков. Размерные линии могли стать «стенами»: проверьте глазами.`);
+  }
+
+  // --- масштаб ------------------------------------------------------------
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const s of used) {
+    minX = Math.min(minX, s.x1, s.x2); minY = Math.min(minY, s.y1, s.y2);
+    maxX = Math.max(maxX, s.x1, s.x2); maxY = Math.max(maxY, s.y1, s.y2);
+  }
+  const extent = Math.max(maxX - minX, maxY - minY);
+  let scale = 1;
+  let unitLabel = "м (как в файле)";
+  // Таблица $INSUNITS по стандарту DXF. Прежде здесь были только мм, см, м и
+  // дюймы, а ФУТЫ (код 2) не значились — американские чертежи чертят в них.
+  // Молчаливое следствие было худшим из возможных: файл ЯВНО сообщал единицу,
+  // мы её не узнавали и уходили в эвристику по габариту. Квартира 40 футов
+  // получала габарит 40 и признавалась метрами — модель втрое больше
+  // настоящей, и полоса правдоподобия такое пропускает: 40 м для дома
+  // выглядит нормально. То есть файл сказал правду, а мы её не услышали.
+  const ЕДИНИЦЫ: Record<number, { scale: number; label: string }> = {
+    1: { scale: 0.0254, label: "дюймы" },
+    2: { scale: 0.3048, label: "футы" },
+    4: { scale: 1 / 1000, label: "мм" },
+    5: { scale: 1 / 100, label: "см" },
+    6: { scale: 1, label: "м" },
+    7: { scale: 1000, label: "километры" },
+    10: { scale: 0.9144, label: "ярды" },
+  };
+  const известная = insUnits === null ? undefined : ЕДИНИЦЫ[insUnits];
+  if (известная) {
+    scale = известная.scale;
+    unitLabel = `${известная.label} ($INSUNITS)`;
+  } else {
+    // Код есть, но нам неизвестен — это НЕ то же самое, что кода нет вовсе.
+    // Человек должен знать, что мы не поняли его файл, а не гадать, почему
+    // модель странного размера.
+    if (insUnits !== null && insUnits !== 0) {
+      warnings.push(
+        `В файле указана единица измерения с кодом ${insUnits}, а её мы не знаем. `
+        + "Масштаб взят по габариту чертежа — обязательно сверьте размеры.",
+      );
+    }
+    if (extent > 1000) { scale = 1 / 1000; unitLabel = "мм (по габариту)"; }
+    else if (extent > 100) { scale = 1 / 100; unitLabel = "см (по габариту)"; }
+  }
+
+  // --- сборка плана -------------------------------------------------------
+  let truncated = 0;
+  let list = used;
+  if (list.length > MAX_SEGMENTS) {
+    // оставляем самые длинные: короткое — чаще всего штриховка и надписи
+    list = [...list].sort(
+      (a, b) => Math.hypot(b.x2 - b.x1, b.y2 - b.y1) - Math.hypot(a.x2 - a.x1, a.y2 - a.y1),
+    ).slice(0, MAX_SEGMENTS);
+    truncated = used.length - MAX_SEGMENTS;
+    warnings.push(`Отрезков больше ${MAX_SEGMENTS}: показаны ${MAX_SEGMENTS} самых длинных, отброшено ${truncated}.`);
+  }
+
+  const walls: Wall[] = [];
+  for (const s of list) {
+    const w: Wall = {
+      x1: (s.x1 - minX) * scale,
+      y1: (s.y1 - minY) * scale,
+      x2: (s.x2 - minX) * scale,
+      y2: (s.y2 - minY) * scale,
+      thickness: 0.15,
+      height: WALL_HEIGHT,
+    };
+    if (Math.hypot(w.x2 - w.x1, w.y2 - w.y1) < 0.05) continue; // мусор < 5 см
+    walls.push(w);
+  }
+  if (walls.length === 0) {
+    return { plan: null, warnings: [...warnings, "После пересчёта масштаба стен не осталось (все отрезки короче 5 см)."], unitLabel, truncated };
+  }
+
+  // Свести двойные линии ОБЯЗАТЕЛЬНО до постановки проёмов: иначе проём
+  // привяжется к одной из двух граней, а не к оси стены.
+  const сведение = mergeDoubleWalls(walls);
+  if (сведение.merged > 0) {
+    const толщины = сведение.walls
+      .filter((w) => Math.abs(w.thickness - 0.15) > 1e-9)
+      .map((w) => w.thickness);
+    const мин = Math.min(...толщины), макс = Math.max(...толщины);
+    warnings.push(
+      `Стены начерчены двумя линиями — ${сведение.merged} пар сведены в одну стену каждая. `
+      + `Толщина взята из чертежа: ${мин === макс ? `${мин.toFixed(2)} м` : `${мин.toFixed(2)}–${макс.toFixed(2)} м`}, `
+      + "а не типовые 0.15 м. Если у вас были ДВЕ отдельные стены рядом — сверьте с чертежом.",
+    );
+  }
+  if (сведение.dropped > 0) {
+    warnings.push(
+      `Одинаковых стен, начерченных дважды: ${сведение.dropped} — выброшены. `
+      + "Иначе розетки, кабель и площадь посчитались бы по ним ещё раз.",
+    );
+  }
+
+  // ⚠️ `placeOpening` НЕ меняет план на месте, а возвращает новый: страница
+  // работает через состояние React, где менять объект нельзя. Первая версия
+  // этого разбора звала его как изменяющий — счётчик честно печатал
+  // «распознано 1», а в плане был ноль проёмов. Поймал тест, чтением не видно.
+  // --- правдоподобность масштаба ------------------------------------------
+  // Единицы берутся из файла, а в файле они бывают неверными: $INSUNITS ставит
+  // тот, кто чертил, и ошибиться там легко. Следствие — самый дорогой класс
+  // дефектов модуля: правдоподобно неверная модель. Квартира в 0.2 м
+  // выглядит как исправно построенная, просто маленькая, и человек скорее
+  // усомнится в модуле, чем в своём файле.
+  //
+  // Границы взяты по смыслу задачи, а не с потолка: 2 м — меньше самого
+  // тесного санузла; 200 м — больше любой квартиры и большинства этажей.
+  const итог = Math.max(maxX - minX, maxY - minY) * scale;
+  if (итог < 2 || итог > 200) {
+    warnings.push(
+      `Габарит после пересчёта — ${итог.toFixed(итог < 2 ? 2 : 0)} м по большей `
+      + `стороне. Для квартиры это невероятно: похоже, единицы в файле `
+      + `(${unitLabel}) указаны неверно. Модель построена, но сверьте размеры `
+      + "с чертежом, прежде чем считать по ней закупку.",
+    );
+  }
+
+  let plan: Plan = { name: "Импорт DXF", walls: сведение.walls, openings: [], source: "dxf" };
+
+  // --- проёмы из блоков ---------------------------------------------------
+  // Ставятся ТЕМИ ЖЕ функциями, что и клик человека по стене: они уже умеют
+  // отказать, если проём не влезает или налезает на соседний. Второй способ
+  // ставить проёмы стал бы вторым источником правды.
+  const blockSizes = readBlockSizes(ps);
+  let recognised = 0;
+  /** ширина взята из чертежа */
+  let measured = 0;
+  /** ширины в чертеже не нашлось — поставлена типовая */
+  let typical = 0;
+  let unattached = 0;
+  let byLayer = 0;
+  let rejected = 0;
+  const rejectReasons = new Set<string>();
+  const unknownNames = new Set<string>();
+  for (const b of blocks) {
+    const guess = kindOfBlock(b.name, b.layer);
+    if (!guess) { unknownNames.add(b.name || "(без имени)"); continue; }
+    const hit = nearestWall(plan, (b.x - minX) * scale, (b.y - minY) * scale, 0.7);
+    // ⚠️ Два РАЗНЫХ отказа, и человеку нужны разные слова. «Стены рядом нет» —
+    // скорее всего блок не на плане (штамп, условное обозначение). «Не влез» —
+    // стена найдена, но проём в неё не помещается или налезает на соседний, и
+    // это уже про сам чертёж. Считать их одним числом значило бы сказать про
+    // половину случаев неправду.
+    if (!hit) { unattached++; continue; }
+    // Ширина ИЗ ЧЕРТЕЖА, если она там есть и правдоподобна.
+    // Полоса 0.5–3 м — не вкусовщина: уже 0.5 м не пройдёт человек, шире 3 м
+    // — уже не проём, а проём в полстены. За полосой берём типовую и
+    // ГОВОРИМ об этом: молча подставленное число — худший класс этого модуля.
+    // Каждая сторона умножается на СВОЙ масштаб: вставка бывает растянута
+    // по осям по-разному (коды 41 и 42), и взять большую СТОРОНУ, а потом
+    // умножить её на масштаб ДРУГОЙ оси — значит получить правдоподобно
+    // неверное число. Поворот (код 50) не нужен вовсе: большая из двух
+    // сторон от него не зависит.
+    const own = blockSizes.get(b.name);
+    const fromFile = own === undefined
+      ? null
+      : Math.max(own.dx * b.sx, own.dy * b.sy) * scale;
+    const size = fromFile !== null && fromFile >= 0.5 && fromFile <= 3
+      ? { ...PRESETS[guess.kind], width: fromFile }
+      : undefined;
+    const res = placeOpening(plan, hit, guess.kind, size);
+    if (res.ok) {
+      plan = res.plan;
+      recognised++;
+      if (size) measured++; else typical++;
+      if (guess.byLayer) byLayer++;
+    } else {
+      rejected++;
+      if (rejectReasons.size < 3) rejectReasons.add(res.reason);
+    }
+  }
+  if (blocks.length > 0) {
+    warnings.push(
+      `Блоков в чертеже: ${blocks.length}. Проёмов распознано: ${recognised}`
+      + (unattached > 0 ? `, рядом нет стены: ${unattached}` : "")
+      + (rejected > 0
+        ? `, не помещается в стену: ${rejected} (${[...rejectReasons].join("; ")})`
+        : "")
+      + (byLayer > 0
+        ? `, из них по СЛОЮ (имя блока молчит): ${byLayer} — проверьте, не мебель ли это`
+        : "")
+      + (unknownNames.size > 0
+        ? `, имена не опознаны: ${[...unknownNames].slice(0, 5).join(", ")}`
+          + (unknownNames.size > 5 ? ` и ещё ${unknownNames.size - 5}` : "")
+        : "")
+      + (measured > 0
+        ? `. Ширина измерена по чертежу у ${measured}`
+          + (typical > 0 ? `, типовая у ${typical}` : "")
+        : ". Ширина взята ТИПОВАЯ: в чертеже габарита блока не нашлось")
+      + ". Проверьте и поправьте кликом.",
+    );
+  }
+
+  return { plan, warnings, unitLabel, truncated };
+}

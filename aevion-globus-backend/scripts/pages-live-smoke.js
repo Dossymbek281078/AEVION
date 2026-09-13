@@ -92,6 +92,7 @@ const PAGES = [
   "/hn",
   "/ph",
   "/qskyway",
+  "/qspace",  // 3D-модельер помещений (MVP 07.09.2026)
   "/build",
   "/qtrade",
   "/smeta-trainer",

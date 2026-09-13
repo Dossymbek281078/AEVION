@@ -61,6 +61,7 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/bureau", changeFrequency: "daily", priority: 0.9 },
   { path: "/qsign", changeFrequency: "weekly", priority: 0.7 },
   { path: "/quantum-shield", changeFrequency: "weekly", priority: 0.7 },
+  { path: "/qspace", changeFrequency: "weekly", priority: 0.7 },
   { path: "/planet", changeFrequency: "daily", priority: 0.8 },
   { path: "/awards", changeFrequency: "daily", priority: 0.8 },
   { path: "/qreal", changeFrequency: "weekly", priority: 0.8 },

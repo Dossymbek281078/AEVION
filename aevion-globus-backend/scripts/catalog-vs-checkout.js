@@ -169,6 +169,27 @@ async function checkDemoDisclosure(item) {
     process.exit(1);
   }
 
+  // РАЗБОР МОЖЕТ БЫТЬ НЕПОЛНЫМ, И ЭТО ВЫГЛЯДИТ КАК УСПЕХ.
+  //
+  // Позиции достаются регуляркой (id + priceUsd + billing). Поменяйся формат
+  // каталога — и разберётся, скажем, девять позиций из шестнадцати: скрипт
+  // напечатает «9 OK, 0 FAIL» и вернёт 0. При ПУСТОМ разборе — «0 OK, 0 FAIL»
+  // и тоже 0: полностью слепая проверка отчитается успехом, а ежедневный
+  // набор покажет PASS.
+  //
+  // Знаменатель берём НЕЗАВИСИМЫЙ — число ссылок на кассы в том же файле.
+  // Это другой образец: он ловит расхождение РАЗБОРА, а не повторяет его
+  // ошибку. Позиций не может быть меньше, чем у них ссылок.
+  const ssylok = (fs.readFileSync(CATALOG, "utf8").match(/href:\s*(GUM|LS)\(/g) || []).length;
+  if (catalog.length < ssylok) {
+    console.error(
+      `catalog-vs-checkout: разобрано ${catalog.length} позиций при ${ssylok} ссылках на кассы — ` +
+        "разбор НЕПОЛОН, судить по нему нельзя",
+    );
+    process.exitCode = 2;
+    return;
+  }
+
   console.log(`catalog-vs-checkout: позиций в каталоге ${catalog.length}\n`);
 
   let ok = 0;
@@ -216,5 +237,8 @@ async function checkDemoDisclosure(item) {
     console.log("\nРасхождения:");
     for (const f of failures) console.log(`  • ${f}`);
   }
-  process.exit(fail ? 1 : 0);
+  // НЕ process.exit(): fetch + process.exit роняет node на Windows ассертом
+  // libuv, и проверка возвращает 127 при нуле расхождений. У соседнего
+  // смоука это давало вечный FAIL в ежедневном наборе.
+  process.exitCode = fail ? 1 : 0;
 })();

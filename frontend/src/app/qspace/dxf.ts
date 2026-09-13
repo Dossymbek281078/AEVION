@@ -193,6 +193,19 @@ export function parseDxf(text: string): DxfResult {
   const segs: Seg[] = [];
   const blocks: Block[] = [];
   const skipped = new Set<string>();
+  // Отрезки из списка вершин собираются ОДНОЙ функцией для обоих видов
+  // полилиний. Две копии этого кода разошлись бы молча: замыкание контура —
+  // как раз то место, где легко забыть последнюю стену комнаты.
+  const изВершин = (xs: number[], ys: number[], closed: boolean, layer: string) => {
+    const n = Math.min(xs.length, ys.length);
+    for (let k = 0; k + 1 < n; k++) {
+      segs.push({ x1: xs[k], y1: ys[k], x2: xs[k + 1], y2: ys[k + 1], layer });
+    }
+    if (closed && n >= 3) {
+      segs.push({ x1: xs[n - 1], y1: ys[n - 1], x2: xs[0], y2: ys[0], layer });
+    }
+  };
+
   let i = 0;
   // границы секции ENTITIES
   let inEntities = false;
@@ -230,13 +243,46 @@ export function parseDxf(text: string): DxfResult {
         else if (c === 10) xs.push(parseFloat(v));
         else if (c === 20) ys.push(parseFloat(v));
       }
-      const n = Math.min(xs.length, ys.length);
-      for (let k = 0; k + 1 < n; k++) {
-        segs.push({ x1: xs[k], y1: ys[k], x2: xs[k + 1], y2: ys[k + 1], layer });
+      изВершин(xs, ys, closed, layer);
+      i = j;
+      continue;
+    }
+
+    // POLYLINE старого вида: сама сущность несёт только слой и флаги, а
+    // координаты лежат в ДОЧЕРНИХ VERTEX до SEQEND. Его пишут старые файлы и
+    // многие экспортёры, и до 13.09.2026 мы его не читали ВОВСЕ.
+    //
+    // Замер, ради которого это написано: файл из одной LINE и одного POLYLINE
+    // на четыре вершины давал 1 стену вместо 5 — и предупреждение уверенно
+    // сообщало «взяты ВСЕ 1 отрезков». Четыре стены исчезали молча, а смета
+    // считалась по одной: правдоподобно неверное число на денежном пути.
+    if (inEntities && code === 0 && val === "POLYLINE") {
+      let layer = "";
+      let flags = 0;
+      const xs: number[] = [];
+      const ys: number[] = [];
+      let j = i + 1;
+      for (; j < ps.length && ps[j][0] !== 0; j++) {
+        const [c, v] = ps[j];
+        if (c === 8) layer = v;
+        else if (c === 70) flags = parseInt(v, 10) || 0;
       }
-      if (closed && n >= 3) {
-        segs.push({ x1: xs[n - 1], y1: ys[n - 1], x2: xs[0], y2: ys[0], layer });
+      while (j < ps.length && ps[j][0] === 0 && ps[j][1] === "VERTEX") {
+        let x = NaN, y = NaN;
+        j++;
+        for (; j < ps.length && ps[j][0] !== 0; j++) {
+          const [c, v] = ps[j];
+          if (c === 10) x = parseFloat(v);
+          else if (c === 20) y = parseFloat(v);
+        }
+        if (Number.isFinite(x) && Number.isFinite(y)) { xs.push(x); ys.push(y); }
       }
+      if (j < ps.length && ps[j][0] === 0 && ps[j][1] === "SEQEND") j++;
+      // Биты 16 и 64 — это трёхмерная СЕТКА, а не контур: её вершины значат
+      // другое, и строить из них стены нельзя. Такой случай не проглатываем,
+      // а называем вслух — иначе пропажа снова стала бы тихой.
+      if ((flags & 16) !== 0 || (flags & 64) !== 0) skipped.add("POLYLINE-сетка");
+      else изВершин(xs, ys, (flags & 1) === 1, layer);
       i = j;
       continue;
     }

@@ -331,16 +331,23 @@ export interface PositionAnalysis {
   tacticsHint?: string;
 }
 
-/** Определяем фазу партии по количеству ходов и материалу */
+/** Определяем фазу партии ПО ПОЗИЦИИ, а не по номеру хода.
+ * Прежде фаза бралась из plyCount<20 → "opening", и загруженная ЗАДАЧА
+ * (эндшпиль/миттельшпиль с plyCount=0) молча объявлялась дебютом — коуч
+ * советовал дебютные принципы на эндшпиле. Позиция надёжнее номера хода:
+ * мало фигур = эндшпиль независимо от того, сколько ходов «сыграно». */
 export function detectPhase(fen: string, plyCount: number): "opening" | "middlegame" | "endgame" {
-  if (plyCount < 20) return "opening";
-  // Считаем материал
-  const pieces = fen.split(" ")[0];
-  let total = 0;
-  for (const c of pieces) {
-    if ("nbrqNBRQ".includes(c)) total++;
+  const board = fen.split(" ")[0];
+  let officers = 0, pawns = 0;
+  for (const c of board) {
+    if ("nbrqNBRQ".includes(c)) officers++;
+    else if (c === "p" || c === "P") pawns++;
   }
-  if (total <= 6) return "endgame";
+  // Эндшпиль — по МАТЕРИАЛУ (мало лёгких/тяжёлых фигур), в любой момент партии.
+  if (officers <= 6) return "endgame";
+  // Дебют — только когда позиция реально ранняя: почти все фигуры и пешки на
+  // доске И сыграно мало ходов. Загруженная задача этим условиям не отвечает.
+  if (plyCount < 20 && officers >= 12 && pawns >= 12) return "opening";
   return "middlegame";
 }
 

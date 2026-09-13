@@ -33,6 +33,29 @@ const КЛИЕНТ = readFileSync(path.join(__dirname, "_client.tsx"), "utf8")
   .filter((строка) => !/^\s*\/\//.test(строка))
   .join(String.fromCharCode(10));
 
+/**
+ * Кусок разметки САМОЙ кнопки, а не окно вокруг неё.
+ *
+ * Первая редакция брала ±260 знаков от onClick — и покраснела, когда рядом
+ * появился КОММЕНТАРИЙ со словом !webglOk у соседней кнопки. Шестой за день
+ * случай, когда свой же текст ослепляет своего же сторожа. Окно вокруг —
+ * признак приблизительный; тег кнопки — точный.
+ */
+function тегКнопки(onClick: string): string | null {
+  const i = КЛИЕНТ.indexOf(onClick);
+  if (i < 0) return null;
+  const начало = КЛИЕНТ.lastIndexOf("<button", i);
+  // Конец тега ищем НЕ первым «>»: в стрелочной функции `() => addItem(c)`
+  // он тоже есть, и срез обрывался до атрибута disabled. Берём «>», перед
+  // которым не стоит «=».
+  let конец = -1;
+  for (let k = i; k < КЛИЕНТ.length; k++) {
+    if (КЛИЕНТ[k] === ">" && КЛИЕНТ[k - 1] !== "=") { конец = k; break; }
+  }
+  if (начало < 0 || конец < 0) return null;
+  return КЛИЕНТ.slice(начало, конец + 1);
+}
+
 function телоФункции(имя: string): string {
   const i = КЛИЕНТ.indexOf(`const ${имя} = useCallback(`);
   expect(i, `функция ${имя} не найдена — сторож проверял бы пустоту`).toBeGreaterThan(-1);
@@ -70,11 +93,9 @@ describe("кнопки, которым нужна сцена, не нажима�
   it("каждая закрыта при отсутствии WebGL", () => {
     const молчат: string[] = [];
     for (const имя of НУЖНА_СЦЕНА) {
-      const i = КЛИЕНТ.indexOf(`onClick={${имя.startsWith("addItem") ? "() => addItem(c)" : имя}}`);
-      if (i < 0) { молчат.push(`${имя}: не нашёл onClick`); continue; }
-      // Окно вокруг: атрибуты кнопки разнесены по строкам.
-      const окно = КЛИЕНТ.slice(Math.max(0, i - 260), i + 260);
-      if (!/!webglOk/.test(окно)) молчат.push(имя);
+      const тег = тегКнопки(`onClick={${имя.startsWith("addItem") ? "() => addItem(c)" : имя}}`);
+      if (тег === null) { молчат.push(`${имя}: не нашёл кнопку`); continue; }
+      if (!/!webglOk/.test(тег)) молчат.push(имя);
     }
     expect(
       молчат,
@@ -95,11 +116,10 @@ describe("кнопки, которым нужна сцена, не нажима�
  */
 describe("обещанное без 3D остаётся доступным", () => {
   it("выгрузка чертежа SVG НЕ закрыта отсутствием WebGL", () => {
-    const i = КЛИЕНТ.indexOf("onClick={downloadPlanSvg}");
-    expect(i, "кнопка чертежа исчезла — сторож устарел").toBeGreaterThan(-1);
-    const окно = КЛИЕНТ.slice(Math.max(0, i - 260), i + 260);
+    const тег = тегКнопки("onClick={downloadPlanSvg}");
+    expect(тег, "кнопка чертежа исчезла — сторож устарел").not.toBeNull();
     expect(
-      /!webglOk/.test(окно),
+      /!webglOk/.test(тег!),
       "чертёж закрыт вместе с 3D, хотя сообщение обещает, что он работает",
     ).toBe(false);
   });

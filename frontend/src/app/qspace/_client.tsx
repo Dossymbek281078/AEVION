@@ -23,7 +23,7 @@ import {
   type Plan,
 } from "./planModel";
 import { parseDxf } from "./dxf";
-import { estimatePlan } from "./estimate";
+import { estimateCsv, estimatePlan } from "./estimate";
 import { planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
 import { drawMaterial, materialById, materialsFor } from "./materials";
 import { CATALOG, demoPlacedSnapshots, groups, itemById, type CatalogItem } from "./furniture";
@@ -130,7 +130,13 @@ export default function QSpaceClient() {
   const [saveNote, setSaveNote] = useState<{ text: string; failed: boolean }>(
     { text: "", failed: false },
   );
-  const скажи = (text: string, failed = false) => setSaveNote({ text, failed });
+  // useCallback, а не обычная функция: её держат в зависимостях несколько
+  // обработчиков, и без этого они пересоздавались бы на каждой отрисовке.
+  // Поймал aevion-hooks-lint на моём же новом обработчике выгрузки.
+  const скажи = useCallback(
+    (text: string, failed = false) => setSaveNote({ text, failed }),
+    [],
+  );
   // Сообщение о восстановлении держится отдельно: автосохранение срабатывает
   // через секунду и затирало его — человек не успевал прочитать, что его
   // проект вернули (поймано браузерной пробой, а не чтением кода).
@@ -882,7 +888,7 @@ export default function QSpaceClient() {
     a2.click();
     URL.revokeObjectURL(url);
     скажи("Проект выгружен файлом — его можно хранить и переносить.");
-  }, [snapshot]);
+  }, [snapshot, скажи]);
 
   const openProjectFile = useCallback(async (f: File) => {
     const r = parseProjectFile(await f.text());
@@ -893,13 +899,13 @@ export default function QSpaceClient() {
     applyProject(r.project);
     setWarnings([]);
     скажи("Проект открыт из файла.");
-  }, [applyProject]);
+  }, [applyProject, скажи]);
 
   const forgetSaved = useCallback(() => {
     clearLocal();
     setRestoreNote("");
     скажи("Сохранённое в браузере удалено. Файлы проектов не тронуты.");
-  }, []);
+  }, [скажи]);
 
   // ---- автосохранение ------------------------------------------------------
   // С задержкой: перетаскивание мебели меняет состояние часто, а запись в
@@ -913,7 +919,7 @@ export default function QSpaceClient() {
       else скажи(r.reason, true);
     }, 1200);
     return () => clearTimeout(id);
-  }, [snapshot, pendingRestore]);
+  }, [snapshot, pendingRestore, скажи]);
 
   const screenshot = useCallback(() => {
     const t = three.current; if (!t) return;
@@ -956,7 +962,7 @@ export default function QSpaceClient() {
     a2.click();
     URL.revokeObjectURL(url);
     скажи("Чертёж сохранён. Откройте файл и печатайте — он векторный.");
-  }, [plan, roomsInfo]);
+  }, [plan, roomsInfo, скажи]);
 
   const est = useMemo(() => {
     const w = generateWiring(plan);
@@ -977,6 +983,22 @@ export default function QSpaceClient() {
       roomsInfo.totalArea, perRoom.totals.wallArea,
     );
   }, [plan, roomsInfo, perRoom]);
+
+  // Список закупки уносится с экрана таблицей. Раньше скопировать можно было
+  // только разбивку по комнатам, а кабель, трубы, розетки и светильники
+  // оставались на странице — в магазин человек шёл с телефоном в руке.
+  const downloadEstimateCsv = useCallback(() => {
+    const csv = estimateCsv(est, plan.name);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "qspace-спецификация.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+    скажи("Спецификация сохранена. Колонка цен пустая — впишите свои, сумма посчитается сама.");
+  }, [est, plan.name, скажи]);
+
 
   const S = styles;
   const catalogGroups = groups();
@@ -1128,6 +1150,11 @@ export default function QSpaceClient() {
         </button>
         <button type="button" style={S.btn} onClick={downloadPlanSvg}>
           Чертёж сверху (SVG, для печати)
+        </button>
+        {/* Не закрыта !webglOk: спецификация считается из ПЛАНА, а не из
+            сцены, и обязана работать там же, где работает чертёж. */}
+        <button type="button" style={S.btn} onClick={downloadEstimateCsv}>
+          Спецификация таблицей (CSV)
         </button>
         {/* disabled, а не тихий возврат: кадр рисуется ИЗ сцены, и без неё
             нажатие не делало ничего — ни файла, ни слова. Недоступная кнопка

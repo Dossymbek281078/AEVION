@@ -22,16 +22,22 @@ export const metadata: Metadata = {
   description:
     "QRight is the AEVION authorship layer: register a work, get a content-hashed receipt with HMAC + Ed25519 signatures, threshold-shard the secret across Quantum Shield. Verify offline; route royalties through Bank. Слой авторства AEVION: регистрация работы, подписанный чек с хешем содержимого, проверка без доверия серверу, роялти через Bank.",
   openGraph: {
-    title: "AEVION QRight — proof-of-authorship rail",
+    // 13.09.2026: превью было англоязычным, а подписчик у волны 20 сентября
+    // русский — по ссылке из письма он видел бы текст на чужом языке раньше
+    // самой страницы. Перевод, а не новый текст: утверждения те же, и они
+    // проверены 09.09 по ручке /api/pipeline/protect (Ed25519 + доли Шамира
+    // 2 из 3). Английский остался в title/description и в JSON-LD — их читают
+    // поиск и внешние интеграторы.
+    title: "AEVION QRight — рельс авторства: регистрация, подпись, роялти",
     description:
-      "Register, sign, threshold-shard. Public verification page per object, embeddable badge, royalty rail to Bank.",
+      "Зарегистрируйте, подпишите, разделите ключ на пороговые доли. Публичная страница проверки для каждого объекта, встраиваемый значок, отчисления роялти в Банк.",
     type: "website",
     siteName: "AEVION",
   },
   twitter: {
     card: "summary_large_image",
-    title: "AEVION QRight",
-    description: "Proof-of-authorship rail with Ed25519 + Shamir + Bank royalty payouts.",
+    title: "AEVION QRight — рельс авторства",
+    description: "Регистрация, подпись Ed25519, доли ключа по Шамиру, роялти через Банк.",
   },
   alternates: { canonical: "/qright" },
 };

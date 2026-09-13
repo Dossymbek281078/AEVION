@@ -7,6 +7,18 @@ import QSkywayClient from "./_client";
 import { PageTracking } from "@/components/PageTracking";
 
 const TITLE = "QSkyway — navigation layer for the urban sky · навигация городского неба";
+// 13.09.2026: у превью СВОЁ описание, короткое.
+//
+// Длинное DESCRIPTION ниже (583 знака) хорошо для страницы и поиска, но в
+// карточке ссылки Телеграм и X показывают около двухсот знаков — остальное
+// обрезается на полуслове, и человек видит обрубок вместо обещания. Замер
+// живой страницы штатной проверкой: og:description 583 знака, помечено
+// «Телеграм обрежет». Ничего не удаляю: длинный текст остаётся там, где
+// длина уместна, а превью получает свой.
+const OG_DESCRIPTION =
+  "3D-коридоры аэротакси по правилам, которые публикуют регуляторы: Астана, Нью-Йорк, Токио. " +
+  "Air-taxi corridors routed against published regulator rules.";
+
 const DESCRIPTION =
   "Навигационный слой городского неба: 3D-коридоры аэротакси по правилам, которые "
   + "регуляторы реально публикуют. "
@@ -27,7 +39,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/qskyway" },
   openGraph: {
     title: TITLE,
-    description: DESCRIPTION,
+    description: OG_DESCRIPTION,
     type: "website",
     url: "/qskyway",
     siteName: "AEVION",
@@ -35,7 +47,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: TITLE,
-    description: DESCRIPTION,
+    description: OG_DESCRIPTION,
   },
 };
 

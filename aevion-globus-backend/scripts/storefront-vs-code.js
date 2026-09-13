@@ -33,6 +33,9 @@ const STORE_HTML = process.env.STOREFRONT_HTML_PATH || null;
 const VARIANTS_TS = path.resolve(__dirname, "../src/data/lemonSqueezyVariants.ts");
 const PRICING_TS = path.resolve(__dirname, "../src/data/pricing.ts");
 const CATALOG_TS = path.resolve(__dirname, "../../frontend/src/lib/products.ts");
+const GUMROAD_STORE = process.env.GUMROAD_STORE_URL || "https://aevion.gumroad.com";
+const GUMROAD_HTML = process.env.GUMROAD_HTML_PATH || null;
+const WEBHOOK_TS = path.resolve(__dirname, "../src/routes/gumroadWebhook.ts");
 
 /** Названия товаров -> ссылка в коде. Разбор регуляркой: это TS, а скрипт на JS. */
 function readNameMap() {
@@ -57,6 +60,21 @@ function readCatalogByCheckoutId() {
     const cena = blok.match(/priceUsd:\s*([\d.]+)/);
     const bill = blok.match(/billing:\s*"(monthly|once)"/);
     if (ls && cena) out[ls[1]] = { id: starts[k].id, priceUsd: parseFloat(cena[1]), billing: bill ? bill[1] : "?" };
+  }
+  return out;
+}
+
+/** Позиции каталога сайта с кассой Gumroad, ключ — слаг товара. */
+function readCatalogByGumSlug() {
+  const src = fs.readFileSync(CATALOG_TS, "utf8");
+  const starts = [...src.matchAll(/id:\s*"([^"]+)"/g)].map((m) => ({ pos: m.index, id: m[1] }));
+  const out = {};
+  for (let k = 0; k < starts.length; k++) {
+    const blok = src.slice(starts[k].pos, k + 1 < starts.length ? starts[k + 1].pos : src.length);
+    const gum = blok.match(/href:\s*GUM\("([^"]+)"\)/);
+    const cena = blok.match(/priceUsd:\s*([\d.]+)/);
+    const bill = blok.match(/billing:\s*"(monthly|once)"/);
+    if (gum && cena) out[gum[1]] = { id: starts[k].id, priceUsd: parseFloat(cena[1]), billing: bill ? bill[1] : "?" };
   }
   return out;
 }
@@ -97,6 +115,43 @@ function readBaseline() {
     process.exitCode = 2;
     return null;
   }
+}
+
+/** Слаги Gumroad, для которых код ЗНАЕТ, что выдавать. Без сопоставления
+ *  покупка проваливается в общую ветку: 27 и 29 мая и 2 июня так продали
+ *  книгу за $9.99 и выдали за неё платный ТАРИФ. */
+function readGumroadMapping() {
+  const src = fs.readFileSync(WEBHOOK_TS, "utf8");
+  const i = src.indexOf("KNOWN_PERMALINK_REFERENCE");
+  if (i < 0) return null;
+  const blok = src.slice(i, src.indexOf("};", i));
+  const out = {};
+  for (const m of blok.matchAll(/^\s*([a-z0-9]+):\s*"([^"]+)"/gm)) out[m[1]] = m[2];
+  return out;
+}
+
+/** Товары с публичного профиля Gumroad: слаг, имя, цена, период. */
+function parseGumroad(html) {
+  const plain = html.replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+  const out = [];
+  const re = /"permalink":"([a-z0-9]+)","name":"([^"]*)"[\s\S]{0,600}?"price_cents":(\d+)[\s\S]{0,400}?"recurrence":(null|"[a-z]+")/g;
+  let m;
+  while ((m = re.exec(plain))) {
+    out.push({
+      slug: m[1],
+      name: m[2],
+      priceUsd: Number(m[3]) / 100,
+      recurrence: m[4] === "null" ? null : m[4].replace(/"/g, ""),
+    });
+  }
+  return out;
+}
+
+async function fetchGumroad() {
+  if (GUMROAD_HTML) return fs.readFileSync(path.resolve(GUMROAD_HTML), "utf8");
+  const r = await fetch(GUMROAD_STORE, { headers: { "user-agent": "Mozilla/5.0 (aevion-storefront-check)" } });
+  if (!r.ok) throw new Error("витрина Gumroad ответила " + r.status);
+  return await r.text();
 }
 
 async function fetchStore() {
@@ -209,7 +264,52 @@ function parseStore(html) {
       nahodki.push(`НЕ НА САЙТЕ: "${it.name}" ($${it.priceUsd}/${it.period}) продаётся в магазине, но в каталоге сайта его нет`);
   }
 
-  console.log(`storefront-vs-code: товаров на витрине ${store.length}, ссылок в коде ${Object.keys(nameMap).length}`);
+  // ── Вторая касса: Gumroad ────────────────────────────────────────────────
+  // Главное здесь не цены (их сверяет catalog-vs-checkout), а ПОЛНОТА
+  // СОПОСТАВЛЕНИЯ. Товар, которого нет в KNOWN_PERMALINK_REFERENCE, при покупке
+  // проваливается в общую ветку: 27 и 29 мая и 2 июня так продали книгу за
+  // $9.99 и выдали за неё платный ТАРИФ. Это единственная проверка, которая
+  // ловит такой товар ДО первой продажи.
+  let gumStore = null;
+  try {
+    gumStore = parseGumroad(await fetchGumroad());
+  } catch (e) {
+    console.error("storefront-vs-code: витрину Gumroad прочитать НЕ удалось — " + e.message);
+    process.exitCode = 2;
+    return;
+  }
+  if (gumStore.length === 0) {
+    console.error("storefront-vs-code: на витрине Gumroad не разобрано НИ ОДНОГО товара — разбор сломан");
+    process.exitCode = 2;
+    return;
+  }
+  const gumMap = readGumroadMapping();
+  if (gumMap === null) {
+    console.error("storefront-vs-code: соответствие слагов в gumroadWebhook.ts не найдено — проверять нечем");
+    process.exitCode = 2;
+    return;
+  }
+  const gumKatalog = readCatalogByGumSlug();
+
+  for (const it of gumStore) {
+    if (!gumMap[it.slug])
+      nahodki.push(`GUMROAD БЕЗ СОПОСТАВЛЕНИЯ: "${it.name}" (${it.slug}, $${it.priceUsd}) — покупка уйдёт в общую ветку`);
+  }
+  for (const slug of Object.keys(gumMap)) {
+    if (!gumStore.some((it) => it.slug === slug))
+      nahodki.push(`GUMROAD НЕТ ТОВАРА: код знает слаг ${slug}, на витрине его нет — ссылка «купить» мертва`);
+  }
+  for (const it of gumStore) {
+    const k = gumKatalog[it.slug];
+    if (!k) continue;
+    if (Math.abs(k.priceUsd - it.priceUsd) > 0.009)
+      nahodki.push(`GUMROAD ЦЕНА: "${it.name}" в кассе $${it.priceUsd}, на сайте позиция ${k.id} стоит $${k.priceUsd}`);
+    const povtor = it.recurrence ? "monthly" : "once";
+    if (k.billing !== "?" && k.billing !== povtor)
+      nahodki.push(`GUMROAD ПЕРИОД: "${it.name}" в кассе ${povtor}, на сайте позиция ${k.id} объявлена как ${k.billing}`);
+  }
+
+  console.log(`storefront-vs-code: товаров на витрине ${store.length}, ссылок в коде ${Object.keys(nameMap).length}; Gumroad: товаров ${gumStore.length}, сопоставлений ${Object.keys(gumMap).length}`);
 
   // БАЗОВАЯ ЛИНИЯ. Скрипт ставится в ежедневный набор, а сегодня он красный
   // по известной причине (Planet). Красный с рождения сторож перестают

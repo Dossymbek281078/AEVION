@@ -5117,6 +5117,8 @@ const ru: Record<string, string> = {
   "pricing.home.price.free": "Бесплатно",
   "pricing.home.price.onRequest": "По запросу",
   "pricing.home.tier.openingCheckout": "Открываем оплату...",
+  "pricing.home.tier.notSellable": "Оформить онлайн пока нельзя.",
+  "pricing.home.tier.notSellableCta": "Напишите нам — подключим вручную",
   "pricing.home.tier.selectProductAria": "Выберите продукт для Lite",
   "pricing.home.tier.selectProductOption": "— выберите продукт —",
   "pricing.integrations.category.automation": "Автоматизация",

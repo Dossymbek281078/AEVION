@@ -5076,6 +5076,8 @@ const kk: Record<string, string> = {
   "pricing.home.price.free": "Тегін",
   "pricing.home.price.onRequest": "Сұрау бойынша",
   "pricing.home.tier.openingCheckout": "Төлем ашылуда...",
+  "pricing.home.tier.notSellable": "Онлайн төлеу әзірге қолжетімсіз.",
+  "pricing.home.tier.notSellableCta": "Бізге жазыңыз — қолмен қосамыз",
   "pricing.home.tier.selectProductAria": "Lite үшін өнімді таңдаңыз",
   "pricing.home.tier.selectProductOption": "— өнімді таңдаңыз —",
   "pricing.integrations.category.automation": "Автоматтандыру",

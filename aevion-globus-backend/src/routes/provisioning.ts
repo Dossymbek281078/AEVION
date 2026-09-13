@@ -206,14 +206,50 @@ export function purgeSubscriptions(email: string): { removed: number; remaining:
   return { removed, remaining: kept.length };
 }
 
-export function countSubscriptions(): { ok: boolean; total: number } {
+export function countSubscriptions(): { ok: boolean; total: number; active: number } {
   try {
     const file = subsFile();
     // Файла нет — это ЧЕСТНЫЙ ноль: подписок ещё не было.
-    if (!existsSync(file)) return { ok: true, total: 0 };
+    if (!existsSync(file)) return { ok: true, total: 0, active: 0 };
     const content = readFileSync(file, "utf8");
-    const n = content.split(String.fromCharCode(10)).filter((l) => l.trim().length > 0).length;
-    return { ok: true, total: n };
+    const строки = content.split(String.fromCharCode(10)).filter((l) => l.trim().length > 0);
+    const n = строки.length;
+
+    // `total` — это ЗАПИСИ, и он таким и остаётся. Хранилище дописывающее и
+    // «последняя запись побеждает»: отмена подписки добавляет ВТОРУЮ строку
+    // на тот же адрес (`if (отзываем) writeSubscription(downgrade)` во всех
+    // трёх вебхуках), а продление — третью. То есть число строк никогда не
+    // было числом подписчиков, хотя ручка зовётся `subscriptions/count`.
+    //
+    // Менять смысл `total` НЕЛЬЗЯ, и это не осторожность ради осторожности:
+    // единственный его потребитель — `aevion-after-deploy.mjs` — сравнивает
+    // счёт ДО и ПОСЛЕ выкатки, чтобы поймать потерю хранилища. Исправь мы
+    // `total` на месте, первая же выкатка показала бы обвал 31 → 3 и подняла
+    // ложную тревогу о потерянных данных. Сторож, кричащий на починку,
+    // приучает себя не читать.
+    //
+    // Поэтому настоящее число встаёт РЯДОМ, отдельным полем.
+    const адреса = new Set<string>();
+    for (const line of строки) {
+      try {
+        const sub = JSON.parse(line) as { email?: unknown };
+        if (typeof sub.email === "string" && sub.email.trim()) адреса.add(sub.email.toLowerCase().trim());
+      } catch {
+        // битая строка — пропускаем, как и readSubscriptions
+      }
+    }
+    // Считаем через getActivePlan, а не своим проходом: правило «последняя
+    // запись побеждает И срок не истёк» уже живёт там и его знают ручка
+    // самообслуживания и гейт Конституции. Третья реализация того же правила
+    // разошлась бы с ними молча.
+    //
+    // Цена — чтение файла на каждый адрес. При нынешних десятках записей это
+    // доли миллисекунды; вырастет до тысяч — переписать на один проход,
+    // вынеся правило из getActivePlan в общую функцию, а не скопировав его.
+    let active = 0;
+    for (const email of адреса) if (getActivePlan(email).active) active++;
+
+    return { ok: true, total: n, active };
   } catch {
     // А СБОЙ ЧТЕНИЯ нулём быть не должен: это «не знаю».
     //
@@ -221,7 +257,7 @@ export function countSubscriptions(): { ok: boolean; total: number } {
     // Ноль при нечитаемом файле выглядит как «никто не купил» или «мы
     // потеряли всех подписчиков» — ложная тревога, отличить которую от
     // правды было нечем.
-    return { ok: false, total: 0 };
+    return { ok: false, total: 0, active: 0 };
   }
 }
 

@@ -195,8 +195,20 @@ function parseStore(html) {
   const tiers = readTierPrices();
   const store = parseStore(html);
 
-  if (store.length === 0) {
-    console.error("storefront-vs-code: на витрине не разобрано НИ ОДНОГО товара — разбор сломан, а не магазин пуст");
+  // НОЛЬ — не единственный признак сломанного разбора, и это важнее самого
+  // нуля. Поменяйся разметка витрины чуть-чуть, и регулярка разберёт, скажем,
+  // 12 товаров из 17: проверки молча охватят меньше, а вывод останется
+  // зелёным. Прогон бывает НЕПОЛНЫМ и выглядит успешным.
+  //
+  // Знаменатель у нас есть, и он независимый: справочник ссылок в коде.
+  // Товаров на витрине не может быть меньше, чем ссылок, которые мы же на
+  // неё и завели.
+  const nuzhno = Object.keys(nameMap).length;
+  if (store.length < nuzhno) {
+    console.error(
+      `storefront-vs-code: разобрано ${store.length} товаров при ${nuzhno} ссылках в коде — ` +
+        "разбор НЕПОЛОН, судить по нему нельзя"
+    );
     process.exitCode = 2;
     return;
   }
@@ -278,14 +290,19 @@ function parseStore(html) {
     process.exitCode = 2;
     return;
   }
-  if (gumStore.length === 0) {
-    console.error("storefront-vs-code: на витрине Gumroad не разобрано НИ ОДНОГО товара — разбор сломан");
-    process.exitCode = 2;
-    return;
-  }
   const gumMap = readGumroadMapping();
   if (gumMap === null) {
     console.error("storefront-vs-code: соответствие слагов в gumroadWebhook.ts не найдено — проверять нечем");
+    process.exitCode = 2;
+    return;
+  }
+  // Тот же знаменатель для второй кассы: сопоставлений в коде столько-то,
+  // товаров на витрине не может быть меньше.
+  if (gumStore.length < Object.keys(gumMap).length) {
+    console.error(
+      `storefront-vs-code: Gumroad разобрано ${gumStore.length} товаров при ` +
+        `${Object.keys(gumMap).length} сопоставлениях в коде — разбор НЕПОЛОН`
+    );
     process.exitCode = 2;
     return;
   }

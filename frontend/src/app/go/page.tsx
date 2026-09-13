@@ -257,8 +257,8 @@ export default async function GoPage({
           <h2 style={styles.h2}>Ближайший запуск</h2>
           <LinkCard
             href={keep("/apps")}
-            kicker="10 сентября · семь модулей"
-            title="DevHub, мультичат, QRight, QSign, бюро, биржа — открываем 10 сентября"
+            kicker="20 сентября · семь модулей"
+            title="DevHub, мультичат, QRight, QSign, бюро, биржа — открываем 20 сентября"
             note="Партия с движком, задача дня и тренер, который объясняет ход. Оставьте адрес — напишем в день запуска."
           />
         </section>

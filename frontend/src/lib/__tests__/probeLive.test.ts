@@ -113,7 +113,7 @@ describe("daysUntil — счёт по UTC-полуночи", () => {
 
   test("до даты — положительное число, в день — ноль", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-09-10T21:30:00Z"));
+    vi.setSystemTime(new Date("2026-09-20T21:30:00Z"));
     expect(daysUntil(2026, 8, 13)).toBe(3);
     vi.setSystemTime(new Date("2026-09-13T00:00:01Z"));
     expect(daysUntil(2026, 8, 13)).toBe(0);

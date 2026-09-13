@@ -12,7 +12,13 @@ const SITE = getSiteUrl();
 // быть другие потребители, здесь она просто больше не источник превью.
 
 export const metadata: Metadata = {
-  title: "AEVION QRight — author rights & royalty rail · права автора и роялти",
+  // 13.09.2026: absolute, потому что имя платформы уже стоит В САМОМ
+  // заголовке, а корневой шаблон добавлял второе. Замер на живом сайте:
+  // «... · AEVION» у 14 страниц из 14 в выборке. Вкладка и выдача поиска
+  // режут около шестидесяти знаков — второй бренд выталкивал оттуда
+  // нужные слова. Страницам БЕЗ имени в заголовке шаблон по-прежнему нужен,
+  // поэтому корневой файл не тронут.
+  title: { absolute: "AEVION QRight — author rights & royalty rail · права автора и роялти" },
   description:
     "QRight is the AEVION authorship layer: register a work, get a content-hashed receipt with HMAC + Ed25519 signatures, threshold-shard the secret across Quantum Shield. Verify offline; route royalties through Bank. Слой авторства AEVION: регистрация работы, подписанный чек с хешем содержимого, проверка без доверия серверу, роялти через Bank.",
   openGraph: {

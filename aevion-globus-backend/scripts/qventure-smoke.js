@@ -5,7 +5,30 @@
  *        BASE=https://aevion-production-a70c.up.railway.app node scripts/qventure-smoke.js
  */
 const BASE = (process.env.BASE || "http://127.0.0.1:4001").replace(/\/$/, "");
-let passed = 0, failed = 0;
+let passed = 0, failed = 0, skipped = 0;
+
+/**
+ * SKIP_AI=1 — не звать платную модель.
+ *
+ * Каждый POST /analyze запускает совет: четыре «линзы» плюс синтез, то есть
+ * ПЯТЬ обращений к провайдеру (в ответе живого анализа стоит live: true).
+ * Смоук делает четыре анализа за прогон — около двадцати платных вызовов, и
+ * в ежедневном наборе это повторялось бы каждый день молча.
+ *
+ * Приём не новый: constitution-prod-smoke.js живёт с SKIP_AI, и ежедневный
+ * workflow уже передаёт ему SKIP_AI=1. Здесь то же для второго смоука,
+ * который тратит деньги.
+ *
+ * Пропуск ОБЪЯВЛЯЕТСЯ счётчиком и отдельной строкой: молчаливый пропуск
+ * превратил бы проверку в зелёную пустоту — прогон «прошёл», а ядро модуля
+ * никто не трогал.
+ */
+const SKIP_AI = process.env.SKIP_AI === "1";
+
+function skip(label, why) {
+  console.log(`  [пропущено] ${label} — ${why}`);
+  skipped++;
+}
 
 function assert(label, cond, info = "") {
   if (cond) { console.log(`  ✓ ${label}`); passed++; }
@@ -45,6 +68,17 @@ async function run() {
   assert("missing name → 400", badName.status === 400, String(badName.status));
   const badDesc = await req("POST", "/api/qventure/analyze", { name: "Acme", description: "too short", stage: "seed" });
   assert("short description → 400", badDesc.status === 400, String(badDesc.status));
+
+  if (SKIP_AI) {
+    console.log("");
+    console.log("4. Analyze и всё, что от него зависит");
+    skip("POST /analyze и разбор совета", "SKIP_AI=1, вызовы модели платные");
+    console.log("");
+    console.log(`${failed === 0 ? "OK" : "СБОЙ"} QVenture smoke: ${passed} passed, ${failed} failed, ${skipped} skipped`);
+    console.log("   ЯДРО МОДУЛЯ НЕ ПРОВЕРЕНО — снимите SKIP_AI для полного прогона");
+    process.exitCode = failed === 0 ? 0 : 1;
+    return;
+  }
 
   console.log("\n4. Analyze (fintech, seed) — core engine + council");
   const a = await req("POST", "/api/qventure/analyze", {

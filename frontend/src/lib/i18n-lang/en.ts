@@ -5117,6 +5117,8 @@ const en: Record<string, string> = {
   "pricing.home.price.free": "Free",
   "pricing.home.price.onRequest": "On request",
   "pricing.home.tier.openingCheckout": "Opening checkout...",
+  "pricing.home.tier.notSellable": "Online checkout is not available yet.",
+  "pricing.home.tier.notSellableCta": "Contact us — we will set it up manually",
   "pricing.home.tier.selectProductAria": "Select a product for Lite",
   "pricing.home.tier.selectProductOption": "— select a product —",
   "pricing.integrations.category.automation": "Automation",

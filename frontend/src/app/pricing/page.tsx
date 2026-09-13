@@ -618,6 +618,18 @@ export default function PricingPage() {
                 {чемСпишется()}
               </div>
             </div>
+            {!продаётся("lite") && (
+              /* Неактивная кнопка без объяснения — тупик молча: человек
+                 видел серую кнопку и не знал ни почему, ни что делать.
+                 Касса на этом пути отвечает честным 503 с текстом «напишите
+                 нам», но только ПОСЛЕ нажатия; здесь та же мысль сказана до. */
+              <p style={{ fontSize: 11, lineHeight: 1.4, color: "#64748b", marginBottom: 8 }}>
+                {t("pricing.home.tier.notSellable")}{" "}
+                <Link href="/pricing/contact?tier=lite" style={{ color: "#0d9488", fontWeight: 700 }}>
+                  {t("pricing.home.tier.notSellableCta")}
+                </Link>
+              </p>
+            )}
             <button
               type="button"
               disabled={checkingOut === "lite" || !продаётся("lite")}
@@ -1099,6 +1111,19 @@ export default function PricingPage() {
                       <option key={m.id} value={m.id}>{m.name}</option>
                     ))}
                   </select>
+                )}
+                {!продаётся(tier.id) && (
+                  /* Неактивная кнопка без объяснения — тупик молча. Раньше
+                     человек видел просто серую кнопку и не знал ни почему,
+                     ни что делать. Касса на этом пути отвечает честным 503 с
+                     текстом «напишите нам», но только ПОСЛЕ нажатия; здесь
+                     та же мысль сказана до него. */
+                  <p style={{ fontSize: 11, lineHeight: 1.4, color: "#64748b", marginBottom: 8 }}>
+                    {t("pricing.home.tier.notSellable")}{" "}
+                    <Link href={`/pricing/contact?tier=${tier.id}`} style={{ color: "#0d9488", fontWeight: 700 }}>
+                      {t("pricing.home.tier.notSellableCta")}
+                    </Link>
+                  </p>
                 )}
                 <button
                   disabled={checkingOut === tier.id || !продаётся(tier.id)}

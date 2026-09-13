@@ -17,7 +17,13 @@
 ## TL;DR
 
 ```bash
-# 1. confirm current state (must say "enforced: 0" on dormant)
+# 1. confirm current state
+#    Замер 13.09.2026: на проде enforced = 6 (qfusionai, multichat-engine,
+#    healthai, qai, qlearn, qnews) — ровно список из шапки этого файла.
+#    Прежде здесь стояло «must say "enforced: 0" on dormant»: верно для
+#    июня, когда гейт был спящим, и противоречит шапке с 01.07. Идущий по
+#    шагам увидел бы 6 и решил, что состояние неверное, — поэтому строка
+#    и поправлена. Правило вместо числа: список должен совпадать с шапкой.
 node aevion-globus-backend/scripts/paywall-policy-smoke.js
 
 # 2. flip one module on Railway preview

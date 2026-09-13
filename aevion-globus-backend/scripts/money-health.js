@@ -26,6 +26,11 @@ const STEPS = [
     hint: "витрина, qmelanin, qrenew, longevity и остальные публичные страницы",
   },
   {
+    name: "Витрины магазинов совпадают с кодом",
+    script: "storefront-vs-code.js",
+    hint: "что продаётся в LemonSqueezy и Gumroad против справочников и каталога сайта"
+  },
+  {
     name: "Каталог совпадает с карточками оплаты",
     script: "catalog-vs-checkout.js",
     hint: "цена, периодичность списания, дисклеймер у демо-модулей",

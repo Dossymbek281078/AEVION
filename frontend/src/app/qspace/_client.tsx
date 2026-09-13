@@ -1021,7 +1021,7 @@ export default function QSpaceClient() {
 
 
   return (
-    <main style={S.page}>
+    <main style={S.page} className="qspace-main">
       {/*
         На узком экране колонки складываются, и 3D-вид уезжает ПОД каталог:
         человек жмёт «+ Диван» и не видит результата (замер: 0 px вида).
@@ -1033,6 +1033,23 @@ export default function QSpaceClient() {
         @media (max-width: 860px) {
           .qspace-canvas-wrap { order: -1; width: 100%; }
           .qspace-canvas-wrap > div { height: 42vh !important; }
+
+          /* Замерено 13.09.2026 на 390x844: до первого кадра 3D надо было
+             пролистать 1223 px — 1.4 экрана. Из них заголовок 602, загрузка
+             плана 245, заметка 53, переключатели слоёв 97. То есть человек
+             открывал 3D-модельер и полтора экрана не видел ни одной модели,
+             хотя демо-квартира уже построена и ждёт.
+
+             Порядок в разметке менять нельзя: на широком экране он верный
+             (сперва объяснение и загрузка, потом результат рядом с панелью).
+             Поэтому колонка и order — только на узком. Заголовок остаётся
+             первым: без него непонятно, куда попал. Секции и абзацы делят
+             один order и потому сохраняют свой порядок между собой. */
+          .qspace-main { display: flex; flex-direction: column; }
+          .qspace-main > header { order: 0; }
+          .qspace-body { order: 1; }
+          .qspace-main > section, .qspace-main > p { order: 2; }
+          .qspace-main > footer { order: 3; }
         }
       `}</style>
       <header style={S.header}>
@@ -1197,7 +1214,7 @@ export default function QSpaceClient() {
         ))}
       </section>
 
-      <div style={S.body}>
+      <div style={S.body} className="qspace-body">
         <aside style={S.panel}>
           {/* Высота нужна ВСЕМ слоям: по ней считается и штукатурка (черновая),
               и краска (чистовая). Первая редакция стояла внутри блока черновой

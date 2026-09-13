@@ -125,6 +125,38 @@ function mapStatus(raw: string | undefined, refunded: boolean | undefined): Paym
   }
 }
 
+/**
+ * Язык страницы оплаты: наш код языка -> код, который принимает касса.
+ *
+ * ⚠️ Списки НЕ совпадают, и это не мелочь. Замер 09.09.2026: у нас 11 языков
+ * интерфейса, касса принимает 8 из них. Не принимает `ar`, `kk` и `zh` —
+ * причём китайский у неё существует, но называется `zh-CN`.
+ *
+ * Неизвестный код НЕ передаём вовсе (возвращаем undefined), а не подставляем
+ * английский молча: пустое поле означает «решай сам», и покупатель увидит язык
+ * своего браузера — это лучше, чем чужой язык, навязанный нами. Передать же
+ * код, которого касса не знает, нельзя вообще: риск в том, что оплата
+ * ОТКАЖЕТ, а это дороже любого языка.
+ *
+ * Список сверен с документацией кассы 09.09.2026. Появится казахский — сюда
+ * добавляется одна строка.
+ */
+const ЯЗЫКИ_КАССЫ = new Set([
+  "bg", "hr", "cs", "da", "nl", "en", "et", "fil", "fi", "fr", "de", "el",
+  "hu", "id", "it", "ja", "ko", "lv", "lt", "ms", "mt", "pl", "pt", "ro",
+  "ru", "zh-CN", "sk", "sl", "es", "sv", "th", "tr", "vi",
+]);
+
+export function localeForCheckout(наш?: string | null): string | undefined {
+  if (!наш) return undefined;
+  const код = String(наш).trim().toLowerCase();
+  if (код === "zh") return "zh-CN";              // у кассы китайский только так
+  if (ЯЗЫКИ_КАССЫ.has(код)) return код;
+  const база = код.split("-")[0];                 // "ru-RU" -> "ru"
+  if (ЯЗЫКИ_КАССЫ.has(база)) return база;
+  return undefined;                               // ar, kk и прочие — молча не шлём
+}
+
 export const lemonSqueezyPaymentProvider: PaymentProvider = {
   id: "lemonsqueezy",
 
@@ -170,6 +202,8 @@ export const lemonSqueezyPaymentProvider: PaymentProvider = {
             custom: { bureauIntentId: intentId, reference: input.reference, ...(input.customData ?? {}) },
           },
           checkout_options: {
+            // без этого касса берёт язык магазина, а он у нас болгарский
+            ...(localeForCheckout(input.locale) ? { locale: localeForCheckout(input.locale) } : {}),
             embed: false,
             media: false,
             logo: true,

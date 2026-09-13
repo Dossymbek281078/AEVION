@@ -4,7 +4,7 @@ import path from "node:path";
 import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 
 /**
- * Страница `/devhub/launch` — та, по которой модуль выходит 10 сентября, и
+ * Страница `/devhub/launch` — та, по которой модуль выходит 20 сентября, и
  * ссылка из письма ведёт именно туда. Класс известен и уже закрыт у шахмат
  * (`cyberchess/__tests__/launchPageAfterLaunch.test.ts`): что должно стать
  * правдой в дату, обязано меняться ПО дате. У моей страницы такой проверки
@@ -31,7 +31,7 @@ function vidimyj(): string {
     .replace(/^\s*\/\/.*$/gm, " ");
 }
 
-const ZAPUSK = Date.UTC(2026, 8, 10); // 10 сентября, полночь по календарю Астаны
+const ZAPUSK = Date.UTC(2026, 8, 20); // 20 сентября, полночь по календарю Астаны
 
 describe("страница запуска говорит правду в день запуска", () => {
   test("прибор работает: текст страницы прочитан и непуст", () => {
@@ -40,18 +40,18 @@ describe("страница запуска говорит правду в ден�
   });
 
   test("накануне — «завтра», в день запуска — ноль, после — минус", () => {
-    // 9 сентября, день по Астане (UTC+5): 06:00 UTC = 11:00 местного.
-    expect(daysUntilLaunch(ZAPUSK, new Date(Date.UTC(2026, 8, 9, 6, 0)))).toBe(1);
-    // 10 сентября, 00:30 местного = 19:30 UTC девятого. Самый опасный час:
+    // 19 сентября, день по Астане (UTC+5): 06:00 UTC = 11:00 местного.
+    expect(daysUntilLaunch(ZAPUSK, new Date(Date.UTC(2026, 8, 19, 6, 0)))).toBe(1);
+    // 20 сентября, 00:30 местного = 19:30 UTC девятнадцатого. Самый опасный час:
     // человек уже пришёл по письму «сегодня открылись».
     expect(
-      daysUntilLaunch(ZAPUSK, new Date(Date.UTC(2026, 8, 9, 19, 30))),
+      daysUntilLaunch(ZAPUSK, new Date(Date.UTC(2026, 8, 19, 19, 30))),
       "в ночь запуска страница сказала бы «ещё день»",
     ).toBe(0);
-    // 10 сентября днём.
-    expect(daysUntilLaunch(ZAPUSK, new Date(Date.UTC(2026, 8, 10, 6, 0)))).toBe(0);
-    // 11-го — минус, а не застревание на нуле.
-    expect(daysUntilLaunch(ZAPUSK, new Date(Date.UTC(2026, 8, 11, 6, 0)))).toBeLessThan(0);
+    // 20 сентября днём.
+    expect(daysUntilLaunch(ZAPUSK, new Date(Date.UTC(2026, 8, 20, 6, 0)))).toBe(0);
+    // 21-го — минус, а не застревание на нуле.
+    expect(daysUntilLaunch(ZAPUSK, new Date(Date.UTC(2026, 8, 21, 6, 0)))).toBeLessThan(0);
   });
 
   test("обе ветки фразы есть на странице, а не только будущая", () => {
@@ -69,6 +69,6 @@ describe("страница запуска говорит правду в ден�
 
   test("дата берётся общим расчётом, а не своим", () => {
     expect(STRANICA, "своя арифметика разойдётся с соседними посадочными").toContain("daysUntilLaunch");
-    expect(STRANICA, "день запуска задан явно").toContain("Date.UTC(2026, 8, 10)");
+    expect(STRANICA, "день запуска задан явно").toContain("Date.UTC(2026, 8, 20)");
   });
 });

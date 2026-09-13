@@ -362,7 +362,7 @@ describe("неподтверждённая дата запуска не попа
   //
   // Обновлено 30.08.2026. Подтверждённых дат теперь ДВЕ, обе из документа
   // основателя (00-НАЧНИ-ОТСЮДА6-08-30-ПЛАН-даты-запуска-новые.md):
-  // 10 сентября — DevHub, мультичат, QRight, QSign, биржа, QSkyway, бюро и
+  // 20 сентября — DevHub, мультичат, QRight, QSign, биржа, QSkyway, бюро и
   // тестовые шахматы; 30 сентября — шахматы полностью. Обе живут на своих
   // посадочных, не на этих двух страницах, поэтому запрет остаётся в силе.
   //
@@ -406,11 +406,17 @@ describe("неподтверждённая дата запуска не попа
           ? await import("../multichat-engine/launch/page")
           : await import("../devhub/launch/page");
       const m = page.metadata as {
-        title?: string;
+        // Заголовок бывает ДВУХ форм: строка (тогда корневой шаблон добавит
+        // « · AEVION») и { absolute } — когда имя платформы уже стоит в самом
+        // заголовке и второе было бы удвоением. С 13.09.2026 у страниц запуска
+        // вторая форма, и проверка обязана понимать обе: иначе она считает
+        // заголовок отсутствующим и краснеет на исправной странице.
+        title?: string | { absolute?: string };
         description?: string;
         openGraph?: { title?: string; description?: string };
       };
-      const fields = [m.title, m.description, m.openGraph?.title, m.openGraph?.description];
+      const zagolovok = typeof m.title === "string" ? m.title : m.title?.absolute;
+      const fields = [zagolovok, m.description, m.openGraph?.title, m.openGraph?.description];
       // Проверка покрытия: поля обязаны быть непустыми, иначе тест зелен впустую.
       expect(fields.filter((f) => typeof f === "string" && f.length > 10)).toHaveLength(4);
       for (const f of fields) expect(MONTHS.test(String(f))).toBe(false);

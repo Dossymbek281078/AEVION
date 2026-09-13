@@ -26,6 +26,28 @@ import { rateLimit } from "../lib/rateLimit";
 
 const capture = makeServiceCapture("checkout");
 
+/**
+ * Язык, на котором говорить с покупателем на странице оплаты.
+ *
+ * Источника два, по убыванию надёжности: то, что явно прислала витрина (она
+ * знает, на какой странице человек нажал «Купить»), и заголовок его браузера.
+ * Своего кода НЕ подставляем: навязанный нами чужой язык хуже, чем язык
+ * браузера, который касса определит сама.
+ */
+function языкПокупателя(req: { body?: unknown; headers: Record<string, unknown> }): string | undefined {
+  const тело = (req.body ?? {}) as { locale?: unknown; lang?: unknown };
+  for (const кандидат of [тело.locale, тело.lang]) {
+    if (typeof кандидат === "string" && кандидат.trim()) return кандидат.trim();
+  }
+  const заголовок = req.headers["accept-language"];
+  if (typeof заголовок === "string" && заголовок.trim()) {
+    // "ru-RU,ru;q=0.9,en;q=0.8" -> "ru-RU"
+    const первый = заголовок.split(",")[0]?.split(";")[0]?.trim();
+    if (первый) return первый;
+  }
+  return undefined;
+}
+
 export const checkoutRouter = Router();
 
 /**
@@ -484,6 +506,11 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
         const intent = await lemonSqueezyPaymentProvider.createIntent({
           reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
           customData: собратьCustomData(liteModule, channel),
+          // Язык страницы оплаты. Берём его от САМОГО ПОКУПАТЕЛЯ, а не
+          // подставляем свой: сперва то, что прислала витрина, иначе язык его
+          // браузера. Без этого касса открывалась по-болгарски (замер 09.09).
+          // Неизвестный кассе код провайдер отбросит сам — см. localeForCheckout.
+          locale: языкПокупателя(req),
           // Модуль для адреса возврата: страница после оплаты обязана
           // назвать то, за что заплатили. Только при ОДНОМ купленном
           // модуле — на наборе называть один было бы враньём.

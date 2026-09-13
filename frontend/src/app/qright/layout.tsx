@@ -1,13 +1,24 @@
 import type { Metadata } from "next";
 import { getSiteUrl } from "@/lib/siteUrl";
-import { getApiBase } from "@/lib/apiBase";
 import { AutoTranslate } from "@/components/AutoTranslate";
 
 const SITE = getSiteUrl();
-const OG_IMAGE = `${getApiBase()}/api/qright/og.svg`;
+// 13.09.2026: явная ссылка на og.svg убрана. Она перебивала файловое
+// соглашение Next (opengraph-image.tsx рядом) и подставляла SVG с СЫРОГО
+// домена Railway, а SVG как превью не рисует ни одна крупная площадка —
+// ссылка уходила в мессенджер голой. Теперь картинку даёт соседний
+// opengraph-image.tsx: PNG 1200x630 с нашего домена, как у qsign и qskyway.
+// Ручка /api/<модуль>/og.svg на сервере жива и не тронута: у неё могут
+// быть другие потребители, здесь она просто больше не источник превью.
 
 export const metadata: Metadata = {
-  title: "AEVION QRight — author rights & royalty rail · права автора и роялти",
+  // 13.09.2026: absolute, потому что имя платформы уже стоит В САМОМ
+  // заголовке, а корневой шаблон добавлял второе. Замер на живом сайте:
+  // «... · AEVION» у 14 страниц из 14 в выборке. Вкладка и выдача поиска
+  // режут около шестидесяти знаков — второй бренд выталкивал оттуда
+  // нужные слова. Страницам БЕЗ имени в заголовке шаблон по-прежнему нужен,
+  // поэтому корневой файл не тронут.
+  title: { absolute: "AEVION QRight — author rights & royalty rail · права автора и роялти" },
   description:
     "QRight is the AEVION authorship layer: register a work, get a content-hashed receipt with HMAC + Ed25519 signatures, threshold-shard the secret across Quantum Shield. Verify offline; route royalties through Bank. Слой авторства AEVION: регистрация работы, подписанный чек с хешем содержимого, проверка без доверия серверу, роялти через Bank.",
   openGraph: {
@@ -16,13 +27,11 @@ export const metadata: Metadata = {
       "Register, sign, threshold-shard. Public verification page per object, embeddable badge, royalty rail to Bank.",
     type: "website",
     siteName: "AEVION",
-    images: [{ url: OG_IMAGE, width: 1200, height: 630, alt: "AEVION QRight" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "AEVION QRight",
     description: "Proof-of-authorship rail with Ed25519 + Shamir + Bank royalty payouts.",
-    images: [OG_IMAGE],
   },
   alternates: { canonical: "/qright" },
 };

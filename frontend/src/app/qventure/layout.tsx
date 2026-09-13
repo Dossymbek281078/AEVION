@@ -13,6 +13,17 @@ import type { Metadata } from "next";
 // маршрут, языка читателя здесь нет, а доводчик <title> не переводит.
 // EN-визитёр раньше видел чисто русскую вкладку у «fund-grade English tool».
 const TITLE = "QVenture — AI Deal Analyzer · ИИ-аналитик инвестиций";
+// 13.09.2026: у превью СВОЁ описание, короткое.
+//
+// Длинное DESCRIPTION ниже (399 знаков) уместно на странице и в поиске, но в
+// карточке ссылки Телеграм и X показывают около двухсот знаков — дальше
+// обрыв на полуслове. Замер живой страницы штатной проверкой пометил его
+// «Телеграм обрежет». Двуязычность сохранена намеренно: причина, по которой
+// титул двуязычный (строки выше), верна и для описания.
+const OG_DESCRIPTION =
+  "Проверка сделки за секунды: оценка 0–100 по восьми факторам и стратегия входа. " +
+  "Fund-grade deal screening: 0–100 score, entry strategy.";
+
 const DESCRIPTION =
   "Fund-grade deal screening in seconds: a transparent 0–100 score across eight factors, "
   + "a four-role AI council and a concrete entry strategy. "
@@ -35,7 +46,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/qventure" },
   openGraph: {
     title: TITLE,
-    description: DESCRIPTION,
+    description: OG_DESCRIPTION,
     type: "website",
     url: "/qventure",
     siteName: "AEVION",
@@ -43,7 +54,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: TITLE,
-    description: DESCRIPTION,
+    description: OG_DESCRIPTION,
   },
 };
 

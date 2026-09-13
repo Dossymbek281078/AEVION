@@ -45,6 +45,21 @@ function kartochka(mod: string): string | null {
   return existsSync(p) ? readFileSync(p, "utf8") : null;
 }
 
+/**
+ * Метаданные модуля живут либо в layout.tsx, либо в page.tsx (у qskyway — второе).
+ * Спрашивать надо ТО место, где они объявлены, иначе сторож проверит пустоту.
+ */
+function metadannye(mod: string): string {
+  for (const f of ["layout.tsx", "page.tsx"]) {
+    const p = join(APP, mod, f);
+    if (existsSync(p)) {
+      const t = readFileSync(p, "utf8");
+      if (t.includes("export const metadata")) return t;
+    }
+  }
+  return "";
+}
+
 function maket(mod: string): string {
   const p = join(APP, mod, "layout.tsx");
   return existsSync(p) ? readFileSync(p, "utf8") : "";
@@ -108,6 +123,37 @@ describe("у каждого модуля волны своя PNG-карточк�
       expect(m, "макет " + mod + " указывает og:image на .svg").not.toMatch(/images:[\s\S]{0,300}\.svg/);
       expect(m, "макет " + mod + " указывает og:image на сырой домен провайдера")
         .not.toMatch(/images:[\s\S]{0,300}(railway\.app|vercel\.app)/);
+    });
+  }
+});
+
+describe("подпись карточки на X — своя, а не корневая", () => {
+  // Картинка и подпись — РАЗНЫЕ поля, и чинятся порознь. 13.09.2026 у /devhub и
+  // /startup-exchange картинка уже стала своей, а блока twitter не было вовсе:
+  // они наследовали корневой и подписывались «AEVION — Trust OS» вместо имени
+  // модуля. Нашло соседнее окно зондом по живым страницам — сторож формы этого
+  // не видел, потому что смотрел только на картинку.
+  const KORNEVOJ = "AEVION — Trust OS";
+
+  it("прибор работает: корневой макет действительно объявляет общую подпись", () => {
+    const root = readFileSync(join(APP, "layout.tsx"), "utf8");
+    expect(root, "корневой twitter исчез — проверьте, что сторож всё ещё про то").toContain(KORNEVOJ);
+  });
+
+  for (const mod of VOLNA) {
+    it("модуль " + mod + ": свой блок twitter", () => {
+      const m = metadannye(mod);
+      expect(m.length, "у " + mod + " не найдены метаданные").toBeGreaterThan(100);
+      expect(m, "у " + mod + " нет своего twitter — на X подпишется корневым именем")
+        .toContain("twitter:");
+      // Поиск ПОЗИЦИОННЫЙ, а не регуляркой. Первая редакция собирала regexp из
+      // строки — `"[\s\S]"` в двойных кавычках JS превращается в `[sS]`, шаблон
+      // перестаёт совпадать с чем-либо, и сторож зеленеет на сломанном коде.
+      // Поймала мутация «подпись заменена корневой»: код 1, не поймана.
+      const nachalo = m.indexOf("twitter:");
+      const okno = nachalo >= 0 ? m.slice(nachalo, nachalo + 300) : "";
+      expect(okno, "у " + mod + " в своей карточке стоит корневое имя платформы")
+        .not.toContain(KORNEVOJ);
     });
   }
 });

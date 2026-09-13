@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { stripComments } from "./helpers/sourceCode";
 
 /**
  * Английские подписи в атрибутах на РУССКОЯЗЫЧНЫХ страницах не растут.
@@ -136,7 +137,23 @@ function schitat(): Record<string, number> {
     // Страница считается русскоязычной по подписи между тегами. Грубо, но
     // осознанно: без этого условия в выборку попадут английские страницы,
     // где английский атрибут ПРАВИЛЕН, и сторож стал бы машиной лжи.
-    if (!/>[^<]*[А-Яа-я]{4}/.test(src)) continue;
+    // 13.09.2026: вопрос «русская ли это страница» задаём БЕЗ КОММЕНТАРИЕВ.
+    //
+    // Иначе русское пояснение в коде переводит файл в охват, и наружу
+    // вылезают английские подписи, которые там ПРАВИЛЬНЫ. Поймано на себе:
+    // я дописал в bureau/layout.tsx и qright/layout.tsx по русскому
+    // комментарию — сторож показал «было 0, стало 2» у обоих, а нашёл он
+    // давние og:title и twitter:title. Страницы этих модулей английские
+    // (замер живого текста: кириллицы 6 % и 27 %), значит английская подпись
+    // там верна, и краснота была про мой комментарий, а не про экран.
+    //
+    // Считаем по-прежнему по ПОЛНОМУ исходнику: подпись, спрятанная в
+    // закомментированном коде, — это долг, который вернётся при раскомментировании.
+    const bezKommentariev = stripComments(src)
+      .split(String.fromCharCode(10))
+      .filter((l) => !l.trim().startsWith("//"))
+      .join(String.fromCharCode(10));
+    if (!/>[^<]*[А-Яа-я]{4}/.test(bezKommentariev)) continue;
     const n = angliyskie(src).length;
     if (n) itog[relative(KOREN, p).split("\\").join("/")] = n;
   }

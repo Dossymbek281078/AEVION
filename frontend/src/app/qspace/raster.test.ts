@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { findWallSegments } from "./raster";
 
 /** Рисует белое полотно и даёт кисть для чёрных прямоугольников. */
@@ -174,5 +176,77 @@ describe("порог яркости работает на СЕРОМ, как н�
     const y = r.segments.map((s) => Math.round((s.y1 + s.y2) / 2));
     expect(y.some((v) => Math.abs(v - 36) <= 3),
       "при пороге 200 светло-серая линия обязана распознаться").toBe(true);
+  });
+});
+
+/**
+ * Граница по наклону скана — закреплена ЧИСЛАМИ, а не обещанием.
+ *
+ * Фото плана никогда не выходит строго по осям, а разбор ищет горизонтальные и
+ * вертикальные прогоны тёмных точек. Замер 13.09.2026 на повёрнутом
+ * прямоугольнике:
+ *
+ *     0-2°    4 стены из 4 — верно
+ *     5°      8 отрезков вместо 4, «толщина» раздута с 3 до 13 точек
+ *     10°     линий не найдено, и это сказано прямым текстом
+ *
+ * Детектор наклона намеренно не написан: единственный доступный признак —
+ * раздутая толщина — неотличим от чертежа с настоящими толстыми стенами.
+ * Граница названа человеку словами на странице; тест держит её честной.
+ */
+describe("наклон скана: граница названа числами", () => {
+  function полотно2(w: number, h: number) {
+    const data = new Uint8ClampedArray(w * h * 4);
+    for (let i = 0; i < data.length; i += 4) {
+      data[i] = 255; data[i + 1] = 255; data[i + 2] = 255; data[i + 3] = 255;
+    }
+    const точка = (x: number, y: number) => {
+      const xi = Math.round(x), yi = Math.round(y);
+      if (xi < 0 || yi < 0 || xi >= w || yi >= h) return;
+      const i = (yi * w + xi) * 4;
+      data[i] = 0; data[i + 1] = 0; data[i + 2] = 0;
+    };
+    const линия = (x1: number, y1: number, x2: number, y2: number) => {
+      const n = Math.ceil(Math.hypot(x2 - x1, y2 - y1));
+      for (let k = 0; k <= n; k++) {
+        const t = k / n;
+        const x = x1 + (x2 - x1) * t, y = y1 + (y2 - y1) * t;
+        for (let d = -1; d <= 1; d++) { точка(x + d, y); точка(x, y + d); }
+      }
+    };
+    return { data, линия, w, h };
+  }
+  const повёрнутый = (угол: number) => {
+    const c = полотно2(400, 300);
+    const a = (угол * Math.PI) / 180;
+    const углы = ([[-150, -100], [150, -100], [150, 100], [-150, 100]] as const).map(
+      ([x, y]) => [200 + x * Math.cos(a) - y * Math.sin(a), 150 + x * Math.sin(a) + y * Math.cos(a)] as const,
+    );
+    for (let k = 0; k < 4; k++) {
+      const [x1, y1] = углы[k], [x2, y2] = углы[(k + 1) % 4];
+      c.линия(x1, y1, x2, y2);
+    }
+    return c;
+  };
+
+  it("ровный и почти ровный скан дают ровно четыре стены", () => {
+    for (const угол of [0, 1, 2]) {
+      const c = повёрнутый(угол);
+      const r = findWallSegments(c.data, c.w, c.h);
+      expect(r.segments.length, `наклон ${угол}° перестал давать 4 стены`).toBe(4);
+    }
+  });
+
+  it("сильный наклон НЕ выдаётся за успех и называет причину", () => {
+    const c = повёрнутый(10);
+    const r = findWallSegments(c.data, c.w, c.h);
+    expect(r.segments.length, "при 10° что-то «нашлось» — это была бы выдумка").toBe(0);
+    expect(r.warnings.join(" "), "причина не названа, человек не поймёт, что делать")
+      .toMatch(/под углом|от руки/);
+  });
+
+  it("страница честно предупреждает о наклоне — иначе граница есть, а человек о ней не знает", () => {
+    const client = readFileSync(path.join(__dirname, "_client.tsx"), "utf8");
+    expect(client, "на странице нет ни слова про выравнивание скана").toMatch(/выровнен/i);
   });
 });

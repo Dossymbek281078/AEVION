@@ -120,6 +120,10 @@ export default function QSpaceClient() {
   // смотрит на пустую рамку. Пустота неотличима от поломки, и ждать её не
   // станут. Поэтому состояние «сцена ещё строится» показывается словами.
   const [сценаГотова, setСценаГотова] = useState(false);
+  // Имя загруженного файла. Без него план назывался «Импорт DXF» у всех
+  // файлов подряд: человек, моделирующий три квартиры, не различал их ни на
+  // экране, ни в заголовке скачанной спецификации — а её несут в магазин.
+  const [имяФайла, setИмяФайла] = useState("");
   const [exporting, setExporting] = useState(false);
   // Состояние сохранения: человек должен ВИДЕТЬ, сохранена ли его работа.
   // Плашка сообщений о сохранении несёт ПРИЗНАК отказа, а не только текст.
@@ -691,6 +695,7 @@ export default function QSpaceClient() {
 
   const onFile = useCallback(async (f: File) => {
     setPdfPending(null);
+    setИмяФайла(f.name);
     // Предел размера — ПЕРЕД чтением, а не после. Дальше по всем трём веткам
     // файл читается целиком в память (`f.text()`, `f.arrayBuffer()`), и на
     // папке гигабайтных сканов вкладка просто повисла бы без единого слова.
@@ -738,7 +743,7 @@ export default function QSpaceClient() {
     const r = parseDxf(text);
     setWarnings(r.warnings);
     setUnitLabel(r.plan ? r.unitLabel : "");
-    if (r.plan) setPlan(r.plan);
+    if (r.plan) setPlan({ ...r.plan, name: f.name });
   }, []);
 
   /** Переписать высоту у всех стен плана — она хранится у стены, не глобально. */
@@ -754,11 +759,11 @@ export default function QSpaceClient() {
     const r = planFromPdfSegments(pdfPending, Number(pdfExtent));
     setWarnings(r.warnings);
     if (r.plan) {
-      setPlan(r.plan);
+      setPlan({ ...r.plan, name: имяФайла || r.plan.name });
       setUnitLabel(`масштаб задан вами: ${pdfExtent} м по большей стороне`);
       setPdfPending(null);
     }
-  }, [pdfPending, pdfExtent]);
+  }, [pdfPending, pdfExtent, имяФайла]);
 
   // Экспорт модели в GLB — двоичный glTF, открывается в Blender, SketchUp,
   // 3ds Max и просмотрщике Windows. Экспортируются только ВИДИМЫЕ слои:
@@ -1257,7 +1262,7 @@ export default function QSpaceClient() {
             setRasterUrl(null);
           }}
           onAccept={(p) => {
-            setPlan(p);
+            setPlan({ ...p, name: имяФайла || p.name });
             setUnitLabel("масштаб задан вами по картинке");
             setWarnings([
               "Модель построена по РАСПОЗНАННОЙ картинке и вашей правке — "

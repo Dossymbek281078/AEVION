@@ -28,6 +28,16 @@ export const metadata: Metadata = {
     locale: "ru_RU",
     type: "website",
   },
+  // 13.09.2026: без своего блока страница наследовала корневой twitter, и на X
+  // карточка подписывалась «AEVION — Trust OS» вместо имени модуля. Картинка
+  // при этом уже своя — расходились именно подписи. Корневой блок НЕ трогаем:
+  // для страниц без собственного описания он верен.
+  twitter: {
+    card: "summary_large_image",
+    title: "AEVION DevHub — приложение по описанию",
+    description:
+      "«Сделай мне…» вместо конструктора: код, страницы и публикация из одного описания.",
+  },
 };
 
 export default function DevHubLayout({ children }: { children: React.ReactNode }) {

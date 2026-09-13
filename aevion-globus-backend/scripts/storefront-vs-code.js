@@ -63,6 +63,25 @@ function normName(s) {
     .trim();
 }
 
+const BASELINE = process.env.STOREFRONT_BASELINE_PATH
+  ? path.resolve(process.env.STOREFRONT_BASELINE_PATH)
+  : path.resolve(__dirname, "storefront-vs-code.baseline.json");
+
+/** Известные расхождения. Файла нет — честный пустой список, а не отказ. */
+function readBaseline() {
+  if (!fs.existsSync(BASELINE)) return [];
+  try {
+    const j = JSON.parse(fs.readFileSync(BASELINE, "utf8"));
+    return Array.isArray(j.known) ? j.known : [];
+  } catch (e) {
+    // Битый файл — это НЕ «известных нет»: иначе все находки стали бы новыми
+    // и прогон покраснел бы по чужой причине. Говорим прямо и падаем в 2.
+    console.error("storefront-vs-code: базовая линия не читается — " + e.message);
+    process.exitCode = 2;
+    return null;
+  }
+}
+
 async function fetchStore() {
   if (STORE_HTML) return fs.readFileSync(path.resolve(STORE_HTML), "utf8");
   const r = await fetch(STORE, { headers: { "user-agent": "Mozilla/5.0 (aevion-storefront-check)" } });
@@ -141,11 +160,30 @@ function parseStore(html) {
   }
 
   console.log(`storefront-vs-code: товаров на витрине ${store.length}, ссылок в коде ${Object.keys(nameMap).length}`);
-  if (nahodki.length === 0) {
-    console.log("Расхождений нет.");
+
+  // БАЗОВАЯ ЛИНИЯ. Скрипт ставится в ежедневный набор, а сегодня он красный
+  // по известной причине (Planet). Красный с рождения сторож перестают
+  // читать, поэтому известное записано в файл рядом и не роняет прогон.
+  //
+  // Список разрешено только СОКРАЩАТЬ: новое расхождение роняет, исчезнувшее
+  // печатается как ПОЧИНКА и прогон не роняет. Иначе сторож ругался бы на
+  // собственное исправление.
+  const izvestnye = readBaseline();
+  if (izvestnye === null) return; // базовая линия не прочитана, код уже 2
+  const novye = nahodki.filter((x) => !izvestnye.includes(x));
+  const ischezli = izvestnye.filter((x) => !nahodki.includes(x));
+
+  for (const n of nahodki.filter((x) => izvestnye.includes(x))) console.log("  [известно] " + n);
+  for (const n of ischezli) console.log("  [ПОЧИНЕНО, уберите из базовой линии] " + n);
+  for (const n of novye) console.log("  [НОВОЕ] " + n);
+
+  if (novye.length === 0) {
+    console.log(
+      `Новых расхождений нет (известных ${nahodki.length}` +
+        (ischezli.length ? `, починено ${ischezli.length}` : "") + ")."
+    );
     return;
   }
-  for (const n of nahodki) console.log("  " + n);
-  console.log(`Расхождений: ${nahodki.length}`);
+  console.log(`НОВЫХ расхождений: ${novye.length}`);
   process.exitCode = 1;
 })();

@@ -32,6 +32,7 @@ const STORE_HTML = process.env.STOREFRONT_HTML_PATH || null;
 
 const VARIANTS_TS = path.resolve(__dirname, "../src/data/lemonSqueezyVariants.ts");
 const PRICING_TS = path.resolve(__dirname, "../src/data/pricing.ts");
+const CATALOG_TS = path.resolve(__dirname, "../../frontend/src/lib/products.ts");
 
 /** Названия товаров -> ссылка в коде. Разбор регуляркой: это TS, а скрипт на JS. */
 function readNameMap() {
@@ -42,6 +43,22 @@ function readNameMap() {
   let m;
   while ((m = re.exec(block))) map[normName(m[1])] = m[2];
   return map;
+}
+
+/** Позиции каталога сайта, у которых касса LemonSqueezy. Ключ — идентификатор
+ *  кассы: он одинаков у нас и в магазине, в отличие от названий. */
+function readCatalogByCheckoutId() {
+  const src = fs.readFileSync(CATALOG_TS, "utf8");
+  const starts = [...src.matchAll(/id:\s*"([^"]+)"/g)].map((m) => ({ pos: m.index, id: m[1] }));
+  const out = {};
+  for (let k = 0; k < starts.length; k++) {
+    const blok = src.slice(starts[k].pos, k + 1 < starts.length ? starts[k + 1].pos : src.length);
+    const ls = blok.match(/href:\s*LS\("([^"]+)"\)/);
+    const cena = blok.match(/priceUsd:\s*([\d.]+)/);
+    const bill = blok.match(/billing:\s*"(monthly|once)"/);
+    if (ls && cena) out[ls[1]] = { id: starts[k].id, priceUsd: parseFloat(cena[1]), billing: bill ? bill[1] : "?" };
+  }
+  return out;
 }
 
 /** Цены тарифов, как мы их ОБЪЯВЛЯЕМ. */
@@ -92,10 +109,19 @@ async function fetchStore() {
 function parseStore(html) {
   const flat = html.replace(/\s+/g, " ");
   const items = [];
-  const re = /<h2[^>]*>\s*([^<]+?)\s*<\/h2>\s*<p[^>]*>\s*\$([\d.,]+)\/(\w+)\s*<\/p>/g;
+  // Ссылка кассы идёт ПЕРЕД названием — берём её тем же проходом: это
+  // ТОЧНЫЙ ключ сверки с каталогом сайта. Сопоставлять по именам нельзя:
+  // `app_smeta` в коде против `smeta-trainer` в каталоге, и таких пар
+  // несколько — по именам сверка давала бы ложные срабатывания.
+  const re = /href="[^"]*\/checkout\/buy\/([0-9a-f-]{36})"[\s\S]*?<h2[^>]*>\s*([^<]+?)\s*<\/h2>\s*<p[^>]*>\s*\$([\d.,]+)\/(\w+)\s*<\/p>/g;
   let m;
   while ((m = re.exec(flat))) {
-    items.push({ name: normName(m[1]), priceUsd: parseFloat(m[2].replace(/,/g, "")), period: m[3].toLowerCase() });
+    items.push({
+      checkoutId: m[1],
+      name: normName(m[2]),
+      priceUsd: parseFloat(m[3].replace(/,/g, "")),
+      period: m[4].toLowerCase(),
+    });
   }
   return items;
 }
@@ -157,6 +183,30 @@ function parseStore(html) {
   //    его нечем: сопоставления нет, значит и тариф по нему не назначить.
   for (const it of store) {
     if (!nameMap[it.name]) nahodki.push(`НЕ ОПОЗНАН: на витрине "${it.name}" ($${it.priceUsd}/${it.period}), в коде такого названия нет`);
+  }
+
+  // 5. Цена в магазине против цены в каталоге САЙТА, по точному ключу —
+  //    идентификатору кассы. Тут допущений нет вовсе: один и тот же товар,
+  //    два источника. Замер 13.09: совпало 7 из 7 до цента.
+  const katalog = readCatalogByCheckoutId();
+  for (const it of store) {
+    const k = katalog[it.checkoutId];
+    if (!k) continue;
+    if (Math.abs(k.priceUsd - it.priceUsd) > 0.009)
+      nahodki.push(`КАТАЛОГ: "${it.name}" в магазине $${it.priceUsd}, на сайте позиция ${k.id} стоит $${k.priceUsd}`);
+    const ozhidaem = k.billing === "monthly" ? "month" : k.billing === "annual" ? "year" : null;
+    if (ozhidaem && it.period !== ozhidaem)
+      nahodki.push(`КАТАЛОГ: "${it.name}" в магазине списывает ${it.period}, на сайте позиция ${k.id} объявлена как ${k.billing}`);
+  }
+
+  // 6. Товар модуля продаётся в магазине, а на сайте не выставлен вовсе.
+  //    Тарифы сюда не попадают намеренно: их продаёт страница цен, а не
+  //    каталог, и их отсутствие в products.ts — норма.
+  for (const it of store) {
+    const ref = nameMap[it.name];
+    if (!ref || !ref.startsWith("app_")) continue;
+    if (!katalog[it.checkoutId])
+      nahodki.push(`НЕ НА САЙТЕ: "${it.name}" ($${it.priceUsd}/${it.period}) продаётся в магазине, но в каталоге сайта его нет`);
   }
 
   console.log(`storefront-vs-code: товаров на витрине ${store.length}, ссылок в коде ${Object.keys(nameMap).length}`);

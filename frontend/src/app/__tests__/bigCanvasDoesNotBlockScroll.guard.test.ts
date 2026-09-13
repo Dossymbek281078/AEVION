@@ -55,17 +55,19 @@ describe("широкий холст не съедает прокрутку ст�
   it("touchAction none только там, где это ручка перетаскивания", () => {
     const najdeno: string[] = [];
     for (const f of files) {
-      // Комментарии вырезаются, иначе сторож краснеет на ИСПРАВНОМ коде.
-      // 13.09.2026: qspace/_client.tsx поставил себе pan-y и рядом объяснил
-      // ПОЧЕМУ — процитировав «touchAction: "none"» как поведение библиотеки
-      // OrbitControls. Сторож прочитал цитату как признак и поднял тревогу на
-      // файле, который как раз дефект и закрыл. Текст О вещи неотличим от
-      // вещи для любого разбора по образцу.
-      const исходник = readFileSync(f, "utf8")
-        .split(/\r?\n/)
-        .filter((строка) => !/^\s*\/\//.test(строка))
+      // ДВЕ формы записи, и вторая чуть не осталась слепой зоной. В объекте
+      // стилей пишут `touchAction: "none"` (двоеточие), а на живом элементе —
+      // `canvas.style.touchAction = "none"` (равно). Соседнее окно поймало это
+      // у себя: их сторож знал только первую форму и потому был зелёным ровно
+      // там, где дефект и жил. Комментарии вырезаем: цитата формы в пояснении
+      // иначе краснит сторожа на исправном коде — этот класс у нас уже был.
+      const tekst = readFileSync(f, "utf8")
+        .split(String.fromCharCode(10))
+        .filter((l) => !l.trim().startsWith("//"))
         .join(String.fromCharCode(10));
-      if (!исходник.includes('touchAction: "none"')) continue;
+      const zapret =
+        tekst.includes('touchAction: "none"') || tekst.includes('touchAction = "none"');
+      if (!zapret) continue;
       najdeno.push(f.slice(APP.length + 1).split(String.fromCharCode(92)).join("/"));
     }
     const novye = najdeno.filter((f) => !RAZRESHENO.includes(f));

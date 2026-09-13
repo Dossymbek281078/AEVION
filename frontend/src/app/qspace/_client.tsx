@@ -91,6 +91,76 @@ interface PlacedItem {
   name: string;
 }
 
+/**
+ * Мебель, стоящая в сцене, — снимком.
+ *
+ * Читается ПОЛОЖЕНИЕ из three, а не из состояния: предметы двигают мышью, и
+ * состояние о перетаскивании не знает. Список известных предметов приходит
+ * снаружи — имя и предмет каталога живут в состоянии, а не в сцене.
+ */
+/**
+ * Слой сцены — в ноль, с освобождением геометрии.
+ *
+ * Общий помощник: чистят слои ДВА места — пересборка под новый план и
+ * загрузка сохранённого проекта. Второе долго обходилось без очистки, и это
+ * был тихий дефект: открыв проект поверх расставленного, человек получал в
+ * сцене призраков, которых нет в списке предметов, — выбрать их нельзя,
+ * удалить нельзя, а в смету они не попадают. Нашлось вычиткой правки, не
+ * прогоном: списку и сцене расходиться нечем, они не сверяются.
+ */
+function очиститьСлой(g: THREE.Group): void {
+  while (g.children.length) {
+    const c = g.children[0];
+    g.remove(c);
+    c.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.geometry) m.geometry.dispose();
+    });
+  }
+}
+
+function снятьМебель(
+  t: { gDecor: THREE.Group },
+  известные: PlacedItem[],
+): PlacedSnapshot[] {
+  const out: PlacedSnapshot[] = [];
+  for (const g of t.gDecor.children) {
+    const rec = известные.find((x) => x.uid === g.userData.uid);
+    if (!rec) continue;
+    out.push({ catalogId: rec.catalogId, x: g.position.x, z: g.position.z, rotY: g.rotation.y });
+  }
+  return out;
+}
+
+/**
+ * Мебель из снимка — обратно в сцену.
+ *
+ * Общий помощник для двух вызывающих: перестройки сцены (высота потолка,
+ * проёмы) и загрузки сохранённого проекта. Второй способ делать то же самое
+ * стал бы источником расхождений, а расходятся они молча.
+ *
+ * Предмет, исчезнувший из каталога, пропускается, а не роняет восстановление:
+ * вызывающий сравнивает длины и говорит человеку, сколько потерялось.
+ */
+function вернутьМебель(
+  t: { gDecor: THREE.Group; uidSeq: number },
+  список: PlacedSnapshot[],
+): PlacedItem[] {
+  const out: PlacedItem[] = [];
+  for (const it of список) {
+    const item = CATALOG.find((c) => c.id === it.catalogId);
+    if (!item) continue;
+    const g = item.build();
+    const uid = t.uidSeq++;
+    g.userData.uid = uid;
+    g.position.set(it.x, 0, it.z);
+    g.rotation.y = it.rotY;
+    t.gDecor.add(g);
+    out.push({ uid, catalogId: item.id, name: item.name });
+  }
+  return out;
+}
+
 export default function QSpaceClient() {
   const mountRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -190,6 +260,11 @@ export default function QSpaceClient() {
   // прямой зависимостью: пересчёт расстановки не должен тянуть за собой
   // заливку плана, она дорогая и меняется только вместе с планом.
   const roomsRef = useRef<ReturnType<typeof findRooms> | null>(null);
+  // Список предметов нужен эффекту ПЕРЕСБОРКИ сцены, у которого в
+  // зависимостях нет placed — и правильно: иначе сцена пересобиралась бы на
+  // каждую постановку предмета. Через ref он видит список настоящим, а не
+  // таким, каким тот был при первой отрисовке.
+  const placedRef = useRef<PlacedItem[]>([]);
 
   // ---- начальная сцена ----------------------------------------------------
   useEffect(() => {
@@ -346,19 +421,29 @@ export default function QSpaceClient() {
   // ---- перестройка сцены при смене плана ---------------------------------
   useEffect(() => {
     const t = three.current; if (!t) return;
-    const clear = (g: THREE.Group) => {
-      while (g.children.length) {
-        const c = g.children[0];
-        g.remove(c);
-        c.traverse((o) => {
-          const m = o as THREE.Mesh;
-          if (m.geometry) m.geometry.dispose();
-        });
-      }
-    };
-    clear(t.gRough); clear(t.gFinish); clear(t.gWalls); clear(t.gDecor);
-    setPlaced([]); setSelectedUid(null);
-
+    // 🔴 Мебель ПЕРЕЖИВАЕТ пересборку плана.
+    //
+    // План пересобирается целиком при смене высоты потолка и при постановке
+    // проёма, а сцена строится из плана — значит слой декора чистился вместе
+    // со стенами. Для НОВОГО чертежа это верно: мебель, расставленная в другой
+    // квартире, смысла не имеет. При той же геометрии терять нечего.
+    //
+    // Замер до починки: 14 предметов, человек называет свою высоту потолка —
+    // и раздел «Предметы в сцене» исчезает целиком, без единого слова. Модуль
+    // сам приглашает к этому действию («Поставьте свою»), то есть предлагает
+    // потерять работу.
+    //
+    // Снимок и возврат делаются ЗДЕСЬ ЖЕ, одним проходом, а не отдельным
+    // эффектом. Прежняя редакция снимала мебель в обработчике высоты и
+    // возвращала эффектом восстановления — то есть держалась на порядке
+    // объявления двух эффектов. Она не работала, и молча. Внутри одного
+    // прохода терять нечего, и чинятся заодно проёмы: они меняют план тем же
+    // способом и стирали мебель так же.
+    const сохранённые = снятьМебель(t, placedRef.current);
+    очиститьСлой(t.gRough); очиститьСлой(t.gFinish);
+    очиститьСлой(t.gWalls); очиститьСлой(t.gDecor);
+    const вернулись = вернутьМебель(t, сохранённые);
+    setPlaced(вернулись); setSelectedUid(null);
     const b = planBounds(plan);
     const cx = (b.minX + b.maxX) / 2;
     const cz = (b.minY + b.maxY) / 2;
@@ -540,18 +625,12 @@ export default function QSpaceClient() {
     if (!pendingRestore) return;
     const t = three.current;
     if (!t) return;
-    const added: PlacedItem[] = [];
-    for (const it of pendingRestore.placed) {
-      const item = CATALOG.find((c) => c.id === it.catalogId);
-      if (!item) continue; // предмет исчез из каталога — пропускаем, а не падаем
-      const g = item.build();
-      const uid = t.uidSeq++;
-      g.userData.uid = uid;
-      g.position.set(it.x, 0, it.z);
-      g.rotation.y = it.rotY;
-      t.gDecor.add(g);
-      added.push({ uid, catalogId: item.id, name: item.name });
-    }
+    // Слой чистится ПЕРЕД добавлением: сюда приходят с уже пересобранной
+    // сценой, в которой пересборка вернула ПРЕЖНЮЮ мебель. Без очистки
+    // загруженная легла бы поверх неё, и в сцене остались бы призраки —
+    // предметы, которых нет в списке.
+    очиститьСлой(t.gDecor);
+    const added = вернутьМебель(t, pendingRestore.placed);
     const lost = pendingRestore.placed.length - added.length;
     setPlaced(added);
     if (lost > 0) {
@@ -751,6 +830,21 @@ export default function QSpaceClient() {
     setHeightM(v);
     const h = Number(v);
     if (!Number.isFinite(h) || h < 2 || h > 5) return; // за этими краями не бывает
+
+    // 🔴 Смена высоты СТИРАЛА всю расставленную мебель, и молча.
+    //
+    // Высота хранится у стен, поэтому её правка меняет план — а на любую
+    // смену плана сцена пересобирается и слой декора очищается. Для НОВОГО
+    // чертежа это верно: мебель, расставленная в другой квартире, не имеет
+    // смысла. Здесь геометрия та же, и терять нечего.
+    //
+    // Замер до починки: 14 предметов в сцене, ввод своей высоты — и раздел
+    // «Предметы в сцене» исчезает целиком. Модуль сам приглашает к этому
+    // действию («Поставьте свою высоту»), то есть предлагает потерять работу.
+    //
+    // Мебель сохраняет сама перестройка сцены: снимок до очистки, возврат
+    // после (эффект на [plan]). Здесь достаточно поменять план — иначе
+    // сохранение делалось бы в двух местах, а расходятся они молча.
     setPlan((p) => ({ ...p, walls: p.walls.map((w) => ({ ...w, height: h })) }));
   }, []);
 
@@ -1072,6 +1166,7 @@ export default function QSpaceClient() {
   }, [placed, plan]);
 
   useEffect(() => { roomsRef.current = roomsInfo; }, [roomsInfo]);
+  useEffect(() => { placedRef.current = placed; }, [placed]);
   useEffect(() => { recheck(); }, [recheck, roomsInfo]);
   useEffect(() => { recheckRef.current = recheck; }, [recheck]);
 

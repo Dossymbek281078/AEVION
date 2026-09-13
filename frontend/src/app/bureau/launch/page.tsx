@@ -5,7 +5,7 @@ import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { PageTracking } from "@/components/PageTracking";
 
-// Посадочная запуска «патентного бюро» (QRight + QSign + IP Bureau) — 10 сентября.
+// Посадочная запуска «патентного бюро» (QRight + QSign + IP Bureau) — 20 сентября.
 //
 // ПОЧЕМУ ЗДЕСЬ НЕТ НИ ОДНОГО ЧИСЛА ПРО МАСШТАБ. Замер 18.08: в реестре QRight
 // 25 объектов, но без пробных остаётся пять, и те называются «1», «Музыка 1»,
@@ -27,11 +27,11 @@ import { PageTracking } from "@/components/PageTracking";
 // выкатки чужой починки. Второй раз обещать то же самое нельзя.
 
 export const metadata: Metadata = {
-  title: "AEVION IP Bureau — запуск 10 сентября",
+  title: "AEVION IP Bureau — запуск 20 сентября",
   description:
     "Зафиксировать авторство: хеш содержимого в реестре, криптографическая подпись, сертификат с публичной проверкой по ссылке.",
   openGraph: {
-    title: "AEVION IP Bureau — запуск 10 сентября",
+    title: "AEVION IP Bureau — запуск 20 сентября",
     description: "Реестр, подпись, сертификат с проверкой по ссылке. Ранний доступ по адресу почты.",
     // Контент посадочных русский, а корневой layout объявляет lang="en":
     // проверено запросом от имени поискового робота — в серверной разметке
@@ -68,7 +68,7 @@ export default async function BureauLaunchPage({
     probe("/api/qsign/v2/health"),
     probe("/api/bureau/health"),
   ]);
-  const left = daysUntilLaunch(Date.UTC(2026, 8, 10)); // 10 сентября 2026
+  const left = daysUntilLaunch(Date.UTC(2026, 8, 20)); // 20 сентября 2026
 
   // Метка канала — та же механика, что на посадочной шахмат: без неё после
   // запуска не ответить, какой источник привёл людей именно в бюро.
@@ -104,7 +104,7 @@ export default async function BureauLaunchPage({
           <p style={{ color: MUTED, fontSize: 15.5, lineHeight: 1.5, margin: "10px 0 0" }}>
             Хеш содержимого, криптографическая подпись и сертификат, который
             проверяется по ссылке без входа.
-            {left > 0 ? ` Открываем ${left === 1 ? "завтра" : `через ${left} дн.`} — 10 сентября.` : " Уже открыто."}
+            {left > 0 ? ` Открываем ${left === 1 ? "завтра" : `через ${left} дн.`} — 20 сентября.` : " Уже открыто."}
           </p>
         </header>
 

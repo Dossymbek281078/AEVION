@@ -190,7 +190,7 @@ export function buildWaitlistConfirmEmail(email: string, source?: string): Const
  */
 const LAUNCH_MODULES: Array<{ prefix: string; name: string; plan: string; page: string; planUtc: number }> = [
   { prefix: "cyberchess", name: "CyberChess", plan: "30 сентября", page: "https://aevion.app/cyberchess/launch", planUtc: Date.UTC(2026, 8, 30) },
-  { prefix: "bureau", name: "AEVION IP Bureau", plan: "10 сентября", page: "https://aevion.app/bureau/launch", planUtc: Date.UTC(2026, 8, 10) },
+  { prefix: "bureau", name: "AEVION IP Bureau", plan: "20 сентября", page: "https://aevion.app/bureau/launch", planUtc: Date.UTC(2026, 8, 20) },
   // ⚠️ 09.09.2026: строка была скопирована с соседней (bureau) и не поправлена —
   // подписчик со страницы QRight получал письмо про ЧУЖОЙ модуль («AEVION IP
   // Bureau») и ссылку на чужую страницу запуска, накануне собственного запуска
@@ -201,21 +201,21 @@ const LAUNCH_MODULES: Array<{ prefix: string; name: string; plan: string; page: 
   // (проверено 09.09: /qright 200, /qright/launch 404). Выдумывать адрес нельзя,
   // это увело бы человека из письма в 404. Тот же выбор и по той же причине
   // сделан у qskyway выше.
-  { prefix: "qright", name: "QRight", plan: "10 сентября", page: "https://aevion.app/qright", planUtc: Date.UTC(2026, 8, 10) },
-  { prefix: "devhub", name: "DevHub Studio", plan: "10 сентября", page: "https://aevion.app/devhub/launch", planUtc: Date.UTC(2026, 8, 10) },
-  { prefix: "multichat", name: "AEVION Multichat", plan: "10 сентября", page: "https://aevion.app/multichat-engine/launch", planUtc: Date.UTC(2026, 8, 10) },
+  { prefix: "qright", name: "QRight", plan: "20 сентября", page: "https://aevion.app/qright", planUtc: Date.UTC(2026, 8, 20) },
+  { prefix: "devhub", name: "DevHub Studio", plan: "20 сентября", page: "https://aevion.app/devhub/launch", planUtc: Date.UTC(2026, 8, 20) },
+  { prefix: "multichat", name: "AEVION Multichat", plan: "20 сентября", page: "https://aevion.app/multichat-engine/launch", planUtc: Date.UTC(2026, 8, 20) },
   // ⚠️ Добавлено 31.08.2026. Найдено сторожем воронки при сборке: подписчик со
   // страницы QSkyway получал ОБЩЕЕ письмо «платформа выпускает модули по
   // одному» вместо письма про свой модуль — а QSkyway в списке основателя на
-  // 10 сентября.
+  // 20 сентября.
   //
   // Адрес ведёт на страницу МОДУЛЯ, а не на /qskyway/launch: страницы запуска
   // у него нет. Выдумывать адрес нельзя — у нас это уже давало ложные находки
   // и повело бы человека из письма в 404. Страница модуля проверена: 200.
-  { prefix: "qskyway", name: "AEVION QSkyway", plan: "10 сентября", page: "https://aevion.app/qskyway", planUtc: Date.UTC(2026, 8, 10) },
+  { prefix: "qskyway", name: "AEVION QSkyway", plan: "20 сентября", page: "https://aevion.app/qskyway", planUtc: Date.UTC(2026, 8, 20) },
   // ⚠️ Ещё три модуля 31.08.2026, и нашлись они не глазами, а РАСХОЖДЕНИЕМ ДВУХ
   // НАШИХ СПИСКОВ. Сторож сверяет письмо с планом основателя; я добавил в письмо
-  // QSkyway, он покраснел — и при разборе выяснилось, что у плана на 10 сентября
+  // QSkyway, он покраснел — и при разборе выяснилось, что у плана на 20 сентября
   // ВОСЕМЬ модулей, а письмо знало пять. То есть подписчики трёх модулей,
   // выходящих в один день с остальными, получили бы общее письмо «платформа
   // выпускает модули по одному» — ровно в день выпуска своего.
@@ -227,9 +227,9 @@ const LAUNCH_MODULES: Array<{ prefix: string; name: string; plan: string; page: 
   // выдумывать адрес нельзя — человек из письма попал бы в 404. Все три
   // проверены на проде: 200, при контроле (заведомо несуществующий адрес)
   // ответ иной.
-  { prefix: "qsign", name: "AEVION QSign", plan: "10 сентября", page: "https://aevion.app/qsign", planUtc: Date.UTC(2026, 8, 10) },
-  { prefix: "startup", name: "Биржа стартапов", plan: "10 сентября", page: "https://aevion.app/startup-exchange", planUtc: Date.UTC(2026, 8, 10) },
-  { prefix: "qventure", name: "AEVION QVenture", plan: "10 сентября", page: "https://aevion.app/qventure", planUtc: Date.UTC(2026, 8, 10) },
+  { prefix: "qsign", name: "AEVION QSign", plan: "20 сентября", page: "https://aevion.app/qsign", planUtc: Date.UTC(2026, 8, 20) },
+  { prefix: "startup", name: "Биржа стартапов", plan: "20 сентября", page: "https://aevion.app/startup-exchange", planUtc: Date.UTC(2026, 8, 20) },
+  { prefix: "qventure", name: "AEVION QVenture", plan: "20 сентября", page: "https://aevion.app/qventure", planUtc: Date.UTC(2026, 8, 20) },
 ];
 
 /**
@@ -254,7 +254,7 @@ const LAUNCH_TZ_OFFSET_MS = 5 * 3_600_000;
 /**
  * Как назвать дату человеку — с учётом того, что день мог УЖЕ ПРОЙТИ.
  *
- * «Открываем по плану 10 сентября» становится ложью само по себе, без единой
+ * «Открываем по плану 20 сентября» становится ложью само по себе, без единой
  * правки кода: просто когда день наступит и пройдёт. Ни один тест этого не
  * ловит — сегодня текст верен.
  *

@@ -80,7 +80,7 @@ export const DISALLOWED_PATHS = [
  * `Disallow: /qr`, а по стандарту путь в Disallow — это ПРЕФИКС. То есть
  * запрет короткого входа канала закрывал от поисковика живые страницы
  * /qright, /qright/transparency, /qreal, /qrenew, /qrenew/report. QRight
- * выходит 10 сентября и продаётся.
+ * выходит 20 сентября и продаётся.
  *
  * Сплошной якорь ко ВСЕМУ списку ставить нельзя: у /auth/success,
  * /pricing/admin, /pricing/checkout/success и /pricing/checkout/cancel нет

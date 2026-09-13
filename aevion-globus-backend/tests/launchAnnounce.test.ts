@@ -38,6 +38,11 @@ describe("отбор получателей по метке источника",
     // Сравнение строгое по началу, а не подстрокой: иначе «devhub» притянул бы
     // любую метку, где это слово встретилось.
     expect(matchesModule("olddevhub", "devhub")).toBe(false);
+    // Префикс БЕЗ дефиса. Замер 13.09.2026: мутация `startsWith(slug)` вместо
+    // `startsWith(slug + "-")` проходила незамеченной — 49 тестов из 49 зелёные.
+    // Случай выше её не ловит: "olddevhub" не НАЧИНАЕТСЯ со слага, а содержит его.
+    // Цена в день запуска: подписчик метки "devhubteam" получил бы письмо devhub.
+    expect(matchesModule("devhubteam", "devhub")).toBe(false);
     expect(matchesModule("cyberchess", "devhub")).toBe(false);
     expect(matchesModule("multichat", "devhub")).toBe(false);
   });

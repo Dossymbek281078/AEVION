@@ -1,9 +1,14 @@
 import type { Metadata } from "next";
 import { getSiteUrl } from "@/lib/siteUrl";
-import { getApiBase } from "@/lib/apiBase";
 
 const SITE = getSiteUrl();
-const OG_IMAGE = `${getApiBase()}/api/bureau/og.svg`;
+// 13.09.2026: явная ссылка на og.svg убрана. Она перебивала файловое
+// соглашение Next (opengraph-image.tsx рядом) и подставляла SVG с СЫРОГО
+// домена Railway, а SVG как превью не рисует ни одна крупная площадка —
+// ссылка уходила в мессенджер голой. Теперь картинку даёт соседний
+// opengraph-image.tsx: PNG 1200x630 с нашего домена, как у qsign и qskyway.
+// Ручка /api/<модуль>/og.svg на сервере жива и не тронута: у неё могут
+// быть другие потребители, здесь она просто больше не источник превью.
 
 export const metadata: Metadata = {
   title: "AEVION Bureau — public verified registry · публичный реестр авторов",
@@ -15,13 +20,11 @@ export const metadata: Metadata = {
       "Verified creators, B2B organizations, notarized certificates. Embed badges, link from contracts, audit publicly.",
     type: "website",
     siteName: "AEVION",
-    images: [{ url: OG_IMAGE, width: 1200, height: 630, alt: "AEVION Bureau" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "AEVION Bureau",
     description: "Verified creator + org registry. Embed badges, audit publicly.",
-    images: [OG_IMAGE],
   },
   alternates: { canonical: "/bureau" },
 };

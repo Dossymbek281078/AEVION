@@ -66,7 +66,8 @@ function enforcedSet(body) {
       }
       if (Date.now() > deadline) {
         fail(`timeout — expected ${EXPECT_ENFORCED.join(",")} not enforced after ${WAIT_TIMEOUT_MS}ms`);
-        process.exit(1);
+        process.exitCode = 1;
+        return;
       }
       await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
     }
@@ -77,13 +78,15 @@ function enforcedSet(body) {
       pass(`/api/paywall/policy — 200`);
     } catch (e) {
       fail(`/api/paywall/policy — ${e.message}`);
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
   }
 
   if (!Array.isArray(body?.modules)) {
     fail(`response.modules is not an array (got ${typeof body?.modules})`);
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
   pass(`response.modules — array (${body.modules.length} entries)`);
 
@@ -136,8 +139,14 @@ function enforcedSet(body) {
 
   console.log("");
   console.log(`Result: ${passed} passed, ${failed} failed`);
-  process.exit(failed > 0 ? 1 : 0);
+  // НЕ process.exit(): на Windows node роняет процесс ассертом libuv
+  // (src/win/async.c:76) поверх ещё не закрытых соединений undici, и код
+  // выхода становится 127 — при пяти пройденных проверках из пяти.
+  // Чек-лист в docs/PAYWALL_FLIP_READINESS.md требует ровно «exit 0», то есть
+  // оператор увидел бы отказ на первом же шаге. Замер 13.09.2026: было 127,
+  // стало 0. Приём тот же, что у aevion-prod-status и соседей.
+  process.exitCode = failed > 0 ? 1 : 0;
 })().catch((e) => {
   console.error("Crash:", e);
-  process.exit(2);
+  process.exitCode = 2;
 });

@@ -11,7 +11,13 @@ const SITE = getSiteUrl();
 // быть другие потребители, здесь она просто больше не источник превью.
 
 export const metadata: Metadata = {
-  title: "AEVION Bureau — public verified registry · публичный реестр авторов",
+  // 13.09.2026: absolute, потому что имя платформы уже стоит В САМОМ
+  // заголовке, а корневой шаблон добавлял второе. Замер на живом сайте:
+  // «... · AEVION» у 14 страниц из 14 в выборке. Вкладка и выдача поиска
+  // режут около шестидесяти знаков — второй бренд выталкивал оттуда
+  // нужные слова. Страницам БЕЗ имени в заголовке шаблон по-прежнему нужен,
+  // поэтому корневой файл не тронут.
+  title: { absolute: "AEVION Bureau — public verified registry · публичный реестр авторов" },
   description:
     "AEVION Bureau is the public registry of verified authors, organizations and notarized certificates. KYC + payment + Planet quorum stamp every entry; embed badges on your portfolio or contracts. Публичный реестр проверенных авторов и организаций: заверенные сертификаты, значки для портфолио и договоров.",
   openGraph: {

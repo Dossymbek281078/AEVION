@@ -9,7 +9,13 @@ const SITE = getSiteUrl();
 // app/opengraph-image.tsx. Metadata text is the important SEO win here — the
 // page was previously a bare "use client" route with no title/description.
 export const metadata: Metadata = {
-  title: "AEVION QSign — canonical-JSON signing · подпись и проверка документов",
+  // 13.09.2026: absolute, потому что имя платформы уже стоит В САМОМ
+  // заголовке, а корневой шаблон добавлял второе. Замер на живом сайте:
+  // «... · AEVION» у 14 страниц из 14 в выборке. Вкладка и выдача поиска
+  // режут около шестидесяти знаков — второй бренд выталкивал оттуда
+  // нужные слова. Страницам БЕЗ имени в заголовке шаблон по-прежнему нужен,
+  // поэтому корневой файл не тронут.
+  title: { absolute: "AEVION QSign — canonical-JSON signing · подпись и проверка документов" },
   description:
     "QSign signs any JSON payload over an RFC 8785-canonical form: deterministic key ordering, HMAC and Ed25519 signatures, offline verification. The signing primitive under QRight receipts, Bureau certificates and Planet attestations. Подпись любого JSON-документа и проверка офлайн — тот же примитив, что заверяет чеки QRight и сертификаты Bureau.",
   openGraph: {

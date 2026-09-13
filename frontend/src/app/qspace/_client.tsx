@@ -1117,7 +1117,15 @@ export default function QSpaceClient() {
         <button type="button" style={S.btn} onClick={downloadPlanSvg}>
           Чертёж сверху (SVG, для печати)
         </button>
-        <button type="button" style={S.btn} onClick={screenshot}>Скачать кадр (PNG)</button>
+        {/* disabled, а не тихий возврат: кадр рисуется ИЗ сцены, и без неё
+            нажатие не делало ничего — ни файла, ни слова. Недоступная кнопка
+            с объяснением честнее кнопки, нажимающейся в тишину. */}
+        <button
+          type="button" style={S.btn} onClick={screenshot} disabled={!webglOk}
+          title={webglOk ? undefined : "Кадр рисуется из 3D-сцены, а её у этого браузера нет"}
+        >
+          Скачать кадр (PNG)
+        </button>
         <button type="button" style={S.btn} onClick={saveProjectFile}>
           Сохранить проект (файл)
         </button>
@@ -1142,7 +1150,11 @@ export default function QSpaceClient() {
         >
           Начать заново
         </button>
-        <button type="button" style={S.btn} onClick={exportGlb} disabled={exporting}>
+        <button
+          type="button" style={S.btn} onClick={exportGlb}
+          disabled={exporting || !webglOk}
+          title={webglOk ? undefined : "Модель собирается из 3D-сцены, а её у этого браузера нет"}
+        >
           {exporting ? "Собираю GLB…" : "Скачать модель (GLB)"}
         </button>
         <span style={S.dims}>
@@ -1417,7 +1429,11 @@ export default function QSpaceClient() {
               <h3 style={S.h3}>{grp}</h3>
               <div style={S.catalogGrid}>
                 {CATALOG.filter((c) => c.group === grp).map((c) => (
-                  <button key={c.id} type="button" style={S.catBtn} onClick={() => addItem(c)}>
+                  <button
+                    key={c.id} type="button" style={S.catBtn}
+                    onClick={() => addItem(c)} disabled={!webglOk}
+                    title={webglOk ? undefined : "Предмет ставится в 3D-сцену, а её у этого браузера нет"}
+                  >
                     + {c.name}
                   </button>
                 ))}

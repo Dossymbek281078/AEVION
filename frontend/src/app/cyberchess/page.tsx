@@ -603,9 +603,12 @@ const ACH_LABELS:Record<string,string>={
 };
 
 /* ═══ Resume snapshot — autosave in-progress game ═══ */
-type ResumeSnap={v:1;fen:string;hist:string[];fenHist:string[];pCol:"w"|"b";aiI:number;tcI:number;useCustom:boolean;customMin:number;customInc:number;timeP:number;timeA:number;capW:string[];capB:string[];ts:number};
+type ResumeSnap={v:1|2;fen:string;hist:string[];fenHist:string[];pCol:"w"|"b";aiI:number;tcI:number;useCustom:boolean;customMin:number;customInc:number;timeP:number;timeA:number;capW:string[];capB:string[];ts:number;
+  // v2 (08→09.09.2026): вариант-состояние, живущее ВНЕ fen (счётчики/пул/кубик/армии).
+  // Опциональны: снимок v1 (только standard) грузится с variant=standard и пустыми значениями.
+  variant?:VariantId;variantStartFen?:string;variantArmies?:{white:ArmySlot[];black:ArmySlot[]}|null;diceFace?:1|2|3|4|5|6;dicePieceType?:string;diceLabel?:string;checksByWhite?:number;checksByBlack?:number;dropPool?:DropPool};
 const RSK="aevion_chess_resume_v1";
-function loadResume():ResumeSnap|null{try{const s=localStorage.getItem(RSK);if(!s)return null;const r=JSON.parse(s);if(r?.v!==1||!Array.isArray(r.hist)||!r.fen)return null;return r as ResumeSnap}catch{return null}}
+function loadResume():ResumeSnap|null{try{const s=localStorage.getItem(RSK);if(!s)return null;const r=JSON.parse(s);if((r?.v!==1&&r?.v!==2)||!Array.isArray(r.hist)||!r.fen)return null;return r as ResumeSnap}catch{return null}}
 function saveResume(s:ResumeSnap){try{localStorage.setItem(RSK,JSON.stringify(s))}catch{}}
 function clearResume(){try{localStorage.removeItem(RSK)}catch{}}
 
@@ -4513,17 +4516,19 @@ export default function CyberChessPage(){
 
   /* ── Autosave in-progress game ── */
   useEffect(()=>{
-    // Только СТАНДАРТ. ResumeSnap не хранит вариант и вариант-специфичное
-    // состояние (армии asymmetric, пул дропов crazyhouse/powerdrop, счётчики
-    // three-check, кубик diceblade), поэтому возобновление вариантной партии
-    // молча играло бы по СТАНДАРТУ из той позиции — правила варианта пропадали.
-    // Лучше не предлагать resume варианту, чем воскресить его с чужими
-    // правилами. Полное восстановление вариантов — отдельная задача (нужно
-    // расширить ResumeSnap и resumeGame). 08.09.2026.
-    if(tab!=="play"||!on||over||setup||hist.length===0||variant!=="standard")return;
-    const snap:ResumeSnap={v:1,fen:game.fen(),hist,fenHist,pCol,aiI,tcI,useCustom,customMin,customInc,timeP:Math.round(pT.getSeconds()),timeA:Math.round(aT.getSeconds()),capW,capB,ts:Date.now()};
+    // Автосейв ЛЮБОЙ незавершённой партии, включая варианты. ResumeSnap v2
+    // хранит вариант-состояние вне fen (variant, стартовый fen, армии asymmetric,
+    // пул дропов crazyhouse/powerdrop, счётчики three-check, кубик diceblade), а
+    // resumeGame его восстанавливает и гасит ref-guard'ы вариант-эффектов, чтобы
+    // они не пересчитали последний ход поверх восстановленного. 09.09.2026.
+    // (Прежде здесь стоял гард variant!=="standard" — вариантные партии не
+    // сохранялись; полное восстановление сделано, гард снят.)
+    if(tab!=="play"||!on||over||setup||hist.length===0)return;
+    const snap:ResumeSnap={v:2,fen:game.fen(),hist,fenHist,pCol,aiI,tcI,useCustom,customMin,customInc,timeP:Math.round(pT.getSeconds()),timeA:Math.round(aT.getSeconds()),capW,capB,ts:Date.now(),variant,variantStartFen,variantArmies,diceFace,dicePieceType,diceLabel,checksByWhite,checksByBlack,dropPool};
     saveResume(snap);
-  },[bk,tab,on,over,setup,hist.length,variant]);
+    // deps включают вариант-состояние: checks/dropPool/dice меняются в своих
+    // эффектах БЕЗ бампа bk, и без них snap записал бы значение на ход назад.
+  },[bk,tab,on,over,setup,hist.length,variant,checksByWhite,checksByBlack,dropPool,diceFace,dicePieceType,diceLabel,variantArmies,variantStartFen]);
   useEffect(()=>{if(over)clearResume()},[over]);
 
   /* ── Auto post-game analysis in Play/Coach for instant accuracy card ── */
@@ -5202,7 +5207,21 @@ export default function CyberChessPage(){
       sTab("play");
       sTcI(s.tcI);sUseCustom(s.useCustom);sCustomMin(s.customMin);sCustomInc(s.customInc);
       sPCol(s.pCol);sAiI((chessy.owned.master_ai||isPro)?s.aiI:Math.min(s.aiI,4));sFlip(s.pCol==="b");
-      const g=new Chess(s.fen);setGame(g);sBk(k=>k+1);
+      // v2: вариант и его состояние — ДО setGame (движок/логика читают variant),
+      // затем гасим ref-guard'ы вариант-эффектов на НОВЫЙ bk, иначе они пересчитают
+      // ПОСЛЕДНИЙ ход поверх восстановленного (двойной шах в Three-Check, повторное
+      // взятие в пул Power Drop, повторный взрыв/подкрепление). Разбор:
+      // [[project_cyberchess_variant_resume_scope]].
+      sVariant(s.variant??"standard");
+      sVariantStartFen(s.variantStartFen??"");
+      sVariantArmies(s.variantArmies??null);
+      sChecksByWhite(s.checksByWhite??0);sChecksByBlack(s.checksByBlack??0);
+      sDropPool(s.dropPool??EMPTY_POOL);
+      sDiceFace(s.diceFace??6);sDicePieceType(s.dicePieceType??"");sDiceLabel(s.diceLabel??"Любая фигура");
+      const g=new Chess(s.fen);setGame(g);
+      // nb=k+1 в функциональном апдейтере — точный новый bk (замыкание bk могло
+      // отстать). Идемпотентно: StrictMode-повтор апдейтера даёт то же nb.
+      sBk(k=>{const nb=k+1;lastCheckBkRef.current=nb;lastAtomicBkRef.current=nb;lastCaptureBkRef.current=nb;reinfLastMoveRef.current=s.hist.length;return nb;});
       sHist(s.hist);sFenHist(s.fenHist);sCapW(s.capW);sCapB(s.capB);
       sLm(null);sSel(null);sVm(new Set());sPromo(null);sThink(false);sPms([]);sPmSel(null);
       sOver(null);sOn(true);sSetup(false);sEvalCp(0);sEvalMate(0);sAnalysis([]);sShowAnal(false);

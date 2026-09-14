@@ -11,7 +11,7 @@ import WaitlistCapture from "@/components/WaitlistCapture";
 import { competitorsFor } from "@/lib/competitors";
 import type { DataQuality } from "@/lib/dataQuality";
 import type { RegulatorySource } from "@/lib/regulatorySource";
-import { resolveStartCity } from "./startCity";
+import { resolveStartCity, DEFAULT_CITY } from "./startCity";
 import { isSmokeSlot, countSmokeSlots } from "./slotSource";
 // Цена спорной высоты для ЭТОГО рейса. Отдельным файлом, потому что на живых
 // городах блок не появляется (0 из 42 пар Астаны) — увидеть его можно только
@@ -92,7 +92,7 @@ interface JustDoc {
   obstacleSegments?: number; measuredObstacleSegments?: number;
   /** где страховочный запас за неуверенность съеден полом коридора — под подписью */
   blindHeight?: { guessedSegments: number; inertPenaltySegments: number; clearedUpToM: number };
-  airspace: null | { authority: string; source: string; regime: string; effective: string; contentHash: string | null; compliant: boolean | null; exceedingSegments: number | null; maxExceedanceM: number | null; lowestCeilingM: number | null };
+  airspace: null | { authority: string; source: string; regime: string; effective: string; currentEdition?: { publishedEffective: string | null; ceilingsMatch: boolean | null; checkedAt: string | null } | null; contentHash: string | null; compliant: boolean | null; exceedingSegments: number | null; maxExceedanceM: number | null; lowestCeilingM: number | null };
 }
 interface JustAttestation { alg: string; contentHash: string; signature: string; publicKey: string; ephemeral: boolean }
 interface Cell { c: number; r: number; }
@@ -234,7 +234,7 @@ export default function QSkywayClient() {
   const mapRef = useRef<HTMLCanvasElement | null>(null);
   const profRef = useRef<HTMLCanvasElement | null>(null);
   const cityRef = useRef<CityData | null>(null);
-  const cityIdRef = useRef<string>("astana");
+  const cityIdRef = useRef<string>(DEFAULT_CITY);
   const taxisRef = useRef<Taxi[]>([]);
   const heroRef = useRef<Taxi | null>(null);
   const rafRef = useRef<number>(0);
@@ -251,7 +251,7 @@ export default function QSkywayClient() {
   const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
   const [coverage, setCoverage] = useState<{ withFeed: number; withRegulatoryLayer?: number; total: number; missing: string[]; withCeilings?: number; withPermissionRegime?: number } | null>(null);
   const [impact, setImpact] = useState<{ compliant: number; pairs: number; compliantPct: number; strictRoutable: number; padsNeedingAtc: number; authority: string; note: string } | null>(null);
-  const [cityId, setCityId] = useState<string>("astana");
+  const [cityId, setCityId] = useState<string>(DEFAULT_CITY);
   const [meta, setMeta] = useState<{ wind: string; windSource: "metar" | "illustrative"; signed: string; nofly: number | null; dq?: DataQuality; suspect: { i: number; h: number; why?: string; times?: number; was?: number; levels?: number }[]; substituted: { i: number; type: string; from: number; n: number }[]; heightReview: { index: number; taggedM: number; publishedM: number; publishedSource: string; verdict: string; note: string }[]; airspace?: AirspaceSummary } | null>(null);
   // Strict mode asks the backend to treat the published ceiling as a hard
   // constraint instead of an advisory verdict. Off by default: the honest
@@ -1438,6 +1438,21 @@ export default function QSkywayClient() {
                           <div style={{ marginTop: 3, color: justification.doc.airspace.compliant ? "#2dd4bf" : "#fbbf24" }}>
                             {justification.doc.airspace.authority} · {justification.doc.airspace.effective} ·{" "}
                             {justification.doc.airspace.compliant ? t("qskyway.just.within") : t("qskyway.just.above")}
+                          </div>
+                        )}
+                        {/* Вердикт сверки берётся ИЗ ДОКУМЕНТА, а не из текущего
+                            состояния страницы: на экране должно стоять то, что
+                            лежит в подписанном файле. Нет сверки (null или
+                            документ старого образца) — не пишем ничего, а не
+                            «актуально». */}
+                        {justification.doc.airspace?.currentEdition && (
+                          <div style={{ marginTop: 3, color: justification.doc.airspace.currentEdition.ceilingsMatch === false ? "#fbbf24" : "#5f7086" }}>
+                            {justification.doc.airspace.currentEdition.ceilingsMatch === false
+                              ? t("reg.tip.drift")
+                              : justification.doc.airspace.currentEdition.publishedEffective &&
+                                  justification.doc.airspace.currentEdition.publishedEffective !== justification.doc.airspace.effective
+                                ? t("reg.tip.reissued", { edition: justification.doc.airspace.currentEdition.publishedEffective })
+                                : t("reg.tip.fresh")}
                           </div>
                         )}
                         {/* Качество высотных данных — часть обоснования, а не

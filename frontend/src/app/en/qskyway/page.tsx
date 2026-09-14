@@ -51,7 +51,7 @@ export default async function EnQskywayPage({
           of the box, with a switcher in the header for Russian and Kazakh.
         </p>
         <div style={styles.row}>
-          <a href={keepChannel("/qskyway", channel)} style={styles.cta}>
+          <a href={keepChannel("/qskyway?app=1", channel)} style={styles.cta}>
             Open QSkyway
           </a>
           <a href={keepChannel("/pricing", channel)} style={styles.ctaGhost}>

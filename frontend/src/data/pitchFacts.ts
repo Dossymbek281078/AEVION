@@ -36,9 +36,9 @@
  * счётчики, подписанные этим эндпоинтом, должны падать сюда, а не в
  * MODULE_NODES (тот на единицу меньше — он считает продуктовые узлы карты).
  */
-export const REGISTRY_ENTRIES = 41;
+export const REGISTRY_ENTRIES = 42;
 /** Public "product nodes on the Globus map" = registry entries − the globus map shell. */
-export const MODULE_NODES = 40;
+export const MODULE_NODES = 41;
 /** Registry entries with status:"live". The remaining 5 are status:"mvp". */
 export const LIVE_MODULES = 36;
 /** Honest qualitative framing (from the #484 objectivity audit): deployed ≠ feature-complete. */

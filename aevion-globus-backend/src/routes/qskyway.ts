@@ -83,7 +83,12 @@ const DISCLAIMER =
 
 // ── city registry ──────────────────────────────────────────────────────────
 const CITIES: Record<string, CityData> = { astana: CITY, nyc: CITY_NYC, tokyo: CITY_TOKYO };
-const DEFAULT_CITY = "astana";
+// Нью-Йорк по умолчанию — решение основателя 14.09.2026. Только у него есть
+// издание ограничений FAA, доказательство даты и запись в реестре QRight; над
+// твином Астаны — запретная зона UAP28. Сторож причины:
+// tests/qskywayDefaultCityHasProofChain.test.ts. Фронт держит ту же константу в
+// app/qskyway/startCity.ts — меняя здесь, меняйте и там.
+const DEFAULT_CITY = "nyc";
 const resolveCity = (id: unknown): { id: string; city: CityData } | null => {
   // hasOwnProperty.call, а не `in`: `in` идёт по цепочке прототипов, поэтому
   // `"constructor" in CITIES` истинно, ключом становилось само слово, а городом —
@@ -1439,10 +1444,13 @@ qskywayRouter.get("/health", async (_req: Request, res: Response) => {
     status: "ok",
     module: "qskyway",
     cities: Object.entries(CITIES).map(([id, c]) => ({ id, name: c.city, buildings: c.buildings.length, vertiports: c.vertiports.length, noFlyZones: (NOFLY[id] ?? []).length, heightMeasuredPct: c.dataQuality.measuredPct, heightRealPct: c.dataQuality.realPct, suspectHeights: c.dataQuality.suspect?.length ?? 0, airspaceFeed: AIRSPACE[id]?.authority ?? null })),
-    city: CITY.city,
-    buildings: CITY.buildings.length,
-    vertiports: CITY.vertiports.length,
-    grid: { cols: CITY.grid.cols, rows: CITY.grid.rows, cellM: CITY.grid.cell },
+    // Плоские поля описывают город по умолчанию — тот же, что отдаёт /city без
+    // ?city=. До 14.09.2026 здесь стоял жёстко CITY (Астана) и совпадал с /city
+    // лишь потому, что Астана и была городом по умолчанию.
+    city: CITIES[DEFAULT_CITY].city,
+    buildings: CITIES[DEFAULT_CITY].buildings.length,
+    vertiports: CITIES[DEFAULT_CITY].vertiports.length,
+    grid: { cols: CITIES[DEFAULT_CITY].grid.cols, rows: CITIES[DEFAULT_CITY].grid.rows, cellM: CITIES[DEFAULT_CITY].grid.cell },
     altitude: { floorM: FLOOR, bandM: BAND, clearanceM: CLEAR },
     clearanceModel: { baseM: CLEAR, byHeightSourceM: { measured: SRC_CLEARANCE[0], derived: SRC_CLEARANCE[1], guessed: SRC_CLEARANCE[2] }, note: "Страховочный просвет растёт при низкой уверенности высоты; лучше данные (LiDAR/LOD2/3D Tiles) → ниже крейсер.", noteEn: "Safety clearance grows when height confidence is low; better data (LiDAR/LOD2/3D Tiles) → a lower cruise." },
     // Плоский список читается как «умеем во всех городах». Для шести пунктов
@@ -2065,6 +2073,12 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
   const src = AIRSPACE[resolved.id];
   const twinSig = signCity(resolved.id, resolved.city);
   const asSig = signAirspace(resolved.id);
+  // Сверка снимка с тем, что регулятор публикует СЕЙЧАС. 14.09.2026 FAA уже
+  // публиковало издание 9/3/2026, а документ называл только снимок 7/9/2026 —
+  // проверяющий читал это как «маршрут по устаревшему изданию», хотя потолки
+  // сверены и совпадают. Страница об этом говорила (RegulatorySourceChip),
+  // бумага — нет.
+  const fresh = src ? airspaceFreshness(resolved.id) : null;
   const dispute = heightDisputeFor(resolved.id, resolved.city, route);
 
   // Оговорка о границах документа. Считается ДО него, потому что теперь входит
@@ -2121,6 +2135,11 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
           source: src.source,
           regime: src.regime,
           effective: src.effective,
+          // null — сверки ещё не было (старт, сбой фида). Не «актуально» и не
+          // «устарело»: неотвеченный вопрос не подменяется ответом.
+          currentEdition: fresh?.checked
+            ? { publishedEffective: fresh.publishedEffective, ceilingsMatch: fresh.upToDate, checkedAt: fresh.checkedAt }
+            : null,
           contentHash: asSig?.contentHash ?? null,
           compliant: route.airspace.compliant,
           exceedingSegments: route.airspace.exceedingSegments,

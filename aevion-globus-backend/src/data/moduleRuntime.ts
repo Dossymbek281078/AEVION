@@ -285,6 +285,15 @@ export const MODULE_RUNTIME: Record<string, ModuleRuntimeMeta> = {
   // qskyway (планета #40, PR #563 параллельной сессии) — без записи падал в
   // default portal_only. По факту рабочий: /api/qskyway/{health,cities,city,
   // route(A*),slots} живые, страница /qskyway 200. Классифицирую mvp_live.
+  // qspace (07.09.2026): модуль целиком на фронте — three.js в браузере,
+  // бэкенд-API не нужен по устройству, поэтому apiHints пустые. Страница /qspace.
+  qspace: {
+    tier: "mvp_live",
+    primaryPath: "/qspace",
+    apiHints: [],
+    hint: "3D-модельер помещений · DXF, векторный PDF и распознавание картинки -> 3 слоя (черновая/чистовая/декор) · целиком в браузере, без API",
+  },
+
   qskyway: {
     tier: "mvp_live",
     primaryPath: "/qskyway",

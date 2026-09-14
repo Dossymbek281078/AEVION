@@ -417,6 +417,7 @@ const STR: Record<string, Record<Lang, string>> = {
   risk_medium: { en: "Medium", ru: "Средний" },
   risk_high: { en: "High", ru: "Высокий" },
   toast_save_failed: { en: "Save failed", ru: "Не удалось сохранить" },
+  toast_export_failed: { en: "Export failed", ru: "Не удалось выгрузить данные" },
   toast_check_failed: { en: "Check failed", ru: "Не удалось" },
   toast_log_failed: { en: "Log failed", ru: "Не удалось" },
   toast_profile_created: { en: "Profile created ✓", ru: "Профиль создан ✓" },
@@ -801,6 +802,27 @@ export default function HealthAIPage() {
   const showToast = (msg: string) => {
     setToast(msg);
     window.setTimeout(() => setToast(null), 2200);
+  };
+
+  // Была ссылка с `download`: браузер открывает её без заголовка входа, и стена
+  // отвечала 402 даже заплатившему — вместо данных сохранялся отказ (замер 14.09.2026).
+  // На 402 окно тарифа показывает общий перехватчик, поэтому своё сообщение — только на прочие отказы.
+  const downloadExport = async (id: string) => {
+    try {
+      const r = await fetch(`${backendBase()}/api/healthai/export/${encodeURIComponent(id)}`, { headers: getAuthHeaders() });
+      if (!r.ok) {
+        if (r.status !== 402) showToast(t("toast_export_failed", lang));
+        return;
+      }
+      const href = URL.createObjectURL(await r.blob());
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = `aevion-healthai-${id}.json`;
+      a.click();
+      window.setTimeout(() => URL.revokeObjectURL(href), 1000);
+    } catch {
+      showToast(t("toast_export_failed", lang));
+    }
   };
 
   const loadHistory = useCallback(async (profileId: string) => {
@@ -1872,21 +1894,20 @@ export default function HealthAIPage() {
               >
                 {t("btn_print_report", lang)}
               </a>
-              <a
-                href={`${backendBase()}/api/healthai/export/${encodeURIComponent(profile.id)}`}
-                download
+              <button
+                type="button"
+                onClick={() => void downloadExport(profile.id)}
                 style={{
                   ...primaryBtn,
                   background: "rgba(120,160,220,0.18)",
                   borderColor: "rgba(120,160,220,0.45)",
                   color: "#cbd5e1",
-                  textDecoration: "none",
                   display: "inline-flex",
                   alignItems: "center",
                 }}
               >
                 {t("btn_export_json", lang)}
-              </a>
+              </button>
             </div>
           </Card>
         ) : null}

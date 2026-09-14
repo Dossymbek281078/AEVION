@@ -347,7 +347,7 @@ export default function QNewsPage() {
       if (q.trim()) params.set("q", q.trim());
       params.set("limit", "100");
       const url = apiUrl("/api/qnews/articles") + `?${params.toString()}`;
-      const resp = await fetch(url);
+      const resp = await fetch(url, { headers: getAuthHeaders() });
       if (resp.ok) {
         const data = await resp.json() as { articles: NewsItem[] };
         setArticles(data.articles ?? []);

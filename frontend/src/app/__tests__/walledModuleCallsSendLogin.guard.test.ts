@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 
 /**
@@ -55,17 +56,19 @@ export function текстВызова(строки: string[], i: number): strin
 }
 
 type Место = { файл: string; строка: number; модуль: string; текст: string; есть_вход: boolean };
+type Ссылка = { файл: string; строка: number; модуль: string; адрес: string };
 
 /** Все вызовы фронта к закрытым префиксам, с признаком «несёт ли вход». */
 export function найтиВызовы(
   корень: string,
   пары: Array<[string, string]> = Object.entries(ЗАКРЫТЫЕ).map(([модуль, префикс]) => [префикс, модуль]),
-): { места: Место[]; неразобрано: string[] } {
+): { места: Место[]; неразобрано: string[]; ссылки: Ссылка[] } {
   // Длинный префикс раньше короткого: /api/veilnetx-ledger не должен уйти в /api/veilnetx.
   const порядок = [...пары].sort((a, b) => b[0].length - a[0].length);
   const шаблоны = порядок.map(([префикс, модуль]) => [new RegExp(префикс + "([/\"'`?$][^\"'`]*)?(?![A-Za-z0-9_-])"), модуль] as const);
   const места: Место[] = [];
   const неразобрано: string[] = [];
+  const ссылки: Ссылка[] = [];
   const обход = (d: string) => {
     for (const имя of readdirSync(d)) {
       const p = join(d, имя);
@@ -80,12 +83,24 @@ export function найтиВызовы(
             const m = line.match(шаблон);
             if (!m) continue;
             const окно = строки.slice(Math.max(0, i - 2), i + 1).join("\n");
-            if (!/fetch\(/.test(окно)) break;
+            // Замер 14.09.2026: без этих двух веток сторож молча пропускал список
+            // статей qnews (`const url = apiUrl(...)`, ниже `fetch(url)`) и ссылку
+            // на экспорт healthai — заплативший получал 402 в обоих местах.
+            // Присваивание проверяется ПЕРВЫМ: чужой fetch строкой выше иначе
+            // подменял бы вызов (так контроль и поймал первую версию).
+            let строкаВызова = i;
+            let ссылка = false;
+            const имя = line.includes("fetch(") ? undefined : line.match(/(?:const|let)\s+([A-Za-z_]\w*)\s*=/)?.[1];
+            const далее = имя ? строки.slice(i + 1, i + 20).findIndex((s) => s.includes(`fetch(${имя}`)) : -1;
+            if (далее !== -1) строкаВызова = i + 1 + далее;
+            else if (/href\s*=/.test(line) && !line.includes("fetch(")) ссылка = true;
+            else if (!/fetch\(/.test(окно)) break;
             const путь = (m[1] ?? "").split("?")[0].replace(/\/+$/, "");
             if (модуль === "multichat-engine" && ПУБЛИЧНЫЙ_МУЛЬТИЧАТ.some((x) => путь.startsWith(x))) break;
             if (ИСКЛЮЧЕНИЯ_СТЕНЫ.some((x) => путь.endsWith(x))) break;
             const файл = relative(корень, p).split("\\").join("/");
-            const текст = текстВызова(строки, i);
+            if (ссылка) { ссылки.push({ файл, строка: i + 1, модуль, адрес: m[0] }); break; }
+            const текст = текстВызова(строки, строкаВызова);
             if (текст === null) { неразобрано.push(`${файл}:${i + 1}`); break; }
             места.push({ файл, строка: i + 1, модуль, текст, есть_вход: ВХОД.test(текст) });
             break;
@@ -95,7 +110,7 @@ export function найтиВызовы(
     }
   };
   обход(корень);
-  return { места, неразобрано };
+  return { места, неразобрано, ссылки };
 }
 
 function статистика(p: string) {
@@ -137,11 +152,13 @@ export function модулиСтены(): { пары: Array<[string, string]>; �
  * 402. Число может только уменьшаться: новый вызов без входа краснит сторожа,
  * починка — нет (сторож не должен мешать тому, кто чинит). Перед флипом модуля
  * его число здесь обязано стать 0 — см. docs/PAYWALL_FLIP_READINESS.md.
+ * Планки qcoreai 205→206 и бюро 5→6 подняты не новым кодом, а прибором: с
+ * 14.09 он видит адрес, собранный в переменной (`qcoreai/pipeline`, `bureau/notaries`).
  */
 const ДОЛГ_БЕЗ_ВХОДА: Record<string, number> = {
-  qcoreai: 205, qreal: 23, qmedia: 15, qright: 14, "revenue-hub": 14, "qpaynet-embedded": 13,
+  qcoreai: 206, qreal: 23, qmedia: 15, qright: 14, "revenue-hub": 14, "qpaynet-embedded": 13,
   qgood: 12, qskyway: 11, qsign: 10, "psyapp-deps": 8, qmaskcard: 8, qventure: 8, "z-tide": 8,
-  shadownet: 7, qpersona: 6, qstore: 6, veilnetx: 6, "aevion-ip-bureau": 5, "kids-ai-content": 5,
+  shadownet: 7, qpersona: 6, qstore: 6, veilnetx: 6, "aevion-ip-bureau": 6, "kids-ai-content": 5,
   mapreality: 5, qchaingov: 5, qcontract: 5, qlife: 5, "voice-of-earth": 4, qevents: 3,
   qmelanin: 3, qrenew: 3, ventures: 3, qtradeoffline: 2, "startup-exchange": 2, deepsan: 0, lifebox: 0,
 };
@@ -163,9 +180,46 @@ describe("вызовы модулей за стеной несут вход", ()
   // падали по таймауту набора (30 с): сторож, медленнее всех остальных тестов,
   // в полном прогоне под нагрузкой начал бы краснеть не по делу.
   const стена = модулиСтены();
-  const { места: всеМеста, неразобрано } = найтиВызовы(SRC, стена.пары);
+  const { места: всеМеста, неразобрано, ссылки } = найтиВызовы(SRC, стена.пары);
   const закрытыеИмена = new Set(Object.keys(ЗАКРЫТЫЕ));
   const места = всеМеста.filter((м) => закрытыеИмена.has(м.модуль));
+
+  it("адрес в переменной и ссылка тоже видны — иначе вызов проходит молча", () => {
+    const папка = mkdtempSync(join(tmpdir(), "walled-"));
+    try {
+      writeFileSync(
+        join(папка, "page.tsx"),
+        [
+          'const url = apiUrl("/api/qnews/articles") + `?${q}`;',
+          "const resp = await fetch(url);",
+          'const url2 = apiUrl("/api/qnews/stats");',
+          "const r2 = await fetch(url2, { headers: getAuthHeaders() });",
+          '<a href={apiUrl("/api/qnews/rss")}>RSS</a>',
+        ].join("\n"),
+      );
+      const { места: м, ссылки: с } = найтиВызовы(папка);
+      expect(м.map((x) => [x.строка, x.есть_вход]), "вызов через переменную не найден или вход определён неверно").toEqual([[1, false], [3, true]]);
+      expect(с.map((x) => x.адрес), "ссылка на закрытый адрес не найдена").toEqual(["/api/qnews/rss"]);
+    } finally {
+      rmSync(папка, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * Ссылка (`href`) открывается браузером без заголовка: на закрытом модуле она
+   * отдаёт 402 любому, включая заплатившего (проба прода 14.09.2026). Две оставлены
+   * сознательно — это решение основателя, а не код: RSS-читалка и описание API
+   * вход слать не умеют в принципе, их надо либо открыть в `isExemptPath`, либо убрать.
+   */
+  const ССЫЛКИ_ЖДУТ_РЕШЕНИЯ = ["app/qnews/page.tsx /api/qnews/rss", "app/qfusionai/page.tsx /api/qfusionai/openapi.json"];
+  it("на закрытый модуль нет ссылок, которые откроются без входа", () => {
+    const все = ссылки.filter((с) => закрытыеИмена.has(с.модуль)).map((с) => `${с.файл} ${с.адрес}`);
+    expect(все.length, "ссылки не найдены вовсе — поиск ссылок сломан?").toBeGreaterThan(0);
+    expect(
+      все.filter((с) => !ССЫЛКИ_ЖДУТ_РЕШЕНИЯ.includes(с)),
+      "ссылка на закрытый адрес: заплативший получит 402. Замените на fetch с getAuthHeaders()",
+    ).toEqual([]);
+  });
 
   it("вызовы к закрытым модулям вообще найдены — иначе проверка пуста", () => {
     // На 14.09.2026 их 73. Резкое падение — скорее поломка разбора, чем чистка кода.

@@ -52,6 +52,15 @@ function ответыСервера(configured: string[] | null, missing: string
       };
       return { ok: true, status: 200, json: async () => h } as unknown as Response;
     }
+    if (адрес.includes("/pricing/quote")) {
+      // Калькулятор рисует итог и кнопку оплаты только при непустом расчёте.
+      // Без этого ответа кнопки нет вовсе, и «кнопка погашена» прошло бы на пустом месте.
+      const расчёт = {
+        tierId: "pro", period: "annual", currency: "USD",
+        lines: [], subtotal: 1490, discount: 0, total: 1490, notes: [], promo: null,
+      };
+      return { ok: true, status: 200, json: async () => расчёт } as unknown as Response;
+    }
     if (адрес.includes("/pricing/trust")) {
       return { ok: true, status: 200, json: async () => ({ numbers: [], badges: [] }) } as unknown as Response;
     }
@@ -78,6 +87,24 @@ async function отрисовать() {
       </I18nProvider>,
     );
   });
+}
+
+/** Выбирает тариф в калькуляторе по имени и ждёт пересчёта (он идёт через 250 мс). */
+async function калькуляторНа(имя: string): Promise<HTMLElement> {
+  const калькулятор = document.getElementById("calculator");
+  expect(калькулятор, "калькулятора на странице нет — проверки ниже пустые").not.toBeNull();
+  const переключатель = Array.from(калькулятор!.querySelectorAll("button"))
+    .find((b) => (b.textContent ?? "").trim() === имя);
+  expect(переключатель, `переключателя «${имя}» в калькуляторе нет`).toBeTruthy();
+  await act(async () => { переключатель!.click(); });
+  await act(async () => { await new Promise((r) => setTimeout(r, 450)); });
+  return калькулятор!;
+}
+
+/** Кнопка оплаты калькулятора: единственная с ценой вида «… · $…». */
+function кнопкаОплатыКалькулятора(калькулятор: HTMLElement): HTMLButtonElement | undefined {
+  return Array.from(калькулятор.querySelectorAll<HTMLButtonElement>("button"))
+    .find((b) => /·\s*\$/.test(b.textContent ?? ""));
 }
 
 afterEach(() => {
@@ -121,6 +148,21 @@ describe("непокупаемый тариф объясняет себя", () =
     ).toBe(false);
   });
 
+  it("калькулятор: у непокупаемого тарифа кнопка оплаты погашена и объяснена", async () => {
+    // Калькулятор ведёт в ту же кассу, что и карточки. До 14.09.2026 его кнопка
+    // на продаваемость не смотрела вовсе — для Universe она звала бы в 503.
+    ответыСервера(["tier_full_monthly", "tier_full_annual"], []);
+    await отрисовать();
+    const калькулятор = await калькуляторНа("Universe");
+    const оплата = кнопкаОплатыКалькулятора(калькулятор);
+    expect(оплата, "кнопки оплаты в калькуляторе не нашлось — проверка ниже пустая").toBeTruthy();
+    expect(оплата!.disabled, "кнопка оплаты калькулятора зовёт в кассу непокупаемого тарифа").toBe(true);
+    expect(
+      калькулятор.querySelector('a[href="/pricing/contact?tier=pro"]'),
+      "в калькуляторе кнопка погасла молча — ссылки на связь нет",
+    ).not.toBeNull();
+  });
+
   it("незнание о продаваемости кнопки НЕ гасит и подпись НЕ вешает", async () => {
     // Самое дорогое направление ошибки: если «поля нет» прочитается как
     // «ничего не продаётся», один сбой ответа остановит ВСЕ продажи.
@@ -151,5 +193,10 @@ describe("непокупаемый тариф объясняет себя", () =
     const пробная = document.querySelector<HTMLButtonElement>('button[aria-label$=": pro"]');
     expect(пробная, "кнопки пробного периода у pro не нашлось — проверка ниже пустая").not.toBeNull();
     expect(пробная?.disabled, "пробный период погашен у продаваемого тарифа").toBe(false);
+
+    const калькулятор = await калькуляторНа("Universe");
+    const оплата = кнопкаОплатыКалькулятора(калькулятор);
+    expect(оплата, "кнопки оплаты в калькуляторе не нашлось — проверка ниже пустая").toBeTruthy();
+    expect(оплата!.disabled, "кнопка оплаты калькулятора погашена у продаваемого тарифа").toBe(false);
   });
 });

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { getAuthHeaders } from "@/lib/auth";
 
 const BACKEND =
   process.env.NEXT_PUBLIC_COACH_BACKEND?.trim() ||
@@ -89,7 +90,7 @@ export default function HealthPlanPage() {
     setProfileId(pid);
     if (!pid) { setLoading(false); return; }
 
-    fetch(`${BACKEND}/api/healthai/plan/${encodeURIComponent(pid)}`)
+    fetch(`${BACKEND}/api/healthai/plan/${encodeURIComponent(pid)}`, { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((d) => {
         if (d.error) throw new Error(d.error);

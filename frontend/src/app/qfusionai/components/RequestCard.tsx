@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getAuthHeaders } from "@/lib/auth";
 
 type StatEntry = {
   strategy: string;
@@ -55,7 +56,7 @@ export default function RequestCard({ refreshTick }: { refreshTick?: number }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api-backend/api/qfusionai/stats")
+    fetch("/api-backend/api/qfusionai/stats", { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((d) => setStats(d as StatsResponse))
       .catch(() => void 0)

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { getAuthHeaders } from "@/lib/auth";
 
 const BACKEND =
   process.env.NEXT_PUBLIC_COACH_BACKEND?.trim() ||
@@ -63,7 +64,7 @@ export default function CyclePage() {
 
   async function load(id: string) {
     try {
-      const r = await fetch(`${BACKEND}/api/healthai/cycle/${encodeURIComponent(id)}`);
+      const r = await fetch(`${BACKEND}/api/healthai/cycle/${encodeURIComponent(id)}`, { headers: getAuthHeaders() });
       if (!r.ok) return;
       const d: CycleData = await r.json();
       setData(d);
@@ -90,7 +91,7 @@ export default function CyclePage() {
     try {
       const r = await fetch(`${BACKEND}/api/healthai/cycle`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({ profileId: pid, date: today, flow: flow || undefined, symptoms, notes: notes || undefined }),
       });
       if (r.ok) { setSaved(true); load(pid); }

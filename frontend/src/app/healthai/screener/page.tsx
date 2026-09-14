@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { getAuthHeaders } from "@/lib/auth";
 
 const BACKEND =
   typeof window !== "undefined" && window.location.hostname === "localhost"
@@ -99,7 +100,7 @@ export default function ScreenerPage() {
       const profileId = localStorage.getItem(LS_PROFILE) ?? "guest-" + Date.now();
       const res = await fetch(`${BACKEND}/api/healthai/screener/${activeTest}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({ profileId, answers }),
       });
       const data = await res.json();

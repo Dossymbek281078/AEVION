@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { getAuthHeaders } from "@/lib/auth";
 
 const BACKEND =
   process.env.NEXT_PUBLIC_COACH_BACKEND?.trim() ||
@@ -103,7 +104,7 @@ export default function PopulationPage() {
   useEffect(() => {
     const pid = localStorage.getItem(LS_PROFILE);
     if (!pid) { setNoProfile(true); setLoading(false); return; }
-    fetch(`${BACKEND}/api/healthai/population/${encodeURIComponent(pid)}`)
+    fetch(`${BACKEND}/api/healthai/population/${encodeURIComponent(pid)}`, { headers: getAuthHeaders() })
       .then((r) => r.ok ? r.json() : null)
       .then((d) => d && setData(d))
       .catch(() => {})

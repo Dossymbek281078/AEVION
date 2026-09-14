@@ -447,9 +447,16 @@ export default function DevHubPage() {
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 16px" }}>
 
         {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 32, flexWrap: "wrap", gap: 12 }}>
+        {/* Отступы и размеры шапки и карточки промпта сжимаются ТОЛЬКО на узких
+            экранах (clamp упирается в прежние значения от ~800px, десктоп не меняется).
+            Замер 14.09.2026 на живом проде с перестановкой в браузере: на 360x640 после
+            переноса навигации поле видно, но кнопка «Построить» была на 33px за сгибом;
+            с этими clamp поле на 496px, кнопка до 628px — запас 12px (375x667: 35px).
+            На 1280x800 вычисленные значения прежние: 32 / 28px 24px / 28 / 20. Пиксели
+            здесь сторожит только браузерный зонд после выкатки, не набор тестов. */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "clamp(12px, 3.5vw, 32px)", flexWrap: "wrap", gap: 12 }}>
           <div>
-            <h1 style={{ fontSize: 28, fontWeight: 800, color: "#0f172a", margin: 0 }}>
+            <h1 style={{ fontSize: "clamp(22px, 6.5vw, 28px)", fontWeight: 800, color: "#0f172a", margin: 0 }}>
               DevHub
             </h1>
             <p style={{ color: "#64748b", marginTop: 6, fontSize: 15 }}>
@@ -471,9 +478,9 @@ export default function DevHubPage() {
         {/* Prompt-first entry — the product's front door: describe → built */}
         <div style={{
           background: "linear-gradient(135deg, #0f172a 0%, #134e4a 100%)",
-          borderRadius: 16, padding: "28px 24px", marginBottom: 20,
+          borderRadius: 16, padding: "clamp(16px, 4vw, 28px) clamp(16px, 5vw, 24px)", marginBottom: 20,
         }}>
-          <div style={{ fontSize: 20, fontWeight: 800, color: "#fff", marginBottom: 6 }}>
+          <div style={{ fontSize: "clamp(17px, 5vw, 20px)", fontWeight: 800, color: "#fff", marginBottom: 6 }}>
             {t("hero.title")}
           </div>
           <div ref={ideaFieldRef} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>

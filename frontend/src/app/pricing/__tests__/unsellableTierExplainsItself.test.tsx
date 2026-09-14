@@ -37,7 +37,7 @@ const тариф = (id: string, name: string, priceMonthly: number) => ({
 
 // configured = null — healthz ответил, но поля продаваемости в нём НЕТ
 // (так было до выкатки 29.08.2026 и так будет при любом сбое сборки ответа).
-function ответыСервера(configured: string[] | null, missing: string[] = []) {
+function ответыСервера(configured: string[] | null, missing: string[] = [], расчётОшибкой = false) {
   vi.stubGlobal("fetch", async (u: string) => {
     const адрес = String(u);
     if (адрес.includes("checkout/healthz")) {
@@ -51,6 +51,10 @@ function ответыСервера(configured: string[] | null, missing: string
         },
       };
       return { ok: true, status: 200, json: async () => h } as unknown as Response;
+    }
+    if (адрес.includes("/pricing/quote") && расчётОшибкой) {
+      // Ручка расчёта ответила ошибкой: тело без lines. Раньше это роняло всю /pricing.
+      return { ok: false, status: 400, json: async () => ({ error: "bad_request" }) } as unknown as Response;
     }
     if (адрес.includes("/pricing/quote")) {
       // Калькулятор рисует итог и кнопку оплаты только при непустом расчёте.
@@ -113,27 +117,33 @@ afterEach(() => {
 });
 
 describe("непокупаемый тариф объясняет себя", () => {
-  it("при непродаваемом тарифе на экране есть подпись и ссылка на связь", async () => {
-    // Ровно прод 13.09.2026: full настроен, а pro НЕТ НИ В ОДНОМ списке.
-    // Проверка по `missing` ответила бы здесь «продаётся» — на этом и жил дефект.
+  it("тариф без товара (нет ни в одном списке) — вместо цены и кнопок «Связаться»", async () => {
+    // Ровно прод 14.09.2026: full настроен, а pro НЕТ НИ В ОДНОМ списке — товара
+    // не существует. Решение основателя: не серые кнопки, а «Связаться», как у Enterprise.
     ответыСервера(["tier_full_monthly", "tier_full_annual"], []);
     await отрисовать();
-
     const ссылки = Array.from(document.querySelectorAll("a")).map((a) => a.getAttribute("href") ?? "");
     expect(
       ссылки.some((h) => h.includes("/pricing/contact") && h.includes("tier=pro")),
-      "кнопка погасла молча: ссылки на связь для непокупаемого тарифа нет",
+      "у тарифа без товара нет пути «связаться»",
     ).toBe(true);
+    expect(
+      document.querySelector('button[aria-label$=": pro"]'),
+      "у тарифа без товара осталась кнопка пробного периода — она ведёт в 503",
+    ).toBeNull();
+  });
 
-    // И сама подпись, а не только ссылка: ссылка без текста — тоже загадка.
+  it("авария кассы (товар объявлен, но не настроен) — подпись и серая кнопка, а не «Связаться»", async () => {
+    // Если переменная товара пропала, тариф существует, и прятать цену было бы ложью.
+    // Здесь pro — среди НЕнастроенных: прежнее поведение с объяснением у серой кнопки.
+    ответыСервера(["tier_full_monthly", "tier_full_annual"], ["tier_pro_monthly", "tier_pro_annual"]);
+    await отрисовать();
     const текст = document.body.textContent ?? "";
     expect(текст.length, "страница не отрисовалась вовсе").toBeGreaterThan(0);
     expect(текст, "подписи о недоступности нет").toMatch(/онлайн|online/i);
-
-    // Пробный период ведёт в ту же кассу — у непокупаемого тарифа он обязан погаснуть.
     const пробная = document.querySelector<HTMLButtonElement>('button[aria-label$=": pro"]');
     expect(пробная, "кнопки пробного периода у pro не нашлось — проверка ниже пустая").not.toBeNull();
-    expect(пробная?.disabled, "пробный период непокупаемого тарифа остался живым").toBe(true);
+    expect(пробная?.disabled, "пробный период при аварии кассы остался живым").toBe(true);
   });
 
   it("бесплатный тариф подпись «оформить нельзя» не получает никогда", async () => {
@@ -161,6 +171,16 @@ describe("непокупаемый тариф объясняет себя", () =
       калькулятор.querySelector('a[href="/pricing/contact?tier=pro"]'),
       "в калькуляторе кнопка погасла молча — ссылки на связь нет",
     ).not.toBeNull();
+  });
+
+  it("ошибка ручки расчёта не роняет страницу цен", async () => {
+    // Калькулятор принимал любой ответ как расчёт: при 400 {error} страница падала
+    // на quote.lines.length. Кривой ответ — «расчёта нет», а не падение /pricing.
+    ответыСервера(["tier_full_monthly", "tier_full_annual", "tier_pro_monthly", "tier_pro_annual"], [], true);
+    await отрисовать();
+    const калькулятор = await калькуляторНа("Universe");
+    expect((document.body.textContent ?? "").length, "страница упала на кривом ответе расчёта").toBeGreaterThan(0);
+    expect(кнопкаОплатыКалькулятора(калькулятор), "при ошибке расчёта появилась кнопка оплаты с ценой").toBeUndefined();
   });
 
   it("незнание о продаваемости кнопки НЕ гасит и подпись НЕ вешает", async () => {

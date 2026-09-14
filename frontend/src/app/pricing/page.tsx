@@ -352,6 +352,9 @@ export default function PricingPage() {
   // переменной ослепила бы двух сторожей, которые сейчас честно помнят, что
   // товара у pro нет (pricedTierMustBeBuyable, everyPaidTierHasAPaymentPath).
   const [sellableRefs, setSellableRefs] = useState<string[] | null>(null);
+  // Ссылки, товар которых объявлен, но не настроен (`sellable.missing`). Нужны,
+  // чтобы отличить АВАРИЮ кассы (переменная пропала) от ОТСУТСТВИЯ товара вовсе.
+  const [missingRefs, setMissingRefs] = useState<string[] | null>(null);
   /** Можно ли купить этот тариф прямо сейчас. Незнание = НЕ запрещаем. */
   const продаётся = (tierId: string) => {
     // Бесплатный тариф не покупается через кассу, и в справочнике товаров его
@@ -359,6 +362,23 @@ export default function PricingPage() {
     // бесплатно» и повесил на Free «оформить онлайн пока нельзя».
     if (tierId === "free") return true;
     return sellableRefs === null ? true : sellableRefs.includes(`tier_${tierId}_${period}`);
+  };
+  /**
+   * Товара у тарифа нет ВОВСЕ — его ссылки нет ни среди настроенных, ни среди
+   * ненастроенных. 14.09.2026 так жил Universe ($149): цена стояла, кнопки были
+   * серыми, и карточка выглядела как поломка. Решение основателя: пока товара нет —
+   * вместо цены и кнопок «Связаться», как у Enterprise.
+   *
+   * Это НЕ авария кассы: если у Lite пропадёт переменная, его ссылка окажется в
+   * missing, и карточка по-прежнему скажет «оформить онлайн пока нельзя» у серой
+   * кнопки — прятать цену при сбое настройки было бы ложью о тарифе.
+   * Незнание (любой список не пришёл) ничего не прячет.
+   */
+  const безТовара = (tierId: string) => {
+    if (tierId === "free" || tierId === "enterprise") return false;
+    if (sellableRefs === null || missingRefs === null) return false;
+    const ссылка = `tier_${tierId}_${period}`;
+    return !sellableRefs.includes(ссылка) && !missingRefs.includes(ссылка);
   };
 
   useEffect(() => {
@@ -379,6 +399,8 @@ export default function PricingPage() {
         // осведомлённость, второе про товар.
         const configured = j?.providers?.lemonsqueezy?.sellable?.configured;
         if (!cancelled && Array.isArray(configured)) setSellableRefs(configured as string[]);
+        const missing = j?.providers?.lemonsqueezy?.sellable?.missing;
+        if (!cancelled && Array.isArray(missing)) setMissingRefs(missing as string[]);
       } catch {
         // Не спросили - значит не знаем. Оставляем null: обещать нельзя,
         // но и пугать «не работает» на основании сетевого сбоя тоже нельзя.
@@ -528,8 +550,15 @@ export default function PricingPage() {
           promoCode: calcPromo || undefined,
         }),
       });
-      const j: Quote = await r.json();
-      setQuote(j);
+      // Ответ ручки расчёта принимался как есть: при ошибке (400 {error}) или
+      // обрыве в quote попадал объект без lines, и вся /pricing падала на
+      // quote.lines.length. Кривой ответ — это «расчёта нет», а не падение страницы.
+      if (!r.ok) {
+        setQuote(null);
+        return;
+      }
+      const j = (await r.json()) as Partial<Quote> | null;
+      setQuote(j && Array.isArray(j.lines) && typeof j.total === "number" ? (j as Quote) : null);
     } catch (e) {
       console.error("[pricing] quote failed", e);
     } finally {
@@ -996,8 +1025,10 @@ export default function PricingPage() {
               : tierCardsVariant === "B"
                 ? tier.id === "medium"
                 : tier.id === "full";
-          const showPrice =
-            period === "annual" ? tier.priceAnnualPerMonth : tier.priceMonthly;
+          // Нет товара — цены не показываем: displayPrice(null) даст «по запросу», как у Enterprise.
+          const showPrice = безТовара(tier.id)
+            ? null
+            : period === "annual" ? tier.priceAnnualPerMonth : tier.priceMonthly;
           return (
             <div
               key={tier.id}
@@ -1077,15 +1108,15 @@ export default function PricingPage() {
                     {tp("tier.perMonth")}
                   </span>
                 )}
-                {period === "annual" && tier.priceAnnualTotal !== null && tier.priceAnnualTotal > 0 && (
+                {period === "annual" && !безТовара(tier.id) && tier.priceAnnualTotal !== null && tier.priceAnnualTotal > 0 && (
                   <div style={{ fontSize: 11, color: isHighlight ? "#94a3b8" : "#64748b", marginTop: 4 }}>
                     {displayPrice(tier.priceAnnualTotal)} {tp("tier.perYear")}
                   </div>
                 )}
               </div>
-              {tier.id === "enterprise" ? (
+              {tier.id === "enterprise" || безТовара(tier.id) ? (
                 <Link
-                  href="/pricing/contact?tier=enterprise"
+                  href={`/pricing/contact?tier=${tier.id}`}
                   style={{
                     display: "block",
                     width: "100%",
@@ -1102,7 +1133,7 @@ export default function PricingPage() {
                     boxSizing: "border-box",
                   }}
                 >
-                  {tier.ctaLabel}
+                  {tier.id === "enterprise" ? tier.ctaLabel : t("pricing.home.tier.notSellableCta")}
                 </Link>
               ) : (
                 <>
@@ -1178,7 +1209,9 @@ export default function PricingPage() {
                 </button>
                 </>
               )}
-              {tier.id !== "enterprise" && tier.id !== "free" && (
+              {/* Пробный период и калькулятор — только у тарифа, у которого ЕСТЬ товар:
+                  у тарифа без товара обе кнопки вели бы к погашенной оплате. */}
+              {tier.id !== "enterprise" && tier.id !== "free" && !безТовара(tier.id) && (
                 <>
                   <button
                     style={{

@@ -17,20 +17,20 @@ export const metadata: Metadata = {
   // режут около шестидесяти знаков — второй бренд выталкивал оттуда
   // нужные слова. Страницам БЕЗ имени в заголовке шаблон по-прежнему нужен,
   // поэтому корневой файл не тронут.
-  title: { absolute: "AEVION Bureau — public verified registry · публичный реестр авторов" },
+  title: { absolute: "AEVION Bureau — public registry of authors · публичный реестр авторов" },
   description:
-    "AEVION Bureau is the public registry of verified authors, organizations and notarized certificates. KYC + payment + Planet quorum stamp every entry; embed badges on your portfolio or contracts. Публичный реестр проверенных авторов и организаций: заверенные сертификаты, значки для портфолио и договоров.",
+    "Public registry of creators and organizations: profiles, certificates with a public verification link, embeddable badges. Identity checks and notary are in demo mode. Реестр авторов и организаций: профили, сертификаты с проверкой по ссылке, значки. Личность и нотариус — в демо-режиме.",
   openGraph: {
-    title: "AEVION Bureau — verified creator + org registry",
+    title: "AEVION Бюро — реестр авторов и организаций",
     description:
-      "Verified creators, B2B organizations, notarized certificates. Embed badges, link from contracts, audit publicly.",
+      "Реестр авторов и организаций: профили, сертификаты, встраиваемые значки, публичная проверка по ссылке. Проверка личности и нотариус — пока в демо-режиме.",
     type: "website",
     siteName: "AEVION",
   },
   twitter: {
     card: "summary_large_image",
-    title: "AEVION Bureau",
-    description: "Verified creator + org registry. Embed badges, audit publicly.",
+    title: "AEVION Бюро — реестр авторов",
+    description: "Реестр авторов и организаций: сертификаты и значки, проверка по ссылке. Личность и нотариус — в демо-режиме.",
   },
   alternates: { canonical: "/bureau" },
 };
@@ -38,12 +38,12 @@ export const metadata: Metadata = {
 const articleJsonLd = {
   "@context": "https://schema.org",
   "@type": "Article",
-  headline: "AEVION Bureau — verified registry for creators and orgs",
+  headline: "AEVION Bureau — public registry for creators and orgs",
   name: "AEVION Bureau",
   description:
-    "Public registry of verified creators and organizations. KYC + payment + Planet quorum stamp every certificate. Embed badges from your portfolio or notarized contracts.",
+    "Public registry of creators and organizations: profiles, certificates with a public verification link, embeddable badges. Identity checks and notary signature are currently in demo mode.",
   inLanguage: ["en", "ru", "kk"],
-  about: ["AEVION Bureau", "Verified Creators", "B2B Verification", "Notarized Certificates", "Trust Registry"],
+  about: ["AEVION Bureau", "Creator Registry", "Organization Registry", "Certificates", "Public Verification Link"],
   publisher: { "@type": "Organization", name: "AEVION", url: SITE },
   mainEntityOfPage: { "@type": "WebPage", "@id": `${SITE}/bureau` },
 };

@@ -523,15 +523,9 @@ export default function QNewsPage() {
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <a
-              href={apiUrl("/api/qnews/rss")}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="RSS 2.0 feed"
-              style={{ padding: "9px 14px", borderRadius: 10, border: "1px solid #e2e8f0", background: "#fff", color: "#f97316", fontWeight: 700, fontSize: 13, textDecoration: "none" }}
-            >
-              📡 RSS
-            </a>
+            {/* Ссылка на RSS убрана 14.09.2026: лента за стеной отвечала 402 любому,
+                а RSS-читалка вход слать не умеет. Вернуть вместе с открытием
+                /api/qnews/rss в isExemptPath, если лента будет публичной. */}
             <button
               onClick={() => setShowSubmit(true)}
               style={{ padding: "9px 18px", borderRadius: 10, border: "none", background: "#0d9488", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}

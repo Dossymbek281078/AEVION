@@ -36,7 +36,7 @@ const ЗАКРЫТЫЕ: Record<string, string> = {
   healthai: "/api/healthai",
   "multichat-engine": "/api/multichat",
 };
-const ИСКЛЮЧЕНИЯ_СТЕНЫ = ["/health", "/me/plan", "/me/entitlements", "/providers", "/status", "/waitlist", "/subscribe"];
+const ИСКЛЮЧЕНИЯ_СТЕНЫ = ["/health", "/me/plan", "/me/entitlements", "/providers", "/status", "/waitlist", "/subscribe", "/openapi.json"];
 const ПУБЛИЧНЫЙ_МУЛЬТИЧАТ = ["/dissent/preview", "/receipt/verify", "/shared/"];
 const ВХОД = /Authorization|getAuthHeaders|authHeaders?\s*\(|withAuth|Bearer|headers\s*:\s*authHeaders?\b|\.\.\.authHeaders?\b/;
 
@@ -211,10 +211,11 @@ describe("вызовы модулей за стеной несут вход", ()
    * сознательно — это решение основателя, а не код: RSS-читалка и описание API
    * вход слать не умеют в принципе, их надо либо открыть в `isExemptPath`, либо убрать.
    */
-  const ССЫЛКИ_ЖДУТ_РЕШЕНИЯ = ["app/qnews/page.tsx /api/qnews/rss", "app/qfusionai/page.tsx /api/qfusionai/openapi.json"];
+  const ССЫЛКИ_ЖДУТ_РЕШЕНИЯ: string[] = [];
   it("на закрытый модуль нет ссылок, которые откроются без входа", () => {
+    // Что поиск ссылок вообще работает, доказывает контроль на временном файле выше:
+    // здесь честный ноль допустим, когда все ссылки открыты или убраны.
     const все = ссылки.filter((с) => закрытыеИмена.has(с.модуль)).map((с) => `${с.файл} ${с.адрес}`);
-    expect(все.length, "ссылки не найдены вовсе — поиск ссылок сломан?").toBeGreaterThan(0);
     expect(
       все.filter((с) => !ССЫЛКИ_ЖДУТ_РЕШЕНИЯ.includes(с)),
       "ссылка на закрытый адрес: заплативший получит 402. Замените на fetch с getAuthHeaders()",

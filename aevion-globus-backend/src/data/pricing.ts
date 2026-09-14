@@ -797,6 +797,9 @@ export const MODULES_PRICING: ModulePrice[] = [
     // покупает там, где выдача работает. Связь закреплена сторожем
     // devhubAddonOnlyWhenEntitled в tests/.
     addonMonthly: null,
+    // РЕШЕНО ОСНОВАТЕЛЕМ 14.09.2026: DevHub входит в Full; routes/devhub.ts признаёт
+    // isModuleEntitled(). Цену надстройки к Lite/Medium основатель НЕ назначал —
+    // addonMonthly остаётся null. Текст ниже — след прежнего состояния.
     // ПУСТОЙ намеренно, а не по недосмотру: в какие тарифы DevHub входит
     // bundle-ом — решение о составе пакетов, оно за основателем. Пустой
     // список означает «ни в какой тариф не обещан», то есть мы не обещаем
@@ -804,7 +807,7 @@ export const MODULES_PRICING: ModulePrice[] = [
     // isModuleEntitled() для full/enterprise возвращает true раньше, чем
     // читает includedIn, а для прочих тарифов прежнее запасное значение
     // ["full","enterprise"] давало ровно тот же ответ — false.
-    includedIn: [],
+    includedIn: ["full"],
     availability: "live",
     oneLiner: "Браузерная IDE на движке VS Code: генерация кода и публикация",
     // Модуля НЕТ в data/projects.ts, поэтому имя обязано быть здесь — иначе

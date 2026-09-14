@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pgIntId } from "../lib/queryNumber";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { resolvePlanFromPayload, isModuleEntitled } from "../lib/planGate";
 // Обе стороны нужны: у них шире набор из devhubGuest, у меня — devhubGuestLink.
 // Все четыре символа используются в теле файла, проверено счётом вхождений.
 import { requesterId, devhubGuestId, DEVHUB_GUEST_HEADER } from "../lib/devhubGuest";
@@ -513,7 +514,44 @@ function creditMonth(): string {
  * database wobbled, and said nothing about it — the mirror image of the usage
  * meter answering 0. The last value we actually saw is preferred to the guess.
  */
+/**
+ * Тариф DevHub с учётом прав ПЛАТФОРМЫ. Решение основателя 14.09.2026: DevHub входит
+ * в подписку Full. Раньше тариф брался только из таблиц DevHub (их пишут лишь покупки
+ * самого DevHub), и подписчик Full получал здесь бесплатный тариф.
+ *
+ * Обёртка, а не правка внутри: собственный тариф бывает ЯВНЫМ «free» (так вебхук
+ * отмечает отмену отдельной подписки DevHub), и прежняя функция отдаёт его сразу.
+ * Производный тариф НЕ записывается: подписка платформы может истечь. Если свой
+ * тариф прочитать не удалось (tierKnown: false) — не угадываем.
+ */
 async function getUserTierChecked(userId: string): Promise<{ tier: StudioTier; tierKnown: boolean }> {
+  const own = await getOwnTierChecked(userId);
+  if (own.tier !== "free" || !own.tierKnown) return own;
+  const viaPlan = await tierFromPlatformPlan(userId);
+  return viaPlan ? { tier: viaPlan, tierKnown: true } : own;
+}
+
+/** Почта (учётка или привязанная почта гостя) -> план платформы. «Тариф в токене»
+ *  комп-аккаунтов без запроса не виден — только подписка по почте и allowlist. */
+async function tierFromPlatformPlan(userId: string): Promise<StudioTier | null> {
+  if (!isDevHubDbReady()) return null;
+  try {
+    const r = await pool.query(`
+      SELECT LOWER("email") AS email FROM "AEVIONUser" WHERE "id" = $1
+      UNION ALL
+      SELECT LOWER("email") AS email FROM "DevHubGuestEmail" WHERE "guestId" = $1
+      LIMIT 1
+    `, [userId]);
+    const email = r.rows[0]?.email;
+    if (typeof email !== "string" || !email) return null;
+    return isModuleEntitled(resolvePlanFromPayload({ email }), "devhub") ? "pro" : null;
+  } catch (e: unknown) {
+    console.warn(`[DevHub] план платформы не прочитан для ${userId}: ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  }
+}
+
+async function getOwnTierChecked(userId: string): Promise<{ tier: StudioTier; tierKnown: boolean }> {
   if (!isDevHubDbReady()) return { tier: memTiers.get(userId) ?? "free", tierKnown: true };
   try {
     const r = await pool.query(`SELECT "tier" FROM "DevHubTier" WHERE "userId"=$1`, [userId]);

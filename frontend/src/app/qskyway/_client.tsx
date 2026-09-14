@@ -11,7 +11,7 @@ import WaitlistCapture from "@/components/WaitlistCapture";
 import { competitorsFor } from "@/lib/competitors";
 import type { DataQuality } from "@/lib/dataQuality";
 import type { RegulatorySource } from "@/lib/regulatorySource";
-import { resolveStartCity } from "./startCity";
+import { resolveStartCity, DEFAULT_CITY } from "./startCity";
 import { isSmokeSlot, countSmokeSlots } from "./slotSource";
 // Цена спорной высоты для ЭТОГО рейса. Отдельным файлом, потому что на живых
 // городах блок не появляется (0 из 42 пар Астаны) — увидеть его можно только
@@ -234,7 +234,7 @@ export default function QSkywayClient() {
   const mapRef = useRef<HTMLCanvasElement | null>(null);
   const profRef = useRef<HTMLCanvasElement | null>(null);
   const cityRef = useRef<CityData | null>(null);
-  const cityIdRef = useRef<string>("astana");
+  const cityIdRef = useRef<string>(DEFAULT_CITY);
   const taxisRef = useRef<Taxi[]>([]);
   const heroRef = useRef<Taxi | null>(null);
   const rafRef = useRef<number>(0);
@@ -251,7 +251,7 @@ export default function QSkywayClient() {
   const [cities, setCities] = useState<{ id: string; name: string }[]>([]);
   const [coverage, setCoverage] = useState<{ withFeed: number; withRegulatoryLayer?: number; total: number; missing: string[]; withCeilings?: number; withPermissionRegime?: number } | null>(null);
   const [impact, setImpact] = useState<{ compliant: number; pairs: number; compliantPct: number; strictRoutable: number; padsNeedingAtc: number; authority: string; note: string } | null>(null);
-  const [cityId, setCityId] = useState<string>("astana");
+  const [cityId, setCityId] = useState<string>(DEFAULT_CITY);
   const [meta, setMeta] = useState<{ wind: string; windSource: "metar" | "illustrative"; signed: string; nofly: number | null; dq?: DataQuality; suspect: { i: number; h: number; why?: string; times?: number; was?: number; levels?: number }[]; substituted: { i: number; type: string; from: number; n: number }[]; heightReview: { index: number; taggedM: number; publishedM: number; publishedSource: string; verdict: string; note: string }[]; airspace?: AirspaceSummary } | null>(null);
   // Strict mode asks the backend to treat the published ceiling as a hard
   // constraint instead of an advisory verdict. Off by default: the honest

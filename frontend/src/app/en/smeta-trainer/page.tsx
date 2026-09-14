@@ -53,7 +53,7 @@ export default async function EnSmetaPage({
           either way.
         </p>
         <div style={styles.row}>
-          <a href={keepChannel("/smeta-trainer", channel)} style={styles.cta}>
+          <a href={keepChannel("/smeta-trainer?app=1", channel)} style={styles.cta}>
             Open the trainer
           </a>
           <a href={keepChannel("/pricing?module=smeta-trainer", channel)} style={styles.ctaGhost}>

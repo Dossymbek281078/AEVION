@@ -445,12 +445,18 @@ export default function DevHubPage() {
           До 14.08.2026 страница не считала НИЧЕГО, хотя ведёт к покупке. */}
       <PageTracking page="devhub" />
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 16px" }}>
-        <Wave1Nav />
 
         {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 32, flexWrap: "wrap", gap: 12 }}>
+        {/* Отступы и размеры шапки и карточки промпта сжимаются ТОЛЬКО на узких
+            экранах (clamp упирается в прежние значения от ~800px, десктоп не меняется).
+            Замер 14.09.2026 на живом проде с перестановкой в браузере: на 360x640 после
+            переноса навигации поле видно, но кнопка «Построить» была на 33px за сгибом;
+            с этими clamp поле на 496px, кнопка до 628px — запас 12px (375x667: 35px).
+            На 1280x800 вычисленные значения прежние: 32 / 28px 24px / 28 / 20. Пиксели
+            здесь сторожит только браузерный зонд после выкатки, не набор тестов. */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "clamp(12px, 3.5vw, 32px)", flexWrap: "wrap", gap: 12 }}>
           <div>
-            <h1 style={{ fontSize: 28, fontWeight: 800, color: "#0f172a", margin: 0 }}>
+            <h1 style={{ fontSize: "clamp(22px, 6.5vw, 28px)", fontWeight: 800, color: "#0f172a", margin: 0 }}>
               DevHub
             </h1>
             <p style={{ color: "#64748b", marginTop: 6, fontSize: 15 }}>
@@ -472,9 +478,9 @@ export default function DevHubPage() {
         {/* Prompt-first entry — the product's front door: describe → built */}
         <div style={{
           background: "linear-gradient(135deg, #0f172a 0%, #134e4a 100%)",
-          borderRadius: 16, padding: "28px 24px", marginBottom: 20,
+          borderRadius: 16, padding: "clamp(16px, 4vw, 28px) clamp(16px, 5vw, 24px)", marginBottom: 20,
         }}>
-          <div style={{ fontSize: 20, fontWeight: 800, color: "#fff", marginBottom: 6 }}>
+          <div style={{ fontSize: "clamp(17px, 5vw, 20px)", fontWeight: 800, color: "#fff", marginBottom: 6 }}>
             {t("hero.title")}
           </div>
           <div ref={ideaFieldRef} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -515,7 +521,7 @@ export default function DevHubPage() {
           {/* Подзаголовок стоит ПОД полем, а не над ним, и это замер, а не вкус.
               На 360x640 до поля ввода лежало 859px: 218 шапка сайта + 189
               навигация волны + 169 заголовок с подписью + 60 заголовок карточки
-              + 101 этот подзаголовок. Первые два блока не наши, а из своих
+              + 101 этот подзаголовок. Шапка сайта не наша; навигацию волны ставит сама страница (14.09 перенесена под карточку), а из своих
               четырёхсот пикселей этот — единственный, который можно перенести,
               ничего не потеряв: человек читает объяснение ПОСЛЕ того, как увидел,
               куда писать. Модуль открывается промтом, а не абзацами.
@@ -550,6 +556,16 @@ export default function DevHubPage() {
             ))}
           </div>
         </div>
+
+        {/* Навигация волны стоит ПОД карточкой промпта, а не над заголовком.
+            Замер прода 14.09.2026, 360x640, три прогона подряд: поле ввода
+            начиналось на 744px (ru) и 716px (en) при сгибе 640 — выше него
+            лежали 218px шапки сайта и 189px (ru) / 162px (en) этой навигации.
+            Шапка сайта не наша, а навигацию ставит сама страница: 09.09 я
+            ошибочно записал её в «не нашу зону» и переносил только подзаголовок.
+            Модуль открывается промптом (директива основателя), навигация к
+            соседним модулям — второе действие, ей место ниже. */}
+        <Wave1Nav />
 
         {/* Обучающее видео (вкладка Video·HowTo, 07.09.2026).
             ПОЧЕМУ ЛЕЖИТ У НАС, А НЕ НА CDN ГЕНЕРАТОРА: мастер оттуда весит

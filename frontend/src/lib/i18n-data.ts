@@ -91,9 +91,11 @@ export const LANG_KEY_COUNT: Record<Lang, number> = {
   // pricing.home.tier.notSellable / notSellableCta (погашенная кнопка
   // тарифа объясняет себя вместо молчания). Числа взяты из падения
   // самого сторожа, не посчитаны на глаз.
-  ru: 7451,
-  en: 7451,
-  kk: 7410,
+  // 14.09: +10 в ru/en/kk — moduleChip.* (кнопка покупки на 38 страницах
+  // модулей была зашита по-русски; сторож chipSpeaksVisitorLanguage).
+  ru: 7461,
+  en: 7461,
+  kk: 7420,
   de: 134,
   fr: 134,
   es: 134,

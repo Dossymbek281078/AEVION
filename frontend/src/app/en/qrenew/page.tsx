@@ -48,7 +48,7 @@ export default async function EnQrenewPage({
           prevent any disease.
         </p>
         <div style={styles.row}>
-          <a href={keepChannel("/qrenew", channel)} style={styles.cta}>
+          <a href={keepChannel("/qrenew?app=1", channel)} style={styles.cta}>
             Open QRenew
           </a>
           <a href={keepChannel("/pricing", channel)} style={styles.ctaGhost}>

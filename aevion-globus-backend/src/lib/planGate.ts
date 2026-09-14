@@ -328,7 +328,11 @@ function isExemptPath(req: Request): boolean {
     p === "/providers" || p.endsWith("/providers") ||
     p === "/status" || p.endsWith("/status") ||
     p === "/waitlist" || p.endsWith("/waitlist") ||
-    p === "/subscribe" || p.endsWith("/subscribe")
+    p === "/subscribe" || p.endsWith("/subscribe") ||
+    // Описание API — не выдача продукта: по нему интегратор решает, покупать ли.
+    // Проба прода 14.09.2026: /api/qfusionai/openapi.json отвечал 402 любому,
+    // а страница модуля ссылается на него кнопкой. Генератор клиентов вход не шлёт.
+    p === "/openapi.json" || p.endsWith("/openapi.json")
   );
 }
 

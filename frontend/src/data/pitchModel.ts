@@ -523,7 +523,7 @@ export const launchedModules: PitchModule[] = [
   },
 ];
 
-/* Ecosystem nodes that map to product slots in the 41-node Globus but don't have stand-alone landings yet. */
+/* Ecosystem nodes that map to product slots in the Globus registry but don't have stand-alone landings yet. */
 export const ecosystemNodes: Array<Pick<PitchModule, "id" | "code" | "name" | "stage" | "bucket" | "tagline" | "valueLine">> = [
   { id: "qfusionai", code: "QFUSIONAI", name: "QFusionAI", stage: "alpha", bucket: "intelligence", tagline: "Hybrid model router — auto-select best provider per task.", valueLine: "Reduces vendor lock-in; smooths LLM market volatility." },
   { id: "qtradeoffline", code: "QTRADE-OFFLINE", name: "QTrade Offline", stage: "vision", bucket: "money", tagline: "Trade and transfer without constant connectivity.", valueLine: "TAM expansion to emerging markets and remote regions." },
@@ -809,7 +809,7 @@ export const team = {
   ],
   proof:
     `Proof points instead of bios: ${DEEP_DIVE_MODULES} production MVPs shipped, /pitch with live API metrics, ` +
-    "41-node roadmap with shared infrastructure, multilingual EN/RU/KK production codebase.",
+    `${MODULE_NODES}-node roadmap with shared infrastructure, multilingual EN/RU/KK production codebase.`,
 } as const;
 
 /* ────────────────────────────────────────────────────────────────────────── */

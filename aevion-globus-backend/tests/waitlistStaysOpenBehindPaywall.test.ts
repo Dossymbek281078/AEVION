@@ -46,7 +46,7 @@ describe("платный доступ не закрывает сбор адре�
     expect(g.paywallEnabledFor("cyberchess"), "шлюз включился там, где не просили").toBe(false);
   });
 
-  for (const p of ["/waitlist", "/subscribe"]) {
+  for (const p of ["/waitlist", "/subscribe", "/openapi.json"]) {
     test(`${p} остаётся открытым на закрытом модуле`, async () => {
       const g = await gate();
       const exempt = (g as any).__testables?.isExemptPath ?? null;

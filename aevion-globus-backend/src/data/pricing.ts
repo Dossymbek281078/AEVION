@@ -685,12 +685,14 @@ export const MODULES_PRICING: ModulePrice[] = [
     oneLiner: "AI due-diligence: quant-скоринг + совет 4 ролей + стратегия входа",
   },
   {
-    // Явная строка = поведение как у fallthrough planGate (full+enterprise),
-    // ничего не меняет в доступе. addonMonthly:null (sales-only, PoC — не à-la-carte),
-    // как у соседей veilnetx/qchaingov/z-tide. Закрывает audit:projects-pricing.
+    // 14.09.2026 цену назначил основатель: $19/мес отдельно и в составе
+    // Full и Enterprise — та же форма, что у остальных платных модулей.
+    // До этого стояло addonMonthly:null, includedIn:[] (sales-only, PoC), и
+    // купить модуль было нельзя ничем. Стены это не включает: qskyway нет в
+    // PAYWALL_MODULES (проверено на проде 14.09).
     id: "qskyway",
-    addonMonthly: null,
-    includedIn: [],
+    addonMonthly: 19,
+    includedIn: ["full", "enterprise"],
     availability: "beta",
     oneLiner: "Провайдер-независимые 3D-аэрокоридоры для аэротакси над цифровым двойником города",
   },

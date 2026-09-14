@@ -7,6 +7,7 @@ import { track } from "@/lib/track";
 import { запомнитьНамерение } from "@/lib/checkoutIntent";
 import { withChannel } from "@/lib/products";
 import { channelNow } from "@/lib/channelNow";
+import { useI18nOptional } from "@/lib/i18n";
 
 // Compact pricing chip + one-click buy for module pages. Mirrors the REAL GTM
 // tiers (Lite / Medium / Full) from /api/pricing — the same prices the checkout
@@ -76,6 +77,15 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
   const [data, setData] = useState<PricingResponse | null>(null);
   const [buying, setBuying] = useState(false);
   const [buyError, setBuyError] = useState(false);
+  // 14.09.2026: тексты чипа были зашиты по-русски на 38 страницах модулей —
+  // посетитель, выбравший English, видел «Купить» и «/мес» ровно там, где
+  // решается покупка. Optional, а не useI18n: вне I18nProvider (тесты, редкие
+  // страницы) остаётся прежний русский текст, а не падение всего чипа.
+  const i18n = useI18nOptional();
+  const tr = (key: string, ru: string, vars?: Record<string, string | number>): string =>
+    i18n
+      ? i18n.t(key, vars)
+      : Object.entries(vars ?? {}).reduce((s, [k, v]) => s.split(`{${k}}`).join(String(v)), ru);
 
   useEffect(() => {
     let cancelled = false;
@@ -248,9 +258,9 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
       <Link
         href={`/pricing?module=${encodeURIComponent(moduleId)}`}
         style={{ display: "inline-flex", flexWrap: "wrap", maxWidth: "100%", alignItems: "center", gap: 8, color: palette.text, textDecoration: "none" }}
-        title="Сравнить тарифы — Lite, Medium, Full"
+        title={tr("moduleChip.compareTitle", "Сравнить тарифы — Lite, Medium, Full")}
       >
-        <span><strong style={{ fontWeight: 800 }}>{litePrice}</strong>/мес · <span translate="no" className="notranslate">{lite.name || "Lite"}</span></span>
+        <span><strong style={{ fontWeight: 800 }}>{litePrice}</strong>{tr("moduleChip.perMonth", "/мес")} ·<span translate="no" className="notranslate">{lite.name || "Lite"}</span></span>
         {medium && medium.priceMonthly != null && (
           <>
             <span style={{ color: palette.muted }}>·</span>
@@ -280,8 +290,8 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
           href="/account"
           title={
             покупкаПонизит
-              ? "У вас тариф выше Lite — эта кнопка оформила бы Lite и понизила доступ"
-              : "Этот модуль уже открыт вашим тарифом — покупать его повторно незачем"
+              ? tr("moduleChip.higherTierTitle", "У вас тариф выше Lite — эта кнопка оформила бы Lite и понизила доступ")
+              : tr("moduleChip.alreadyOpenTitle", "Этот модуль уже открыт вашим тарифом — покупать его повторно незачем")
           }
           style={{
             padding: "6px 14px",
@@ -294,7 +304,7 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
             border: `1px solid ${palette.border}`,
           }}
         >
-          Уже включено
+          {tr("moduleChip.alreadyIncluded", "Уже включено")}
         </Link>
       )}
       {!hideBuy && !незачемПокупать && (
@@ -302,7 +312,11 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
           type="button"
           onClick={buyNow}
           disabled={buying}
-          title={buyError ? "Ошибка — попробуйте ещё раз" : `Купить Lite ${litePrice}/мес — этот продукт, оплата картой`}
+          title={
+            buyError
+              ? tr("moduleChip.errorTitle", "Ошибка — попробуйте ещё раз")
+              : tr("moduleChip.buyTitle", "Купить Lite {price}/мес — этот продукт, оплата картой", { price: litePrice })
+          }
           style={{
             border: "none",
             cursor: buying ? "wait" : "pointer",
@@ -316,7 +330,11 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
             opacity: buying ? 0.7 : 1,
           }}
         >
-          {buying ? "Открываем…" : buyError ? "Повторить" : "Купить"}
+          {buying
+            ? tr("moduleChip.opening", "Открываем…")
+            : buyError
+              ? tr("moduleChip.retry", "Повторить")
+              : tr("moduleChip.buy", "Купить")}
         </button>
       )}
     </span>

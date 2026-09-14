@@ -336,12 +336,30 @@ export default function PricingPage() {
   // LemonSqueezy. Покупатель из Казахстана читал про Kaspi и попадал на оплату
   // в долларах. Обещание теперь следует за фактом, а не наоборот.
   const [payboxLive, setPayboxLive] = useState<boolean | null>(null);
-  // null = не спрашивали или поля ещё нет; массив = список ссылок, купить
-  // которые нельзя (у провайдера не задан вариант товара).
-  const [notSellable, setNotSellable] = useState<string[] | null>(null);
+  // null = не спрашивали или поля ещё нет; массив = список ссылок, которые
+  // ТОЧНО можно купить (у провайдера задан вариант товара).
+  //
+  // 14.09.2026: список стал ПОЛОЖИТЕЛЬНЫМ. Раньше страница спрашивала «нет ли
+  // тарифа среди НЕнастроенных» (`sellable.missing`) и была слепа к тарифу,
+  // которого нет в справочнике товаров вовсе. Так жил флагман `pro`
+  // («Universe», $149/мес): его ссылки нет ни в configured, ни в missing,
+  // проверка отвечала «продаётся», кнопки «Занять место» и «Попробовать
+  // 14 дней» были живыми, а касса отвечала 503. Замер на живой /pricing после
+  // выкатки cycle16: подписи нет, обе кнопки активны.
+  // «Нет в списке плохих» — не то же самое, что «хорошо».
+  //
+  // Справочник на бэкенде намеренно НЕ расширен: запись `tier_pro_*` с пустой
+  // переменной ослепила бы двух сторожей, которые сейчас честно помнят, что
+  // товара у pro нет (pricedTierMustBeBuyable, everyPaidTierHasAPaymentPath).
+  const [sellableRefs, setSellableRefs] = useState<string[] | null>(null);
   /** Можно ли купить этот тариф прямо сейчас. Незнание = НЕ запрещаем. */
-  const продаётся = (tierId: string) =>
-    notSellable === null ? true : !notSellable.includes(`tier_${tierId}_${period}`);
+  const продаётся = (tierId: string) => {
+    // Бесплатный тариф не покупается через кассу, и в справочнике товаров его
+    // нет по определению: положительный список иначе погасил бы «Начать
+    // бесплатно» и повесил на Free «оформить онлайн пока нельзя».
+    if (tierId === "free") return true;
+    return sellableRefs === null ? true : sellableRefs.includes(`tier_${tierId}_${period}`);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -359,8 +377,8 @@ export default function PricingPage() {
         // выкачен) остаётся null — «не знаем», и ничего не меняется.
         // Путать «поля нет» с «нельзя купить» нельзя: первое про нашу
         // осведомлённость, второе про товар.
-        const missing = j?.providers?.lemonsqueezy?.sellable?.missing;
-        if (!cancelled && Array.isArray(missing)) setNotSellable(missing as string[]);
+        const configured = j?.providers?.lemonsqueezy?.sellable?.configured;
+        if (!cancelled && Array.isArray(configured)) setSellableRefs(configured as string[]);
       } catch {
         // Не спросили - значит не знаем. Оставляем null: обещать нельзя,
         // но и пугать «не работает» на основании сетевого сбоя тоже нельзя.
@@ -1178,6 +1196,10 @@ export default function PricingPage() {
                       marginBottom: 6,
                     }}
                     aria-label={`${tp("tier.tryTrial")}: ${tier.id}`}
+                    // Пробный период идёт через ту же кассу: для непокупаемого
+                    // тарифа он кончается тем же 503. До 14.09 эта кнопка
+                    // оставалась живой, даже когда основную уже гасили.
+                    disabled={checkingOut === tier.id || !продаётся(tier.id)}
                     onClick={() =>
                       startCheckout(
                         tier.id === "lite" && liteModule
@@ -1877,9 +1899,19 @@ export default function PricingPage() {
                     {quote.total.toLocaleString("ru-RU")}
                   </span>
                 </div>
+                {calcTier !== "free" && calcTier !== "enterprise" && !продаётся(calcTier) && (
+                  /* Калькулятор ведёт в ту же кассу, что и карточки: гасим кнопку
+                     и говорим почему — серая кнопка без объяснения это тупик. */
+                  <p style={{ fontSize: 11, lineHeight: 1.4, color: "#94a3b8", marginTop: 16, marginBottom: 0 }}>
+                    {t("pricing.home.tier.notSellable")}{" "}
+                    <Link href={`/pricing/contact?tier=${calcTier}`} style={{ color: "#5eead4", fontWeight: 700 }}>
+                      {t("pricing.home.tier.notSellableCta")}
+                    </Link>
+                  </p>
+                )}
                 {calcTier !== "free" && calcTier !== "enterprise" && (
                   <button
-                    disabled={checkingOut === calcTier}
+                    disabled={checkingOut === calcTier || !продаётся(calcTier)}
                     onClick={() =>
                       startCheckout({
                         tierId: calcTier,

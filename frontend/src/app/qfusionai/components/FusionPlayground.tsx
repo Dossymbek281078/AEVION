@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { fusionClientId } from "./fusionClient";
+import { getAuthHeaders } from "@/lib/auth";
 
 type Strategy = "speed" | "quality" | "cost" | "auto";
 
@@ -55,7 +56,7 @@ export default function FusionPlayground({ onResult }: Props) {
       if (cid) body.clientId = cid;
       const r = await fetch("/api-backend/api/qfusionai/route", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       if (r.status === 402) {

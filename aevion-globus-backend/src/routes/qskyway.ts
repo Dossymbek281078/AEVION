@@ -2073,6 +2073,12 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
   const src = AIRSPACE[resolved.id];
   const twinSig = signCity(resolved.id, resolved.city);
   const asSig = signAirspace(resolved.id);
+  // Сверка снимка с тем, что регулятор публикует СЕЙЧАС. 14.09.2026 FAA уже
+  // публиковало издание 9/3/2026, а документ называл только снимок 7/9/2026 —
+  // проверяющий читал это как «маршрут по устаревшему изданию», хотя потолки
+  // сверены и совпадают. Страница об этом говорила (RegulatorySourceChip),
+  // бумага — нет.
+  const fresh = src ? airspaceFreshness(resolved.id) : null;
   const dispute = heightDisputeFor(resolved.id, resolved.city, route);
 
   // Оговорка о границах документа. Считается ДО него, потому что теперь входит
@@ -2129,6 +2135,11 @@ qskywayRouter.post("/route/justification", (req: Request, res: Response) => {
           source: src.source,
           regime: src.regime,
           effective: src.effective,
+          // null — сверки ещё не было (старт, сбой фида). Не «актуально» и не
+          // «устарело»: неотвеченный вопрос не подменяется ответом.
+          currentEdition: fresh?.checked
+            ? { publishedEffective: fresh.publishedEffective, ceilingsMatch: fresh.upToDate, checkedAt: fresh.checkedAt }
+            : null,
           contentHash: asSig?.contentHash ?? null,
           compliant: route.airspace.compliant,
           exceedingSegments: route.airspace.exceedingSegments,

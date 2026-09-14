@@ -6,6 +6,7 @@ import { useI18n } from "@/lib/i18n";
 import { DataProvenanceChip } from "@/components/DataProvenanceChip";
 import { RegulatorySourceChip } from "@/components/RegulatorySourceChip";
 import ModuleStatusNote from "@/components/ModuleStatusNote";
+import ModulePricingChip from "@/components/ModulePricingChip";
 import { CompetitorMatrix } from "@/components/CompetitorMatrix";
 import WaitlistCapture from "@/components/WaitlistCapture";
 import { competitorsFor } from "@/lib/competitors";
@@ -941,6 +942,14 @@ export default function QSkywayClient() {
               (оговорка выше), но с каталогом связана не была - разошлись бы молча.
             */}
             <ModuleStatusNote moduleId="qskyway" />
+            {/*
+              14.09.2026: до сегодня на странице не было НИКАКОГО пути к покупке —
+              аудит 13.09 кликом по 44 витринам: у qskyway единственной ни чипа,
+              ни ссылки в кассу. Цена назначена, чип тот же, что у qright/qsign.
+            */}
+            <div style={{ margin: "0 0 16px" }}>
+              <ModulePricingChip moduleId="qskyway" theme="dark" />
+            </div>
 
         {/*
           На телефоне три кнопки города вставали столбиком: названия длинные

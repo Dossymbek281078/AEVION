@@ -7453,6 +7453,16 @@ const ru: Record<string, string> = {
   "chain.unknownWarn": "У части шагов в ответе нет блока подписи. Это не значит, что шаг подделан, — значит, проверить его нечем: подпись к нему не прикладывалась.",
   "chain.hash": "Хэш содержимого",
   "chain.at": "Время",
+  "moduleChip.perMonth": "/мес",
+  "moduleChip.compareTitle": "Сравнить тарифы — Lite, Medium, Full",
+  "moduleChip.alreadyIncluded": "Уже включено",
+  "moduleChip.higherTierTitle": "У вас тариф выше Lite — эта кнопка оформила бы Lite и понизила доступ",
+  "moduleChip.alreadyOpenTitle": "Этот модуль уже открыт вашим тарифом — покупать его повторно незачем",
+  "moduleChip.errorTitle": "Ошибка — попробуйте ещё раз",
+  "moduleChip.buyTitle": "Купить Lite {price}/мес — этот продукт, оплата картой",
+  "moduleChip.opening": "Открываем…",
+  "moduleChip.retry": "Повторить",
+  "moduleChip.buy": "Купить",
 };
 
 export default ru;

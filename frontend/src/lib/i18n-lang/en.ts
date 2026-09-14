@@ -7453,6 +7453,16 @@ const en: Record<string, string> = {
   "chain.unknownWarn": "Some steps carry no signature block in the response. That does not mean a step was forged — it means there is nothing to check: no signature was attached.",
   "chain.hash": "Content hash",
   "chain.at": "Time",
+  "moduleChip.perMonth": "/mo",
+  "moduleChip.compareTitle": "Compare plans — Lite, Medium, Full",
+  "moduleChip.alreadyIncluded": "Already included",
+  "moduleChip.higherTierTitle": "Your plan is above Lite — this button would switch you to Lite and reduce your access",
+  "moduleChip.alreadyOpenTitle": "This module is already included in your plan — no need to buy it again",
+  "moduleChip.errorTitle": "Error — please try again",
+  "moduleChip.buyTitle": "Buy Lite {price}/mo — this product, card payment",
+  "moduleChip.opening": "Opening…",
+  "moduleChip.retry": "Retry",
+  "moduleChip.buy": "Buy",
 };
 
 export default en;

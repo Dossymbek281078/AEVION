@@ -7412,6 +7412,16 @@ const kk: Record<string, string> = {
   "chain.unknownWarn": "Кейбір қадамдарда жауапта қолтаңба блогы жоқ. Бұл қадам жалған дегенді білдірмейді — оны тексеретін ештеңе жоқ: қолтаңба қосылмаған.",
   "chain.hash": "Мазмұн хэші",
   "chain.at": "Уақыт",
+  "moduleChip.perMonth": "/ай",
+  "moduleChip.compareTitle": "Тарифтерді салыстыру — Lite, Medium, Full",
+  "moduleChip.alreadyIncluded": "Тарифте бар",
+  "moduleChip.higherTierTitle": "Сіздің тарифіңіз Lite-тан жоғары — бұл батырма Lite рәсімдеп, қолжетімділікті төмендетер еді",
+  "moduleChip.alreadyOpenTitle": "Бұл модуль тарифіңізде ашық — қайта сатып алудың қажеті жоқ",
+  "moduleChip.errorTitle": "Қате — қайта көріңіз",
+  "moduleChip.buyTitle": "Lite {price}/ай сатып алу — осы өнім, картамен төлеу",
+  "moduleChip.opening": "Ашылуда…",
+  "moduleChip.retry": "Қайталау",
+  "moduleChip.buy": "Сатып алу",
 };
 
 export default kk;

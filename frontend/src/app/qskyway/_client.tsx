@@ -92,7 +92,7 @@ interface JustDoc {
   obstacleSegments?: number; measuredObstacleSegments?: number;
   /** где страховочный запас за неуверенность съеден полом коридора — под подписью */
   blindHeight?: { guessedSegments: number; inertPenaltySegments: number; clearedUpToM: number };
-  airspace: null | { authority: string; source: string; regime: string; effective: string; contentHash: string | null; compliant: boolean | null; exceedingSegments: number | null; maxExceedanceM: number | null; lowestCeilingM: number | null };
+  airspace: null | { authority: string; source: string; regime: string; effective: string; currentEdition?: { publishedEffective: string | null; ceilingsMatch: boolean | null; checkedAt: string | null } | null; contentHash: string | null; compliant: boolean | null; exceedingSegments: number | null; maxExceedanceM: number | null; lowestCeilingM: number | null };
 }
 interface JustAttestation { alg: string; contentHash: string; signature: string; publicKey: string; ephemeral: boolean }
 interface Cell { c: number; r: number; }
@@ -1438,6 +1438,21 @@ export default function QSkywayClient() {
                           <div style={{ marginTop: 3, color: justification.doc.airspace.compliant ? "#2dd4bf" : "#fbbf24" }}>
                             {justification.doc.airspace.authority} · {justification.doc.airspace.effective} ·{" "}
                             {justification.doc.airspace.compliant ? t("qskyway.just.within") : t("qskyway.just.above")}
+                          </div>
+                        )}
+                        {/* Вердикт сверки берётся ИЗ ДОКУМЕНТА, а не из текущего
+                            состояния страницы: на экране должно стоять то, что
+                            лежит в подписанном файле. Нет сверки (null или
+                            документ старого образца) — не пишем ничего, а не
+                            «актуально». */}
+                        {justification.doc.airspace?.currentEdition && (
+                          <div style={{ marginTop: 3, color: justification.doc.airspace.currentEdition.ceilingsMatch === false ? "#fbbf24" : "#5f7086" }}>
+                            {justification.doc.airspace.currentEdition.ceilingsMatch === false
+                              ? t("reg.tip.drift")
+                              : justification.doc.airspace.currentEdition.publishedEffective &&
+                                  justification.doc.airspace.currentEdition.publishedEffective !== justification.doc.airspace.effective
+                                ? t("reg.tip.reissued", { edition: justification.doc.airspace.currentEdition.publishedEffective })
+                                : t("reg.tip.fresh")}
                           </div>
                         )}
                         {/* Качество высотных данных — часть обоснования, а не

@@ -51,13 +51,23 @@ export const metadata: Metadata = {
   },
 };
 
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ app?: string | string[] }>;
+}) {
   // Языковая маршрутизация — 6-й случай приёма (образцы /longevity, /go,
   // /shop, /smeta-trainer, /qrenew; мутации у сторожей пойманы там).
   // Замер EN-свипа 06.09.2026: 57 % кириллицы под cookie en при живом
   // международном предмете. Редирект до платной стены и до учёта.
-  const язык = (await cookies()).get("aevion_lang_v1")?.value;
-  if (язык === "en") {
+  //
+  // ?app= — явное намерение открыть само демо. Без этого выхода кнопка
+  // «Open QSkyway» английской посадочной вела сюда, а отсюда cookie en уводил
+  // обратно на /en/qskyway: англоязычный посетитель ходил по кругу и до демо
+  // не доходил никогда (прод 14.09.2026: 307 -> /en/qskyway, без cookie 200).
+  const lang = (await cookies()).get("aevion_lang_v1")?.value;
+  const openApp = (await searchParams)?.app != null;
+  if (lang === "en" && !openApp) {
     redirect("/en/qskyway");
   }
 

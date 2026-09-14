@@ -14,6 +14,7 @@
 
 import type { Plan, Wall } from "./planModel";
 import { WALL_HEIGHT } from "./planModel";
+import { isWallLayer } from "./wallLayer";
 import { PRESETS, nearestWall, placeOpening } from "./openings";
 import { mergeDoubleWalls } from "./wallMerge";
 
@@ -347,8 +348,8 @@ export function parseDxf(text: string): DxfResult {
   }
 
   // --- фильтр по слоям стен ---------------------------------------------
-  const wallRe = /(wall|стен|перегород|w-|a-wall)/i;
-  const wallSegs = segs.filter((s) => wallRe.test(s.layer));
+  // Правило общее с разбором PDF — см. wallLayer.ts.
+  const wallSegs = segs.filter((s) => isWallLayer(s.layer));
   let used = segs;
   if (wallSegs.length >= 4) {
     used = wallSegs;

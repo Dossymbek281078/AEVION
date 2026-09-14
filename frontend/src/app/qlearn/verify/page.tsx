@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthHeaders } from "@/lib/auth";
 
 /**
  * Публичная проверка сертификата QLearn — страница для того, кому сертификат
@@ -71,7 +72,7 @@ export default function VerifyCertificatePage() {
     setError(null);
     setVerdict(null);
     try {
-      const res = await fetch(apiUrl(`/api/qlearn/certificates/${encodeURIComponent(n)}`));
+      const res = await fetch(apiUrl(`/api/qlearn/certificates/${encodeURIComponent(n)}`), { headers: getAuthHeaders() });
       let data: Record<string, unknown> = {};
       try {
         data = (await res.json()) as Record<string, unknown>;

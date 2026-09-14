@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { getAuthHeaders } from "@/lib/auth";
 
 const BACKEND =
   process.env.NEXT_PUBLIC_COACH_BACKEND?.trim() ||
@@ -83,7 +84,7 @@ export default function FamilyPage() {
     const fetched: Profile[] = [];
     for (const id of stored) {
       try {
-        const res = await fetch(`${BACKEND}/api/healthai/profile/${encodeURIComponent(id)}`);
+        const res = await fetch(`${BACKEND}/api/healthai/profile/${encodeURIComponent(id)}`, { headers: getAuthHeaders() });
         if (res.ok) {
           const data = await res.json();
           fetched.push(data);
@@ -124,7 +125,7 @@ export default function FamilyPage() {
     try {
       const res = await fetch(`${BACKEND}/api/healthai/profile`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({
           name: formName.trim(),
           age,
@@ -179,7 +180,7 @@ export default function FamilyPage() {
       // Ответ сервера ОБЯЗАТЕЛЬНО проверяем: без этого профиль исчезал с
       // экрана даже когда сервер отказал, и человек считал медицинские
       // данные удалёнными, а на сервере они оставались.
-      const res = await fetch(`${BACKEND}/api/healthai/profile/${encodeURIComponent(id)}`, {
+      const res = await fetch(`${BACKEND}/api/healthai/profile/${encodeURIComponent(id)}`, { headers: getAuthHeaders(),
         method: "DELETE",
       });
       // 404 считаем успехом: профиля на сервере уже нет, значит цель

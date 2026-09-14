@@ -6,6 +6,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
 import { apiUrl } from "@/lib/apiBase";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { getAuthHeaders } from "@/lib/auth";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -346,7 +347,7 @@ export default function QNewsPage() {
       if (q.trim()) params.set("q", q.trim());
       params.set("limit", "100");
       const url = apiUrl("/api/qnews/articles") + `?${params.toString()}`;
-      const resp = await fetch(url);
+      const resp = await fetch(url, { headers: getAuthHeaders() });
       if (resp.ok) {
         const data = await resp.json() as { articles: NewsItem[] };
         setArticles(data.articles ?? []);
@@ -370,7 +371,7 @@ export default function QNewsPage() {
 
   async function fetchTrending() {
     try {
-      const resp = await fetch(apiUrl("/api/qnews/trending"));
+      const resp = await fetch(apiUrl("/api/qnews/trending"), { headers: getAuthHeaders() });
       if (resp.ok) {
         const data = await resp.json() as { articles: NewsItem[] };
         setTrending(data.articles ?? []);
@@ -380,7 +381,7 @@ export default function QNewsPage() {
 
   async function fetchStats() {
     try {
-      const resp = await fetch(apiUrl("/api/qnews/stats"));
+      const resp = await fetch(apiUrl("/api/qnews/stats"), { headers: getAuthHeaders() });
       if (resp.ok) setStats(await resp.json());
     } catch { /* ignore */ }
   }
@@ -406,7 +407,7 @@ export default function QNewsPage() {
   async function fetchDigest() {
     setDigestLoading(true);
     try {
-      const resp = await fetch(apiUrl("/api/qnews/ai/digest"), { method: "POST", headers: { "Content-Type": "application/json" } });
+      const resp = await fetch(apiUrl("/api/qnews/ai/digest"), { method: "POST", headers: { ...getAuthHeaders(), "Content-Type": "application/json" } });
       if (resp.ok) setDigest(await resp.json());
     } finally { setDigestLoading(false); }
   }
@@ -477,7 +478,7 @@ export default function QNewsPage() {
     try {
       const resp = await fetch(apiUrl("/api/qnews/ai/summarize"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({ articleId }),
       });
       if (resp.ok) {
@@ -522,15 +523,9 @@ export default function QNewsPage() {
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <a
-              href={apiUrl("/api/qnews/rss")}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="RSS 2.0 feed"
-              style={{ padding: "9px 14px", borderRadius: 10, border: "1px solid #e2e8f0", background: "#fff", color: "#f97316", fontWeight: 700, fontSize: 13, textDecoration: "none" }}
-            >
-              📡 RSS
-            </a>
+            {/* Ссылка на RSS убрана 14.09.2026: лента за стеной отвечала 402 любому,
+                а RSS-читалка вход слать не умеет. Вернуть вместе с открытием
+                /api/qnews/rss в isExemptPath, если лента будет публичной. */}
             <button
               onClick={() => setShowSubmit(true)}
               style={{ padding: "9px 18px", borderRadius: 10, border: "none", background: "#0d9488", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}

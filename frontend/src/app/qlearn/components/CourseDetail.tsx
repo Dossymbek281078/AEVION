@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import LessonQuiz from "./LessonQuiz";
+import { getAuthHeaders } from "@/lib/auth";
 
 /**
  * Экран курса: уроки, чтение урока, отметка прогресса, завершение и сертификат.
@@ -177,7 +178,7 @@ export default function CourseDetail({
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await fetch(apiUrl(`/api/qlearn/courses/${courseId}`));
+      const res = await fetch(apiUrl(`/api/qlearn/courses/${courseId}`), { headers: getAuthHeaders() });
       const { ok, data } = await readJson(res);
       if (!ok) {
         // Сбой загрузки — это НЕ «курс пуст». Пустой экран здесь читался бы
@@ -227,7 +228,7 @@ export default function CourseDetail({
   const readLesson = async (lessonId: string) => {
     setLessonError(null);
     try {
-      const res = await fetch(apiUrl(`/api/qlearn/courses/${courseId}/lessons/${lessonId}`));
+      const res = await fetch(apiUrl(`/api/qlearn/courses/${courseId}/lessons/${lessonId}`), { headers: getAuthHeaders() });
       const { ok, data } = await readJson(res);
       if (!ok) {
         setLessonError(errorText(data, "Урок не открылся. Попробуйте позже."));

@@ -11,6 +11,7 @@
 
 import { useEffect, useState } from "react";
 import { getApiBase } from "@/lib/apiBase";
+import { getAuthHeaders } from "@/lib/auth";
 
 // The rest of the frontend reaches the backend through getApiBase() — the
 // /api-backend proxy in the browser, the internal address on the server. This
@@ -87,7 +88,7 @@ export default function HealthReportPage() {
       setError("Не указан id профиля. Откройте /healthai/report?id=<profileId>.");
       return;
     }
-    fetch(`${backendBase()}/api/healthai/export/${id}`)
+    fetch(`${backendBase()}/api/healthai/export/${id}`, { headers: getAuthHeaders() })
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();

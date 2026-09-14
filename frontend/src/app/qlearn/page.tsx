@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { getAuthToken } from "@/lib/auth";
+import { getAuthToken, getAuthHeaders } from "@/lib/auth";
 import CourseDetail from "./components/CourseDetail";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -368,7 +368,7 @@ export default function QLearnPage() {
       const params = new URLSearchParams();
       if (selectedCategory) params.set("category", selectedCategory);
       if (selectedLevel) params.set("level", selectedLevel);
-      const res = await fetch(apiUrl(`/api/qlearn/courses?${params}`));
+      const res = await fetch(apiUrl(`/api/qlearn/courses?${params}`), { headers: getAuthHeaders() });
       const data = await res.json();
       // Отказ хранилища и пустой каталог — РАЗНЫЕ новости, а `|| []` и
       // `catch { setCourses([]) }` превращали первое во второе: обе ветки

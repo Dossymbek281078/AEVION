@@ -805,7 +805,7 @@ export default function HealthAIPage() {
 
   const loadHistory = useCallback(async (profileId: string) => {
     try {
-      const r = await fetch(`${backendBase()}/api/healthai/history/${profileId}`);
+      const r = await fetch(`${backendBase()}/api/healthai/history/${profileId}`, { headers: getAuthHeaders() });
       if (!r.ok) return;
       const j = await r.json();
       setChecks(j.checks || []);
@@ -815,7 +815,7 @@ export default function HealthAIPage() {
 
   const loadTrends = useCallback(async (profileId: string) => {
     try {
-      const r = await fetch(`${backendBase()}/api/healthai/trends/${profileId}`);
+      const r = await fetch(`${backendBase()}/api/healthai/trends/${profileId}`, { headers: getAuthHeaders() });
       if (!r.ok) return;
       const j = await r.json();
       setTrends(j);
@@ -824,7 +824,7 @@ export default function HealthAIPage() {
 
   const loadGad7Last = useCallback(async (profileId: string) => {
     try {
-      const r = await fetch(`${backendBase()}/api/healthai/screener/gad7/${profileId}`);
+      const r = await fetch(`${backendBase()}/api/healthai/screener/gad7/${profileId}`, { headers: getAuthHeaders() });
       if (!r.ok) return;
       const j = await r.json();
       if (j.last) {
@@ -843,7 +843,7 @@ export default function HealthAIPage() {
 
   const loadPhq9Last = useCallback(async (profileId: string) => {
     try {
-      const r = await fetch(`${backendBase()}/api/healthai/screener/phq9/${profileId}`);
+      const r = await fetch(`${backendBase()}/api/healthai/screener/phq9/${profileId}`, { headers: getAuthHeaders() });
       if (!r.ok) return;
       const j = await r.json();
       if (j.last) {
@@ -864,7 +864,7 @@ export default function HealthAIPage() {
 
   const loadRisks = useCallback(async (profileId: string) => {
     try {
-      const r = await fetch(`${backendBase()}/api/healthai/risks/${profileId}`);
+      const r = await fetch(`${backendBase()}/api/healthai/risks/${profileId}`, { headers: getAuthHeaders() });
       if (!r.ok) return;
       const j = await r.json();
       setRisks(j);
@@ -873,7 +873,7 @@ export default function HealthAIPage() {
 
   const loadHydration = useCallback(async (profileId: string) => {
     try {
-      const r = await fetch(`${backendBase()}/api/healthai/hydration/${profileId}`);
+      const r = await fetch(`${backendBase()}/api/healthai/hydration/${profileId}`, { headers: getAuthHeaders() });
       if (!r.ok) return;
       const j = (await r.json()) as HydrationResp;
       setHydration(j);
@@ -882,7 +882,7 @@ export default function HealthAIPage() {
 
   const loadWellnessScore = useCallback(async (profileId: string) => {
     try {
-      const r = await fetch(`${backendBase()}/api/healthai/score/${profileId}`);
+      const r = await fetch(`${backendBase()}/api/healthai/score/${profileId}`, { headers: getAuthHeaders() });
       if (!r.ok) return;
       const j = (await r.json()) as ScoreResp;
       setWellnessScore(j);
@@ -899,6 +899,7 @@ export default function HealthAIPage() {
         if (opts?.emergencyOnly) params.set("emergency", "1");
         const r = await fetch(
           `${backendBase()}/api/healthai/referrals${params.toString() ? `?${params.toString()}` : ""}`,
+          { headers: getAuthHeaders() },
         );
         if (!r.ok) return;
         const j = await r.json();
@@ -912,7 +913,7 @@ export default function HealthAIPage() {
 
   const loadPopulation = useCallback(async (profileId: string) => {
     try {
-      const r = await fetch(`${backendBase()}/api/healthai/population/${profileId}`);
+      const r = await fetch(`${backendBase()}/api/healthai/population/${profileId}`, { headers: getAuthHeaders() });
       if (!r.ok) return;
       const j = await r.json();
       setPopulation(j);
@@ -922,7 +923,7 @@ export default function HealthAIPage() {
   const loadProfile = useCallback(
     async (id: string) => {
       try {
-        const r = await fetch(`${backendBase()}/api/healthai/profile/${id}`);
+        const r = await fetch(`${backendBase()}/api/healthai/profile/${id}`, { headers: getAuthHeaders() });
         if (!r.ok) return false;
         const j = await r.json();
         if (j.profile) {
@@ -1056,7 +1057,7 @@ export default function HealthAIPage() {
     try {
       const r = await fetch(`${backendBase()}/api/healthai/check`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({
           profileId: profileIdRef.current,
           symptoms,
@@ -1145,7 +1146,7 @@ export default function HealthAIPage() {
 
   const loadCycle = useCallback(async (profileId: string) => {
     try {
-      const r = await fetch(`${backendBase()}/api/healthai/cycle/${profileId}`);
+      const r = await fetch(`${backendBase()}/api/healthai/cycle/${profileId}`, { headers: getAuthHeaders() });
       if (!r.ok) return;
       const j = await r.json();
       setCycle(j);
@@ -1166,7 +1167,7 @@ export default function HealthAIPage() {
     try {
       const r = await fetch(`${backendBase()}/api/healthai/cycle`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({
           profileId: profileIdRef.current,
           flow: cycleFlow,
@@ -1185,7 +1186,7 @@ export default function HealthAIPage() {
 
   const loadPlanHistory = useCallback(async (pid: string) => {
     try {
-      const r = await fetch(`${backendBase()}/api/healthai/plan/history/${pid}`);
+      const r = await fetch(`${backendBase()}/api/healthai/plan/history/${pid}`, { headers: getAuthHeaders() });
       if (!r.ok) return;
       const j = await r.json();
       setPlanHistory(Array.isArray(j.snapshots) ? j.snapshots : []);
@@ -1197,7 +1198,7 @@ export default function HealthAIPage() {
   const loadPlanSnapshot = useCallback(async (snapshotId: string) => {
     setPlanBusy(true);
     try {
-      const r = await fetch(`${backendBase()}/api/healthai/plan/snapshot/${snapshotId}`);
+      const r = await fetch(`${backendBase()}/api/healthai/plan/snapshot/${snapshotId}`, { headers: getAuthHeaders() });
       if (!r.ok) return;
       const j = await r.json();
       if (j.plan) {
@@ -1215,6 +1216,7 @@ export default function HealthAIPage() {
     try {
       const r = await fetch(
         `${backendBase()}/api/healthai/plan/${profileIdRef.current}`,
+        { headers: getAuthHeaders() },
       );
       if (!r.ok) return;
       const j = await r.json();
@@ -1263,7 +1265,7 @@ export default function HealthAIPage() {
     try {
       const r = await fetch(`${backendBase()}/api/healthai/screener/gad7`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({
           profileId: profileIdRef.current,
           answers: gad7,
@@ -1299,7 +1301,7 @@ export default function HealthAIPage() {
     try {
       const r = await fetch(`${backendBase()}/api/healthai/screener/phq9`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({
           profileId: profileIdRef.current,
           answers: phq9,
@@ -1330,7 +1332,7 @@ export default function HealthAIPage() {
     try {
       const r = await fetch(`${backendBase()}/api/healthai/check-llm`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({
           profileId: profileIdRef.current,
           symptoms: lastCheck.symptoms,
@@ -1388,7 +1390,7 @@ export default function HealthAIPage() {
       }
       const r = await fetch(`${backendBase()}/api/healthai/import`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({ profileId: profileIdRef.current, source, entries }),
       });
       const j = await r.json();
@@ -1428,7 +1430,7 @@ export default function HealthAIPage() {
       if (logNotes) body.notes = logNotes;
       const r = await fetch(`${backendBase()}/api/healthai/log`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       const j = await r.json();

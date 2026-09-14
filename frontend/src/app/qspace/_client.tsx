@@ -25,6 +25,8 @@ import {
 import { parseDxf } from "./dxf";
 import { estimateCsv, estimatePlan } from "./estimate";
 import { planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
+import { масштабПоРазмерам, словаИзТекста } from "./dimensionScale";
+import { текстPdf } from "./pdfText";
 import { drawMaterial, materialById, materialsFor } from "./materials";
 import { CATALOG, demoPlacedSnapshots, groups, itemById, type CatalogItem } from "./furniture";
 import { checkClearance, type Issue, type Placed } from "./clearance";
@@ -851,11 +853,34 @@ export default function QSpaceClient() {
         setUnitLabel("");
         return;
       }
-      // Масштаб PDF неизвестен — спрашиваем габарит у человека, а не гадаем.
       setPdfPending(src);
+      // Масштаб — из размерных чисел самого чертежа («1400», «2000» цепочкой
+      // вдоль стен). Нашёлся — модель строится сразу, а поле габарита остаётся
+      // для поправки. Не нашёлся — спрашиваем человека и говорим, почему.
+      const текст = await текстPdf(bytes);
+      const масштаб = текст.ok ? масштабПоРазмерам(словаИзТекста(текст.items)) : null;
+      if (масштаб && src.extentPt > 0) {
+        const extentM = Math.round((src.extentPt * масштаб.mmPerPt) / 10) / 100;
+        const r = planFromPdfSegments(src, extentM, "размеры");
+        if (r.plan) {
+          setPdfExtent(String(extentM));
+          setWarnings([
+            `Масштаб найден по размерам на чертеже: ${масштаб.mmPerPt.toFixed(1)} мм в пункте листа `
+            + `(согласных пар чисел ${масштаб.agree} из ${масштаб.pairs}). Модель построена — `
+            + "если большая сторона плана на самом деле другая, поправьте число ниже.",
+            ...r.warnings,
+          ]);
+          поставитьЧертёж({ ...r.plan, name: f.name });
+          setUnitLabel(`масштаб по размерам чертежа: ${extentM} м по большей стороне`);
+          return;
+        }
+      }
+      const почему = !текст.ok
+        ? "Размерные числа на чертеже прочитать не удалось. "
+        : "Размерных цепочек на чертеже не нашлось — масштаб неизвестен. ";
       setWarnings([
-        `Найдено линий: ${src.segments.length}. PDF не хранит масштаб чертежа — `
-        + "укажите длину БОЛЬШЕЙ стороны плана в метрах, и модель построится.",
+        `Найдено линий: ${src.segments.length}. ${почему}`
+        + "Укажите длину БОЛЬШЕЙ стороны плана в метрах, и модель построится.",
         ...src.warnings,
       ]);
       setUnitLabel("");

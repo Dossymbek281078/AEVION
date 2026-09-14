@@ -99,9 +99,37 @@ async function inflate(raw: Uint8Array): Promise<Uint8Array | null> {
   return null;
 }
 
-/** Ищет все потоки содержимого и распаковывает Flate-сжатые. */
-async function extractStreams(bytes: Uint8Array): Promise<{ texts: string[]; flate: number; other: number }> {
+// Пробельные символы PDF (пробел, TAB, LF, CR) — собраны из кодов, чтобы в
+// исходнике не было обратных слэшей: на этой машине они съедаются при правке.
+const ПРОБЕЛЫ = String.fromCharCode(32, 9, 10, 13);
+const ПП = "[" + ПРОБЕЛЫ + "]";
+
+/**
+ * Порядок потоков страницы: /Contents [6 0 R 13 0 R 30 0 R] или /Contents 6 0 R.
+ *
+ * По стандарту PDF потоки одной страницы — это ОДИН поток, разрезанный на части:
+ * матрица, заданная в первом без q/Q, действует на все следующие. AutoCAD так и
+ * делает: в LA VIE первый поток ставит «0.12 0 0 0.12 18 18 cm», а все стены
+ * (1.1 МБ) лежат в третьем. Разбирая части порознь, мы получали стены в «сырых»
+ * числах, в 8.3 раза крупнее листа.
+ */
+function порядокСодержимого(тексты: string[]): number[][] {
+  const группы: number[][] = [];
+  const массив = new RegExp("/Contents" + ПП + "*[[]([0-9R" + ПРОБЕЛЫ + "]*)]", "g");
+  const одна = new RegExp("/Contents" + ПП + "+([0-9]+)" + ПП + "+[0-9]+" + ПП + "+R", "g");
+  const ссылка = new RegExp("([0-9]+)" + ПП + "+[0-9]+" + ПП + "+R", "g");
+  for (const t of тексты) {
+    for (const m of t.matchAll(массив)) группы.push([...m[1].matchAll(ссылка)].map((x) => Number(x[1])));
+    for (const m of t.matchAll(одна)) группы.push([Number(m[1])]);
+  }
+  return группы.filter((g) => g.length > 0);
+}
+
+/** Ищет все потоки содержимого и распаковывает Flate-сжатые. У каждого — номер объекта, если он виден. */
+async function extractStreams(bytes: Uint8Array): Promise<{ texts: string[]; ids: Array<number | null>; flate: number; other: number }> {
   const texts: string[] = [];
+  const ids: Array<number | null> = [];
+  const заголовокОбъекта = new RegExp("([0-9]+)" + ПП + "+[0-9]+" + ПП + "+obj", "g");
   let flate = 0;
   let other = 0;
 
@@ -127,7 +155,18 @@ async function extractStreams(bytes: Uint8Array): Promise<{ texts: string[]; fla
 
     // заголовок словаря перед stream — смотрим фильтр
     const headStart = Math.max(0, s - 400);
-    const head = new TextDecoder("latin1").decode(hay.subarray(headStart, s));
+    const окно = new TextDecoder("latin1").decode(hay.subarray(headStart, s));
+    // ближайший к слову stream заголовок «N 0 obj» — номер этого потока
+    const заголовки = [...окно.matchAll(заголовокОбъекта)];
+    const последний = заголовки[заголовки.length - 1];
+    const id = последний ? Number(последний[1]) : null;
+    // 🔴 Словарь ЭТОГО потока — от его «N 0 obj», а не всё окно в 400 байт.
+    // Окно захватывает и словарь СОСЕДНЕГО объекта, а /Length и фильтр ищутся
+    // первым совпадением — то есть чужими. Поймано тестом порядка /Contents:
+    // поток «0.5 0 0 0.5 0 0 cm» (18 знаков) обрезался по чужой длине 15 и
+    // терял оператор cm; так же чужой /FlateDecode отправил бы несжатый поток
+    // в распаковку, и он пропал бы молча.
+    const head = последний ? окно.slice(последний.index ?? 0) : окно;
     let start = s + S.length;
     // после "stream" идёт CRLF или LF
     if (hay[start] === 0x0d && hay[start + 1] === 0x0a) start += 2;
@@ -157,7 +196,7 @@ async function extractStreams(bytes: Uint8Array): Promise<{ texts: string[]; fla
     if (/\/FlateDecode/.test(head)) {
       flate++;
       const un = await inflate(raw);
-      if (un) texts.push(new TextDecoder("latin1").decode(un));
+      if (un) { texts.push(new TextDecoder("latin1").decode(un)); ids.push(id); }
       // битый или не тот вид Flate — не считаем это успехом и не молчим
       else other++;
     } else if (/\/(LZW|DCT|JPX|CCITT|RunLength)Decode/.test(head)) {
@@ -165,10 +204,11 @@ async function extractStreams(bytes: Uint8Array): Promise<{ texts: string[]; fla
     } else if (raw.length > 0 && raw.length < 4_000_000) {
       // несжатый поток содержимого
       texts.push(new TextDecoder("latin1").decode(raw));
+      ids.push(id);
     }
     pos = e + E.length;
   }
-  return { texts, flate, other };
+  return { texts, ids, flate, other };
 }
 
 /** Разбирает операторы рисования в отрезки. */
@@ -203,6 +243,17 @@ function segmentsFromContent(content: string): СырыйОтрезок[] {
     const oc = слой();
     segs.push(oc !== undefined ? { x1, y1, x2, y2, oc } : { x1, y1, x2, y2 });
   };
+  // Матрица преобразования (cm) и её стек (q/Q). Без неё координаты — это числа
+  // из потока, а не точки листа: AutoCAD кладёт весь план под «0.12 0 0 0.12 … cm»
+  // и каждый повёрнутый блок (двери, мебель, подписи) — под свою матрицу.
+  // Замер на LA VIE: 1884 матрицы cm, габарит стен в «сырых» числах 3663 против
+  // 440 пт листа, а отрезки внутри повёрнутых блоков ложились не на своё место.
+  // Масштаб из размерных надписей считается в пунктах ЛИСТА — значит, и
+  // отрезки обязаны быть в них же, иначе ошибка в 8 раз.
+  let ctm = [1, 0, 0, 1, 0, 0];
+  const стекCtm: number[][] = [];
+  const точка = (x: number, y: number): [number, number] =>
+    [ctm[0] * x + ctm[2] * y + ctm[4], ctm[1] * x + ctm[3] * y + ctm[5]];
   let curX = 0, curY = 0, startX = 0, startY = 0, has = false;
   const re = /(\/[^\s\/\[\]<>(){}%]+)|(-?\d+(?:\.\d+)?)|([A-Za-z']+)/g;
   let m: RegExpExecArray | null;
@@ -226,26 +277,39 @@ function segmentsFromContent(content: string): СырыйОтрезок[] {
       метки.push(null);
     } else if (op === "EMC") {
       метки.pop();
+    } else if (op === "q") {
+      стекCtm.push(ctm.slice());
+    } else if (op === "Q") {
+      const прежняя = стекCtm.pop();
+      if (прежняя) ctm = прежняя;
+    } else if (op === "cm" && nums.length >= 6) {
+      const [a, b, c, d, e, f] = nums.slice(-6);
+      const [A, B, C, D, E, F] = ctm;
+      // новая = M × текущая (порядок PDF: сначала матрица из cm, потом прежняя)
+      ctm = [a * A + b * C, a * B + b * D, c * A + d * C, c * B + d * D, e * A + f * C + E, e * B + f * D + F];
     } else if (op === "m" && nums.length >= 2) {
-      curX = nums[nums.length - 2]; curY = nums[nums.length - 1];
+      [curX, curY] = точка(nums[nums.length - 2], nums[nums.length - 1]);
       startX = curX; startY = curY; has = true;
     } else if (op === "l" && nums.length >= 2 && has) {
-      const x = nums[nums.length - 2], y = nums[nums.length - 1];
+      const [x, y] = точка(nums[nums.length - 2], nums[nums.length - 1]);
       add(curX, curY, x, y);
       curX = x; curY = y;
     } else if (op === "re" && nums.length >= 4) {
       const x = nums[nums.length - 4], y = nums[nums.length - 3];
       const w = nums[nums.length - 2], h = nums[nums.length - 1];
-      add(x, y, x + w, y);
-      add(x + w, y, x + w, y + h);
-      add(x + w, y + h, x, y + h);
-      add(x, y + h, x, y);
-      curX = x; curY = y; startX = x; startY = y; has = true;
+      // углы по отдельности: под повёрнутой матрицей прямоугольник остаётся
+      // четырёхугольником, а не «x, y, x+w, y+h» в координатах листа
+      const p1 = точка(x, y), p2 = точка(x + w, y), p3 = точка(x + w, y + h), p4 = точка(x, y + h);
+      add(p1[0], p1[1], p2[0], p2[1]);
+      add(p2[0], p2[1], p3[0], p3[1]);
+      add(p3[0], p3[1], p4[0], p4[1]);
+      add(p4[0], p4[1], p1[0], p1[1]);
+      [curX, curY] = p1; startX = p1[0]; startY = p1[1]; has = true;
     } else if (op === "h" && has) {
       add(curX, curY, startX, startY);
       curX = startX; curY = startY;
     } else if (op === "c" || op === "v" || op === "y") {
-      if (nums.length >= 2) { curX = nums[nums.length - 2]; curY = nums[nums.length - 1]; }
+      if (nums.length >= 2) [curX, curY] = точка(nums[nums.length - 2], nums[nums.length - 1]);
     }
     nums.length = 0;
     names.length = 0;
@@ -334,11 +398,31 @@ export async function readPdfSegments(bytes: Uint8Array): Promise<PdfSegments> {
     return { segments: [], warnings: ["PDF защищён паролем/шифрованием — разобрать нельзя. Сохраните копию без защиты."], extentPt: 0 };
   }
 
-  const { texts, other } = await extractStreams(bytes);
+  const { texts, ids, other } = await extractStreams(bytes);
+  const весьФайл = new TextDecoder("latin1").decode(bytes);
+
+  // Потоки страницы склеиваем в порядке /Contents (см. порядокСодержимого).
+  // Группу берём, только если нашлись ВСЕ её части и ни одна не занята другой
+  // страницей; иначе эти потоки разбираются по-старому, по одному.
+  const поНомеру = new Map<number, string>();
+  ids.forEach((id, i) => { if (id !== null && !поНомеру.has(id)) поНомеру.set(id, texts[i]); });
+  const вГруппах = new Set<number>();
+  const потоки: string[] = [];
+  for (const g of порядокСодержимого([весьФайл, ...texts])) {
+    const части = g.map((n) => поНомеру.get(n));
+    if (части.some((x) => x === undefined) || g.some((n) => вГруппах.has(n))) continue;
+    g.forEach((n) => вГруппах.add(n));
+    потоки.push((части as string[]).join(String.fromCharCode(10)));
+  }
+  texts.forEach((t, i) => { const id = ids[i]; if (id === null || !вГруппах.has(id)) потоки.push(t); });
+
   const segments: СырыйОтрезок[] = [];
-  for (const t of texts) {
+  for (const t of потоки) {
     for (const s of segmentsFromContent(t)) {
-      if (Math.hypot(s.x2 - s.x1, s.y2 - s.y1) >= 1) segments.push(s);
+      // Порог в пунктах ЛИСТА (после матрицы cm). Прежний 1 пт на плане в
+      // масштабе LA VIE (42.6 мм/пт) выбрасывал бы всё короче 4 см, включая
+      // торцы тонких перегородок; 0.2 пт ≈ 9 мм отсекает только точки.
+      if (Math.hypot(s.x2 - s.x1, s.y2 - s.y1) >= 0.2) segments.push(s);
     }
   }
 
@@ -352,7 +436,7 @@ export async function readPdfSegments(bytes: Uint8Array): Promise<PdfSegments> {
   // Слой стен — первым делом, до габарита: масштаб считается по ГАБАРИТУ, и
   // если в него войдут размерные цепочки и рамка, стены выйдут мельче.
   // Три случая, как в разборе DXF, и на каждый своё честное сообщение.
-  const слои = слоиИзФайла([new TextDecoder("latin1").decode(bytes), ...texts]);
+  const слои = слоиИзФайла([весьФайл, ...texts]);
   const названные = segments.map((s0) => {
     const имя = s0.oc !== undefined ? слои.get(s0.oc) : undefined;
     return имя !== undefined
@@ -458,7 +542,12 @@ export async function readPdfSegments(bytes: Uint8Array): Promise<PdfSegments> {
  * плана не будет: масштаб PDF не хранит, и угадывание дало бы правдоподобно
  * неверную модель.
  */
-export function planFromPdfSegments(src: PdfSegments, knownExtentM: number): PdfResult {
+export function planFromPdfSegments(
+  src: PdfSegments,
+  knownExtentM: number,
+  /** откуда габарит: назвал человек или посчитан по размерным числам чертежа */
+  источникМасштаба: "человек" | "размеры" = "человек",
+): PdfResult {
   const warnings = [...src.warnings];
   if (src.segments.length === 0 || src.extentPt <= 0) {
     return { plan: null, warnings, metersPerPt: 0, extentPt: src.extentPt, truncated: 0 };
@@ -556,8 +645,11 @@ export function planFromPdfSegments(src: PdfSegments, knownExtentM: number): Pdf
   }
 
   warnings.push(
-    "PDF не хранит масштаб чертежа — модель построена по указанному вами габариту "
-    + `${knownExtentM} м. Если размеры не сходятся, поправьте это число.`,
+    источникМасштаба === "размеры"
+      ? `Масштаб взят из размерных чисел чертежа: большая сторона плана ${knownExtentM} м. `
+        + "Если размеры не сходятся, поправьте это число."
+      : "PDF не хранит масштаб чертежа — модель построена по указанному вами габариту "
+        + `${knownExtentM} м. Если размеры не сходятся, поправьте это число.`,
   );
 
   return {

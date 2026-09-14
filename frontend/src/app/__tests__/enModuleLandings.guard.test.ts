@@ -61,5 +61,26 @@ describe("языковая маршрутизация модульных стр�
       const кир = enSrc.replace(/НДЦС РК|ЭСН/g, "").match(/[А-Яа-яЁё]{3,}/g);
       expect(кир, `русские слова в EN-посадочной: ${кир?.slice(0, 4).join(", ")}`).toBeNull();
     });
+
+    // 14.09.2026, найдено на проде: кнопка «Open …» на EN-посадочной вела на
+    // RU-адрес, а тот по cookie en уводил обратно — круг, из которого человек,
+    // выбравший English, не попадал в приложение вовсе (три пары из трёх).
+    // Выход из круга — `?app` в ссылке и то же условие в редиректе.
+    it(`${p.en}: кнопка входа в приложение не возвращает на посадочную`, () => {
+      const enSrc = stripComments(readFileSync(join(APP, p.en), "utf8"));
+      const ruPath = p.target.replace(/^\/en/, "");
+      const ссылки = [...enSrc.matchAll(/keepChannel\("([^"]+)"/g)]
+        .map((m) => m[1])
+        .filter((href) => href === ruPath || href.startsWith(`${ruPath}?`));
+      expect(ссылки.length, `на ${p.en} нет ссылки в приложение ${ruPath}`).toBeGreaterThan(0);
+      for (const href of ссылки) {
+        expect(href, "без ?app редирект вернёт на посадочную").toMatch(/[?&]app=1\b/);
+      }
+      // Имена переменных у страниц разные (язык/lang) — закрепляем связь, а не имя:
+      // флаг из ?app обязан стоять в том же условии, что и cookie en.
+      expect(тело, "редирект обязан пропускать вход с ?app").toMatch(
+        /const (\S+) = \(await searchParams\)\??\.app !==? (?:null|undefined);[\s\S]*?if \(\S+ === "en" && !\1\)/,
+      );
+    });
   }
 });

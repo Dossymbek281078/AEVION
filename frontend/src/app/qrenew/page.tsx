@@ -22,13 +22,22 @@ import { PaywallScreen } from "@/components/PaywallScreen";
 import QRenewClient from "./_client";
 import { PageTracking } from "@/components/PageTracking";
 
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ app?: string | string[] }>;
+}) {
   // Языковая маршрутизация — тот же приём, что у /longevity, /go и /shop
   // (мутации у сторожей пойманы там). Замер EN-свипа 06.09.2026: под cookie
   // en страница отдавала 61 % кириллицы. Редирект до платной стены и до
   // учёта — просмотр считается один раз, на странице, которую человек видит.
+  //
+  // 14.09.2026: `?app` — вход в само приложение. Без него кнопка на /en/qrenew
+  // вела сюда же, и редирект возвращал на посадочную: круг (прод: cookie en →
+  // 307 /en/qrenew). Сторож — enModuleLandings.guard.
   const язык = (await cookies()).get("aevion_lang_v1")?.value;
-  if (язык === "en") {
+  const входВПриложение = (await searchParams).app !== undefined;
+  if (язык === "en" && !входВПриложение) {
     redirect("/en/qrenew");
   }
 

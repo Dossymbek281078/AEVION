@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { PageTracking } from "@/components/PageTracking";
 import { channelFrom, keepChannel } from "@/lib/products";
+import ModulePricingChip from "@/components/ModulePricingChip";
 
 // /en/qskyway — английская посадочная QSkyway (6-й случай приёма языковой
 // маршрутизации; образцы /longevity, /go, /shop, /smeta-trainer, /qrenew).
@@ -57,6 +58,14 @@ export default async function EnQskywayPage({
           <a href={keepChannel("/pricing", channel)} style={styles.ctaGhost}>
             Plans &amp; pricing
           </a>
+        </div>
+        {/*
+          14.09.2026: посадочная продавала только ссылкой «Plans & pricing» —
+          цены и кнопки покупки QSkyway на ней не было, хотя в приложении они
+          есть с того же дня. Тот же чип, язык берёт у посетителя.
+        */}
+        <div style={{ marginTop: 18 }}>
+          <ModulePricingChip moduleId="qskyway" theme="light" />
         </div>
       </div>
     </main>

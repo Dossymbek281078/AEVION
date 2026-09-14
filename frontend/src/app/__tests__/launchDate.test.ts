@@ -14,6 +14,8 @@ import {
   launchHasPassed,
   launchKicker,
   launchTitle,
+  launchHeadline,
+  launchMetaTitle,
 } from "../launchDate";
 
 const MODULES = "DevHub, мультичат, QRight, QSign, бюро, биржа";
@@ -56,6 +58,25 @@ describe("дата запуска платформы", () => {
     // позвало людей в запуск, которого не было.
     expect(текст.includes("уже открыт"), "календарь объявил открытым то, чего мы не проверяли").toBe(false);
     expect(текст.includes("Открыто"), "то же самое другими словами").toBe(false);
+  });
+
+  test("карточка и заголовок посадочной: до даты текст прежний, после — «обещали»", () => {
+    const накануне = new Date(PLATFORM_LAUNCH_UTC - 86_400_000);
+    // 10:00 UTC дня запуска — 15:00 в Алматы, тот же календарный день.
+    const вДень = new Date(PLATFORM_LAUNCH_UTC + 10 * 3_600_000);
+    const назавтра = new Date(PLATFORM_LAUNCH_UTC + 172_800_000);
+    const ИМЯ = "AEVION IP Bureau";
+
+    // До даты — буква в букву то, что стояло литералом: превью не меняется раньше времени.
+    expect(launchHeadline(накануне)).toBe(`Открываем ${PLATFORM_LAUNCH_HUMAN}`);
+    expect(launchMetaTitle(ИМЯ, накануне)).toBe(`${ИМЯ} — запуск ${PLATFORM_LAUNCH_HUMAN}`);
+    expect(launchHeadline(вДень), "в сам день запуска ещё будущее время").toBe(`Открываем ${PLATFORM_LAUNCH_HUMAN}`);
+
+    expect(launchHeadline(назавтра)).toBe(`Обещали ${PLATFORM_LAUNCH_HUMAN}`);
+    expect(launchMetaTitle(ИМЯ, назавтра)).toBe(`${ИМЯ} — обещали ${PLATFORM_LAUNCH_HUMAN}`);
+    for (const т of [launchHeadline(назавтра), launchMetaTitle(ИМЯ, назавтра)]) {
+      expect(т.toLowerCase().includes("открыт"), "после даты объявили открытым: " + т).toBe(false);
+    }
   });
 
   test("месяц в подписи всегда назван — иначе это не дата", () => {

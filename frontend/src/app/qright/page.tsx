@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { launchHasPassed, PLATFORM_LAUNCH_HUMAN } from "../launchDate";
 import { useI18nOptional } from "@/lib/i18n";
 import { QR_BUSY } from "./busyUi";
 import Link from "next/link";
@@ -728,8 +729,12 @@ export default function QRightPage() {
           <WaitlistCapture
             source="qright"
             tone="dark"
-            title="Написать вам в день запуска"
-            description="Реестр открыт уже сейчас. Одно письмо на запуск бюро 20 сентября и условия раннего доступа."
+            title={launchHasPassed() ? "Написать вам о запуске бюро" : "Написать вам в день запуска"}
+            description={
+              launchHasPassed()
+                ? `Реестр открыт уже сейчас. Бюро обещали к ${PLATFORM_LAUNCH_HUMAN} — напишем одно письмо, как только откроем, и условия раннего доступа.`
+                : `Реестр открыт уже сейчас. Одно письмо на запуск бюро ${PLATFORM_LAUNCH_HUMAN} и условия раннего доступа.`
+            }
           />
         </div>
 

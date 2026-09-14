@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { getAuthHeaders } from "@/lib/auth";
 
 interface Message {
   role: "user" | "assistant";
@@ -224,7 +225,7 @@ export default function QAIPage() {
   // Load personas + sessionId + history
   useEffect(() => {
     // Personas — fetch best-effort
-    fetch(apiUrl("/api/qai/personas"))
+    fetch(apiUrl("/api/qai/personas"), { headers: getAuthHeaders() })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data?.personas && Array.isArray(data.personas)) {
@@ -319,7 +320,7 @@ export default function QAIPage() {
     try {
       const res = await fetch(apiUrl("/api/qai/chat/stream"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({ message: text, sessionId, personaId: activePersona }),
         signal: controller.signal,
       });

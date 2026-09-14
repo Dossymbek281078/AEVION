@@ -24,7 +24,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { apiUrl, getClientApiBase } from "@/lib/apiBase";
-import { isAuthenticated } from "@/lib/auth";
+import { isAuthenticated, getAuthHeaders } from "@/lib/auth";
 import { CouncilConsole } from "./CouncilConsole";
 import { T } from "./theme";
 
@@ -79,7 +79,7 @@ function ProviderHealthStrip() {
 
   const load = useCallback(async () => {
     try {
-      const r = await fetch(apiUrl("/api/multichat/provider-status"), {
+      const r = await fetch(apiUrl("/api/multichat/provider-status"), { headers: getAuthHeaders(),
         credentials: "include",
       });
       // 402 — это не сбой, а ответ платной стены, и он не изменится от того,
@@ -325,7 +325,7 @@ function MissionPresetGrid({ onPick }: { onPick: (preset: MissionPreset) => void
     let alive = true;
     (async () => {
       try {
-        const r = await fetch(apiUrl("/api/multichat/presets"), {
+        const r = await fetch(apiUrl("/api/multichat/presets"), { headers: getAuthHeaders(),
           credentials: "include",
         });
         // «Mission presets unavailable: status 402» — не ошибка, а платный

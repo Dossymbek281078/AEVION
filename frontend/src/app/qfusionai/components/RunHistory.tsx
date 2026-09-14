@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { fusionClientId } from "./fusionClient";
+import { getAuthHeaders } from "@/lib/auth";
 
 interface RunPreviewRow {
   id: string;
@@ -35,7 +36,7 @@ export default function RunHistory({ refreshTick }: { refreshTick: number }) {
     if (!cid) { setLoading(false); return; }
     setLoading(true);
     try {
-      const r = await fetch(`/api-backend/api/qfusionai/runs?clientId=${encodeURIComponent(cid)}&limit=20`, { cache: "no-store" });
+      const r = await fetch(`/api-backend/api/qfusionai/runs?clientId=${encodeURIComponent(cid)}&limit=20`, { headers: getAuthHeaders(), cache: "no-store" });
       if (r.ok) {
         const j = await r.json();
         setRuns(Array.isArray(j.runs) ? j.runs : []);
@@ -52,7 +53,7 @@ export default function RunHistory({ refreshTick }: { refreshTick: number }) {
     if (!full[id]) {
       const cid = fusionClientId();
       try {
-        const r = await fetch(`/api-backend/api/qfusionai/runs/${encodeURIComponent(id)}?clientId=${encodeURIComponent(cid)}`, { cache: "no-store" });
+        const r = await fetch(`/api-backend/api/qfusionai/runs/${encodeURIComponent(id)}?clientId=${encodeURIComponent(cid)}`, { headers: getAuthHeaders(), cache: "no-store" });
         if (r.ok) {
           const j = await r.json();
           if (j.run) setFull((prev) => ({ ...prev, [id]: j.run as RunFull }));

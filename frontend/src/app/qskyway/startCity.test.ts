@@ -13,6 +13,14 @@ describe("с какого города открывать QSkyway", () => {
     expect(resolveStartCity("?foo=bar")).toBe(DEFAULT_CITY);
   });
 
+  it("по умолчанию — Нью-Йорк: только там цепочка доказательств замыкается", () => {
+    // Решение основателя 14.09.2026. Проверки выше сравнивают результат с той
+    // же константой и смену города не заметят; эта строка делает смену
+    // осознанной правкой, а не побочным эффектом.
+    expect(DEFAULT_CITY).toBe("nyc");
+    expect(resolveStartCity("")).toBe("nyc");
+  });
+
   it("параметр из адреса применяется — это и был баг", () => {
     expect(resolveStartCity("?city=nyc")).toBe("nyc");
     expect(resolveStartCity("city=tokyo")).toBe("tokyo"); // без ведущего «?»

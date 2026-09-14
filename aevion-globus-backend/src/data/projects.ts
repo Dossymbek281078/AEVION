@@ -339,6 +339,19 @@ export const projects: GlobusProject[] = [
     updatedAt: now,
   },
   {
+    id: "devhub",
+    code: "DEVHUB",
+    name: "DevHub Studio — Prompt-to-App IDE",
+    description:
+      "Браузерная IDE на движке VS Code: описываете приложение — AI пишет код, публикация на Cloudflare Pages. Pro $149/мес. Публикация в GitHub, выкатка на Vercel, свой домен и голос зависят от ключей провайдеров — их текущее состояние отдаёт /api/devhub/studio/capabilities, а не это описание.",
+    kind: "product",
+    status: "mvp",
+    priority: 2,
+    tags: ["ide", "ai-codegen", "vscode", "deploy", "developer-tools"],
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
     id: "qskyway",
     code: "QSKYWAY",
     name: "QSkyway — Urban Air-Corridor Navigation",

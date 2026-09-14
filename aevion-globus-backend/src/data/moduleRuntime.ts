@@ -294,6 +294,15 @@ export const MODULE_RUNTIME: Record<string, ModuleRuntimeMeta> = {
     hint: "3D-модельер помещений · DXF, векторный PDF и распознавание картинки -> 3 слоя (черновая/чистовая/декор) · целиком в браузере, без API",
   },
 
+  // devhub (14.09.2026): до этого дня DevHub продавался и был открыт на /devhub,
+  // но в реестре не значился. Состояние интеграций отдаёт capabilities, а не hint.
+  devhub: {
+    tier: "mvp_live",
+    primaryPath: "/devhub",
+    apiHints: ["/api/devhub/studio/capabilities", "/api/devhub/providers/health", "/api/devhub/*"],
+    hint: "Prompt-to-App IDE · VS Code в браузере · AI-генерация кода · публикация на Cloudflare Pages; GitHub, Vercel, домен и голос — по ключам провайдеров",
+  },
+
   qskyway: {
     tier: "mvp_live",
     primaryPath: "/qskyway",

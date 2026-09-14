@@ -111,6 +111,37 @@ EXPECT_ENFORCED=qcoreai node aevion-globus-backend/scripts/paywall-policy-smoke.
 - [ ] `npm run audit:projects-pricing --prefix aevion-globus-backend` exit 0 — every module has a `MODULES_PRICING` row
 - [ ] `node aevion-globus-backend/scripts/paywall-policy-smoke.js` exit 0 — endpoint up, schema stable, **enforced: 0** in prod today
 - [ ] (Optional since PR #439) Confirm modules you plan to enforce have a `<PaywallScreen>`-wired page for the *best* UX. Grep: `grep -l PaywallScreen frontend/src/app/<module>/`. Modules without one still get the global `<PaywallModal>` overlay on 402 — no module is left with a silent failure.
+- [ ] **Страницы модуля шлют вход — ОБЯЗАТЕЛЬНО (с 14.09.2026).** Стена узнаёт
+  человека только по `Authorization: Bearer`, а токен лежит в `localStorage`:
+  ни прокси `/api-backend`, ни `credentials: "include"` его не несут. Если
+  страница зовёт API модуля без `getAuthHeaders()`, то после флипа **заплативший
+  получит 402 как гость** и окно «купите тариф». Так было 14.09 на всех шести
+  закрытых модулях (46 вызовов из 73) — починено веткой
+  `fix/walled-modules-send-login-2026-09-14`.
+  Проверка: в `frontend/` запустить
+  `node node_modules/vitest/vitest.mjs run src/app/__tests__/walledModuleCallsSendLogin.guard.test.ts`
+  и убедиться, что у модуля в `ДОЛГ_БЕЗ_ВХОДА` стоит **0** — иначе сперва чинить.
+
+  > **Замер 14.09.2026 — что сломается у заплативших, если включить стену.**
+  > Модули и префиксы взяты из `MODULE_GATE_PREFIXES` бэкенда; вызовы — весь
+  > `frontend/src`, без путей из `isExemptPath` и публичного роутера мультичата.
+  >
+  > | группа | модулей | вызовов | без входа |
+  > |---|---|---|---|
+  > | платные, стена выключена, включить можно | 28 | 285 | **184** |
+  > | — из них с проблемой | **26** | | |
+  > | — чистые (`deepsan`, `lifebox`: вызовов со страниц нет вовсе) | 2 | 0 | 0 |
+  > | `UNSAFE_TO_GATE` (включить нельзя) | 3 | 271 | 229 |
+  > | уже закрытые, после починки | 6 | 73 | 0 |
+  >
+  > Больше всего вызовов без входа: `qreal` 23, `qmedia` 15, `revenue-hub` 14,
+  > `qpaynet-embedded` 13, `qgood` 12, `qmaskcard`/`qventure`/`z-tide`/`psyapp-deps` по 8.
+  > Среди «нельзя»: `qcoreai` 205 из 220, `qright` 14, `qsign` 10.
+  >
+  > Практически: флип любого из 26 модулей без этой подготовки повторит дефект
+  > 14.09. Чинить заранее все 184 места смысла нет, пока не решено, какие
+  > модули закрывать, — сторож держит долг от роста, а число у модуля
+  > говорит, сколько работы перед его флипом.
 - [ ] Confirm `/pricing` page lists the tiers the 402 response will name (`lite`/`medium`/`full`/`enterprise`). The CTA in `PaywallScreen` deep-links to `upgradeUrl` from the backend.
 - [ ] Decide enforcement strategy: comma list (`qcoreai,qfusionai`), wildcard (`*`), or stepwise rollout (one module per day for a week)
 - [ ] **After the flip: run `BASE=https://aevion.app/api-backend node aevion-globus-backend/scripts/all-smokes.js`.** The 2026-07 flip silently broke 8 module smokes for a day — they treated the gate's 402 as failure. Smokes are paywall-aware since PR #804/#825 (`scripts/lib/paywallAware.js` verifies the 402 contract; fully-gated modules self-skip functional checks), but any NEW module smoke must use the same helper, and only a post-flip suite run proves it.

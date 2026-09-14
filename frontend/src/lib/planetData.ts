@@ -26,13 +26,29 @@ export type RecentArtifact = {
   submissionTitle?: string;
   artifactType?: string;
   versionNo?: number;
+  productKey?: string;
 };
 
 /**
- * Сколько тянем на всех. Больше текущего максимума потребителей (5), чтобы
- * добавление шестого элемента куда-нибудь не вернуло второй запрос молча.
+ * Сколько тянем на всех. Потолок ручки — 25 (на `limit=100` она молча отдаёт
+ * умолчание 8). Берём потолок, а не «чуть больше 5»: пробы отсеиваются уже
+ * здесь, и после фильтра должно остаться место для настоящих артефактов.
  */
-const RECENT_FETCH_LIMIT = 8;
+const RECENT_FETCH_LIMIT = 25;
+
+/**
+ * Служебная запись, а не работа автора: прогоны проверок пишут в прод артефакты
+ * с ключами `smoke-music-test`, `test-key` и `k<метка времени>`. Замер 14.09.2026:
+ * все 25 последних артефактов — такие, и главная показывала их на первом экране.
+ * Пустой список после фильтра — законный случай: оба блока на главной при нём
+ * не рисуются.
+ */
+export function isProbeArtifact(a: RecentArtifact): boolean {
+  const key = (a.productKey ?? "").toLowerCase();
+  if (key.startsWith("smoke") || key.startsWith("test") || key.endsWith("-test")) return true;
+  if (/^k-?[0-9]{13}$/.test(key)) return true;
+  return (a.submissionTitle ?? "").toLowerCase().startsWith("smoke");
+}
 const TTL_MS = 30_000;
 
 type Cache<T> = { at: number; value: T } | null;
@@ -91,7 +107,7 @@ export async function fetchRecentArtifacts(
       const j: unknown = await r.json();
       const items = (j as { items?: unknown } | null)?.items;
       if (!Array.isArray(items)) return null;
-      const value = items as RecentArtifact[];
+      const value = (items as RecentArtifact[]).filter((a) => !isProbeArtifact(a));
       recentCache = { at: now, value };
       return value;
     } catch {

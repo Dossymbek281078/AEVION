@@ -15,7 +15,8 @@ import { CHANNELS, channelFrom } from "../products";
 
 describe("метки каналов", () => {
   it("покрывают площадки, где мы публикуем", () => {
-    for (const short of ["ig", "tt", "yt", "tg", "dz", "vk"]) {
+    // li, bs, x, th — площадки поста запуска 20.09.2026 (добавлено 15.09).
+    for (const short of ["ig", "tt", "yt", "tg", "dz", "vk", "li", "bs", "x", "th"]) {
       expect(CHANNELS[short], `нет метки для ?c=${short}`).toBeTruthy();
     }
   });

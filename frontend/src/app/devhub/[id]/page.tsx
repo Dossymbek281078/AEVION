@@ -2816,17 +2816,14 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     setPayError(null);
     setPayResult(null);
     try {
-      // С 15.09.2026 ссылку на оплату выпускает только вошедший: без входа любой
+      // С 15.09.2026 ссылку на оплату выпускает Studio Pro: бесплатному гостю сервер
+      // отвечает 402 с адресом привязки покупки (/devhub/link) — раньше любой
       // посетитель создавал в нашем магазине ссылку на Studio Pro за 50 центов.
+      // Токен входа, если есть, шлём — вошедшему можно и без привязки.
       const payToken = getAuthToken();
-      if (!payToken) {
-        setPayError("Войдите в AEVION, чтобы создать ссылку на оплату — без входа ссылки не выпускаются.");
-        setPayLoading(false);
-        return;
-      }
       const r = await fetch(apiUrl("/api/devhub/media/payment-link"), {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${payToken}` },
+        headers: { "Content-Type": "application/json", ...(payToken ? { Authorization: `Bearer ${payToken}` } : {}) },
         body: JSON.stringify({
           name: payName.trim(),
           amountCents: Math.round(amtUnits * 100),

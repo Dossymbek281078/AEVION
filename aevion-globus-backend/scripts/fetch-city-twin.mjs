@@ -419,7 +419,9 @@ if (city.measured) {
       idField: city.measured.idField, heightField: city.measured.heightField,
       log: (s) => process.stderr.write(s + "\n"),
     });
-    for (const p of pts) outlines.push({ h: p.h, ring: pointAsTinyRing(p.lon, p.lat) });
+    // Контур — выпуклая оболочка меша (lib/i3s-points.mjs); у вырожденных —
+    // квадрат 1×1 м вокруг центроида, чтобы правило «центроид внутри» работало.
+    for (const p of pts) outlines.push({ h: p.h, ring: p.ring ?? pointAsTinyRing(p.lon, p.lat) });
   } else {
     throw new Error(`${cityId}: unknown measured-height source kind "${kind}"`);
   }
@@ -465,13 +467,18 @@ if (city.measured) {
       //
       // Прикидке по этажам и подставленному значению по умолчанию спорить с
       // обмером нечем — там побеждает съёмка.
-      if (b.stated) {
-        if (p.h > b.h) plateauTaller++; else if (b.h > p.h) osmTaller++;
-        b.h = Math.round(Math.max(p.h, b.h));
+      // 15.09.2026: раньше при «OSM выше обмера» здание получало высоту ТЕГА и
+      // класс hs=0 «обмерено» — и Абу-Даби Плаза (тег 382 при обмере 311)
+      // выпала из списка сомнительных, потому что стала «обмеренной на 382».
+      // Высота остаётся большей (безопасная сторона), но класс — тега: hs=1,
+      // и второе правило сомнительных высот снова его видит.
+      if (b.stated && b.h > p.h) {
+        osmTaller++;
       } else {
+        if (b.stated && p.h > b.h) plateauTaller++;
         b.h = Math.round(p.h);
+        b.hs = 0;
       }
-      b.hs = 0;
     } else if (p.how === "near" && b.hs !== 0 && p.h > b.h) {
       near++;
       b.h = Math.round(p.h);
@@ -484,10 +491,15 @@ if (city.measured) {
   // exists to match edge buildings and was never queried from OSM, so "no OSM
   // counterpart" there means nothing.
   let added = 0;
-  // Точечный источник (i3s) не добавляет зданий: у точки нет площади, и
-  // «1 м² высотой 300 м» стало бы иглой-препятствием, которого нет в городе.
-  for (const i of kind === "i3s" ? [] : unmatched) {
+  // 15.09.2026: контуры-оболочки из I3S ДОБАВЛЯЮТСЯ, как и обмерные контуры
+  // NYC/Токио — в квадрате Астаны 338 из 705 зданий города в OSM нет вовсе,
+  // то есть маршрутизатор не видел их как препятствия. Порог 20 м² отсекает
+  // будки и вырожденные оболочки (квадрат 1×1 м вокруг центроида): у них нет
+  // площади, и «1 м² высотой 300 м» было бы иглой, которой в городе нет.
+  const ringArea = (r) => Math.abs(r.reduce((s, [x, y], k) => { const [x2, y2] = r[(k + 1) % r.length]; return s + x * y2 - x2 * y; }, 0) / 2);
+  for (const i of unmatched) {
     const ring = projected[i].ring;
+    if (ringArea(ring) < 20) continue;
     let sx = 0, sy = 0;
     for (const [x, y] of ring) { sx += x; sy += y; }
     const cx = sx / ring.length, cy = sy / ring.length;

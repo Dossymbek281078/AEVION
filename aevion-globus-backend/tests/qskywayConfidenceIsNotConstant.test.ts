@@ -42,21 +42,23 @@ async function measure(city: string) {
 }
 
 describe("уверенность по высотам зависит от данных города", () => {
+  // 15.09.2026: у Астаны появился обмер (3D-модель города, 83 %), поэтому
+  // «город без обмера» теперь Сингапур — открытого обмера у него нет (0 %).
   test("город без городского обмера не увереннее города с полным", async () => {
-    const astana = await measure("astana");
+    const singapore = await measure("singapore");
     const nyc = await measure("nyc");
 
     // Отрицательный контроль. Без него отношение можно было бы
     // выполнить, обмерив оба города или ни одного, — и проверка стала
     // бы пустой, продолжая выглядеть осмысленной.
-    expect(astana.obstacles, "в Астане нет участков со зданием — сравнивать нечего").toBeGreaterThan(0);
-    expect(astana.measured, "у Астаны появился городской обмер — тест опирался на его отсутствие").toBe(0);
+    expect(singapore.obstacles, "в Сингапуре нет участков со зданием — сравнивать нечего").toBeGreaterThan(0);
+    expect(singapore.measured, "у Сингапура появился городской обмер — тест опирался на его отсутствие").toBe(0);
     expect(nyc.measured, "у Нью-Йорка пропал городской обмер — сравнение потеряло смысл").toBeGreaterThan(0);
 
     expect(
-      astana.pct,
+      singapore.pct,
       "уверенность одинакова у города без обмера и города с полным обмером: " +
-        "число не следует за данными (astana=" + astana.pct + ", nyc=" + nyc.pct + ")",
+        "число не следует за данными (singapore=" + singapore.pct + ", nyc=" + nyc.pct + ")",
     ).toBeLessThan(nyc.pct);
   }, 60000);
 });

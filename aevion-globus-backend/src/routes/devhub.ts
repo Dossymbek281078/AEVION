@@ -15,7 +15,8 @@ import { noteEmailSent } from "../lib/brevoQuota";
 // Ограничитель дорогих ручек. Тот же помощник, что стоит на 27 соседних ручках в
 // коммите d9cc19ce0 (28.07) — он ждёт мержа 22 дня, поэтому здесь пока только две
 // ручки, которые тогда пропустили: /ask и /media/upload-image.
-import { rateLimit } from "../lib/rateLimit";
+import { rateLimit, clientIp } from "../lib/rateLimit";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 /**
  * Предел для дорогих ручек этого модуля.
@@ -220,6 +221,11 @@ devhubRouter.use(
   ["/media/email", "/media/email-template-send", "/media/sms", "/media/whatsapp"],
   dhSendLimit(),
 );
+
+// Область запроса: адрес клиента для потолка кредита гостя (guestIpBudgetKey ниже).
+// Стоит ДО всех ручек: middleware действует только на зарегистрированные после него.
+const requestScope = new AsyncLocalStorage<{ ip: string }>();
+devhubRouter.use((req, _res, next) => requestScope.run({ ip: clientIp(req) }, next));
 
 /**
  * Ограничитель для формы связывания. Отдельный и СТРОЖЕ обычного: форма
@@ -671,6 +677,26 @@ async function getMonthUsage(userId: string, month: string, capability: Capabili
 
 type CreditVerdict = { allowed: boolean; used: number; limit: number; tier: StudioTier; usedKnown: boolean };
 
+/**
+ * Кредит гостя — ещё и по адресу клиента (15.09.2026).
+ *
+ * Гость опознаётся заголовком x-devhub-guest, который выбирает сам клиент: сменил
+ * заголовок — получил новый месячный кредит free (3 видео Replicate, 10 картинок
+ * OpenAI, 10k знаков ElevenLabs, 10 выкаток в наш Vercel/Cloudflare). Ограничителя
+ * по адресу на этих ручках не было — деньги и кредит сборок уходили без потолка.
+ * Второй потолок: те же лимиты free на ключ `guest-ip:<адрес>`. Адрес берётся из
+ * области запроса (AsyncLocalStorage), чтобы не менять двадцать точек вызова.
+ * Вошедшего это не касается: его кредит — по его id.
+ */
+function isGuestRequester(userId: string): boolean {
+  return userId === "anonymous" || userId.startsWith("guest:");
+}
+
+function guestIpBudgetKey(userId: string): string | null {
+  if (!isGuestRequester(userId)) return null;
+  const ip = requestScope.getStore()?.ip;
+  return ip ? `guest-ip:${ip}` : null;
+}
 async function checkCredit(userId: string, capability: CapabilityKey, amount = 1): Promise<CreditVerdict> {
   const tier = await getUserTier(userId);
   const limit = TIER_LIMITS[tier][capability];
@@ -684,6 +710,14 @@ async function checkCredit(userId: string, capability: CapabilityKey, amount = 1
     // unmetered month left no trace anywhere.
     return { allowed: true, used: 0, limit, tier, usedKnown: false };
   }
+  const ipKey = guestIpBudgetKey(userId);
+  if (ipKey) {
+    const ipLimit = TIER_LIMITS.free[capability];
+    const ipUsed = await getMonthUsage(ipKey, month, capability);
+    if (ipLimit !== -1 && ipUsed !== null && ipUsed + amount > ipLimit) {
+      return { allowed: false, used: ipUsed, limit: ipLimit, tier: "free", usedKnown: true };
+    }
+  }
   return { allowed: used + amount <= limit, used, limit, tier, usedKnown: true };
 }
 
@@ -696,6 +730,8 @@ function creditNote(verdict: CreditVerdict): { creditUnverified: true } | Record
 }
 
 async function debitCredit(userId: string, capability: CapabilityKey, amount = 1): Promise<void> {
+  const ipKey = guestIpBudgetKey(userId);
+  if (ipKey) await debitCredit(ipKey, capability, amount);
   const month = creditMonth();
   const tier = await getUserTier(userId);
   if (!isDevHubDbReady()) {

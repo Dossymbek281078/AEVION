@@ -18,7 +18,7 @@ vi.mock("../src/lib/sentry/platform", () => ({ makeServiceCapture: () => () => {
 const прежняяОбщая = process.env.GUMROAD_DEFAULT_PERMALINK;
 delete process.env.GUMROAD_DEFAULT_PERMALINK;
 
-const { __testables } = await import("../src/routes/gumroadWebhook");
+const { __testables, gumroadProvisionable } = await import("../src/routes/gumroadWebhook");
 const { gumroadSellable } = await import("../src/lib/payment/gumroadProvider");
 const { STOREFRONT_NAME_TO_REFERENCE, tierForLemonSqueezyReference, appSlugForReference } = await import(
   "../src/data/lemonSqueezyVariants"
@@ -68,6 +68,19 @@ describe("что продаётся через Gumroad, то вебхук выд
       }
     });
   }
+
+  test("пара для healthz: что продаётся, то и выдаётся — по всем 17", () => {
+    for (const ref of ВСЕ) задать(ref);
+    expect(gumroadProvisionable(ВСЕ).configured).toEqual(gumroadSellable(ВСЕ).configured);
+    expect(gumroadProvisionable(ВСЕ).configured.length).toBe(17);
+  });
+
+  test("КОНТРОЛЬ: общий товар по умолчанию — «продаётся» всё, «выдаётся» ничего", () => {
+    process.env.GUMROAD_DEFAULT_PERMALINK = "https://aevion.gumroad.com/l/obshchij";
+    поставлено.push("GUMROAD_DEFAULT_PERMALINK");
+    expect(gumroadSellable(ВСЕ).configured.length, "касса должна объявить всё продаваемым").toBe(17);
+    expect(gumroadProvisionable(ВСЕ).configured, "расхождение не видно — прибор слеп").toEqual([]);
+  });
 
   test("КОНТРОЛЬ: похожий, но другой адрес товара не узнаётся", () => {
     задать("tier_lite_monthly");

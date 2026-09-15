@@ -233,6 +233,28 @@ function moduleSlugForReference(ref: string): string | null {
 /** Для сторожа «что продаётся — то выдаётся». Поведение не меняет. */
 export const __testables = { resolveReference, tierForReference, moduleSlugForReference };
 
+/**
+ * Какие позиции вебхук ВЫДАСТ, если их купят через Gumroad. Пара к
+ * `gumroadSellable` (что касса продаёт): позиция, которая продаётся, но не
+ * выдаётся, — это деньги без доступа. Отдаётся в /checkout/healthz, чтобы
+ * расхождение было видно без покупки. Замер 15.09.2026: такое расхождение
+ * (17 продаваемых при 6 узнаваемых) не видел ни один прибор.
+ */
+export function gumroadProvisionable(references: string[]): { configured: string[]; missing: string[] } {
+  const configured: string[] = [];
+  const missing: string[] = [];
+  for (const ref of references) {
+    const ключ = ref.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+    const slug = permalinkSlug(
+      process.env[`GUMROAD_PERMALINK_${ключ}`]?.trim() ||
+        process.env[`GUMROAD_${ключ}_PERMALINK`]?.trim() ||
+        process.env.GUMROAD_DEFAULT_PERMALINK,
+    );
+    (slug && resolveReference({ product_permalink: slug }) === ref ? configured : missing).push(ref);
+  }
+  return { configured: configured.sort(), missing: missing.sort() };
+}
+
 // Liveness probe — Gumroad sends only POST, but a GET in the browser used to
 // answer "Cannot GET" which looks like the URL is broken when configuring the
 // webhook. Return a tiny JSON manifest instead so admins can sanity-check the

@@ -371,11 +371,14 @@ export function assessCenter(fen: string): string {
   const rank4 = board[4]; // ряд 4 (индекс от чёрных)
   const rank5 = board[3]; // ряд 5
 
-  let center = "";
-  if (rank4.includes("P") || rank5.includes("P")) center += "белые пешки в центре; ";
-  if (rank4.includes("p") || rank5.includes("p")) center += "чёрные пешки в центре; ";
-  if (!center) return "открытый центр";
-  return center.trim();
+  // Части склеиваются через «; » БЕЗ хвостовой точки с запятой: прежний вариант
+  // (`+= "…; "` и trim) оставлял «;» на конце, а шаблон разбора добавлял «.» —
+  // игрок читал «в центре;.» в каждом разборе. Замер живого текста 15.09.2026.
+  const parts: string[] = [];
+  if (rank4.includes("P") || rank5.includes("P")) parts.push("белые пешки в центре");
+  if (rank4.includes("p") || rank5.includes("p")) parts.push("чёрные пешки в центре");
+  if (!parts.length) return "открытый центр";
+  return parts.join("; ");
 }
 
 /** Проверка безопасности короля */
@@ -441,7 +444,10 @@ export function generatePositionExplanation(fen: string, plyCount: number, evalC
   const matLabel = matBal === 0 ? "материальное равенство" : matBal > 0 ? `белые опережают на ${matBal} ${pluralUnit(matBal)}` : `чёрные опережают на ${Math.abs(matBal)} ${pluralUnit(matBal)}`;
 
   const lines = [
-    `Сейчас ${phaseLabel}. Ход ${turn}. ${evalLabel}.`,
+    // Оценка начинается со строчной («позиция примерно равна», «у белых…»), а стоит
+    // после точки — поднимаем первую букву. Эмодзи в начале («⚠️ …») от toUpperCase
+    // не меняется. Замер живого текста 15.09.2026: «Ход чёрных. позиция…».
+    `Сейчас ${phaseLabel}. Ход ${turn}. ${evalLabel.charAt(0).toUpperCase() + evalLabel.slice(1)}.`,
     `Материал: ${matLabel}. Центр: ${center}.`,
     `Безопасность королей: белые — ${kingSafety.white}; чёрные — ${kingSafety.black}.`,
   ];

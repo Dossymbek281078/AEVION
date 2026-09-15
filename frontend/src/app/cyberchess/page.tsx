@@ -12727,7 +12727,11 @@ ${question.trim()}`;
     {on&&!over&&tab!=="play"&&!isHumanGame&&<button onClick={()=>sTab("play")}
       title="Вернуться к партии — часы на паузе, пока ты здесь"
       style={{
-        position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",zIndex:Z.modal,
+        // bottom на телефоне поднят над BottomNav (sticky bottom:0, ~54px, порог 769 —
+        // тот же, что у BottomNav): при bottom:20 пилюля ложилась РОВНО на вкладки
+        // Анализ/Коуч и, будучи выше по z, делала их ненажимаемыми. Замер 15.09.2026
+        // на 390px: elementFromPoint над вкладкой Коуч возвращал эту пилюлю.
+        position:"fixed",bottom:vwPx<769?88:20,left:"50%",transform:"translateX(-50%)",zIndex:Z.modal,
         display:"inline-flex",alignItems:"center",gap:9,
         padding:"11px 20px",borderRadius:RADIUS.full,border:"none",
         background:"linear-gradient(135deg,#059669,#10b981)",color:"#fff",

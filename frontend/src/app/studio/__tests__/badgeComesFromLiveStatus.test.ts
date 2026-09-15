@@ -15,11 +15,11 @@ const SRC = readFileSync(resolve(__dirname, "..", "page.tsx"), "utf8");
 
 describe("бейдж /studio берётся из статуса возможности", () => {
   test("каждый статус даёт свой бейдж, неизвестный — «—»", () => {
-    expect(badgeFrom("live").text).toBe("LIVE");
-    expect(badgeFrom("needs_token").text).toBe("NEEDS TOKEN");
-    expect(badgeFrom("degraded").text).toBe("DEGRADED");
-    expect(badgeFrom("not_available").text).toBe("OFF");
-    expect(badgeFrom(undefined).text).toBe("—");
+    expect(badgeFrom("live").caption).toBe("LIVE");
+    expect(badgeFrom("needs_token").caption).toBe("NEEDS TOKEN");
+    expect(badgeFrom("degraded").caption).toBe("DEGRADED");
+    expect(badgeFrom("not_available").caption).toBe("OFF");
+    expect(badgeFrom(undefined).caption).toBe("—");
     expect(badgeFrom("live").bg).not.toBe(badgeFrom("needs_token").bg);
   });
 

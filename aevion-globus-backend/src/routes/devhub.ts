@@ -7362,14 +7362,21 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
       return res.status(502).json({ error: `CF Pages upload failed: ${wranglerResult.error}` });
     }
-    const pagesUrl = wranglerResult.url;
+    // Живой адрес — адрес ПРОЕКТА (<pageName>.pages.dev), а не адрес выкатки
+    // (<hash>.<pageName>.pages.dev), который wrangler печатает первым. Проба 15.09
+    // (probe-newcomer-c64315): адрес проекта и <slug>.aevion.app отвечали через
+    // минуту, адрес выкатки — не отвечал и через три (jina 422 при живых A-записях).
+    // Проверка шла именно по нему — отсюда «выкаток 6, успешных 0» за 30 дней.
+    // Людям тоже нужен адрес проекта: он не меняется от выкатки к выкатке.
+    const deploymentUrl = wranglerResult.url;
+    const pagesUrl = `https://${pageName}.pages.dev`;
 
     deployment.status = "building";
     deployment.deployUrl = pagesUrl;
     // Пропущенные файлы называются поимённо: молчаливый пропуск означал бы,
     // что на сайте не хватает страницы, а выкатка отчиталась успехом.
     deployment.buildLog =
-      `CF Pages deployment uploaded via wrangler` +
+      `CF Pages deployment uploaded via wrangler (${deploymentUrl}); live address ${pagesUrl}` +
       (wranglerResult.skipped.length
         ? ` | НЕ ЗАГРУЖЕНЫ ${wranglerResult.skipped.length} файл(ов) с недопустимым путём: ${wranglerResult.skipped.slice(0, 10).join(", ")}`
         : "");
@@ -7439,6 +7446,7 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       provider: "cloudflare-pages",
       deploymentId,
       pagesUrl,
+      deploymentUrl,
       domain: customDomain,
       domainUrl,
       domainReady,
@@ -7472,7 +7480,11 @@ devhubRouter.post("/projects/:id/deployments/:deployId/recheck", async (req, res
   if (!d) d = memDeployments.get(deployId) ?? null;
   if (!d) return res.status(404).json({ error: "deployment not found" });
   if (!d.deployUrl) return res.status(400).json({ error: "deployment has no address to check — the upload never finished" });
-  const serves = await verifyDeploymentServes(d.deployUrl, 1000, 3);
+  // Старые записи хранят адрес выкатки (<hash>.<проект>.pages.dev); он бывает мёртв
+  // при живом адресе проекта — спрашиваем оба, живым считаем адрес проекта.
+  const m = /^https:\/\/[a-z0-9]+\.([a-z0-9-]+\.pages\.dev)$/i.exec(d.deployUrl);
+  const projectUrl = m ? `https://${m[1]}` : d.deployUrl;
+  const serves = (await verifyDeploymentServes(projectUrl, 1000, 3)) || (projectUrl !== d.deployUrl && await verifyDeploymentServes(d.deployUrl, 1000, 2));
   if (!serves) {
     return res.json({ ok: true, serves: false, status: d.status, deployUrl: d.deployUrl, message: `${d.deployUrl} still does not answer 2xx` });
   }
@@ -7480,8 +7492,9 @@ devhubRouter.post("/projects/:id/deployments/:deployId/recheck", async (req, res
   const domainFailed = /\| domain: /.test(d.buildLog || "");
   const customDomain = project.customDomain
     || (dnsConfigured() && !domainFailed ? `${slugify(project.name)}-${project.id.slice(0, 6)}.${siteZone()}` : null);
-  await markDeploymentLive(d, project, d.deployUrl, customDomain);
-  return res.json({ ok: true, serves: true, status: "live", deployUrl: d.deployUrl, customDomain });
+  d.deployUrl = projectUrl;
+  await markDeploymentLive(d, project, projectUrl, customDomain);
+  return res.json({ ok: true, serves: true, status: "live", deployUrl: projectUrl, customDomain });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════

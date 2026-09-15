@@ -119,7 +119,7 @@ describe("цепочка окон: поздний успех — успех, м�
     expect(afterSecond.status).toBe("live");
     expect(afterSecond.buildLog).toMatch(/page answers 2xx/);
     const proj = (await request(app).get(`/api/devhub/projects/${id}`)).body.project;
-    expect(proj.deployUrl).toBe("https://abc.aevion-t.pages.dev");
+    expect(proj.deployUrl, "живой адрес — адрес ПРОЕКТА, не выкатки").toMatch(/^https:\/\/aevion-[a-z0-9-]+\.pages\.dev$/);
     expect(proj.status).toBe("live");
     expect(getProviderHealth("pages")?.ok).toBe(true);
   });
@@ -168,7 +168,7 @@ describe("recheck: старая «failed» лечится по требован�
     expect(r2.body.serves).toBe(true);
     expect((await deployment(app, id, deploymentId)).status).toBe("live");
     const proj = (await request(app).get(`/api/devhub/projects/${id}`)).body.project;
-    expect(proj.deployUrl).toBe("https://abc.aevion-t.pages.dev");
+    expect(proj.deployUrl, "живой адрес — адрес ПРОЕКТА, не выкатки").toMatch(/^https:\/\/aevion-[a-z0-9-]+\.pages\.dev$/);
     expect(getProviderHealth("pages")?.ok).toBe(true);
   });
 

@@ -99,7 +99,13 @@ function loadPos(): { x: number; y: number } {
   if (typeof window === "undefined") return DEFAULT_POS;
   try {
     const raw = localStorage.getItem(POS_KEY);
-    if (!raw) return DEFAULT_POS;
+    // На телефоне (<769 — порог BottomNav) первый показ — внизу справа НАД навом
+    // (запас 100px = нав ~54 + safe-area + зазор), а не в углу (24,24): там окно
+    // 320×180 накрывало верх доски (замер 15.09.2026 на 390px). Сохранённая
+    // пользователем позиция по-прежнему главнее — ветка только при отсутствии raw.
+    if (!raw) return window.innerWidth < 769
+      ? { x: Math.max(8, window.innerWidth - MIN_SIZE.w - 8), y: Math.max(8, window.innerHeight - MIN_SIZE.h - 100) }
+      : DEFAULT_POS;
     const j = JSON.parse(raw);
     return { x: Number(j.x) || DEFAULT_POS.x, y: Number(j.y) || DEFAULT_POS.y };
   } catch { return DEFAULT_POS; }
@@ -108,7 +114,9 @@ function loadSize(): { w: number; h: number } {
   if (typeof window === "undefined") return DEFAULT_SIZE;
   try {
     const raw = localStorage.getItem(SIZE_KEY);
-    if (!raw) return DEFAULT_SIZE;
+    // На телефоне первый показ — минимальный размер (240×135): 320×180 на 390px
+    // занимал почти всю ширину. Сохранённый пользователем размер главнее.
+    if (!raw) return window.innerWidth < 769 ? { ...MIN_SIZE } : DEFAULT_SIZE;
     const j = JSON.parse(raw);
     return {
       w: Math.max(MIN_SIZE.w, Number(j.w) || DEFAULT_SIZE.w),

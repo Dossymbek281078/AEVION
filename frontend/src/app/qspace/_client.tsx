@@ -25,9 +25,9 @@ import {
 import { parseDxf } from "./dxf";
 import { estimateCsv, estimatePlan } from "./estimate";
 import { planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
-import { масштабПоРазмерам, словаИзТекста } from "./dimensionScale";
+import { масштабПоРазмерам, надёжностьМасштаба, предупреждениеОбОсях, словаИзТекста } from "./dimensionScale";
 import { текстPdf } from "./pdfText";
-import { drawMaterial, materialById, materialsFor } from "./materials";
+import { FINISH_PRESETS, drawMaterial, materialById, materialsFor } from "./materials";
 import { CATALOG, demoPlacedSnapshots, groups, itemById, type CatalogItem } from "./furniture";
 import { checkClearance, type Issue, type Placed } from "./clearance";
 import { findRooms } from "./rooms";
@@ -865,9 +865,12 @@ export default function QSpaceClient() {
         if (r.plan) {
           setPdfExtent(String(extentM));
           setWarnings([
-            `Масштаб найден по размерам на чертеже: ${масштаб.mmPerPt.toFixed(1)} мм в пункте листа `
-            + `(согласных пар чисел ${масштаб.agree} из ${масштаб.pairs}). Модель построена — `
-            + "если большая сторона плана на самом деле другая, поправьте число ниже.",
+            `Масштаб найден по размерам на чертеже — ${надёжностьМасштаба(масштаб.agree)}: `
+            + `${масштаб.mmPerPt.toFixed(1)} мм в пункте листа, его подтверждают ${масштаб.agree} пар размеров из ${масштаб.pairs}. `
+            + (масштаб.agree < 5
+              ? "Пар мало — сверьте с чертежом длину большей стороны ниже, три пары могут совпасть случайно. "
+              : "Модель построена — если большая сторона плана на самом деле другая, поправьте число ниже."),
+            ...предупреждениеОбОсях(масштаб),
             ...r.warnings,
           ]);
           поставитьЧертёж({ ...r.plan, name: f.name });
@@ -1558,6 +1561,37 @@ export default function QSpaceClient() {
           <CoolingPanel rooms={roomsInfo.rooms} />
 
           <h2 style={S.h2}>Чистовая отделка</h2>
+          <div style={S.swatchRow} role="group" aria-label="Готовые сочетания отделки">
+            {FINISH_PRESETS.map((p) => {
+              const активен = wallMatId === p.wall && floorMatId === p.floor;
+              const пол = materialById(p.floor);
+              const стена = materialById(p.wall);
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  aria-pressed={активен}
+                  title={`${пол?.name ?? p.floor} + ${стена?.name ?? p.wall}`}
+                  onClick={() => { setWallMatId(p.wall); setFloorMatId(p.floor); }}
+                  style={{
+                    ...S.btn,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    fontWeight: активен ? 700 : 400,
+                    borderColor: активен ? "#2f5e2a" : "#c9c4bb",
+                  }}
+                >
+                  <span aria-hidden="true" style={{ display: "inline-flex" }}>
+                    <span style={{ width: 12, height: 12, background: пол?.colors[0], border: "1px solid #b8b3aa" }} />
+                    <span style={{ width: 12, height: 12, background: стена?.colors[0], border: "1px solid #b8b3aa", marginLeft: -4 }} />
+                  </span>
+                  {p.name}
+                </button>
+              );
+            })}
+          </div>
+          <p style={S.hint}>Сочетание — это те же пол и стены из рядов ниже; можно поправить по отдельности.</p>
           <div style={S.swatchRow} role="group" aria-label="Отделка стен">
             {materialsFor("wall").map((m) => (
               <button

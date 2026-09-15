@@ -109,6 +109,27 @@ export const MATERIALS: Material[] = [
   },
 ];
 
+/**
+ * Готовые сочетания «пол + стены» — одной кнопкой вместо двух рядов образцов.
+ *
+ * Появились 15.09.2026 после вопроса основателя «а где три варианта»: они были
+ * в отдельной 3D-странице по плану LA VIE, а на сайте — только образцы по одному.
+ * Названия те же, что там; материалы — из каталога выше, отдельных цветов нет,
+ * иначе смета считала бы одно, а на экране было бы другое.
+ */
+export interface FinishPreset {
+  id: string;
+  name: string;
+  wall: string;
+  floor: string;
+}
+
+export const FINISH_PRESETS: FinishPreset[] = [
+  { id: "light-oak", name: "Светлый дуб", wall: "paint-warm-white", floor: "laminate-light" },
+  { id: "warm-walnut", name: "Тёплый орех", wall: "paint-sand", floor: "parquet-oak" },
+  { id: "graphite", name: "Графит и бетон", wall: "paint-grey", floor: "concrete-floor" },
+];
+
 export function materialsFor(surface: Surface): Material[] {
   return MATERIALS.filter((m) => m.surface === surface);
 }

@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
-import { масштабПоРазмерам, предупреждениеОбОсях, словаИзТекста, type СловоНаЛисте } from "./dimensionScale";
+import { масштабПоРазмерам, надёжностьМасштаба, предупреждениеОбОсях, словаИзТекста, type СловоНаЛисте } from "./dimensionScale";
 import { planFromPdfSegments, readPdfSegments } from "./pdf";
 
 /** Цепочка размеров вдоль оси: надписи посередине своих отрезков, масштаб k мм/пт. */
@@ -107,6 +107,17 @@ describe("масштаб по осям — чертёж, растянутый п
     expect(r!.byAxis).toEqual({ h: 40 });
     expect(r!.axisMismatchPct).toBeUndefined();
     expect(предупреждениеОбОсях(r!)).toEqual([]);
+  });
+});
+
+describe("надёжность масштаба по числу согласных пар", () => {
+  it("3–4 шатко, 5–7 вероятно, от 8 надёжно — границы с обеих сторон", () => {
+    expect(надёжностьМасштаба(3)).toBe("шатко");
+    expect(надёжностьМасштаба(4)).toBe("шатко");
+    expect(надёжностьМасштаба(5)).toBe("вероятно");
+    expect(надёжностьМасштаба(7)).toBe("вероятно");
+    expect(надёжностьМасштаба(8)).toBe("надёжно");
+    expect(надёжностьМасштаба(12)).toBe("надёжно");
   });
 });
 

@@ -50,9 +50,11 @@ describe("readPdfSegments — что нашлось в файле", () => {
     expect(r.warnings.join(" ")).toMatch(/СКАН|картинка/);
   });
 
-  it("отрезки короче пункта отбрасываются как мусор оформления", async () => {
-    const r = await readPdfSegments(makePdf("0 0 m 0.4 0 l 0 0 m 100 0 l S"));
-    expect(r.segments.length).toBe(1);
+  // Порог 0.2 пункта ЛИСТА: после матрицы cm план в масштабе ~42 мм/пт делает
+  // короткие торцы перегородок длиной в доли пункта, и прежний 1 пт их выбрасывал.
+  it("отрезки короче 0.2 пункта отбрасываются как мусор оформления, 0.4 — остаются", async () => {
+    const r = await readPdfSegments(makePdf("0 0 m 0.1 0 l 0 0 m 0.4 0 l 0 0 m 100 0 l S"));
+    expect(r.segments.length).toBe(2);
   });
 
   // Главный настоящий случай: AutoCAD/Revit пишут поток СЖАТЫМ (FlateDecode).

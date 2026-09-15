@@ -73,6 +73,34 @@ export function labelInZone(fqdn: string): string | null {
   return null;
 }
 
+/**
+ * Имя, которое DevHub выдаёт сам: <slug>-<6 hex id проекта>. ТОЛЬКО такие метки
+ * пишутся в зону. Найдено окном приёмки 15.09.2026: гость без входа мог записать
+ * проекту customDomain «api.aevion.app», позвать auto-setup — и upsertCname удалил
+ * бы CNAME `api` (весь бэкенд) ради своей записи; так же уязвимы brevo1/2._domainkey.
+ * Служебные имена (`@`, с `_`, с точкой) под этот формат не подходят никогда.
+ */
+export const DEVHUB_LABEL_RE = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?-[0-9a-f]{6}$/;
+
+export function isDevHubLabel(label: string): boolean {
+  return DEVHUB_LABEL_RE.test(label);
+}
+
+/** Цель, которую ставит сам DevHub. Запись с другой целью — чужая, её не трогаем. */
+export function isOurTarget(value: string): boolean {
+  const v = stripDot(value);
+  return v.endsWith(".pages.dev") || v.endsWith(".vercel.app") || v === `devhub.${siteZone()}`;
+}
+
+/** Почему запись писать нельзя; null — можно. Проверяется ДО любого запроса к поставщику. */
+export function cnameWriteRefusal(fqdn: string, target: string): string | null {
+  const zone = siteZone();
+  const label = labelInZone(fqdn);
+  if (label === null) return `${fqdn} is outside the ${zone} zone — DevHub writes only its own <slug>-<id>.${zone} names; an external domain is configured at its registrar`;
+  if (!isDevHubLabel(label)) return `${fqdn} is not a DevHub-issued name (expected <slug>-<6 hex>.${zone}) — reserved and service records are never written`;
+  if (!isOurTarget(target)) return `target ${target} is not a DevHub destination (*.pages.dev, *.vercel.app or devhub.${zone})`;
+  return null;
+}
 // ───── Vercel ────────────────────────────────────────────────────────────────
 
 type VercelRecord = { id: string; name: string; type: string; value: string };
@@ -104,6 +132,9 @@ async function upsertVercel(fqdn: string, target: string): Promise<UpsertResult>
   // У Vercel нет «заменить значение» с гарантированной формой ответа во всех
   // версиях API, зато удаление и создание задокументированы одинаково. Порядок:
   // сперва создать нельзя (дубль CNAME отвергается), поэтому удалить → создать.
+  if (existing && !isOurTarget(existing.value)) {
+    return { ok: false, error: `${fqdn} already exists and points elsewhere (${stripDot(existing.value)}) — not a DevHub record, refusing to replace it` };
+  }
   if (existing) {
     const delResp = await fetch(`${base}/${existing.id}`, { method: "DELETE", headers: vercelHeaders() });
     if (!delResp.ok && delResp.status !== 404) {
@@ -159,6 +190,9 @@ async function upsertCloudflare(fqdn: string, target: string): Promise<UpsertRes
   if (existing && stripDot(existing.content) === stripDot(target)) {
     return { ok: true, action: "already-configured", recordId: existing.id };
   }
+  if (existing && !isOurTarget(existing.content)) {
+    return { ok: false, error: `${fqdn} already exists and points elsewhere (${stripDot(existing.content)}) — not a DevHub record, refusing to replace it` };
+  }
   const body = JSON.stringify({ type: "CNAME", name: fqdn, content: target, ttl: 1, proxied: true });
   const resp = existing
     ? await fetch(`${base}/${existing.id}`, { method: "PUT", headers: cfHeaders(), body })
@@ -185,6 +219,8 @@ async function cloudflareZoneStatus(): Promise<string | null> {
 // ───── Общий интерфейс ───────────────────────────────────────────────────────
 
 export async function upsertCname(fqdn: string, target: string): Promise<UpsertResult> {
+  const refusal = cnameWriteRefusal(fqdn, target);
+  if (refusal) return { ok: false, error: refusal };
   const p = dnsProvider();
   if (p === "vercel") {
     if (!process.env.VERCEL_API_TOKEN) return { ok: false, error: "VERCEL_API_TOKEN not set" };

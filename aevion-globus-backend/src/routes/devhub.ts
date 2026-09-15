@@ -866,11 +866,24 @@ function safeRedirect(raw: unknown, frontendUrl: string, fallbackPath: string): 
     return fallback;
   }
 }
-const GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN = "sign in to use the shared AEVION GitHub account, or set your own GITHUB_TOKEN in the project Env Vars";
+const SHARED_GITHUB_IS_PRO = "the shared AEVION GitHub account is part of Studio Pro — link your purchase at /devhub/link (or sign in), or set your own GITHUB_TOKEN in the project Env Vars";
 
-/** Гость без своего токена не получает общий токен GitHub AEVION (см. ручки /github/*). */
-function guestMayNotUseSharedGitHub(auth: unknown, project: DevHubProject): boolean {
-  return !auth && !project.envVars?.GITHUB_TOKEN;
+/**
+ * Общий токен GitHub AEVION — не бесплатному гостю (окно приёмки 15.09.2026: гость
+ * без входа пушил и мержил PR под нашим аккаунтом — паттерн бана 27.07).
+ * DevHub намеренно работает без входа, покупка привязывается к браузеру гостя
+ * (/devhub/link) — поэтому замок по ТАРИФУ, а не по входу: свой токен в env
+ * проекта — всегда; вошедший — да; гость с тарифом выше free — да; бесплатный
+ * гость — 402 с адресом, где привязать покупку.
+ */
+async function sharedGitHubRefusal(userId: string, auth: unknown, project: DevHubProject): Promise<string | null> {
+  if (project.envVars?.GITHUB_TOKEN || auth) return null;
+  return (await getUserTier(userId)) === "free" ? SHARED_GITHUB_IS_PRO : null;
+}
+
+/** Стенд: тариф гостя в памяти (когда БД нет). */
+export function __setUserTierForTest(userId: string, tier: StudioTier): void {
+  memTiers.set(userId, tier);
 }
 
 /** Имя поставщика DNS для текстов, которые читает человек. */
@@ -3635,7 +3648,8 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
   // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
   // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
   // другой проверкой: контракт ручки для гостя — 401, без исключений.
-  if (guestMayNotUseSharedGitHub(auth, project)) return res.status(401).json({ error: GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN });
+  const sharedGitHubWhyNot = await sharedGitHubRefusal(userId, auth, project);
+  if (sharedGitHubWhyNot) return res.status(402).json({ error: sharedGitHubWhyNot, upgrade: "/devhub/link" });
   const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
   if (!githubToken) {
     return res.json({
@@ -3785,7 +3799,8 @@ devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
   // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
   // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
   // другой проверкой: контракт ручки для гостя — 401, без исключений.
-  if (guestMayNotUseSharedGitHub(auth, project)) return res.status(401).json({ error: GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN });
+  const sharedGitHubWhyNot = await sharedGitHubRefusal(userId, auth, project);
+  if (sharedGitHubWhyNot) return res.status(402).json({ error: sharedGitHubWhyNot, upgrade: "/devhub/link" });
   if (!project.repoUrl) {
     return res.json({ ok: false, message: "No GitHub repo linked yet — push to GitHub first (POST /github/push)" });
   }
@@ -3903,7 +3918,8 @@ devhubRouter.post("/projects/:id/github/pull-request", async (req, res) => {
   // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
   // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
   // другой проверкой: контракт ручки для гостя — 401, без исключений.
-  if (guestMayNotUseSharedGitHub(auth, project)) return res.status(401).json({ error: GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN });
+  const sharedGitHubWhyNot = await sharedGitHubRefusal(userId, auth, project);
+  if (sharedGitHubWhyNot) return res.status(402).json({ error: sharedGitHubWhyNot, upgrade: "/devhub/link" });
   const { title, body: prBody, branch: branchInput } = req.body || {};
   if (!title || typeof title !== "string") {
     return res.status(400).json({ error: "title is required" });
@@ -4052,7 +4068,8 @@ devhubRouter.post("/projects/:id/github/pull-request/:number/merge", async (req,
   // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
   // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
   // другой проверкой: контракт ручки для гостя — 401, без исключений.
-  if (guestMayNotUseSharedGitHub(auth, project)) return res.status(401).json({ error: GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN });
+  const sharedGitHubWhyNot = await sharedGitHubRefusal(userId, auth, project);
+  if (sharedGitHubWhyNot) return res.status(402).json({ error: sharedGitHubWhyNot, upgrade: "/devhub/link" });
   const prNumber = pgIntId(req.params.number);
   if (prNumber === null) {
     return res.status(400).json({ error: "invalid pull request number" });
@@ -4109,7 +4126,8 @@ devhubRouter.get("/projects/:id/github/status", async (req, res) => {
   // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
   // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
   // другой проверкой: контракт ручки для гостя — 401, без исключений.
-  if (guestMayNotUseSharedGitHub(auth, project)) return res.status(401).json({ error: GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN });
+  const sharedGitHubWhyNot = await sharedGitHubRefusal(userId, auth, project);
+  if (sharedGitHubWhyNot) return res.status(402).json({ error: sharedGitHubWhyNot, upgrade: "/devhub/link" });
   const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
   if (!project.repoUrl || !githubToken) {
     return res.json({ exists: false });
@@ -4161,7 +4179,8 @@ devhubRouter.get("/projects/:id/github/branches", async (req, res) => {
   // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
   // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
   // другой проверкой: контракт ручки для гостя — 401, без исключений.
-  if (guestMayNotUseSharedGitHub(auth, project)) return res.status(401).json({ error: GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN });
+  const sharedGitHubWhyNot = await sharedGitHubRefusal(userId, auth, project);
+  if (sharedGitHubWhyNot) return res.status(402).json({ error: sharedGitHubWhyNot, upgrade: "/devhub/link" });
   const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
   if (!project.repoUrl || !githubToken) {
     return res.json({ branches: [], connected: false });
@@ -4798,7 +4817,12 @@ devhubRouter.post("/media/payment-link", dhCostlyLimit("dhpaylink"), async (req,
   // Три замка: вход обязателен; товар — ТОЛЬКО отдельный (LEMON_SQUEEZY_PAYLINK_VARIANT_ID),
   // никогда не Studio Pro и не товар по умолчанию; адрес возврата — только свой домен.
   const auth = verifyBearerOptional(req);
-  if (!auth) return res.status(401).json({ error: "auth required — sign in to create payment links" });
+  const payUserId = requesterId(req, auth?.sub);
+  // DevHub работает без входа (покупка привязывается к браузеру гостя через
+  // /devhub/link), поэтому замок — по тарифу: бесплатному гостю ссылки не выпускаем.
+  if (!auth && (await getUserTier(payUserId)) === "free") {
+    return res.status(402).json({ error: "payment links are part of Studio Pro — link your purchase at /devhub/link, or sign in", upgrade: "/devhub/link" });
+  }
   const { name, amountCents, description, successUrl } = req.body || {};
   if (!name || typeof name !== "string") return res.status(400).json({ error: "name required" });
   const amt = Number(amountCents);
@@ -4831,7 +4855,7 @@ devhubRouter.post("/media/payment-link", dhCostlyLimit("dhpaylink"), async (req,
         attributes: {
           custom_price: Math.round(amt),
           // Метка для вебхука и разбора: это пользовательская ссылка, не покупка тарифа.
-          checkout_data: { custom: { aevion_paylink: "1", issuer: String(auth.sub || "") } },
+          checkout_data: { custom: { aevion_paylink: "1", issuer: payUserId } },
           checkout_options: { embed: false, media: false, logo: true },
           product_options: {
             name: name.trim().slice(0, 200),

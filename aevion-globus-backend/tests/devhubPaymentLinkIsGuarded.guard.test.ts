@@ -7,7 +7,11 @@
  * умолчанию на проде — DevHub Studio Pro, а вебхук по нему выдаёт Pro без сверки
  * суммы. Pro ($149/мес) за $0.50 любому посетителю.
  *
- * Здесь закреплено: без токена 401 и ноль обращений к LemonSqueezy; товар — только
+ * DevHub намеренно работает без входа (покупка привязывается к браузеру гостя через
+ * /devhub/link), поэтому замок — по тарифу: бесплатному гостю 402 с адресом привязки,
+ * вошедшему и гостю с покупкой — можно.
+ *
+ * Здесь закреплено: бесплатный гость — 402 и ноль обращений к LemonSqueezy; товар — только
  * отдельный (LEMON_SQUEEZY_PAYLINK_VARIANT_ID), никогда не Studio Pro и не товар по
  * умолчанию (503 «не настроено», не тихая подмена); адрес возврата — только свой домен.
  */
@@ -27,7 +31,7 @@ vi.mock("../src/services/qcoreai/providers", () => ({ getProviders: vi.fn(() => 
 vi.mock("../src/lib/wranglerPagesDeploy", () => ({ deployViaWrangler: vi.fn() }));
 
 // eslint-disable-next-line import/first
-import { devhubRouter, __resetDevHubStore } from "../src/routes/devhub";
+import { devhubRouter, __resetDevHubStore, __setUserTierForTest } from "../src/routes/devhub";
 
 const ENV = ["LEMON_SQUEEZY_API_KEY", "LEMON_SQUEEZY_STORE_ID", "LEMON_SQUEEZY_DEFAULT_VARIANT_ID", "LEMON_SQUEEZY_PAYLINK_VARIANT_ID", "LEMON_SQUEEZY_VARIANT_DEVHUB_STUDIO_PRO", "FRONTEND_URL", "AUTH_JWT_SECRET"];
 const было: Record<string, string | undefined> = {};
@@ -65,19 +69,27 @@ afterEach(() => {
 
 const GOOD = { name: "Консультация", amountCents: 5000 };
 
-describe("замок 1: вход обязателен", () => {
-  test("без токена — 401, к LemonSqueezy ни одного запроса, даже при полной настройке", async () => {
+describe("замок 1: бесплатному гостю — 402; вошедшему и гостю с покупкой — можно", () => {
+  test("без токена (бесплатный гость) — 402 с адресом привязки, к LemonSqueezy ни одного запроса", async () => {
     process.env.LEMON_SQUEEZY_PAYLINK_VARIANT_ID = "paylink-1";
     const r = await request(makeApp()).post("/api/devhub/media/payment-link").send(GOOD);
-    expect(r.status).toBe(401);
+    expect(r.status).toBe(402);
+    expect(r.body.upgrade).toBe("/devhub/link");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  test("мусорный токен — тоже 401", async () => {
+  test("мусорный токен — тоже 402 (это гость)", async () => {
     process.env.LEMON_SQUEEZY_PAYLINK_VARIANT_ID = "paylink-1";
     const r = await request(makeApp()).post("/api/devhub/media/payment-link").set({ Authorization: "Bearer not-a-jwt" }).send(GOOD);
-    expect(r.status).toBe(401);
+    expect(r.status).toBe(402);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("гость с тарифом pro (привязал покупку) — ссылка создаётся", async () => {
+    process.env.LEMON_SQUEEZY_PAYLINK_VARIANT_ID = "paylink-1";
+    __setUserTierForTest("guest:guest-pro-1", "pro");
+    const r = await request(makeApp()).post("/api/devhub/media/payment-link").set({ "x-devhub-guest": "guest-pro-1" }).send(GOOD);
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
   });
 
   test("КОНТРОЛЬ: с токеном и отдельным товаром ссылка создаётся на ЭТОМ товаре с меткой paylink", async () => {

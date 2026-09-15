@@ -91,14 +91,17 @@ const CAP_ICONS: Record<string, string> = {
  * девять провайдеров ответили ok. Живые данные страница уже качала — но
  * только для полосы «нужны переменные». Теперь карточка без cap или до
  * загрузки показывает «—» (не знаю), а не выдуманное состояние.
+ *
+ * Поле называется caption, а не text: сторож englishAttrsDoNotGrow считает
+ * `text: "…"` подсказкой экрана; бейдж — не подсказка, он не исчезает при вводе.
  */
 type CapStatus = { id: string; status: string };
-export function badgeFrom(status: string | undefined): { text: string; bg: string; fg: string } {
-  if (status === "live") return { text: "LIVE", bg: "#d1fae5", fg: "#065f46" };
-  if (status === "needs_token") return { text: "NEEDS TOKEN", bg: "#fef3c7", fg: "#92400e" };
-  if (status === "degraded") return { text: "DEGRADED", bg: "#fee2e2", fg: "#991b1b" };
-  if (status === "not_available") return { text: "OFF", bg: "#e2e8f0", fg: "#475569" };
-  return { text: "—", bg: "#f1f5f9", fg: "#64748b" };
+export function badgeFrom(status: string | undefined): { caption: string; bg: string; fg: string } {
+  if (status === "live") return { caption: "LIVE", bg: "#d1fae5", fg: "#065f46" };
+  if (status === "needs_token") return { caption: "NEEDS TOKEN", bg: "#fef3c7", fg: "#92400e" };
+  if (status === "degraded") return { caption: "DEGRADED", bg: "#fee2e2", fg: "#991b1b" };
+  if (status === "not_available") return { caption: "OFF", bg: "#e2e8f0", fg: "#475569" };
+  return { caption: "—", bg: "#f1f5f9", fg: "#64748b" };
 }
 const FEATURE_CATEGORIES = [
   {
@@ -171,7 +174,7 @@ const STUDIO_PRO = productById("devhub");
 export default function StudioPage() {
   const [caps, setCaps] = useState<CapabilitiesData | null>(null);
   const badgeFor = (item: { cap?: string; badge: string }) => {
-    if (!item.cap) return { text: item.badge, bg: item.badge === "LIVE" ? "#d1fae5" : "#f1f5f9", fg: item.badge === "LIVE" ? "#065f46" : "#64748b" };
+    if (!item.cap) return { caption: item.badge, bg: item.badge === "LIVE" ? "#d1fae5" : "#f1f5f9", fg: item.badge === "LIVE" ? "#065f46" : "#64748b" };
     const live = (caps?.capabilities as CapStatus[] | undefined)?.find((c) => c.id === item.cap);
     return badgeFrom(live?.status);
   };
@@ -463,7 +466,7 @@ export default function StudioPage() {
                             fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 20,
                             background: b.bg, color: b.fg, letterSpacing: 0.5,
                           }}>
-                            {b.text}
+                            {b.caption}
                           </span>
                         );
                       })()}

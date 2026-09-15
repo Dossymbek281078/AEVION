@@ -8356,7 +8356,8 @@ devhubRouter.get("/studio/capabilities", async (_req, res) => {
     const raw = (c.lastError ?? "").toLowerCase();
     if (/quota|exhaust|limit exceeded|исчерпан/.test(raw)) return "quota_exhausted";
     if (/401|403|invalid.?api.?key|authentication|unauthor/.test(raw)) return "auth_rejected";
-    if (/не делегирован|not delegated/.test(raw)) return "zone_not_delegated";
+    // 15.09.2026: зона у Vercel — текст отказа «не подтверждена у Vercel» / «not verified».
+    if (/не делегирован|not delegated|не подтверждена|not verified|zone .* not ready/.test(raw)) return "zone_not_delegated";
     if (raw.includes("{") || /http \d{3}/.test(raw)) return "provider_error";
     if (c.status === "needs_token") return "needs_token";
     if (c.status === "not_available") return "not_available";

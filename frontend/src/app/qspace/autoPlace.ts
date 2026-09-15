@@ -42,6 +42,12 @@ export function autoPlace(
   runsOf: (index: number) => RoomRun[],
   roomAt: (x: number, y: number) => number | null,
   sizeOf: (catalogId: string) => [number, number, number] | undefined,
+  /**
+   * Уже стоящее — сантехника и мебель С ЧЕРТЕЖА (fixtures.ts). Идёт в ответ
+   * первым, занимает место, и тот же предмет в той же комнате по стилю
+   * второй раз не ставится: унитаз с чертежа важнее унитаза «по стилю».
+   */
+  preplaced: Placement[] = [],
 ): PlacementResult {
   const items: Placement[] = [];
   const skipped: PlacementResult["skipped"] = [];
@@ -49,6 +55,17 @@ export function autoPlace(
 
   const пересекает = (b: Box): boolean =>
     заняты.some((o) => b.x0 < o.x1 + ЗАЗОР && b.x1 > o.x0 - ЗАЗОР && b.z0 < o.z1 + ЗАЗОР && b.z1 > o.z0 - ЗАЗОР);
+
+  const естьСЧертежа = new Set<string>();
+  for (const p of preplaced) {
+    const size = sizeOf(p.catalogId);
+    if (!size) continue;
+    const поворот = Math.abs(Math.sin(p.rotY)) > 0.5;
+    const w = поворот ? size[1] : size[0], d = поворот ? size[0] : size[1];
+    заняты.push({ x0: p.x - w / 2, z0: p.z - d / 2, x1: p.x + w / 2, z1: p.z + d / 2 });
+    items.push(p);
+    естьСЧертежа.add(`${p.room}:${p.catalogId}`);
+  }
 
   for (const room of rooms) {
     const type = types[room.index] ?? "living";
@@ -58,6 +75,7 @@ export function autoPlace(
     const minY = Math.min(...runs.map((r) => r.y)), maxY = Math.max(...runs.map((r) => r.y));
 
     for (const catalogId of style.furniture[type]) {
+      if (естьСЧертежа.has(`${room.index}:${catalogId}`)) continue;
       const size = sizeOf(catalogId);
       if (!size) { skipped.push({ room: room.index, catalogId }); continue; }
       let поставлен = false;

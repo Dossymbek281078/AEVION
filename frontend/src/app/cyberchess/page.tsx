@@ -6314,7 +6314,13 @@ export default function CyberChessPage(){
           else if(r===streakType)streak++;
           else break;
         }
-        return<div style={{flex:1,minHeight:0,overflowY:"auto",marginBottom:16,display:"flex",flexDirection:"column",gap:SPACE[3],maxWidth:1180,width:"100%",marginInline:"auto"}}>
+        // paddingBottom под пилюлю «Вернуться к партии» на телефоне — ЗДЕСЬ, потому что это
+        // и есть контейнер прокрутки контента (ProductPageShell fullWidth = overflow:hidden).
+        // Спейсер ПОСЛЕ </ProductPageShell> был вне клипа и не давал доске прокрутиться:
+        // два выкаченных варианта (64 и 152) не сдвинули низ доски ни на пиксель — 724/844
+        // и 694/780. 152 = 88 (отступ пилюли) + 56 (её высота с чипом) + 8. Условие — ровно
+        // то же, что у пилюли. Замеры 15.09.2026.
+        return<div style={{flex:1,minHeight:0,overflowY:"auto",marginBottom:16,display:"flex",flexDirection:"column",gap:SPACE[3],maxWidth:1180,width:"100%",marginInline:"auto",paddingBottom:(on&&!over&&tab!=="play"&&!isHumanGame&&vwPx<769)?152:0}}>
 
           {/* ─── ДОСКА ПЕРВЫМ ДЕЛОМ ───
               Человек, открывший шахматы, доски не видел вовсе: экран начинался
@@ -14876,13 +14882,10 @@ ${question.trim()}`;
     </Modal>
 
     </ProductPageShell>
-    {/* Спейсер под пилюлю «Вернуться к партии» на телефоне. Пилюля — position:fixed и
-        места в потоке не занимает; на вкладках Задачи/Коуч доска задачи/анализа уезжала
-        ПОД неё: обход 15.09.2026 — накрыто 4 клетки на 390px и 9 на 360px (нижняя
-        горизонталь, тапнуть нельзя). BottomNav — sticky и место в потоке занимает сам,
-        поэтому под нав спейсер не нужен. 64 = высота пилюли (~40) + зазор. Условие —
-        ровно то же, что у самой пилюли (строка с «Вернуться к партии»), плюс мобильный порог. */}
-    {on&&!over&&tab!=="play"&&!isHumanGame&&vwPx<769&&<div aria-hidden style={{height:64}}/>}
+    {/* Спейсера под пилюлю ЗДЕСЬ больше нет: это место вне контейнера прокрутки
+        (ProductPageShell fullWidth = overflow:hidden), и два выкаченных варианта (64, 152)
+        не сдвинули доску ни на пиксель. Отступ живёт paddingBottom'ом у самого скроллера
+        контента (div flex:1/overflowY:auto, ~стр. 6317). Замеры 15.09.2026. */}
     {/* Bottom navigation — только на мобайле (<769px). На десктопе вкладки уже в верхней
         шапке, а нижняя плашка перекрывала низ доски. Гейт по vwPx (надёжнее CSS-media). */}
     {!streamerMode&&vwPx<769&&<BottomNav

@@ -71,6 +71,16 @@ const RULES: Array<[RegExp, string]> = [
   [/rate limit|too many requests/i, "Слишком часто. Подождите минуту и повторите."],
   [/\b(insufficient|not enough) (credits?|balance)\b/i, "Не хватает средств на счёте модуля."],
   [/\bpayment required\b|\bupgrade\b/i, "Нужен платный тариф."],
+  // 15.09.2026: замки DevHub по тарифу (общий аккаунт GitHub и ссылки на оплату —
+  // Studio Pro; покупка привязывается к браузеру гостя на /devhub/link) и отказы
+  // DNS-слоя (проекту можно взять только своё имя внутри aevion.app). Тексты длиннее
+  // 90 знаков сторож everyServerErrorSpeaksRussian не видит — правила добавлены руками.
+  [/shared AEVION GitHub account is part of Studio Pro/i, "Публикация в GitHub от имени AEVION входит в Studio Pro: привяжите покупку на странице /devhub/link или задайте свой GITHUB_TOKEN в переменных проекта."],
+  [/payment links are part of Studio Pro/i, "Ссылки на оплату входят в Studio Pro: привяжите покупку на странице /devhub/link."],
+  [/payment links not configured/i, "Ссылки на оплату ещё не настроены на сервере — напишите нам."],
+  [/is inside \S+ but is not this project's DevHub name/i, "Внутри aevion.app проекту можно взять только своё имя вида <название>-<код проекта>; служебные имена заняты."],
+  [/does not resolve — the CNAME is not visible/i, "Адрес пока не разрешается: запись DNS ещё не появилась. Подождите пару минут."],
+  [/already exists and points elsewhere/i, "Такое имя уже занято другой записью — выберите другое."],
 
   // Доступ.
   [/unauthori[sz]ed|forbidden|access denied/i, "Нет доступа. Войдите заново."],

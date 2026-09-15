@@ -34,6 +34,10 @@ export interface PdfSegments {
   wallLayers?: string[];
   /** линии со слоёв витражей и окон — станут стеклянными стенами (только при отборе по слою) */
   glassSegments?: Array<{ x1: number; y1: number; x2: number; y2: number; layer?: string }>;
+  /** сколько линий на каждом слое файла — чтобы видеть, где мебель и сантехника */
+  layerCounts?: Record<string, number>;
+  /** линии всех слоёв, кроме стен и стекла — мебель, сантехника, размеры (только при отборе по слою) */
+  otherSegments?: Array<{ x1: number; y1: number; x2: number; y2: number; layer: string }>;
 }
 
 export interface PdfResult {
@@ -43,6 +47,8 @@ export interface PdfResult {
   metersPerPt: number;
   extentPt: number;
   truncated: number;
+  /** начало координат плана на листе (пункты): точка листа → метры = (p − origin) × metersPerPt */
+  originPt?: { x: number; y: number };
 }
 
 const MAX_SEGMENTS = 400;
@@ -480,6 +486,12 @@ export async function readPdfSegments(bytes: Uint8Array): Promise<PdfSegments> {
   const glassSegments = wallLayers.length > 0
     ? сИменем.filter((s0) => isGlassLayer(s0.layer as string))
     : [];
+  const layerCounts: Record<string, number> = {};
+  for (const s0 of сИменем) layerCounts[s0.layer as string] = (layerCounts[s0.layer as string] ?? 0) + 1;
+  const otherSegments = wallLayers.length > 0
+    ? (сИменем as Array<{ x1: number; y1: number; x2: number; y2: number; layer: string }>)
+      .filter((s0) => !isWallLayer(s0.layer) && !isGlassLayer(s0.layer))
+    : [];
   if (glassSegments.length > 0) {
     warnings.push(
       `Витражи и окна (${glassSegments.length} линий со слоя ${перечислить(glassSegments.map((s0) => s0.layer as string))}) `
@@ -547,7 +559,7 @@ export async function readPdfSegments(bytes: Uint8Array): Promise<PdfSegments> {
   if (other > 0) {
     warnings.push(`Часть содержимого пропущена (${other} поток(ов) картинок или неподдержанного сжатия).`);
   }
-  return { segments: used, warnings, extentPt, wallLayers, glassSegments };
+  return { segments: used, warnings, extentPt, wallLayers, glassSegments, layerCounts, otherSegments };
 }
 
 /**
@@ -690,5 +702,8 @@ export function planFromPdfSegments(
     metersPerPt,
     extentPt: src.extentPt,
     truncated,
+    // начало координат плана на листе: подписи комнат из текста PDF переводятся
+    // в метры тем же сдвигом и масштабом, что и стены
+    originPt: { x: minX, y: minY },
   };
 }

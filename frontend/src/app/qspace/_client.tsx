@@ -32,6 +32,7 @@ import { ROOM_TYPES, ROOM_TYPE_LABEL, guessRoomTypes, type RoomType } from "./ro
 import { STYLES, type Style } from "./styles";
 import { autoPlace } from "./autoPlace";
 import { roomsBesideWall } from "./wallSides";
+import { materialShopping } from "./materialTotals";
 import { CATALOG, demoPlacedSnapshots, groups, itemById, type CatalogItem } from "./furniture";
 import { checkClearance, type Issue, type Placed } from "./clearance";
 import { findRooms } from "./rooms";
@@ -1311,8 +1312,14 @@ export default function QSpaceClient() {
   // Список закупки уносится с экрана таблицей. Раньше скопировать можно было
   // только разбивку по комнатам, а кабель, трубы, розетки и светильники
   // оставались на странице — в магазин человек шёл с телефоном в руке.
+  // Список к покупке по материалам: отделка по комнатам разная, покупают по материалу.
+  const shopping = useMemo(
+    () => materialShopping(perRoom.lines, roomFloor, roomWall, floorMatId, wallMatId),
+    [perRoom, roomFloor, roomWall, floorMatId, wallMatId],
+  );
+
   const downloadEstimateCsv = useCallback(() => {
-    const csv = estimateCsv(est, plan.name, perRoom.lines);
+    const csv = estimateCsv(est, plan.name, perRoom.lines, shopping);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1321,7 +1328,7 @@ export default function QSpaceClient() {
     a.click();
     URL.revokeObjectURL(url);
     скажи("Спецификация сохранена. Колонка цен пустая — впишите свои, сумма посчитается сама.");
-  }, [est, plan.name, perRoom.lines, скажи]);
+  }, [est, plan.name, perRoom.lines, shopping, скажи]);
 
 
   const S = styles;
@@ -1819,8 +1826,8 @@ export default function QSpaceClient() {
               <p style={S.hint}>
                 Назначение угадано по площади — поправьте, если не так; стиль тогда переназначит
                 пол и стены этой комнаты. Стена между двумя комнатами красится с каждой стороны
-                в цвет своей комнаты. Смета пока считает отделку по общим материалам — учёт по
-                комнатам следующим шагом.
+                в цвет своей комнаты. Сколько какого материала покупать — в разделе
+                «Помещения» ниже, список считается по этой таблице.
               </p>
             </>
           )}
@@ -2072,6 +2079,27 @@ export default function QSpaceClient() {
                   </tr>
                 </tbody>
               </table>
+              <h3 style={{ ...S.h2, fontSize: 15, marginTop: 10 }}>К покупке по материалам</h3>
+              <table style={S.estTable} aria-label="Материалы к покупке">
+                <tbody>
+                  {shopping.map((m) => (
+                    <tr key={`${m.surface}:${m.id}`}>
+                      <td style={S.estTd}>
+                        {m.surface === "floor" ? "Пол" : "Стены"}: {m.name}
+                        <br />
+                        <span style={{ fontSize: 11.5, color: "#7a746b" }}>
+                          помещени{m.rooms.length === 1 ? "е" : "я"} {m.rooms.join(", ")}
+                        </span>
+                      </td>
+                      <td style={S.estTdNum}>{m.area.toFixed(1)} м²</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p style={S.hint}>
+                Пол — с запасом на подрезку, стены — чистая площадь. Меняете пол или стены
+                комнаты в таблице «по комнатам» — этот список пересчитывается сам.
+              </p>
               <button
                 type="button"
                 style={{ ...S.btn, marginTop: 8 }}

@@ -842,9 +842,11 @@ describe("the domain capability reports what deploys actually observed", () => {
 
     if (r.status === 200 && r.body.domain) {
       expect(r.body.domainReady).toBe(false);
-      const health = getProviderHealth("domain");
-      expect(health?.ok).toBe(false);
-      expect(health?.reason).toMatch(/not delegated|does not resolve/);
+      // 15.09.2026: отказ домена больше не выносится в момент ответа (запись только
+      // создана, DNS расходится секундами) — его выносит цепочка окон после того, как
+      // ответит страница; см. pagesVerifyChainAndRecheck. Здесь: DNS ещё не виден.
+      expect(r.body.domainDns).toBe(false);
+      expect(getProviderHealth("domain")?.ok ?? null).not.toBe(true);
     }
 
     vi.doUnmock("../src/lib/wranglerPagesDeploy");

@@ -898,19 +898,22 @@ function dnsProviderName(): string {
  * Стенд подменяет `dnsProbe.cnameResolves`, чтобы не ходить в сеть.
  */
 export const dnsProbe = {
-  async cnameResolves(host: string): Promise<boolean> {
-    try {
-      const r = await Promise.race([
-        dnsPromises.resolveCname(host),
-        new Promise<string[]>((_, reject) => {
-          const t = setTimeout(() => reject(new Error("dns timeout")), 3000);
-          t.unref?.();
-        }),
-      ]);
-      return Array.isArray(r) && r.length > 0;
-    } catch {
-      return false;
+  /** Несколько попыток: запись только что создана, у поставщика она видна через секунды (проба 15.09: false сразу, true через минуту). */
+  async cnameResolves(host: string, attempts = 3, delayMs = 2000): Promise<boolean> {
+    for (let i = 0; i < attempts; i++) {
+      try {
+        const r = await Promise.race([
+          dnsPromises.resolveCname(host),
+          new Promise<string[]>((_, reject) => {
+            const t = setTimeout(() => reject(new Error("dns timeout")), 3000);
+            t.unref?.();
+          }),
+        ]);
+        if (Array.isArray(r) && r.length > 0) return true;
+      } catch { /* не разрешилось — попробуем ещё */ }
+      if (i < attempts - 1) await new Promise((r) => setTimeout(r, delayMs));
     }
+    return false;
   },
 };
 
@@ -982,8 +985,14 @@ async function markDeploymentLive(
     if (ready) {
       noteProviderSuccess("domain");
       domainNote = ` | domain: https://${customDomain} answers`;
-    } else {
+    } else if (await dnsProbe.cnameResolves(customDomain, 2, 1000)) {
+      noteProviderSuccess("domain");
       domainNote = ` | domain: https://${customDomain} not answering yet (Pages certificate pending); the DNS record is in place`;
+    } else {
+      // Страница уже отвечает, прошло не меньше окна проверки, а CNAME так и не
+      // виден — вот это отказ DNS, и витрина «домен» вправе покраснеть.
+      noteProviderFailure("domain", `${customDomain} does not resolve — the CNAME is not visible in the ${siteZone()} zone at ${dnsProviderName()}`);
+      domainNote = ` | domain: ${customDomain} does not resolve (CNAME not visible at ${dnsProviderName()})`;
     }
   }
   d.buildLog = (d.buildLog || "") + " | verify: page answers 2xx" + domainNote;
@@ -7418,10 +7427,10 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
     // готовность HTTPS (сертификат Pages) проверяет та же цепочка после того, как
     // ответит pages.dev. Витрина «домен» отвечает за запись в DNS, не за сертификат.
     const domainDns = customDomain ? await dnsProbe.cnameResolves(customDomain) : false;
-    if (customDomain) {
-      if (domainDns) noteProviderSuccess("domain");
-      else noteProviderFailure("domain", `${customDomain} does not resolve — the CNAME is not visible in the ${siteZone()} zone at ${dnsProviderName()} yet`);
-    }
+    // «Ещё не видно» сразу после записи — не отказ: проба 15.09 дала false в момент
+    // ответа и true через минуту, а витрина краснела на 30 минут. Успех отмечаем
+    // сразу, отказ — только из цепочки окон (markDeploymentLive), когда прошло время.
+    if (customDomain && domainDns) noteProviderSuccess("domain");
     // HTTPS домена сразу после выкатки не готов никогда — поле остаётся ради
     // клиентов, которые его читают, и никогда не делает домен liveUrl.
     const domainReady = false;

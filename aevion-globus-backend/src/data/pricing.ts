@@ -1072,7 +1072,7 @@ export function buildQuote(input: {
   const fanUsd = fanTotalUsd(fans);
   discount += fanUsd;
 
-  // 6) Промо-код применяется на (subtotal - discount)
+  // 6) Промо-код применяется на (subtotal - discount). Фиксированный — ОДИН раз за покупку (15.09.2026): при умножении на срок TEAM100 «до $100» давал $900 на Full за 9 месяцев
   let promoApplied: AppliedPromo | null = null;
   let promoUsd = 0;
   if (input.promoCode) {
@@ -1082,7 +1082,7 @@ export function buildQuote(input: {
       const rawPromoUsd =
         promo.kind === "percent"
           ? Math.round((base * promo.amount) / 100)
-          : Math.min(base, promo.amount * months);
+          : Math.min(base, promo.amount);
       promoUsd = Math.min(rawPromoUsd, base * MAX_PROMO_DISCOUNT_RATIO);
       const rate = currencyRate(currency);
       promoApplied = {

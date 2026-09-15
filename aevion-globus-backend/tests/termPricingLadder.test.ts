@@ -59,6 +59,14 @@ describe("лестница сроков AEVION", () => {
     }
   });
 
+  test("фиксированный промокод — один раз за покупку, а не за каждый месяц срока", () => {
+    // TEAM100 обещает «до $100»: умноженный на 9 месяцев Full, он давал $900.
+    expect(buildQuote({ tierId: "full", promoCode: "TEAM100" }).promo?.applied).toBe(100);
+    expect(buildQuote({ tierId: "max", promoCode: "FRIEND10" }).promo?.applied).toBe(10);
+    // КОНТРОЛЬ: процентный промокод по-прежнему считается от всей суммы срока
+    expect(buildQuote({ tierId: "max", promoCode: "AEVION20" }).promo?.applied).toBe(480);
+  });
+
   test("на каждой ступени целые доллары; нецелая база — ошибка данных, а не округление", () => {
     for (const a of STANDALONE_APPS) for (const t of TERM_TIERS) expect(Number.isInteger(termPricePerMonth(a.baseMonthly, t))).toBe(true);
     expect(() => termPricePerMonth(25, "medium")).toThrow();

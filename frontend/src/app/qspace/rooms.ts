@@ -217,8 +217,36 @@ export function findRooms(plan: Plan, opts: { minAreaM2?: number } = {}): RoomsR
   }
 
   // Двери-разрывы закрываются ТОЛЬКО в сетке: сам план не меняется.
-  const закрыто = closeDoorGaps(plan.walls, (x1, y1, x2, y2, t) =>
-    markWall(grid, gw, gh, ox, oy, x1, y1, x2, y2, t));
+  // Разрывы считаются по КЛЕТКАМ, а не по парам отрезков: один проём находят
+  // несколько пар (стена из кусков, сведённые двойные линии), и счётчик пар на
+  // LA VIE говорил «1022», после дедупликации «293» при ~30 настоящих дверях.
+  // Связная группа закрытых клеток, не лежащих на стене, — один проём.
+  const закрытия = new Uint8Array(gw * gh);
+  const стеныДо = grid.slice(); // одна копия на весь план, а не на каждый проём
+  closeDoorGaps(plan.walls, (x1, y1, x2, y2, t) => {
+    markWall(grid, gw, gh, ox, oy, x1, y1, x2, y2, t);
+    markWall(закрытия, gw, gh, ox, oy, x1, y1, x2, y2, t);
+  });
+  for (let i = 0; i < закрытия.length; i++) if (стеныДо[i] !== 0) закрытия[i] = 0;
+  let закрыто = 0;
+  {
+    const seen = new Uint8Array(gw * gh);
+    for (let s = 0; s < закрытия.length; s++) {
+      if (закрытия[s] === 0 || seen[s]) continue;
+      закрыто++;
+      const st = [s]; seen[s] = 1;
+      while (st.length) {
+        const i = st.pop() as number;
+        const x = i % gw, y = (i - x) / gw;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= gw || ny >= gh) continue;
+          const j = ny * gw + nx;
+          if (закрытия[j] === 1 && !seen[j]) { seen[j] = 1; st.push(j); }
+        }
+      }
+    }
+  }
 
   // --- заливка ------------------------------------------------------------
   const label = new Int32Array(gw * gh).fill(-1);

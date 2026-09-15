@@ -28,6 +28,9 @@ import { planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
 import { масштабПоРазмерам, надёжностьМасштаба, предупреждениеОбОсях, словаИзТекста } from "./dimensionScale";
 import { текстPdf } from "./pdfText";
 import { FINISH_PRESETS, drawMaterial, materialById, materialsFor } from "./materials";
+import { ROOM_TYPES, ROOM_TYPE_LABEL, guessRoomTypes, type RoomType } from "./roomTypes";
+import { STYLES, type Style } from "./styles";
+import { autoPlace } from "./autoPlace";
 import { CATALOG, demoPlacedSnapshots, groups, itemById, type CatalogItem } from "./furniture";
 import { checkClearance, type Issue, type Placed } from "./clearance";
 import { findRooms } from "./rooms";
@@ -178,6 +181,12 @@ export default function QSpaceClient() {
   const [partition, setPartition] = useState("wall-block");
   const [wallMatId, setWallMatId] = useState("paint-warm-white");
   const [floorMatId, setFloorMatId] = useState("parquet-oak");
+  // Отделка ПО КОМНАТАМ: пол каждой комнаты (ключ — номер комнаты); чего нет —
+  // берётся общий floorMatId. Тип комнаты угадывается по площади, человек
+  // поправляет — его правка живёт отдельно и переживает смену стиля.
+  const [roomFloor, setRoomFloor] = useState<Record<number, string>>({});
+  const [roomTypeOverride, setRoomTypeOverride] = useState<Record<number, RoomType>>({});
+  const [styleId, setStyleId] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [unitLabel, setUnitLabel] = useState<string>("");
   const [placed, setPlaced] = useState<PlacedItem[]>([]);
@@ -246,6 +255,8 @@ export default function QSpaceClient() {
     wallMat: THREE.MeshLambertMaterial;
     floorMat: THREE.MeshLambertMaterial;
     floorMesh: THREE.Mesh | null;
+    /** пол каждой комнаты своим материалом — поверх общего пола, только в чистовом слое */
+    roomFloors: Map<number, { mesh: THREE.Mesh; mat: THREE.MeshLambertMaterial; w: number; h: number }>;
     raycaster: THREE.Raycaster;
     dragUid: number | null;
     uidSeq: number;
@@ -322,7 +333,7 @@ export default function QSpaceClient() {
     three.current = {
       scene, camera, renderer, controls,
       gRough, gFinish, gDecor, gWalls,
-      wallMat, floorMat, floorMesh: null,
+      wallMat, floorMat, floorMesh: null, roomFloors: new Map(),
       raycaster: new THREE.Raycaster(),
       dragUid: null, uidSeq: 1,
     };
@@ -462,6 +473,42 @@ export default function QSpaceClient() {
     floor.position.set(cx, 0, cz);
     t.gWalls.add(floor);
     t.floorMesh = floor;
+
+    // --- пол каждой комнаты своим материалом ---------------------------------
+    // Геометрия — из полос клеток разбивки (те же клетки, что считают площадь),
+    // чуть выше общего пола; материал ставит эффект отделки по roomFloor.
+    // у объявлений three в проекте нет типа Material — зовём dispose через узкий тип
+    for (const rf of t.roomFloors.values()) (rf.mat as unknown as { dispose(): void }).dispose();
+    t.roomFloors.clear();
+    for (const room of roomsInfo.rooms) {
+      const runs = roomsInfo.runsOf(room.index);
+      if (runs.length === 0) continue;
+      const rx0 = Math.min(...runs.map((r) => r.x0)), rx1 = Math.max(...runs.map((r) => r.x1));
+      const ry0 = Math.min(...runs.map((r) => r.y)), ry1 = Math.max(...runs.map((r) => r.y));
+      const rw = Math.max(rx1 - rx0, 0.1), rh = Math.max(ry1 - ry0, 0.1);
+      const pos = new Float32Array(runs.length * 18);
+      const uv = new Float32Array(runs.length * 12);
+      runs.forEach((r, i) => {
+        const z0 = r.y - 0.025, z1 = r.y + 0.025;
+        const quad = [r.x0, z0, r.x1, z0, r.x1, z1, r.x0, z0, r.x1, z1, r.x0, z1];
+        for (let k = 0; k < 6; k++) {
+          pos.set([quad[k * 2], 0.006, quad[k * 2 + 1]], i * 18 + k * 3);
+          uv.set([(quad[k * 2] - rx0) / rw, (quad[k * 2 + 1] - ry0) / rh], i * 12 + k * 2);
+        }
+      });
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+      geo.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+      // нормали вверх у всех вершин: пол плоский, считать их незачем
+      const nrm = new Float32Array(runs.length * 18);
+      for (let k = 0; k < runs.length * 6; k++) nrm.set([0, 1, 0], k * 3);
+      geo.setAttribute("normal", new THREE.BufferAttribute(nrm, 3));
+      const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.visible = false; // включит эффект отделки, когда есть чистовой слой
+      t.gWalls.add(mesh);
+      t.roomFloors.set(room.index, { mesh, mat, w: rw, h: rh });
+    }
 
     // подложка-газон вокруг, чтобы модель не висела в пустоте
     const ground = new THREE.Mesh(
@@ -694,7 +741,66 @@ export default function QSpaceClient() {
     }
     t.wallMat.needsUpdate = true;
     t.floorMat.needsUpdate = true;
-  }, [wallMatId, floorMatId, layers.finish, plan]);
+
+    // Полы комнат: свой материал у каждой, где он назначен; иначе общий.
+    // В черновом слое их нет вовсе — там стяжка, и она одна на всю квартиру.
+    for (const [idx, rf] of t.roomFloors) {
+      const id = roomFloor[idx] ?? floorMatId;
+      const m = materialById(id);
+      rf.mesh.visible = layers.finish && !!m;
+      if (!m) continue;
+      const tex = m.pattern === "solid" ? null : textureFor(id, rf.w, rf.h);
+      rf.mat.color.set(tex ? 0xffffff : m.colors[0]);
+      rf.mat.map = tex;
+      rf.mat.needsUpdate = true;
+    }
+  }, [wallMatId, floorMatId, roomFloor, layers.finish, plan]);
+
+  // ---- готовые стили и назначение комнат ----------------------------------
+  const roomTypes = useMemo<Record<number, RoomType>>(
+    () => ({ ...guessRoomTypes(roomsInfo.rooms), ...roomTypeOverride }),
+    [roomsInfo, roomTypeOverride],
+  );
+
+  /**
+   * Стиль одной кнопкой: отделка каждой комнаты по её типу, стены — как в
+   * гостиной (стены общие между комнатами, красить их по комнатам пока нельзя),
+   * мебель стиля расставлена по комнатам заново. Расставленное прежде снимается
+   * — и об этом говорится числом, а не молча.
+   */
+  const applyStyle = useCallback((s: Style) => {
+    const t = three.current; if (!t) return;
+    const было = placedRef.current.length;
+    const полы: Record<number, string> = {};
+    for (const r of roomsInfo.rooms) полы[r.index] = s.finish[roomTypes[r.index] ?? "living"].floor;
+    setRoomFloor(полы);
+    setWallMatId(s.finish.living.wall);
+    setFloorMatId(s.finish.living.floor);
+    setStyleId(s.id);
+    очиститьСлой(t.gDecor);
+    const план = autoPlace(
+      roomsInfo.rooms, roomTypes, s, roomsInfo.runsOf, roomsInfo.roomAt,
+      (id) => CATALOG.find((c) => c.id === id)?.size,
+    );
+    const вернулись = вернутьМебель(t, план.items);
+    setPlaced(вернулись);
+    setSelectedUid(null);
+    setLayers((l) => ({ ...l, finish: true, decor: true }));
+    const строки = [
+      `Стиль «${s.name}»: отделка назначена ${roomsInfo.rooms.length} комнатам по их назначению, `
+      + `расставлено ${план.items.length} предметов${было ? ` (прежние ${было} сняты)` : ""}. `
+      + "Двигайте мебель мышью или пальцем, назначение комнат и пол правьте ниже.",
+    ];
+    if (план.skipped.length > 0) {
+      const поКомнатам = new Map<number, number>();
+      for (const k of план.skipped) поКомнатам.set(k.room, (поКомнатам.get(k.room) ?? 0) + 1);
+      строки.push(
+        `Не поместилось: ${[...поКомнатам].map(([r, n]) => `комната ${r} — ${n}`).join(", ")}. `
+        + "Это черновая расстановка: лишнее можно добавить из каталога вручную.",
+      );
+    }
+    setWarnings(строки);
+  }, [roomsInfo, roomTypes]);
 
   // ---- подсветка выбранного предмета -------------------------------------
   useEffect(() => {
@@ -1024,8 +1130,10 @@ export default function QSpaceClient() {
       floorMatId,
       partition,
       layers,
+      roomFloor: Object.fromEntries(Object.entries(roomFloor).map(([k, v]) => [String(k), v])),
+      roomTypes: Object.fromEntries(Object.entries(roomTypeOverride).map(([k, v]) => [String(k), v])),
     };
-  }, [plan, placed, wallMatId, floorMatId, partition, layers]);
+  }, [plan, placed, wallMatId, floorMatId, partition, layers, roomFloor, roomTypeOverride]);
 
   /** Ставит сцену по сохранённому проекту. План идёт первым: он пересобирает сцену. */
   const applyProject = useCallback((pr: Project) => {
@@ -1040,6 +1148,13 @@ export default function QSpaceClient() {
     setFloorMatId(pr.floorMatId);
     setPartition(pr.partition);
     setLayers(pr.layers);
+    const полы: Record<number, string> = {};
+    for (const [k, v] of Object.entries(pr.roomFloor ?? {})) if (materialById(v)) полы[Number(k)] = v;
+    setRoomFloor(полы);
+    const типы: Record<number, RoomType> = {};
+    for (const [k, v] of Object.entries(pr.roomTypes ?? {})) if ((ROOM_TYPES as string[]).includes(v)) типы[Number(k)] = v as RoomType;
+    setRoomTypeOverride(типы);
+    setStyleId(null);
     // мебель ставится ПОСЛЕ пересборки сцены — иначе её сотрёт очистка слоёв
     setPendingRestore(pr);
   }, []);
@@ -1559,6 +1674,95 @@ export default function QSpaceClient() {
 
           <h2 style={S.h2}>Кондиционирование: какой сплит нужен</h2>
           <CoolingPanel rooms={roomsInfo.rooms} />
+
+          <h2 style={S.h2}>Готовые дизайны</h2>
+          <p style={S.hint}>
+            Один стиль — отделка каждой комнаты по её назначению (в санузле керамогранит и
+            плитка, в спальне паркет и краска) и мебель, расставленная по комнатам. Дальше —
+            правьте по комнатам ниже или мышью и пальцем в 3D.
+          </p>
+          <div style={S.swatchRow} role="group" aria-label="Готовые дизайны">
+            {STYLES.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                aria-pressed={styleId === s.id}
+                title={s.tagline}
+                onClick={() => applyStyle(s)}
+                style={{
+                  ...S.btn,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontWeight: styleId === s.id ? 700 : 400,
+                  borderColor: styleId === s.id ? "#2f5e2a" : "#c9c4bb",
+                }}
+              >
+                <span aria-hidden="true" style={{ display: "inline-flex" }}>
+                  <span style={{ width: 12, height: 12, background: materialById(s.finish.living.floor)?.colors[0], border: "1px solid #b8b3aa" }} />
+                  <span style={{ width: 12, height: 12, background: materialById(s.finish.living.wall)?.colors[0], border: "1px solid #b8b3aa", marginLeft: -4 }} />
+                  <span style={{ width: 12, height: 12, background: materialById(s.finish.bath.floor)?.colors[0], border: "1px solid #b8b3aa", marginLeft: -4 }} />
+                </span>
+                {s.name}
+              </button>
+            ))}
+          </div>
+
+          {roomsInfo.rooms.length > 0 && (
+            <>
+              <h3 style={{ ...S.h2, fontSize: 15, marginTop: 10 }}>По комнатам: назначение и пол</h3>
+              <table style={{ borderCollapse: "collapse", fontSize: 13, width: "100%" }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: "left", padding: "2px 6px 2px 0" }}>№</th>
+                    <th style={{ textAlign: "right", padding: "2px 6px" }}>м²</th>
+                    <th style={{ textAlign: "left", padding: "2px 6px" }}>назначение</th>
+                    <th style={{ textAlign: "left", padding: "2px 6px" }}>пол</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {roomsInfo.rooms.map((r) => (
+                    <tr key={r.index}>
+                      <td style={{ padding: "2px 6px 2px 0", fontVariantNumeric: "tabular-nums" }}>{r.index}</td>
+                      <td style={{ padding: "2px 6px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.area.toFixed(1)}</td>
+                      <td style={{ padding: "2px 6px" }}>
+                        <select
+                          id={`qspace-room-type-${r.index}`}
+                          aria-label={`Назначение комнаты ${r.index}`}
+                          value={roomTypes[r.index] ?? "living"}
+                          onChange={(e) => setRoomTypeOverride((o) => ({ ...o, [r.index]: e.target.value as RoomType }))}
+                          style={{ fontSize: 13 }}
+                        >
+                          {ROOM_TYPES.map((t) => <option key={t} value={t}>{ROOM_TYPE_LABEL[t]}</option>)}
+                        </select>
+                      </td>
+                      <td style={{ padding: "2px 6px" }}>
+                        <select
+                          id={`qspace-room-floor-${r.index}`}
+                          aria-label={`Пол комнаты ${r.index}`}
+                          value={roomFloor[r.index] ?? ""}
+                          onChange={(e) => setRoomFloor((f) => {
+                            const next = { ...f };
+                            if (e.target.value) next[r.index] = e.target.value; else delete next[r.index];
+                            return next;
+                          })}
+                          style={{ fontSize: 13, maxWidth: 220 }}
+                        >
+                          <option value="">как общий ({materialById(floorMatId)?.name ?? "—"})</option>
+                          {materialsFor("floor").map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </select>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p style={S.hint}>
+                Назначение угадано по площади — поправьте, если не так; стиль тогда переназначит
+                пол этой комнаты. Стены пока красятся одним цветом на всю квартиру: они общие
+                между комнатами. Смета считает пол по общему материалу — учёт по комнатам следующим шагом.
+              </p>
+            </>
+          )}
 
           <h2 style={S.h2}>Чистовая отделка</h2>
           <div style={S.swatchRow} role="group" aria-label="Готовые сочетания отделки">

@@ -81,6 +81,44 @@ export const MATERIALS: Material[] = [
     unitM: 1,
     note: "ровный тон без рисунка",
   },
+  // Керамогранит — основной пол ванной, кухни и прихожей в готовых стилях.
+  // Отличие от плитки для сметы и человека: плотнее, крупнее формат, ректификат.
+  {
+    id: "porcelain-grey",
+    name: "Керамогранит серый 60×60",
+    surface: "floor",
+    pattern: "tile",
+    colors: ["#c3c1bc", "#a8a6a1"],
+    unitM: 0.6,
+    note: "ректификат, шов 2 мм",
+  },
+  {
+    id: "porcelain-marble",
+    name: "Керамогранит под мрамор 60×120",
+    surface: "floor",
+    pattern: "tile",
+    colors: ["#e6e3de", "#cfcbc4"],
+    unitM: 1.2,
+    note: "светлый, с прожилками (условно)",
+  },
+  {
+    id: "porcelain-terrazzo",
+    name: "Керамогранит терраццо 60×60",
+    surface: "floor",
+    pattern: "tile",
+    colors: ["#d9d3c9", "#b9b1a4"],
+    unitM: 0.6,
+    note: "крошка не имитируется — тон",
+  },
+  {
+    id: "porcelain-wood",
+    name: "Керамогранит под дерево 20×120",
+    surface: "floor",
+    pattern: "planks",
+    colors: ["#b08c62", "#a17f57", "#bb976c", "#98764f"],
+    unitM: 1.2,
+    note: "для кухни и прихожей: вид дерева, стойкость плитки",
+  },
 
   // --- стены ---------------------------------------------------------------
   { id: "paint-warm-white", name: "Краска: тёплый белый", surface: "wall", pattern: "solid", colors: ["#e8e4da"], unitM: 1, note: "матовая" },
@@ -107,6 +145,27 @@ export const MATERIALS: Material[] = [
     unitM: 0.25,
     note: "кухонный фартук, санузел",
   },
+  {
+    id: "tile-wall-grey",
+    name: "Плитка стеновая серая 30×60",
+    surface: "wall",
+    pattern: "tile",
+    colors: ["#cfcdc8", "#b3b1ac"],
+    unitM: 0.45,
+    note: "санузел, крупный формат",
+  },
+  {
+    id: "porcelain-wall-marble",
+    name: "Керамогранит стеновой под мрамор 60×120",
+    surface: "wall",
+    pattern: "tile",
+    colors: ["#e8e5e0", "#d2cec7"],
+    unitM: 0.9,
+    note: "санузел, минимум швов",
+  },
+  { id: "paint-graphite", name: "Краска: графит", surface: "wall", pattern: "solid", colors: ["#5b5e60"], unitM: 1, note: "акцентная, матовая" },
+  { id: "paint-terracotta", name: "Краска: терракота", surface: "wall", pattern: "solid", colors: ["#c9906e"], unitM: 1, note: "акцентная, матовая" },
+  { id: "paint-olive", name: "Краска: олива", surface: "wall", pattern: "solid", colors: ["#a9ab8d"], unitM: 1, note: "матовая" },
 ];
 
 /**

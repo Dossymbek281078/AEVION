@@ -52,6 +52,9 @@ export const DISALLOWED_PATHS = [
   "/tt",
   "/ig",
   "/yt",
+  // 15.09.2026: li/bs — метки из выкатки 970e30d1d72e, входы заведены вместе с этой строкой.
+  "/li",
+  "/bs",
   // dz/vk/tg заведены 29.08.2026 — те же короткие входы, та же причина.
   // Без этой строки они попадают в карту сайта: проверено на проде,
   // dz/vk/tg были там по одной записи, а tt/ig/yt отсутствовали.
@@ -93,7 +96,7 @@ export const DISALLOWED_PATHS = [
  */
 export const EXACT_ONLY_PATHS: readonly string[] = [
   "/tt", "/ig", "/yt", "/dz", "/vk", "/tg",
-  "/th", "/fb", "/x", "/qr",
+  "/th", "/fb", "/x", "/qr", "/li", "/bs",
   "/en/tt", "/en/ig", "/en/yt",
 ];
 

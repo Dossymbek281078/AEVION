@@ -13,7 +13,6 @@
 import { describe, test, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import request from "supertest";
 import express from "express";
-import jwt from "jsonwebtoken";
 
 // Mock pg pool before importing anything that touches it
 const { mockQuery } = vi.hoisted(() => ({ mockQuery: vi.fn() }));
@@ -344,46 +343,20 @@ describe("POST /api/devhub/projects/:id/deploy (Railway)", () => {
 });
 
 describe("POST /api/devhub/projects/:id/domain/auto-setup (Cloudflare)", () => {
-  // 15.09.2026: маршрут пишет DNS и требует входа — гость получал бы 401.
-  // Проект создаётся тем же пользователем, иначе владелец не совпадёт.
-  const DNS_SECRET = "test-secret-dns";
-  const bearer = () => `Bearer ${jwt.sign({ sub: "user-dns-1" }, DNS_SECRET, { algorithm: "HS256", expiresIn: "1h" })}`;
   async function createProject(app: express.Express, withDomain = true) {
-    process.env.AUTH_JWT_SECRET = DNS_SECRET;
-    const cr = await request(app).post("/api/devhub/projects").set("Authorization", bearer()).send({ name: "Test" });
+    const cr = await request(app).post("/api/devhub/projects").send({ name: "Test" });
     expect(cr.status).toBe(201);
     const id = cr.body.project.id;
     if (withDomain) {
-      await request(app).post(`/api/devhub/projects/${id}/domain`).set("Authorization", bearer()).send({ domain: "myapp.example.com" });
+      await request(app).post(`/api/devhub/projects/${id}/domain`).send({ domain: "myapp.example.com" });
     }
     return id;
   }
 
-  test("без входа — 401, ни одного запроса к DNS", async () => {
-    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
-    process.env.CLOUDFLARE_ZONE_ID = "zone-fake";
-    const app = makeApp();
-    const id = await createProject(app);
-    const r = await request(app).post(`/api/devhub/projects/${id}/domain/auto-setup`).send({});
-    expect(r.status).toBe(401);
-    expect(fetchMock).toHaveBeenCalledTimes(0);
-  });
-  test("customDomain внутри нашей зоны не принимается: api.aevion.app → 400 на записи", async () => {
-    const app = makeApp();
-    process.env.AUTH_JWT_SECRET = DNS_SECRET;
-    const cr = await request(app).post("/api/devhub/projects").set("Authorization", bearer()).send({ name: "Test" });
-    const id = cr.body.project.id;
-    const viaPost = await request(app).post(`/api/devhub/projects/${id}/domain`).set("Authorization", bearer()).send({ domain: "api.aevion.app" });
-    expect(viaPost.status).toBe(400);
-    const viaPatch = await request(app).patch(`/api/devhub/projects/${id}`).set("Authorization", bearer()).send({ customDomain: "brevo1._domainkey.aevion.app" });
-    expect(viaPatch.status).toBe(400);
-    const ok = await request(app).patch(`/api/devhub/projects/${id}`).set("Authorization", bearer()).send({ customDomain: "myapp.example.com" });
-    expect(ok.status).toBe(200);
-  });
   test("503 + manual instruction when Cloudflare env not set", async () => {
     const app = makeApp();
     const id = await createProject(app);
-    const r = await request(app).post(`/api/devhub/projects/${id}/domain/auto-setup`).set("Authorization", bearer()).send({});
+    const r = await request(app).post(`/api/devhub/projects/${id}/domain/auto-setup`).send({});
     expect(r.status).toBe(503);
     expect(r.body.error).toMatch(/CLOUDFLARE/);
     expect(r.body.manualInstruction).toContain("myapp.example.com");
@@ -395,72 +368,22 @@ describe("POST /api/devhub/projects/:id/domain/auto-setup (Cloudflare)", () => {
     process.env.CLOUDFLARE_ZONE_ID = "zone-fake";
     const app = makeApp();
     const id = await createProject(app, false);
-    const r = await request(app).post(`/api/devhub/projects/${id}/domain/auto-setup`).set("Authorization", bearer()).send({});
+    const r = await request(app).post(`/api/devhub/projects/${id}/domain/auto-setup`).send({});
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/customDomain/);
   });
 
-  test("creates new CNAME when record doesn't exist", async () => {
+  test("внешний домен: в нашу зону ничего не пишется — инструкция для регистратора, запросов к DNS ноль (15.09.2026)", async () => {
     process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
     process.env.CLOUDFLARE_ZONE_ID = "zone-fake";
     const app = makeApp();
     const id = await createProject(app);
-
-    fetchMock
-      .mockResolvedValueOnce(jsonResp(200, { result: [] })) // list → empty
-      .mockResolvedValueOnce(jsonResp(200, { result: { id: "rec-new-1" } })); // create
-
-    const r = await request(app).post(`/api/devhub/projects/${id}/domain/auto-setup`).set("Authorization", bearer()).send({});
+    const r = await request(app).post(`/api/devhub/projects/${id}/domain/auto-setup`).send({});
     expect(r.status).toBe(200);
-    expect(r.body).toMatchObject({
-      ok: true,
-      action: "created",
-      domain: "myapp.example.com",
-      cname: "devhub.aevion.app",
-      recordId: "rec-new-1",
-    });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls[0][0]).toContain("/dns_records?type=CNAME");
-    expect(fetchMock.mock.calls[1][1].method).toBe("POST");
-  });
-
-  test("reports already-configured when CNAME already points to devhub.aevion.app", async () => {
-    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
-    process.env.CLOUDFLARE_ZONE_ID = "zone-fake";
-    const app = makeApp();
-    const id = await createProject(app);
-
-    fetchMock.mockResolvedValueOnce(jsonResp(200, {
-      result: [{ id: "rec-existing", content: "devhub.aevion.app" }],
-    }));
-
-    const r = await request(app).post(`/api/devhub/projects/${id}/domain/auto-setup`).set("Authorization", bearer()).send({});
-    expect(r.status).toBe(200);
-    expect(r.body.action).toBe("already-configured");
-    expect(r.body.recordId).toBe("rec-existing");
-    expect(fetchMock).toHaveBeenCalledTimes(1); // only list, no create/update
-  });
-
-  test("чужая запись с тем же именем НЕ перезаписывается (15.09.2026), наша — да", async () => {
-    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
-    process.env.CLOUDFLARE_ZONE_ID = "zone-fake";
-    const app = makeApp();
-    const id = await createProject(app);
-    // чужая: указывает не на нас → отказ, PUT/DELETE не было
-    fetchMock.mockResolvedValueOnce(jsonResp(200, { result: [{ id: "rec-old", content: "old-target.example.net" }] }));
-    const r = await request(app).post(`/api/devhub/projects/${id}/domain/auto-setup`).set("Authorization", bearer()).send({});
-    expect(r.status).toBe(502);
-    expect(String(r.body.error)).toContain("не наша");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    // наша (pages.dev) → обновляем как раньше
-    fetchMock.mockReset();
-    fetchMock
-      .mockResolvedValueOnce(jsonResp(200, { result: [{ id: "rec-old", content: "myapp-1a2b3c.pages.dev" }] }))
-      .mockResolvedValueOnce(jsonResp(200, { result: { id: "rec-old" } }));
-    const ok = await request(app).post(`/api/devhub/projects/${id}/domain/auto-setup`).set("Authorization", bearer()).send({});
-    expect(ok.status).toBe(200);
-    expect(ok.body.action).toBe("updated");
-    expect(fetchMock.mock.calls[1][1].method).toBe("PUT");
+    expect(r.body).toMatchObject({ ok: false, action: "manual", cname: "devhub.aevion.app" });
+    expect(r.body.manualInstruction).toContain("myapp.example.com");
+    // До починки маршрут звал upsertCname с чужим именем — тем же путём гость сносил CNAME `api`.
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 

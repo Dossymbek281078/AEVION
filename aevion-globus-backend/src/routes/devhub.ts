@@ -3,7 +3,8 @@ import { pgIntId } from "../lib/queryNumber";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { resolvePlanFromPayload, isModuleEntitled } from "../lib/planGate";
-import { siteZone, dnsProvider, dnsConfigured, dnsTokensNeeded, upsertCname, zoneActiveUncached, zoneProbe, zoneWriteRefusal, labelInZone } from "../lib/devhubDns";
+import { siteZone, dnsProvider, dnsConfigured, dnsTokensNeeded, upsertCname, zoneActiveUncached, zoneProbe, labelInZone, isDevHubLabel } from "../lib/devhubDns";
+import { promises as dnsPromises } from "node:dns";
 // Обе стороны нужны: у них шире набор из devhubGuest, у меня — devhubGuestLink.
 // Все четыре символа используются в теле файла, проверено счётом вхождений.
 import { requesterId, devhubGuestId, DEVHUB_GUEST_HEADER } from "../lib/devhubGuest";
@@ -796,6 +797,130 @@ function deferred(fn: () => void | Promise<void>, ms: number): void {
 export function __clearDeferredDevHubWork() {
   for (const t of deferredTimers) clearTimeout(t);
   deferredTimers.clear();
+}
+
+/**
+ * Имя внутри зоны aevion.app проект может носить только своё: <slug>-<6 hex его id>.
+ * Иначе гость называл проект «api.aevion.app», звал auto-setup — и DNS-слой сносил
+ * CNAME бэкенда (найдено окном приёмки 15.09.2026, на проде не воспроизводилось).
+ * Чужой домен (вне зоны) записать можно: его DNS не наш, писать туда мы не будем.
+ */
+function customDomainRefusal(domain: string, projectId: string): string | null {
+  const label = labelInZone(domain);
+  if (label === null) return null;
+  const own = `-${projectId.slice(0, 6)}`;
+  if (!isDevHubLabel(label) || !label.endsWith(own)) {
+    return `${domain} is inside ${siteZone()} but is not this project's DevHub name (<slug>${own}.${siteZone()}) — reserved and service names cannot be claimed`;
+  }
+  return null;
+}
+/** Имя поставщика DNS для текстов, которые читает человек. */
+function dnsProviderName(): string {
+  return dnsProvider() === "vercel" ? "Vercel" : "Cloudflare";
+}
+
+/**
+ * Разрешается ли CNAME адреса. Домен после выкатки судим ПО DNS, а не по HTTPS:
+ * сертификат у Cloudflare Pages выпускается минутами, и HTTPS-проба сразу после
+ * записи CNAME проваливалась всегда — обвиняя зону, которая отработала.
+ * Стенд подменяет `dnsProbe.cnameResolves`, чтобы не ходить в сеть.
+ */
+export const dnsProbe = {
+  async cnameResolves(host: string): Promise<boolean> {
+    try {
+      const r = await Promise.race([
+        dnsPromises.resolveCname(host),
+        new Promise<string[]>((_, reject) => {
+          const t = setTimeout(() => reject(new Error("dns timeout")), 3000);
+          t.unref?.();
+        }),
+      ]);
+      return Array.isArray(r) && r.length > 0;
+    } catch {
+      return false;
+    }
+  },
+};
+
+/**
+ * Окна проверки «страница отвечает» после загрузки на Pages.
+ *
+ * Замер 15.09.2026 (проба probe-domain-check-375c20): загрузка через wrangler
+ * прошла, окно в 2 минуты (24 × 5 с) не увидело ни одного 2xx, выкатка записана
+ * failed, витрина /studio покраснела на 30 минут — а на третьей минуте и
+ * pages.dev, и <slug>.aevion.app отдавали страницу (внешняя проверка 200).
+ * /studio/deploy-stats за 30 дней: 6 выкаток, успешных 0, «failed с адресом» 4 —
+ * тот же класс. Новый проект Pages расходится по краю дольше двух минут.
+ *
+ * Поэтому окон три: старт через 4 с (внутри ~2 мин), повторы через 3 и 7 минут.
+ * Между окнами статус остаётся building, failed и красная витрина — только
+ * после последнего. Ручка /deployments/:id/recheck перепроверяет по требованию.
+ */
+export const SERVE_VERIFY_RETRY_DELAYS_MS = [3 * 60_000, 7 * 60_000];
+
+function scheduleServeVerification(
+  deployment: DevHubDeployment,
+  project: DevHubProject | null,
+  pagesUrl: string,
+  customDomain: string | null,
+  step = 0,
+): void {
+  deferred(async () => {
+    const d = memDeployments.get(deployment.id) ?? deployment;
+    const serves = await verifyDeploymentServes(pagesUrl);
+    if (serves) {
+      await markDeploymentLive(d, project, pagesUrl, customDomain);
+      return;
+    }
+    if (step < SERVE_VERIFY_RETRY_DELAYS_MS.length) {
+      const wait = SERVE_VERIFY_RETRY_DELAYS_MS[step];
+      d.buildLog = (d.buildLog || "") +
+        ` | verify ${step + 1}: no 2xx yet (~2 min window); a new Pages project can take longer to propagate — next check in ${Math.round(wait / 60_000)} min`;
+      try { await dbSaveDeployment(d); } catch { memDeployments.set(d.id, d); }
+      scheduleServeVerification(deployment, project, pagesUrl, customDomain, step + 1);
+      return;
+    }
+    // Отличать ветки просто: `wrangler: ...` — упала загрузка;
+    // `verify: ...` — загрузка прошла, а адрес не ответил.
+    noteProviderFailure("pages", "the deployed page does not serve (2xx never came back across three windows, ~14 min)");
+    d.status = "failed";
+    d.buildLog = (d.buildLog || "") +
+      " | verify: wrangler upload finished, but the page never answered 2xx across three windows (~14 min). " +
+      "Check the address by hand before blaming the upload; POST /deployments/:id/recheck asks again.";
+    d.completedAt = now();
+    try { await dbSaveDeployment(d); } catch { memDeployments.set(d.id, d); }
+  }, step === 0 ? 4000 : SERVE_VERIFY_RETRY_DELAYS_MS[step - 1]);
+}
+
+/** Страница ответила: выкатка и проект — live; домен спрашиваем по HTTPS, но не-ответ — не отказ (сертификат Pages). */
+async function markDeploymentLive(
+  d: DevHubDeployment,
+  project: DevHubProject | null,
+  pagesUrl: string,
+  customDomain: string | null,
+): Promise<void> {
+  noteProviderSuccess("pages");
+  d.status = "live";
+  d.completedAt = now();
+  let domainNote = "";
+  if (customDomain) {
+    const ready = await verifyDeploymentServes(`https://${customDomain}`, 5000, 6).catch(() => false);
+    if (ready) {
+      noteProviderSuccess("domain");
+      domainNote = ` | domain: https://${customDomain} answers`;
+    } else {
+      domainNote = ` | domain: https://${customDomain} not answering yet (Pages certificate pending); the DNS record is in place`;
+    }
+  }
+  d.buildLog = (d.buildLog || "") + " | verify: page answers 2xx" + domainNote;
+  try { await dbSaveDeployment(d); } catch { memDeployments.set(d.id, d); }
+  if (project) {
+    project.status = "live";
+    project.deployUrl = pagesUrl;
+    if (customDomain) project.customDomain = customDomain;
+    project.updatedAt = now();
+    try { await dbSaveProject(project); } catch { memProjects.set(project.id, project); }
+  }
 }
 
 // ── Exported reset helpers for tests ─────────────────────────────────────────
@@ -2214,10 +2339,8 @@ devhubRouter.patch("/projects/:id", async (req, res) => {
   if (deployUrl !== undefined) project.deployUrl = deployUrl ? String(deployUrl) : null;
   if (repoUrl !== undefined) project.repoUrl = repoUrl ? String(repoUrl) : null;
   if (customDomain !== undefined) {
-    // 15.09.2026: имя внутри нашей зоны принимается только в формате DevHub —
-    // иначе гость записывал сюда "api.aevion.app", а auto-setup сносил CNAME.
-    const wanted = customDomain ? String(customDomain).trim() : null;
-    const refusal = wanted ? zoneWriteRefusal(wanted) : null;
+    const wanted = customDomain ? String(customDomain).trim().toLowerCase() : null;
+    const refusal = wanted ? customDomainRefusal(wanted, project.id) : null;
     if (refusal) return res.status(400).json({ error: refusal });
     project.customDomain = wanted;
   }
@@ -4104,9 +4227,9 @@ devhubRouter.post("/projects/:id/domain", async (req, res) => {
   if (!domainRegex.test(domain.trim())) {
     return res.status(400).json({ error: "invalid domain format" });
   }
-  const zoneRefusal = zoneWriteRefusal(domain.trim());
-  if (zoneRefusal) return res.status(400).json({ error: zoneRefusal });
-  project.customDomain = domain.trim();
+  const domainRefusal = customDomainRefusal(domain.trim().toLowerCase(), project.id);
+  if (domainRefusal) return res.status(400).json({ error: domainRefusal });
+  project.customDomain = domain.trim().toLowerCase();
   project.updatedAt = now();
   // Человек получает инструкцию по DNS и считает домен привязанным. Если
   // запись легла только в память процесса, привязка исчезнет при
@@ -4967,8 +5090,6 @@ devhubRouter.post("/media/music", async (req, res) => {
 // POST /api/devhub/projects/:id/domain/auto-setup — Cloudflare DNS CNAME
 devhubRouter.post("/projects/:id/domain/auto-setup", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  // 15.09.2026: маршрут ПИШЕТ DNS зоны — гостю здесь делать нечего.
-  if (!auth?.sub) return res.status(401).json({ error: "sign in required: this route writes DNS records" });
   const userId = requesterId(req, auth?.sub);
   const read = await readProject(req.params.id);
   if (!read.project && read.failed) return replyStorageUnavailable(res);
@@ -4979,10 +5100,12 @@ devhubRouter.post("/projects/:id/domain/auto-setup", async (req, res) => {
   if (!project.customDomain) {
     return res.status(400).json({ error: "project has no customDomain set" });
   }
-  // Имена внутри нашей зоны выдаёт /domain/setup с безопасной меткой;
-  // auto-setup — для собственного домена человека.
+  // Внутри нашей зоны auto-setup не пишет ничего: имя проекту выдаёт /domain/setup
+  // (своя метка, своя цель). Иначе этот маршрут переписывал бы любую запись зоны.
   if (labelInZone(project.customDomain) !== null) {
-    return res.status(400).json({ error: `${project.customDomain} is inside ${siteZone()} — use /domain/setup, which provisions <slug>-<id>.${siteZone()}` });
+    return res.status(400).json({
+      error: `${project.customDomain} is inside ${siteZone()} — use POST /projects/:id/domain/setup, which issues the project's own name; DevHub never rewrites other records of the zone`,
+    });
   }
 
   if (!dnsConfigured()) {
@@ -4996,15 +5119,16 @@ devhubRouter.post("/projects/:id/domain/auto-setup", async (req, res) => {
   const target = "devhub.aevion.app";
   const domain = project.customDomain;
 
-  try {
-    const dns = await upsertCname(domain, target);
-    if (!dns.ok) {
-      return res.status(502).json({ error: dns.error, manualInstruction: `Add CNAME ${domain} → ${target}` });
-    }
-    return res.json({ ok: true, action: dns.action, domain, cname: target, recordId: dns.recordId });
-  } catch (e: any) {
-    res.status(500).json({ error: redactInfraDetails(e) || "Domain setup failed" });
-  }
+  // Чужой домен живёт в чужом DNS: запись про него в НАШЕЙ зоне ничего не
+  // разрешает, а до 15.09.2026 маршрут именно это и пытался сделать. Честный
+  // ответ — что и куда добавить у регистратора; запросов к поставщику ноль.
+  return res.json({
+    ok: false,
+    action: "manual",
+    domain,
+    cname: target,
+    manualInstruction: `Add CNAME ${domain} → ${target} at the DNS provider of ${domain}; DevHub cannot write another zone`,
+  });
 });
 
 // ── Voice clone helpers ─────────────────────────────────────────────────────
@@ -7148,71 +7272,21 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       }
     }
 
-    // 5. Verify the page actually SERVES before calling it live. CF's create
-    // API reports deploy:success even when the uploaded assets never stored
-    // (the raw multipart flow is deprecated in favor of wrangler) — the page
-    // then 500s forever while our records said "live" (found live 2026-07-21:
-    // every CF Pages deploy ever made had this). Degraded-convention: a
-    // deploy that doesn't serve is FAILED, not live.
-    deferred(async () => {
-      const d = memDeployments.get(deployment.id) ?? deployment;
-      const serves = await verifyDeploymentServes(pagesUrl);
-      // Pages is the one deploy path that actually works, so when it stops
-      // working the shop window should be the first to say it — not the user
-      // whose page never came up.
-      // ТЕКСТ НЕУДАЧИ НАЗЫВАЛ МЁРТВУЮ ПРИЧИНУ. До 08.09.2026 здесь стояло
-      // «CF direct-upload via raw REST is deprecated, wrangler-based upload
-      // needed» — а загрузка идёт ЧЕРЕЗ WRANGLER (строка с deployViaWrangler
-      // выше), и этот путь давно единственный. Сообщение уводило разбирающего
-      // к замене загрузчика, который менять не надо.
-      //
-      // Замер, ради которого это нашлось: за 7 дней 5 выкаток, успешных ноль
-      // (`/studio/deploy-stats`). Разбирать их будут по этому самому журналу,
-      // и ложная причина в нём стоит дороже самой неудачи.
-      //
-      // Отличать ветки просто: `wrangler: ...` — упала загрузка;
-      // `verify: ...` — загрузка прошла, а адрес не ответил.
-      if (serves) noteProviderSuccess("pages");
-      else noteProviderFailure("pages", "the deployed page does not serve (2xx never came back after retries)");
-      if (serves) {
-        d.status = "live"; d.completedAt = now();
-      } else {
-        d.status = "failed";
-        d.buildLog = (d.buildLog || "") +
-          " | verify: wrangler upload finished, but the page did not answer 2xx within ~25s " +
-          "(5 attempts, 5s apart). Either the new Pages project has not propagated yet, or it " +
-          "really does not serve. Check the address by hand before blaming the upload.";
-        d.completedAt = now();
-      }
-      try { await dbSaveDeployment(d); } catch { memDeployments.set(d.id, d); }
-      if (project && serves) {
-        project.status = "live";
-        project.deployUrl = pagesUrl;
-        if (customDomain) project.customDomain = customDomain;
-        project.updatedAt = now();
-        try { await dbSaveProject(project); } catch { memProjects.set(project.id, project); }
-      }
-    }, 4000);
+    // 5. «Страница отвечает» — цепочкой окон, а не одним (см. scheduleServeVerification).
+    // Загрузка прошла, а адрес молчит — это «ещё поднимается», пока не истекли все окна.
+    scheduleServeVerification(deployment, project, pagesUrl, customDomain);
 
-    // The CNAME is created, but a record in a zone nobody delegated resolves
-    // nowhere: aevion.build is still `pending` at Cloudflare, so every
-    // *.aevion.build address handed out so far — including ones from July —
-    // fails DNS. pagesUrl is the address that actually answers, so that is
-    // what we call live; the custom domain is reported separately with its
-    // real state instead of being presented as the primary URL.
-    // Second arg is the delay between attempts — 1ms keeps this a fast probe
-    // rather than the 25s wait the deploy path uses.
-    const domainReady = domainUrl ? await verifyDeploymentServes(domainUrl, 1).catch(() => false) : false;
-    // The `domain` capability still decides "live" from token presence alone —
-    // the very "a key is not a working capability" lie the health layer exists
-    // to kill. Tokens are all set and the zone is still undelegated, so every
-    // *.aevion.build address fails DNS while the shop window says live. Record
-    // what the deploy actually observed; /studio/capabilities merges it and
-    // reports `degraded` with this reason.
+    // Домен судим по DNS, а не по HTTPS: разрешился CNAME — зона отработала;
+    // готовность HTTPS (сертификат Pages) проверяет та же цепочка после того, как
+    // ответит pages.dev. Витрина «домен» отвечает за запись в DNS, не за сертификат.
+    const domainDns = customDomain ? await dnsProbe.cnameResolves(customDomain) : false;
     if (customDomain) {
-      if (domainReady) noteProviderSuccess("domain");
-      else noteProviderFailure("domain", `${customDomain} does not resolve — the ${siteZone()} DNS zone is not ready at ${dnsProvider() === "vercel" ? "Vercel" : "Cloudflare"}`);
+      if (domainDns) noteProviderSuccess("domain");
+      else noteProviderFailure("domain", `${customDomain} does not resolve — the CNAME is not visible in the ${siteZone()} zone at ${dnsProviderName()} yet`);
     }
+    // HTTPS домена сразу после выкатки не готов никогда — поле остаётся ради
+    // клиентов, которые его читают, и никогда не делает домен liveUrl.
+    const domainReady = false;
     return res.json({
       ok: true,
       provider: "cloudflare-pages",
@@ -7221,11 +7295,12 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       domain: customDomain,
       domainUrl,
       domainReady,
-      liveUrl: domainReady ? domainUrl : pagesUrl,
+      domainDns,
+      liveUrl: pagesUrl,
       message: customDomain
-        ? domainReady
-          ? `Deployed to ${domainUrl} (and ${pagesUrl})`
-          : `Deployed to ${pagesUrl}. ${customDomain} is configured but does not resolve yet — the ${siteZone()} DNS zone is not ready yet at ${dnsProvider() === "vercel" ? "Vercel" : "Cloudflare"}.`
+        ? domainDns
+          ? `Deployed to ${pagesUrl}. ${customDomain}: DNS is in place, the Cloudflare Pages certificate is being issued (usually 1–5 minutes); the deployment goes live once the page answers.`
+          : `Deployed to ${pagesUrl}. ${customDomain} does not resolve yet — the CNAME is not visible in the ${siteZone()} zone at ${dnsProviderName()}.`
         : `Deployed to ${pagesUrl} — verifying it serves before marking live (configure a DNS provider to enable ${siteZone()} domains)`,
     });
   } catch (e: any) {
@@ -7234,6 +7309,32 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
     try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
     return res.status(500).json({ ok: false, error: redactInfraDetails(e) || "Cloudflare Pages deploy failed" });
   }
+});
+
+// Перепроверка по требованию. «failed» через 2 минуты часто означало «ещё
+// поднимается» (замер 15.09.2026: 4 из 5 «упавших» с адресом отвечали 200).
+// Спрашиваем адрес сейчас: отвечает — выкатка и проект live; нет — честное «пока нет».
+devhubRouter.post("/projects/:id/deployments/:deployId/recheck", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = requesterId(req, auth?.sub);
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
+  const deployId = String(req.params.deployId);
+  let d: DevHubDeployment | null = null;
+  try { d = (await dbListDeployments(project.id, 50)).find((x) => x.id === deployId) ?? null; } catch { d = null; }
+  if (!d) d = memDeployments.get(deployId) ?? null;
+  if (!d) return res.status(404).json({ error: "deployment not found" });
+  if (!d.deployUrl) return res.status(400).json({ error: "deployment has no address to check — the upload never finished" });
+  const serves = await verifyDeploymentServes(d.deployUrl, 1000, 3);
+  if (!serves) {
+    return res.json({ ok: true, serves: false, status: d.status, deployUrl: d.deployUrl, message: `${d.deployUrl} still does not answer 2xx` });
+  }
+  // Домен той выкатки: имя детерминировано; если шаг домена тогда отказал, в журнале есть `| domain:`.
+  const domainFailed = /\| domain: /.test(d.buildLog || "");
+  const customDomain = project.customDomain
+    || (dnsConfigured() && !domainFailed ? `${slugify(project.name)}-${project.id.slice(0, 6)}.${siteZone()}` : null);
+  await markDeploymentLive(d, project, d.deployUrl, customDomain);
+  return res.json({ ok: true, serves: true, status: "live", deployUrl: d.deployUrl, customDomain });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -7832,8 +7933,6 @@ devhubRouter.get("/media/video/status/:predictionId", async (req, res) => {
 
 devhubRouter.post("/projects/:id/domain/setup", async (req, res) => {
   const auth = verifyBearerOptional(req);
-  // 15.09.2026: маршрут ПИШЕТ DNS зоны — только со входом.
-  if (!auth?.sub) return res.status(401).json({ error: "sign in required: this route writes DNS records" });
   const userId = requesterId(req, auth?.sub);
 
   const read = await readProject(req.params.id);

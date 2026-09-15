@@ -1772,33 +1772,28 @@ export default function QSpaceClient() {
           {roomsInfo.rooms.length > 0 && (
             <>
               <h3 style={{ ...S.h2, fontSize: 15, marginTop: 10 }}>По комнатам: назначение и пол</h3>
-              <table style={{ borderCollapse: "collapse", fontSize: 13, width: "100%" }}>
-                <thead>
-                  <tr>
-                    <th style={{ textAlign: "left", padding: "2px 6px 2px 0" }}>№</th>
-                    <th style={{ textAlign: "right", padding: "2px 6px" }}>м²</th>
-                    <th style={{ textAlign: "left", padding: "2px 6px" }}>назначение</th>
-                    <th style={{ textAlign: "left", padding: "2px 6px" }}>пол</th>
-                    <th style={{ textAlign: "left", padding: "2px 6px" }}>стены</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {roomsInfo.rooms.map((r) => (
-                    <tr key={r.index}>
-                      <td style={{ padding: "2px 6px 2px 0", fontVariantNumeric: "tabular-nums" }}>{r.index}</td>
-                      <td style={{ padding: "2px 6px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{r.area.toFixed(1)}</td>
-                      <td style={{ padding: "2px 6px" }}>
-                        <select
-                          id={`qspace-room-type-${r.index}`}
-                          aria-label={`Назначение комнаты ${r.index}`}
-                          value={roomTypes[r.index] ?? "living"}
-                          onChange={(e) => setRoomTypeOverride((o) => ({ ...o, [r.index]: e.target.value as RoomType }))}
-                          style={{ fontSize: 13 }}
-                        >
-                          {ROOM_TYPES.map((t) => <option key={t} value={t}>{ROOM_TYPE_LABEL[t]}</option>)}
-                        </select>
-                      </td>
-                      <td style={{ padding: "2px 6px" }}>
+              {/* Не таблица, а карточки: панель узкая, и четыре колонки с выпадающими
+                  списками вылезали из неё под 3D-холст — поймано снимком приёмки 15.09.
+                  Списки на всю ширину и переносятся; на телефоне это те же карточки. */}
+              <div style={{ display: "grid", gap: 6 }} role="list" aria-label="Комнаты: назначение, пол и стены">
+                {roomsInfo.rooms.map((r) => (
+                  <div key={r.index} role="listitem" style={{ borderBottom: "1px solid #eee9df", paddingBottom: 6 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                      <strong style={{ fontVariantNumeric: "tabular-nums", minWidth: 22 }}>{r.index}</strong>
+                      <span style={{ fontVariantNumeric: "tabular-nums", color: "#6a645a", minWidth: 52 }}>{r.area.toFixed(1)} м²</span>
+                      <select
+                        id={`qspace-room-type-${r.index}`}
+                        aria-label={`Назначение комнаты ${r.index}`}
+                        value={roomTypes[r.index] ?? "living"}
+                        onChange={(e) => setRoomTypeOverride((o) => ({ ...o, [r.index]: e.target.value as RoomType }))}
+                        style={{ fontSize: 13, flex: 1, minWidth: 0 }}
+                      >
+                        {ROOM_TYPES.map((t) => <option key={t} value={t}>{ROOM_TYPE_LABEL[t]}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
+                      <label style={{ flex: "1 1 140px", minWidth: 0, fontSize: 12, color: "#6a645a" }}>
+                        пол
                         <select
                           id={`qspace-room-floor-${r.index}`}
                           aria-label={`Пол комнаты ${r.index}`}
@@ -1808,13 +1803,14 @@ export default function QSpaceClient() {
                             if (e.target.value) next[r.index] = e.target.value; else delete next[r.index];
                             return next;
                           })}
-                          style={{ fontSize: 13, maxWidth: 220 }}
+                          style={{ fontSize: 13, display: "block", width: "100%" }}
                         >
                           <option value="">как общий ({materialById(floorMatId)?.name ?? "—"})</option>
                           {materialsFor("floor").map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                         </select>
-                      </td>
-                      <td style={{ padding: "2px 6px" }}>
+                      </label>
+                      <label style={{ flex: "1 1 140px", minWidth: 0, fontSize: 12, color: "#6a645a" }}>
+                        стены
                         <select
                           id={`qspace-room-wall-${r.index}`}
                           aria-label={`Стены комнаты ${r.index}`}
@@ -1824,16 +1820,16 @@ export default function QSpaceClient() {
                             if (e.target.value) next[r.index] = e.target.value; else delete next[r.index];
                             return next;
                           })}
-                          style={{ fontSize: 13, maxWidth: 220 }}
+                          style={{ fontSize: 13, display: "block", width: "100%" }}
                         >
                           <option value="">как общие ({materialById(wallMatId)?.name ?? "—"})</option>
                           {materialsFor("wall").map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                         </select>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </div>
               <p style={S.hint}>
                 Назначение угадано по площади — поправьте, если не так; стиль тогда переназначит
                 пол и стены этой комнаты. Стена между двумя комнатами красится с каждой стороны

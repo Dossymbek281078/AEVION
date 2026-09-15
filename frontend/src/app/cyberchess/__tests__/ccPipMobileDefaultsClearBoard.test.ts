@@ -12,14 +12,21 @@ const src = readFileSync(join(__dirname, "..", "WorkspacePiP.tsx"), "utf8");
 const pos = src.slice(src.indexOf("function loadPos"), src.indexOf("function loadSize"));
 const size = src.slice(src.indexOf("function loadSize"), src.indexOf("function clampToViewport"));
 
-describe("PiP на телефоне стартует под доской, минимальным, над навом", () => {
+describe("PiP на телефоне стартует под доской, малым, над навом", () => {
+  // Числа закреплены арифметикой замера 15.09.2026 (390×844, доска y 302..638):
+  // 844 − 88 − 113 = 643 > 638. Первая редакция (240×135, зазор 100) давала верх на 609
+  // и накрывала d1–h1 — сторож на неё был зелёным, потому что не закреплял ЧИСЛА.
+  it("константы: 200×113 и зазор 88 (не 240×135 / 100)", () => {
+    expect(src).toMatch(/const MOBILE_SIZE = \{ w: 200, h: 113 \}/);
+    expect(src).toMatch(/const MOBILE_NAV_CLEAR = 88/);
+  });
   it("loadPos: мобильная ветка при отсутствии raw — низ справа над навом", () => {
     expect(pos).toMatch(/if \(!raw\) return window\.innerWidth < 769/);
-    expect(pos).toMatch(/innerHeight - MIN_SIZE\.h - 100/);
-    expect(pos).toMatch(/innerWidth - MIN_SIZE\.w - 8/);
+    expect(pos).toMatch(/innerHeight - MOBILE_SIZE\.h - MOBILE_NAV_CLEAR/);
+    expect(pos).toMatch(/innerWidth - MOBILE_SIZE\.w - 8/);
   });
-  it("loadSize: мобильная ветка при отсутствии raw — MIN_SIZE", () => {
-    expect(size).toMatch(/if \(!raw\) return window\.innerWidth < 769 \? \{ \.\.\.MIN_SIZE \} : DEFAULT_SIZE/);
+  it("loadSize: мобильная ветка при отсутствии raw — MOBILE_SIZE", () => {
+    expect(size).toMatch(/if \(!raw\) return window\.innerWidth < 769 \? \{ \.\.\.MOBILE_SIZE \} : DEFAULT_SIZE/);
   });
   it("сохранённые значения по-прежнему читаются (ветка не сломала разбор raw)", () => {
     expect(pos).toMatch(/Number\(j\.x\) \|\| DEFAULT_POS\.x/);

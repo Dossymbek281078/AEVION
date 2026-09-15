@@ -176,6 +176,38 @@ function detectBrowserLang(): Lang {
   return "en";
 }
 
+/**
+ * Словарь посетителя начинает качаться при ИСПОЛНЕНИИ модуля, а не из эффекта.
+ *
+ * Замер 15.09.2026 на проде, /pricing, браузер ru-RU без куки: на телефоне
+ * (390 px, Slow 4G) человек 9,3 с видел английский сайт — текст на экране в
+ * 9580 мс, русский в 18873 мс. Провайдер стартует с "en" (так требует
+ * гидрация), а загрузка словаря начиналась только в эффекте, то есть ПОСЛЕ
+ * того, как страница ожила. Первый рендер от этого не меняется — "en" остаётся
+ * до эффекта, — но скачивание идёт параллельно с гидрацией, а не после неё.
+ *
+ * Порядок источников тот же, что в эффекте ниже: сохранённый выбор → кука →
+ * язык браузера. Повторного скачивания нет: loadDict держит запрос в inFlight,
+ * и эффект подхватит уже начатый.
+ */
+function guessVisitorLangEarly(): Lang {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (isLang(saved)) return saved;
+  } catch {}
+  try {
+    const m = document.cookie.match(new RegExp(`(?:^|; )${LANG_COOKIE}=([^;]*)`));
+    const fromCookie = m ? decodeURIComponent(m[1]) : null;
+    if (isLang(fromCookie)) return fromCookie;
+  } catch {}
+  return detectBrowserLang();
+}
+
+if (typeof window !== "undefined") {
+  const early = guessVisitorLangEarly();
+  if (early !== "en") void loadDict(early);
+}
+
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Lang>("en");
   const [langReady, setLangReady] = useState(false);

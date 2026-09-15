@@ -126,9 +126,13 @@ export function fixturesFromSegments(
   const свои = segs.filter((s) => !s.layer || isFurnitureLayer(s.layer));
   const блоки = блокиИзЛиний(свои)
     .filter((b) => b.n >= 6 && (b.x1 - b.x0) >= 0.25 && (b.y1 - b.y0) >= 0.25 && (b.x1 - b.x0) <= 4.5 && (b.y1 - b.y0) <= 4.5);
+  // крупные первыми: вложенный блок (секция гарнитура внутри гарнитура, ящик в
+  // холодильнике) тогда попадает центром в уже поставленный и не даёт «холодильник ×2»
+  блоки.sort((a, b) => (b.x1 - b.x0) * (b.y1 - b.y0) - (a.x1 - a.x0) * (a.y1 - a.y0));
   const items: Placement[] = [];
   const unknown: Блок[] = [];
-  const занято: Блок[] = [];
+  const занято: Array<Блок & { id: string; room: number }> = [];
+  const перекрытие = (a: Блок, b: Блок) => Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)) * Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0));
   for (const b of блоки) {
     const cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2;
     const room = roomAt(cx, cy);
@@ -136,12 +140,55 @@ export function fixturesFromSegments(
     const bw = b.x1 - b.x0, bd = b.y1 - b.y0;
     const id = классифицироватьБлок(bw, bd, types[room] ?? null);
     if (!id) { unknown.push(b); continue; }
+    // холодильник в кухне один; второй квадрат 0.6×0.6 — духовка или посудомойка, по габариту не
+    // отличить: его ставит подпись («дух», «п/м»), а не догадка
+    if (id === "fridge" && занято.some((z) => z.id === "fridge" && z.room === room)) { unknown.push(b); continue; }
     if (занято.some((z) => cx > z.x0 && cx < z.x1 && cy > z.y0 && cy < z.y1)) continue; // центр внутри уже поставленного
+    // тот же предмет, перекрывающий поставленный больше чем наполовину, — его же дубль
+    if (занято.some((z) => z.id === id && перекрытие(z, b) > 0.5 * bw * bd)) continue;
     const size = sizeOf(id);
     if (!size) continue;
     const rotY = (bw >= bd) === (size[0] >= size[1]) ? 0 : Math.PI / 2;
     items.push({ catalogId: id, x: cx, z: cy, rotY, room });
-    занято.push(b);
+    занято.push({ ...b, id, room });
   }
   return { items, blocks: блоки.length, unknown };
+}
+
+/** Подпись техники на плане → предмет каталога. «дух свч» — плита с духовкой, «п/м» — посудомойка. */
+const ТЕХНИКА: Array<[RegExp, string]> = [
+  [/(п\/м|пмм|посудом|dishwash)/i, "dishwasher"],
+  [/(^|\s)(с\/м|стир|washer)/i, "washer"],
+  [/(дух|плит|варочн|stove|oven)/i, "stove"],
+  [/(холод|fridge)/i, "fridge"],
+];
+
+export function applianceFromLabel(text: string): string | null {
+  for (const [re, id] of ТЕХНИКА) if (re.test(text)) return id;
+  return null;
+}
+
+/**
+ * Техника по подписям чертежа («дух свч», «п/м», «с/м», «холодильник»): ставится
+ * в точку подписи. Если тот же предмет уже узнан по блоку ближе метра — блок
+ * точнее, подпись пропускается.
+ */
+export function appliancesFromLabels(
+  labels: Array<{ text: string; x: number; y: number }>,
+  originPt: { x: number; y: number },
+  metersPerPt: number,
+  roomAt: (x: number, y: number) => number | null,
+  already: Placement[],
+): Placement[] {
+  const out: Placement[] = [];
+  for (const l of labels) {
+    const id = applianceFromLabel(l.text);
+    if (!id) continue;
+    const x = (l.x - originPt.x) * metersPerPt, z = (l.y - originPt.y) * metersPerPt;
+    const room = roomAt(x, z);
+    if (room === null) continue;
+    if ([...already, ...out].some((p) => p.catalogId === id && Math.hypot(p.x - x, p.z - z) < 1.0)) continue;
+    out.push({ catalogId: id, x, z, rotY: 0, room });
+  }
+  return out;
 }

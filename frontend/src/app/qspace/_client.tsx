@@ -28,7 +28,7 @@ import { planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
 import { масштабПоРазмерам, надёжностьМасштаба, предупреждениеОбОсях, словаИзТекста } from "./dimensionScale";
 import { текстPdf } from "./pdfText";
 import { назначенияПоПодписям, подписиИзТекста, type Подпись } from "./roomLabels";
-import { fixturesFromSegments } from "./fixtures";
+import { appliancesFromLabels, fixturesFromSegments } from "./fixtures";
 import type { Placement } from "./autoPlace";
 import { FINISH_PRESETS, drawMaterial, materialById, materialsFor } from "./materials";
 import { ROOM_TYPES, ROOM_TYPE_LABEL, guessRoomTypes, type RoomType } from "./roomTypes";
@@ -1019,15 +1019,18 @@ export default function QSpaceClient() {
     if (другиеЛинии.length > 0) {
       const линии = другиеЛинии.map((s) => ({ x1: (s.x1 - o.x) * k, y1: (s.y1 - o.y) * k, x2: (s.x2 - o.x) * k, y2: (s.y2 - o.y) * k, layer: s.layer }));
       const f = fixturesFromSegments(линии, rooms.roomAt, типы, (id) => CATALOG.find((c) => c.id === id)?.size);
-      if (f.items.length > 0) {
-        setPdfFixtures(f.items);
-        setPendingRestore({ placed: f.items });
+      // техника по подписям («дух свч», «п/м», «с/м») — туда, где написано
+      const техника = appliancesFromLabels(labels, o, k, rooms.roomAt, f.items);
+      const все = [...f.items, ...техника];
+      if (все.length > 0) {
+        setPdfFixtures(все);
+        setPendingRestore({ placed: все });
         setLayers((l) => ({ ...l, decor: true }));
         const счёт = new Map<string, number>();
-        for (const it of f.items) счёт.set(it.catalogId, (счёт.get(it.catalogId) ?? 0) + 1);
+        for (const it of все) счёт.set(it.catalogId, (счёт.get(it.catalogId) ?? 0) + 1);
         строки.push(
           `С чертежа взяты и поставлены: ${[...счёт].map(([id, n]) => `${CATALOG.find((c) => c.id === id)?.name.toLowerCase() ?? id}${n > 1 ? ` ×${n}` : ""}`).join(", ")}`
-          + ` (${f.items.length} из ${f.blocks} блоков мебели; остальные не узнаны и не ставились).`,
+          + ` (${f.items.length} из ${f.blocks} блоков мебели${техника.length ? `, ${техника.length} по подписям техники` : ""}; остальные не узнаны и не ставились).`,
         );
       } else if (f.blocks > 0) {
         строки.push(`На слоях мебели ${f.blocks} блоков, но ни один не узнан по габариту и комнате — расставит стиль.`);

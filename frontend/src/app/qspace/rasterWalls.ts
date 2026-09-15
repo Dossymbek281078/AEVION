@@ -428,29 +428,53 @@ export function findWallsByThickness(rgba: Uint8ClampedArray, w: number, h: numb
   };
   segs = merge(segs);
 
-  // 7. стёкла: тонкие чернила в створе между коллинеарными стенами
+  // 7. стёкла: тонкие чернила в створе между коллинеарными стенами — под любым
+  //    углом (в LA VIE окна стоят в косых стенах V-образного крыла; со стеклом
+  //    только по осям контур крыла тёк и комнат было 3 вместо 11)
   const glass: WallSeg[] = [];
   const inkAt = (x: number, y: number) => { const xi = Math.round(x), yi = Math.round(y); if (xi < 0 || yi < 0 || xi >= w || yi >= h) return 0; return ink[yi * w + xi]; };
-  for (const axis of ["h", "v"] as const) {
-    const same = segs.filter((s) => s.axis === axis).sort((a, b) => (axis === "h" ? a.y1 - b.y1 || a.x1 - b.x1 : a.x1 - b.x1 || a.y1 - b.y1));
-    for (let i = 0; i + 1 < same.length; i++) {
-      const a = same[i], b = same[i + 1];
-      const ca = axis === "h" ? a.y1 : a.x1, cb = axis === "h" ? b.y1 : b.x1;
-      if (Math.abs(ca - cb) > wallPx) continue;
-      const ea = axis === "h" ? a.x2 : a.y2, sb = axis === "h" ? b.x1 : b.y1;
-      const gap = sb - ea;
+  const segLen = (q: WallSeg) => Math.hypot(q.x2 - q.x1, q.y2 - q.y1);
+  const стены = segs.filter((q) => segLen(q) > 0);
+  const пары = new Set<string>();
+  for (let i = 0; i < стены.length; i++) {
+    const a = стены[i]; const la = segLen(a);
+    const ux = (a.x2 - a.x1) / la, uy = (a.y2 - a.y1) / la;
+    for (let j = 0; j < стены.length; j++) {
+      if (i === j) continue;
+      const b = стены[j]; const lb = segLen(b);
+      const vx = (b.x2 - b.x1) / lb, vy = (b.y2 - b.y1) / lb;
+      if (Math.abs(ux * vx + uy * vy) < Math.cos((3 * Math.PI) / 180)) continue; // не коллинеарны
+      // b на прямой a: поперечное отклонение обоих концов в пределах толщины
+      const off1 = Math.abs(-uy * (b.x1 - a.x1) + ux * (b.y1 - a.y1)), off2 = Math.abs(-uy * (b.x2 - a.x1) + ux * (b.y2 - a.y1));
+      if (Math.max(off1, off2) > wallPx) continue;
+      // проекции вдоль a: a занимает [0, la]; b — [q0, q1]; берём разрыв справа от a
+      const q0 = Math.min(ux * (b.x1 - a.x1) + uy * (b.y1 - a.y1), ux * (b.x2 - a.x1) + uy * (b.y2 - a.y1));
+      const gap = q0 - la;
       if (gap < 2 * wallPx || gap > Math.max(w, h) / 3) continue;
+      const key = `${Math.min(i, j)}:${Math.max(i, j)}`;
+      if (пары.has(key)) continue;
+      // между концом a и началом b не должно быть третьей стены той же прямой
+      let занято = false;
+      for (let k = 0; k < стены.length && !занято; k++) {
+        if (k === i || k === j) continue;
+        const c = стены[k]; const lc = segLen(c);
+        if (Math.abs(ux * ((c.x2 - c.x1) / lc) + uy * ((c.y2 - c.y1) / lc)) < Math.cos((3 * Math.PI) / 180)) continue;
+        const o1 = Math.abs(-uy * (c.x1 - a.x1) + ux * (c.y1 - a.y1)); if (o1 > wallPx) continue;
+        const p1 = ux * (c.x1 - a.x1) + uy * (c.y1 - a.y1), p2 = ux * (c.x2 - a.x1) + uy * (c.y2 - a.y1);
+        if (Math.max(p1, p2) > la + wallPx && Math.min(p1, p2) < q0 - wallPx) занято = true;
+      }
+      if (занято) continue;
       let hit = 0, tot = 0;
-      for (let t = ea; t <= sb; t += 2) {
+      for (let t = la; t <= q0; t += 2) {
         tot++;
+        const cx = a.x1 + ux * t, cy = a.y1 + uy * t;
         let any = 0;
-        for (let o = -Math.round(wallPx); o <= Math.round(wallPx) && !any; o++) any = axis === "h" ? inkAt(t, ca + o) : inkAt(ca + o, t);
+        for (let o = -Math.round(wallPx); o <= Math.round(wallPx) && !any; o++) any = inkAt(cx - uy * o, cy + ux * o);
         hit += any;
       }
       if (tot > 0 && hit / tot >= 0.6) {
-        glass.push(axis === "h"
-          ? { x1: ea, x2: sb, y1: ca, y2: ca, weight: Math.max(2, minPx / 2), axis, glass: true }
-          : { x1: ca, x2: ca, y1: ea, y2: sb, weight: Math.max(2, minPx / 2), axis, glass: true });
+        пары.add(key);
+        glass.push({ x1: a.x1 + ux * la, y1: a.y1 + uy * la, x2: a.x1 + ux * q0, y2: a.y1 + uy * q0, weight: Math.max(2, minPx / 2), axis: a.axis, glass: true });
       }
     }
   }

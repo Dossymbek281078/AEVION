@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
-import { блокиИзЛиний, классифицироватьБлок, fixturesFromSegments, isFurnitureLayer } from "./fixtures";
+import { блокиИзЛиний, классифицироватьБлок, fixturesFromSegments, isFurnitureLayer, applianceFromLabel, appliancesFromLabels } from "./fixtures";
 import { readPdfSegments, planFromPdfSegments } from "./pdf";
 import { findRooms } from "./rooms";
 import { guessRoomTypes } from "./roomTypes";
@@ -88,5 +88,32 @@ describe.skipIf(!existsSync(LAVIE))("LA VIE.pdf: сантехника и меб�
     expect(ids.some((i) => i === "bathtub" || i === "shower"), строка).toBe(true);
     expect(ids.filter((i) => i === "bed" || i === "bed-single").length, строка).toBeGreaterThanOrEqual(2);
     expect(ids.includes("kitchen"), строка).toBe(true);
+    // дублей одного предмета от вложенных блоков быть не должно: холодильник и гарнитур по одному
+    expect(ids.filter((i) => i === "fridge").length, строка).toBeLessThanOrEqual(1);
+    // техника по подписям: «дух свч» на кухне LA VIE → плита
+    const техника = appliancesFromLabels(подписиИзТекста(items), o, r.metersPerPt, rooms.roomAt, f.items);
+    expect(техника.some((t) => t.catalogId === "stove"), JSON.stringify(техника)).toBe(true);
   }, 90_000);
+});
+
+describe("дубли и техника по подписям", () => {
+  it("вложенный блок того же предмета не даёт «холодильник ×2»: крупный первым, малый внутри — пропущен", () => {
+    const внешний = [...прямоугольник(1, 1, 0.66, 0.66), { x1: 1, y1: 1, x2: 1.66, y2: 1.66 }, { x1: 1, y1: 1.66, x2: 1.66, y2: 1 }];
+    const внутренний = [...прямоугольник(1.04, 1.04, 0.58, 0.58), { x1: 1.04, y1: 1.04, x2: 1.62, y2: 1.62 }, { x1: 1.04, y1: 1.62, x2: 1.62, y2: 1.04 }];
+    const r = fixturesFromSegments([...внутренний, ...внешний], () => 1, { 1: "kitchen" }, (id) => CATALOG.find((c) => c.id === id)?.size);
+    expect(r.items.map((i) => i.catalogId)).toEqual(["fridge"]);
+  });
+  it("подписи: «дух свч» → плита, «п/м» → посудомойка, «с/м» → стиральная, «суш/м» и «термомикс» — ничего", () => {
+    expect(applianceFromLabel("дух свч")).toBe("stove");
+    expect(applianceFromLabel("п/м")).toBe("dishwasher");
+    expect(applianceFromLabel("с/м")).toBe("washer");
+    expect(applianceFromLabel("суш/м")).toBeNull();
+    expect(applianceFromLabel("термомикс и тд.")).toBeNull();
+  });
+  it("техника ставится в точку подписи в метрах; рядом с уже узнанным блоком того же предмета — пропускается", () => {
+    const labels = [{ text: "п/м", x: 20, y: 30 }, { text: "дух свч", x: 50, y: 30 }];
+    const уже = [{ catalogId: "stove", x: 4.2, z: 2, rotY: 0, room: 1 }];
+    const r = appliancesFromLabels(labels, { x: 10, y: 10 }, 0.1, () => 1, уже);
+    expect(r).toEqual([{ catalogId: "dishwasher", x: 1, z: 2, rotY: 0, room: 1 }]);
+  });
 });

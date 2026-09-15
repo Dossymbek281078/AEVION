@@ -541,6 +541,17 @@ export default function QSpaceClient() {
       const len = to - from;
       const a = pointOnWall(w, from);
       const bb = pointOnWall(w, to);
+      if (w.glass) {
+        // витраж: прозрачная панель во всю высоту, без отделки по комнатам
+        const g = new THREE.Mesh(
+          new THREE.BoxGeometry(len, z1 - z0, w.thickness),
+          new THREE.MeshLambertMaterial({ color: 0xbcd8e8, transparent: true, opacity: 0.45 }),
+        );
+        g.position.set((a.x + bb.x) / 2, (z0 + z1) / 2, (a.y + bb.y) / 2);
+        g.rotation.y = -Math.atan2(w.y2 - w.y1, w.x2 - w.x1);
+        t.gWalls.add(g);
+        return;
+      }
       const по = roomsBesideWall(w, from, to, roomsInfo.roomAt);
       const мат = (r: number | null): THREE.MeshLambertMaterial => (r !== null && t.roomWallMats.get(r)) || t.wallMat;
       // грани BoxGeometry: +x, -x, +y, -y, +z, -z; +z после поворота -atan2 смотрит по нормали (-dy, dx)

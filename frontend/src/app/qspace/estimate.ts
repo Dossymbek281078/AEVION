@@ -109,6 +109,7 @@ export function estimatePlan(
   } else {
     let byAxes = 0;
     for (const w of plan.walls) {
+      if (w.glass) continue; // витраж не штукатурят и не красят
       byAxes += Math.hypot(w.x2 - w.x1, w.y2 - w.y1) * w.height;
     }
     for (const o of plan.openings) {

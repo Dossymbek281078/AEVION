@@ -3,7 +3,7 @@ import { pgIntId } from "../lib/queryNumber";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { resolvePlanFromPayload, isModuleEntitled } from "../lib/planGate";
-import { siteZone, dnsProvider, dnsConfigured, dnsTokensNeeded, upsertCname, zoneActiveUncached, zoneProbe } from "../lib/devhubDns";
+import { siteZone, dnsProvider, dnsConfigured, dnsTokensNeeded, upsertCname, zoneActiveUncached, zoneProbe, zoneWriteRefusal, labelInZone } from "../lib/devhubDns";
 // Обе стороны нужны: у них шире набор из devhubGuest, у меня — devhubGuestLink.
 // Все четыре символа используются в теле файла, проверено счётом вхождений.
 import { requesterId, devhubGuestId, DEVHUB_GUEST_HEADER } from "../lib/devhubGuest";
@@ -2213,7 +2213,14 @@ devhubRouter.patch("/projects/:id", async (req, res) => {
   if (status !== undefined) project.status = String(status);
   if (deployUrl !== undefined) project.deployUrl = deployUrl ? String(deployUrl) : null;
   if (repoUrl !== undefined) project.repoUrl = repoUrl ? String(repoUrl) : null;
-  if (customDomain !== undefined) project.customDomain = customDomain ? String(customDomain) : null;
+  if (customDomain !== undefined) {
+    // 15.09.2026: имя внутри нашей зоны принимается только в формате DevHub —
+    // иначе гость записывал сюда "api.aevion.app", а auto-setup сносил CNAME.
+    const wanted = customDomain ? String(customDomain).trim() : null;
+    const refusal = wanted ? zoneWriteRefusal(wanted) : null;
+    if (refusal) return res.status(400).json({ error: refusal });
+    project.customDomain = wanted;
+  }
   project.updatedAt = now();
   // Признак хранилища. До 19.08.2026 ответ был одинаков независимо от того,
   // легло ли сохранение в базу или в память процесса: `catch` тихо клал запись
@@ -4097,6 +4104,8 @@ devhubRouter.post("/projects/:id/domain", async (req, res) => {
   if (!domainRegex.test(domain.trim())) {
     return res.status(400).json({ error: "invalid domain format" });
   }
+  const zoneRefusal = zoneWriteRefusal(domain.trim());
+  if (zoneRefusal) return res.status(400).json({ error: zoneRefusal });
   project.customDomain = domain.trim();
   project.updatedAt = now();
   // Человек получает инструкцию по DNS и считает домен привязанным. Если
@@ -4958,6 +4967,8 @@ devhubRouter.post("/media/music", async (req, res) => {
 // POST /api/devhub/projects/:id/domain/auto-setup — Cloudflare DNS CNAME
 devhubRouter.post("/projects/:id/domain/auto-setup", async (req, res) => {
   const auth = verifyBearerOptional(req);
+  // 15.09.2026: маршрут ПИШЕТ DNS зоны — гостю здесь делать нечего.
+  if (!auth?.sub) return res.status(401).json({ error: "sign in required: this route writes DNS records" });
   const userId = requesterId(req, auth?.sub);
   const read = await readProject(req.params.id);
   if (!read.project && read.failed) return replyStorageUnavailable(res);
@@ -4967,6 +4978,11 @@ devhubRouter.post("/projects/:id/domain/auto-setup", async (req, res) => {
   }
   if (!project.customDomain) {
     return res.status(400).json({ error: "project has no customDomain set" });
+  }
+  // Имена внутри нашей зоны выдаёт /domain/setup с безопасной меткой;
+  // auto-setup — для собственного домена человека.
+  if (labelInZone(project.customDomain) !== null) {
+    return res.status(400).json({ error: `${project.customDomain} is inside ${siteZone()} — use /domain/setup, which provisions <slug>-<id>.${siteZone()}` });
   }
 
   if (!dnsConfigured()) {
@@ -7816,6 +7832,8 @@ devhubRouter.get("/media/video/status/:predictionId", async (req, res) => {
 
 devhubRouter.post("/projects/:id/domain/setup", async (req, res) => {
   const auth = verifyBearerOptional(req);
+  // 15.09.2026: маршрут ПИШЕТ DNS зоны — только со входом.
+  if (!auth?.sub) return res.status(401).json({ error: "sign in required: this route writes DNS records" });
   const userId = requesterId(req, auth?.sub);
 
   const read = await readProject(req.params.id);

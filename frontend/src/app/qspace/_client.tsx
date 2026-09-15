@@ -31,6 +31,8 @@ import { FINISH_PRESETS, drawMaterial, materialById, materialsFor } from "./mate
 import { ROOM_TYPES, ROOM_TYPE_LABEL, guessRoomTypes, type RoomType } from "./roomTypes";
 import { STYLES, type Style } from "./styles";
 import { autoPlace } from "./autoPlace";
+import { roomsBesideWall } from "./wallSides";
+import { materialShopping } from "./materialTotals";
 import { CATALOG, demoPlacedSnapshots, groups, itemById, type CatalogItem } from "./furniture";
 import { checkClearance, type Issue, type Placed } from "./clearance";
 import { findRooms } from "./rooms";
@@ -185,6 +187,7 @@ export default function QSpaceClient() {
   // берётся общий floorMatId. Тип комнаты угадывается по площади, человек
   // поправляет — его правка живёт отдельно и переживает смену стиля.
   const [roomFloor, setRoomFloor] = useState<Record<number, string>>({});
+  const [roomWall, setRoomWall] = useState<Record<number, string>>({});
   const [roomTypeOverride, setRoomTypeOverride] = useState<Record<number, RoomType>>({});
   const [styleId, setStyleId] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -257,6 +260,8 @@ export default function QSpaceClient() {
     floorMesh: THREE.Mesh | null;
     /** пол каждой комнаты своим материалом — поверх общего пола, только в чистовом слое */
     roomFloors: Map<number, { mesh: THREE.Mesh; mat: THREE.MeshLambertMaterial; w: number; h: number }>;
+    /** материал стен, обращённых в комнату: у стены две стороны и две комнаты */
+    roomWallMats: Map<number, THREE.MeshLambertMaterial>;
     raycaster: THREE.Raycaster;
     dragUid: number | null;
     uidSeq: number;
@@ -333,7 +338,7 @@ export default function QSpaceClient() {
     three.current = {
       scene, camera, renderer, controls,
       gRough, gFinish, gDecor, gWalls,
-      wallMat, floorMat, floorMesh: null, roomFloors: new Map(),
+      wallMat, floorMat, floorMesh: null, roomFloors: new Map(), roomWallMats: new Map(),
       raycaster: new THREE.Raycaster(),
       dragUid: null, uidSeq: 1,
     };
@@ -520,6 +525,13 @@ export default function QSpaceClient() {
     t.gWalls.add(ground);
 
     // --- стены с проёмами --------------------------------------------------
+    // У стены две стороны, и смотрят они в РАЗНЫЕ комнаты. Коробка стены
+    // получает шесть материалов: торцы и верх — общий, а две длинные грани —
+    // материал той комнаты, в которую грань обращена. Какая комната с какой
+    // стороны, отвечает разметка комнат (roomAt) по точке чуть за гранью.
+    for (const m of t.roomWallMats.values()) (m as unknown as { dispose(): void }).dispose();
+    t.roomWallMats.clear();
+    for (const room of roomsInfo.rooms) t.roomWallMats.set(room.index, new THREE.MeshLambertMaterial({ color: 0xffffff }));
     const wallBox = (
       w: typeof plan.walls[number],
       from: number, to: number,
@@ -527,9 +539,13 @@ export default function QSpaceClient() {
     ) => {
       if (to - from < 0.01 || z1 - z0 < 0.01) return;
       const len = to - from;
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(len, z1 - z0, w.thickness), t.wallMat);
       const a = pointOnWall(w, from);
       const bb = pointOnWall(w, to);
+      const по = roomsBesideWall(w, from, to, roomsInfo.roomAt);
+      const мат = (r: number | null): THREE.MeshLambertMaterial => (r !== null && t.roomWallMats.get(r)) || t.wallMat;
+      // грани BoxGeometry: +x, -x, +y, -y, +z, -z; +z после поворота -atan2 смотрит по нормали (-dy, dx)
+      const mats = [t.wallMat, t.wallMat, t.wallMat, t.wallMat, мат(по.plus), мат(по.minus)];
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(len, z1 - z0, w.thickness), mats as unknown as THREE.MeshLambertMaterial);
       mesh.position.set((a.x + bb.x) / 2, (z0 + z1) / 2, (a.y + bb.y) / 2);
       mesh.rotation.y = -Math.atan2(w.y2 - w.y1, w.x2 - w.x1);
       t.gWalls.add(mesh);
@@ -742,6 +758,24 @@ export default function QSpaceClient() {
     t.wallMat.needsUpdate = true;
     t.floorMat.needsUpdate = true;
 
+    // Стены, обращённые в комнату: свой материал у каждой комнаты, иначе общий;
+    // в черновом слое — бетон, как и общий.
+    for (const [idx, wmat] of t.roomWallMats) {
+      const id = roomWall[idx] ?? wallMatId;
+      const m = materialById(id);
+      if (!layers.finish || !m) {
+        wmat.color.set(CONCRETE);
+        wmat.map = null;
+      } else if (m.pattern === "solid") {
+        wmat.color.set(m.colors[0]);
+        wmat.map = null;
+      } else {
+        wmat.color.set(0xffffff);
+        wmat.map = textureFor(id, planBounds(plan).maxX - planBounds(plan).minX, planWallHeight(plan));
+      }
+      wmat.needsUpdate = true;
+    }
+
     // Полы комнат: свой материал у каждой, где он назначен; иначе общий.
     // В черновом слое их нет вовсе — там стяжка, и она одна на всю квартиру.
     for (const [idx, rf] of t.roomFloors) {
@@ -754,7 +788,7 @@ export default function QSpaceClient() {
       rf.mat.map = tex;
       rf.mat.needsUpdate = true;
     }
-  }, [wallMatId, floorMatId, roomFloor, layers.finish, plan]);
+  }, [wallMatId, floorMatId, roomFloor, roomWall, layers.finish, plan]);
 
   // ---- готовые стили и назначение комнат ----------------------------------
   const roomTypes = useMemo<Record<number, RoomType>>(
@@ -763,17 +797,23 @@ export default function QSpaceClient() {
   );
 
   /**
-   * Стиль одной кнопкой: отделка каждой комнаты по её типу, стены — как в
-   * гостиной (стены общие между комнатами, красить их по комнатам пока нельзя),
-   * мебель стиля расставлена по комнатам заново. Расставленное прежде снимается
+   * Стиль одной кнопкой: пол и стены каждой комнаты по её типу (общие
+   * материалы — как в гостиной, они идут в смету и на стены, не обращённые ни
+   * в одну комнату), мебель стиля расставлена по комнатам заново. Расставленное прежде снимается
    * — и об этом говорится числом, а не молча.
    */
   const applyStyle = useCallback((s: Style) => {
     const t = three.current; if (!t) return;
     const было = placedRef.current.length;
     const полы: Record<number, string> = {};
-    for (const r of roomsInfo.rooms) полы[r.index] = s.finish[roomTypes[r.index] ?? "living"].floor;
+    const стены: Record<number, string> = {};
+    for (const r of roomsInfo.rooms) {
+      const f = s.finish[roomTypes[r.index] ?? "living"];
+      полы[r.index] = f.floor;
+      стены[r.index] = f.wall;
+    }
     setRoomFloor(полы);
+    setRoomWall(стены);
     setWallMatId(s.finish.living.wall);
     setFloorMatId(s.finish.living.floor);
     setStyleId(s.id);
@@ -1131,9 +1171,10 @@ export default function QSpaceClient() {
       partition,
       layers,
       roomFloor: Object.fromEntries(Object.entries(roomFloor).map(([k, v]) => [String(k), v])),
+      roomWall: Object.fromEntries(Object.entries(roomWall).map(([k, v]) => [String(k), v])),
       roomTypes: Object.fromEntries(Object.entries(roomTypeOverride).map(([k, v]) => [String(k), v])),
     };
-  }, [plan, placed, wallMatId, floorMatId, partition, layers, roomFloor, roomTypeOverride]);
+  }, [plan, placed, wallMatId, floorMatId, partition, layers, roomFloor, roomWall, roomTypeOverride]);
 
   /** Ставит сцену по сохранённому проекту. План идёт первым: он пересобирает сцену. */
   const applyProject = useCallback((pr: Project) => {
@@ -1151,6 +1192,9 @@ export default function QSpaceClient() {
     const полы: Record<number, string> = {};
     for (const [k, v] of Object.entries(pr.roomFloor ?? {})) if (materialById(v)) полы[Number(k)] = v;
     setRoomFloor(полы);
+    const стены: Record<number, string> = {};
+    for (const [k, v] of Object.entries(pr.roomWall ?? {})) if (materialById(v)) стены[Number(k)] = v;
+    setRoomWall(стены);
     const типы: Record<number, RoomType> = {};
     for (const [k, v] of Object.entries(pr.roomTypes ?? {})) if ((ROOM_TYPES as string[]).includes(v)) типы[Number(k)] = v as RoomType;
     setRoomTypeOverride(типы);
@@ -1268,8 +1312,14 @@ export default function QSpaceClient() {
   // Список закупки уносится с экрана таблицей. Раньше скопировать можно было
   // только разбивку по комнатам, а кабель, трубы, розетки и светильники
   // оставались на странице — в магазин человек шёл с телефоном в руке.
+  // Список к покупке по материалам: отделка по комнатам разная, покупают по материалу.
+  const shopping = useMemo(
+    () => materialShopping(perRoom.lines, roomFloor, roomWall, floorMatId, wallMatId),
+    [perRoom, roomFloor, roomWall, floorMatId, wallMatId],
+  );
+
   const downloadEstimateCsv = useCallback(() => {
-    const csv = estimateCsv(est, plan.name, perRoom.lines);
+    const csv = estimateCsv(est, plan.name, perRoom.lines, shopping);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1278,7 +1328,7 @@ export default function QSpaceClient() {
     a.click();
     URL.revokeObjectURL(url);
     скажи("Спецификация сохранена. Колонка цен пустая — впишите свои, сумма посчитается сама.");
-  }, [est, plan.name, perRoom.lines, скажи]);
+  }, [est, plan.name, perRoom.lines, shopping, скажи]);
 
 
   const S = styles;
@@ -1718,6 +1768,7 @@ export default function QSpaceClient() {
                     <th style={{ textAlign: "right", padding: "2px 6px" }}>м²</th>
                     <th style={{ textAlign: "left", padding: "2px 6px" }}>назначение</th>
                     <th style={{ textAlign: "left", padding: "2px 6px" }}>пол</th>
+                    <th style={{ textAlign: "left", padding: "2px 6px" }}>стены</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1752,14 +1803,31 @@ export default function QSpaceClient() {
                           {materialsFor("floor").map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                         </select>
                       </td>
+                      <td style={{ padding: "2px 6px" }}>
+                        <select
+                          id={`qspace-room-wall-${r.index}`}
+                          aria-label={`Стены комнаты ${r.index}`}
+                          value={roomWall[r.index] ?? ""}
+                          onChange={(e) => setRoomWall((f) => {
+                            const next = { ...f };
+                            if (e.target.value) next[r.index] = e.target.value; else delete next[r.index];
+                            return next;
+                          })}
+                          style={{ fontSize: 13, maxWidth: 220 }}
+                        >
+                          <option value="">как общие ({materialById(wallMatId)?.name ?? "—"})</option>
+                          {materialsFor("wall").map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </select>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
               <p style={S.hint}>
                 Назначение угадано по площади — поправьте, если не так; стиль тогда переназначит
-                пол этой комнаты. Стены пока красятся одним цветом на всю квартиру: они общие
-                между комнатами. Смета считает пол по общему материалу — учёт по комнатам следующим шагом.
+                пол и стены этой комнаты. Стена между двумя комнатами красится с каждой стороны
+                в цвет своей комнаты. Сколько какого материала покупать — в разделе
+                «Помещения» ниже, список считается по этой таблице.
               </p>
             </>
           )}
@@ -2011,6 +2079,27 @@ export default function QSpaceClient() {
                   </tr>
                 </tbody>
               </table>
+              <h3 style={{ ...S.h2, fontSize: 15, marginTop: 10 }}>К покупке по материалам</h3>
+              <table style={S.estTable} aria-label="Материалы к покупке">
+                <tbody>
+                  {shopping.map((m) => (
+                    <tr key={`${m.surface}:${m.id}`}>
+                      <td style={S.estTd}>
+                        {m.surface === "floor" ? "Пол" : "Стены"}: {m.name}
+                        <br />
+                        <span style={{ fontSize: 11.5, color: "#7a746b" }}>
+                          помещени{m.rooms.length === 1 ? "е" : "я"} {m.rooms.join(", ")}
+                        </span>
+                      </td>
+                      <td style={S.estTdNum}>{m.area.toFixed(1)} м²</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p style={S.hint}>
+                Пол — с запасом на подрезку, стены — чистая площадь. Меняете пол или стены
+                комнаты в таблице «по комнатам» — этот список пересчитывается сам.
+              </p>
               <button
                 type="button"
                 style={{ ...S.btn, marginTop: 8 }}

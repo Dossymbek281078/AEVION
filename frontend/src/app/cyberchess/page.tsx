@@ -14887,7 +14887,11 @@ ${question.trim()}`;
         шапке, а нижняя плашка перекрывала низ доски. Гейт по vwPx (надёжнее CSS-media). */}
     {!streamerMode&&vwPx<769&&<BottomNav
       setup={setup} tab={tab}
-      onPlay={()=>sShowQuickSetupModal(true)}
+      // При ЖИВОЙ партии «Играть» возвращает к доске — как goTab("play") у десктопной панели
+      // (стр. ~6004). Прежде всегда открывалась шторка «Новая партия»: игрок, тапнувший
+      // «Играть» из Задач, чтобы вернуться к партии, получал предложение начать новую.
+      // Обход 15.09.2026 на 390/360 это и показал. Без партии — по-прежнему шторка.
+      onPlay={()=>{ if(on&&!over){ sTab("play"); sSetup(false); } else sShowQuickSetupModal(true); }}
       onPuzzles={()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length));sSetup(false)}}
       onAnalysis={()=>{sTab("analysis");sSetup(false)}}
       onCoach={()=>{sTab("coach");sSetup(false)}}

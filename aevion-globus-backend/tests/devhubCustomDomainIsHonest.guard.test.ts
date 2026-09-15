@@ -26,6 +26,11 @@ import path from "node:path";
  *
  * Сторож по исходнику: поведенческий путь потребовал бы живого Cloudflare либо
  * подмены сети внутри маршрута выкатки.
+ *
+ * 15.09.2026: зона теперь aevion.app, запись CNAME ушла в lib/devhubDns
+ * (Vercel или Cloudflare). Сторож сверяет ту же суть новой формой: ответ
+ * модуля читается (dns.ok), отказ назван с кодом и телом (dns.error их несёт),
+ * адрес присваивается после проверки. Сам модуль покрыт devhubDnsVercel.test.ts.
  */
 
 const FILE = path.join(__dirname, "..", "src", "routes", "devhub.ts");
@@ -54,7 +59,7 @@ describe("свой поддомен объявляется только когд
   test("прибор работает: блок найден и в нём есть вызовы к Cloudflare", () => {
     const b = domainBlock();
     expect(b.length).toBeGreaterThan(500);
-    expect(b).toContain("dns_records");
+    expect(b, "запись DNS идёт через lib/devhubDns").toContain("upsertCname(");
   });
 
   test("ответ на привязку домена читается", () => {
@@ -65,18 +70,18 @@ describe("свой поддомен объявляется только когд
   });
 
   test("ответ на запись DNS читается", () => {
-    expect(domainBlock(), "запись DNS снова не проверяет ответ").toMatch(/dnsResp\.ok/);
+    expect(domainBlock(), "запись DNS снова не проверяет ответ").toMatch(/dns\.ok/);
   });
 
   test("отказ провайдера назван кодом и телом ответа", () => {
     const b = domainBlock();
     expect(b).toMatch(/Pages domain refused \(\$\{addResp\.status\}\)/);
-    expect(b).toMatch(/DNS record refused \(\$\{dnsResp\.status\}\)/);
+    expect(b).toMatch(/DNS record refused: \$\{dns\.error\}/);
   });
 
   test("поддомен присваивается ПОСЛЕ проверок, а не до них", () => {
     const b = domainBlock();
-    const dnsCheck = b.indexOf("dnsResp.ok");
+    const dnsCheck = b.indexOf("dns.ok");
     const assign = b.indexOf("customDomain = fullDomain");
     expect(dnsCheck).toBeGreaterThan(-1);
     expect(assign).toBeGreaterThan(-1);

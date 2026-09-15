@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, use } from "react";
+import { getAuthToken } from "@/lib/auth";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
@@ -2670,6 +2671,30 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [pagesDeploying, setPagesDeploying] = useState(false);
   const [pagesResult, setPagesResult] = useState<{ liveUrl: string; domain: string | null; pagesUrl: string; domainReady?: boolean } | null>(null);
 
+  // «Не удался» через две минуты часто означал «ещё поднимается»: новый проект Pages
+  // расходится по краю дольше окна проверки. Ручка recheck спрашивает адрес сейчас.
+  const [recheckingId, setRecheckingId] = useState<string | null>(null);
+  const recheckDeployment = async (deployId: string) => {
+    if (!project) return;
+    setRecheckingId(deployId);
+    try {
+      const r = await fetch(apiUrl(`/api/devhub/projects/${project.id}/deployments/${deployId}/recheck`), { method: "POST" });
+      const d = await r.json();
+      if (!r.ok) throw new Error(serverError(d.error, "Не удалось перепроверить"));
+      showToast(d.serves ? `Адрес отвечает — выкатка живая: ${d.deployUrl}` : `${d.deployUrl} пока не отвечает`, d.serves ? "success" : "warning");
+      fetchDeployments();
+      if (d.serves) {
+        const pr = await fetch(apiUrl(`/api/devhub/projects/${project.id}`), { cache: "no-store" });
+        const pd = await pr.json();
+        setProject(pd.project);
+      }
+    } catch (e: any) {
+      showToast(e?.message || "Не удалось перепроверить", "error");
+    } finally {
+      setRecheckingId(null);
+    }
+  };
+
   const deployToPages = async () => {
     if (!project) return;
     if (isCapabilityBlocked(caps, "pages")) {
@@ -2694,13 +2719,18 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       // One message, not two: this Toast shows a single notice at a time, so a
       // second call would silently replace the first — the user would see the
       // caveat and never the address.
+      // 15.09.2026: домен сразу после выкатки по HTTPS не отвечает НИКОГДА — сертификат
+      // Cloudflare Pages выпускается минутами. Сервер теперь отдаёт domainDns: CNAME
+      // записан и разрешается — говорим «подключается», а не «не зарегистрирован».
       showToast(
         d.domainReady && d.domain
           ? `Live: https://${d.domain}`
-          : d.domain
-            ? `Адрес: ${d.liveUrl ?? d.pagesUrl} — ${d.domain} пока не отвечает (домен не зарегистрирован)`
-            : `Адрес: ${d.liveUrl ?? d.pagesUrl}`,
-        d.domain && !d.domainReady ? "warning" : "success",
+          : d.domain && d.domainDns
+            ? `Адрес: ${d.liveUrl ?? d.pagesUrl} — https://${d.domain} подключается: DNS готов, сертификат выпускается (1–5 мин), статус обновится сам`
+            : d.domain
+              ? `Адрес: ${d.liveUrl ?? d.pagesUrl} — ${d.domain} пока не разрешается (запись DNS ещё не видна)`
+              : `Адрес: ${d.liveUrl ?? d.pagesUrl}`,
+        d.domain && !d.domainReady && !d.domainDns ? "warning" : "success",
       );
       setTimeout(async () => {
         const pr = await fetch(apiUrl(`/api/devhub/projects/${project.id}`), { cache: "no-store" });
@@ -2786,9 +2816,17 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     setPayError(null);
     setPayResult(null);
     try {
+      // С 15.09.2026 ссылку на оплату выпускает только вошедший: без входа любой
+      // посетитель создавал в нашем магазине ссылку на Studio Pro за 50 центов.
+      const payToken = getAuthToken();
+      if (!payToken) {
+        setPayError("Войдите в AEVION, чтобы создать ссылку на оплату — без входа ссылки не выпускаются.");
+        setPayLoading(false);
+        return;
+      }
       const r = await fetch(apiUrl("/api/devhub/media/payment-link"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${payToken}` },
         body: JSON.stringify({
           name: payName.trim(),
           amountCents: Math.round(amtUnits * 100),
@@ -4934,6 +4972,14 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                 style={{ fontSize: 11, color: "#0d9488", display: "block", marginTop: 4, wordBreak: "break-all" }}>
                                 {d.deployUrl}
                               </a>
+                            )}
+                            {d.status !== "live" && d.deployUrl && (
+                              <button
+                                onClick={() => recheckDeployment(d.id)}
+                                disabled={recheckingId === d.id}
+                                style={{ marginTop: 6, padding: "4px 10px", borderRadius: 6, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                                {recheckingId === d.id ? "Проверяю…" : "Проверить ещё раз"}
+                              </button>
                             )}
                           </div>
                         );

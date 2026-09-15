@@ -109,6 +109,7 @@ export function estimatePlan(
   } else {
     let byAxes = 0;
     for (const w of plan.walls) {
+      if (w.glass) continue; // витраж не штукатурят и не красят
       byAxes += Math.hypot(w.x2 - w.x1, w.y2 - w.y1) * w.height;
     }
     for (const o of plan.openings) {
@@ -169,10 +170,19 @@ export interface RoomCsvLine {
   skirting: number;
 }
 
+/** Строка списка к покупке по материалу — считается в materialTotals.ts. */
+export interface MaterialCsvLine {
+  surface: "floor" | "wall";
+  name: string;
+  area: number;
+  rooms: number[];
+}
+
 export function estimateCsv(
   est: Estimate,
   planName: string,
   rooms: RoomCsvLine[] = [],
+  materials: MaterialCsvLine[] = [],
 ): string {
   const NL = String.fromCharCode(13) + String.fromCharCode(10);
   // Десятичная ЗАПЯТАЯ и разделитель «;» — пара, которую ждёт русский Excel.
@@ -229,6 +239,20 @@ export function estimateCsv(
       out.push(
         `${r.index};${ч(r.area)};${ч(r.flooring)};${ч(r.wallArea)};`
         + `${ч(r.paint)};${ч(r.skirting)}`,
+      );
+    }
+  }
+
+  // Материалы к покупке — по одному на строку, без цен (итог уже выше):
+  // плитку в санузел и ламинат в спальню покупают отдельно, и продавцу нужны
+  // именно эти числа, а не «пол 36 м²».
+  if (materials.length > 0) {
+    out.push("");
+    out.push('"Материалы к покупке — площадь пола с запасом на подрезку, стены чистые"');
+    out.push("Поверхность;Материал;Площадь;Единица;Помещения");
+    for (const m of materials) {
+      out.push(
+        `${m.surface === "floor" ? "Пол" : "Стены"};"${безопасно(m.name)}";${ч(m.area)};м²;${m.rooms.join(", ")}`,
       );
     }
   }

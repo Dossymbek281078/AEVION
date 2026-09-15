@@ -5,6 +5,7 @@ import { verifyBearerOptional } from "../lib/authJwt";
 import { resolvePlanFromPayload, isModuleEntitled } from "../lib/planGate";
 import { siteZone, dnsProvider, dnsConfigured, dnsTokensNeeded, upsertCname, zoneActiveUncached, zoneProbe, labelInZone, isDevHubLabel } from "../lib/devhubDns";
 import { promises as dnsPromises } from "node:dns";
+import { resolveLemonSqueezyVariant } from "../data/lemonSqueezyVariants";
 // Обе стороны нужны: у них шире набор из devhubGuest, у меня — devhubGuestLink.
 // Все четыре символа используются в теле файла, проверено счётом вхождений.
 import { requesterId, devhubGuestId, DEVHUB_GUEST_HEADER } from "../lib/devhubGuest";
@@ -814,6 +815,28 @@ function customDomainRefusal(domain: string, projectId: string): string | null {
   }
   return null;
 }
+/**
+ * Адрес возврата после оплаты — только свой домен. Произвольный successUrl из тела
+ * уводил бы покупателя из НАШЕГО магазина куда угодно (патч окна free-fleet от
+ * 28.07.2026, применён 15.09.2026).
+ */
+function safeRedirect(raw: unknown, frontendUrl: string, fallbackPath: string): string {
+  const fallback = `${frontendUrl}${fallbackPath}`;
+  if (typeof raw !== "string" || !raw) return fallback;
+  try {
+    const u = new URL(raw, frontendUrl);
+    return u.origin === new URL(frontendUrl).origin ? u.toString() : fallback;
+  } catch {
+    return fallback;
+  }
+}
+const GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN = "sign in to use the shared AEVION GitHub account, or set your own GITHUB_TOKEN in the project Env Vars";
+
+/** Гость без своего токена не получает общий токен GitHub AEVION (см. ручки /github/*). */
+function guestMayNotUseSharedGitHub(auth: unknown, project: DevHubProject): boolean {
+  return !auth && !project.envVars?.GITHUB_TOKEN;
+}
+
 /** Имя поставщика DNS для текстов, которые читает человек. */
 function dnsProviderName(): string {
   return dnsProvider() === "vercel" ? "Vercel" : "Cloudflare";
@@ -885,7 +908,9 @@ function scheduleServeVerification(
     noteProviderFailure("pages", "the deployed page does not serve (2xx never came back across three windows, ~14 min)");
     d.status = "failed";
     d.buildLog = (d.buildLog || "") +
-      " | verify: wrangler upload finished, but the page never answered 2xx across three windows (~14 min). " +
+      " | verify: wrangler upload finished, but the page never answered 2xx across three windows " +
+      "(24 attempts 5s apart, then re-checks after 3 and 7 min; ~14 min total). Either the new Pages project " +
+      "has not propagated yet, or it really does not serve. " +
       "Check the address by hand before blaming the upload; POST /deployments/:id/recheck asks again.";
     d.completedAt = now();
     try { await dbSaveDeployment(d); } catch { memDeployments.set(d.id, d); }
@@ -3569,6 +3594,12 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
+  // 🔴 Общий токен GitHub — только вошедшему (окно приёмки 15.09.2026): гость без
+  // входа создавал проект и пушил/открывал PR под НАШИМ аккаунтом — тот самый
+  // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
+  // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
+  // другой проверкой: контракт ручки для гостя — 401, без исключений.
+  if (guestMayNotUseSharedGitHub(auth, project)) return res.status(401).json({ error: GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN });
   const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
   if (!githubToken) {
     return res.json({
@@ -3713,6 +3744,12 @@ devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
+  // 🔴 Общий токен GitHub — только вошедшему (окно приёмки 15.09.2026): гость без
+  // входа создавал проект и пушил/открывал PR под НАШИМ аккаунтом — тот самый
+  // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
+  // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
+  // другой проверкой: контракт ручки для гостя — 401, без исключений.
+  if (guestMayNotUseSharedGitHub(auth, project)) return res.status(401).json({ error: GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN });
   if (!project.repoUrl) {
     return res.json({ ok: false, message: "No GitHub repo linked yet — push to GitHub first (POST /github/push)" });
   }
@@ -3825,6 +3862,12 @@ devhubRouter.post("/projects/:id/github/pull-request", async (req, res) => {
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
+  // 🔴 Общий токен GitHub — только вошедшему (окно приёмки 15.09.2026): гость без
+  // входа создавал проект и пушил/открывал PR под НАШИМ аккаунтом — тот самый
+  // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
+  // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
+  // другой проверкой: контракт ручки для гостя — 401, без исключений.
+  if (guestMayNotUseSharedGitHub(auth, project)) return res.status(401).json({ error: GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN });
   const { title, body: prBody, branch: branchInput } = req.body || {};
   if (!title || typeof title !== "string") {
     return res.status(400).json({ error: "title is required" });
@@ -3968,6 +4011,12 @@ devhubRouter.post("/projects/:id/github/pull-request/:number/merge", async (req,
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
+  // 🔴 Общий токен GitHub — только вошедшему (окно приёмки 15.09.2026): гость без
+  // входа создавал проект и пушил/открывал PR под НАШИМ аккаунтом — тот самый
+  // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
+  // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
+  // другой проверкой: контракт ручки для гостя — 401, без исключений.
+  if (guestMayNotUseSharedGitHub(auth, project)) return res.status(401).json({ error: GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN });
   const prNumber = pgIntId(req.params.number);
   if (prNumber === null) {
     return res.status(400).json({ error: "invalid pull request number" });
@@ -4019,6 +4068,12 @@ devhubRouter.get("/projects/:id/github/status", async (req, res) => {
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
+  // 🔴 Общий токен GitHub — только вошедшему (окно приёмки 15.09.2026): гость без
+  // входа создавал проект и пушил/открывал PR под НАШИМ аккаунтом — тот самый
+  // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
+  // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
+  // другой проверкой: контракт ручки для гостя — 401, без исключений.
+  if (guestMayNotUseSharedGitHub(auth, project)) return res.status(401).json({ error: GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN });
   const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
   if (!project.repoUrl || !githubToken) {
     return res.json({ exists: false });
@@ -4065,6 +4120,12 @@ devhubRouter.get("/projects/:id/github/branches", async (req, res) => {
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
+  // 🔴 Общий токен GitHub — только вошедшему (окно приёмки 15.09.2026): гость без
+  // входа создавал проект и пушил/открывал PR под НАШИМ аккаунтом — тот самый
+  // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
+  // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
+  // другой проверкой: контракт ручки для гостя — 401, без исключений.
+  if (guestMayNotUseSharedGitHub(auth, project)) return res.status(401).json({ error: GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN });
   const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
   if (!project.repoUrl || !githubToken) {
     return res.json({ branches: [], connected: false });
@@ -4694,6 +4755,14 @@ devhubRouter.post("/media/email", async (req, res) => {
 
 // POST /api/devhub/media/payment-link — create Lemon Squeezy checkout link
 devhubRouter.post("/media/payment-link", dhCostlyLimit("dhpaylink"), async (req, res) => {
+  // 🔴 Дыра с 28.07.2026, закрыта 15.09.2026 (окно приёмки): ручка без входа создавала
+  // в НАШЕМ магазине LemonSqueezy ссылку на товар по умолчанию с ценой из тела от
+  // 50 центов, а товар по умолчанию на проде — DevHub Studio Pro, и вебхук по нему
+  // выдаёт Pro без сверки суммы. Итог: Pro ($149/мес) за $0.50 любому посетителю.
+  // Три замка: вход обязателен; товар — ТОЛЬКО отдельный (LEMON_SQUEEZY_PAYLINK_VARIANT_ID),
+  // никогда не Studio Pro и не товар по умолчанию; адрес возврата — только свой домен.
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth required — sign in to create payment links" });
   const { name, amountCents, description, successUrl } = req.body || {};
   if (!name || typeof name !== "string") return res.status(400).json({ error: "name required" });
   const amt = Number(amountCents);
@@ -4701,12 +4770,19 @@ devhubRouter.post("/media/payment-link", dhCostlyLimit("dhpaylink"), async (req,
 
   const lsKey = process.env.LEMON_SQUEEZY_API_KEY?.trim();
   const storeId = process.env.LEMON_SQUEEZY_STORE_ID?.trim();
-  const variantId = process.env.LEMON_SQUEEZY_DEFAULT_VARIANT_ID?.trim();
+  const variantId = process.env.LEMON_SQUEEZY_PAYLINK_VARIANT_ID?.trim();
 
   if (!lsKey || !storeId || !variantId) {
     return res.status(503).json({
-      error: "Lemon Squeezy not configured — set LEMON_SQUEEZY_API_KEY, LEMON_SQUEEZY_STORE_ID, LEMON_SQUEEZY_DEFAULT_VARIANT_ID",
+      error: "Payment links not configured — set LEMON_SQUEEZY_API_KEY, LEMON_SQUEEZY_STORE_ID and LEMON_SQUEEZY_PAYLINK_VARIANT_ID (a dedicated product for user payment links; never the Studio Pro or default variant)",
       setupUrl: "https://app.lemonsqueezy.com",
+    });
+  }
+  const studioPro = resolveLemonSqueezyVariant("app_devhub");
+  const defaultVariant = process.env.LEMON_SQUEEZY_DEFAULT_VARIANT_ID?.trim();
+  if ((studioPro && variantId === studioPro) || (defaultVariant && variantId === defaultVariant)) {
+    return res.status(503).json({
+      error: "LEMON_SQUEEZY_PAYLINK_VARIANT_ID points at the Studio Pro / default product — the webhook would grant DevHub Pro for any custom price; use a dedicated product",
     });
   }
 
@@ -4718,11 +4794,13 @@ devhubRouter.post("/media/payment-link", dhCostlyLimit("dhpaylink"), async (req,
         type: "checkouts",
         attributes: {
           custom_price: Math.round(amt),
+          // Метка для вебхука и разбора: это пользовательская ссылка, не покупка тарифа.
+          checkout_data: { custom: { aevion_paylink: "1", issuer: String(auth.sub || "") } },
           checkout_options: { embed: false, media: false, logo: true },
           product_options: {
             name: name.trim().slice(0, 200),
             description: (description || name).trim().slice(0, 500),
-            redirect_url: successUrl || `${frontendUrl}/devhub?payment=success`,
+            redirect_url: safeRedirect(successUrl, frontendUrl, "/devhub?payment=success"),
           },
         },
         relationships: {
@@ -8323,7 +8401,8 @@ devhubRouter.get("/studio/capabilities", async (_req, res) => {
     const raw = (c.lastError ?? "").toLowerCase();
     if (/quota|exhaust|limit exceeded|исчерпан/.test(raw)) return "quota_exhausted";
     if (/401|403|invalid.?api.?key|authentication|unauthor/.test(raw)) return "auth_rejected";
-    if (/не делегирован|not delegated/.test(raw)) return "zone_not_delegated";
+    // 15.09.2026: зона у Vercel — текст отказа «не подтверждена у Vercel» / «not verified».
+    if (/не делегирован|not delegated|не подтверждена|not verified|zone .* not ready/.test(raw)) return "zone_not_delegated";
     if (raw.includes("{") || /http \d{3}/.test(raw)) return "provider_error";
     if (c.status === "needs_token") return "needs_token";
     if (c.status === "not_available") return "not_available";

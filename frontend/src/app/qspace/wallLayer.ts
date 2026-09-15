@@ -21,3 +21,12 @@ const ШТРИХОВКА = /(patt|hatch|штрих)/i;
 export function isWallLayer(name: string): boolean {
   return СТЕНА.test(name) && !ШТРИХОВКА.test(name);
 }
+
+const СТЕКЛО = /(витраж|окн|window|glass|glaz|остеклен)/i;
+// импосты — переплёты внутри витража, не граница помещения; узор — не стекло
+const НЕ_СТЕКЛО = /(импост|mullion|patt|hatch|штрих)/i;
+
+/** Слой витражей и окон: его линии замыкают контур помещений как стеклянные стены. */
+export function isGlassLayer(name: string): boolean {
+  return СТЕКЛО.test(name) && !НЕ_СТЕКЛО.test(name);
+}

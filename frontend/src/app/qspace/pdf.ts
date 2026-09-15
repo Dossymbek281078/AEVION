@@ -22,7 +22,7 @@
 import type { Plan, Wall } from "./planModel";
 import { WALL_HEIGHT } from "./planModel";
 import { mergeDoubleWalls } from "./wallMerge";
-import { isWallLayer } from "./wallLayer";
+import { isGlassLayer, isWallLayer } from "./wallLayer";
 
 export interface PdfSegments {
   /** `layer` — имя слоя PDF, если линия лежала внутри метки /OC … BDC. */
@@ -32,6 +32,8 @@ export interface PdfSegments {
   extentPt: number;
   /** Слои стен, по которым отобраны линии. Пусто — отбора по слою не было. */
   wallLayers?: string[];
+  /** линии со слоёв витражей и окон — станут стеклянными стенами (только при отборе по слою) */
+  glassSegments?: Array<{ x1: number; y1: number; x2: number; y2: number; layer?: string }>;
 }
 
 export interface PdfResult {
@@ -472,8 +474,21 @@ export async function readPdfSegments(bytes: Uint8Array): Promise<PdfSegments> {
     );
   }
 
+  // Витражи и окна — только когда стены взяты по слою: без отбора «всё подряд»
+  // и так уже в стенах. Они входят в габарит: витражный фасад стоит на
+  // контуре, и без него масштаб считался бы по внутренним стенам.
+  const glassSegments = wallLayers.length > 0
+    ? сИменем.filter((s0) => isGlassLayer(s0.layer as string))
+    : [];
+  if (glassSegments.length > 0) {
+    warnings.push(
+      `Витражи и окна (${glassSegments.length} линий со слоя ${перечислить(glassSegments.map((s0) => s0.layer as string))}) `
+      + "добавлены как стеклянные стены: они замыкают контур для площадей, в 3D прозрачные, в смету стен не входят.",
+    );
+  }
+
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const s of used) {
+  for (const s of [...used, ...glassSegments]) {
     minX = Math.min(minX, s.x1, s.x2); minY = Math.min(minY, s.y1, s.y2);
     maxX = Math.max(maxX, s.x1, s.x2); maxY = Math.max(maxY, s.y1, s.y2);
   }
@@ -532,7 +547,7 @@ export async function readPdfSegments(bytes: Uint8Array): Promise<PdfSegments> {
   if (other > 0) {
     warnings.push(`Часть содержимого пропущена (${other} поток(ов) картинок или неподдержанного сжатия).`);
   }
-  return { segments: used, warnings, extentPt, wallLayers };
+  return { segments: used, warnings, extentPt, wallLayers, glassSegments };
 }
 
 /**
@@ -564,8 +579,9 @@ export function planFromPdfSegments(
 
   const metersPerPt = knownExtentM / src.extentPt;
 
+  const стекло = src.glassSegments ?? [];
   let minX = Infinity, minY = Infinity;
-  for (const s of src.segments) {
+  for (const s of [...src.segments, ...стекло]) {
     minX = Math.min(minX, s.x1, s.x2);
     minY = Math.min(minY, s.y1, s.y2);
   }
@@ -652,8 +668,24 @@ export function planFromPdfSegments(
         + `${knownExtentM} м. Если размеры не сходятся, поправьте это число.`,
   );
 
+  // Стеклянные стены — ПОСЛЕ сведения двойных линий: витраж начерчен одной
+  // линией, и сводить его не с чем, а спутать с гранью настоящей стены можно.
+  const стеклянные: Wall[] = [];
+  for (const s of стекло) {
+    const w: Wall = {
+      x1: (s.x1 - minX) * metersPerPt,
+      y1: (s.y1 - minY) * metersPerPt,
+      x2: (s.x2 - minX) * metersPerPt,
+      y2: (s.y2 - minY) * metersPerPt,
+      thickness: 0.06,
+      height: WALL_HEIGHT,
+      glass: true,
+    };
+    if (Math.hypot(w.x2 - w.x1, w.y2 - w.y1) >= 0.05) стеклянные.push(w);
+  }
+
   return {
-    plan: { name: "Импорт PDF", walls: сведение.walls, openings: [], source: "pdf" },
+    plan: { name: "Импорт PDF", walls: [...сведение.walls, ...стеклянные], openings: [], source: "pdf" },
     warnings,
     metersPerPt,
     extentPt: src.extentPt,

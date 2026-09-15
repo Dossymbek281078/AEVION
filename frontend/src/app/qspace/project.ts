@@ -36,6 +36,8 @@ export interface Project {
   layers: { rough: boolean; finish: boolean; decor: boolean };
   /** пол по комнатам (ключ — номер комнаты); появилось 15.09.2026, старые файлы без него — исправны */
   roomFloor?: Record<string, string>;
+  /** стены, обращённые в комнату (ключ — номер комнаты) */
+  roomWall?: Record<string, string>;
   /** назначение комнат, поправленное человеком */
   roomTypes?: Record<string, string>;
 }
@@ -85,7 +87,7 @@ export function isProject(v: unknown): v is Project {
   }
   // Необязательные поля: нет — ладно; есть — обязаны быть словарём строк,
   // иначе страница подставит их в материалы и получит undefined посреди сцены.
-  for (const key of ["roomFloor", "roomTypes"] as const) {
+  for (const key of ["roomFloor", "roomWall", "roomTypes"] as const) {
     const v = p[key];
     if (v === undefined) continue;
     if (!v || typeof v !== "object" || Array.isArray(v)) return false;

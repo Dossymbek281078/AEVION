@@ -32,7 +32,13 @@ import {
   type Subscription,
 } from "./provisioning";
 import { periodForReference } from "../lib/payment/billingPeriod";
-import type { TierId } from "../data/pricing";
+import {
+  STOREFRONT_NAME_TO_REFERENCE,
+  tierForLemonSqueezyReference,
+  appSlugForReference,
+  type LemonSqueezyReference,
+} from "../data/lemonSqueezyVariants";
+import { TIERS, type TierId } from "../data/pricing";
 import { getPool } from "../lib/dbPool";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
@@ -151,6 +157,15 @@ function resolveReference(raw: Record<string, string>): string {
     for (const [envKey, reference] of Object.entries(TIER_PERMALINK_ENV)) {
       if (permalinkSlug(process.env[envKey]) === pingSlug && pingSlug) return reference;
     }
+    // 1б. ВСЕ позиции кассы — по тому же правилу имени, по которому касса решает,
+    //     что товар продаётся (gumroadSellable: GUMROAD_PERMALINK_<ССЫЛКА>).
+    //     Замер 15.09.2026: касса умела продавать 17 позиций, а вебхук узнавал
+    //     только шесть тарифов — Planet и девять приложений человек мог оплатить,
+    //     но получал 500 «неизвестный товар» вместо доступа.
+    for (const reference of new Set(Object.values(STOREFRONT_NAME_TO_REFERENCE))) {
+      const envKey = `GUMROAD_PERMALINK_${reference.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
+      if (permalinkSlug(process.env[envKey]) === pingSlug) return reference;
+    }
   }
 
   // 2. Explicit per-product override by product_id.
@@ -187,6 +202,9 @@ function resolveReference(raw: Record<string, string>): string {
 }
 
 function tierForReference(ref: string): TierId {
+  // Тариф кассы решает ОБЩЕЕ правило, то же, что у Lemon Squeezy. Своя догадка
+  // по словам отправляла Planet в lite: человек платил за Planet и получал входной тариф.
+  if (ref.startsWith("tier_")) return tierForLemonSqueezyReference(ref as LemonSqueezyReference);
   const r = ref.toLowerCase();
   if (r.includes("medium")) return "medium";
   // all-access / business / team / full → вся экосистема
@@ -207,7 +225,68 @@ function isConstitutionProduct(ref: string): boolean {
 function moduleSlugForReference(ref: string): string | null {
   const r = ref.toLowerCase();
   if (r === "constitution-pro" || r === "constitution-team") return "constitution";
+  // Приложение кассы → тот же slug, что пишет вебхук Lemon Squeezy.
+  if (r.startsWith("app_")) return appSlugForReference(r as LemonSqueezyReference);
   return null;
+}
+
+/**
+ * Годовая или месячная — по ПРОВЕРЕННОЙ продаже, когда один товар Gumroad задан
+ * для обоих периодов тарифа. Замер 15.09.2026: `aevion-lite` — одна подписка с
+ * месячной и годовой ценой, вебхук брал первое совпадение (месячное), и
+ * заплативший за год терял доступ через месяц — тот же класс, что 03.09.
+ * Пинг не подписан, его `recurrence` НЕ читаем: иначе любой POST «yearly»
+ * превращал бы месячную оплату в годовой доступ. Не удалось решить — месячная.
+ */
+function периодПоПродаже(
+  reference: string,
+  sale: Record<string, unknown> | null,
+  paidUsd: number | undefined,
+): string {
+  const m = /^tier_([a-z]+)_monthly$/.exec(reference);
+  if (!m) return reference;
+  const годовая = `tier_${m[1]}_annual`;
+  const слаг = (ref: string) =>
+    permalinkSlug(process.env[`GUMROAD_PERMALINK_${ref.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`]);
+  if (!слаг(годовая) || слаг(годовая) !== слаг(reference)) return reference;
+  const r = sale?.recurrence;
+  const повтор = typeof r === "string" ? r.toLowerCase() : "";
+  if (повтор === "yearly" || повтор === "annual" || повтор === "annually") return годовая;
+  if (повтор === "monthly") return reference;
+  const годоваяЦена = TIERS.find((t) => t.id === m[1])?.priceAnnualTotal;
+  if (paidUsd !== undefined && typeof годоваяЦена === "number" && годоваяЦена > 0 && paidUsd >= годоваяЦена * 0.9) {
+    return годовая;
+  }
+  return reference;
+}
+
+/** Для сторожа «что продаётся — то выдаётся». Поведение не меняет. */
+export const __testables = { resolveReference, tierForReference, moduleSlugForReference, периодПоПродаже };
+
+/**
+ * Какие позиции вебхук ВЫДАСТ, если их купят через Gumroad. Пара к
+ * `gumroadSellable` (что касса продаёт): позиция, которая продаётся, но не
+ * выдаётся, — это деньги без доступа. Отдаётся в /checkout/healthz, чтобы
+ * расхождение было видно без покупки. Замер 15.09.2026: такое расхождение
+ * (17 продаваемых при 6 узнаваемых) не видел ни один прибор.
+ */
+export function gumroadProvisionable(references: string[]): { configured: string[]; missing: string[] } {
+  const configured: string[] = [];
+  const missing: string[] = [];
+  for (const ref of references) {
+    const ключ = ref.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+    const slug = permalinkSlug(
+      process.env[`GUMROAD_PERMALINK_${ключ}`]?.trim() ||
+        process.env[`GUMROAD_${ключ}_PERMALINK`]?.trim() ||
+        process.env.GUMROAD_DEFAULT_PERMALINK,
+    );
+    const узнан = slug ? resolveReference({ product_permalink: slug }) : "unknown";
+    // Годовая на ОБЩЕМ с месячной товаре выдаётся годовой — период решает
+    // проверенная продажа (периодПоПродаже), а не порядок совпадения.
+    const годоваяНаОбщем = /_annual$/.test(ref) && узнан === ref.replace(/_annual$/, "_monthly");
+    (узнан === ref || годоваяНаОбщем ? configured : missing).push(ref);
+  }
+  return { configured: configured.sort(), missing: missing.sort() };
 }
 
 // Liveness probe — Gumroad sends only POST, but a GET in the browser used to
@@ -333,7 +412,7 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
     ""
   ).trim().slice(0, 40);
 
-  const reference = resolveReference(raw);
+  let reference = resolveReference(raw);
 
   // Products from other services (book platform etc.) share this Gumroad account
   // but don't need AEVION subscription provisioning — skip them silently.
@@ -469,6 +548,13 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
       const pingCents = Number.parseInt(String(raw.price ?? ""), 10);
       // Наружу блока — её пишем в запись подписки ниже.
       if (Number.isFinite(paidCents) && paidCents > 0) paidUsd = paidCents / 100;
+      // Один товар Gumroad на два периода: пинг не подписан, поэтому период
+      // берём из ПРОВЕРЕННОЙ продажи (см. периодПоПродаже).
+      const уточнённая = периодПоПродаже(reference, sale, paidUsd);
+      if (уточнённая !== reference) {
+        console.log(`[gumroad/webhook] sale ${saleId}: ${reference} → ${уточнённая} по проверенной продаже`);
+        reference = уточнённая;
+      }
       if (!Number.isFinite(paidCents) || paidCents <= 0) {
         console.warn(
           `[gumroad/webhook] sale ${saleId}: сумма ${JSON.stringify(sale.price ?? null)} — ` +
@@ -604,7 +690,26 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
     const moduleSlug = moduleSlugForReference(reference);
     if (moduleSlug) {
       const active = result.status === "paid";
+      // У DevHub доступ открывает ещё и его собственный тариф (DevHubTier) —
+      // так же, как в вебхуке Lemon Squeezy. Порядок: при отзыве сперва снимаем
+      // тариф, при выдаче — после строки прав; сбой → 500, чтобы Gumroad повторил.
+      if (moduleSlug === "devhub" && !active) {
+        try {
+          await upgradeDevHubByEmail(email, "free");
+        } catch (err) {
+          capture(err);
+          return res.status(500).json({ ok: false, error: "devhub_tier_failed" });
+        }
+      }
       await upsertAppSubscription(email, moduleSlug, active ? "active" : "cancelled", saleId);
+      if (moduleSlug === "devhub" && active) {
+        try {
+          await upgradeDevHubByEmail(email, "pro");
+        } catch (err) {
+          capture(err);
+          return res.status(500).json({ ok: false, error: "devhub_tier_failed" });
+        }
+      }
       console.log(`[gumroad/webhook] ${result.status} → app_sub ${active ? "active" : "cancelled"}: ${moduleSlug} for ${email}`);
       return res.json({
         ok: true,

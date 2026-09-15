@@ -238,8 +238,11 @@ describe("живая Астана — предупреждение только 
  * «с данными всё хорошо».
  */
 describe("уверенность по зданиям — отдельно от уверенности по всему коридору", () => {
-  test("[astana] коридор не может заявлять обмеренные здания там, где их ноль", async () => {
-    let checked = 0;
+  test("[astana] обмеренных сегментов не больше, чем препятствий, и с 15.09.2026 они есть", async () => {
+    // До 15.09.2026 здесь стояло `measuredObstacleSegments === 0`: у Астаны не
+    // было обмера. Теперь есть (3D-модель города, gis.esaulet.kz), и проверка
+    // о том же — цифра по зданиям не выдумывается и не превышает общее число.
+    let checked = 0, measuredPairs = 0;
     for (let i = 0; i < 4; i++) {
       for (let j = 0; j < 4; j++) {
         if (i === j) continue;
@@ -249,14 +252,16 @@ describe("уверенность по зданиям — отдельно от �
         // участков со зданием под крылом меньше, чем всего участков, и они есть
         expect(r.body.obstacleSegments).toBeGreaterThan(0);
         expect(r.body.obstacleSegments).toBeLessThanOrEqual(r.body.alts.length);
-        // в Астане городского обмера нет ни у одного здания
-        expect(r.body.measuredObstacleSegments).toBe(0);
+        expect(r.body.measuredObstacleSegments).toBeGreaterThanOrEqual(0);
+        expect(r.body.measuredObstacleSegments).toBeLessThanOrEqual(r.body.obstacleSegments);
+        if (r.body.measuredObstacleSegments > 0) measuredPairs++;
         // а общий показатель при этом высокий — ровно то расхождение, ради
         // которого второе число и заведено
         expect(r.body.heightConfidencePct).toBeGreaterThan(50);
       }
     }
     expect(checked).toBe(12);
+    expect(measuredPairs, "обмер есть у 55 % зданий, а ни один коридор его не встретил").toBeGreaterThan(0);
   }, 60000);
 
   test("[nyc] город с городским обмером даёт ненулевую цифру по зданиям", async () => {
@@ -270,7 +275,8 @@ describe("уверенность по зданиям — отдельно от �
     const j = await request(app).post("/api/qskyway/route/justification").send({ from: 0, to: 3, city: "astana" });
     expect(j.status).toBe(200);
     expect(j.body.document.heightConfidencePct).toBeGreaterThan(50);
-    expect(j.body.document.measuredObstacleSegments).toBe(0);
+    expect(j.body.document.measuredObstacleSegments).toBeGreaterThanOrEqual(0);
+    expect(j.body.document.measuredObstacleSegments).toBeLessThanOrEqual(j.body.document.obstacleSegments);
     expect(j.body.document.obstacleSegments).toBeGreaterThan(0);
   }, 30000);
 });

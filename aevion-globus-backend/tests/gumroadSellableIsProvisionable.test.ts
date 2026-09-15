@@ -82,6 +82,44 @@ describe("что продаётся через Gumroad, то вебхук выд
     expect(gumroadProvisionable(ВСЕ).configured, "расхождение не видно — прибор слеп").toEqual([]);
   });
 
+  describe("один товар на месячный и годовой период (aevion-lite, 15.09.2026)", () => {
+    const общий = () => {
+      process.env.GUMROAD_PERMALINK_TIER_LITE_MONTHLY = "aevion-lite";
+      process.env.GUMROAD_PERMALINK_TIER_LITE_ANNUAL = "https://aevion.gumroad.com/l/aevion-lite";
+      поставлено.push("GUMROAD_PERMALINK_TIER_LITE_MONTHLY", "GUMROAD_PERMALINK_TIER_LITE_ANNUAL");
+    };
+    const период = (s: Record<string, unknown> | null, usd?: number) =>
+      __testables.периодПоПродаже("tier_lite_monthly", s, usd);
+
+    test("healthz: оба периода и продаются, и выдаются", () => {
+      общий();
+      const refs = ["tier_lite_monthly", "tier_lite_annual"];
+      expect(gumroadProvisionable(refs).configured).toEqual(gumroadSellable(refs).configured);
+    });
+    test("заплачено $190 — годовая", () => {
+      общий();
+      expect(период({ price: "19000" }, 190)).toBe("tier_lite_annual");
+    });
+    test("заплачено $19 — месячная", () => {
+      общий();
+      expect(период({ price: "1900" }, 19)).toBe("tier_lite_monthly");
+    });
+    test("проверенная продажа сама говорит yearly — годовая", () => {
+      общий();
+      expect(период({ recurrence: "yearly" }, undefined)).toBe("tier_lite_annual");
+    });
+    test("КОНТРОЛЬ: продажа не проверена — месячная, а не догадка", () => {
+      общий();
+      expect(период(null, undefined)).toBe("tier_lite_monthly");
+    });
+    test("КОНТРОЛЬ: у годовой свой товар — период не трогаем", () => {
+      process.env.GUMROAD_PERMALINK_TIER_LITE_MONTHLY = "aevion-lite";
+      process.env.GUMROAD_PERMALINK_TIER_LITE_ANNUAL = "aevion-lite-year";
+      поставлено.push("GUMROAD_PERMALINK_TIER_LITE_MONTHLY", "GUMROAD_PERMALINK_TIER_LITE_ANNUAL");
+      expect(период({ price: "19000" }, 190)).toBe("tier_lite_monthly");
+    });
+  });
+
   test("КОНТРОЛЬ: похожий, но другой адрес товара не узнаётся", () => {
     задать("tier_lite_monthly");
     expect(__testables.resolveReference({ product_permalink: `${слаг("tier_lite_monthly")}-x` })).toBe("unknown");

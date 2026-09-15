@@ -38,7 +38,7 @@ import {
   appSlugForReference,
   type LemonSqueezyReference,
 } from "../data/lemonSqueezyVariants";
-import type { TierId } from "../data/pricing";
+import { TIERS, type TierId } from "../data/pricing";
 import { getPool } from "../lib/dbPool";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
@@ -230,8 +230,38 @@ function moduleSlugForReference(ref: string): string | null {
   return null;
 }
 
+/**
+ * Годовая или месячная — по ПРОВЕРЕННОЙ продаже, когда один товар Gumroad задан
+ * для обоих периодов тарифа. Замер 15.09.2026: `aevion-lite` — одна подписка с
+ * месячной и годовой ценой, вебхук брал первое совпадение (месячное), и
+ * заплативший за год терял доступ через месяц — тот же класс, что 03.09.
+ * Пинг не подписан, его `recurrence` НЕ читаем: иначе любой POST «yearly»
+ * превращал бы месячную оплату в годовой доступ. Не удалось решить — месячная.
+ */
+function периодПоПродаже(
+  reference: string,
+  sale: Record<string, unknown> | null,
+  paidUsd: number | undefined,
+): string {
+  const m = /^tier_([a-z]+)_monthly$/.exec(reference);
+  if (!m) return reference;
+  const годовая = `tier_${m[1]}_annual`;
+  const слаг = (ref: string) =>
+    permalinkSlug(process.env[`GUMROAD_PERMALINK_${ref.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`]);
+  if (!слаг(годовая) || слаг(годовая) !== слаг(reference)) return reference;
+  const r = sale?.recurrence;
+  const повтор = typeof r === "string" ? r.toLowerCase() : "";
+  if (повтор === "yearly" || повтор === "annual" || повтор === "annually") return годовая;
+  if (повтор === "monthly") return reference;
+  const годоваяЦена = TIERS.find((t) => t.id === m[1])?.priceAnnualTotal;
+  if (paidUsd !== undefined && typeof годоваяЦена === "number" && годоваяЦена > 0 && paidUsd >= годоваяЦена * 0.9) {
+    return годовая;
+  }
+  return reference;
+}
+
 /** Для сторожа «что продаётся — то выдаётся». Поведение не меняет. */
-export const __testables = { resolveReference, tierForReference, moduleSlugForReference };
+export const __testables = { resolveReference, tierForReference, moduleSlugForReference, периодПоПродаже };
 
 /**
  * Какие позиции вебхук ВЫДАСТ, если их купят через Gumroad. Пара к
@@ -250,7 +280,11 @@ export function gumroadProvisionable(references: string[]): { configured: string
         process.env[`GUMROAD_${ключ}_PERMALINK`]?.trim() ||
         process.env.GUMROAD_DEFAULT_PERMALINK,
     );
-    (slug && resolveReference({ product_permalink: slug }) === ref ? configured : missing).push(ref);
+    const узнан = slug ? resolveReference({ product_permalink: slug }) : "unknown";
+    // Годовая на ОБЩЕМ с месячной товаре выдаётся годовой — период решает
+    // проверенная продажа (периодПоПродаже), а не порядок совпадения.
+    const годоваяНаОбщем = /_annual$/.test(ref) && узнан === ref.replace(/_annual$/, "_monthly");
+    (узнан === ref || годоваяНаОбщем ? configured : missing).push(ref);
   }
   return { configured: configured.sort(), missing: missing.sort() };
 }
@@ -378,7 +412,7 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
     ""
   ).trim().slice(0, 40);
 
-  const reference = resolveReference(raw);
+  let reference = resolveReference(raw);
 
   // Products from other services (book platform etc.) share this Gumroad account
   // but don't need AEVION subscription provisioning — skip them silently.
@@ -514,6 +548,13 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
       const pingCents = Number.parseInt(String(raw.price ?? ""), 10);
       // Наружу блока — её пишем в запись подписки ниже.
       if (Number.isFinite(paidCents) && paidCents > 0) paidUsd = paidCents / 100;
+      // Один товар Gumroad на два периода: пинг не подписан, поэтому период
+      // берём из ПРОВЕРЕННОЙ продажи (см. периодПоПродаже).
+      const уточнённая = периодПоПродаже(reference, sale, paidUsd);
+      if (уточнённая !== reference) {
+        console.log(`[gumroad/webhook] sale ${saleId}: ${reference} → ${уточнённая} по проверенной продаже`);
+        reference = уточнённая;
+      }
       if (!Number.isFinite(paidCents) || paidCents <= 0) {
         console.warn(
           `[gumroad/webhook] sale ${saleId}: сумма ${JSON.stringify(sale.price ?? null)} — ` +

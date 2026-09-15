@@ -1018,7 +1018,8 @@ export default function QSpaceClient() {
     // Ставятся сразу, чтобы человек видел на модели то, что нарисовано на плане.
     if (другиеЛинии.length > 0) {
       const линии = другиеЛинии.map((s) => ({ x1: (s.x1 - o.x) * k, y1: (s.y1 - o.y) * k, x2: (s.x2 - o.x) * k, y2: (s.y2 - o.y) * k, layer: s.layer }));
-      const f = fixturesFromSegments(линии, rooms.roomAt, типы, (id) => CATALOG.find((c) => c.id === id)?.size);
+      const подписиМ = labels.map((l) => ({ text: l.text, x: (l.x - o.x) * k, y: (l.y - o.y) * k }));
+      const f = fixturesFromSegments(линии, rooms.roomAt, типы, (id) => CATALOG.find((c) => c.id === id)?.size, подписиМ);
       // техника по подписям («дух свч», «п/м», «с/м») — туда, где написано
       const техника = appliancesFromLabels(labels, o, k, rooms.roomAt, f.items);
       const все = [...f.items, ...техника];

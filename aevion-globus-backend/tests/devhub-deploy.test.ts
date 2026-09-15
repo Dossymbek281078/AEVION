@@ -373,63 +373,17 @@ describe("POST /api/devhub/projects/:id/domain/auto-setup (Cloudflare)", () => {
     expect(r.body.error).toMatch(/customDomain/);
   });
 
-  test("creates new CNAME when record doesn't exist", async () => {
+  test("внешний домен: в нашу зону ничего не пишется — инструкция для регистратора, запросов к DNS ноль (15.09.2026)", async () => {
     process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
     process.env.CLOUDFLARE_ZONE_ID = "zone-fake";
     const app = makeApp();
     const id = await createProject(app);
-
-    fetchMock
-      .mockResolvedValueOnce(jsonResp(200, { result: [] })) // list → empty
-      .mockResolvedValueOnce(jsonResp(200, { result: { id: "rec-new-1" } })); // create
-
     const r = await request(app).post(`/api/devhub/projects/${id}/domain/auto-setup`).send({});
     expect(r.status).toBe(200);
-    expect(r.body).toMatchObject({
-      ok: true,
-      action: "created",
-      domain: "myapp.example.com",
-      cname: "devhub.aevion.app",
-      recordId: "rec-new-1",
-    });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls[0][0]).toContain("/dns_records?type=CNAME");
-    expect(fetchMock.mock.calls[1][1].method).toBe("POST");
-  });
-
-  test("reports already-configured when CNAME already points to devhub.aevion.app", async () => {
-    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
-    process.env.CLOUDFLARE_ZONE_ID = "zone-fake";
-    const app = makeApp();
-    const id = await createProject(app);
-
-    fetchMock.mockResolvedValueOnce(jsonResp(200, {
-      result: [{ id: "rec-existing", content: "devhub.aevion.app" }],
-    }));
-
-    const r = await request(app).post(`/api/devhub/projects/${id}/domain/auto-setup`).send({});
-    expect(r.status).toBe(200);
-    expect(r.body.action).toBe("already-configured");
-    expect(r.body.recordId).toBe("rec-existing");
-    expect(fetchMock).toHaveBeenCalledTimes(1); // only list, no create/update
-  });
-
-  test("updates existing CNAME when pointing elsewhere", async () => {
-    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
-    process.env.CLOUDFLARE_ZONE_ID = "zone-fake";
-    const app = makeApp();
-    const id = await createProject(app);
-
-    fetchMock
-      .mockResolvedValueOnce(jsonResp(200, {
-        result: [{ id: "rec-wrong", content: "other.target.com" }],
-      }))
-      .mockResolvedValueOnce(jsonResp(200, { result: { id: "rec-wrong" } }));
-
-    const r = await request(app).post(`/api/devhub/projects/${id}/domain/auto-setup`).send({});
-    expect(r.status).toBe(200);
-    expect(r.body.action).toBe("updated");
-    expect(fetchMock.mock.calls[1][1].method).toBe("PUT");
+    expect(r.body).toMatchObject({ ok: false, action: "manual", cname: "devhub.aevion.app" });
+    expect(r.body.manualInstruction).toContain("myapp.example.com");
+    // До починки маршрут звал upsertCname с чужим именем — тем же путём гость сносил CNAME `api`.
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
@@ -876,7 +830,7 @@ describe("the domain capability reports what deploys actually observed", () => {
     }));
     // Cloudflare API calls succeed; the domain probe itself never answers 2xx.
     fetchMock.mockImplementation(async (url: string) =>
-      String(url).includes(".aevion.build")
+      String(url).includes(".aevion.app")
         ? { ok: false, status: 522, json: async () => ({}), text: async () => "" }
         : { ok: true, status: 200, json: async () => ({ success: true, result: {} }), text: async () => "" },
     );

@@ -13,6 +13,7 @@
 
 import { describe, test, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import request from "supertest";
+import jwt from "jsonwebtoken";
 import express from "express";
 
 /**
@@ -257,12 +258,14 @@ describe("POST /api/devhub/media/payment-link (Lemon Squeezy)", () => {
   function setLsEnv() {
     process.env.LEMON_SQUEEZY_API_KEY = "ls_fake_key";
     process.env.LEMON_SQUEEZY_STORE_ID = "12345";
-    process.env.LEMON_SQUEEZY_DEFAULT_VARIANT_ID = "67890";
+    process.env.LEMON_SQUEEZY_PAYLINK_VARIANT_ID = "67890";
   }
+  const bearer = { Authorization: `Bearer ${jwt.sign({ sub: "u-pay", email: "pay@test.dev" }, process.env.AUTH_JWT_SECRET || "dev-auth-secret", { algorithm: "HS256" })}` };
 
   test("503 when Lemon Squeezy env vars missing", async () => {
     const r = await request(makeApp())
       .post("/api/devhub/media/payment-link")
+      .set(bearer)
       .send({ name: "Pro", amountCents: 999 });
     expect(r.status).toBe(503);
     expect(r.body.error).toMatch(/LEMON_SQUEEZY/);
@@ -272,6 +275,7 @@ describe("POST /api/devhub/media/payment-link (Lemon Squeezy)", () => {
     setLsEnv();
     const r = await request(makeApp())
       .post("/api/devhub/media/payment-link")
+      .set(bearer)
       .send({ name: "Pro", amountCents: 10 });
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/≥ 50/);
@@ -285,6 +289,7 @@ describe("POST /api/devhub/media/payment-link (Lemon Squeezy)", () => {
 
     const r = await request(makeApp())
       .post("/api/devhub/media/payment-link")
+      .set(bearer)
       .send({ name: "Pro plan", amountCents: 999, currency: "usd", description: "Monthly" });
 
     expect(r.status).toBe(200);

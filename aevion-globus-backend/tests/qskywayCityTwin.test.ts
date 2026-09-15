@@ -319,7 +319,10 @@ describe("the committed twins publish what the generator could not vouch for", (
     const suspect = CITY.dataQuality.suspect ?? [];
     expect(suspect).toHaveLength(1);
     expect(suspect[0].h).toBe(382);
-    expect(suspect[0].times).toBeGreaterThan(3);
+    // 15.09.2026: с обмером города 99-й процентиль вырос, и «в разы» стало
+    // 1.23× — тег держится вторым правилом: выше всего, что обмерил город.
+    expect(suspect[0].times).toBeGreaterThan(1);
+    expect(suspect[0].why).toBe("taller than anything the city measured");
     expect(CITY.buildings[suspect[0].i].h).toBe(suspect[0].h);
     expect(CITY.buildings[suspect[0].i].hs).toBe(1);
   });

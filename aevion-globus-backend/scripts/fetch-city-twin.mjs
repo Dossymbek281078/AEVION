@@ -68,6 +68,7 @@ import {
 import { parsePlateauGml } from "./lib/plateau-heights.mjs";
 import { parseNycBuildings, nycBuildingsQuery } from "./lib/nyc-open-data.mjs";
 import { reconcileMeasuredOutlines } from "./lib/measured-outlines.mjs";
+import { fetchI3sBuildingPoints, pointAsTinyRing } from "./lib/i3s-points.mjs";
 
 // The height model, the projection and the rasterizer live in
 // scripts/lib/city-twin-geometry.mjs so they can be unit-tested; this file is
@@ -88,8 +89,24 @@ const CITIES = {
       { c: 112, r: 2, x: 2250, y: 50 }, { c: 53, r: 93, x: 1070, y: 1870 },
       { c: 17, r: 48, x: 350, y: 970 },
     ],
+    // 15.09.2026: у Астаны ЕСТЬ обмер — у самого города. Геопортал Управления
+    // архитектуры (gis.esaulet.kz) отдаёт 3D-модель зданий как I3S без токена;
+    // h_1 — высота в метрах (Байтерек 97.0 м, Хан Шатыр 139 м сошлись).
+    // Точки-центроиды, не контуры — см. lib/i3s-points.mjs; поэтому
+    // nearRadiusM 0: чужой центроид в 20 м — это соседний дом, а не этот.
+    measured: {
+      kind: "i3s",
+      url: "https://gis.esaulet.kz/server/rest/services/Hosted/Build_151222/SceneServer/layers/0",
+      idField: "objectid",
+      heightField: "h_1",
+      label: "3D-модель зданий Управления архитектуры г. Астаны (gis.esaulet.kz, Build_151222, 15.12.2022, h_1)",
+      marginM: 100,
+      nearRadiusM: 0,
+    },
     header: [
       "// QSkyway city digital-twin — real Astana buildings from OpenStreetMap (Overpass),",
+      "// heights reconciled with the city's own 3D building model (gis.esaulet.kz,",
+      "// Build_151222 I3S layer, attribute h_1, 15.12.2022) — see scripts/lib/i3s-points.mjs.",
       "// rasterized to a 20m height field. v2: per-building height provenance (hs) +",
       "// per-cell source grid + dataQuality summary. Regenerate with:",
       "//   node scripts/fetch-city-twin.mjs astana --write",
@@ -393,6 +410,18 @@ if (city.measured) {
     process.stderr.write(`  NYC Open Data: ${rows.length} rows, ${got.length} outlines with a height\n`);
     // Socrata geometry is GeoJSON, longitude first — already the shape we want.
     outlines.push(...got);
+  } else if (kind === "i3s") {
+    // Точки-центроиды из I3S-слоя города; каждая — квадрат 1×1 м, чтобы пройти
+    // правило «центроид внутри контура OSM» в reconcileMeasuredOutlines.
+    process.stderr.write(`  I3S ${city.measured.url}: reading node pages…\n`);
+    const pts = await fetchI3sBuildingPoints(city.measured.url, wide, {
+      ua: "AEVION-QSkyway/1.0 (city twin builder)",
+      idField: city.measured.idField, heightField: city.measured.heightField,
+      log: (s) => process.stderr.write(s + "\n"),
+    });
+    // Контур — выпуклая оболочка меша (lib/i3s-points.mjs); у вырожденных —
+    // квадрат 1×1 м вокруг центроида, чтобы правило «центроид внутри» работало.
+    for (const p of pts) outlines.push({ h: p.h, ring: p.ring ?? pointAsTinyRing(p.lon, p.lat) });
   } else {
     throw new Error(`${cityId}: unknown measured-height source kind "${kind}"`);
   }
@@ -438,13 +467,18 @@ if (city.measured) {
       //
       // Прикидке по этажам и подставленному значению по умолчанию спорить с
       // обмером нечем — там побеждает съёмка.
-      if (b.stated) {
-        if (p.h > b.h) plateauTaller++; else if (b.h > p.h) osmTaller++;
-        b.h = Math.round(Math.max(p.h, b.h));
+      // 15.09.2026: раньше при «OSM выше обмера» здание получало высоту ТЕГА и
+      // класс hs=0 «обмерено» — и Абу-Даби Плаза (тег 382 при обмере 311)
+      // выпала из списка сомнительных, потому что стала «обмеренной на 382».
+      // Высота остаётся большей (безопасная сторона), но класс — тега: hs=1,
+      // и второе правило сомнительных высот снова его видит.
+      if (b.stated && b.h > p.h) {
+        osmTaller++;
       } else {
+        if (b.stated && p.h > b.h) plateauTaller++;
         b.h = Math.round(p.h);
+        b.hs = 0;
       }
-      b.hs = 0;
     } else if (p.how === "near" && b.hs !== 0 && p.h > b.h) {
       near++;
       b.h = Math.round(p.h);
@@ -457,8 +491,15 @@ if (city.measured) {
   // exists to match edge buildings and was never queried from OSM, so "no OSM
   // counterpart" there means nothing.
   let added = 0;
+  // 15.09.2026: контуры-оболочки из I3S ДОБАВЛЯЮТСЯ, как и обмерные контуры
+  // NYC/Токио — в квадрате Астаны 338 из 705 зданий города в OSM нет вовсе,
+  // то есть маршрутизатор не видел их как препятствия. Порог 20 м² отсекает
+  // будки и вырожденные оболочки (квадрат 1×1 м вокруг центроида): у них нет
+  // площади, и «1 м² высотой 300 м» было бы иглой, которой в городе нет.
+  const ringArea = (r) => Math.abs(r.reduce((s, [x, y], k) => { const [x2, y2] = r[(k + 1) % r.length]; return s + x * y2 - x2 * y; }, 0) / 2);
   for (const i of unmatched) {
     const ring = projected[i].ring;
+    if (ringArea(ring) < 20) continue;
     let sx = 0, sy = 0;
     for (const [x, y] of ring) { sx += x; sy += y; }
     const cx = sx / ring.length, cy = sy / ring.length;
@@ -706,8 +747,26 @@ if (compareOnly) {
 // Отгружается ТОЛЬКО для спорных: у 475 зданий id стоил бы лишних килобайт в
 // файле, который целиком грузится в браузер.
 const osmIdOf = (i) => meta[i]?.id ?? null;
+// 15.09.2026: появление обмера СНЯЛО прежний флаг с завышенного тега Астаны
+// (382 м при опубликованных 310.8): 99-й процентиль поднялся вместе с
+// обмеренными башнями, и 382/311 уже не «в разы». Флаг исчез, тег остался —
+// хуже, чем было. Второе правило: заявленный тег ВЫШЕ самого высокого здания,
+// которое обмерил сам город, — это ровно тот случай, когда тегу нельзя верить.
+// Порог 50 обмеренных: на горстке точек «самое высокое из обмеренных» ничего
+// не значит.
+const outliers = heightOutliers(buildings);
+const flagged = new Set(outliers.map((o) => o.index));
+const measuredHs = buildings.filter((b) => b.hs === 0).map((b) => b.h);
+const maxMeasured = measuredHs.length >= 50 ? Math.max(...measuredHs) : 0;
+const aboveSurvey = maxMeasured > 0
+  ? buildings
+      .map((b, i) => ({ b, i }))
+      .filter(({ b, i }) => b.hs !== 0 && b.h > maxMeasured * 1.1 && !flagged.has(i))
+      .map(({ b, i }) => ({ i, osm: osmIdOf(i), h: b.h, times: Math.round((100 * b.h) / maxMeasured) / 100, why: "taller than anything the city measured" }))
+  : [];
 const suspect = [
-  ...heightOutliers(buildings).map((o) => ({ i: o.index, osm: osmIdOf(o.index), h: o.h, times: o.times, why: "towers over the city" })),
+  ...outliers.map((o) => ({ i: o.index, osm: osmIdOf(o.index), h: o.h, times: o.times, why: "towers over the city" })),
+  ...aboveSurvey,
   ...contradicted.map((c) => ({ i: c.i, osm: osmIdOf(c.i), h: c.h, was: c.was, levels: c.levels, why: "height tag contradicted its own floor count" })),
 ];
 if (suspect.length) {

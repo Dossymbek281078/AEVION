@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { fetchPlanetStats, fetchRecentArtifacts, __resetPlanetCache } from "../planetData";
+import { fetchPlanetStats, fetchRecentArtifacts, isProbeArtifact, __resetPlanetCache } from "../planetData";
 
 /**
  * Issue #1028: на главной `planet/stats` и `planet/artifacts/recent` уходили
@@ -78,5 +78,38 @@ describe("planetData — один запрос на всех потребите�
   it("не-массив в items → null, чтобы «нет данных» не выглядело как «пусто»", async () => {
     mockFetch(() => ({ ok: true, body: { items: "нет" } }));
     expect(await fetchRecentArtifacts(4)).toBeNull();
+  });
+});
+
+describe("planetData — пробы с прода не выходят на главную", () => {
+  // Ключи сняты с живого /api/planet/artifacts/recent 14.09.2026.
+  const PROBES = [
+    { id: "p1", productKey: "smoke-music-test", submissionTitle: "smoke-music-1784717120863" },
+    { id: "p2", productKey: "k1778063172256" },
+    { id: "p3", productKey: "k-1778063149328" },
+    { id: "p4", productKey: "test-key" },
+  ];
+
+  it("все последние — пробы: пустой список, а не null (блоки просто не рисуются)", async () => {
+    mockFetch(() => ({ ok: true, body: { items: PROBES } }));
+    expect(await fetchRecentArtifacts(5)).toEqual([]);
+  });
+
+  it("КОНТРОЛЬ: настоящий ключ и запись без ключа остаются, порядок сохранён", async () => {
+    const real = { id: "r1", productKey: "aevion_award_music_2026_s1", submissionTitle: "Песня степи" };
+    const bare = { id: "r2", submissionTitle: "Без ключа" };
+    mockFetch(() => ({ ok: true, body: { items: [PROBES[0], real, PROBES[2], bare] } }));
+    expect((await fetchRecentArtifacts(5))?.map((r) => r.id)).toEqual(["r1", "r2"]);
+  });
+
+  it("КОНТРОЛЬ: похожее, но не пробное — «k» с короткой меткой и слово в середине — не отсеивается", async () => {
+    expect(isProbeArtifact({ id: "x", productKey: "k2026" })).toBe(false);
+    expect(isProbeArtifact({ id: "y", productKey: "aevion_smoke_free" })).toBe(false);
+  });
+
+  it("лимит запроса — потолок ручки, чтобы после фильтра осталось место", async () => {
+    const f = mockFetch(() => ({ ok: true, body: { items: [] } }));
+    await fetchRecentArtifacts(5);
+    expect(String(f.mock.calls[0][0])).toContain("limit=25");
   });
 });

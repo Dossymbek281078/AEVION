@@ -34,6 +34,12 @@ export interface Project {
   floorMatId: string;
   partition: string;
   layers: { rough: boolean; finish: boolean; decor: boolean };
+  /** пол по комнатам (ключ — номер комнаты); появилось 15.09.2026, старые файлы без него — исправны */
+  roomFloor?: Record<string, string>;
+  /** стены, обращённые в комнату (ключ — номер комнаты) */
+  roomWall?: Record<string, string>;
+  /** назначение комнат, поправленное человеком */
+  roomTypes?: Record<string, string>;
 }
 
 export const STORAGE_KEY = "aevion_qspace_project_v1";
@@ -78,6 +84,14 @@ export function isProject(v: unknown): v is Project {
   const l = p.layers as Partial<Project["layers"]>;
   if (!["rough", "finish", "decor"].every((k) => typeof l[k as keyof typeof l] === "boolean")) {
     return false;
+  }
+  // Необязательные поля: нет — ладно; есть — обязаны быть словарём строк,
+  // иначе страница подставит их в материалы и получит undefined посреди сцены.
+  for (const key of ["roomFloor", "roomWall", "roomTypes"] as const) {
+    const v = p[key];
+    if (v === undefined) continue;
+    if (!v || typeof v !== "object" || Array.isArray(v)) return false;
+    if (!Object.values(v).every((s) => typeof s === "string")) return false;
   }
   return true;
 }

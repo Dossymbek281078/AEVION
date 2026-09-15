@@ -22,7 +22,11 @@ import type { CityData } from "../src/routes/qskyway.city";
 
 const PROFILE: Record<string, { twin: CityData; total: number; measured: number; guessed: number }> = {
   // Астана: городского обмера нет вовсе, тег несущий — тут слепота дороже всего
-  astana: { twin: CITY, total: 475, measured: 0, guessed: 237 },
+  // 15.09.2026: у Астаны появился обмер — 3D-модель зданий города
+  // (gis.esaulet.kz, Build_151222): 264 из 476 по центроиду внутри контура OSM.
+  // Вечером того же дня — контуры города (выпуклые оболочки мешей): +165 зданий,
+  // которых в OSM нет, и обмер по центроиду OSM внутри контура: 532 из 641 (тег 382 м Абу-Даби Плазы выше обмера 311 — остаётся тегом, hs=1).
+  astana: { twin: CITY, total: 641, measured: 532, guessed: 77 },
   // Нью-Йорк и Токио: высоты перекрыты городским обмером
   // 12.08.2026: пересборка добавила один обмеренный дом (2879 → 2880).
   nyc: { twin: CITY_NYC, total: 2976, measured: 2880, guessed: 28 },
@@ -55,7 +59,10 @@ describe("профиль слепых высот в твинах", () => {
   test("[astana] обмера нет ни у одного здания — это свойство города, а не сбой сборки", () => {
     // Если однажды у Астаны появится городской обмер, тест упадёт, и это
     // правильный повод пересмотреть и класс высот, и текст на странице.
-    expect(CITY.dataQuality.measured).toBe(0);
-    expect(CITY.dataQuality.measuredPct).toBe(0);
+    // 15.09.2026: это и случилось — обмер пришёл из 3D-модели города. Теперь
+    // храповик в другую сторону: измеренных не меньше, чем при подключении.
+    expect(CITY.dataQuality.measured).toBeGreaterThanOrEqual(532);
+    expect(CITY.dataQuality.measuredPct).toBeGreaterThanOrEqual(83);
+    expect(CITY.dataQuality.source).toContain("esaulet");
   });
 });

@@ -14876,11 +14876,22 @@ ${question.trim()}`;
     </Modal>
 
     </ProductPageShell>
+    {/* Спейсер под пилюлю «Вернуться к партии» на телефоне. Пилюля — position:fixed и
+        места в потоке не занимает; на вкладках Задачи/Коуч доска задачи/анализа уезжала
+        ПОД неё: обход 15.09.2026 — накрыто 4 клетки на 390px и 9 на 360px (нижняя
+        горизонталь, тапнуть нельзя). BottomNav — sticky и место в потоке занимает сам,
+        поэтому под нав спейсер не нужен. 64 = высота пилюли (~40) + зазор. Условие —
+        ровно то же, что у самой пилюли (строка с «Вернуться к партии»), плюс мобильный порог. */}
+    {on&&!over&&tab!=="play"&&!isHumanGame&&vwPx<769&&<div aria-hidden style={{height:64}}/>}
     {/* Bottom navigation — только на мобайле (<769px). На десктопе вкладки уже в верхней
         шапке, а нижняя плашка перекрывала низ доски. Гейт по vwPx (надёжнее CSS-media). */}
     {!streamerMode&&vwPx<769&&<BottomNav
       setup={setup} tab={tab}
-      onPlay={()=>sShowQuickSetupModal(true)}
+      // При ЖИВОЙ партии «Играть» возвращает к доске — как goTab("play") у десктопной панели
+      // (стр. ~6004). Прежде всегда открывалась шторка «Новая партия»: игрок, тапнувший
+      // «Играть» из Задач, чтобы вернуться к партии, получал предложение начать новую.
+      // Обход 15.09.2026 на 390/360 это и показал. Без партии — по-прежнему шторка.
+      onPlay={()=>{ if(on&&!over){ sTab("play"); sSetup(false); } else sShowQuickSetupModal(true); }}
       onPuzzles={()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length));sSetup(false)}}
       onAnalysis={()=>{sTab("analysis");sSetup(false)}}
       onCoach={()=>{sTab("coach");sSetup(false)}}

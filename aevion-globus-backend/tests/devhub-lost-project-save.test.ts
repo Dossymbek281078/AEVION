@@ -22,6 +22,7 @@
 
 import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
 import request from "supertest";
+import jwt from "jsonwebtoken";
 import express from "express";
 
 const { mockQuery } = vi.hoisted(() => ({ mockQuery: vi.fn() }));
@@ -195,7 +196,7 @@ describe("an undo point whose save failed must not be invisible", () => {
       await request(app).patch(`/api/devhub/projects/${id}`).send({ repoUrl: "https://github.com/o/r" });
 
       // The pull overwrites a.ts and takes a checkpoint first — whose save fails.
-      const sync = await request(app).post(`/api/devhub/projects/${id}/github/sync`);
+      const sync = await request(app).post(`/api/devhub/projects/${id}/github/sync`).set({ Authorization: `Bearer ${jwt.sign({ sub: "anonymous", email: "a@test.dev" }, process.env.AUTH_JWT_SECRET || "dev-auth-secret", { algorithm: "HS256" })}` });
       expect(sync.body.ok).toBe(true);
 
       const list = await request(app).get(`/api/devhub/projects/${id}/checkpoints`);

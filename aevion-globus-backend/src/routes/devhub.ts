@@ -3,6 +3,9 @@ import { pgIntId } from "../lib/queryNumber";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { resolvePlanFromPayload, isModuleEntitled } from "../lib/planGate";
+import { siteZone, dnsProvider, dnsConfigured, dnsTokensNeeded, upsertCname, zoneActiveUncached, zoneProbe, labelInZone, isDevHubLabel } from "../lib/devhubDns";
+import { promises as dnsPromises } from "node:dns";
+import { resolveLemonSqueezyVariant } from "../data/lemonSqueezyVariants";
 // Обе стороны нужны: у них шире набор из devhubGuest, у меня — devhubGuestLink.
 // Все четыре символа используются в теле файла, проверено счётом вхождений.
 import { requesterId, devhubGuestId, DEVHUB_GUEST_HEADER } from "../lib/devhubGuest";
@@ -12,7 +15,8 @@ import { noteEmailSent } from "../lib/brevoQuota";
 // Ограничитель дорогих ручек. Тот же помощник, что стоит на 27 соседних ручках в
 // коммите d9cc19ce0 (28.07) — он ждёт мержа 22 дня, поэтому здесь пока только две
 // ручки, которые тогда пропустили: /ask и /media/upload-image.
-import { rateLimit } from "../lib/rateLimit";
+import { rateLimit, clientIp } from "../lib/rateLimit";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 /**
  * Предел для дорогих ручек этого модуля.
@@ -217,6 +221,11 @@ devhubRouter.use(
   ["/media/email", "/media/email-template-send", "/media/sms", "/media/whatsapp"],
   dhSendLimit(),
 );
+
+// Область запроса: адрес клиента для потолка кредита гостя (guestIpBudgetKey ниже).
+// Стоит ДО всех ручек: middleware действует только на зарегистрированные после него.
+const requestScope = new AsyncLocalStorage<{ ip: string }>();
+devhubRouter.use((req, _res, next) => requestScope.run({ ip: clientIp(req) }, next));
 
 /**
  * Ограничитель для формы связывания. Отдельный и СТРОЖЕ обычного: форма
@@ -668,6 +677,26 @@ async function getMonthUsage(userId: string, month: string, capability: Capabili
 
 type CreditVerdict = { allowed: boolean; used: number; limit: number; tier: StudioTier; usedKnown: boolean };
 
+/**
+ * Кредит гостя — ещё и по адресу клиента (15.09.2026).
+ *
+ * Гость опознаётся заголовком x-devhub-guest, который выбирает сам клиент: сменил
+ * заголовок — получил новый месячный кредит free (3 видео Replicate, 10 картинок
+ * OpenAI, 10k знаков ElevenLabs, 10 выкаток в наш Vercel/Cloudflare). Ограничителя
+ * по адресу на этих ручках не было — деньги и кредит сборок уходили без потолка.
+ * Второй потолок: те же лимиты free на ключ `guest-ip:<адрес>`. Адрес берётся из
+ * области запроса (AsyncLocalStorage), чтобы не менять двадцать точек вызова.
+ * Вошедшего это не касается: его кредит — по его id.
+ */
+function isGuestRequester(userId: string): boolean {
+  return userId === "anonymous" || userId.startsWith("guest:");
+}
+
+function guestIpBudgetKey(userId: string): string | null {
+  if (!isGuestRequester(userId)) return null;
+  const ip = requestScope.getStore()?.ip;
+  return ip ? `guest-ip:${ip}` : null;
+}
 async function checkCredit(userId: string, capability: CapabilityKey, amount = 1): Promise<CreditVerdict> {
   const tier = await getUserTier(userId);
   const limit = TIER_LIMITS[tier][capability];
@@ -681,6 +710,14 @@ async function checkCredit(userId: string, capability: CapabilityKey, amount = 1
     // unmetered month left no trace anywhere.
     return { allowed: true, used: 0, limit, tier, usedKnown: false };
   }
+  const ipKey = guestIpBudgetKey(userId);
+  if (ipKey) {
+    const ipLimit = TIER_LIMITS.free[capability];
+    const ipUsed = await getMonthUsage(ipKey, month, capability);
+    if (ipLimit !== -1 && ipUsed !== null && ipUsed + amount > ipLimit) {
+      return { allowed: false, used: ipUsed, limit: ipLimit, tier: "free", usedKnown: true };
+    }
+  }
   return { allowed: used + amount <= limit, used, limit, tier, usedKnown: true };
 }
 
@@ -693,6 +730,8 @@ function creditNote(verdict: CreditVerdict): { creditUnverified: true } | Record
 }
 
 async function debitCredit(userId: string, capability: CapabilityKey, amount = 1): Promise<void> {
+  const ipKey = guestIpBudgetKey(userId);
+  if (ipKey) await debitCredit(ipKey, capability, amount);
   const month = creditMonth();
   const tier = await getUserTier(userId);
   if (!isDevHubDbReady()) {
@@ -795,6 +834,154 @@ function deferred(fn: () => void | Promise<void>, ms: number): void {
 export function __clearDeferredDevHubWork() {
   for (const t of deferredTimers) clearTimeout(t);
   deferredTimers.clear();
+}
+
+/**
+ * Имя внутри зоны aevion.app проект может носить только своё: <slug>-<6 hex его id>.
+ * Иначе гость называл проект «api.aevion.app», звал auto-setup — и DNS-слой сносил
+ * CNAME бэкенда (найдено окном приёмки 15.09.2026, на проде не воспроизводилось).
+ * Чужой домен (вне зоны) записать можно: его DNS не наш, писать туда мы не будем.
+ */
+function customDomainRefusal(domain: string, projectId: string): string | null {
+  const label = labelInZone(domain);
+  if (label === null) return null;
+  const own = `-${projectId.slice(0, 6)}`;
+  if (!isDevHubLabel(label) || !label.endsWith(own)) {
+    return `${domain} is inside ${siteZone()} but is not this project's DevHub name (<slug>${own}.${siteZone()}) — reserved and service names cannot be claimed`;
+  }
+  return null;
+}
+/**
+ * Адрес возврата после оплаты — только свой домен. Произвольный successUrl из тела
+ * уводил бы покупателя из НАШЕГО магазина куда угодно (патч окна free-fleet от
+ * 28.07.2026, применён 15.09.2026).
+ */
+function safeRedirect(raw: unknown, frontendUrl: string, fallbackPath: string): string {
+  const fallback = `${frontendUrl}${fallbackPath}`;
+  if (typeof raw !== "string" || !raw) return fallback;
+  try {
+    const u = new URL(raw, frontendUrl);
+    return u.origin === new URL(frontendUrl).origin ? u.toString() : fallback;
+  } catch {
+    return fallback;
+  }
+}
+const GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN = "sign in to use the shared AEVION GitHub account, or set your own GITHUB_TOKEN in the project Env Vars";
+
+/** Гость без своего токена не получает общий токен GitHub AEVION (см. ручки /github/*). */
+function guestMayNotUseSharedGitHub(auth: unknown, project: DevHubProject): boolean {
+  return !auth && !project.envVars?.GITHUB_TOKEN;
+}
+
+/** Имя поставщика DNS для текстов, которые читает человек. */
+function dnsProviderName(): string {
+  return dnsProvider() === "vercel" ? "Vercel" : "Cloudflare";
+}
+
+/**
+ * Разрешается ли CNAME адреса. Домен после выкатки судим ПО DNS, а не по HTTPS:
+ * сертификат у Cloudflare Pages выпускается минутами, и HTTPS-проба сразу после
+ * записи CNAME проваливалась всегда — обвиняя зону, которая отработала.
+ * Стенд подменяет `dnsProbe.cnameResolves`, чтобы не ходить в сеть.
+ */
+export const dnsProbe = {
+  async cnameResolves(host: string): Promise<boolean> {
+    try {
+      const r = await Promise.race([
+        dnsPromises.resolveCname(host),
+        new Promise<string[]>((_, reject) => {
+          const t = setTimeout(() => reject(new Error("dns timeout")), 3000);
+          t.unref?.();
+        }),
+      ]);
+      return Array.isArray(r) && r.length > 0;
+    } catch {
+      return false;
+    }
+  },
+};
+
+/**
+ * Окна проверки «страница отвечает» после загрузки на Pages.
+ *
+ * Замер 15.09.2026 (проба probe-domain-check-375c20): загрузка через wrangler
+ * прошла, окно в 2 минуты (24 × 5 с) не увидело ни одного 2xx, выкатка записана
+ * failed, витрина /studio покраснела на 30 минут — а на третьей минуте и
+ * pages.dev, и <slug>.aevion.app отдавали страницу (внешняя проверка 200).
+ * /studio/deploy-stats за 30 дней: 6 выкаток, успешных 0, «failed с адресом» 4 —
+ * тот же класс. Новый проект Pages расходится по краю дольше двух минут.
+ *
+ * Поэтому окон три: старт через 4 с (внутри ~2 мин), повторы через 3 и 7 минут.
+ * Между окнами статус остаётся building, failed и красная витрина — только
+ * после последнего. Ручка /deployments/:id/recheck перепроверяет по требованию.
+ */
+export const SERVE_VERIFY_RETRY_DELAYS_MS = [3 * 60_000, 7 * 60_000];
+
+function scheduleServeVerification(
+  deployment: DevHubDeployment,
+  project: DevHubProject | null,
+  pagesUrl: string,
+  customDomain: string | null,
+  step = 0,
+): void {
+  deferred(async () => {
+    const d = memDeployments.get(deployment.id) ?? deployment;
+    const serves = await verifyDeploymentServes(pagesUrl);
+    if (serves) {
+      await markDeploymentLive(d, project, pagesUrl, customDomain);
+      return;
+    }
+    if (step < SERVE_VERIFY_RETRY_DELAYS_MS.length) {
+      const wait = SERVE_VERIFY_RETRY_DELAYS_MS[step];
+      d.buildLog = (d.buildLog || "") +
+        ` | verify ${step + 1}: no 2xx yet (~2 min window); a new Pages project can take longer to propagate — next check in ${Math.round(wait / 60_000)} min`;
+      try { await dbSaveDeployment(d); } catch { memDeployments.set(d.id, d); }
+      scheduleServeVerification(deployment, project, pagesUrl, customDomain, step + 1);
+      return;
+    }
+    // Отличать ветки просто: `wrangler: ...` — упала загрузка;
+    // `verify: ...` — загрузка прошла, а адрес не ответил.
+    noteProviderFailure("pages", "the deployed page does not serve (2xx never came back across three windows, ~14 min)");
+    d.status = "failed";
+    d.buildLog = (d.buildLog || "") +
+      " | verify: wrangler upload finished, but the page never answered 2xx across three windows " +
+      "(24 attempts 5s apart, then re-checks after 3 and 7 min; ~14 min total). Either the new Pages project " +
+      "has not propagated yet, or it really does not serve. " +
+      "Check the address by hand before blaming the upload; POST /deployments/:id/recheck asks again.";
+    d.completedAt = now();
+    try { await dbSaveDeployment(d); } catch { memDeployments.set(d.id, d); }
+  }, step === 0 ? 4000 : SERVE_VERIFY_RETRY_DELAYS_MS[step - 1]);
+}
+
+/** Страница ответила: выкатка и проект — live; домен спрашиваем по HTTPS, но не-ответ — не отказ (сертификат Pages). */
+async function markDeploymentLive(
+  d: DevHubDeployment,
+  project: DevHubProject | null,
+  pagesUrl: string,
+  customDomain: string | null,
+): Promise<void> {
+  noteProviderSuccess("pages");
+  d.status = "live";
+  d.completedAt = now();
+  let domainNote = "";
+  if (customDomain) {
+    const ready = await verifyDeploymentServes(`https://${customDomain}`, 5000, 6).catch(() => false);
+    if (ready) {
+      noteProviderSuccess("domain");
+      domainNote = ` | domain: https://${customDomain} answers`;
+    } else {
+      domainNote = ` | domain: https://${customDomain} not answering yet (Pages certificate pending); the DNS record is in place`;
+    }
+  }
+  d.buildLog = (d.buildLog || "") + " | verify: page answers 2xx" + domainNote;
+  try { await dbSaveDeployment(d); } catch { memDeployments.set(d.id, d); }
+  if (project) {
+    project.status = "live";
+    project.deployUrl = pagesUrl;
+    if (customDomain) project.customDomain = customDomain;
+    project.updatedAt = now();
+    try { await dbSaveProject(project); } catch { memProjects.set(project.id, project); }
+  }
 }
 
 // ── Exported reset helpers for tests ─────────────────────────────────────────
@@ -2212,7 +2399,12 @@ devhubRouter.patch("/projects/:id", async (req, res) => {
   if (status !== undefined) project.status = String(status);
   if (deployUrl !== undefined) project.deployUrl = deployUrl ? String(deployUrl) : null;
   if (repoUrl !== undefined) project.repoUrl = repoUrl ? String(repoUrl) : null;
-  if (customDomain !== undefined) project.customDomain = customDomain ? String(customDomain) : null;
+  if (customDomain !== undefined) {
+    const wanted = customDomain ? String(customDomain).trim().toLowerCase() : null;
+    const refusal = wanted ? customDomainRefusal(wanted, project.id) : null;
+    if (refusal) return res.status(400).json({ error: refusal });
+    project.customDomain = wanted;
+  }
   project.updatedAt = now();
   // Признак хранилища. До 19.08.2026 ответ был одинаков независимо от того,
   // легло ли сохранение в базу или в память процесса: `catch` тихо клал запись
@@ -3255,7 +3447,7 @@ Built, but ${url} did not answer 2xx in time`;
     return res.status(501).json({
       error: "Backend deploys are not available yet",
       detail: "This button used to trigger a redeploy of the AEVION platform service instead of your project — it has been disabled rather than left lying.",
-      alternative: "Static projects deploy for real via Cloudflare Pages (Deploy → Pages), including a verified *.aevion.build subdomain.",
+      alternative: "Static projects deploy for real via Cloudflare Pages (Deploy → Pages), including a verified *.aevion.app subdomain.",
       deploymentId: deployment.id,
     });
   }
@@ -3438,6 +3630,12 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
+  // 🔴 Общий токен GitHub — только вошедшему (окно приёмки 15.09.2026): гость без
+  // входа создавал проект и пушил/открывал PR под НАШИМ аккаунтом — тот самый
+  // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
+  // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
+  // другой проверкой: контракт ручки для гостя — 401, без исключений.
+  if (guestMayNotUseSharedGitHub(auth, project)) return res.status(401).json({ error: GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN });
   const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
   if (!githubToken) {
     return res.json({
@@ -3582,6 +3780,12 @@ devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
+  // 🔴 Общий токен GitHub — только вошедшему (окно приёмки 15.09.2026): гость без
+  // входа создавал проект и пушил/открывал PR под НАШИМ аккаунтом — тот самый
+  // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
+  // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
+  // другой проверкой: контракт ручки для гостя — 401, без исключений.
+  if (guestMayNotUseSharedGitHub(auth, project)) return res.status(401).json({ error: GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN });
   if (!project.repoUrl) {
     return res.json({ ok: false, message: "No GitHub repo linked yet — push to GitHub first (POST /github/push)" });
   }
@@ -3694,6 +3898,12 @@ devhubRouter.post("/projects/:id/github/pull-request", async (req, res) => {
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
+  // 🔴 Общий токен GitHub — только вошедшему (окно приёмки 15.09.2026): гость без
+  // входа создавал проект и пушил/открывал PR под НАШИМ аккаунтом — тот самый
+  // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
+  // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
+  // другой проверкой: контракт ручки для гостя — 401, без исключений.
+  if (guestMayNotUseSharedGitHub(auth, project)) return res.status(401).json({ error: GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN });
   const { title, body: prBody, branch: branchInput } = req.body || {};
   if (!title || typeof title !== "string") {
     return res.status(400).json({ error: "title is required" });
@@ -3837,6 +4047,12 @@ devhubRouter.post("/projects/:id/github/pull-request/:number/merge", async (req,
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
+  // 🔴 Общий токен GitHub — только вошедшему (окно приёмки 15.09.2026): гость без
+  // входа создавал проект и пушил/открывал PR под НАШИМ аккаунтом — тот самый
+  // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
+  // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
+  // другой проверкой: контракт ручки для гостя — 401, без исключений.
+  if (guestMayNotUseSharedGitHub(auth, project)) return res.status(401).json({ error: GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN });
   const prNumber = pgIntId(req.params.number);
   if (prNumber === null) {
     return res.status(400).json({ error: "invalid pull request number" });
@@ -3888,6 +4104,12 @@ devhubRouter.get("/projects/:id/github/status", async (req, res) => {
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
+  // 🔴 Общий токен GitHub — только вошедшему (окно приёмки 15.09.2026): гость без
+  // входа создавал проект и пушил/открывал PR под НАШИМ аккаунтом — тот самый
+  // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
+  // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
+  // другой проверкой: контракт ручки для гостя — 401, без исключений.
+  if (guestMayNotUseSharedGitHub(auth, project)) return res.status(401).json({ error: GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN });
   const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
   if (!project.repoUrl || !githubToken) {
     return res.json({ exists: false });
@@ -3934,6 +4156,12 @@ devhubRouter.get("/projects/:id/github/branches", async (req, res) => {
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
+  // 🔴 Общий токен GitHub — только вошедшему (окно приёмки 15.09.2026): гость без
+  // входа создавал проект и пушил/открывал PR под НАШИМ аккаунтом — тот самый
+  // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
+  // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
+  // другой проверкой: контракт ручки для гостя — 401, без исключений.
+  if (guestMayNotUseSharedGitHub(auth, project)) return res.status(401).json({ error: GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN });
   const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
   if (!project.repoUrl || !githubToken) {
     return res.json({ branches: [], connected: false });
@@ -4096,7 +4324,9 @@ devhubRouter.post("/projects/:id/domain", async (req, res) => {
   if (!domainRegex.test(domain.trim())) {
     return res.status(400).json({ error: "invalid domain format" });
   }
-  project.customDomain = domain.trim();
+  const domainRefusal = customDomainRefusal(domain.trim().toLowerCase(), project.id);
+  if (domainRefusal) return res.status(400).json({ error: domainRefusal });
+  project.customDomain = domain.trim().toLowerCase();
   project.updatedAt = now();
   // Человек получает инструкцию по DNS и считает домен привязанным. Если
   // запись легла только в память процесса, привязка исчезнет при
@@ -4561,6 +4791,14 @@ devhubRouter.post("/media/email", async (req, res) => {
 
 // POST /api/devhub/media/payment-link — create Lemon Squeezy checkout link
 devhubRouter.post("/media/payment-link", dhCostlyLimit("dhpaylink"), async (req, res) => {
+  // 🔴 Дыра с 28.07.2026, закрыта 15.09.2026 (окно приёмки): ручка без входа создавала
+  // в НАШЕМ магазине LemonSqueezy ссылку на товар по умолчанию с ценой из тела от
+  // 50 центов, а товар по умолчанию на проде — DevHub Studio Pro, и вебхук по нему
+  // выдаёт Pro без сверки суммы. Итог: Pro ($149/мес) за $0.50 любому посетителю.
+  // Три замка: вход обязателен; товар — ТОЛЬКО отдельный (LEMON_SQUEEZY_PAYLINK_VARIANT_ID),
+  // никогда не Studio Pro и не товар по умолчанию; адрес возврата — только свой домен.
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth required — sign in to create payment links" });
   const { name, amountCents, description, successUrl } = req.body || {};
   if (!name || typeof name !== "string") return res.status(400).json({ error: "name required" });
   const amt = Number(amountCents);
@@ -4568,12 +4806,19 @@ devhubRouter.post("/media/payment-link", dhCostlyLimit("dhpaylink"), async (req,
 
   const lsKey = process.env.LEMON_SQUEEZY_API_KEY?.trim();
   const storeId = process.env.LEMON_SQUEEZY_STORE_ID?.trim();
-  const variantId = process.env.LEMON_SQUEEZY_DEFAULT_VARIANT_ID?.trim();
+  const variantId = process.env.LEMON_SQUEEZY_PAYLINK_VARIANT_ID?.trim();
 
   if (!lsKey || !storeId || !variantId) {
     return res.status(503).json({
-      error: "Lemon Squeezy not configured — set LEMON_SQUEEZY_API_KEY, LEMON_SQUEEZY_STORE_ID, LEMON_SQUEEZY_DEFAULT_VARIANT_ID",
+      error: "Payment links not configured — set LEMON_SQUEEZY_API_KEY, LEMON_SQUEEZY_STORE_ID and LEMON_SQUEEZY_PAYLINK_VARIANT_ID (a dedicated product for user payment links; never the Studio Pro or default variant)",
       setupUrl: "https://app.lemonsqueezy.com",
+    });
+  }
+  const studioPro = resolveLemonSqueezyVariant("app_devhub");
+  const defaultVariant = process.env.LEMON_SQUEEZY_DEFAULT_VARIANT_ID?.trim();
+  if ((studioPro && variantId === studioPro) || (defaultVariant && variantId === defaultVariant)) {
+    return res.status(503).json({
+      error: "LEMON_SQUEEZY_PAYLINK_VARIANT_ID points at the Studio Pro / default product — the webhook would grant DevHub Pro for any custom price; use a dedicated product",
     });
   }
 
@@ -4585,11 +4830,13 @@ devhubRouter.post("/media/payment-link", dhCostlyLimit("dhpaylink"), async (req,
         type: "checkouts",
         attributes: {
           custom_price: Math.round(amt),
+          // Метка для вебхука и разбора: это пользовательская ссылка, не покупка тарифа.
+          checkout_data: { custom: { aevion_paylink: "1", issuer: String(auth.sub || "") } },
           checkout_options: { embed: false, media: false, logo: true },
           product_options: {
             name: name.trim().slice(0, 200),
             description: (description || name).trim().slice(0, 500),
-            redirect_url: successUrl || `${frontendUrl}/devhub?payment=success`,
+            redirect_url: safeRedirect(successUrl, frontendUrl, "/devhub?payment=success"),
           },
         },
         relationships: {
@@ -4967,13 +5214,18 @@ devhubRouter.post("/projects/:id/domain/auto-setup", async (req, res) => {
   if (!project.customDomain) {
     return res.status(400).json({ error: "project has no customDomain set" });
   }
+  // Внутри нашей зоны auto-setup не пишет ничего: имя проекту выдаёт /domain/setup
+  // (своя метка, своя цель). Иначе этот маршрут переписывал бы любую запись зоны.
+  if (labelInZone(project.customDomain) !== null) {
+    return res.status(400).json({
+      error: `${project.customDomain} is inside ${siteZone()} — use POST /projects/:id/domain/setup, which issues the project's own name; DevHub never rewrites other records of the zone`,
+    });
+  }
 
-  const cfToken = process.env.CLOUDFLARE_API_TOKEN;
-  const cfZoneId = process.env.CLOUDFLARE_ZONE_ID;
-  if (!cfToken || !cfZoneId) {
+  if (!dnsConfigured()) {
     return res.status(503).json({
-      error: "Cloudflare not configured — set CLOUDFLARE_API_TOKEN + CLOUDFLARE_ZONE_ID",
-      setupUrl: "https://dash.cloudflare.com/profile/api-tokens",
+      error: `DNS not configured — set ${dnsTokensNeeded().join(" + ")}`,
+      setupUrl: dnsProvider() === "vercel" ? "https://vercel.com/account/settings/tokens" : "https://dash.cloudflare.com/profile/api-tokens",
       manualInstruction: `Add CNAME ${project.customDomain} → devhub.aevion.app`,
     });
   }
@@ -4981,54 +5233,16 @@ devhubRouter.post("/projects/:id/domain/auto-setup", async (req, res) => {
   const target = "devhub.aevion.app";
   const domain = project.customDomain;
 
-  try {
-    const listResp = await fetch(
-      `https://api.cloudflare.com/client/v4/zones/${cfZoneId}/dns_records?type=CNAME&name=${encodeURIComponent(domain)}`,
-      { headers: { Authorization: `Bearer ${cfToken}`, Accept: "application/json" } }
-    );
-    if (!listResp.ok) {
-      const t = await listResp.text();
-      return res.status(listResp.status).json({ error: `Cloudflare list error: ${t.slice(0, 300)}` });
-    }
-    const listData = await listResp.json() as { result: Array<{ id: string; content: string }> };
-    const existing = listData.result?.[0];
-
-    if (existing) {
-      if (existing.content === target) {
-        return res.json({ ok: true, action: "already-configured", domain, cname: target, recordId: existing.id });
-      }
-      const upResp = await fetch(
-        `https://api.cloudflare.com/client/v4/zones/${cfZoneId}/dns_records/${existing.id}`,
-        {
-          method: "PUT",
-          headers: { Authorization: `Bearer ${cfToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "CNAME", name: domain, content: target, ttl: 1, proxied: true }),
-        }
-      );
-      if (!upResp.ok) {
-        const t = await upResp.text();
-        return res.status(upResp.status).json({ error: `Cloudflare update error: ${t.slice(0, 300)}` });
-      }
-      return res.json({ ok: true, action: "updated", domain, cname: target, recordId: existing.id });
-    }
-
-    const createResp = await fetch(
-      `https://api.cloudflare.com/client/v4/zones/${cfZoneId}/dns_records`,
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${cfToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "CNAME", name: domain, content: target, ttl: 1, proxied: true }),
-      }
-    );
-    if (!createResp.ok) {
-      const t = await createResp.text();
-      return res.status(createResp.status).json({ error: `Cloudflare create error: ${t.slice(0, 300)}` });
-    }
-    const created = await createResp.json() as { result: { id: string } };
-    res.json({ ok: true, action: "created", domain, cname: target, recordId: created.result.id });
-  } catch (e: any) {
-    res.status(500).json({ error: redactInfraDetails(e) || "Domain setup failed" });
-  }
+  // Чужой домен живёт в чужом DNS: запись про него в НАШЕЙ зоне ничего не
+  // разрешает, а до 15.09.2026 маршрут именно это и пытался сделать. Честный
+  // ответ — что и куда добавить у регистратора; запросов к поставщику ноль.
+  return res.json({
+    ok: false,
+    action: "manual",
+    domain,
+    cname: target,
+    manualInstruction: `Add CNAME ${domain} → ${target} at the DNS provider of ${domain}; DevHub cannot write another zone`,
+  });
 });
 
 // ── Voice clone helpers ─────────────────────────────────────────────────────
@@ -7026,8 +7240,8 @@ devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
 // Flow:
 //   1. Create CF Pages project (idempotent — ignores "already exists")
 //   2. Upload all project files as multipart direct-upload deployment
-//   3. Add <slug>.aevion.build custom domain to Pages project
-//   4. Provision CNAME DNS record in aevion.build zone
+//   3. Add <slug>.aevion.app custom domain to Pages project
+//   4. Provision CNAME DNS record via lib/devhubDns (zone aevion.app lives at Vercel)
 //   5. Return live URL + domain
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -7044,7 +7258,6 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
 
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   const apiToken = process.env.CLOUDFLARE_API_TOKEN;
-  const zoneId = process.env.CLOUDFLARE_ZONE_ID;
   if (!accountId || !apiToken) {
     return res.status(503).json({
       error: "Cloudflare Pages not configured",
@@ -7130,15 +7343,20 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
     try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
     await debitQuietly(userId, "deploy");
 
-    // 4. Provision aevion.build domain (best-effort — don't fail deploy if zone not configured)
+    // 4. Выдача адреса <slug>.<зона> (best-effort — выкатка не падает, если DNS не настроен).
+    //
+    // 15.09.2026: зона — aevion.app (решение основателя); прежняя aevion.build в
+    // Cloudflare больше не существует, и каждый выданный адрес не разрешался. DNS
+    // домена aevion.app живёт у Vercel, поэтому записи пишет lib/devhubDns через
+    // выбранного поставщика (на проде Vercel; Cloudflare — прежний путь). Шаг 4a
+    // остаётся здесь: он про Pages, а не про DNS.
     let customDomain: string | null = null;
     let domainUrl: string | null = null;
 
-    if (zoneId) {
+    if (dnsConfigured()) {
       try {
         const domainSlug = `${slugify(project.name)}-${project.id.slice(0, 6)}`;
-        const fullDomain = `${domainSlug}.aevion.build`;
-
+        const fullDomain = `${domainSlug}.${siteZone()}`;
         // 4a. Add custom domain to CF Pages project.
         //
         // Ответ ОБЯЗАН быть прочитан. Раньше все три вызова к Cloudflare шли без
@@ -7157,21 +7375,9 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
           throw new Error(`Pages domain refused (${addResp.status}): ${body.slice(0, 200)}`);
         }
 
-        // 4b. CNAME DNS record: fullDomain → pageName.pages.dev
-        const dnsTarget = `${pageName}.pages.dev`;
-        const zoneBase = `https://api.cloudflare.com/client/v4/zones/${zoneId}/dns_records`;
-        const listResp = await fetch(`${zoneBase}?type=CNAME&name=${fullDomain}`, { headers: cfHeaders });
-        const listData = await listResp.json() as { result: Array<{ id: string }> };
-        const existingId = listData.result?.[0]?.id;
-
-        const dnsBody = JSON.stringify({ type: "CNAME", name: fullDomain, content: dnsTarget, ttl: 1, proxied: true });
-        const dnsResp = existingId
-          ? await fetch(`${zoneBase}/${existingId}`, { method: "PUT", headers: { ...cfHeaders, "Content-Type": "application/json" }, body: dnsBody })
-          : await fetch(zoneBase, { method: "POST", headers: { ...cfHeaders, "Content-Type": "application/json" }, body: dnsBody });
-        if (!dnsResp.ok) {
-          const body = await dnsResp.text().catch(() => "");
-          throw new Error(`DNS record refused (${dnsResp.status}): ${body.slice(0, 200)}`);
-        }
+        // 4b. CNAME fullDomain → pageName.pages.dev через выбранного поставщика DNS.
+        const dns = await upsertCname(fullDomain, `${pageName}.pages.dev`);
+        if (!dns.ok) throw new Error(`DNS record refused: ${dns.error}`);
 
         customDomain = fullDomain;
         domainUrl = `https://${fullDomain}`;
@@ -7180,71 +7386,21 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       }
     }
 
-    // 5. Verify the page actually SERVES before calling it live. CF's create
-    // API reports deploy:success even when the uploaded assets never stored
-    // (the raw multipart flow is deprecated in favor of wrangler) — the page
-    // then 500s forever while our records said "live" (found live 2026-07-21:
-    // every CF Pages deploy ever made had this). Degraded-convention: a
-    // deploy that doesn't serve is FAILED, not live.
-    deferred(async () => {
-      const d = memDeployments.get(deployment.id) ?? deployment;
-      const serves = await verifyDeploymentServes(pagesUrl);
-      // Pages is the one deploy path that actually works, so when it stops
-      // working the shop window should be the first to say it — not the user
-      // whose page never came up.
-      // ТЕКСТ НЕУДАЧИ НАЗЫВАЛ МЁРТВУЮ ПРИЧИНУ. До 08.09.2026 здесь стояло
-      // «CF direct-upload via raw REST is deprecated, wrangler-based upload
-      // needed» — а загрузка идёт ЧЕРЕЗ WRANGLER (строка с deployViaWrangler
-      // выше), и этот путь давно единственный. Сообщение уводило разбирающего
-      // к замене загрузчика, который менять не надо.
-      //
-      // Замер, ради которого это нашлось: за 7 дней 5 выкаток, успешных ноль
-      // (`/studio/deploy-stats`). Разбирать их будут по этому самому журналу,
-      // и ложная причина в нём стоит дороже самой неудачи.
-      //
-      // Отличать ветки просто: `wrangler: ...` — упала загрузка;
-      // `verify: ...` — загрузка прошла, а адрес не ответил.
-      if (serves) noteProviderSuccess("pages");
-      else noteProviderFailure("pages", "the deployed page does not serve (2xx never came back after retries)");
-      if (serves) {
-        d.status = "live"; d.completedAt = now();
-      } else {
-        d.status = "failed";
-        d.buildLog = (d.buildLog || "") +
-          " | verify: wrangler upload finished, but the page did not answer 2xx within ~25s " +
-          "(5 attempts, 5s apart). Either the new Pages project has not propagated yet, or it " +
-          "really does not serve. Check the address by hand before blaming the upload.";
-        d.completedAt = now();
-      }
-      try { await dbSaveDeployment(d); } catch { memDeployments.set(d.id, d); }
-      if (project && serves) {
-        project.status = "live";
-        project.deployUrl = pagesUrl;
-        if (customDomain) project.customDomain = customDomain;
-        project.updatedAt = now();
-        try { await dbSaveProject(project); } catch { memProjects.set(project.id, project); }
-      }
-    }, 4000);
+    // 5. «Страница отвечает» — цепочкой окон, а не одним (см. scheduleServeVerification).
+    // Загрузка прошла, а адрес молчит — это «ещё поднимается», пока не истекли все окна.
+    scheduleServeVerification(deployment, project, pagesUrl, customDomain);
 
-    // The CNAME is created, but a record in a zone nobody delegated resolves
-    // nowhere: aevion.build is still `pending` at Cloudflare, so every
-    // *.aevion.build address handed out so far — including ones from July —
-    // fails DNS. pagesUrl is the address that actually answers, so that is
-    // what we call live; the custom domain is reported separately with its
-    // real state instead of being presented as the primary URL.
-    // Second arg is the delay between attempts — 1ms keeps this a fast probe
-    // rather than the 25s wait the deploy path uses.
-    const domainReady = domainUrl ? await verifyDeploymentServes(domainUrl, 1).catch(() => false) : false;
-    // The `domain` capability still decides "live" from token presence alone —
-    // the very "a key is not a working capability" lie the health layer exists
-    // to kill. Tokens are all set and the zone is still undelegated, so every
-    // *.aevion.build address fails DNS while the shop window says live. Record
-    // what the deploy actually observed; /studio/capabilities merges it and
-    // reports `degraded` with this reason.
+    // Домен судим по DNS, а не по HTTPS: разрешился CNAME — зона отработала;
+    // готовность HTTPS (сертификат Pages) проверяет та же цепочка после того, как
+    // ответит pages.dev. Витрина «домен» отвечает за запись в DNS, не за сертификат.
+    const domainDns = customDomain ? await dnsProbe.cnameResolves(customDomain) : false;
     if (customDomain) {
-      if (domainReady) noteProviderSuccess("domain");
-      else noteProviderFailure("domain", `${customDomain} does not resolve — the aevion.build zone is not delegated to Cloudflare`);
+      if (domainDns) noteProviderSuccess("domain");
+      else noteProviderFailure("domain", `${customDomain} does not resolve — the CNAME is not visible in the ${siteZone()} zone at ${dnsProviderName()} yet`);
     }
+    // HTTPS домена сразу после выкатки не готов никогда — поле остаётся ради
+    // клиентов, которые его читают, и никогда не делает домен liveUrl.
+    const domainReady = false;
     return res.json({
       ok: true,
       provider: "cloudflare-pages",
@@ -7253,12 +7409,13 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       domain: customDomain,
       domainUrl,
       domainReady,
-      liveUrl: domainReady ? domainUrl : pagesUrl,
+      domainDns,
+      liveUrl: pagesUrl,
       message: customDomain
-        ? domainReady
-          ? `Deployed to ${domainUrl} (and ${pagesUrl})`
-          : `Deployed to ${pagesUrl}. ${customDomain} is configured but does not resolve yet — the aevion.build zone is not delegated to Cloudflare (point the registrar's nameservers at it).`
-        : `Deployed to ${pagesUrl} — verifying it serves before marking live (add CLOUDFLARE_ZONE_ID to enable aevion.build domain)`,
+        ? domainDns
+          ? `Deployed to ${pagesUrl}. ${customDomain}: DNS is in place, the Cloudflare Pages certificate is being issued (usually 1–5 minutes); the deployment goes live once the page answers.`
+          : `Deployed to ${pagesUrl}. ${customDomain} does not resolve yet — the CNAME is not visible in the ${siteZone()} zone at ${dnsProviderName()}.`
+        : `Deployed to ${pagesUrl} — verifying it serves before marking live (configure a DNS provider to enable ${siteZone()} domains)`,
     });
   } catch (e: any) {
     deployment.status = "failed"; deployment.buildLog = e?.message || "deploy failed";
@@ -7266,6 +7423,32 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
     try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
     return res.status(500).json({ ok: false, error: redactInfraDetails(e) || "Cloudflare Pages deploy failed" });
   }
+});
+
+// Перепроверка по требованию. «failed» через 2 минуты часто означало «ещё
+// поднимается» (замер 15.09.2026: 4 из 5 «упавших» с адресом отвечали 200).
+// Спрашиваем адрес сейчас: отвечает — выкатка и проект live; нет — честное «пока нет».
+devhubRouter.post("/projects/:id/deployments/:deployId/recheck", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = requesterId(req, auth?.sub);
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
+  const deployId = String(req.params.deployId);
+  let d: DevHubDeployment | null = null;
+  try { d = (await dbListDeployments(project.id, 50)).find((x) => x.id === deployId) ?? null; } catch { d = null; }
+  if (!d) d = memDeployments.get(deployId) ?? null;
+  if (!d) return res.status(404).json({ error: "deployment not found" });
+  if (!d.deployUrl) return res.status(400).json({ error: "deployment has no address to check — the upload never finished" });
+  const serves = await verifyDeploymentServes(d.deployUrl, 1000, 3);
+  if (!serves) {
+    return res.json({ ok: true, serves: false, status: d.status, deployUrl: d.deployUrl, message: `${d.deployUrl} still does not answer 2xx` });
+  }
+  // Домен той выкатки: имя детерминировано; если шаг домена тогда отказал, в журнале есть `| domain:`.
+  const domainFailed = /\| domain: /.test(d.buildLog || "");
+  const customDomain = project.customDomain
+    || (dnsConfigured() && !domainFailed ? `${slugify(project.name)}-${project.id.slice(0, 6)}.${siteZone()}` : null);
+  await markDeploymentLive(d, project, d.deployUrl, customDomain);
+  return res.json({ ok: true, serves: true, status: "live", deployUrl: d.deployUrl, customDomain });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -7857,7 +8040,7 @@ devhubRouter.get("/media/video/status/:predictionId", async (req, res) => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// Domain provision: <slug>.aevion.build via Cloudflare DNS
+// Domain provision: <slug>.<зона> (aevion.app) через lib/devhubDns — Vercel или Cloudflare
 // POST /api/devhub/projects/:id/domain/setup  { subdomain? }
 // GET  /api/devhub/projects/:id/domain/status
 // ═════════════════════════════════════════════════════════════════════════════
@@ -7873,12 +8056,10 @@ devhubRouter.post("/projects/:id/domain/setup", async (req, res) => {
     return res.status(404).json({ error: "project not found" });
   }
 
-  const cfToken = process.env.CLOUDFLARE_API_TOKEN;
-  const cfZoneId = process.env.CLOUDFLARE_ZONE_ID;
-  if (!cfToken || !cfZoneId) {
+  if (!dnsConfigured()) {
     return res.status(503).json({
-      error: "Domain provision not configured — set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID in Railway",
-      setupUrl: "https://dash.cloudflare.com/profile/api-tokens",
+      error: `Domain provision not configured — set ${dnsTokensNeeded().join(" and ")} in Railway`,
+      setupUrl: dnsProvider() === "vercel" ? "https://vercel.com/account/settings/tokens" : "https://dash.cloudflare.com/profile/api-tokens",
     });
   }
 
@@ -7889,44 +8070,18 @@ devhubRouter.post("/projects/:id/domain/setup", async (req, res) => {
 
   const requestedSub = (req.body?.subdomain as string | undefined) || slugify(project.name);
   const subdomain = (requestedSub + "-" + project.id.slice(0, 6)).toLowerCase().replace(/[^a-z0-9-]/g, "-");
-  const fullDomain = `${subdomain}.aevion.build`;
+  const fullDomain = `${subdomain}.${siteZone()}`;
 
   try {
-    // Create or update CNAME record
-    const listResp = await fetch(
-      `https://api.cloudflare.com/client/v4/zones/${cfZoneId}/dns_records?type=CNAME&name=${fullDomain}`,
-      { headers: { Authorization: `Bearer ${cfToken}`, "Content-Type": "application/json" } }
-    );
-    const existing = await listResp.json() as { result: Array<{ id: string }> };
-    const existingId = existing.result?.[0]?.id;
-
-    const payload = { type: "CNAME", name: fullDomain, content: deployTarget, proxied: true, ttl: 1 };
-
-    let cfResp: Response;
-    if (existingId) {
-      cfResp = await fetch(
-        `https://api.cloudflare.com/client/v4/zones/${cfZoneId}/dns_records/${existingId}`,
-        { method: "PUT", headers: { Authorization: `Bearer ${cfToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) }
-      );
-    } else {
-      cfResp = await fetch(
-        `https://api.cloudflare.com/client/v4/zones/${cfZoneId}/dns_records`,
-        { method: "POST", headers: { Authorization: `Bearer ${cfToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) }
-      );
-    }
-
-    const cfData = await cfResp.json() as { success: boolean; errors?: Array<{ message: string }> };
-    if (!cfData.success) {
-      const msg = cfData.errors?.[0]?.message ?? "Cloudflare DNS error";
-      return res.json({ ok: false, error: msg });
-    }
+    const dns = await upsertCname(fullDomain, deployTarget);
+    if (!dns.ok) return res.json({ ok: false, error: dns.error });
 
     // Save custom domain to project
     project.customDomain = fullDomain;
     project.updatedAt = now();
     try { await dbSaveProject(project); } catch { memProjects.set(project.id, project); }
 
-    return res.json({ ok: true, domain: fullDomain, url: `https://${fullDomain}`, cname: deployTarget });
+    return res.json({ ok: true, domain: fullDomain, url: `https://${fullDomain}`, cname: deployTarget, action: dns.action });
   } catch (e: any) {
     return res.status(500).json({ error: redactInfraDetails(e) || "Domain provision failed" });
   }
@@ -7997,19 +8152,8 @@ devhubRouter.get("/providers/health", async (_req, res) => {
       });
       return { ok: r.ok, detail: `HTTP ${r.status}` };
     }),
-    probe("cloudflare_zone", async () => {
-      if (!process.env.CLOUDFLARE_ZONE_ID || !process.env.CLOUDFLARE_API_TOKEN) {
-        return { ok: false, detail: "CLOUDFLARE_ZONE_ID not set" };
-      }
-      const r = await fetch(`https://api.cloudflare.com/client/v4/zones/${process.env.CLOUDFLARE_ZONE_ID}`, {
-        headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` },
-      });
-      const b = await r.json().catch(() => ({} as any));
-      const status = b?.result?.status;
-      // "pending" means the registrar never pointed at Cloudflare, so every
-      // *.aevion.build address we hand out fails DNS.
-      return { ok: status === "active", detail: `zone status: ${status ?? "unknown"}` };
-    }),
+    // Зона DNS — Vercel или Cloudflare по выбранному поставщику (lib/devhubDns).
+    zoneProbe(),
     probe("openai", async () => {
       if (!process.env.OPENAI_API_KEY) return { ok: false, detail: "OPENAI_API_KEY not set" };
       const r = await fetch("https://api.openai.com/v1/models", {
@@ -8073,6 +8217,8 @@ devhubRouter.get("/providers/health", async (_req, res) => {
     elevenlabs: ["audio_tts", "audio_music"],
     brevo: ["email", "sms", "whatsapp"],
     cloudflare: ["pages"],
+    cloudflare_zone: ["domain"],
+    vercel_dns: ["domain"],
   };
   for (const c of checks) {
     for (const capId of CHECK_TO_CAPABILITIES[c.name] ?? []) {
@@ -8110,23 +8256,14 @@ export function __resetAevionBuildZoneCache(): void {
 }
 
 async function aevionBuildZoneActive(): Promise<boolean | null> {
-  if (!process.env.CLOUDFLARE_ZONE_ID || !process.env.CLOUDFLARE_API_TOKEN) return null;
+  // Поставщика и саму пробу знает lib/devhubDns; здесь только кэш.
+  if (!dnsConfigured()) return null;
   const now = Date.now();
   const ttl = zoneCache.active === null ? ZONE_FAIL_TTL_MS : ZONE_TTL_MS;
   if (zoneCache.at !== 0 && now - zoneCache.at < ttl) return zoneCache.active;
-  try {
-    const r = await fetch(
-      `https://api.cloudflare.com/client/v4/zones/${process.env.CLOUDFLARE_ZONE_ID}`,
-      { headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` } },
-    );
-    const b: any = await r.json().catch(() => ({}));
-    const active = b?.result?.status === "active";
-    zoneCache = { at: now, active };
-    return active;
-  } catch {
-    zoneCache = { at: now, active: null };
-    return null;
-  }
+  const active = await zoneActiveUncached();
+  zoneCache = { at: now, active };
+  return active;
 }
 
 // GET /api/devhub/studio/deploy-stats?days=N — доля успешных публикаций.
@@ -8257,14 +8394,14 @@ devhubRouter.get("/studio/capabilities", async (_req, res) => {
     // делегирована, честный ответ — not_available, как у Railway. Флаг
     // DEVHUB_AEVION_BUILD_ZONE_ACTIVE включает возможность обратно, когда зона
     // заработает: возвращать её должен человек, который это проверил.
-    { id: "domain", name: "Домен (aevion.build)", description: "Auto-provision <slug>.aevion.build with Pages deploy", status: zoneActive === true ? "live" : "not_available",
+    { id: "domain", name: `Домен (${siteZone()})`, description: `Auto-provision <slug>.${siteZone()} with Pages deploy`, status: zoneActive === true ? "live" : "not_available",
       // Причина в lastError: интерфейс показывает её подсказкой. Без неё
       // человек видит выключенную возможность и не знает, чего ждать —
       // «не работает» без причины читается как поломка у нас.
-      lastError: (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ZONE_ID && zoneActive === false)
-        ? "ключи заданы, но зона aevion.build не делегирована — выданные адреса не разрешаются"
+      lastError: (dnsConfigured() && zoneActive === false)
+        ? `ключи заданы, но зона ${siteZone()} ${dnsProvider() === "vercel" ? "не подтверждена у Vercel" : "не делегирована в Cloudflare"} — выданные адреса не разрешаются`
         : undefined,
-      tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID"] },
+      tokens: ["CLOUDFLARE_ACCOUNT_ID", ...dnsTokensNeeded()] },
     { id: "video", name: "Генерация видео", description: "AI video via Replicate", status: process.env.REPLICATE_API_TOKEN ? "live" : "needs_token", token: "REPLICATE_API_TOKEN" },
     // 3D объявлен на странице модуля среди возможностей «в одном проекте»,
     // а в этом списке его не было вовсе: панель показывала «настроено N из 16»,
@@ -8300,7 +8437,8 @@ devhubRouter.get("/studio/capabilities", async (_req, res) => {
     const raw = (c.lastError ?? "").toLowerCase();
     if (/quota|exhaust|limit exceeded|исчерпан/.test(raw)) return "quota_exhausted";
     if (/401|403|invalid.?api.?key|authentication|unauthor/.test(raw)) return "auth_rejected";
-    if (/не делегирован|not delegated/.test(raw)) return "zone_not_delegated";
+    // 15.09.2026: зона у Vercel — текст отказа «не подтверждена у Vercel» / «not verified».
+    if (/не делегирован|not delegated|не подтверждена|not verified|zone .* not ready/.test(raw)) return "zone_not_delegated";
     if (raw.includes("{") || /http \d{3}/.test(raw)) return "provider_error";
     if (c.status === "needs_token") return "needs_token";
     if (c.status === "not_available") return "not_available";

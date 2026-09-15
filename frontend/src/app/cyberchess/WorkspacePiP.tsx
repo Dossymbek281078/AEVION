@@ -39,6 +39,15 @@ const MUTE_KEY = "aevion_cyberchess_pip_mute_v1";
 const DEFAULT_SIZE = { w: 320, h: 180 };
 const MIN_SIZE = { w: 240, h: 135 };
 const DEFAULT_POS = { x: 24, y: 24 };
+// Телефон (<769 — порог BottomNav), ПЕРВЫЙ показ. Замер 15.09.2026 на 390×844 в живой
+// партии: доска стоит на y 302..638 (над ней часы и панели), нижняя навигация ~54px +
+// safe-area. Полоса под доской — 206px. Окно 240×135 с зазором 100 давало верх на 609 и
+// накрывало нижние 29px горизонтали d1–h1. Поэтому: 200×113 (16:9) и зазор 88 — как у
+// пилюли «Вернуться к партии», у которой нав вживую оставался свободен:
+// 844 − 88 − 113 = 643 > 638 → под доской и над навом. Пользователь может растянуть
+// (ресайз держит MIN_SIZE) и перетащить; сохранённые значения главнее этих дефолтов.
+const MOBILE_SIZE = { w: 200, h: 113 };
+const MOBILE_NAV_CLEAR = 88;
 const CHAT_WIDTH = 240;
 const Z_INDEX = 8000;
 
@@ -99,7 +108,13 @@ function loadPos(): { x: number; y: number } {
   if (typeof window === "undefined") return DEFAULT_POS;
   try {
     const raw = localStorage.getItem(POS_KEY);
-    if (!raw) return DEFAULT_POS;
+    // На телефоне (<769 — порог BottomNav) первый показ — внизу справа НАД навом
+    // (запас 100px = нав ~54 + safe-area + зазор), а не в углу (24,24): там окно
+    // 320×180 накрывало верх доски (замер 15.09.2026 на 390px). Сохранённая
+    // пользователем позиция по-прежнему главнее — ветка только при отсутствии raw.
+    if (!raw) return window.innerWidth < 769
+      ? { x: Math.max(8, window.innerWidth - MOBILE_SIZE.w - 8), y: Math.max(8, window.innerHeight - MOBILE_SIZE.h - MOBILE_NAV_CLEAR) }
+      : DEFAULT_POS;
     const j = JSON.parse(raw);
     return { x: Number(j.x) || DEFAULT_POS.x, y: Number(j.y) || DEFAULT_POS.y };
   } catch { return DEFAULT_POS; }
@@ -108,7 +123,9 @@ function loadSize(): { w: number; h: number } {
   if (typeof window === "undefined") return DEFAULT_SIZE;
   try {
     const raw = localStorage.getItem(SIZE_KEY);
-    if (!raw) return DEFAULT_SIZE;
+    // На телефоне первый показ — минимальный размер (240×135): 320×180 на 390px
+    // занимал почти всю ширину. Сохранённый пользователем размер главнее.
+    if (!raw) return window.innerWidth < 769 ? { ...MOBILE_SIZE } : DEFAULT_SIZE;
     const j = JSON.parse(raw);
     return {
       w: Math.max(MIN_SIZE.w, Number(j.w) || DEFAULT_SIZE.w),

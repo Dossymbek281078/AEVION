@@ -69,6 +69,10 @@ describe("статус возможности не спорит с пробой"
   test("проверка провайдера по-прежнему требует активной зоны", () => {
     // Если ослабить её до «ответ получен», расхождение исчезнет ложным путём:
     // обе стороны будут говорить «хорошо» при недоступной зоне.
-    expect(SRC).toContain('ok: status === "active"');
+    // 15.09.2026: проба зоны переехала в lib/devhubDns (Vercel или Cloudflare),
+    // требование то же — Cloudflare-зона считается живой только при status active.
+    const DNS = fs.readFileSync(path.resolve(__dirname, "..", "src", "lib", "devhubDns.ts"), "utf8");
+    expect(DNS).toContain('=== "active"');
+    expect(SRC, "маршрут больше не зовёт пробу зоны").toContain("zoneProbe()");
   });
 });

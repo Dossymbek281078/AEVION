@@ -15,6 +15,7 @@
 
 import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
 import request from "supertest";
+import jwt from "jsonwebtoken";
 import express from "express";
 
 const { mockQuery } = vi.hoisted(() => ({ mockQuery: vi.fn() }));
@@ -57,6 +58,15 @@ function makeApp() {
     next();
   });
   app.use(express.json({ limit: "10mb" }));
+  // С 15.09.2026 общий токен GitHub доступен только вошедшему (гость без своего
+  // токена получает 401). Эти тесты — про поведение самих ручек, поэтому каждый
+  // запрос идёт от одного и того же вошедшего пользователя.
+  app.use((req, _res, next) => {
+    if (!req.headers.authorization) {
+      req.headers.authorization = `Bearer ${jwt.sign({ sub: "u-github-tests", email: "gh@test.dev" }, process.env.AUTH_JWT_SECRET || "dev-auth-secret", { algorithm: "HS256" })}`;
+    }
+    next();
+  });
   app.use("/api/devhub", devhubRouter);
   return app;
 }

@@ -96,28 +96,49 @@ function closeDoorGaps(
     if (Math.abs(w.x2 - w.x1) < 1e-6 && Math.abs(w.y2 - w.y1) > 1e-6) return "v";
     return null;
   };
+  void ось;
+  // Правило общее для ЛЮБОГО направления, не только по осям: у LA VIE половина
+  // стен идёт под 45°, и осевая редакция не закрывала там ни одной двери —
+  // открытая зона с витражным фасадом «утекала» на улицу. Два отрезка лежат на
+  // одной прямой (направления параллельны, второй отстоит от прямой первого
+  // не дальше 8 см), смотрят торцами друг на друга, между ними пусто.
+  // У стекла закрывается и щель меньше двери: витражные панели чертят с
+  // зазорами под импосты в 10–30 см, а двери в витраже — редкость; заливка
+  // при клетке 5 см проходит и в такую щель.
   let closed = 0;
-  for (const a of ["h", "v"] as const) {
-    const свои = walls.filter((w) => ось(w) === a);
-    const поперёк = (w: Plan["walls"][number]) => (a === "h" ? w.y1 : w.x1);
-    const нач = (w: Plan["walls"][number]) =>
-      a === "h" ? Math.min(w.x1, w.x2) : Math.min(w.y1, w.y2);
-    const кон = (w: Plan["walls"][number]) =>
-      a === "h" ? Math.max(w.x1, w.x2) : Math.max(w.y1, w.y2);
-
-    for (let i = 0; i < свои.length; i++) {
-      for (let j = i + 1; j < свои.length; j++) {
-        const p1 = свои[i], p2 = свои[j];
-        if (Math.abs(поперёк(p1) - поперёк(p2)) > 1e-6) continue; // не на одной прямой
-        const зазор = Math.max(нач(p1), нач(p2)) - Math.min(кон(p1), кон(p2));
-        if (зазор < DOOR_MIN || зазор > DOOR_MAX) continue;
-        const от = Math.min(кон(p1), кон(p2));
-        const до = Math.max(нач(p1), нач(p2));
-        const c = поперёк(p1);
-        const t = Math.max(p1.thickness, p2.thickness);
-        if (a === "h") mark(от, c, до, c, t); else mark(c, от, c, до, t);
-        closed++;
-      }
+  // Один и тот же разрыв находится по нескольким парам отрезков (стена из
+  // кусков, сведённые двойные линии): без учёта повторов LA VIE показывал
+  // «разрывов 1022» при ~30 настоящих дверей — число человеку врало.
+  const уже = new Set<string>();
+  for (let i = 0; i < walls.length; i++) {
+    const a = walls[i];
+    const adx = a.x2 - a.x1, ady = a.y2 - a.y1, al = Math.hypot(adx, ady);
+    if (al < 1e-6) continue;
+    const ux = adx / al, uy = ady / al;
+    for (let j = i + 1; j < walls.length; j++) {
+      const b = walls[j];
+      const bdx = b.x2 - b.x1, bdy = b.y2 - b.y1, bl = Math.hypot(bdx, bdy);
+      if (bl < 1e-6) continue;
+      if (Math.abs(ux * bdy - uy * bdx) / bl > 0.03) continue; // не параллельны
+      // расстояние концов b до прямой a
+      const perp = (px: number, py: number) => Math.abs((px - a.x1) * uy - (py - a.y1) * ux);
+      if (perp(b.x1, b.y1) > 0.08 || perp(b.x2, b.y2) > 0.08) continue; // параллельны, но не на одной прямой
+      const proj = (px: number, py: number) => (px - a.x1) * ux + (py - a.y1) * uy;
+      const a0 = 0, a1 = al;
+      const b0 = Math.min(proj(b.x1, b.y1), proj(b.x2, b.y2));
+      const b1 = Math.max(proj(b.x1, b.y1), proj(b.x2, b.y2));
+      const зазор = Math.max(a0, b0) - Math.min(a1, b1);
+      const мин = a.glass || b.glass ? 0.02 : DOOR_MIN;
+      if (зазор < мин || зазор > DOOR_MAX) continue;
+      const от = Math.min(a1, b1), до = Math.max(a0, b0);
+      const t = Math.max(a.thickness, b.thickness);
+      const x1 = a.x1 + ux * от, y1 = a.y1 + uy * от, x2 = a.x1 + ux * до, y2 = a.y1 + uy * до;
+      const ключ = [x1, y1, x2, y2].map((v) => Math.round(v / 0.1)).join(",");
+      const обратный = [x2, y2, x1, y1].map((v) => Math.round(v / 0.1)).join(",");
+      if (уже.has(ключ) || уже.has(обратный)) continue;
+      уже.add(ключ);
+      mark(x1, y1, x2, y2, t);
+      closed++;
     }
   }
   return closed;
@@ -129,6 +150,8 @@ function markWall(
   minX: number, minY: number,
   x1: number, y1: number, x2: number, y2: number,
   thickness: number,
+  /** 1 — глухая стена (считается в периметр), 2 — стекло (граница, но не поверхность под отделку) */
+  value: 1 | 2 = 1,
 ) {
   const len = Math.hypot(x2 - x1, y2 - y1);
   if (len < 1e-6) return;
@@ -145,7 +168,8 @@ function markWall(
         const gx = cx + dx;
         const gy = cy + dy;
         if (gx < 0 || gy < 0 || gx >= w || gy >= h) continue;
-        grid[gy * w + gx] = 1;
+        // глухая стена старше стекла: там, где витраж примыкает к стене, периметр считается
+        if (grid[gy * w + gx] !== 1) grid[gy * w + gx] = value;
       }
     }
   }
@@ -189,7 +213,7 @@ export function findRooms(plan: Plan, opts: { minAreaM2?: number } = {}): RoomsR
   const ox = minX - pad * CELL;
   const oy = minY - pad * CELL;
   for (const w of plan.walls) {
-    markWall(grid, gw, gh, ox, oy, w.x1, w.y1, w.x2, w.y2, w.thickness);
+    markWall(grid, gw, gh, ox, oy, w.x1, w.y1, w.x2, w.y2, w.thickness, w.glass ? 2 : 1);
   }
 
   // Двери-разрывы закрываются ТОЛЬКО в сетке: сам план не меняется.
@@ -206,7 +230,7 @@ export function findRooms(plan: Plan, opts: { minAreaM2?: number } = {}): RoomsR
   let outsideTouched = false;
 
   for (let start = 0; start < grid.length; start++) {
-    if (grid[start] === 1 || label[start] !== -1) continue;
+    if (grid[start] !== 0 || label[start] !== -1) continue;
     const id = next++;
     const stack = [start];
     label[start] = id;
@@ -227,7 +251,8 @@ export function findRooms(plan: Plan, opts: { minAreaM2?: number } = {}): RoomsR
         const nx = x + dx, ny = y + dy;
         if (nx < 0 || ny < 0 || nx >= gw || ny >= gh) { border++; continue; }
         const j = ny * gw + nx;
-        if (grid[j] === 1) { border++; continue; }
+        // стекло (2) — граница комнаты, но не поверхность: в периметр под отделку не идёт
+        if (grid[j] !== 0) { if (grid[j] === 1) border++; continue; }
         if (label[j] !== -1) continue;
         label[j] = id;
         stack.push(j);

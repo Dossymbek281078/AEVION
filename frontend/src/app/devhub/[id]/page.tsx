@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, use } from "react";
+import { getAuthToken } from "@/lib/auth";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
@@ -2815,9 +2816,17 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     setPayError(null);
     setPayResult(null);
     try {
+      // С 15.09.2026 ссылку на оплату выпускает только вошедший: без входа любой
+      // посетитель создавал в нашем магазине ссылку на Studio Pro за 50 центов.
+      const payToken = getAuthToken();
+      if (!payToken) {
+        setPayError("Войдите в AEVION, чтобы создать ссылку на оплату — без входа ссылки не выпускаются.");
+        setPayLoading(false);
+        return;
+      }
       const r = await fetch(apiUrl("/api/devhub/media/payment-link"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${payToken}` },
         body: JSON.stringify({
           name: payName.trim(),
           amountCents: Math.round(amtUnits * 100),

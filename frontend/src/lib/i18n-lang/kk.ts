@@ -7392,6 +7392,7 @@ const kk: Record<string, string> = {
   "qskyway.city.astana": "Астана — орталық (Нұржол бульвары)",
   "qskyway.city.nyc": "Нью-Йорк — Мидтаун (Манхэттен)",
   "qskyway.city.tokyo": "Токио — Ниси-Синдзюку",
+  "qskyway.city.singapore": "Сингапур — Марина-Бей / CBD",
   "langSwitch.aria": "Интерфейс тілі",
   "chain.room.qright": "Авторлық белгісі",
   "chain.room.qcontract": "Шарт",

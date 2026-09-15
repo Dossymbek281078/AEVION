@@ -7,6 +7,7 @@ import {
 import { CITY } from "../src/routes/qskyway.city";
 import { CITY_NYC } from "../src/routes/qskyway.city.nyc";
 import { CITY_TOKYO } from "../src/routes/qskyway.city.tokyo";
+import { CITY_SINGAPORE } from "../src/routes/qskyway.city.singapore";
 
 // The twin is the module's most load-bearing data: every route, every ceiling
 // check and every signed justification is computed over the obstacle grid these
@@ -205,6 +206,7 @@ describe("projection — must reproduce the committed twin, or routes miss the b
     ["astana", CITY],
     ["nyc", CITY_NYC],
     ["tokyo", CITY_TOKYO],
+    ["singapore", CITY_SINGAPORE],
   ])("derives the shipped %s grid from the shipped bbox", (_name, city) => {
     const { cols, rows, w, h } = projection(city.bbox);
     expect({ cols, rows }).toEqual({ cols: city.grid.cols, rows: city.grid.rows });
@@ -251,7 +253,7 @@ describe("overpassProblem — a truncated answer must not be mistaken for data",
 });
 
 describe("the committed twins are internally consistent", () => {
-  it.each([["astana", CITY], ["nyc", CITY_NYC], ["tokyo", CITY_TOKYO]])(
+  it.each([["astana", CITY], ["nyc", CITY_NYC], ["tokyo", CITY_TOKYO], ["singapore", CITY_SINGAPORE]])(
     "%s: dataQuality counts match its own buildings array", (_n, city) => {
     const q = city.dataQuality;
     const count = (hs: number) => city.buildings.filter((b) => b.hs === hs).length;
@@ -262,7 +264,7 @@ describe("the committed twins are internally consistent", () => {
     expect(q.realPct).toBeCloseTo((100 * (q.measured + q.derived)) / q.total, 1);
   });
 
-  it.each([["astana", CITY], ["nyc", CITY_NYC], ["tokyo", CITY_TOKYO]])(
+  it.each([["astana", CITY], ["nyc", CITY_NYC], ["tokyo", CITY_TOKYO], ["singapore", CITY_SINGAPORE]])(
     "%s: the grids are the declared size and carry no NaN", (_n, city) => {
     const cells = city.grid.cols * city.grid.rows;
     expect(city.grid.heights).toHaveLength(cells);
@@ -271,7 +273,7 @@ describe("the committed twins are internally consistent", () => {
     expect(city.grid.src.every((s) => s === 0 || s === 1 || s === 2)).toBe(true);
   });
 
-  it.each([["astana", CITY], ["nyc", CITY_NYC], ["tokyo", CITY_TOKYO]])(
+  it.each([["astana", CITY], ["nyc", CITY_NYC], ["tokyo", CITY_TOKYO], ["singapore", CITY_SINGAPORE]])(
     "%s: every vertiport sits inside the grid", (_n, city) => {
     expect(city.vertiports.length).toBeGreaterThan(0);
     for (const v of city.vertiports) {
@@ -331,7 +333,7 @@ describe("the committed twins publish what the generator could not vouch for", (
     // этажности, включая 30 Rockefeller Plaza (height=10 при 70 этажах → 226 м).
     // Привязка к конкретному городу оказалась привязкой к состоянию данных, а не
     // к правилу. Проверяем само правило — по всем городам сразу.
-    for (const [name, city] of [["astana", CITY], ["nyc", CITY_NYC], ["tokyo", CITY_TOKYO]] as const) {
+    for (const [name, city] of [["astana", CITY], ["nyc", CITY_NYC], ["tokyo", CITY_TOKYO], ["singapore", CITY_SINGAPORE]] as const) {
       const s = city.dataQuality.suspect;
       expect(s === undefined || s.length > 0, `${name} отгрузил пустой список находок`).toBe(true);
     }

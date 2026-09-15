@@ -18,6 +18,7 @@
 import { CITY } from "../routes/qskyway.city";
 import { CITY_NYC } from "../routes/qskyway.city.nyc";
 import { CITY_TOKYO } from "../routes/qskyway.city.tokyo";
+import { CITY_SINGAPORE } from "../routes/qskyway.city.singapore";
 import { PROVENANCE_SNAPSHOTS } from "../data/moduleProvenanceSnapshots";
 
 export interface DataQuality {
@@ -61,7 +62,7 @@ type Provider = () => DataQuality | null;
 const qskywayProvider: Provider = () => {
   // Aggregate building-height provenance across all live city twins.
   let measured = 0, derived = 0, guessed = 0;
-  for (const c of [CITY, CITY_NYC, CITY_TOKYO]) {
+  for (const c of [CITY, CITY_NYC, CITY_TOKYO, CITY_SINGAPORE]) {
     const d = c.dataQuality;
     if (!d) continue;
     measured += d.measured;

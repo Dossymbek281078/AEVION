@@ -25,6 +25,7 @@
 
 import { PERMISSION_TOKYO } from "./qskyway.permission.tokyo";
 import { PERMISSION_ASTANA } from "./qskyway.permission.astana";
+import { PERMISSION_SINGAPORE } from "./qskyway.permission.singapore";
 
 export interface CityPermission {
   authority: string;
@@ -66,7 +67,7 @@ export interface CityPermission {
   coveragePct: number;
 }
 
-export const PERMISSION: Record<string, CityPermission> = { tokyo: PERMISSION_TOKYO, astana: PERMISSION_ASTANA };
+export const PERMISSION: Record<string, CityPermission> = { tokyo: PERMISSION_TOKYO, astana: PERMISSION_ASTANA, singapore: PERMISSION_SINGAPORE };
 
 export function permissionSummary(cityId: string) {
   const p = PERMISSION[cityId];

@@ -4,6 +4,7 @@ import * as path from "path";
 import { CITY } from "../src/routes/qskyway.city";
 import { CITY_NYC } from "../src/routes/qskyway.city.nyc";
 import { CITY_TOKYO } from "../src/routes/qskyway.city.tokyo";
+import { CITY_SINGAPORE } from "../src/routes/qskyway.city.singapore";
 
 // Страница /compare — продающая: числа на ней читают как проверяемые, и ссылка
 // рядом ведёт на живой API. Значит расхождение с данными твинов — не опечатка,
@@ -22,6 +23,7 @@ const CITIES: Record<string, { buildings: unknown[]; vertiports: unknown[]; data
   astana: CITY as never,
   nyc: CITY_NYC as never,
   tokyo: CITY_TOKYO as never,
+  singapore: CITY_SINGAPORE as never,
 };
 
 const COMPETITORS = fs.readFileSync(
@@ -83,7 +85,7 @@ describe("числа QSkyway на /compare сходятся с твинами", 
   it("провенанс высот назван по каждому городу так, как его считает движок", () => {
     for (const [id, c] of Object.entries(CITIES)) {
       const pct = c.dataQuality.measuredPct;
-      const label = { astana: "Астана", nyc: "Нью-Йорк", tokyo: "Токио" }[id]!;
+      const label = { astana: "Астана", nyc: "Нью-Йорк", tokyo: "Токио", singapore: "Сингапур" }[id]!;
       const m = block.match(new RegExp(`${label}[^;]*?(\\d+(?:\\.\\d+)?)%`));
       expect(m, `в блоке нет процента обмера для «${label}»`).not.toBeNull();
       expect(Number(m![1]), `${label}: на витрине ${m![1]}%, движок считает ${pct}%`).toBe(pct);

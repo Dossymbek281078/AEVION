@@ -63,8 +63,35 @@ export const NOFLY: Record<string, NoFlyZone[]> = {
     { id: "nfz-cluster", name: "Кластер небоскрёбов Ниси-Синдзюку — ограничение", kind: "permanent", center: [139.69569, 35.69335], radiusM: 220 },
     { id: "nfz-crowd", name: "Плотная толпа — станция Синдзюку", kind: "temporary", center: [139.70000, 35.68883], radiusM: 200, until: "2026-07-20T12:00:00Z" },
   ],
+  singapore: [
+    {
+      // Сингапур, 15.09.2026. Реальный режим CAAS: запрет в 5 км от аэродромов,
+      // в опасных/запретных/ограниченных зонах и в «охраняемых районах» по Air
+      // Navigation Act (caas.gov.sg/unmanned-aircraft/no-fly-zones-and-ua-flying-areas).
+      // Замер по нашему квадрату: ближайший аэродром — авиабаза Пая-Лебар,
+      // ~10 км от центра твина; Селетар ~15 км; Чанги ~17 км — ни один 5-км круг
+      // до твина не доходит. Список охраняемых районов CAAS публикует только
+      // в OneMap (слой не вобран); вторичные источники называют Парламент —
+      // он внутри квадрата. Круг ниже — НАША демо-геометрия вокруг него,
+      // не опубликованный контур, и об этом сказано прямо.
+      id: "nfz-parliament", name: "Парламент и Верховный суд (демо-геометрия)", kind: "permanent",
+      center: [103.8506, 1.2891], radiusM: 250,
+      realityNote:
+        "Это НАША демо-окружность. CAAS запрещает полёты в «охраняемых районах» по Air Navigation Act, "
+        + "но публикует их контуры только в OneMap, и этот слой в твин не вобран; по вторичным источникам "
+        + "Парламент входит в такой район. 5-км круги аэродромов до квадрата не доходят (Пая-Лебар ~10 км). "
+        + "За реальным режимом см. блок airspace.permission: любой нерекреационный (в том числе коммерческий) "
+        + "полёт требует разрешения оператора и разрешения на деятельность CAAS.",
+      realityNoteEn:
+        "This is OUR demo circle. CAAS forbids flight in 'protected areas' under the Air Navigation Act, "
+        + "but publishes their outlines only in OneMap, which is not ingested here; secondary sources name "
+        + "Parliament House as one. The 5 km aerodrome circles do not reach this square (Paya Lebar Air Base "
+        + "~10 km). For the real regime see airspace.permission: any non-recreational flight needs a CAAS "
+        + "Operator Permit and an Activity Permit.",
+    },
+    { id: "nfz-crowd", name: "Плотная толпа — Марина-Бей (набережная)", kind: "temporary", center: [103.8590, 1.2830], radiusM: 200, until: "2026-12-31T16:00:00Z" },
+  ],
 };
-
 export const WIND: Record<string, WindConfig> = {
   // Астана — открытая степь, преобладающий юго-западный/южный ветер, сильный.
   astana: { fromDeg: 210, baseMs: 4, perBandMs: 1.6 },
@@ -72,4 +99,7 @@ export const WIND: Record<string, WindConfig> = {
   nyc: { fromDeg: 290, baseMs: 3, perBandMs: 1.3 },
   // Токио — летний тихоокеанский муссон, преобладающий южный ветер, умеренный.
   tokyo: { fromDeg: 180, baseMs: 3, perBandMs: 1.2 },
+  // Сингапур — экватор, слабые ветры; северо-восточный муссон (дек–март)
+  // преобладает по силе. Живой METAR WSSS (Чанги) перекрывает это значение.
+  singapore: { fromDeg: 45, baseMs: 2.5, perBandMs: 1.0 },
 };

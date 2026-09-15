@@ -15,7 +15,7 @@ import ModulePricingChip from "@/components/ModulePricingChip";
 export const metadata: Metadata = {
   title: "QSkyway — navigation layer for the urban sky",
   description:
-    "Provider-independent 3D air corridors and rules for air taxis, live on real buildings in Astana, NYC and Tokyo. Routed against what regulators actually publish; live METAR wind; every flight exportable as a signed justification document.",
+    "Provider-independent 3D air corridors and rules for air taxis, live on real buildings in Astana, NYC, Tokyo and Singapore. Routed against what regulators actually publish; live METAR wind; every flight exportable as a signed justification document.",
   alternates: { canonical: "https://aevion.app/en/qskyway" },
   openGraph: {
     title: "QSkyway — navigation layer for the urban sky",
@@ -40,10 +40,11 @@ export default async function EnQskywayPage({
         <h1 style={styles.h1}>QSkyway — navigation layer for the urban sky</h1>
         <p style={styles.lede}>
           Provider-independent 3D air corridors for air taxis — live on real
-          buildings in Astana, New York and Tokyo,
+          buildings in Astana, New York, Tokyo and Singapore,
           routed against what the regulators actually publish (FAA airspace
           ceilings over Manhattan, Japan&apos;s MLIT permission regime,
-          Kazakhstan&apos;s published prohibited area over the Astana twin).
+          CAAS permits over Singapore, Kazakhstan&apos;s published prohibited
+          area over the Astana twin).
         </p>
         <p style={styles.note}>
           Live METAR wind, height-data provenance, an airspace-slot rights

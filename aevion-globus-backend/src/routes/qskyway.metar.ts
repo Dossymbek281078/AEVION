@@ -11,6 +11,7 @@ const CITY_STATION: Record<string, string> = {
   astana: "UACC", // Astana Nazarbayev Intl
   nyc: "KJFK", // JFK Intl
   tokyo: "RJTT", // Tokyo Haneda Intl
+  singapore: "WSSS", // Singapore Changi
 };
 
 interface MetarWind { fromDeg: number; speedMs: number; obsTime: string; station: string; }

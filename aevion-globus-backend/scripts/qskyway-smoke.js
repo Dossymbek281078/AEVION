@@ -160,7 +160,7 @@ async function main() {
   const cs = await jget("/api/qskyway/cities");
   assert(cs.status === 200 && Array.isArray(cs.json?.cities), "/cities lists registry", `status=${cs.status}`);
   const cityIds = (cs.json?.cities ?? []).map((c) => c.id);
-  assert(cityIds.includes("astana") && cityIds.includes("nyc") && cityIds.includes("tokyo"), "registry has astana + nyc + tokyo", cityIds.join(","));
+  assert(cityIds.includes("astana") && cityIds.includes("nyc") && cityIds.includes("tokyo") && cityIds.includes("singapore"), "registry has astana + nyc + tokyo + singapore", cityIds.join(","));
 
   // clearance invariant across all vertiport pairs, per city
   for (const cid of cityIds) {

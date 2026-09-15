@@ -190,6 +190,36 @@ const CITIES = {
       'import type { CityData } from "./qskyway.city";',
     ].join("\n"),
   },
+  singapore: {
+    // Четвёртый город, 15.09.2026. Выбран по ДАННЫМ, а не по рынку: замер OSM
+    // по четырём кандидатам (тот же Overpass, квадраты ~NYC) — Сингапур 85 %
+    // зданий с тегом height, Дубай 26 %, Алматы 11 %, Лондон 4 %. Открытого
+    // обмера (лидар, CityGML) у Сингапура нет (Urban Analytics Lab, NUS:
+    // «no publicly available lidar dataset»), поэтому блока `measured` нет и
+    // hs=0 здесь не будет ни у одного здания — как у Астаны, честно.
+    // Марина-Бей / CBD: Raffles Place, Marina Bay Sands, Esplanade.
+    name: "Сингапур — Марина-Бей / CBD",
+    bbox: { minLat: 1.278, maxLat: 1.292, minLon: 103.846, maxLon: 103.866 },
+    exportName: "CITY_SINGAPORE",
+    committed: "qskyway.city.singapore.ts",
+    // Сетка из projection(): 2226×1548 м → 112×78 ячеек (CELL 20). Площадки —
+    // конфиг, как у Астаны: углы, середина, две у береговой линии.
+    vertiports: [
+      { c: 2, r: 2, x: 50, y: 50 }, { c: 109, r: 2, x: 2190, y: 50 },
+      { c: 2, r: 75, x: 50, y: 1510 }, { c: 109, r: 75, x: 2190, y: 1510 },
+      { c: 56, r: 39, x: 1130, y: 790 }, { c: 56, r: 75, x: 1130, y: 1510 },
+      { c: 20, r: 45, x: 410, y: 910 },
+    ],
+    header: [
+      "// QSkyway city digital-twin — Сингапур, Марина-Бей / CBD. OpenStreetMap footprints",
+      "// and height tags (Overpass, ODbL), rasterized to a 20m height field. No open",
+      "// survey source exists for Singapore, so no building is hs=0 (measured) here —",
+      "// OSM height tags are hs=1 (derived), the rest guessed. Regenerate with:",
+      "//   node scripts/fetch-city-twin.mjs singapore --write",
+      "/* eslint-disable */",
+      'import type { CityData } from "./qskyway.city";',
+    ].join("\n"),
+  },
 };
 
 const cityId = process.argv[2];
@@ -573,7 +603,14 @@ const guessed = buildings.filter((b) => b.hs === 2).length;
 const total = buildings.length;
 const round1 = (n) => Math.round(n * 10) / 10;
 
-const committed = loadCommitted(city.committed);
+// Первый твин нового города: сравнивать не с чем, и это не ошибка — если
+// площадки заданы в конфиге. --compare и `vertiports: null` без файла —
+// ошибка по-прежнему (15.09.2026, четвёртый город).
+const committedExists = fs.existsSync(new URL(`../src/routes/${city.committed}`, import.meta.url));
+if (!committedExists && (compareOnly || !city.vertiports)) {
+  throw new Error(`${cityId}: no committed twin ${city.committed} — --compare needs one, and so does vertiports: null`);
+}
+const committed = committedExists ? loadCommitted(city.committed) : null;
 
 if (compareOnly) {
   const cg = committed.grid;

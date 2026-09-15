@@ -65,7 +65,6 @@ const IZVESTNYE = [
   "/media/email-template-create",
   "/media/email-template-send",
   "/media/gumroad-checkout",
-  "/media/payment-link",
   "/media/sms",
   "/media/upload-audio",
   "/media/upload-image",

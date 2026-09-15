@@ -5,6 +5,7 @@ import { verifyBearerOptional } from "../lib/authJwt";
 import { resolvePlanFromPayload, isModuleEntitled } from "../lib/planGate";
 import { siteZone, dnsProvider, dnsConfigured, dnsTokensNeeded, upsertCname, zoneActiveUncached, zoneProbe, labelInZone, isDevHubLabel } from "../lib/devhubDns";
 import { promises as dnsPromises } from "node:dns";
+import { resolveLemonSqueezyVariant } from "../data/lemonSqueezyVariants";
 // Обе стороны нужны: у них шире набор из devhubGuest, у меня — devhubGuestLink.
 // Все четыре символа используются в теле файла, проверено счётом вхождений.
 import { requesterId, devhubGuestId, DEVHUB_GUEST_HEADER } from "../lib/devhubGuest";
@@ -813,6 +814,21 @@ function customDomainRefusal(domain: string, projectId: string): string | null {
     return `${domain} is inside ${siteZone()} but is not this project's DevHub name (<slug>${own}.${siteZone()}) — reserved and service names cannot be claimed`;
   }
   return null;
+}
+/**
+ * Адрес возврата после оплаты — только свой домен. Произвольный successUrl из тела
+ * уводил бы покупателя из НАШЕГО магазина куда угодно (патч окна free-fleet от
+ * 28.07.2026, применён 15.09.2026).
+ */
+function safeRedirect(raw: unknown, frontendUrl: string): string {
+  const fallback = `${frontendUrl}/devhub?payment=success`;
+  if (typeof raw !== "string" || !raw) return fallback;
+  try {
+    const u = new URL(raw, frontendUrl);
+    return u.origin === new URL(frontendUrl).origin ? u.toString() : fallback;
+  } catch {
+    return fallback;
+  }
 }
 /** Имя поставщика DNS для текстов, которые читает человек. */
 function dnsProviderName(): string {
@@ -4694,6 +4710,14 @@ devhubRouter.post("/media/email", async (req, res) => {
 
 // POST /api/devhub/media/payment-link — create Lemon Squeezy checkout link
 devhubRouter.post("/media/payment-link", dhCostlyLimit("dhpaylink"), async (req, res) => {
+  // 🔴 Дыра с 28.07.2026, закрыта 15.09.2026 (окно приёмки): ручка без входа создавала
+  // в НАШЕМ магазине LemonSqueezy ссылку на товар по умолчанию с ценой из тела от
+  // 50 центов, а товар по умолчанию на проде — DevHub Studio Pro, и вебхук по нему
+  // выдаёт Pro без сверки суммы. Итог: Pro ($149/мес) за $0.50 любому посетителю.
+  // Три замка: вход обязателен; товар — ТОЛЬКО отдельный (LEMON_SQUEEZY_PAYLINK_VARIANT_ID),
+  // никогда не Studio Pro и не товар по умолчанию; адрес возврата — только свой домен.
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth required — sign in to create payment links" });
   const { name, amountCents, description, successUrl } = req.body || {};
   if (!name || typeof name !== "string") return res.status(400).json({ error: "name required" });
   const amt = Number(amountCents);
@@ -4701,12 +4725,19 @@ devhubRouter.post("/media/payment-link", dhCostlyLimit("dhpaylink"), async (req,
 
   const lsKey = process.env.LEMON_SQUEEZY_API_KEY?.trim();
   const storeId = process.env.LEMON_SQUEEZY_STORE_ID?.trim();
-  const variantId = process.env.LEMON_SQUEEZY_DEFAULT_VARIANT_ID?.trim();
+  const variantId = process.env.LEMON_SQUEEZY_PAYLINK_VARIANT_ID?.trim();
 
   if (!lsKey || !storeId || !variantId) {
     return res.status(503).json({
-      error: "Lemon Squeezy not configured — set LEMON_SQUEEZY_API_KEY, LEMON_SQUEEZY_STORE_ID, LEMON_SQUEEZY_DEFAULT_VARIANT_ID",
+      error: "Payment links not configured — set LEMON_SQUEEZY_API_KEY, LEMON_SQUEEZY_STORE_ID and LEMON_SQUEEZY_PAYLINK_VARIANT_ID (a dedicated product for user payment links; never the Studio Pro or default variant)",
       setupUrl: "https://app.lemonsqueezy.com",
+    });
+  }
+  const studioPro = resolveLemonSqueezyVariant("app_devhub");
+  const defaultVariant = process.env.LEMON_SQUEEZY_DEFAULT_VARIANT_ID?.trim();
+  if ((studioPro && variantId === studioPro) || (defaultVariant && variantId === defaultVariant)) {
+    return res.status(503).json({
+      error: "LEMON_SQUEEZY_PAYLINK_VARIANT_ID points at the Studio Pro / default product — the webhook would grant DevHub Pro for any custom price; use a dedicated product",
     });
   }
 
@@ -4718,11 +4749,13 @@ devhubRouter.post("/media/payment-link", dhCostlyLimit("dhpaylink"), async (req,
         type: "checkouts",
         attributes: {
           custom_price: Math.round(amt),
+          // Метка для вебхука и разбора: это пользовательская ссылка, не покупка тарифа.
+          checkout_data: { custom: { aevion_paylink: "1", issuer: String(auth.sub || "") } },
           checkout_options: { embed: false, media: false, logo: true },
           product_options: {
             name: name.trim().slice(0, 200),
             description: (description || name).trim().slice(0, 500),
-            redirect_url: successUrl || `${frontendUrl}/devhub?payment=success`,
+            redirect_url: safeRedirect(successUrl, frontendUrl),
           },
         },
         relationships: {

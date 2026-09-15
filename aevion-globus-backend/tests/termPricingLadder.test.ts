@@ -52,11 +52,19 @@ describe("лестница сроков AEVION", () => {
     }
   });
 
-  test("вся планета дешевле пяти приложений по отдельности — на КАЖДОМ сроке", () => {
-    for (const t of TERM_TIERS) {
-      const sum = STANDALONE_APPS.reduce((s, a) => s + termPricePerMonth(a.baseMonthly, t), 0);
-      expect(sum, `срок ${t}`).toBeGreaterThan(termPricePerMonth(PLANET_BASE_MONTHLY, t));
-    }
+  test("базы отдельных приложений — решение основателя (бюро $32 — слово 15.09.2026)", () => {
+    // Литералами: это решение человека. При бюро $32 пять приложений вместе стоят
+    // $376 на Lite — дешевле планеты ($400); основатель выбрал это сознательно.
+    expect(Object.fromEntries(STANDALONE_APPS.map((a) => [a.slug, a.baseMonthly]))).toEqual({
+      cyberchess: 24,
+      multichat: 40,
+      qventure: 80,
+      ip_bureau: 32,
+      devhub: 200,
+    });
+    expect(TERM_TIERS.map((t) => termPricePerMonth(32, t))).toEqual([32, 28, 24, 20, 16]);
+    expect(STANDALONE_APPS.reduce((s, a) => s + a.baseMonthly, 0)).toBe(376);
+    expect(PLANET_BASE_MONTHLY).toBe(400);
   });
 
   test("фиксированный промокод — один раз за покупку, а не за каждый месяц срока", () => {

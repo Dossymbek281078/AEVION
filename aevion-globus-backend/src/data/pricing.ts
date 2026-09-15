@@ -267,7 +267,7 @@ export const STANDALONE_APPS: StandaloneApp[] = [
   { slug: "cyberchess", moduleId: "cyberchess", name: "CyberChess", baseMonthly: 24 },
   { slug: "multichat", moduleId: "multichat-engine", name: "Multichat", baseMonthly: 40 },
   { slug: "qventure", moduleId: "qventure", name: "QVenture", baseMonthly: 80 },
-  { slug: "ip_bureau", moduleId: "aevion-ip-bureau", name: "IP Bureau", baseMonthly: 80 },
+  { slug: "ip_bureau", moduleId: "aevion-ip-bureau", name: "IP Bureau", baseMonthly: 32 },
   { slug: "devhub", moduleId: "devhub", name: "DevHub", baseMonthly: 200 },
 ];
 

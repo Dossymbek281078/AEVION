@@ -96,6 +96,24 @@ describe("авторасстановка мебели", () => {
     }
   });
 
+  it("предметы с чертежа идут первыми, занимают место, и тот же предмет по стилю в ту же комнату не ставится", () => {
+    const r = findRooms(plan);
+    const types: Record<number, RoomType> = { 1: "bedroom", 2: "bath" };
+    const сЧертежа = [{ catalogId: "toilet", x: 4.5, z: 0.6, rotY: 0, room: 2 }];
+    const p = autoPlace(r.rooms, types, STYLES[0], r.runsOf, r.roomAt, sizeOf, сЧертежа);
+    expect(p.items[0]).toEqual(сЧертежа[0]);
+    expect(p.items.filter((i) => i.catalogId === "toilet" && i.room === 2).length).toBe(1);
+    // ничто по стилю не легло на унитаз с чертежа
+    for (const it of p.items.slice(1)) {
+      const s = sizeOf(it.catalogId)!;
+      const [w, d] = it.rotY === 0 ? [s[0], s[1]] : [s[1], s[0]];
+      expect(Math.abs(it.x - 4.5) < (w + 0.38) / 2 && Math.abs(it.z - 0.6) < (d + 0.7) / 2, `${it.catalogId} на унитазе`).toBe(false);
+    }
+    // контроль: без preplaced унитаз по стилю в санузле ставится сам
+    const без = autoPlace(r.rooms, types, STYLES[0], r.runsOf, r.roomAt, sizeOf);
+    expect(без.items.some((i) => i.catalogId === "toilet" && i.room === 2)).toBe(true);
+  });
+
   it("Г-образная комната: ни один угол предмета не заходит в закуток за стеной", () => {
     // 6×4 с закрытым квадратом 1.2×1.2 в правом верхнем углу: главная комната — буква Г.
     // Проверка только по центру предмета пропускает диван, чей угол лежит в закутке.

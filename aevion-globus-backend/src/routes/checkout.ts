@@ -8,9 +8,10 @@ import { paypalPaymentProvider, isPaypalConfigured } from "../lib/payment/paypal
 import { resolveLemonSqueezyVariant, lemonSqueezySellable } from "../data/lemonSqueezyVariants";
 import {
   TIERS, getTier, getModulePrice, resolvePromoCode, CURRENCY_RATES, MAX_PROMO_DISCOUNT_RATIO, buildQuote,
-  type TierId, type BillingPeriod, type CurrencyCode,
+  type TierId, type CurrencyCode, type TermTier,
+  isTermTier, standaloneApp, termTotal, monthsLabelRu,
 } from "../data/pricing";
-import { provisionSubscription, countSubscriptions, findSubscriptionByPaymentId } from "./provisioning";
+import { provisionSubscription, countSubscriptions, findSubscriptionByPaymentId, termMonthsOf } from "./provisioning";
 import { модулиДляКассы } from "../lib/payment/customData";
 
 /**
@@ -98,7 +99,10 @@ function собратьCustomData(
 
 interface CheckoutBody {
   tierId: TierId;
-  period?: "monthly" | "annual";
+  /** Устарело 15.09.2026: тариф сам и есть срок (lite 1 мес … max 12). Поле не читается. */
+  period?: string;
+  /** Отдельное приложение (STANDALONE_APPS: slug или id модуля); tierId тогда — ступень срока. */
+  app?: string;
   /** Срок обязательства в месяцах: 24 и 36 дают ступень веерной скидки. */
   commitmentMonths?: number;
   seats?: number;
@@ -189,7 +193,7 @@ checkoutRouter.get("/status", statusLimiter, (req, res) => {
   try {
     const итог = findSubscriptionByPaymentId(intentId);
     if (!итог.найдено) return res.json({ ready: false });
-    return res.json({ ready: true, tier: итог.подписка.tierId, period: итог.подписка.period });
+    return res.json({ ready: true, tier: итог.подписка.tierId, termMonths: termMonthsOf(итог.подписка) });
   } catch (e) {
     capture(e);
     console.error("[checkout/status] lookup failed", e);
@@ -208,7 +212,7 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
     // хуже отсутствующего: в сводке он стал бы отдельным безымянным ключом.
     const channel = typeof body.channel === "string" ? body.channel.trim().slice(0, 40) : "";
 
-    if (!body.tierId || !["free", "lite", "medium", "full", "pro", "enterprise"].includes(body.tierId)) {
+    if (!body.tierId || !["free", "lite", "medium", "pro", "full", "max", "enterprise"].includes(body.tierId)) {
       // Единственный ответ чекаута без человеческого текста (замер 03.09.2026:
       // 5 с текстом против 1 без). Соседние ответы этого же файла его несут —
       // непоследовательность внутри одной функции почти всегда недосмотр,
@@ -219,7 +223,18 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
       });
     }
     const tier = getTier(body.tierId)!;
-    const period: BillingPeriod = body.period === "annual" ? "annual" : "monthly";
+    const termMonths = tier.termMonths;
+    // Отдельное приложение — та же лестница сроков, своя база цены (STANDALONE_APPS).
+    // Всё остальное продаётся только в составе планеты: чужое имя — отказ, а не
+    // тихая покупка тарифа вместо приложения.
+    const app = body.app ? standaloneApp(String(body.app)) : null;
+    if (body.app && (!app || !isTermTier(tier.id))) {
+      return res.status(400).json({
+        error: "invalid_app",
+        message: "Это приложение отдельно не продаётся — оно входит в подписку AEVION. Выберите срок подписки на странице цен.",
+      });
+    }
+    const ценаПриложения = app && isTermTier(tier.id) ? termTotal(app.baseMonthly, tier.id as TermTier) : null;
     const seats = Math.max(1, Math.min(1000, body.seats ?? 1));
 
     if (tier.id === "free") {
@@ -245,12 +260,11 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
       tierId: tier.id,
       modules: body.modules,
       seats,
-      period,
       currency: "USD",
       promoCode: body.promoCode,
       commitmentMonths: body.commitmentMonths,
     });
-    const totalUsd = quote.total;
+    const totalUsd = ценаПриложения ?? quote.total;
 
     // ЧТО СПИШУТ, ЕСЛИ КАССА НЕ ЗНАЕТ НАШЕЙ СУММЫ.
     //
@@ -282,7 +296,7 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
     // сумму, а списывали другую». На этих двух путях класс пережил ту
     // починку: считаем мы теперь одинаково, а до кассы сумма не доезжает.
     const базоваяЦенаCents = Math.round(
-      buildQuote({ tierId: tier.id, modules: [], seats: 1, period, currency: "USD" }).total * 100
+      (ценаПриложения ?? buildQuote({ tierId: tier.id, modules: [], seats: 1, currency: "USD" }).total) * 100
     );
     function предупредитьЕслиСуммаНеДоедет(провайдер: string): void {
       if (totalCents === базоваяЦенаCents) return;
@@ -297,9 +311,9 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
       // потеряется. Своё же правило, поэтому применяю к себе.
       console.warn(
         `[checkout/session] сумма не доедет до кассы: провайдер=${провайдер} ` +
-          `показано=${totalCents} спишут≈${базоваяЦенаCents} tier=${tier.id} period=${period} seats=${seats}`
+          `показано=${totalCents} спишут≈${базоваяЦенаCents} tier=${tier.id} term=${termMonths}m${app ? ` app=${app.slug}` : ""} seats=${seats}`
       );
-      const ключТревоги = `${провайдер}:${tier.id}:${period}:${
+      const ключТревоги = `${провайдер}:${tier.id}:${app?.slug ?? ""}:${termMonths}:${
         body.promoCode ? "promo" : ""
       }:${seats > 1 ? "seats" : ""}:${(body.modules ?? []).length > 0 ? "modules" : ""}`;
       if (ужеСообщено.has(ключТревоги)) return;
@@ -310,7 +324,8 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
         shownCents: totalCents,
         providerPriceCents: базоваяЦенаCents,
         tier: tier.id,
-        period,
+        termMonths,
+        app: app?.slug,
         seats,
         hasPromo: Boolean(body.promoCode),
         moduleCount: (body.modules ?? []).length,
@@ -337,16 +352,16 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
     if (trialDays > 0 && totalCents > 0) {
       console.warn(
         `[checkout/session] пробный период запрошен, но НЕ применён: tier=${tier.id} ` +
-          `period=${period} сумма=${totalCents}¢ — покупатель платит сразу`
+          `term=${termMonths}m${app ? ` app=${app.slug}` : ""} сумма=${totalCents}¢ — покупатель платит сразу`
       );
       capture(new Error("checkout_trial_requested_but_not_applied"), {
         route: "checkout/session",
         tier: tier.id,
-        period,
+        termMonths,
       });
     }
 
-    const reference = `tier_${tier.id}_${period}`;
+    const reference = app ? `app_${app.slug}_${tier.id}` : `tier_${tier.id}`;
 
     // Free / fully discounted — no checkout needed, provision directly.
     //
@@ -386,7 +401,7 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
       }
       try {
         await provisionSubscription({
-          email: body.email, tierId: tier.id, period, seats,
+          email: body.email, tierId: tier.id, termMonths, seats,
           // ТОТ ЖЕ список, что и на платном пути: отфильтрованный,
           // без повторов и ограниченный. Одинаковый вход обязан давать
           // одинаковую запись — иначе бесплатный тариф хранит сырое тело
@@ -402,13 +417,13 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
         });
       }
       return res.json({
-        url: `${FRONTEND_URL}/pricing/checkout/success?gumroad=true&tier=${tier.id}&period=${period}&total=0`,
+        url: `${FRONTEND_URL}/pricing/checkout/success?gumroad=true&tier=${tier.id}&term=${termMonths}&total=0`,
         mode: "zero",
         provider: "gumroad",
       });
     }
 
-    const description = `AEVION ${tier.name} ${period === "annual" ? "Annual" : "Monthly"}`;
+    const description = `AEVION ${app ? `${app.name} ` : ""}${tier.name} — ${monthsLabelRu(termMonths ?? 1)}`;
 
     // 0) PayBox — локальный KZT-канал (карты КЗ + Kaspi). Срабатывает только
     //    когда плательщик явно выбрал KZT и провайдер настроен. Сумму USD
@@ -555,12 +570,13 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
     // доступ даром и врать покупателю про успешную оплату.
     console.error(
       `[checkout/session] нет процессинга для ${reference} — отказ вместо заглушки ` +
-        `(tier=${tier.id}, period=${period}, total=${totalCents}¢)`,
+        `(tier=${tier.id}, term=${termMonths}m${app ? ` app=${app.slug}` : ""}, total=${totalCents}¢)`,
     );
     return res.status(503).json({
       error: "checkout_unavailable",
       tier: tier.id,
-      period,
+      termMonths,
+      app: app?.slug,
       message:
         "Оплата этого тарифа сейчас недоступна: платёжный вариант не настроен. " +
         "Подписка не оформлена и деньги не списаны — напишите нам, и мы оформим доступ вручную.",

@@ -1,55 +1,34 @@
 /**
- * Lemon Squeezy variant mapping — Lite / Medium / Full subscription tiers.
+ * Lemon Squeezy: ссылка заказа → переменная окружения с id варианта товара.
  *
- * LS is now the LIVE subscription processor (account activated 2026-06-04).
- * Each tier:period maps to one LS variant id, supplied via env so new variant
- * IDs are pasted without code changes:
+ * С 15.09.2026 тариф — это СРОК (data/pricing.ts, TERM_*). Продаются:
  *
- *   LEMON_SQUEEZY_VARIANT_LITE_MONTHLY     LEMON_SQUEEZY_VARIANT_LITE_ANNUAL
- *   LEMON_SQUEEZY_VARIANT_MEDIUM_MONTHLY   LEMON_SQUEEZY_VARIANT_MEDIUM_ANNUAL
- *   LEMON_SQUEEZY_VARIANT_FULL_MONTHLY     LEMON_SQUEEZY_VARIANT_FULL_ANNUAL
- *   LEMON_SQUEEZY_VARIANT_PLANET_MONTHLY   LEMON_SQUEEZY_VARIANT_PLANET_ANNUAL
+ *   tier_<ступень>              вся планета: LEMON_SQUEEZY_VARIANT_LITE … _MAX
+ *   app_<приложение>_<ступень>  отдельное приложение: LEMON_SQUEEZY_VARIANT_CYBERCHESS_PRO
  *
- * Setup:
- *   1. LS dashboard → Store → Products → New product (subscription)
- *      - Lite   $19/mo  + $190/yr variant
- *      - Medium $29/mo  + $290/yr variant
- *      - Full   $49/mo  + $490/yr variant
- *   2. Open each variant; the numeric variant id is in the URL:
- *      lemonsqueezy.com/dashboard/.../products/<pid>/variants/<VARIANT_ID>
- *   3. Paste each id into the matching env var on Railway.
+ * Ступени: lite 1 мес, medium 3, pro 6, full 9, max 12. Вариант в магазине —
+ * подписка с интервалом «каждые N месяцев» и ценой ЗА ВЕСЬ СРОК. Цена варианта
+ * обязана совпадать с priceForReference ниже: этот файл меняет то, что показывает
+ * и считает витрина, но не то, что спишет уже заведённый вариант.
  *
- * Prices on the LS variant are the source of truth — they MUST match the tier
- * prices in data/pricing.ts (lite 19/190, medium 29/290, full 49/490).
+ * Прежние ссылки (tier_lite_monthly … app_devhub) больше НЕ продаются, но
+ * понимаются при продлении и отмене: по ним уже могли купить (LEGACY_VARIANT_ENV).
  *
- * ⚠️ ЦЕНЫ МЕНЯЛИСЬ ДВАЖДЫ. 22.07.2026 их подняли до 24/39/89, а 13.08.2026
- * вернули к 19/29/49 (коммит d424fbf07, «цены приведены к рынку»). Числа выше —
- * действующие, они совпадают с data/pricing.ts и с ответом /api/pricing на проде
- * (проверено 29.08.2026). Прежняя редакция этого файла велела ставить в кассе
- * 24/39/89 — то есть БОЛЬШЕ, чем показывает витрина; настроивший по ней вариант
- * списывал бы с покупателя лишнее. Если вариант уже заведён со старой ценой,
- * with the old prices, the dashboard price on each variant MUST be updated
- * (or a new variant created and the env var repointed) — this file only
- * changes what data/pricing.ts *displays/computes*, it cannot change what an
- * already-configured LS variant actually charges.
- *
- * ПОПРАВКА 28.08.2026. Здесь стояло «cyberchess's addonMonthly moved 19 → 9.99»
- * — это неверно и стоило мне поисков несуществующего расхождения за два дня до
- * запуска шахмат. 9.99 принадлежит `qcoreai` (data/pricing.ts), у cyberchess
- * там же стоит 19. Проверено по всей цепочке: products.ts — 19, pricing.ts —
- * 19, витрина /shop показывает «$19/мес», касса Lemon Squeezy берёт
- * «$19.00 billed every month». Расхождения нет. `tier_pro_*` (Universe) заведены 15.09.2026 заранее, до
- * товара в магазине: пока на Railway не заданы LEMON_SQUEEZY_VARIANT_PRO_*,
- * касса по «pro» отвечает честным 503, а /pricing показывает «авария кассы».
- *
- * A checkout reference is "tier_<tier>_<period>" (built by routes/checkout.ts),
- * e.g. "tier_lite_monthly". The webhook reverse-maps an incoming variant_id
- * back to that reference to provision the right tier.
+ * Названия товаров витрины — STOREFRONT_NAME_TO_REFERENCE: заводить ровно так.
  */
 
-import type { TierId } from "./pricing";
+import {
+  TERM_TIERS, TERM_NAME, TERM_MONTHS, TIERS, STANDALONE_APPS, termTotal,
+  type TierId, type TermTier,
+} from "./pricing";
+import { tierIdForReference } from "../lib/payment/billingPeriod";
 
-export type LemonSqueezyReference =
+/** Ступень всей планеты: tier_lite … tier_max. */
+export type TierReference = `tier_${TermTier}`;
+/** Отдельное приложение на ступени: app_cyberchess_pro. */
+export type AppTermReference = `app_${string}_${TermTier}`;
+/** Ссылки до 15.09.2026: не продаются, понимаются при продлении и отмене. */
+export type LegacyReference =
   | "tier_lite_monthly"
   | "tier_lite_annual"
   | "tier_medium_monthly"
@@ -58,10 +37,6 @@ export type LemonSqueezyReference =
   | "tier_full_annual"
   | "tier_planet_monthly"
   | "tier_planet_annual"
-  // Universe (id тарифа «pro», $149/мес). 15.09.2026: заведено ЗАРАНЕЕ, до товара в магазине.
-  // Не выкатывать, пока в LS нет товара и на Railway не заданы обе переменные ниже:
-  // иначе ссылки попадут в sellable.missing, и /pricing сменит честное «Связаться» на
-  // «авария кассы» с серой кнопкой.
   | "tier_pro_monthly"
   | "tier_pro_annual"
   | "app_qventure"
@@ -73,9 +48,26 @@ export type LemonSqueezyReference =
   | "app_smeta"
   | "app_cyberchess"
   | "app_devhub";
+export type LemonSqueezyReference = TierReference | AppTermReference | LegacyReference;
 
-/** reference → env var holding the LS variant id. */
-const TIER_VARIANT_ENV: Record<LemonSqueezyReference, string> = {
+/** Всё, что продаётся сейчас: пять ступеней планеты и пять ступеней каждого приложения. */
+export const TERM_REFERENCES: LemonSqueezyReference[] = [
+  ...TERM_TIERS.map((t): LemonSqueezyReference => `tier_${t}`),
+  ...STANDALONE_APPS.flatMap((a) => TERM_TIERS.map((t): LemonSqueezyReference => `app_${a.slug}_${t}`)),
+];
+
+/** tier_lite → LEMON_SQUEEZY_VARIANT_LITE; app_ip_bureau_max → LEMON_SQUEEZY_VARIANT_IP_BUREAU_MAX. */
+function variantEnvKey(ref: string): string {
+  return `LEMON_SQUEEZY_VARIANT_${ref.replace(/^(tier|app)_/, "").toUpperCase()}`;
+}
+
+/** reference → env var holding the LS variant id — ТОЛЬКО то, что продаётся. */
+const TIER_VARIANT_ENV = Object.fromEntries(
+  TERM_REFERENCES.map((r) => [r, variantEnvKey(r)]),
+) as Record<LemonSqueezyReference, string>;
+
+/** Прежние варианты: не продаются (их нет в TIER_VARIANT_ENV), но узнаются вебхуком. */
+const LEGACY_VARIANT_ENV: Record<LegacyReference, string> = {
   tier_lite_monthly: "LEMON_SQUEEZY_VARIANT_LITE_MONTHLY",
   tier_lite_annual: "LEMON_SQUEEZY_VARIANT_LITE_ANNUAL",
   tier_medium_monthly: "LEMON_SQUEEZY_VARIANT_MEDIUM_MONTHLY",
@@ -222,28 +214,13 @@ export function lemonSqueezyTiersConfigured(): boolean {
  * Товар, которого здесь нет, — не ошибка сам по себе, но и выдать его нечем:
  * сверка скажет об этом до того, как его кто-то купит.
  */
-export const STOREFRONT_NAME_TO_REFERENCE: Record<string, LemonSqueezyReference> = {
-  "AEVION Lite — Monthly": "tier_lite_monthly",
-  "AEVION Lite — Annual": "tier_lite_annual",
-  "AEVION Medium — Monthly": "tier_medium_monthly",
-  "AEVION Medium — Annual": "tier_medium_annual",
-  "AEVION Full — Monthly": "tier_full_monthly",
-  "AEVION Full — Annual": "tier_full_annual",
-  "AEVION Planet — Monthly": "tier_planet_monthly",
-  "AEVION Planet — Annual": "tier_planet_annual",
-  // Названия товаров Universe заданы ЗДЕСЬ первыми — в магазине заводить ровно так.
-  "AEVION Universe — Monthly": "tier_pro_monthly",
-  "AEVION Universe — Annual": "tier_pro_annual",
-  "AEVION DevHub Studio Pro": "app_devhub",
-  "AEVION Smeta Trainer": "app_smeta",
-  "AEVION QVenture": "app_qventure",
-  "AEVION QPayNet": "app_qpaynet",
-  "AEVION QContract": "app_qcontract",
-  "AEVION IP Bureau": "app_ip_bureau",
-  "AEVION CyberChess Pro": "app_cyberchess",
-  "AEVION QRenew": "app_qrenew",
-  "AEVION Constitution Lab": "app_constitution",
-};
+export const STOREFRONT_NAME_TO_REFERENCE: Record<string, LemonSqueezyReference> = Object.fromEntries([
+  // Порядок важен для Gumroad: при общем товаре первой узнаётся самая короткая ступень.
+  ...TERM_TIERS.map((t) => [`AEVION Planet — ${TERM_NAME[t]} (${TERM_MONTHS[t]} mo)`, `tier_${t}`]),
+  ...STANDALONE_APPS.flatMap((a) =>
+    TERM_TIERS.map((t) => [`AEVION ${a.name} — ${TERM_NAME[t]} (${TERM_MONTHS[t]} mo)`, `app_${a.slug}_${t}`]),
+  ),
+]);
 
 /**
  * Какие товары РЕАЛЬНО можно выдать: у каких ссылок задан вариант в окружении.
@@ -273,22 +250,20 @@ export function referenceForVariantId(
 ): LemonSqueezyReference | null {
   if (variantId == null) return null;
   const id = String(variantId);
-  for (const ref of Object.keys(TIER_VARIANT_ENV) as LemonSqueezyReference[]) {
-    if (process.env[TIER_VARIANT_ENV[ref]]?.trim() === id) return ref;
+  // Прежние варианты тоже: продление и отмена по старой покупке приходят с ними.
+  for (const [ref, env] of [...Object.entries(TIER_VARIANT_ENV), ...Object.entries(LEGACY_VARIANT_ENV)]) {
+    if (process.env[env]?.trim() === id) return ref as LemonSqueezyReference;
   }
   return null;
 }
 
 /** A checkout reference → tier id. Defaults to "lite" (safest paid entry). */
 export function tierForLemonSqueezyReference(ref: LemonSqueezyReference | null): TierId {
+  // Тариф решает общее правило ссылок (lib/payment/billingPeriod): лестница сроков
+  // и прежние tier_<тариф>_<период>. Подстрокой не ищем — «promo» содержит «pro».
+  // Незнакомое — lite, самый короткий срок: умолчание безопасное, а не щедрое.
   if (!ref) return "lite";
-  if (ref.includes("medium")) return "medium";
-  if (ref.includes("full")) return "full";
-  if (ref.includes("planet")) return "full";
-  // Без этой строки подписка Universe за $149 выдавала бы Lite ($19) — тот же класс,
-  // что у DevHub Studio Pro в августе. Сторож: tests/lsVariantTierIsUnderstood.test.ts.
-  if (ref.startsWith("tier_pro_")) return "pro";
-  return "lite";
+  return tierIdForReference(ref) ?? "lite";
 }
 
 /** True when the reference is for an individual app (not a platform tier). */
@@ -299,7 +274,7 @@ export function isAppReference(ref: LemonSqueezyReference | null): boolean {
 /** Extract the app slug from an app reference ("app_qventure" → "qventure"). */
 export function appSlugForReference(ref: LemonSqueezyReference | null): string | null {
   if (!ref?.startsWith("app_")) return null;
-  return ref.slice(4);
+  return ref.slice(4).replace(/_(lite|medium|pro|full|max)$/, "");
 }
 
 /**
@@ -313,6 +288,7 @@ export function appSlugForReference(ref: LemonSqueezyReference | null): string |
  */
 const APP_SLUG_TO_MODULE_ID: Record<string, string> = {
   ip_bureau: "aevion-ip-bureau",
+  multichat: "multichat-engine",
   smeta: "smeta-trainer",
   // Найдено 13.08.2026 сверкой с реестром модулей: в `MODULES_PRICING` он
   // называется `qpaynet-embedded`. Без этой строки гейт не нашёл бы покупку и
@@ -334,9 +310,12 @@ export function appSlugHasOwnGate(slug: string): boolean {
 
 /** Все slug'и, которые продаются отдельной подпиской. */
 export function allAppSlugs(): string[] {
-  return (Object.keys(TIER_VARIANT_ENV) as LemonSqueezyReference[])
-    .filter((r) => r.startsWith("app_"))
-    .map((r) => r.slice(4));
+  const slugs = new Set<string>();
+  for (const r of [...Object.keys(TIER_VARIANT_ENV), ...Object.keys(LEGACY_VARIANT_ENV)]) {
+    const slug = appSlugForReference(r as LemonSqueezyReference);
+    if (slug) slugs.add(slug);
+  }
+  return [...slugs];
 }
 
 /** "ip_bureau" → "aevion-ip-bureau"; для совпадающих имён вернёт как есть. */
@@ -349,7 +328,10 @@ export function appSlugForModuleId(moduleId: string): string | null {
   for (const [slug, id] of Object.entries(APP_SLUG_TO_MODULE_ID)) {
     if (id === moduleId) return slug;
   }
-  return isReference(`app_${moduleId}`) ? moduleId : null;
+  const app = STANDALONE_APPS.find((a) => a.moduleId === moduleId);
+  if (app) return app.slug;
+  // Прежние отдельные подписки (smeta, qcontract …) — чтобы уже купленное не пропало.
+  return Object.prototype.hasOwnProperty.call(LEGACY_VARIANT_ENV, `app_${moduleId}`) ? moduleId : null;
 }
 
 /**
@@ -377,4 +359,19 @@ export function lemonSqueezySellable(): {
     (process.env[env]?.trim() ? configured : missing).push(ref);
   }
   return { configured: configured.sort(), missing: missing.sort() };
+}
+
+/**
+ * Платёж за срок по ссылке, USD — сколько касса обязана списать, не больше.
+ * null — ссылка прежняя или не наша: для неё потолка нет, и вебхук не поднимет
+ * ложную тревогу о переплате.
+ */
+export function priceForReference(ref: string | null): number | null {
+  if (!ref) return null;
+  const t = /^tier_(lite|medium|pro|full|max)$/.exec(ref);
+  if (t) return TIERS.find((x) => x.id === t[1])?.priceTermTotal ?? null;
+  const a = /^app_([a-z_]+?)_(lite|medium|pro|full|max)$/.exec(ref);
+  if (!a) return null;
+  const app = STANDALONE_APPS.find((x) => x.slug === a[1]);
+  return app ? termTotal(app.baseMonthly, a[2] as TermTier) : null;
 }

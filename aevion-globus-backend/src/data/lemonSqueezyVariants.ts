@@ -370,8 +370,33 @@ export function priceForReference(ref: string | null): number | null {
   if (!ref) return null;
   const t = /^tier_(lite|medium|pro|full|max)$/.exec(ref);
   if (t) return TIERS.find((x) => x.id === t[1])?.priceTermTotal ?? null;
+  // Прежняя ссылка тарифа (tier_lite_monthly …) выдаётся тарифом новой лестницы —
+  // её потолок и есть платёж за срок этого тарифа. Цена прежнего товара в магазине
+  // ниже, ложной тревоги не будет, а списание сверх нового тарифа видно.
+  if (/^tier_[a-z]+_(monthly|annual)$/.test(ref)) {
+    const legacy = tierIdForReference(ref);
+    return legacy ? TIERS.find((x) => x.id === legacy)?.priceTermTotal ?? null : null;
+  }
   const a = /^app_([a-z_]+?)_(lite|medium|pro|full|max)$/.exec(ref);
   if (!a) return null;
   const app = STANDALONE_APPS.find((x) => x.slug === a[1]);
   return app ? termTotal(app.baseMonthly, a[2] as TermTier) : null;
+}
+
+/**
+ * Все варианты, которые выдают DevHub Pro: прежний «DevHub Studio Pro» и ступени
+ * app_devhub_*. Нужен замку пользовательских ссылок оплаты (routes/devhub.ts):
+ * ссылка на любом из них выдала бы Pro за произвольную цену.
+ */
+export function devHubVariantIds(): string[] {
+  const envs = [
+    LEGACY_VARIANT_ENV.app_devhub,
+    ...TERM_REFERENCES.filter((r) => r.startsWith("app_devhub_")).map((r) => TIER_VARIANT_ENV[r]),
+  ];
+  return envs.map((k) => process.env[k]?.trim()).filter((v): v is string => Boolean(v));
+}
+
+/** Вариант прежнего разового товара «DevHub Studio Pro» (событие order_created). */
+export function legacyStudioProVariantId(): string | null {
+  return process.env[LEGACY_VARIANT_ENV.app_devhub]?.trim() || null;
 }

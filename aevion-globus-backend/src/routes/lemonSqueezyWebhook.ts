@@ -52,6 +52,7 @@ import {
   resolveLemonSqueezyVariant,
   tierForLemonSqueezyReference,
   priceForReference,
+  legacyStudioProVariantId,
   isAppReference,
   appSlugForReference,
   type LemonSqueezyReference,
@@ -266,7 +267,7 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
     // же факта. Переименуй кто-нибудь переменную в карте — прямое чтение
     // сохранило бы старое имя, выдача тарифа за $149 тихо перестала бы
     // срабатывать, а заплативший не получил бы ничего.
-    const studioVariant = resolveLemonSqueezyVariant("app_devhub");
+    const studioVariant = legacyStudioProVariantId();
     const variantId = String(attrs.variant_id ?? "");
     if (studioVariant && variantId === studioVariant && email) {
       const tier = revoke ? "free" : "pro";

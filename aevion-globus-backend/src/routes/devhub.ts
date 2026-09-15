@@ -5,7 +5,7 @@ import { verifyBearerOptional } from "../lib/authJwt";
 import { resolvePlanFromPayload, isModuleEntitled } from "../lib/planGate";
 import { siteZone, dnsProvider, dnsConfigured, dnsTokensNeeded, upsertCname, zoneActiveUncached, zoneProbe, labelInZone, isDevHubLabel } from "../lib/devhubDns";
 import { promises as dnsPromises } from "node:dns";
-import { resolveLemonSqueezyVariant } from "../data/lemonSqueezyVariants";
+import { devHubVariantIds } from "../data/lemonSqueezyVariants";
 // Обе стороны нужны: у них шире набор из devhubGuest, у меня — devhubGuestLink.
 // Все четыре символа используются в теле файла, проверено счётом вхождений.
 import { requesterId, devhubGuestId, DEVHUB_GUEST_HEADER } from "../lib/devhubGuest";
@@ -4838,9 +4838,11 @@ devhubRouter.post("/media/payment-link", dhCostlyLimit("dhpaylink"), async (req,
       setupUrl: "https://app.lemonsqueezy.com",
     });
   }
-  const studioPro = resolveLemonSqueezyVariant("app_devhub");
+  // Все товары, выдающие DevHub Pro: прежний Studio Pro и ступени лестницы сроков
+  // (app_devhub_lite … _max, 15.09.2026). Ссылка на любом из них — Pro за любую цену.
+  const devHubVariants = devHubVariantIds();
   const defaultVariant = process.env.LEMON_SQUEEZY_DEFAULT_VARIANT_ID?.trim();
-  if ((studioPro && variantId === studioPro) || (defaultVariant && variantId === defaultVariant)) {
+  if (devHubVariants.includes(variantId) || (defaultVariant && variantId === defaultVariant)) {
     return res.status(503).json({
       error: "LEMON_SQUEEZY_PAYLINK_VARIANT_ID points at the Studio Pro / default product — the webhook would grant DevHub Pro for any custom price; use a dedicated product",
     });

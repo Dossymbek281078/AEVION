@@ -19,7 +19,7 @@
 export type DevhubExampleText = { title: string; prompt: string };
 
 export type DevhubExample = DevhubExampleText & {
-  /** Живой публичный адрес (*.pages.dev или *.aevion.build). */
+  /** Живой публичный адрес (*.pages.dev или *.aevion.app). */
   url: string;
   en: DevhubExampleText;
   kk: DevhubExampleText;

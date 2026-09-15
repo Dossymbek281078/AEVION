@@ -4258,7 +4258,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                                     zone was never delegated, so for months this
                                     card promised an address that failed DNS. */}
                                 🚀 Готовы показать людям? Одна кнопка — и проект публикуется на Cloudflare{domainCapabilityWorks
-                                  ? <> по вашему адресу <span style={{ fontFamily: "monospace" }}>*.aevion.build</span></>
+                                  ? <> по вашему адресу <span style={{ fontFamily: "monospace" }}>*.aevion.app</span></>
                                   : <> — вы получите общедоступный адрес <span style={{ fontFamily: "monospace" }}>*.pages.dev</span></>} — «живым» деплой считается только после того, как страница реально ответила.
                               </div>
                               <button
@@ -4835,7 +4835,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                       <span style={{ fontSize: 18 }}>☁️</span>
                       <div>
                         <div style={{ fontSize: 13, fontWeight: 800, color: "#9a3412" }}>Cloudflare Pages</div>
-                        <div style={{ fontSize: 11, color: "#c2410c" }}>Бесплатно · SSL сам · мировой CDN{domainCapabilityWorks ? " · aevion.build domain included" : " · публичный адрес *.pages.dev"}</div>
+                        <div style={{ fontSize: 11, color: "#c2410c" }}>Бесплатно · SSL сам · мировой CDN{domainCapabilityWorks ? " · aevion.app domain included" : " · публичный адрес *.pages.dev"}</div>
                       </div>
                     </div>
 
@@ -4877,8 +4877,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     </button>
                     <div style={{ fontSize: 10, color: "#9a3412", marginTop: 6 }}>
                       {domainCapabilityWorks
-                        ? <>Свой поддомен выдаётся, только если Cloudflare его подтвердит; иначе адрес будет на <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>*.pages.dev</code>.</>
-                        : <>Домен <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>aevion.build</code> пока не отвечает — домен не зарегистрирован на Cloudflare, поэтому адрес выдаётся на <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>*.pages.dev</code>.</>}
+                        ? <>Свой поддомен выдаётся, только если DNS его подтвердит; иначе адрес будет на <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>*.pages.dev</code>.</>
+                        : <>Домен <code style={{ background: "#fed7aa", padding: "1px 3px", borderRadius: 2 }}>aevion.app</code> пока не подтверждён — адрес будет на *.pages.dev</>}
                     </div>
                   </div>
 

@@ -49,7 +49,16 @@ export interface RoomsResult {
    * другим способом, то есть завести второй источник правды.
    */
   roomAt(x: number, y: number): number | null;
+  /**
+   * Клетки комнаты полосами по строкам, в метрах плана: y — середина строки,
+   * x0..x1 — сплошной отрезок клеток этой комнаты. Нужно, чтобы построить пол
+   * КОМНАТЫ (свой материал у каждой) и найти её габарит для расстановки мебели.
+   * Берётся из той же разметки, что и roomAt, — второй обход стен не нужен.
+   */
+  runsOf(index: number): Array<{ y: number; x0: number; x1: number }>;
 }
+
+export type RoomRun = { y: number; x0: number; x1: number };
 
 const CELL = 0.05; // 5 см — компромисс между точностью и объёмом работы
 
@@ -153,7 +162,7 @@ export function findRooms(plan: Plan, opts: { minAreaM2?: number } = {}): RoomsR
   const warnings: string[] = [];
 
   if (plan.walls.length === 0) {
-    return { rooms: [], totalArea: 0, warnings: ["В плане нет стен."], roomAt: () => null };
+    return { rooms: [], totalArea: 0, warnings: ["В плане нет стен."], roomAt: () => null, runsOf: () => [] };
   }
 
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -172,6 +181,7 @@ export function findRooms(plan: Plan, opts: { minAreaM2?: number } = {}): RoomsR
       totalArea: 0,
       warnings: ["План слишком велик для разбивки на комнаты — проверьте масштаб."],
       roomAt: () => null,
+      runsOf: () => [],
     };
   }
 
@@ -277,5 +287,21 @@ export function findRooms(plan: Plan, opts: { minAreaM2?: number } = {}): RoomsR
     return room ? room.index : null;
   };
 
-  return { rooms, totalArea, warnings, roomAt };
+  const runsOf = (index: number): RoomRun[] => {
+    const out: RoomRun[] = [];
+    for (let gy = 0; gy < gh; gy++) {
+      let start = -1;
+      for (let gx = 0; gx <= gw; gx++) {
+        const mine = gx < gw && labelToRoom.get(label[gy * gw + gx])?.index === index;
+        if (mine && start < 0) start = gx;
+        if (!mine && start >= 0) {
+          out.push({ y: oy + (gy + 0.5) * CELL, x0: ox + start * CELL, x1: ox + gx * CELL });
+          start = -1;
+        }
+      }
+    }
+    return out;
+  };
+
+  return { rooms, totalArea, warnings, roomAt, runsOf };
 }

@@ -6986,8 +6986,8 @@ devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
 // Flow:
 //   1. Create CF Pages project (idempotent — ignores "already exists")
 //   2. Upload all project files as multipart direct-upload deployment
-//   3. Add <slug>.aevion.build custom domain to Pages project
-//   4. Provision CNAME DNS record in aevion.build zone
+//   3. Add <slug>.aevion.app custom domain to Pages project
+//   4. Provision CNAME DNS record via lib/devhubDns (zone aevion.app lives at Vercel)
 //   5. Return live URL + domain
 // ═════════════════════════════════════════════════════════════════════════════
 

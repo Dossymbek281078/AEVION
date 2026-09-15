@@ -83,6 +83,23 @@ const CAP_ICONS: Record<string, string> = {
   whatsapp: "📱",
 };
 
+/**
+ * Бейдж карточки — из живого /studio/capabilities, а не из кода.
+ *
+ * До 15.09.2026 бейджи были зашиты: «NEEDS TOKEN» у Vercel, GitHub и
+ * ElevenLabs стояло в исходнике и пережило день, когда ключи встали и все
+ * девять провайдеров ответили ok. Живые данные страница уже качала — но
+ * только для полосы «нужны переменные». Теперь карточка без cap или до
+ * загрузки показывает «—» (не знаю), а не выдуманное состояние.
+ */
+type CapStatus = { id: string; status: string };
+export function badgeFrom(status: string | undefined): { text: string; bg: string; fg: string } {
+  if (status === "live") return { text: "LIVE", bg: "#d1fae5", fg: "#065f46" };
+  if (status === "needs_token") return { text: "NEEDS TOKEN", bg: "#fef3c7", fg: "#92400e" };
+  if (status === "degraded") return { text: "DEGRADED", bg: "#fee2e2", fg: "#991b1b" };
+  if (status === "not_available") return { text: "OFF", bg: "#e2e8f0", fg: "#475569" };
+  return { text: "—", bg: "#f1f5f9", fg: "#64748b" };
+}
 const FEATURE_CATEGORIES = [
   {
     id: "create",
@@ -90,9 +107,9 @@ const FEATURE_CATEGORIES = [
     icon: "✨",
     color: "#7c3aed",
     items: [
-      { icon: "⌨️", name: "Code Editor", desc: "Monaco IDE (VS Code engine) — TypeScript, Python, HTML, CSS, JSON, Markdown", href: "/devhub", badge: "LIVE" },
-      { icon: "🤖", name: "AI Code Generation", desc: "Ask AI to generate full files, components, APIs, migrations", href: "/devhub", badge: "LIVE" },
-      { icon: "📄", name: "Templates", desc: "Next.js, Express, React SPA, Python FastAPI — one-click project scaffold", href: "/devhub", badge: "LIVE" },
+      { icon: "⌨️", name: "Code Editor", desc: "Monaco IDE (VS Code engine) — TypeScript, Python, HTML, CSS, JSON, Markdown", href: "/devhub", badge: "—" },
+      { icon: "🤖", name: "AI Code Generation", desc: "Ask AI to generate full files, components, APIs, migrations", href: "/devhub", badge: "—" },
+      { icon: "📄", name: "Templates", desc: "Next.js, Express, React SPA, Python FastAPI — one-click project scaffold", href: "/devhub", badge: "—" },
     ],
   },
   {
@@ -101,13 +118,13 @@ const FEATURE_CATEGORIES = [
     icon: "🎬",
     color: "#0d9488",
     items: [
-      { icon: "🎬", name: "Video AI", desc: "Text-to-video via Replicate — MiniMax, HunyuanVideo, AnimateDiff", href: "/devhub", badge: "NEEDS TOKEN" },
-      { icon: "🖼️", name: "Image Generation", desc: "AI images with a fallback fleet — OpenAI → Workers AI (flux) → Together, permanent CDN URLs", href: "/devhub", badge: "LIVE" },
-      { icon: "📎", name: "Screenshot → Code", desc: "Attach a design screenshot in the AI chat — a vision model recreates it as working code", href: "/devhub", badge: "LIVE" },
-      { icon: "🎵", name: "Music & SFX", desc: "ElevenLabs AI music and sound effects generation", href: "/devhub", badge: "NEEDS TOKEN" },
-      { icon: "🎙️", name: "Voice TTS", desc: "ElevenLabs text-to-speech — 9 voices, high-quality audio", href: "/devhub", badge: "NEEDS TOKEN" },
-      { icon: "🔊", name: "Voice Cloning", desc: "Clone any voice from audio sample — create your own AI voice", href: "/devhub", badge: "NEEDS TOKEN" },
-      { icon: "📝", name: "Speech-to-Text", desc: "Transcribe audio to text with language detection", href: "/devhub", badge: "NEEDS TOKEN" },
+      { icon: "🎬", name: "Video AI", cap: "video", desc: "Text-to-video via Replicate — MiniMax, HunyuanVideo, AnimateDiff", href: "/devhub", badge: "—" },
+      { icon: "🖼️", name: "Image Generation", cap: "image", desc: "AI images with a fallback fleet — OpenAI → Workers AI (flux) → Together, permanent CDN URLs", href: "/devhub", badge: "—" },
+      { icon: "📎", name: "Screenshot → Code", cap: "screenshot_code", desc: "Attach a design screenshot in the AI chat — a vision model recreates it as working code", href: "/devhub", badge: "—" },
+      { icon: "🎵", name: "Music & SFX", cap: "audio_music", desc: "ElevenLabs AI music and sound effects generation", href: "/devhub", badge: "—" },
+      { icon: "🎙️", name: "Voice TTS", cap: "audio_tts", desc: "ElevenLabs text-to-speech — 9 voices, high-quality audio", href: "/devhub", badge: "—" },
+      { icon: "🔊", name: "Voice Cloning", cap: "audio_tts", desc: "Clone any voice from audio sample — create your own AI voice", href: "/devhub", badge: "—" },
+      { icon: "📝", name: "Speech-to-Text", desc: "Transcribe audio to text with language detection", href: "/devhub", badge: "—" },
     ],
   },
   {
@@ -116,11 +133,11 @@ const FEATURE_CATEGORIES = [
     icon: "🚀",
     color: "#0369a1",
     items: [
-      { icon: "🚂", name: "Railway Deploy", desc: "One-click backend deployment — Node.js, Python, Postgres, Redis", href: "/devhub", badge: "NEEDS TOKEN" },
-      { icon: "▲", name: "Vercel Deploy", desc: "Frontend deployment — Next.js, React SPA, static sites", href: "/devhub", badge: "NEEDS TOKEN" },
-      { icon: "☁️", name: "Cloudflare Pages", desc: "Static-site deploy via wrangler, marked live only after the page really answers", href: "/devhub", badge: "LIVE" },
-      { icon: "🐙", name: "GitHub Auto-Push", desc: "Code syncs to GitHub repo in aevion-io org automatically", href: "/devhub", badge: "NEEDS TOKEN" },
-      { icon: "🌐", name: "Domain (aevion.build)", desc: "Waiting on domain delegation — the zone is not pointed at Cloudflare yet, so these subdomains do not resolve", href: "/devhub", badge: "PENDING" },
+      { icon: "🚂", name: "Railway Deploy", cap: "railway", desc: "One-click backend deployment — Node.js, Python, Postgres, Redis", href: "/devhub", badge: "—" },
+      { icon: "▲", name: "Vercel Deploy", cap: "vercel", desc: "Frontend deployment — Next.js, React SPA, static sites", href: "/devhub", badge: "—" },
+      { icon: "☁️", name: "Cloudflare Pages", cap: "pages", desc: "Static-site deploy via wrangler, marked live only after the page really answers", href: "/devhub", badge: "—" },
+      { icon: "🐙", name: "GitHub Auto-Push", cap: "github", desc: "Code syncs to GitHub repo in aevion-io org automatically", href: "/devhub", badge: "—" },
+      { icon: "🌐", name: "Domain (aevion.app)", cap: "domain", desc: "Every Pages deploy also gets a <slug>.aevion.app address — DNS lives at Vercel, the record is written automatically", href: "/devhub", badge: "—" },
     ],
   },
   {
@@ -129,10 +146,10 @@ const FEATURE_CATEGORIES = [
     icon: "📡",
     color: "#b45309",
     items: [
-      { icon: "📧", name: "Email (Brevo)", desc: "Transactional email, HTML templates, bulk campaigns", href: "/devhub", badge: "NEEDS TOKEN" },
-      { icon: "💬", name: "SMS", desc: "Brevo SMS — send messages to any phone number globally", href: "/devhub", badge: "NEEDS TOKEN" },
-      { icon: "📱", name: "WhatsApp", desc: "WhatsApp Business API — template messages", href: "/devhub", badge: "NEEDS TOKEN" },
-      { icon: "💳", name: "Payments", desc: "Gumroad checkout links — sell products without registration", href: "/devhub", badge: "LIVE" },
+      { icon: "📧", name: "Email (Brevo)", cap: "email", desc: "Transactional email, HTML templates, bulk campaigns", href: "/devhub", badge: "—" },
+      { icon: "💬", name: "SMS", cap: "sms", desc: "Brevo SMS — send messages to any phone number globally", href: "/devhub", badge: "—" },
+      { icon: "📱", name: "WhatsApp", cap: "whatsapp", desc: "WhatsApp Business API — template messages", href: "/devhub", badge: "—" },
+      { icon: "💳", name: "Payments", desc: "Gumroad checkout links — sell products without registration", href: "/devhub", badge: "—" },
     ],
   },
 ];
@@ -153,6 +170,11 @@ const STUDIO_PRO = productById("devhub");
 
 export default function StudioPage() {
   const [caps, setCaps] = useState<CapabilitiesData | null>(null);
+  const badgeFor = (item: { cap?: string; badge: string }) => {
+    if (!item.cap) return { text: item.badge, bg: item.badge === "LIVE" ? "#d1fae5" : "#f1f5f9", fg: item.badge === "LIVE" ? "#065f46" : "#64748b" };
+    const live = (caps?.capabilities as CapStatus[] | undefined)?.find((c) => c.id === item.cap);
+    return badgeFrom(live?.status);
+  };
   const [loading, setLoading] = useState(true);
   const [credits, setCredits] = useState<CreditsData | null>(null);
   const [savings, setSavings] = useState<SmartSavings | null>(null);
@@ -434,14 +456,17 @@ export default function StudioPage() {
                   >
                     <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8 }}>
                       <span style={{ fontSize: 24 }}>{item.icon}</span>
-                      <span style={{
-                        fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 20,
-                        background: item.badge === "LIVE" ? "#d1fae5" : "#fef3c7",
-                        color: item.badge === "LIVE" ? "#065f46" : "#92400e",
-                        letterSpacing: 0.5,
-                      }}>
-                        {item.badge}
-                      </span>
+                      {(() => {
+                        const b = badgeFor(item);
+                        return (
+                          <span style={{
+                            fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 20,
+                            background: b.bg, color: b.fg, letterSpacing: 0.5,
+                          }}>
+                            {b.text}
+                          </span>
+                        );
+                      })()}
                     </div>
                     <div style={{ fontSize: 15, fontWeight: 700, color: "#0f172a", marginBottom: 4 }}>{item.name}</div>
                     <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>{item.desc}</div>
@@ -519,12 +544,11 @@ export default function StudioPage() {
           <p style={{ fontSize: 14, color: "#94a3b8", margin: "0 0 24px" }}>Add these env vars to Railway → AEVION backend service → Variables:</p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(340px, 100%), 1fr))", gap: 12 }}>
             {[
-              { token: "GITHUB_TOKEN", where: "github.com/settings/tokens", desc: "GitHub PAT — scope: repo, workflow" },
+              { token: "GITHUB_TOKEN", where: "github.com/settings/tokens", desc: "GitHub PAT — scope public_repo is enough: DevHub creates public repos" },
               { token: "RAILWAY_API_TOKEN", where: "railway.app → Account → API Tokens", desc: "Deploy backends to Railway" },
-              { token: "VERCEL_API_TOKEN", where: "vercel.com/account/tokens", desc: "Deploy frontends to Vercel" },
+              { token: "VERCEL_API_TOKEN", where: "vercel.com/account/tokens", desc: "Deploy frontends to Vercel + write <slug>.aevion.app DNS records (the zone lives at Vercel)" },
               { token: "CLOUDFLARE_ACCOUNT_ID", where: "dash.cloudflare.com → right sidebar", desc: "Account ID for Cloudflare Pages deploy" },
-              { token: "CLOUDFLARE_API_TOKEN", where: "dash.cloudflare.com → Profile → API Tokens", desc: "Deploy to Pages + provision aevion.build" },
-              { token: "CLOUDFLARE_ZONE_ID", where: "Cloudflare → aevion.build domain → Overview", desc: "Zone ID for aevion.build DNS records" },
+              { token: "CLOUDFLARE_API_TOKEN", where: "dash.cloudflare.com → Profile → API Tokens", desc: "Deploy to Pages + attach the aevion.app subdomain to the Pages project" },
               { token: "REPLICATE_API_TOKEN", where: "replicate.com/account/api-tokens", desc: "AI video generation" },
               { token: "OPENAI_API_KEY", where: "platform.openai.com/api-keys", desc: "DALL-E 3 image generation" },
               { token: "ELEVENLABS_API_KEY", where: "elevenlabs.io/app/settings/api-keys", desc: "TTS, music, SFX, voice cloning" },

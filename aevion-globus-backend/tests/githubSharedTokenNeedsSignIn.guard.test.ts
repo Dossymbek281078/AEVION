@@ -27,7 +27,7 @@ vi.mock("../src/services/qcoreai/providers", () => ({ getProviders: vi.fn(() => 
 vi.mock("../src/lib/wranglerPagesDeploy", () => ({ deployViaWrangler: vi.fn() }));
 
 // eslint-disable-next-line import/first
-import { devhubRouter, __resetDevHubStore, __clearDeferredDevHubWork } from "../src/routes/devhub";
+import { devhubRouter, __resetDevHubStore, __clearDeferredDevHubWork, __setUserTierForTest } from "../src/routes/devhub";
 
 const realFetch = globalThis.fetch;
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -74,26 +74,37 @@ async function guestProject(app: express.Express, headers: Record<string, string
   return cr.body.project.id as string;
 }
 
-describe("гость без своего токена — 401, к GitHub ни одного обращения", () => {
+describe("бесплатный гость без своего токена — 402, к GitHub ни одного обращения", () => {
   test.each(ROUTES)("%s /%s", async (method, path) => {
     const app = makeApp();
     const id = await guestProject(app, GUEST);
     const r = await (request(app) as any)[method](`/api/devhub/projects/${id}/${path}`).set(GUEST).send({});
-    expect(r.status, JSON.stringify(r.body)).toBe(401);
-    expect(r.body.error).toMatch(/sign in/);
+    expect(r.status, JSON.stringify(r.body)).toBe(402);
+    expect(r.body.error).toMatch(/Studio Pro/);
+    expect(r.body.upgrade).toBe("/devhub/link");
     const githubCalls = fetchMock.mock.calls.filter((c) => String(c[0]).includes("api.github.com"));
     expect(githubCalls, "серверный токен ушёл в GitHub от гостя").toEqual([]);
   });
 });
 
-describe("контроли: свой токен гостя и вход — проходят дальше 401", () => {
+describe("контроли: свой токен гостя, вход и привязанная покупка — проходят дальше 402", () => {
+  test("гость с тарифом pro (привязал покупку) — не 402, серверный токен используется", async () => {
+    const app = makeApp();
+    __setUserTierForTest("guest:guest-abc", "pro");
+    const id = await guestProject(app, GUEST);
+    const r = await request(app).post(`/api/devhub/projects/${id}/github/push`).set(GUEST).send({});
+    expect(r.status).not.toBe(402);
+    const auths = fetchMock.mock.calls.map((c) => String((c[1] as any)?.headers?.Authorization ?? ""));
+    expect(auths.some((a) => a.includes("ghp_server_token"))).toBe(true);
+  });
+
   test("гость со СВОИМ GITHUB_TOKEN в env проекта — не 401, и в GitHub уходит ЕГО токен", async () => {
     const app = makeApp();
     const id = await guestProject(app, GUEST);
     const env = await request(app).put(`/api/devhub/projects/${id}/env`).set(GUEST).send({ key: "GITHUB_TOKEN", value: "ghp_guest_own" });
     expect(env.status, JSON.stringify(env.body)).toBe(200);
     const r = await request(app).post(`/api/devhub/projects/${id}/github/push`).set(GUEST).send({});
-    expect(r.status).not.toBe(401);
+    expect(r.status).not.toBe(402);
     const auths = fetchMock.mock.calls.map((c) => String((c[1] as any)?.headers?.Authorization ?? ""));
     expect(auths.some((a) => a.includes("ghp_guest_own"))).toBe(true);
     expect(auths.some((a) => a.includes("ghp_server_token")), "серверный токен не должен уходить от гостя").toBe(false);
@@ -103,7 +114,7 @@ describe("контроли: свой токен гостя и вход — пр�
     const app = makeApp();
     const id = await guestProject(app, bearer());
     const r = await request(app).post(`/api/devhub/projects/${id}/github/push`).set(bearer()).send({});
-    expect(r.status).not.toBe(401);
+    expect(r.status).not.toBe(402);
     const auths = fetchMock.mock.calls.map((c) => String((c[1] as any)?.headers?.Authorization ?? ""));
     expect(auths.some((a) => a.includes("ghp_server_token"))).toBe(true);
   });

@@ -56,6 +56,6 @@ describe("журнал неудачной выкатки не врёт о при
     const кусок = SRC.slice(i, i + 400);
     expect(кусок).toContain("has not propagated yet");
     expect(кусок).toContain("does not serve");
-    expect(кусок, "не сказано, сколько ждали — без этого причину не оценить").toMatch(/25s|5 attempts/);
+    expect(кусок, "не сказано, сколько ждали — без этого причину не оценить").toMatch(/25s|\d+ attempts|\d+ min/);
   });
 });

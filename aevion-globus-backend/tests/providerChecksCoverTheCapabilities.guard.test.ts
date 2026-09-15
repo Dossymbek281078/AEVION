@@ -36,7 +36,8 @@ describe("проверки провайдеров покрывают обеща�
 
   test("проверок не меньше девяти", () => {
     const block = healthBlock();
-    const n = block.split('probe("').length - 1;
+    // zoneProbe() — проба зоны DNS (Vercel или Cloudflare), вынесена в lib/devhubDns 15.09.2026.
+    const n = block.split('probe("').length - 1 + (block.includes("zoneProbe()") ? 1 : 0);
     expect(n, "набор проверок усох").toBeGreaterThanOrEqual(9);
   });
 
@@ -51,7 +52,7 @@ describe("проверки провайдеров покрывают обеща�
     // Иначе отсутствие настройки и отвалившийся ключ выглядят одинаково, и
     // человек чинит не то. Признак: у каждой пробы есть ветка "not set".
     const block = healthBlock();
-    const probes = block.split('probe("').length - 1;
+    const probes = block.split('probe("').length - 1 + (block.includes("zoneProbe()") ? 1 : 0);
     const notSet = block.split("not set").length - 1;
     expect(notSet, "не у всех проб есть ветка «ключа нет»").toBeGreaterThanOrEqual(probes - 1);
   });

@@ -820,8 +820,8 @@ function customDomainRefusal(domain: string, projectId: string): string | null {
  * уводил бы покупателя из НАШЕГО магазина куда угодно (патч окна free-fleet от
  * 28.07.2026, применён 15.09.2026).
  */
-function safeRedirect(raw: unknown, frontendUrl: string): string {
-  const fallback = `${frontendUrl}/devhub?payment=success`;
+function safeRedirect(raw: unknown, frontendUrl: string, fallbackPath: string): string {
+  const fallback = `${frontendUrl}${fallbackPath}`;
   if (typeof raw !== "string" || !raw) return fallback;
   try {
     const u = new URL(raw, frontendUrl);
@@ -901,7 +901,9 @@ function scheduleServeVerification(
     noteProviderFailure("pages", "the deployed page does not serve (2xx never came back across three windows, ~14 min)");
     d.status = "failed";
     d.buildLog = (d.buildLog || "") +
-      " | verify: wrangler upload finished, but the page never answered 2xx across three windows (~14 min). " +
+      " | verify: wrangler upload finished, but the page never answered 2xx across three windows " +
+      "(24 attempts 5s apart, then re-checks after 3 and 7 min; ~14 min total). Either the new Pages project " +
+      "has not propagated yet, or it really does not serve. " +
       "Check the address by hand before blaming the upload; POST /deployments/:id/recheck asks again.";
     d.completedAt = now();
     try { await dbSaveDeployment(d); } catch { memDeployments.set(d.id, d); }
@@ -4755,7 +4757,7 @@ devhubRouter.post("/media/payment-link", dhCostlyLimit("dhpaylink"), async (req,
           product_options: {
             name: name.trim().slice(0, 200),
             description: (description || name).trim().slice(0, 500),
-            redirect_url: safeRedirect(successUrl, frontendUrl),
+            redirect_url: safeRedirect(successUrl, frontendUrl, "/devhub?payment=success"),
           },
         },
         relationships: {

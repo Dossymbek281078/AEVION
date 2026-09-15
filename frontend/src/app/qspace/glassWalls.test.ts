@@ -60,6 +60,15 @@ describe("витражи замыкают контур помещения", () =
     expect(est.wallArea).toBeCloseTo(безСтекла, 3);
   });
 
+  it("проём в перегородке — ровно один разрыв в предупреждении", async () => {
+    // перегородка x=100 с дверью: два куска 0..120 и 180..300 пт (0.9 м при 8 м на 400 пт... 60 пт = 1.2 м)
+    const сДверью = "0 0 m 400 0 l S 0 0 m 0 300 l S 0 300 m 400 300 l S 400 0 m 400 300 l S 100 0 m 100 120 l S 100 180 m 100 300 l S";
+    const src = await readPdfSegments(pdfСоСлоями([{ layer: "Стены", ops: сДверью }]));
+    const r = findRooms(planFromPdfSegments(src, 8).plan!);
+    expect(r.rooms.length).toBe(2);
+    expect(r.warnings.find((w) => w.startsWith("Разрывов"))).toMatch(/: 1\./);
+  });
+
   it("контроль: без слоя витража правая часть открыта — комната одна (левая), а не две", async () => {
     const src = await readPdfSegments(pdfСоСлоями([{ layer: "Стены", ops: стены }]));
     expect(src.glassSegments ?? []).toEqual([]);
@@ -92,6 +101,15 @@ const ПАПКА = process.env.QSPACE_EXAMPLES ?? "C:/Users/user/OneDrive/Deskto
 const LAVIE = `${ПАПКА}/LA VIE.pdf`;
 
 describe.skipIf(!existsSync(LAVIE))("LA VIE.pdf: витражный фасад замыкает открытую зону", () => {
+  it("число разрывов считается по проёмам, а не по парам отрезков: десятки, не сотни", async () => {
+    const src = await readPdfSegments(new Uint8Array(readFileSync(LAVIE)));
+    const p = planFromPdfSegments(src, (src.extentPt * 42.59) / 1000);
+    const w = findRooms(p.plan!).warnings.find((x) => x.startsWith("Разрывов")) ?? "";
+    const n = Number((/: (\d+)\./.exec(w) ?? [])[1] ?? -1);
+    expect(n).toBeGreaterThan(5);
+    expect(n).toBeLessThan(80);
+  }, 60_000);
+
   it("площадь помещений заметно больше прежних 54 м² — открытая зона стала комнатой", async () => {
     const src = await readPdfSegments(new Uint8Array(readFileSync(LAVIE)));
     expect(src.glassSegments!.length).toBeGreaterThan(30);

@@ -10,6 +10,7 @@ import {
   buildQuote,
 } from "../src/data/pricing";
 import { termMonthsForReference, tierIdForReference } from "../src/lib/payment/billingPeriod";
+import { ссылкаПодписки } from "../src/lib/payment/subscriptionReference";
 import {
   priceForReference,
   TERM_REFERENCES,
@@ -103,6 +104,16 @@ describe("ссылка заказа → тариф и срок", () => {
     expect(appSlugForReference("app_ip_bureau_max")).toBe("ip_bureau");
     expect(appSlugForReference("app_devhub")).toBe("devhub");
     expect(termMonthsForReference("app_devhub")).toBe(1);
+  });
+
+  test("покупка приложения не выдаёт тариф в вебхуках карт (PayBox, PayPal)", () => {
+    // app_cyberchess_full несёт слово ступени «full»: токенный поиск принял бы его
+    // за тариф, и оплата шахмат открыла бы всю планету на 9 месяцев.
+    for (const a of STANDALONE_APPS) for (const t of TERM_TIERS) {
+      expect(ссылкаПодписки(`app_${a.slug}_${t}`), `app_${a.slug}_${t}`).toBe(false);
+    }
+    // КОНТРОЛЬ: настоящие ссылки тарифов по-прежнему подписки
+    for (const t of TERM_TIERS) expect(ссылкаПодписки(`tier_${t}`)).toBe(true);
   });
 
   test("вебхук Lemon Squeezy выдаёт купленный срок, а не Lite по умолчанию", () => {

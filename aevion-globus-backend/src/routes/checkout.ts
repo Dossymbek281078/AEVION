@@ -445,7 +445,10 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
     const местаДляКассы: Record<string, string> = seats > 1 ? { seats: String(seats) } : {};
 
 
-    if (body.currency === "KZT" && isPayboxConfigured()) {
+    // Отдельное приложение идёт ТОЛЬКО через Lemon Squeezy и Gumroad: их вебхуки
+    // пишут AppSubscription. Вебхуки PayBox и PayPal приложений не выдают вовсе —
+    // оплата прошла бы без доступа (15.09.2026).
+    if (body.currency === "KZT" && isPayboxConfigured() && !app) {
       try {
         const kztCents = Math.round(totalCents * CURRENCY_RATES.KZT.rate);
         const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
@@ -473,7 +476,7 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
 
     // 0b) PayPal — глобальный карт/PayPal-канал. Срабатывает только когда
     //     плательщик явно выбрал method="paypal" и провайдер настроен.
-    if (body.method === "paypal" && isPaypalConfigured()) {
+    if (body.method === "paypal" && isPaypalConfigured() && !app) {
       try {
         const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
         const intent = await paypalPaymentProvider.createIntent({

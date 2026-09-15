@@ -24,6 +24,10 @@
  * разделителями.
  */
 export function ссылкаПодписки(ref: string): boolean {
+  // Отдельное приложение — НЕ подписка на тариф (15.09.2026). Ссылка вида
+  // app_cyberchess_full несёт слово ступени срока, и токенный поиск ниже узнал бы
+  // в нём тариф full: оплата шахмат за $135 выдала бы всю планету на 9 месяцев.
+  if (/^app[_-]/i.test(ref)) return false;
   return (
     /^tier[_-]/i.test(ref) ||
     /(^|[_-])(lite|medium|full|business|team|all-access|enterprise|pro)([_-]|$)/i.test(ref)

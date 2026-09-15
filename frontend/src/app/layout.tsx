@@ -5,6 +5,35 @@ import { getSiteUrl } from "@/lib/siteUrl";
 import { MODULE_NODES } from "@/data/pitchFacts";
 import "./globals.css";
 import { DevHubGuestIdentity } from "@/components/DevHubGuestIdentity";
+import { BUILD_STAMP } from "@/lib/buildStamp";
+
+/*
+  Словарь языка посетителя начинает качаться с ПЕРВОГО БАЙТА HTML.
+
+  Замер 15.09.2026, телефон 390 px, Slow 4G, /pricing, ru без куки: текст на
+  экране в 9,7 с, русский — в 18,7 с. Словарь (один файл на сайт) мог запросить
+  только код переводов, а он исполняется, когда основной JS (~1 МБ) уже доехал;
+  словарь шёл строго ПОСЛЕ. Правка внутри модуля переводов (2723627e7) не дала
+  ничего — измерено. Единственное место, которое у браузера есть раньше
+  основного JS, — сам HTML, поэтому запрос уходит отсюда.
+
+  Порядок источников тот же, что у провайдера: сохранённый выбор → кука →
+  язык браузера. Английский не качаем — он встроен. Результат кладётся в
+  window.__aevionDict, и lib/i18n.tsx берёт его вместо второго скачивания;
+  отказ здесь безвреден: провайдер тогда качает словарь сам, как раньше.
+  Адрес версионирован коммитом сборки — кэш вечный, выкатка = новый адрес.
+*/
+const DICT_PRELOAD_SCRIPT =
+  "try{var L=null;try{L=localStorage.getItem('aevion_lang_v1')}catch(e){}" +
+  "if(!L){var c=document.cookie.split('; ');for(var i=0;i<c.length;i++){var p=c[i].split('=');" +
+  "if(p[0]==='aevion_lang_v1'){L=decodeURIComponent(p[1]||'');break}}}" +
+  "if(!L){var n=(navigator.language||'en').toLowerCase();" +
+  "var m=['kk','kz','ru','de','fr','es','zh','ja','ar','pt','tr'];" +
+  "for(var j=0;j<m.length;j++){if(n.indexOf(m[j])===0){L=m[j]==='kz'?'kk':m[j];break}}}" +
+  "var ok={ru:1,kk:1,de:1,fr:1,es:1,zh:1,ja:1,ar:1,pt:1,tr:1};" +
+  "if(L&&ok[L]){window.__aevionDict={lang:L,promise:fetch('/i18n/'+L+'?v=" +
+  encodeURIComponent(BUILD_STAMP.commit) +
+  "').then(function(r){return r.ok?r.json():null}).catch(function(){return null})}}}catch(e){}";
 
 const SITE = getSiteUrl();
 
@@ -131,6 +160,7 @@ export default function RootLayout({
           своей догадкой. Выбор всегда старше догадки.
         */}
         <script dangerouslySetInnerHTML={{ __html: "try{var c=document.cookie.split('; ');for(var i=0;i<c.length;i++){var p=c[i].split('=');if(p[0]==='aevion_lang_v1'){var l=decodeURIComponent(p[1]||'');if(l==='ru'||l==='kk'||l==='en'){document.documentElement.lang=l;document.documentElement.setAttribute('data-lang-src','cookie');}break;}}}catch(e){}" }} />
+        <script dangerouslySetInnerHTML={{ __html: DICT_PRELOAD_SCRIPT }} />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}

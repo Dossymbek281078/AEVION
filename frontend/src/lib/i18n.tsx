@@ -52,6 +52,13 @@ export {
   type Lang,
 };
 
+declare global {
+  interface Window {
+    /** Словарь, который начал качать инлайн-скрипт макета (см. loadDict). */
+    __aevionDict?: { lang: string; promise: Promise<Record<string, string> | null> };
+  }
+}
+
 /** Dictionaries fetched so far, English included from the start. */
 const loaded: Partial<Record<Lang, Record<string, string>>> = { en };
 const inFlight = new Map<Lang, Promise<Record<string, string>>>();
@@ -94,11 +101,22 @@ export function loadDict(lang: Lang): Promise<Record<string, string>> {
   const existing = inFlight.get(lang);
   if (existing) return existing;
 
-  const p = LOADERS[lang]()
-    .then((m) => {
-      loaded[lang] = m.default;
+  // Инлайн-скрипт корневого макета (app/layout.tsx) начинает качать словарь
+  // с первого байта HTML — раньше, чем этот модуль вообще исполнится. Если он
+  // качал ЭТОТ язык, берём его ответ и не тянем чанк второй раз. Пустой ответ
+  // (сеть, 404) — обычный путь ниже, как до 15.09.2026.
+  const pre = typeof window !== "undefined" ? window.__aevionDict : undefined;
+  const preloaded: Promise<Record<string, string> | null> =
+    pre && pre.lang === lang
+      ? pre.promise.then((d) => (d && typeof d === "object" ? d : null)).catch(() => null)
+      : Promise.resolve(null);
+
+  const p = preloaded
+    .then((d) => d ?? LOADERS[lang]().then((m) => m.default))
+    .then((dict) => {
+      loaded[lang] = dict;
       inFlight.delete(lang);
-      return m.default;
+      return dict;
     })
     .catch((e) => {
       inFlight.delete(lang);

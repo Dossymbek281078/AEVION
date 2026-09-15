@@ -38,9 +38,9 @@
  * запуска шахмат. 9.99 принадлежит `qcoreai` (data/pricing.ts), у cyberchess
  * там же стоит 19. Проверено по всей цепочке: products.ts — 19, pricing.ts —
  * 19, витрина /shop показывает «$19/мес», касса Lemon Squeezy берёт
- * «$19.00 billed every month». Расхождения нет. There is currently no `tier_pro_*` reference for the Universe
- * tier — a "pro" checkout falls through to Gumroad/stub, not LS, until one
- * is added here.
+ * «$19.00 billed every month». Расхождения нет. `tier_pro_*` (Universe) заведены 15.09.2026 заранее, до
+ * товара в магазине: пока на Railway не заданы LEMON_SQUEEZY_VARIANT_PRO_*,
+ * касса по «pro» отвечает честным 503, а /pricing показывает «авария кассы».
  *
  * A checkout reference is "tier_<tier>_<period>" (built by routes/checkout.ts),
  * e.g. "tier_lite_monthly". The webhook reverse-maps an incoming variant_id
@@ -58,6 +58,12 @@ export type LemonSqueezyReference =
   | "tier_full_annual"
   | "tier_planet_monthly"
   | "tier_planet_annual"
+  // Universe (id тарифа «pro», $149/мес). 15.09.2026: заведено ЗАРАНЕЕ, до товара в магазине.
+  // Не выкатывать, пока в LS нет товара и на Railway не заданы обе переменные ниже:
+  // иначе ссылки попадут в sellable.missing, и /pricing сменит честное «Связаться» на
+  // «авария кассы» с серой кнопкой.
+  | "tier_pro_monthly"
+  | "tier_pro_annual"
   | "app_qventure"
   | "app_qpaynet"
   | "app_qcontract"
@@ -78,6 +84,8 @@ const TIER_VARIANT_ENV: Record<LemonSqueezyReference, string> = {
   tier_full_annual: "LEMON_SQUEEZY_VARIANT_FULL_ANNUAL",
   tier_planet_monthly: "LEMON_SQUEEZY_VARIANT_PLANET_MONTHLY",
   tier_planet_annual: "LEMON_SQUEEZY_VARIANT_PLANET_ANNUAL",
+  tier_pro_monthly: "LEMON_SQUEEZY_VARIANT_PRO_MONTHLY",
+  tier_pro_annual: "LEMON_SQUEEZY_VARIANT_PRO_ANNUAL",
   app_qventure:    "LEMON_SQUEEZY_VARIANT_QVENTURE",
   app_qpaynet:     "LEMON_SQUEEZY_VARIANT_QPAYNET",
   app_qcontract:   "LEMON_SQUEEZY_VARIANT_QCONTRACT",
@@ -223,6 +231,9 @@ export const STOREFRONT_NAME_TO_REFERENCE: Record<string, LemonSqueezyReference>
   "AEVION Full — Annual": "tier_full_annual",
   "AEVION Planet — Monthly": "tier_planet_monthly",
   "AEVION Planet — Annual": "tier_planet_annual",
+  // Названия товаров Universe заданы ЗДЕСЬ первыми — в магазине заводить ровно так.
+  "AEVION Universe — Monthly": "tier_pro_monthly",
+  "AEVION Universe — Annual": "tier_pro_annual",
   "AEVION DevHub Studio Pro": "app_devhub",
   "AEVION Smeta Trainer": "app_smeta",
   "AEVION QVenture": "app_qventure",
@@ -274,6 +285,9 @@ export function tierForLemonSqueezyReference(ref: LemonSqueezyReference | null):
   if (ref.includes("medium")) return "medium";
   if (ref.includes("full")) return "full";
   if (ref.includes("planet")) return "full";
+  // Без этой строки подписка Universe за $149 выдавала бы Lite ($19) — тот же класс,
+  // что у DevHub Studio Pro в августе. Сторож: tests/lsVariantTierIsUnderstood.test.ts.
+  if (ref.startsWith("tier_pro_")) return "pro";
   return "lite";
 }
 

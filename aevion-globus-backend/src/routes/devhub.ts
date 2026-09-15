@@ -3,6 +3,7 @@ import { pgIntId } from "../lib/queryNumber";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { resolvePlanFromPayload, isModuleEntitled } from "../lib/planGate";
+import { siteZone, dnsProvider, dnsConfigured, dnsTokensNeeded, upsertCname, zoneActiveUncached, zoneProbe } from "../lib/devhubDns";
 // Обе стороны нужны: у них шире набор из devhubGuest, у меня — devhubGuestLink.
 // Все четыре символа используются в теле файла, проверено счётом вхождений.
 import { requesterId, devhubGuestId, DEVHUB_GUEST_HEADER } from "../lib/devhubGuest";
@@ -3255,7 +3256,7 @@ Built, but ${url} did not answer 2xx in time`;
     return res.status(501).json({
       error: "Backend deploys are not available yet",
       detail: "This button used to trigger a redeploy of the AEVION platform service instead of your project — it has been disabled rather than left lying.",
-      alternative: "Static projects deploy for real via Cloudflare Pages (Deploy → Pages), including a verified *.aevion.build subdomain.",
+      alternative: "Static projects deploy for real via Cloudflare Pages (Deploy → Pages), including a verified *.aevion.app subdomain.",
       deploymentId: deployment.id,
     });
   }
@@ -4968,12 +4969,10 @@ devhubRouter.post("/projects/:id/domain/auto-setup", async (req, res) => {
     return res.status(400).json({ error: "project has no customDomain set" });
   }
 
-  const cfToken = process.env.CLOUDFLARE_API_TOKEN;
-  const cfZoneId = process.env.CLOUDFLARE_ZONE_ID;
-  if (!cfToken || !cfZoneId) {
+  if (!dnsConfigured()) {
     return res.status(503).json({
-      error: "Cloudflare not configured — set CLOUDFLARE_API_TOKEN + CLOUDFLARE_ZONE_ID",
-      setupUrl: "https://dash.cloudflare.com/profile/api-tokens",
+      error: `DNS not configured — set ${dnsTokensNeeded().join(" + ")}`,
+      setupUrl: dnsProvider() === "vercel" ? "https://vercel.com/account/settings/tokens" : "https://dash.cloudflare.com/profile/api-tokens",
       manualInstruction: `Add CNAME ${project.customDomain} → devhub.aevion.app`,
     });
   }
@@ -4982,50 +4981,11 @@ devhubRouter.post("/projects/:id/domain/auto-setup", async (req, res) => {
   const domain = project.customDomain;
 
   try {
-    const listResp = await fetch(
-      `https://api.cloudflare.com/client/v4/zones/${cfZoneId}/dns_records?type=CNAME&name=${encodeURIComponent(domain)}`,
-      { headers: { Authorization: `Bearer ${cfToken}`, Accept: "application/json" } }
-    );
-    if (!listResp.ok) {
-      const t = await listResp.text();
-      return res.status(listResp.status).json({ error: `Cloudflare list error: ${t.slice(0, 300)}` });
+    const dns = await upsertCname(domain, target);
+    if (!dns.ok) {
+      return res.status(502).json({ error: dns.error, manualInstruction: `Add CNAME ${domain} → ${target}` });
     }
-    const listData = await listResp.json() as { result: Array<{ id: string; content: string }> };
-    const existing = listData.result?.[0];
-
-    if (existing) {
-      if (existing.content === target) {
-        return res.json({ ok: true, action: "already-configured", domain, cname: target, recordId: existing.id });
-      }
-      const upResp = await fetch(
-        `https://api.cloudflare.com/client/v4/zones/${cfZoneId}/dns_records/${existing.id}`,
-        {
-          method: "PUT",
-          headers: { Authorization: `Bearer ${cfToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "CNAME", name: domain, content: target, ttl: 1, proxied: true }),
-        }
-      );
-      if (!upResp.ok) {
-        const t = await upResp.text();
-        return res.status(upResp.status).json({ error: `Cloudflare update error: ${t.slice(0, 300)}` });
-      }
-      return res.json({ ok: true, action: "updated", domain, cname: target, recordId: existing.id });
-    }
-
-    const createResp = await fetch(
-      `https://api.cloudflare.com/client/v4/zones/${cfZoneId}/dns_records`,
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${cfToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "CNAME", name: domain, content: target, ttl: 1, proxied: true }),
-      }
-    );
-    if (!createResp.ok) {
-      const t = await createResp.text();
-      return res.status(createResp.status).json({ error: `Cloudflare create error: ${t.slice(0, 300)}` });
-    }
-    const created = await createResp.json() as { result: { id: string } };
-    res.json({ ok: true, action: "created", domain, cname: target, recordId: created.result.id });
+    return res.json({ ok: true, action: dns.action, domain, cname: target, recordId: dns.recordId });
   } catch (e: any) {
     res.status(500).json({ error: redactInfraDetails(e) || "Domain setup failed" });
   }
@@ -7044,7 +7004,6 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
 
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   const apiToken = process.env.CLOUDFLARE_API_TOKEN;
-  const zoneId = process.env.CLOUDFLARE_ZONE_ID;
   if (!accountId || !apiToken) {
     return res.status(503).json({
       error: "Cloudflare Pages not configured",
@@ -7130,15 +7089,20 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
     try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
     await debitQuietly(userId, "deploy");
 
-    // 4. Provision aevion.build domain (best-effort — don't fail deploy if zone not configured)
+    // 4. Выдача адреса <slug>.<зона> (best-effort — выкатка не падает, если DNS не настроен).
+    //
+    // 15.09.2026: зона — aevion.app (решение основателя); прежняя aevion.build в
+    // Cloudflare больше не существует, и каждый выданный адрес не разрешался. DNS
+    // домена aevion.app живёт у Vercel, поэтому записи пишет lib/devhubDns через
+    // выбранного поставщика (на проде Vercel; Cloudflare — прежний путь). Шаг 4a
+    // остаётся здесь: он про Pages, а не про DNS.
     let customDomain: string | null = null;
     let domainUrl: string | null = null;
 
-    if (zoneId) {
+    if (dnsConfigured()) {
       try {
         const domainSlug = `${slugify(project.name)}-${project.id.slice(0, 6)}`;
-        const fullDomain = `${domainSlug}.aevion.build`;
-
+        const fullDomain = `${domainSlug}.${siteZone()}`;
         // 4a. Add custom domain to CF Pages project.
         //
         // Ответ ОБЯЗАН быть прочитан. Раньше все три вызова к Cloudflare шли без
@@ -7157,21 +7121,9 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
           throw new Error(`Pages domain refused (${addResp.status}): ${body.slice(0, 200)}`);
         }
 
-        // 4b. CNAME DNS record: fullDomain → pageName.pages.dev
-        const dnsTarget = `${pageName}.pages.dev`;
-        const zoneBase = `https://api.cloudflare.com/client/v4/zones/${zoneId}/dns_records`;
-        const listResp = await fetch(`${zoneBase}?type=CNAME&name=${fullDomain}`, { headers: cfHeaders });
-        const listData = await listResp.json() as { result: Array<{ id: string }> };
-        const existingId = listData.result?.[0]?.id;
-
-        const dnsBody = JSON.stringify({ type: "CNAME", name: fullDomain, content: dnsTarget, ttl: 1, proxied: true });
-        const dnsResp = existingId
-          ? await fetch(`${zoneBase}/${existingId}`, { method: "PUT", headers: { ...cfHeaders, "Content-Type": "application/json" }, body: dnsBody })
-          : await fetch(zoneBase, { method: "POST", headers: { ...cfHeaders, "Content-Type": "application/json" }, body: dnsBody });
-        if (!dnsResp.ok) {
-          const body = await dnsResp.text().catch(() => "");
-          throw new Error(`DNS record refused (${dnsResp.status}): ${body.slice(0, 200)}`);
-        }
+        // 4b. CNAME fullDomain → pageName.pages.dev через выбранного поставщика DNS.
+        const dns = await upsertCname(fullDomain, `${pageName}.pages.dev`);
+        if (!dns.ok) throw new Error(`DNS record refused: ${dns.error}`);
 
         customDomain = fullDomain;
         domainUrl = `https://${fullDomain}`;
@@ -7243,7 +7195,7 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
     // reports `degraded` with this reason.
     if (customDomain) {
       if (domainReady) noteProviderSuccess("domain");
-      else noteProviderFailure("domain", `${customDomain} does not resolve — the aevion.build zone is not delegated to Cloudflare`);
+      else noteProviderFailure("domain", `${customDomain} does not resolve — the ${siteZone()} DNS zone is not ready at ${dnsProvider() === "vercel" ? "Vercel" : "Cloudflare"}`);
     }
     return res.json({
       ok: true,
@@ -7257,8 +7209,8 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       message: customDomain
         ? domainReady
           ? `Deployed to ${domainUrl} (and ${pagesUrl})`
-          : `Deployed to ${pagesUrl}. ${customDomain} is configured but does not resolve yet — the aevion.build zone is not delegated to Cloudflare (point the registrar's nameservers at it).`
-        : `Deployed to ${pagesUrl} — verifying it serves before marking live (add CLOUDFLARE_ZONE_ID to enable aevion.build domain)`,
+          : `Deployed to ${pagesUrl}. ${customDomain} is configured but does not resolve yet — the ${siteZone()} DNS zone is not ready yet at ${dnsProvider() === "vercel" ? "Vercel" : "Cloudflare"}.`
+        : `Deployed to ${pagesUrl} — verifying it serves before marking live (configure a DNS provider to enable ${siteZone()} domains)`,
     });
   } catch (e: any) {
     deployment.status = "failed"; deployment.buildLog = e?.message || "deploy failed";
@@ -7857,7 +7809,7 @@ devhubRouter.get("/media/video/status/:predictionId", async (req, res) => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// Domain provision: <slug>.aevion.build via Cloudflare DNS
+// Domain provision: <slug>.<зона> (aevion.app) через lib/devhubDns — Vercel или Cloudflare
 // POST /api/devhub/projects/:id/domain/setup  { subdomain? }
 // GET  /api/devhub/projects/:id/domain/status
 // ═════════════════════════════════════════════════════════════════════════════
@@ -7873,12 +7825,10 @@ devhubRouter.post("/projects/:id/domain/setup", async (req, res) => {
     return res.status(404).json({ error: "project not found" });
   }
 
-  const cfToken = process.env.CLOUDFLARE_API_TOKEN;
-  const cfZoneId = process.env.CLOUDFLARE_ZONE_ID;
-  if (!cfToken || !cfZoneId) {
+  if (!dnsConfigured()) {
     return res.status(503).json({
-      error: "Domain provision not configured — set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID in Railway",
-      setupUrl: "https://dash.cloudflare.com/profile/api-tokens",
+      error: `Domain provision not configured — set ${dnsTokensNeeded().join(" and ")} in Railway`,
+      setupUrl: dnsProvider() === "vercel" ? "https://vercel.com/account/settings/tokens" : "https://dash.cloudflare.com/profile/api-tokens",
     });
   }
 
@@ -7889,44 +7839,18 @@ devhubRouter.post("/projects/:id/domain/setup", async (req, res) => {
 
   const requestedSub = (req.body?.subdomain as string | undefined) || slugify(project.name);
   const subdomain = (requestedSub + "-" + project.id.slice(0, 6)).toLowerCase().replace(/[^a-z0-9-]/g, "-");
-  const fullDomain = `${subdomain}.aevion.build`;
+  const fullDomain = `${subdomain}.${siteZone()}`;
 
   try {
-    // Create or update CNAME record
-    const listResp = await fetch(
-      `https://api.cloudflare.com/client/v4/zones/${cfZoneId}/dns_records?type=CNAME&name=${fullDomain}`,
-      { headers: { Authorization: `Bearer ${cfToken}`, "Content-Type": "application/json" } }
-    );
-    const existing = await listResp.json() as { result: Array<{ id: string }> };
-    const existingId = existing.result?.[0]?.id;
-
-    const payload = { type: "CNAME", name: fullDomain, content: deployTarget, proxied: true, ttl: 1 };
-
-    let cfResp: Response;
-    if (existingId) {
-      cfResp = await fetch(
-        `https://api.cloudflare.com/client/v4/zones/${cfZoneId}/dns_records/${existingId}`,
-        { method: "PUT", headers: { Authorization: `Bearer ${cfToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) }
-      );
-    } else {
-      cfResp = await fetch(
-        `https://api.cloudflare.com/client/v4/zones/${cfZoneId}/dns_records`,
-        { method: "POST", headers: { Authorization: `Bearer ${cfToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) }
-      );
-    }
-
-    const cfData = await cfResp.json() as { success: boolean; errors?: Array<{ message: string }> };
-    if (!cfData.success) {
-      const msg = cfData.errors?.[0]?.message ?? "Cloudflare DNS error";
-      return res.json({ ok: false, error: msg });
-    }
+    const dns = await upsertCname(fullDomain, deployTarget);
+    if (!dns.ok) return res.json({ ok: false, error: dns.error });
 
     // Save custom domain to project
     project.customDomain = fullDomain;
     project.updatedAt = now();
     try { await dbSaveProject(project); } catch { memProjects.set(project.id, project); }
 
-    return res.json({ ok: true, domain: fullDomain, url: `https://${fullDomain}`, cname: deployTarget });
+    return res.json({ ok: true, domain: fullDomain, url: `https://${fullDomain}`, cname: deployTarget, action: dns.action });
   } catch (e: any) {
     return res.status(500).json({ error: redactInfraDetails(e) || "Domain provision failed" });
   }
@@ -7997,19 +7921,8 @@ devhubRouter.get("/providers/health", async (_req, res) => {
       });
       return { ok: r.ok, detail: `HTTP ${r.status}` };
     }),
-    probe("cloudflare_zone", async () => {
-      if (!process.env.CLOUDFLARE_ZONE_ID || !process.env.CLOUDFLARE_API_TOKEN) {
-        return { ok: false, detail: "CLOUDFLARE_ZONE_ID not set" };
-      }
-      const r = await fetch(`https://api.cloudflare.com/client/v4/zones/${process.env.CLOUDFLARE_ZONE_ID}`, {
-        headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` },
-      });
-      const b = await r.json().catch(() => ({} as any));
-      const status = b?.result?.status;
-      // "pending" means the registrar never pointed at Cloudflare, so every
-      // *.aevion.build address we hand out fails DNS.
-      return { ok: status === "active", detail: `zone status: ${status ?? "unknown"}` };
-    }),
+    // Зона DNS — Vercel или Cloudflare по выбранному поставщику (lib/devhubDns).
+    zoneProbe(),
     probe("openai", async () => {
       if (!process.env.OPENAI_API_KEY) return { ok: false, detail: "OPENAI_API_KEY not set" };
       const r = await fetch("https://api.openai.com/v1/models", {
@@ -8073,6 +7986,8 @@ devhubRouter.get("/providers/health", async (_req, res) => {
     elevenlabs: ["audio_tts", "audio_music"],
     brevo: ["email", "sms", "whatsapp"],
     cloudflare: ["pages"],
+    cloudflare_zone: ["domain"],
+    vercel_dns: ["domain"],
   };
   for (const c of checks) {
     for (const capId of CHECK_TO_CAPABILITIES[c.name] ?? []) {
@@ -8110,23 +8025,14 @@ export function __resetAevionBuildZoneCache(): void {
 }
 
 async function aevionBuildZoneActive(): Promise<boolean | null> {
-  if (!process.env.CLOUDFLARE_ZONE_ID || !process.env.CLOUDFLARE_API_TOKEN) return null;
+  // Поставщика и саму пробу знает lib/devhubDns; здесь только кэш.
+  if (!dnsConfigured()) return null;
   const now = Date.now();
   const ttl = zoneCache.active === null ? ZONE_FAIL_TTL_MS : ZONE_TTL_MS;
   if (zoneCache.at !== 0 && now - zoneCache.at < ttl) return zoneCache.active;
-  try {
-    const r = await fetch(
-      `https://api.cloudflare.com/client/v4/zones/${process.env.CLOUDFLARE_ZONE_ID}`,
-      { headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` } },
-    );
-    const b: any = await r.json().catch(() => ({}));
-    const active = b?.result?.status === "active";
-    zoneCache = { at: now, active };
-    return active;
-  } catch {
-    zoneCache = { at: now, active: null };
-    return null;
-  }
+  const active = await zoneActiveUncached();
+  zoneCache = { at: now, active };
+  return active;
 }
 
 // GET /api/devhub/studio/deploy-stats?days=N — доля успешных публикаций.
@@ -8257,14 +8163,14 @@ devhubRouter.get("/studio/capabilities", async (_req, res) => {
     // делегирована, честный ответ — not_available, как у Railway. Флаг
     // DEVHUB_AEVION_BUILD_ZONE_ACTIVE включает возможность обратно, когда зона
     // заработает: возвращать её должен человек, который это проверил.
-    { id: "domain", name: "Домен (aevion.build)", description: "Auto-provision <slug>.aevion.build with Pages deploy", status: zoneActive === true ? "live" : "not_available",
+    { id: "domain", name: `Домен (${siteZone()})`, description: `Auto-provision <slug>.${siteZone()} with Pages deploy`, status: zoneActive === true ? "live" : "not_available",
       // Причина в lastError: интерфейс показывает её подсказкой. Без неё
       // человек видит выключенную возможность и не знает, чего ждать —
       // «не работает» без причины читается как поломка у нас.
-      lastError: (process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_ZONE_ID && zoneActive === false)
-        ? "ключи заданы, но зона aevion.build не делегирована — выданные адреса не разрешаются"
+      lastError: (dnsConfigured() && zoneActive === false)
+        ? `ключи заданы, но зона ${siteZone()} ${dnsProvider() === "vercel" ? "не подтверждена у Vercel" : "не делегирована в Cloudflare"} — выданные адреса не разрешаются`
         : undefined,
-      tokens: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ZONE_ID"] },
+      tokens: ["CLOUDFLARE_ACCOUNT_ID", ...dnsTokensNeeded()] },
     { id: "video", name: "Генерация видео", description: "AI video via Replicate", status: process.env.REPLICATE_API_TOKEN ? "live" : "needs_token", token: "REPLICATE_API_TOKEN" },
     // 3D объявлен на странице модуля среди возможностей «в одном проекте»,
     // а в этом списке его не было вовсе: панель показывала «настроено N из 16»,

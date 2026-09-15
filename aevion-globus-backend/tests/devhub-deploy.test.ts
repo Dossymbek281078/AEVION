@@ -876,7 +876,7 @@ describe("the domain capability reports what deploys actually observed", () => {
     }));
     // Cloudflare API calls succeed; the domain probe itself never answers 2xx.
     fetchMock.mockImplementation(async (url: string) =>
-      String(url).includes(".aevion.build")
+      String(url).includes(".aevion.app")
         ? { ok: false, status: 522, json: async () => ({}), text: async () => "" }
         : { ok: true, status: 200, json: async () => ({ success: true, result: {} }), text: async () => "" },
     );

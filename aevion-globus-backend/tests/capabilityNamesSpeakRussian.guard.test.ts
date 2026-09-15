@@ -25,7 +25,7 @@ const SRC = fs.readFileSync(
 );
 
 /** Названия сервисов: остаются как есть, это имена собственные. */
-const BRANDS = ["GitHub", "SMS", "WhatsApp", "Railway", "Vercel", "Cloudflare", "aevion.build"];
+const BRANDS = ["GitHub", "SMS", "WhatsApp", "Railway", "Vercel", "Cloudflare", "aevion.app"];
 
 function capabilityNames(): string[] {
   const i = SRC.indexOf('devhubRouter.get("/studio/capabilities"');

@@ -830,6 +830,8 @@ function safeRedirect(raw: unknown, frontendUrl: string, fallbackPath: string): 
     return fallback;
   }
 }
+const GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN = "sign in to use the shared AEVION GitHub account, or set your own GITHUB_TOKEN in the project Env Vars";
+
 /** Имя поставщика DNS для текстов, которые читает человек. */
 function dnsProviderName(): string {
   return dnsProvider() === "vercel" ? "Vercel" : "Cloudflare";
@@ -3587,6 +3589,12 @@ devhubRouter.post("/projects/:id/github/push", async (req, res) => {
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
+  // 🔴 Общий токен GitHub — только вошедшему (окно приёмки 15.09.2026): гость без
+  // входа создавал проект и пушил/открывал PR под НАШИМ аккаунтом — тот самый
+  // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
+  // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
+  // другой проверкой: контракт ручки для гостя — 401, без исключений.
+  if (!auth && !project.envVars?.GITHUB_TOKEN) return res.status(401).json({ error: GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN });
   const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
   if (!githubToken) {
     return res.json({
@@ -3731,6 +3739,12 @@ devhubRouter.post("/projects/:id/github/sync", async (req, res) => {
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
+  // 🔴 Общий токен GitHub — только вошедшему (окно приёмки 15.09.2026): гость без
+  // входа создавал проект и пушил/открывал PR под НАШИМ аккаунтом — тот самый
+  // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
+  // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
+  // другой проверкой: контракт ручки для гостя — 401, без исключений.
+  if (!auth && !project.envVars?.GITHUB_TOKEN) return res.status(401).json({ error: GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN });
   if (!project.repoUrl) {
     return res.json({ ok: false, message: "No GitHub repo linked yet — push to GitHub first (POST /github/push)" });
   }
@@ -3843,6 +3857,12 @@ devhubRouter.post("/projects/:id/github/pull-request", async (req, res) => {
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
+  // 🔴 Общий токен GitHub — только вошедшему (окно приёмки 15.09.2026): гость без
+  // входа создавал проект и пушил/открывал PR под НАШИМ аккаунтом — тот самый
+  // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
+  // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
+  // другой проверкой: контракт ручки для гостя — 401, без исключений.
+  if (!auth && !project.envVars?.GITHUB_TOKEN) return res.status(401).json({ error: GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN });
   const { title, body: prBody, branch: branchInput } = req.body || {};
   if (!title || typeof title !== "string") {
     return res.status(400).json({ error: "title is required" });
@@ -3986,6 +4006,12 @@ devhubRouter.post("/projects/:id/github/pull-request/:number/merge", async (req,
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
+  // 🔴 Общий токен GitHub — только вошедшему (окно приёмки 15.09.2026): гость без
+  // входа создавал проект и пушил/открывал PR под НАШИМ аккаунтом — тот самый
+  // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
+  // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
+  // другой проверкой: контракт ручки для гостя — 401, без исключений.
+  if (!auth && !project.envVars?.GITHUB_TOKEN) return res.status(401).json({ error: GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN });
   const prNumber = pgIntId(req.params.number);
   if (prNumber === null) {
     return res.status(400).json({ error: "invalid pull request number" });
@@ -4037,6 +4063,12 @@ devhubRouter.get("/projects/:id/github/status", async (req, res) => {
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
+  // 🔴 Общий токен GitHub — только вошедшему (окно приёмки 15.09.2026): гость без
+  // входа создавал проект и пушил/открывал PR под НАШИМ аккаунтом — тот самый
+  // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
+  // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
+  // другой проверкой: контракт ручки для гостя — 401, без исключений.
+  if (!auth && !project.envVars?.GITHUB_TOKEN) return res.status(401).json({ error: GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN });
   const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
   if (!project.repoUrl || !githubToken) {
     return res.json({ exists: false });
@@ -4083,6 +4115,12 @@ devhubRouter.get("/projects/:id/github/branches", async (req, res) => {
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
+  // 🔴 Общий токен GitHub — только вошедшему (окно приёмки 15.09.2026): гость без
+  // входа создавал проект и пушил/открывал PR под НАШИМ аккаунтом — тот самый
+  // паттерн, за который GitHub отключал нас 27.07. Свой токен в env проекта —
+  // пожалуйста, хоть гостем; серверный — после входа. Стоит ПЕРЕД любой
+  // другой проверкой: контракт ручки для гостя — 401, без исключений.
+  if (!auth && !project.envVars?.GITHUB_TOKEN) return res.status(401).json({ error: GITHUB_SHARED_TOKEN_NEEDS_SIGN_IN });
   const githubToken = project.envVars?.GITHUB_TOKEN || process.env.GITHUB_TOKEN;
   if (!project.repoUrl || !githubToken) {
     return res.json({ branches: [], connected: false });

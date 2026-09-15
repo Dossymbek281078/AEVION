@@ -25,7 +25,7 @@ import {
 import { parseDxf } from "./dxf";
 import { estimateCsv, estimatePlan } from "./estimate";
 import { planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
-import { масштабПоРазмерам, словаИзТекста } from "./dimensionScale";
+import { масштабПоРазмерам, предупреждениеОбОсях, словаИзТекста } from "./dimensionScale";
 import { текстPdf } from "./pdfText";
 import { drawMaterial, materialById, materialsFor } from "./materials";
 import { CATALOG, demoPlacedSnapshots, groups, itemById, type CatalogItem } from "./furniture";
@@ -868,6 +868,7 @@ export default function QSpaceClient() {
             `Масштаб найден по размерам на чертеже: ${масштаб.mmPerPt.toFixed(1)} мм в пункте листа `
             + `(согласных пар чисел ${масштаб.agree} из ${масштаб.pairs}). Модель построена — `
             + "если большая сторона плана на самом деле другая, поправьте число ниже.",
+            ...предупреждениеОбОсях(масштаб),
             ...r.warnings,
           ]);
           поставитьЧертёж({ ...r.plan, name: f.name });

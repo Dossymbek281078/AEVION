@@ -43,6 +43,8 @@ export interface PdfResult {
   metersPerPt: number;
   extentPt: number;
   truncated: number;
+  /** начало координат плана на листе (пункты): точка листа → метры = (p − origin) × metersPerPt */
+  originPt?: { x: number; y: number };
 }
 
 const MAX_SEGMENTS = 400;
@@ -690,5 +692,8 @@ export function planFromPdfSegments(
     metersPerPt,
     extentPt: src.extentPt,
     truncated,
+    // начало координат плана на листе: подписи комнат из текста PDF переводятся
+    // в метры тем же сдвигом и масштабом, что и стены
+    originPt: { x: minX, y: minY },
   };
 }

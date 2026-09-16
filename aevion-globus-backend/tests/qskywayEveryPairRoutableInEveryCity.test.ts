@@ -9,6 +9,7 @@ import { CITY_TOKYO } from "../src/routes/qskyway.city.tokyo";
 import { CITY_SINGAPORE } from "../src/routes/qskyway.city.singapore";
 import { CITY_AMSTERDAM } from "../src/routes/qskyway.city.amsterdam";
 import { CITY_BERLIN } from "../src/routes/qskyway.city.berlin";
+import { CITY_VIENNA } from "../src/routes/qskyway.city.vienna";
 
 /**
  * Каждая пара площадок в каждом городе даёт маршрут.
@@ -24,12 +25,12 @@ import { CITY_BERLIN } from "../src/routes/qskyway.city.berlin";
  * CITIES из роутера поднял бы его побочные эффекты; отрицательный контроль —
  * длина списка против экспорта городов.
  */
-const CITIES = { astana: CITY, nyc: CITY_NYC, tokyo: CITY_TOKYO, singapore: CITY_SINGAPORE, amsterdam: CITY_AMSTERDAM, berlin: CITY_BERLIN } as const;
+const CITIES = { astana: CITY, nyc: CITY_NYC, tokyo: CITY_TOKYO, singapore: CITY_SINGAPORE, amsterdam: CITY_AMSTERDAM, berlin: CITY_BERLIN, vienna: CITY_VIENNA } as const;
 const app = express().use(express.json()).use("/api/qskyway", qskywayRouter);
 
 describe("каждая пара площадок проходима — в каждом городе", () => {
   test("список городов здесь совпадает с числом твинов", () => {
-    expect(Object.keys(CITIES).length).toBe(6);
+    expect(Object.keys(CITIES).length).toBe(7);
   });
 
   for (const [city, twin] of Object.entries(CITIES)) {

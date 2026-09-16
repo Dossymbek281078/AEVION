@@ -71,6 +71,7 @@ import { reconcileMeasuredOutlines } from "./lib/measured-outlines.mjs";
 import { fetchI3sBuildingPoints, pointAsTinyRing } from "./lib/i3s-points.mjs";
 import { fetchBag3dOutlines } from "./lib/bag3d.mjs";
 import { fetchBerlinOutlines } from "./lib/berlin-wfs.mjs";
+import { fetchWienBodies } from "./lib/wien-wfs.mjs";
 
 // The height model, the projection and the rasterizer live in
 // scripts/lib/city-twin-geometry.mjs so they can be unit-tested; this file is
@@ -329,6 +330,45 @@ const CITIES = {
       'import type { CityData } from "./qskyway.city";',
     ].join("\n"),
   },
+  vienna: {
+    // Седьмой город, 16.09.2026. Обе половины — ВЕКТОРЫ от первоисточников:
+    // высоты — Баукёрпермодель города (WFS data.wien.gv.at, ogdwien:FMZKBKMOGD,
+    // CC BY 4.0, lib/wien-wfs.mjs; высота тела = O_KOTE − T_KOTE), правило —
+    // WFS самого Austro Control (sdigeo-free.austrocontrol.at, free:CTR):
+    // LOWW CTR, GND–2500 ft AMSL, класс D, Wien Tower — полигон накрывает
+    // весь квадрат (проверено по 4 углам). Квадрат — Внутренний город вокруг
+    // собора Св. Стефана (136 м, самое высокое; контроль сборщика сошёлся).
+    name: "Вена — Внутренний город",
+    bbox: { minLat: 48.204, maxLat: 48.213064, minLon: 16.36, maxLon: 16.376066 },
+    exportName: "CITY_VIENNA",
+    committed: "qskyway.city.vienna.ts",
+    // Сетка из projection(): 1192×1002 м → 60×51 ячеек; раскладка как у Берлина,
+    // но пятая площадка ниже (970, 770): в (970, 610) она попадала в 122 м от
+    // центра демо-круга над собором (r 150) — проверено до сборки, а не смоуком.
+    vertiports: [
+      { c: 2, r: 2, x: 50, y: 50 }, { c: 57, r: 2, x: 1150, y: 50 },
+      { c: 2, r: 48, x: 50, y: 970 }, { c: 57, r: 48, x: 1150, y: 970 },
+      { c: 48, r: 38, x: 970, y: 770 }, { c: 30, r: 48, x: 610, y: 970 },
+      { c: 12, r: 30, x: 250, y: 610 },
+    ],
+    measured: {
+      kind: "wien-wfs",
+      label: "Stadt Wien Baukörpermodell (LOD1, WFS ogdwien:FMZKBKMOGD): верх тела − отметка земли (O_KOTE − T_KOTE, ≈ карниз, без скатов крыш и шпилей), CC BY 4.0",
+      marginM: 50,
+      nearRadiusM: 20,
+      // Верх тела LOD1 — плоская крышка по классу высоты; тег OSM выше — смотреть
+      // гистограмму при первой сборке, класс тега не ставим.
+      osmTallerIsTag: false,
+    },
+    header: [
+      "// QSkyway city digital-twin — Вена, Внутренний город. OpenStreetMap footprints",
+      "// (Overpass, ODbL) reconciled with the City of Vienna's LOD1 building bodies",
+      "// (WFS ogdwien:FMZKBKMOGD, CC BY 4.0) — see scripts/lib/wien-wfs.mjs. Regenerate with:",
+      "//   node scripts/fetch-city-twin.mjs vienna --write",
+      "/* eslint-disable */",
+      'import type { CityData } from "./qskyway.city";',
+    ].join("\n"),
+  },
 };
 
 const cityId = process.argv[2];
@@ -522,6 +562,13 @@ if (city.measured) {
     // Контуры кадастра + высоты LoD2 из WFS Сената; сервер сам отдаёт WGS84.
     process.stderr.write(`  Berlin WFS: fetching outlines…\n`);
     const got = await fetchBerlinOutlines(wide, { log: (s) => process.stderr.write(s + "\n") });
+    for (const g of got) outlines.push({ h: g.h, ring: g.ring });
+  } else if (kind === "wien-wfs") {
+    // Тела LOD1 Баукёрпермодели: одно здание — несколько тел по классам высоты;
+    // reconcileMeasuredOutlines берёт самое высокое из вложенных — это и есть
+    // препятствие, сворачивать по BW_GEB_ID не нужно.
+    process.stderr.write(`  Wien WFS: fetching bodies…\n`);
+    const got = await fetchWienBodies(wide, { log: (s) => process.stderr.write(s + "\n") });
     for (const g of got) outlines.push({ h: g.h, ring: g.ring });
   } else if (kind === "i3s") {
     // Точки-центроиды из I3S-слоя города; каждая — квадрат 1×1 м, чтобы пройти

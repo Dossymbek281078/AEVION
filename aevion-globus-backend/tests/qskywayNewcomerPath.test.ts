@@ -82,7 +82,16 @@ async function walkCity(cityId: string): Promise<string> {
     expect(check.body.valid, "только что выданный документ не проходит собственную проверку").toBe(true);
 
     // 6. Бронь слота — первое действие, оставляющее след.
-    const slot = await request(app).post("/api/qskyway/slots").send({
+    //
+    // 16.09.2026: городов стало семь, а бронь ограничена 6 в минуту НА АДРЕС
+    // (slotBookLimiter) — седьмой город получал 429, и это правильный отказ
+    // ограничителя, а не дефект пути: один человек семь броней подряд не
+    // делает. Новичок каждого города приходит со своего адреса: сокет здесь
+    // внутренний (127.0.0.1), поэтому clientIp доверяет X-Real-IP, как на
+    // проде за прокси Railway. Ослаблять предел ради теста нельзя — он
+    // единственное, что отделяет 41 запись от сорока тысяч (см. роутер).
+    const octet = 1 + ([...cityId].reduce((s, ch) => s + ch.charCodeAt(0), 0) % 250);
+    const slot = await request(app).post("/api/qskyway/slots").set("X-Real-IP", `10.77.0.${octet}`).send({
       routeId: "newcomer-path-" + cityId, t0: "2033-04-04T00:00:00.000Z",
       t1: "2033-04-04T00:10:00.000Z", holder: "Aero Taxi KZ",
     });

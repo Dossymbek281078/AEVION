@@ -96,9 +96,10 @@ export const LANG_KEY_COUNT: Record<Lang, number> = {
   // 15.09: +1 в ru/en/kk — qskyway.city.singapore (четвёртый город).
   // 16.09: +1 в ru/en/kk — qskyway.city.amsterdam (пятый город).
   // 16.09 (вечер): +1 в ru/en/kk — qskyway.city.berlin (шестой город).
-  ru: 7464,
-  en: 7464,
-  kk: 7423,
+  // 16.09 (ночь): +1 в ru/en/kk — qskyway.city.vienna (седьмой город).
+  ru: 7465,
+  en: 7465,
+  kk: 7424,
   de: 134,
   fr: 134,
   es: 134,

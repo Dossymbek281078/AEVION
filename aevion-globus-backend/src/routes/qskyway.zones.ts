@@ -135,6 +135,26 @@ export const NOFLY: Record<string, NoFlyZone[]> = {
     },
     { id: "nfz-crowd", name: "Плотная толпа — Потсдамер-плац (площадь у станции)", kind: "temporary", center: [13.3760, 52.5096], radiusM: 180, until: "2026-12-31T16:00:00Z" },
   ],
+  vienna: [
+    {
+      // Вена, 16.09.2026. Реальный режим: весь квадрат внутри CTR LOWW (полигон
+      // из WFS Austro Control, GND–2500 ft AMSL, класс D) — это блок
+      // airspace.permission на 100 % клеток. Постоянных запретных зон в Австрии
+      // нет (ENR 5.1). Круг ниже — НАША демо-геометрия над собором Св. Стефана
+      // (136 м, самое высокое в квадрате), не опубликованный контур.
+      id: "nfz-stephansdom", name: "Собор Св. Стефана (демо-геометрия)", kind: "permanent",
+      center: [16.3726, 48.2086], radiusM: 150,
+      realityNote:
+        "Это НАША демо-окружность. Опубликованный режим над Внутренним городом один — CTR LOWW (полигон из WFS "
+        + "Austro Control: GND–2500 ft AMSL, класс D, Wien Tower), и он покрывает квадрат целиком: см. блок "
+        + "airspace.permission. Постоянных запретных зон в Австрии нет (ENR 5.1).",
+      realityNoteEn:
+        "This is OUR demo circle. The only published regime over the Innere Stadt is the LOWW CTR (polygon from "
+        + "Austro Control's WFS: GND–2500 ft AMSL, class D, Wien Tower), and it covers the whole square: see "
+        + "airspace.permission. Austria publishes no permanent prohibited areas (ENR 5.1).",
+    },
+    { id: "nfz-crowd", name: "Плотная толпа — Штефансплац и Грабен", kind: "temporary", center: [16.3705, 48.2088], radiusM: 160, until: "2026-12-31T16:00:00Z" },
+  ],
 };
 export const WIND: Record<string, WindConfig> = {
   // Астана — открытая степь, преобладающий юго-западный/южный ветер, сильный.
@@ -152,4 +172,7 @@ export const WIND: Record<string, WindConfig> = {
   // Берлин — равнина, преобладающий западный/юго-западный ветер, умеренный.
   // Живой METAR EDDB (Бранденбург, ~20 км к юго-востоку) перекрывает это значение.
   berlin: { fromDeg: 250, baseMs: 3.5, perBandMs: 1.3 },
+  // Вена — Венская котловина, преобладающий западный/северо-западный ветер.
+  // Живой METAR LOWW (Швехат, ~17 км) перекрывает это значение.
+  vienna: { fromDeg: 300, baseMs: 3.5, perBandMs: 1.3 },
 };

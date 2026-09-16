@@ -14,6 +14,7 @@ const CITY_STATION: Record<string, string> = {
   singapore: "WSSS", // Singapore Changi
   amsterdam: "EHAM", // Amsterdam Schiphol
   berlin: "EDDB", // Berlin Brandenburg (Tegel/Tempelhof closed; ~20 km SE of Potsdamer Platz)
+  vienna: "LOWW", // Vienna Schwechat, ~17 km SE of the Innere Stadt
 };
 
 interface MetarWind { fromDeg: number; speedMs: number; obsTime: string; station: string; }

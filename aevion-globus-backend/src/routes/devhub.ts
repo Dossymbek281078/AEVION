@@ -755,7 +755,8 @@ function creditNote(verdict: CreditVerdict): { creditUnverified: true } | Record
 
 async function debitCredit(userId: string, capability: CapabilityKey, amount = 1): Promise<void> {
   const ipKey = guestIpBudgetKey(userId);
-  if (ipKey) await debitCredit(ipKey, capability, amount);
+  // Через обёртку: отказ списания по адресу должен быть виден так же, как по личности.
+  if (ipKey) await debitQuietly(ipKey, capability, amount);
   const month = creditMonth();
   const tier = await getUserTier(userId);
   if (!isDevHubDbReady()) {

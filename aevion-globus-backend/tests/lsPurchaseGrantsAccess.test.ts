@@ -22,7 +22,8 @@ import { tmpdir } from "node:os";
 const каталог = mkdtempSync(join(tmpdir(), "aevion-ls-"));
 process.env.SUBSCRIPTIONS_FILE = join(каталог, "subscriptions.jsonl");
 process.env.LEMON_SQUEEZY_WEBHOOK_SECRET = "секрет-для-теста-32-символа-минимум-длины";
-process.env.LEMON_SQUEEZY_VARIANT_MEDIUM_MONTHLY = "99001";
+// Вариант ступени Medium (tier_medium, 3 месяца) — ссылки лестницы сроков с 15.09.2026.
+process.env.LEMON_SQUEEZY_VARIANT_MEDIUM = "99001";
 process.env.PAYWALL_MODULES = "multichat-engine";
 process.env.AUTH_JWT_SECRET = "тестовый-секрет-достаточной-длины-для-проверки-32+";
 
@@ -83,7 +84,7 @@ afterAll(() => {
   try { rmSync(каталог, { recursive: true, force: true }); } catch { /* уже нет */ }
   for (const k of [
     "SUBSCRIPTIONS_FILE", "LEMON_SQUEEZY_WEBHOOK_SECRET",
-    "LEMON_SQUEEZY_VARIANT_MEDIUM_MONTHLY", "PAYWALL_MODULES", "AUTH_JWT_SECRET",
+    "LEMON_SQUEEZY_VARIANT_MEDIUM", "PAYWALL_MODULES", "AUTH_JWT_SECRET",
   ]) delete process.env[k];
 });
 
@@ -120,7 +121,10 @@ describe("Lemon Squeezy: оплатил — получил доступ", () => 
     const оплата = await оплатилЧерезLS(email, "99001");
     expect(оплата.status, `вебхук отказал: ${JSON.stringify(оплата.body)}`).toBe(200);
 
-    expect(resolvePlanFromPayload({ email }).tier, "оплатил medium, а тариф другой").toBe("medium");
+    const план = resolvePlanFromPayload({ email });
+    expect(план.rawTier, "оплатил medium, а записан другой срок").toBe("medium");
+    // Любой срок — доступ ко всей планете (15.09.2026).
+    expect(план.tier, "срок Medium не открыл всю планету").toBe("full");
 
     const res = await request(закрытоеПриложение())
       .get("/api/multichat-engine/ping")

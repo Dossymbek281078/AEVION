@@ -1,7 +1,10 @@
 import { describe, test, expect } from "vitest";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { CONSTITUTION_TIERS, MODULES_PRICING, getTier } from "../src/data/pricing";
+import * as pricing from "../src/data/pricing";
+import {
+  MODULES_PRICING, getTier, standaloneApp, TERM_TIERS, TERM_MONTHS, PLANET_BASE_MONTHLY, termPricePerMonth,
+} from "../src/data/pricing";
 
 /**
  * Цена одного товара обязана иметь ОДИН источник.
@@ -10,8 +13,7 @@ import { CONSTITUTION_TIERS, MODULES_PRICING, getTier } from "../src/data/pricin
  * арифметикой мимо buildQuote; отчёт держал копию таблицы исключений; маршрут
  * Конституции — собственный прайс `{ pro: 9, team: 49 }`. Каждый случай по
  * отдельности выглядел исправным, потому что копии совпадали. Расходятся такие
- * копии молча, и заметить это можно только сравнив — то есть там, куда никто
- * не смотрит.
+ * копии молча, и заметить это можно только сравнив — там, куда никто не смотрит.
  *
  * Сторож смотрит на маршруты оплаты: если в них появится своя таблица цен или
  * своя арифметика итога, прогон покраснеет.
@@ -81,76 +83,66 @@ describe("цена имеет один источник", () => {
     const src = withoutComments(sourceOf("checkout.ts"));
 
     expect(src).toContain("buildQuote(");
+    // Цена отдельного приложения — тоже из общей лестницы, а не своей формулой.
+    expect(src).toContain("termTotal(");
     // Прежняя арифметика: накопление итога вручную.
     expect(src).not.toMatch(/totalUsd\s*\+=/);
   });
 
-  test("цена Constitution Pro совпадает с ценой модуля — это один товар", () => {
+  test("Конституция не имеет своей цены — она входит в каждый срок подписки (15.09.2026)", () => {
+    // До 15.09 здесь сверялась цена Constitution Pro с ценой модуля: один товар —
+    // одна цена. Теперь отдельной цены нет вовсе, и сторож держит, что вторая не
+    // появится: ни таблицы тарифов Конституции, ни надстройки, ни отдельного приложения.
     const mod = MODULES_PRICING.find((m) => m.id === "constitution");
-
-    expect(mod?.addonMonthly).toBe(CONSTITUTION_TIERS.pro.priceUsd);
+    expect(mod, "модуль constitution пропал из прайса — проверять нечего").toBeTruthy();
+    expect(mod!.addonMonthly, "у Конституции снова своя цена надстройки").toBeNull();
+    expect(standaloneApp("constitution"), "Конституция снова продаётся отдельным приложением").toBeNull();
+    for (const t of TERM_TIERS) expect(mod!.includedIn, `Конституция не входит в срок ${t}`).toContain(t);
+    expect(Object.keys(pricing), "таблица тарифов Конституции вернулась в прайс").not.toContain("CONSTITUTION_TIERS");
   });
 
   test("тарифы платформы читаются из прайса, а не из копий", () => {
     // Смысловая проверка: getTier — единственный вход к цене тарифа.
-    for (const id of ["lite", "medium", "full"] as const) {
+    for (const id of TERM_TIERS) {
       const t = getTier(id);
       expect(t?.priceMonthly, `${id} без цены`).toBeGreaterThan(0);
     }
   });
 
-  test("годовая цена дешевле месячной, и три числа карточки согласованы", () => {
-    // 13.08.2026 цены снизили, но priceAnnualPerMonth остался считаться от
-    // старых: Lite показывал $20/мес при месячной цене $19, Universe — $208
-    // при $149. Год выглядел ДОРОЖЕ месяца, хотя рядом обещаны «2 месяца в
-    // подарок». Проверяем не формулу, а СМЫСЛ: скидка есть, и годовой итог
-    // согласован с годовой ценой в месяц.
-    for (const id of ["lite", "medium", "full", "pro"] as const) {
-      const t = getTier(id);
-      const monthly = t?.priceMonthly ?? 0;
-      const perMonth = t?.priceAnnualPerMonth ?? 0;
-      const total = t?.priceAnnualTotal ?? 0;
-
-      expect(monthly, `${id} без месячной цены`).toBeGreaterThan(0);
+  test("три числа карточки срока описывают ОДНУ сделку", () => {
+    // 13.08.2026 цены снизили, а «годовая цена в месяц» осталась считаться от
+    // старых: год выглядел ДОРОЖЕ месяца. С 15.09.2026 у карточки три числа —
+    // цена месяца, срок и платёж за срок, — и они обязаны сходиться.
+    for (const id of TERM_TIERS) {
+      const t = getTier(id)!;
+      expect(t.termMonths, `${id}: срок в карточке не равен лестнице`).toBe(TERM_MONTHS[id]);
+      expect(t.priceMonthly, `${id}: цена месяца не из лестницы`).toBe(termPricePerMonth(PLANET_BASE_MONTHLY, id));
       expect(
-        perMonth,
-        `${id}: годовая ($${perMonth}/мес) не дешевле месячной ($${monthly}/мес) — скидки нет`,
-      ).toBeLessThan(monthly);
-
-      // Итог за год и цена «в месяц» обязаны описывать ОДНУ сделку.
-      expect(
-        Math.abs(total / 12 - perMonth),
-        `${id}: $${total} за год — это $${(total / 12).toFixed(2)}/мес, а карточка обещает $${perMonth}/мес`,
-      ).toBeLessThanOrEqual(0.5);
+        t.priceTermTotal,
+        `${id}: $${t.priceTermTotal} за срок — это не $${t.priceMonthly} × ${t.termMonths}`,
+      ).toBe((t.priceMonthly as number) * (t.termMonths as number));
+      // Прежние поля годовой цены убраны: их возвращение — вторая цена того же срока.
+      expect(t, `${id}: вернулась годовая цена`).not.toHaveProperty("priceAnnualPerMonth");
+      expect(t).not.toHaveProperty("priceAnnualTotal");
     }
   });
 
-  test("шапка pricing.ts называет ТЕ ЖЕ цены, что и тарифы под ней", () => {
-    // Комментарий — пересказ, и 13.08.2026 он разошёлся с делом: цены снизили
-    // ($24/$39/$89/$249.99 → $19/$29/$49/$149), а шапку не тронули. Читатель
-    // (и я сам) верит первому, что видит, — то есть враньё стояло в самом
-    // начале файла-источника истины по ценам.
+  test("шапка pricing.ts не пересказывает цены, а подпись лестницы равна тарифам", () => {
+    // Комментарий — пересказ, и 13.08.2026 он разошёлся с делом: цены снизили,
+    // а шапку не тронули. С 15.09.2026 шапка сознательно цен не называет
+    // («числа живут только в TERM_* и PLANET_BASE_MONTHLY») — сторож держит это,
+    // и сверяет единственный оставшийся пересказ: подпись у TERM_FACTOR.
     const src = readFileSync(join(__dirname, "..", "src", "data", "pricing.ts"), "utf8");
-    const head = src.slice(0, src.indexOf("export const TIERS"));
+    const head = src.slice(0, src.indexOf("export type TierId"));
+    expect(head.length, "шапка не найдена — сторож ослеп").toBeGreaterThan(200);
 
-    for (const id of ["lite", "medium", "full", "pro"] as const) {
-      const price = getTier(id)?.priceMonthly;
-      expect(price, `${id} без цены`).toBeGreaterThan(0);
+    const сЦеной = head.split("\n").filter((l) => /\$\s?\d/.test(l));
+    expect(сЦеной, "в шапке снова пересказаны цены тарифов").toEqual([]);
 
-      // Разбираем построчно, а не одной регуляркой: в шаблонной строке `\s`
-      // означает букву s, и собранное так выражение молча не находит ничего —
-      // сторож стал бы вечно зелёным. Проверено: на верной шапке он краснел.
-      const line = head
-        .split("\n")
-        .find((l) => l.includes(`- ${id} `) && l.includes("$"));
-      expect(line, `в шапке нет строки про ${id} — сторож ослеп`).toBeTruthy();
-
-      const claimed = /\$([\d.]+)/.exec(line as string)?.[1];
-      expect(claimed, `в строке про ${id} нет цены`).toBeTruthy();
-      expect(
-        Number(claimed),
-        `шапка обещает $${claimed} за ${id}, а тариф стоит $${price}`,
-      ).toBe(price);
-    }
+    // Разбираем построчно, а не одной регуляркой по всему файлу.
+    const подпись = src.split("\n").find((l) => l.includes("у планеты это"));
+    expect(подпись, "подпись лестницы у TERM_FACTOR исчезла — сторож ослеп").toBeTruthy();
+    const числа = ((подпись as string).match(/\d+/g) ?? []).map(Number);
+    expect(числа, "подпись лестницы обещает не те цены месяца").toEqual(TERM_TIERS.map((t) => getTier(t)!.priceMonthly));
   });
 });

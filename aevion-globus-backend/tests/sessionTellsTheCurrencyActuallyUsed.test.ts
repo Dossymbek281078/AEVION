@@ -46,7 +46,8 @@ beforeEach(() => {
   // вебхука здесь не формальность, без него купленное не выдадут. Тест
   // поднимает все четыре, иначе касса честно отвечает 503.
   process.env.LEMON_SQUEEZY_WEBHOOK_SECRET = "секрет-для-теста";
-  process.env.LEMON_SQUEEZY_VARIANT_MEDIUM_MONTHLY = "12345";
+  // Вариант ступени Medium (tier_medium) — ссылки лестницы сроков с 15.09.2026.
+  process.env.LEMON_SQUEEZY_VARIANT_MEDIUM = "12345";
 });
 
 describe("ответ кассы называет валюту фактической оплаты", () => {
@@ -64,5 +65,32 @@ describe("ответ кассы называет валюту фактическ
       r.body.currency,
       "ответ не называет валюту фактической оплаты — витрина не сможет сказать правду"
     ).toBe("USD");
+  });
+
+  test("отдельное приложение в тенге НЕ идёт в PayBox — только Lemon Squeezy, и ответ честно в USD", async () => {
+    // 15.09.2026 (коммит 8bd91f721): вебхук карт приложения не выдаёт, а ссылку
+    // app_cyberchess_full принял бы за тариф full. Поэтому KZT для приложения
+    // не пробует PayBox вовсе, а не «пробует и падает».
+    const { payboxPaymentProvider } = await import("../src/lib/payment/payboxProvider");
+    const вызовы = vi.mocked(payboxPaymentProvider.createIntent);
+    вызовы.mockClear();
+    process.env.LEMON_SQUEEZY_VARIANT_CYBERCHESS_PRO = "23456";
+    try {
+      const r = await request(app)
+        .post("/api/pricing/checkout/session")
+        .send({ tierId: "pro", app: "cyberchess", currency: "KZT" });
+      expect(r.status, `касса ответила ${r.status}: ${JSON.stringify(r.body)}`).toBe(200);
+      expect(вызовы, "покупка приложения ушла в PayBox").not.toHaveBeenCalled();
+      expect(r.body.provider).toBe("lemonsqueezy");
+      expect(r.body.currency).toBe("USD");
+
+      // Контроль: тариф в тенге PayBox по-прежнему пробует — иначе «не вызван»
+      // проходило бы и на кассе, где PayBox отключён для всех.
+      вызовы.mockClear();
+      await request(app).post("/api/pricing/checkout/session").send({ tierId: "medium", currency: "KZT" });
+      expect(вызовы, "тариф в тенге перестал пробовать PayBox").toHaveBeenCalledTimes(1);
+    } finally {
+      delete process.env.LEMON_SQUEEZY_VARIANT_CYBERCHESS_PRO;
+    }
   });
 });

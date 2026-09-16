@@ -94,9 +94,12 @@ export const LANG_KEY_COUNT: Record<Lang, number> = {
   // 14.09: +10 в ru/en/kk — moduleChip.* (кнопка покупки на 38 страницах
   // модулей была зашита по-русски; сторож chipSpeaksVisitorLanguage).
   // 15.09: +1 в ru/en/kk — qskyway.city.singapore (четвёртый город).
-  ru: 7462,
-  en: 7462,
-  kk: 7421,
+  // 16.09: ценовая политика «тариф = срок» — ключи pricing.* переписаны (сняты period/annual/bundles,
+  // заведены сроки и блок приложений), moduleChip.* и constitution.* правлены. Числа посчитаны,
+  // а не на глаз: ru 7425, en 7425, kk 7384.
+  ru: 7425,
+  en: 7425,
+  kk: 7384,
   de: 134,
   fr: 134,
   es: 134,

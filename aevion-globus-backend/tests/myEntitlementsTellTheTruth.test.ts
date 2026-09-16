@@ -25,6 +25,7 @@ process.env.SUBSCRIPTIONS_FILE = файл;
 process.env.AUTH_JWT_SECRET = "test-jwt-secret-entitlements-01092026";
 
 const { entitlementsRouter } = await import("../src/routes/entitlements");
+const { MODULES_PRICING } = await import("../src/data/pricing");
 
 function приложение() {
   const a = express();
@@ -42,7 +43,7 @@ const токен = (email: string) =>
 beforeEach(() => {
   writeFileSync(файл, JSON.stringify({
     id: "sub_paid", ts: new Date().toISOString(), email: "paid@example.com",
-    tierId: "medium", period: "monthly", seats: 1, modules: [], trialDays: 0,
+    tierId: "medium", termMonths: 3, seats: 1, modules: [], trialDays: 0,
     source: "test",
   }) + "\n", "utf8");
 });
@@ -60,10 +61,12 @@ async function права(email?: string) {
 }
 
 describe("«что мне доступно» говорит правду", () => {
-  test("оплативший medium видит СВОЙ тариф и доступ к закрытому модулю", async () => {
+  test("оплативший срок medium видит доступ всей планеты и закрытый модуль", async () => {
+    // С 15.09.2026 любой срок — доступ ко всей планете: ручка отдаёт канонический
+    // план full (срок в месяцах живёт в записи подписки, а не в этом ответе).
     const res = await права("paid@example.com");
     expect(res.status).toBe(200);
-    expect(res.body.plan, "оплатил medium, а ручка говорит другое").toBe("medium");
+    expect(res.body.plan, "оплатил срок medium, а ручка не признаёт платный план").toBe("full");
 
     const мультичат = (res.body.modules ?? []).find(
       (m: { module: string }) => m.module === "multichat-engine",
@@ -90,12 +93,17 @@ describe("«что мне доступно» говорит правду", () =>
     const res = await права();
     expect(res.status).toBe(200);
     expect(res.body.plan).toBe("free");
-    // Бесплатные модули анонимному доступны ЗАКОННО — их три из сорока трёх.
-    // Проверять надо закрытые: у них в requiredTiers нет ни free, ни lite.
+    // Бесплатные модули анонимному доступны ЗАКОННО — те, что каталог включает во free.
+    // requiredTiers ручки канонические и без free (lite сведён к full), поэтому
+    // «закрытый» берём ИЗ КАТАЛОГА: модуль, которого нет во free.
+    const бесплатные = new Set(MODULES_PRICING.filter((m) => m.includedIn.includes("free")).map((m) => m.id));
+    expect(бесплатные.size, "контроль: бесплатные модули в каталоге есть").toBeGreaterThan(0);
     const закрытыеСДоступом = (res.body.modules ?? []).filter(
-      (m: { requiredTiers: string[]; entitled: boolean }) =>
-        m.entitled && !m.requiredTiers.includes("free") && !m.requiredTiers.includes("lite"),
+      (m: { module: string; entitled: boolean }) => m.entitled && !бесплатные.has(m.module),
     );
+    // Контроль: бесплатные модули анонимному действительно открыты — иначе «ничего
+    // не открыто» проходило бы и на коде, закрывающем всё.
+    expect((res.body.modules ?? []).filter((m: { module: string; entitled: boolean }) => m.entitled && бесплатные.has(m.module)).length).toBe(бесплатные.size);
     expect(
       закрытыеСДоступом.map((m: { module: string }) => m.module),
       "анонимному обещан доступ к платному модулю",

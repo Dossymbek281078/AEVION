@@ -89,7 +89,7 @@ describe("provisioning: сводка", () => {
    * объявлено. Ради этого страница и существует: тариф, по которому сегодня
    * никто не купил, обязан показываться нулём, а не исчезать из отчёта.
    */
-  test("byTier объявляет ВСЕ семь тарифов даже когда подписок нет", () => {
+  test("byTier объявляет ВСЕ восемь тарифов даже когда подписок нет", () => {
     const emptyFile = join(dir, "empty.jsonl");
     writeFileSync(emptyFile, "", "utf8");
     const prev = process.env.SUBSCRIPTIONS_FILE;
@@ -98,7 +98,7 @@ describe("provisioning: сводка", () => {
       const agg = mod.aggregateSubscriptions();
       expect(agg.total).toBe(0);
       expect(Object.keys(agg.byTier).sort()).toEqual(
-        ["business", "enterprise", "free", "full", "lite", "medium", "pro"],
+        ["business", "enterprise", "free", "full", "lite", "max", "medium", "pro"],
       );
     } finally {
       process.env.SUBSCRIPTIONS_FILE = prev;

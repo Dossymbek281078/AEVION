@@ -47,6 +47,7 @@ vi.mock("../src/lib/payment/payboxProvider", () => ({
 vi.mock("../src/lib/sentry/platform", () => ({ makeServiceCapture: () => () => {} }));
 
 const { payboxWebhookRouter } = await import("../src/routes/payboxWebhook");
+const { writeSubscription } = await import("../src/routes/provisioning");
 const { resolvePlanFromPayload, isModuleEntitled, tiersForModule, requireModule, paywallEnabledFor } =
   await import("../src/lib/planGate");
 const jwt = (await import("jsonwebtoken")).default;
@@ -90,7 +91,7 @@ async function вернул(email: string, тариф: string) {
   полезнаяСтатус = "refunded";
   полезная = {
     pg_user_contact_email: email,
-    pg_order_id: `tier_${тариф}_monthly`,
+    pg_order_id: `tier_${тариф}`,
     pg_payment_id: платёжПоПокупке.get(`${email}:${тариф}`) ?? `pay-e2e-возврат-${++счётчик}`,
   };
   const r = await request(приложение()).post("/api/paybox/webhook").send();
@@ -104,7 +105,7 @@ async function оплатил(email: string, тариф: string) {
   платёжПоПокупке.set(`${email}:${тариф}`, идентификатор);
   полезная = {
     pg_user_contact_email: email,
-    pg_order_id: `tier_${тариф}_monthly`,
+    pg_order_id: `tier_${тариф}`,
     pg_payment_id: идентификатор,
   };
   return request(приложение()).post("/api/paybox/webhook").send();
@@ -153,25 +154,42 @@ describe("оплатил — получил доступ", () => {
     expect(readFileSync(файлПодписок, "utf8"), "запись не попала в файл").toContain(email);
 
     const план = resolvePlanFromPayload({ email });
-    expect(план.tier, "оплатил medium, а тариф другой").toBe("medium");
+    expect(план.rawTier, "оплатил срок medium, а записан другой").toBe("medium");
+    // С 15.09.2026 любой срок — доступ ко всей планете.
+    expect(план.tier, "срок medium не открыл всю планету").toBe("full");
 
-    // Модуль запуска 10.09: стена требует medium и выше.
+    // Модуль входит в каждый платный срок.
     expect(tiersForModule("multichat-engine")).toContain("medium");
+    expect(tiersForModule("multichat-engine")).toContain("lite");
     expect(
       isModuleEntitled(план, "multichat-engine"),
       "человек заплатил, а доступа к купленному нет",
     ).toBe(true);
   });
 
-  test("оплата младшего тарифа доступа к старшему модулю НЕ даёт", async () => {
+  test("оплата самого короткого срока (Lite) тоже открывает модуль — тариф это срок, а не набор", async () => {
     const email = "lite-e2e@example.com";
     await оплатил(email, "lite");
     const план = resolvePlanFromPayload({ email });
-    expect(план.tier).toBe("lite");
+    expect(план.rawTier).toBe("lite");
     expect(
       isModuleEntitled(план, "multichat-engine"),
-      "дешёвый тариф открыл модуль, который требует medium",
-    ).toBe(false);
+      "заплатил за месяц всей планеты, а модуль закрыт",
+    ).toBe(true);
+  });
+
+  test("КОНТРОЛЬ: истёкший срок доступа НЕ даёт", () => {
+    // Вторая половина пары: без неё «доступ есть» проходило бы на коде, который
+    // открывает всем, у кого когда-либо была запись.
+    const email = "expired-e2e@example.com";
+    writeSubscription({
+      id: "sub_expired_e2e", ts: new Date().toISOString(), email,
+      tierId: "max", termMonths: 12, seats: 1, modules: [], trialDays: 0,
+      validUntil: new Date(Date.now() - 86_400_000).toISOString(), source: "test",
+    });
+    const план = resolvePlanFromPayload({ email });
+    expect(план.tier).toBe("free");
+    expect(isModuleEntitled(план, "multichat-engine"), "срок истёк, а доступ остался").toBe(false);
   });
 });
 
@@ -203,13 +221,27 @@ describe("настоящие ворота: стена ВКЛЮЧЕНА", () => {
     expect(res.body.ok).toBe(true);
   });
 
-  test("оплативший lite в эти ворота НЕ проходит", async () => {
+  test("оплативший Lite тоже ПРОХОДИТ ворота — любой срок открывает всю планету", async () => {
     const email = "gate-lite-e2e@example.com";
-    await оплатил(email, "lite");
+    const оплата = await оплатил(email, "lite");
+    expect(оплата.body.action, "оплата не проведена — тест мерит не то").toBe("activated");
     const res = await request(закрытоеПриложение())
       .get("/api/multichat-engine/ping")
       .set("Authorization", `Bearer ${токен(email)}`);
-    expect(res.status, "дешёвый тариф открыл ворота старшего модуля").not.toBe(200);
+    expect(res.status, "заплатил за месяц всей планеты, а ворота не пускают").toBe(200);
+  });
+
+  test("КОНТРОЛЬ: с ИСТЁКШИМ сроком ворота не пускают", async () => {
+    const email = "gate-expired-e2e@example.com";
+    writeSubscription({
+      id: "sub_gate_expired", ts: new Date().toISOString(), email,
+      tierId: "medium", termMonths: 3, seats: 1, modules: [], trialDays: 0,
+      validUntil: new Date(Date.now() - 86_400_000).toISOString(), source: "test",
+    });
+    const res = await request(закрытоеПриложение())
+      .get("/api/multichat-engine/ping")
+      .set("Authorization", `Bearer ${токен(email)}`);
+    expect(res.status, "срок истёк, а ворота пускают").not.toBe(200);
   });
 });
 

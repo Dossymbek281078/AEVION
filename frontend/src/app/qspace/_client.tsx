@@ -27,6 +27,9 @@ import { estimateCsv, estimatePlan } from "./estimate";
 import { planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
 import { масштабПоРазмерам, надёжностьМасштаба, предупреждениеОбОсях, словаИзТекста } from "./dimensionScale";
 import { текстPdf } from "./pdfText";
+import { назначенияПоПодписям, подписиИзТекста, type Подпись } from "./roomLabels";
+import { appliancesFromLabels, fixturesFromSegments } from "./fixtures";
+import type { Placement } from "./autoPlace";
 import { FINISH_PRESETS, drawMaterial, materialById, materialsFor } from "./materials";
 import { ROOM_TYPES, ROOM_TYPE_LABEL, guessRoomTypes, type RoomType } from "./roomTypes";
 import { STYLES, type Style } from "./styles";
@@ -189,6 +192,8 @@ export default function QSpaceClient() {
   const [roomFloor, setRoomFloor] = useState<Record<number, string>>({});
   const [roomWall, setRoomWall] = useState<Record<number, string>>({});
   const [roomTypeOverride, setRoomTypeOverride] = useState<Record<number, RoomType>>({});
+  /** имя комнаты с чертежа («Мастер спальня») по номеру — из текстовых подписей PDF */
+  const [roomName, setRoomName] = useState<Record<number, string>>({});
   const [styleId, setStyleId] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [unitLabel, setUnitLabel] = useState<string>("");
@@ -236,6 +241,10 @@ export default function QSpaceClient() {
   const [pendingRestore, setPendingRestore] = useState<Pick<Project, "placed"> | null>(null);
   // PDF разобран, но масштаб ещё не назван человеком — план не строим.
   const [pdfPending, setPdfPending] = useState<PdfSegments | null>(null);
+  /** подписи из текста того же PDF — нужны и при масштабе, заданном человеком */
+  const [pdfLabels, setPdfLabels] = useState<Подпись[]>([]);
+  /** сантехника и мебель, узнанные на чертеже: стоят сразу и первыми при любом стиле */
+  const [pdfFixtures, setPdfFixtures] = useState<Placement[]>([]);
   // Растровый план ждёт проверки человеком: строить 3D молча по
   // распознанному нельзя (см. RasterReview).
   const [rasterUrl, setRasterUrl] = useState<string | null>(null);
@@ -832,6 +841,7 @@ export default function QSpaceClient() {
     const план = autoPlace(
       roomsInfo.rooms, roomTypes, s, roomsInfo.runsOf, roomsInfo.roomAt,
       (id) => CATALOG.find((c) => c.id === id)?.size,
+      pdfFixtures,
     );
     const вернулись = вернутьМебель(t, план.items);
     setPlaced(вернулись);
@@ -839,7 +849,7 @@ export default function QSpaceClient() {
     setLayers((l) => ({ ...l, finish: true, decor: true }));
     const строки = [
       `Стиль «${s.name}»: отделка назначена ${roomsInfo.rooms.length} комнатам по их назначению, `
-      + `расставлено ${план.items.length} предметов${было ? ` (прежние ${было} сняты)` : ""}. `
+      + `расставлено ${план.items.length} предметов${pdfFixtures.length ? ` (из них ${pdfFixtures.length} с чертежа)` : ""}${было ? ` (прежние ${было} сняты)` : ""}. `
       + "Двигайте мебель мышью или пальцем, назначение комнат и пол правьте ниже.",
     ];
     if (план.skipped.length > 0) {
@@ -851,7 +861,7 @@ export default function QSpaceClient() {
       );
     }
     setWarnings(строки);
-  }, [roomsInfo, roomTypes]);
+  }, [roomsInfo, roomTypes, pdfFixtures]);
 
   // ---- подсветка выбранного предмета -------------------------------------
   useEffect(() => {
@@ -974,8 +984,65 @@ export default function QSpaceClient() {
     setPlan(сВысотой);
   }, [heightM]);
 
+  /**
+   * Назначения комнат по подписям чертежа. Основатель 15.09: «нет распознавания
+   * комнат по типу, там же были указаны названия». Подпись «Кухня» стоит внутри
+   * кухни — значит комната, в которую попал её центр, и есть кухня. Эвристика по
+   * площади остаётся только для комнат без подписи.
+   */
+  const назначитьПоПодписям = useCallback((
+    r: { plan: Plan; originPt?: { x: number; y: number }; metersPerPt: number },
+    labels: Подпись[],
+    другиеЛинии: PdfSegments["otherSegments"] = [],
+  ): string[] => {
+    setRoomTypeOverride({});
+    setRoomName({});
+    setPdfFixtures([]);
+    if (!r.originPt) return [];
+    const rooms = findRooms(r.plan);
+    const o = r.originPt, k = r.metersPerPt;
+    const строки: string[] = [];
+    let типы: Record<number, RoomType> = guessRoomTypes(rooms.rooms);
+    if (labels.length > 0) {
+      const { types, names, unplaced } = назначенияПоПодписям(labels, o, k, rooms.roomAt);
+      setRoomTypeOverride(types);
+      setRoomName(names);
+      типы = { ...типы, ...types };
+      const n = Object.keys(names).length;
+      строки.push(n === 0
+        ? "Подписи комнат на чертеже есть, но ни одна не попала внутрь найденной комнаты — назначения поставлены по площади."
+        : `Комнаты названы по подписям чертежа: ${n} из ${rooms.rooms.length}`
+          + (unplaced.length ? `; вне найденных комнат остались: ${unplaced.join(", ")}` : "") + ".");
+    }
+    // Сантехника и мебель с чертежа: блоки слоёв «Мебель» → предметы каталога.
+    // Ставятся сразу, чтобы человек видел на модели то, что нарисовано на плане.
+    if (другиеЛинии.length > 0) {
+      const линии = другиеЛинии.map((s) => ({ x1: (s.x1 - o.x) * k, y1: (s.y1 - o.y) * k, x2: (s.x2 - o.x) * k, y2: (s.y2 - o.y) * k, layer: s.layer }));
+      const подписиМ = labels.map((l) => ({ text: l.text, x: (l.x - o.x) * k, y: (l.y - o.y) * k }));
+      const f = fixturesFromSegments(линии, rooms.roomAt, типы, (id) => CATALOG.find((c) => c.id === id)?.size, подписиМ);
+      // техника по подписям («дух свч», «п/м», «с/м») — туда, где написано
+      const техника = appliancesFromLabels(labels, o, k, rooms.roomAt, f.items);
+      const все = [...f.items, ...техника];
+      if (все.length > 0) {
+        setPdfFixtures(все);
+        setPendingRestore({ placed: все });
+        setLayers((l) => ({ ...l, decor: true }));
+        const счёт = new Map<string, number>();
+        for (const it of все) счёт.set(it.catalogId, (счёт.get(it.catalogId) ?? 0) + 1);
+        строки.push(
+          `С чертежа взяты и поставлены: ${[...счёт].map(([id, n]) => `${CATALOG.find((c) => c.id === id)?.name.toLowerCase() ?? id}${n > 1 ? ` ×${n}` : ""}`).join(", ")}`
+          + ` (${f.items.length} из ${f.blocks} блоков мебели${техника.length ? `, ${техника.length} по подписям техники` : ""}; остальные не узнаны и не ставились).`,
+        );
+      } else if (f.blocks > 0) {
+        строки.push(`На слоях мебели ${f.blocks} блоков, но ни один не узнан по габариту и комнате — расставит стиль.`);
+      }
+    }
+    return строки;
+  }, []);
+
   const onFile = useCallback(async (f: File) => {
     setPdfPending(null);
+    setPdfLabels([]);
     setИмяФайла(f.name);
     // Предел размера — ПЕРЕД чтением, а не после. Дальше по всем трём веткам
     // файл читается целиком в память (`f.text()`, `f.arrayBuffer()`), и на
@@ -1016,6 +1083,8 @@ export default function QSpaceClient() {
       // для поправки. Не нашёлся — спрашиваем человека и говорим, почему.
       const текст = await текстPdf(bytes);
       const масштаб = текст.ok ? масштабПоРазмерам(словаИзТекста(текст.items)) : null;
+      const подписи = текст.ok ? подписиИзТекста(текст.items) : [];
+      setPdfLabels(подписи);
       if (масштаб && src.extentPt > 0) {
         const extentM = Math.round((src.extentPt * масштаб.mmPerPt) / 10) / 100;
         const r = planFromPdfSegments(src, extentM, "размеры");
@@ -1029,6 +1098,7 @@ export default function QSpaceClient() {
               : "Модель построена — если большая сторона плана на самом деле другая, поправьте число ниже."),
             ...предупреждениеОбОсях(масштаб),
             ...r.warnings,
+            ...назначитьПоПодписям({ plan: r.plan, originPt: r.originPt, metersPerPt: r.metersPerPt }, подписи, src.otherSegments),
           ]);
           поставитьЧертёж({ ...r.plan, name: f.name });
           setUnitLabel(`масштаб по размерам чертежа: ${extentM} м по большей стороне`);
@@ -1051,7 +1121,7 @@ export default function QSpaceClient() {
     setWarnings(r.warnings);
     setUnitLabel(r.plan ? r.unitLabel : "");
     if (r.plan) поставитьЧертёж({ ...r.plan, name: f.name });
-  }, [поставитьЧертёж]);
+  }, [поставитьЧертёж, назначитьПоПодписям]);
 
   /** Переписать высоту у всех стен плана — она хранится у стены, не глобально. */
   const applyHeight = useCallback((v: string) => {
@@ -1081,11 +1151,12 @@ export default function QSpaceClient() {
     const r = planFromPdfSegments(pdfPending, Number(pdfExtent));
     setWarnings(r.warnings);
     if (r.plan) {
+      setWarnings([...r.warnings, ...назначитьПоПодписям({ plan: r.plan, originPt: r.originPt, metersPerPt: r.metersPerPt }, pdfLabels, pdfPending.otherSegments)]);
       поставитьЧертёж({ ...r.plan, name: имяФайла || r.plan.name });
       setUnitLabel(`масштаб задан вами: ${pdfExtent} м по большей стороне`);
       setPdfPending(null);
     }
-  }, [pdfPending, pdfExtent, имяФайла, поставитьЧертёж]);
+  }, [pdfPending, pdfExtent, pdfLabels, имяФайла, поставитьЧертёж, назначитьПоПодписям]);
 
   // Экспорт модели в GLB — двоичный glTF, открывается в Blender, SketchUp,
   // 3ds Max и просмотрщике Windows. Экспортируются только ВИДИМЫЕ слои:
@@ -1781,6 +1852,11 @@ export default function QSpaceClient() {
                     <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
                       <strong style={{ fontVariantNumeric: "tabular-nums", minWidth: 22 }}>{r.index}</strong>
                       <span style={{ fontVariantNumeric: "tabular-nums", color: "#6a645a", minWidth: 52 }}>{r.area.toFixed(1)} м²</span>
+                      {roomName[r.index] && (
+                        <span title="подпись с чертежа" style={{ fontSize: 12, color: "#3b6b3a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 120 }}>
+                          «{roomName[r.index]}»
+                        </span>
+                      )}
                       <select
                         id={`qspace-room-type-${r.index}`}
                         aria-label={`Назначение комнаты ${r.index}`}

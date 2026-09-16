@@ -3,6 +3,7 @@ import { describe, test, expect } from "vitest";
 import { CITY } from "../src/routes/qskyway.city";
 import { CITY_NYC } from "../src/routes/qskyway.city.nyc";
 import { CITY_TOKYO } from "../src/routes/qskyway.city.tokyo";
+import { CITY_AMSTERDAM } from "../src/routes/qskyway.city.amsterdam";
 import type { CityData } from "../src/routes/qskyway.city";
 
 /**
@@ -31,13 +32,17 @@ const PROFILE: Record<string, { twin: CityData; total: number; measured: number;
   // 12.08.2026: пересборка добавила один обмеренный дом (2879 → 2880).
   nyc: { twin: CITY_NYC, total: 2976, measured: 2880, guessed: 28 },
   tokyo: { twin: CITY_TOKYO, total: 3781, measured: 3504, guessed: 116 },
+  // Амстердам (16.09.2026): лидар 3D BAG по каждому зданию страны — 559 из 586
+  // по ядру Зёйдаса, +88 контуров, которых в OSM нет. Сингапура в профиле нет
+  // намеренно: у него обмера ноль, и прибивать «не меньше нуля» нечего.
+  amsterdam: { twin: CITY_AMSTERDAM, total: 586, measured: 559, guessed: 21 },
 };
 
 describe("профиль слепых высот в твинах", () => {
   // Тот же предохранитель: профиль перебирается по PROFILE, и пустой объект
   // дал бы зелёный файл без единой проверки.
-  test("профиль описывает все три города", () => {
-    expect(Object.keys(PROFILE).length).toBe(3);
+  test("профиль описывает все четыре города с обмером", () => {
+    expect(Object.keys(PROFILE).length).toBe(4);
   });
 
   for (const [city, p] of Object.entries(PROFILE)) {

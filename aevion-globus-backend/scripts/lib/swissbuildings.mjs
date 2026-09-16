@@ -92,9 +92,14 @@ export async function readSwissBuildings(zipFile, bbox, { log = () => {} } = {})
   const stream = gmlStream(zipFile);
   stream.setEncoding("utf8");
   for await (const chunk of stream) {
+    // Закрывающий тег ищем только в НОВОМ хвосте: поиск с начала буфера на
+    // каждом куске по 64 КБ квадратичен на зданиях в сотни килобайт (десятки
+    // WallSurface) — гипотеза про 16 минут на тайл, проверить замером 17.09.
+    const from = Math.max(0, buf.length - 16);
     buf += chunk;
-    let i;
-    while ((i = buf.indexOf("</bldg:Building>")) >= 0) {
+    // for, а не while: шаг цикла выполняется и после continue — после среза
+    // буфер начинается с хвоста, поэтому следующий поиск идёт с нуля.
+    for (let i = buf.indexOf("</bldg:Building>", from); i >= 0; i = buf.indexOf("</bldg:Building>")) {
       const s = buf.lastIndexOf("<bldg:Building", i);
       const el = s >= 0 ? buf.slice(s, i) : "";
       buf = buf.slice(i + 16);

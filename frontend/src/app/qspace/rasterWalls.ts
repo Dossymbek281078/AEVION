@@ -272,13 +272,32 @@ export function findWallsByThickness(rgba: Uint8ClampedArray, w: number, h: numb
   for (let i = 0; i < n; i++) if (ink[i] && пятно[cc.labels[i]]) ink[i] = 0;
 
   // 4. маска стен = раскрытие радиусом minPx/2: ядро ≥ r, затем расширение на r
+  // 3б. ЗАШТРИХОВАННЫЕ стены (LA VIE: наружные стены нижней части — полоса 8–10 px
+  //     с диагональной штриховкой, чернил в ней половина, гребень 4 px — «текст»).
+  //     Закрытие радиусом 2 заливает штриховку; берём только компоненты закрытия,
+  //     которые ПРИРОСЛИ (≥ 15 % пикселей от закрытия) и ВЫТЯНУТЫ (длинная сторона
+  //     от трёх толщин, короткая до полутора) — текст и подписи вытянутыми не бывают.
+  //     Косые заштрихованные стены этим не ловятся (их прямоугольник не вытянут).
+  const inkClosed = extrema(extrema(ink, w, h, 2, true), w, h, 2, false);
+  const hc = components(inkClosed, w, h);
+  const gained = new Int32Array(hc.comps.length + 1);
+  for (let i = 0; i < n; i++) if (inkClosed[i] && !ink[i]) gained[hc.labels[i]]++;
+  const band = new Uint8Array(hc.comps.length + 1);
+  hc.comps.forEach((c, k) => {
+    const bw = c.x1 - c.x0 + 1, bh = c.y1 - c.y0 + 1;
+    if (gained[k + 1] >= 0.1 * c.count && Math.max(bw, bh) >= 3 * wallPx && Math.min(bw, bh) <= 1.5 * wallPx && Math.min(bw, bh) >= 3) band[k + 1] = 1;
+  });
+  let hatched = 0;
+  const ink2 = new Uint8Array(ink);
+  for (let i = 0; i < n; i++) if (inkClosed[i] && band[hc.labels[i]]) { if (!ink2[i]) hatched++; ink2[i] = 1; }
+  const d2 = hatched > 0 ? distance(ink2, w, h) : d;
   const rr = Math.max(1, Math.round(minPx / 2));
   const core = new Uint8Array(n);
-  for (let i = 0; i < n; i++) if (ink[i] && d[i] >= rr * 3) core[i] = 1;
+  for (let i = 0; i < n; i++) if (ink2[i] && d2[i] >= rr * 3) core[i] = 1;
   const walls = extrema(core, w, h, rr, true);
   // сшить разрывы скелета до толщины стены: закрытие радиусом wallPx/2 внутри чернил
   const closed = extrema(extrema(walls, w, h, Math.round(wallPx / 2), true), w, h, Math.round(wallPx / 2), false);
-  for (let i = 0; i < n; i++) if (closed[i] && ink[i]) walls[i] = 1;
+  for (let i = 0; i < n; i++) if (closed[i] && ink2[i]) walls[i] = 1;
 
   // 5. план — главная группа + группы от 10 % её
   const coreCount = core.reduce((a, v) => a + v, 0);
@@ -295,7 +314,9 @@ export function findWallsByThickness(rgba: Uint8ClampedArray, w: number, h: numb
   wc.comps.forEach((c, k) => { if (c.count >= 0.1 * largest) { keep[k + 1] = 1; px0 = Math.min(px0, c.x0); py0 = Math.min(py0, c.y0); px1 = Math.max(px1, c.x1); py1 = Math.max(py1, c.y1); } });
   wc.comps.forEach((c, k) => {
     const cx = (c.x0 + c.x1) / 2, cy = (c.y0 + c.y1) / 2;
-    if (!keep[k + 1] && c.count >= 2 * minPx * wallPx && cx >= px0 - m && cx <= px1 + m && cy >= py0 - m && cy <= py1 + m) keep[k + 1] = 1;
+    // мелким группам запас меньше — полторы толщины: водяной знак под планом стоит в трёх
+    const mm = 1.5 * wallPx;
+    if (!keep[k + 1] && c.count >= 2 * minPx * wallPx && cx >= px0 - mm && cx <= px1 + mm && cy >= py0 - mm && cy <= py1 + mm) keep[k + 1] = 1;
   });
   for (let i = 0; i < n; i++) if (walls[i] && !keep[wc.labels[i]]) walls[i] = 0;
 
@@ -339,7 +360,7 @@ export function findWallsByThickness(rgba: Uint8ClampedArray, w: number, h: numb
   for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
     const i = y * w + x;
     if (!walls[i] || covered[i]) continue;
-    const v = d[i];
+    const v = d2[i];
     if (v >= rr * 3 && v >= d[i - 1] && v >= d[i + 1] && v >= d[i - w] && v >= d[i + w]) pts.push([x, y, (2 * v) / 3]);
   }
   const hough = houghSegments(pts, wallPx, ext);
@@ -405,7 +426,7 @@ export function findWallsByThickness(rgba: Uint8ClampedArray, w: number, h: numb
   });
   const hollowKept = hollow.filter((q) => !nearThick(q));
   segs.push(...hollowKept);
-  const stats = { inkComps: cc.comps.length, blobs: blob.reduce((a, v) => a + v, 0), spots: пятно.reduce((a, v) => a + v, 0), T, coreCount, wallComps: wc.comps.length, kept: keep.reduce((a, v) => a + v, 0), largest, rects: rects.length, longRects: segs.length - hough.length, ridgePts: pts.length, hough: hough.length, thinPts: thin.length, thinSegs: thinSegs.length, hollow: hollowKept.length };
+  const stats = { inkComps: cc.comps.length, blobs: blob.reduce((a, v) => a + v, 0), spots: пятно.reduce((a, v) => a + v, 0), T, coreCount, wallComps: wc.comps.length, kept: keep.reduce((a, v) => a + v, 0), largest, rects: rects.length, longRects: segs.length - hough.length, ridgePts: pts.length, hough: hough.length, hatchedPx: hatched, bands: band.reduce((a, v) => a + v, 0), thinPts: thin.length, thinSegs: thinSegs.length, hollow: hollowKept.length };
   // слить коллинеарные с перекрытием или зазором до толщины стены
   const merge = (list: WallSeg[]): WallSeg[] => {
     const out: WallSeg[] = list.filter((s) => s.axis === "d");
@@ -450,7 +471,8 @@ export function findWallsByThickness(rgba: Uint8ClampedArray, w: number, h: numb
       // проекции вдоль a: a занимает [0, la]; b — [q0, q1]; берём разрыв справа от a
       const q0 = Math.min(ux * (b.x1 - a.x1) + uy * (b.y1 - a.y1), ux * (b.x2 - a.x1) + uy * (b.y2 - a.y1));
       const gap = q0 - la;
-      if (gap < 2 * wallPx || gap > Math.max(w, h) / 3) continue;
+      // окно не длиннее восьми толщин (~3.5 м): длиннее — это уже не створ, а прямая через комнату по мебели
+      if (gap < 2 * wallPx || gap > 8 * wallPx) continue;
       const key = `${Math.min(i, j)}:${Math.max(i, j)}`;
       if (пары.has(key)) continue;
       // между концом a и началом b не должно быть третьей стены той же прямой

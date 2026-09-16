@@ -14,7 +14,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { findWallSegments, type RasterSegment } from "./raster";
+import { findWallSegments } from "./raster";
+import { findWallsByThickness, type WallSeg } from "./rasterWalls";
 import type { Plan, Wall } from "./planModel";
 import { WALL_HEIGHT } from "./planModel";
 
@@ -25,7 +26,8 @@ interface Props {
   onAccept: (plan: Plan) => void;
 }
 
-const MAX_SIDE = 1400;
+// 2000, а не 1400: при 1400 перегородки в 4 px истончаются до 1.6 и рвутся (LA VIE, 15.09)
+const MAX_SIDE = 2000;
 
 export default function RasterReview({ imageUrl, onCancel, onAccept }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -33,7 +35,7 @@ export default function RasterReview({ imageUrl, onCancel, onAccept }: Props) {
 
   const [threshold, setThreshold] = useState(128);
   const [minLenPct, setMinLenPct] = useState(8);
-  const [segments, setSegments] = useState<RasterSegment[]>([]);
+  const [segments, setSegments] = useState<WallSeg[]>([]);
   const [dropped, setDropped] = useState<Set<number>>(new Set());
   const [warnings, setWarnings] = useState<string[]>([]);
   const [extentM, setExtentM] = useState("10");
@@ -63,13 +65,25 @@ export default function RasterReview({ imageUrl, onCancel, onAccept }: Props) {
     ctx.drawImage(img, 0, 0, w, h);
     const data = ctx.getImageData(0, 0, w, h).data;
 
+    // Сначала — по толщине штриха (стены, косые, полые, окна стеклом); если
+    // стен по толщине нет (тонкие линии, < 4 px), — прежний способ по прогонам
+    // с ползунками чувствительности.
+    const t = findWallsByThickness(data, w, h);
+    if (t.segments.length >= 4) {
+      setSegments(t.segments);
+      setDropped(new Set());
+      setWarnings(t.warnings);
+      setSize({ w, h });
+      setBusy(false);
+      return;
+    }
     const r = findWallSegments(data, w, h, {
       darkThreshold: th,
       minLenFrac: minPct / 100,
     });
     setSegments(r.segments);
     setDropped(new Set());
-    setWarnings(r.warnings);
+    setWarnings([...t.warnings, ...r.warnings]);
     setSize({ w, h });
     setBusy(false);
   }, []);
@@ -117,7 +131,8 @@ export default function RasterReview({ imageUrl, onCancel, onAccept }: Props) {
 
     segments.forEach((s, i) => {
       const off = dropped.has(i);
-      ctx.strokeStyle = off ? "rgba(180,60,60,0.45)" : "#2f5e2a";
+      // стекло — синим, чтобы человек видел, что это окно, а не стена
+      ctx.strokeStyle = off ? "rgba(180,60,60,0.45)" : s.glass ? "#2b5bd7" : "#2f5e2a";
       ctx.lineWidth = off ? 2 : Math.max(3, Math.min(10, s.weight));
       ctx.beginPath();
       ctx.moveTo(s.x1, s.y1);
@@ -199,6 +214,7 @@ export default function RasterReview({ imageUrl, onCancel, onAccept }: Props) {
         y2: (maxY - s.y2) * mPerPx,
         thickness: Math.max(0.08, Math.min(0.4, s.weight * mPerPx)),
         height: WALL_HEIGHT,
+        glass: s.glass || undefined,
       };
       if (Math.hypot(w.x2 - w.x1, w.y2 - w.y1) < 0.05) continue;
       walls.push(w);
@@ -279,7 +295,7 @@ export default function RasterReview({ imageUrl, onCancel, onAccept }: Props) {
   );
 }
 
-function distToSegment(px: number, py: number, s: RasterSegment): number {
+function distToSegment(px: number, py: number, s: WallSeg): number {
   const dx = s.x2 - s.x1;
   const dy = s.y2 - s.y1;
   const len2 = dx * dx + dy * dy;

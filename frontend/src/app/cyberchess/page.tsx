@@ -4530,6 +4530,12 @@ export default function CyberChessPage(){
     // эффектах БЕЗ бампа bk, и без них snap записал бы значение на ход назад.
   },[bk,tab,on,over,setup,hist.length,variant,checksByWhite,checksByBlack,dropPool,diceFace,dicePieceType,diceLabel,variantArmies,variantStartFen]);
   useEffect(()=>{if(over)clearResume()},[over]);
+  // Баннер «Незавершённая партия» гасится, как только идёт ЛЮБАЯ живая партия (обход
+  // 15.09.2026, десктоп, Коуч): startGame его не снимал, автосейв выше уже перезаписал
+  // снимок новой партией, а «▶ Продолжить» ставил СТАРУЮ партию из state поверх живой —
+  // текущая терялась молча. Эффект, а не правка startGame: партии стартуют и из
+  // турнира/человека, одно место покрывает все входы.
+  useEffect(()=>{if(on&&!over)sResumeOffer(null)},[on,over]);
 
   /* ── Auto post-game analysis in Play/Coach for instant accuracy card ── */
   useEffect(()=>{
@@ -12737,7 +12743,16 @@ ${question.trim()}`;
         // тот же, что у BottomNav): при bottom:20 пилюля ложилась РОВНО на вкладки
         // Анализ/Коуч и, будучи выше по z, делала их ненажимаемыми. Замер 15.09.2026
         // на 390px: elementFromPoint над вкладкой Коуч возвращал эту пилюлю.
-        position:"fixed",bottom:vwPx<769?88:20,left:"50%",transform:"translateX(-50%)",zIndex:Z.modal,
+        // На ДЕСКТОПЕ (≥769) — ВВЕРХУ под шапкой, по центру, а не внизу: раскладка
+        // фиксированной высоты, доска анализа доходит до низа экрана, и центральная
+        // пилюля с bottom:20 ложилась на c1–h1 И на ряд ввода ходов «Перевернуть · Новая
+        // партия · Голос · Ход текстом» (скрин основателя 15.09.2026, Коуч, ~2000px: ряда
+        // не видно вовсе). Левый нижний угол не универсален — при сдвинутой раскладке
+        // (боковая панель) ряд ввода начинается с x≈217 и попал бы под пилюлю. Вверху:
+        // контент с y≈148, тулбар «⚙ 🔊 Ещё» слева (x<260), баннер с ≈230, доска с ≈430 —
+        // центрированная пилюля на top:156 ни с чем не пересекается на любой ширине.
+        // На телефоне — по центру над BottomNav (как было).
+        position:"fixed",...(vwPx<769?{bottom:88}:{top:156}),left:"50%",transform:"translateX(-50%)",zIndex:Z.modal,
         display:"inline-flex",alignItems:"center",gap:9,
         padding:"11px 20px",borderRadius:RADIUS.full,border:"none",
         background:"linear-gradient(135deg,#059669,#10b981)",color:"#fff",

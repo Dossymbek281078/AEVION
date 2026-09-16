@@ -100,12 +100,16 @@ export async function readSwissBuildings(zipFile, bbox, { log = () => {} } = {})
       buf = buf.slice(i + 16);
       if (!el) continue;
       total++;
-      const hm = el.match(/measuredHeight[^>]*>([\d.]+)/);
-      const h = hm ? Number(hm[1]) : NaN;
+      // Вырезаем indexOf-ом, не регуляркой: `[\s\S]*?` по элементу в сотни
+      // килобайт (десятки WallSurface) давала 17 минут на тайл (замер 16.09).
+      const hi = el.indexOf("measuredHeight");
+      const h = hi >= 0 ? parseFloat(el.slice(el.indexOf(">", hi) + 1, el.indexOf("<", hi))) : NaN;
       if (!(h > 0)) { noHeight++; continue; }
-      const g = el.match(/<bldg:GroundSurface[\s\S]*?<gml:posList[^>]*>([^<]+)/);
-      if (!g) { noGround++; continue; }
-      const v = g[1].trim().split(/\s+/).map(Number);
+      const gi = el.indexOf("<bldg:GroundSurface");
+      const pi = gi >= 0 ? el.indexOf("<gml:posList", gi) : -1;
+      if (pi < 0) { noGround++; continue; }
+      const p0 = el.indexOf(">", pi) + 1, p1 = el.indexOf("<", p0);
+      const v = el.slice(p0, p1).trim().split(/\s+/).map(Number);
       const ring = [];
       for (let k = 0; k + 2 < v.length; k += 3) ring.push(lv95ToWgs84(v[k], v[k + 1]));
       if (ring.length < 3) { noGround++; continue; }

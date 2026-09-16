@@ -222,6 +222,30 @@ devhubRouter.use(
   dhSendLimit(),
 );
 
+/**
+ * Загрузки медиа — суточный потолок по адресу (15.09.2026).
+ *
+ * /media/upload-image кладёт в Cloudflare Images (платно за штуку и хранение),
+ * /media/upload-audio — в R2 (до 25 МБ, платно за объём). Обе ручки открыты гостю,
+ * месячного кредита у них нет, а ограничитель 30/мин по адресу за сутки пропускает
+ * 43 200 загрузок с одного адреса — терабайт в R2 или тысячи картинок в Images
+ * одним скриптом. Тот же класс, что кредит гостя по заголовку: без потолка по тому,
+ * чего клиент не выбирает, квота бесконечна. Число: человек за день столько не
+ * загружает; настраивается DEVHUB_UPLOAD_DAILY_LIMIT.
+ */
+function dhUploadDailyLimit() {
+  const raw = Number(process.env.DEVHUB_UPLOAD_DAILY_LIMIT);
+  const max = Number.isFinite(raw) && raw > 0 ? raw : 60;
+  return rateLimit({
+    windowMs: 24 * 60 * 60_000,
+    max,
+    keyPrefix: "dhupload-day",
+    message: "Суточный предел загрузок с этого адреса исчерпан. Продолжить можно завтра.",
+  });
+}
+
+devhubRouter.use(["/media/upload-image", "/media/upload-audio"], dhUploadDailyLimit());
+
 // Область запроса: адрес клиента для потолка кредита гостя (guestIpBudgetKey ниже).
 // Стоит ДО всех ручек: middleware действует только на зарегистрированные после него.
 const requestScope = new AsyncLocalStorage<{ ip: string }>();
@@ -731,7 +755,8 @@ function creditNote(verdict: CreditVerdict): { creditUnverified: true } | Record
 
 async function debitCredit(userId: string, capability: CapabilityKey, amount = 1): Promise<void> {
   const ipKey = guestIpBudgetKey(userId);
-  if (ipKey) await debitCredit(ipKey, capability, amount);
+  // Через обёртку: отказ списания по адресу должен быть виден так же, как по личности.
+  if (ipKey) await debitQuietly(ipKey, capability, amount);
   const month = creditMonth();
   const tier = await getUserTier(userId);
   if (!isDevHubDbReady()) {

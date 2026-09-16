@@ -77,45 +77,74 @@ export const REVENUE_SPLIT = "51/49";
 /**
  * The single defensible revenue figure. Company is pre-revenue ($0) today.
  *
- * Recomputed 2026-08-18 off the repriced ladder: the "Ecosystem All-Access"
- * flagship is the live Full tier, which moved $89 → $49/mo ($490/yr annual),
- * so the same unchanged subscriber assumptions (1,000 beachhead / 10,000
- * regional) now carry LESS ARR. Was ≈$1.2M / ≈$13.7M on the $89 price.
+ * Recomputed 2026-09-16 off the TERM LADDER (founder's decision 2026-09-15): a
+ * paid tier is now a TERM of access to the whole planet, paid up front, and the
+ * subscription flagship is modelled at the 12-month term — $200/mo, $2,400 for
+ * the term. The subscriber assumptions did NOT move: still 1,000 beachhead and
+ * 10,000 regional. Only the price input changed, so the arithmetic is
+ * 1,000 × $2,400 = $2.4M and 10,000 × $2,400 = $24M (was 1,000 × $490 = $490K
+ * and 10,000 × $490 = $4.9M under the retired monthly plan).
+ *
+ * Totals therefore move ≈$0.85M → ≈$2.76M beachhead and ≈$9.65M → ≈$28.75M
+ * regional; the QBuild ($235K / $2.35M) and QCoreAI ($120K / $2.4M) rows are
+ * untouched, because neither is priced off the planet ladder.
  *
  * The direction matters more than the number: the model follows the published
- * price both ways. A revenue figure that only ever moves up is a figure nobody
- * should believe.
+ * price both ways — it went DOWN on 2026-08-18 and UP now. A revenue figure
+ * that only ever moves one way is a figure nobody should believe.
+ *
+ * Locked to the registry by pitchNumbers.guard.test.ts, which recomputes the
+ * flagship ARR from the backend term ladder and re-adds the three rows, instead
+ * of comparing one hardcoded number to another.
  */
-export const BOTTOM_UP_BEACHHEAD_ARR = "≈$0.85M";
-export const BOTTOM_UP_REGIONAL_ARR = "≈$9.65M";
+export const BOTTOM_UP_BEACHHEAD_ARR = "≈$2.76M";
+export const BOTTOM_UP_REGIONAL_ARR = "≈$28.75M";
 export const IS_PRE_REVENUE = true;
 
-// ── Universe Seat (one seat = the whole ecosystem) ───────────────────────────
+// ── Term ladder (a paid tier IS a term of access to the whole planet) ───────
 /**
- * The "Universe Seat" = the `pro` tier in the backend pricing registry
- * (aevion-globus-backend/src/data/pricing.ts). Repriced 2026-08-13 from
- * $249.99 → $149/mo, together with the whole ladder.
+ * ЛЕСТНИЦА СРОКОВ — слово основателя 15.09.2026, заменяет помесячный план.
  *
- * The old justification is deliberately NOT kept: it said the flagship "must
- * sit above a single premium AI subscription" and anchored on a $200–400/mo
- * creator stack. At $149 that sentence is simply false, and a false argument in
- * the pitch is worse than no argument — whoever reads it next would defend a
- * position the price no longer supports.
+ * Тариф называет СРОК доступа ко ВСЕЙ планете, оплата за срок вперёд: Lite
+ * 1 месяц, Medium 3, Pro 6, Full 9, Max 12. Цена месяца дешевеет с длиной
+ * срока: $400 / $350 / $300 / $250 / $200. Платёж за срок = цена месяца ×
+ * месяцы, то есть $400 / $1050 / $1800 / $2250 / $2400.
  *
- * The honest anchor at $149: one seat replaces several logins rather than
- * out-prices them. Comparison stays sum-of-parts, but the claim is "cheaper
- * than assembling the same stack", not "more expensive, therefore better".
+ * Источник чисел — реестр бэкенда (data/pricing.ts: TERM_MONTHS, TERM_FACTOR,
+ * PLANET_BASE_MONTHLY), копия для страниц — lib/termPricing.ts. Строки ниже
+ * существуют только для инвесторских поверхностей и ЗАПЕРТЫ на реестр сторожем
+ * pitchNumbers.guard.test.ts: он считает их из лестницы, а не сверяет литерал
+ * с литералом.
  *
- * ANNUAL = ×10 (pay for 10 months, get 12) — the `annualTotal()` formula in the
- * backend registry. $149 × 10 = $1,490/yr, which is the seat ARPU the growth
- * model in pitchModel.ts runs on.
+ * ⚠️ ДВА РАЗНЫХ ЧИСЛА, которые легко принять за одно, — поэтому у них разные
+ * имена, и прежнего единственного ENTRY_PAID_TIER_MONTHLY больше нет:
+ *
+ *   ВХОД в лестницу      — самый КОРОТКИЙ срок: $400 за один месяц. Наименьший
+ *                          платёж, какой можно сделать, и при этом наибольшая
+ *                          цена месяца.
+ *   «от $X/мес» на сайте — наименьшая ЦЕНА МЕСЯЦА, а она на самом ДЛИННОМ
+ *                          сроке: $200 (fromPricePerMonth в lib/termPricing).
+ *
+ * Одно имя на два смысла напечатало бы либо «вход $200» (платежа такого нет),
+ * либо «от $400/мес» (месяц бывает дешевле). Оба варианта — ложь на витрине.
+ *
+ * Годовой оплаты и формулы «×10» (плати за 10 месяцев, получи 12) больше НЕТ:
+ * платёж за срок берётся из реестра, а не считается скидкой к году.
  */
-export const UNIVERSE_SEAT_MONTHLY = "$149";
-export const UNIVERSE_SEAT_ANNUAL_TOTAL = "~$1,490/yr"; // effective ARPU used in the growth model
-export const UNIVERSE_SEAT_INTRO_NOTE = "Introductory price for the first 6–12 months — may rise as the ecosystem matures.";
-// Live plan is 6-tier: Free / Lite $19 / Medium $29 / Full $49 / Universe(pro) $149 / Enterprise.
-// Universe has no Lemon Squeezy variant yet (see data/lemonSqueezyVariants.ts — a "pro" checkout
-// falls through to Gumroad/stub), so the highest tier with a real subscription checkout is Full.
-export const LIVE_TOP_TIER_MONTHLY = "$49"; // highest tier with live LS checkout today (Full)
-/** Entry paid tier — the "from $X/mo" figure on public pricing surfaces and OG cards. */
-export const ENTRY_PAID_TIER_MONTHLY = "$19";
+/** Месяц на самом коротком сроке (Lite, 1 месяц) — вход в лестницу. */
+export const ENTRY_TERM_MONTHLY = "$400";
+/**
+ * Верхняя ступень лестницы — Max, 12 месяцев, $200/мес.
+ *
+ * Оговорка «у Universe нет варианта Lemon Squeezy, поэтому верхняя ПОКУПАЕМАЯ
+ * ступень — Full» СНЯТА 16.09.2026: варианты LS заведены у всех пяти сроков,
+ * то есть верхняя ступень лестницы и есть верхняя ступень с живой кассой.
+ * Держать оговорку дальше значило бы занижать то, что уже можно купить.
+ */
+export const LIVE_TOP_TIER_MONTHLY = "$200";
+/** Платёж за весь 12-месячный срок вперёд — он же ARPU места за год. */
+export const LIVE_TOP_TIER_TERM_TOTAL = "$2,400";
+/** Честная оговорка рядом с ценой: срок фиксирует цену месяца на весь свой период. */
+export const TERM_LADDER_INTRO_NOTE =
+  "Introductory pricing — the term you pay for locks your monthly rate for its whole length; " +
+  "later terms may be priced higher as the ecosystem matures.";

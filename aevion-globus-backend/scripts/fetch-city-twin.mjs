@@ -69,6 +69,7 @@ import { parsePlateauGml } from "./lib/plateau-heights.mjs";
 import { parseNycBuildings, nycBuildingsQuery } from "./lib/nyc-open-data.mjs";
 import { reconcileMeasuredOutlines } from "./lib/measured-outlines.mjs";
 import { fetchI3sBuildingPoints, pointAsTinyRing } from "./lib/i3s-points.mjs";
+import { fetchBag3dOutlines } from "./lib/bag3d.mjs";
 
 // The height model, the projection and the rasterizer live in
 // scripts/lib/city-twin-geometry.mjs so they can be unit-tested; this file is
@@ -237,6 +238,49 @@ const CITIES = {
       "// survey source exists for Singapore, so no building is hs=0 (measured) here —",
       "// OSM height tags are hs=1 (derived), the rest guessed. Regenerate with:",
       "//   node scripts/fetch-city-twin.mjs singapore --write",
+      "/* eslint-disable */",
+      'import type { CityData } from "./qskyway.city";',
+    ].join("\n"),
+  },
+  amsterdam: {
+    // Пятый город, 16.09.2026. Выбран по ОТКРЫТОСТИ обеих половин: высоты —
+    // 3D BAG (лидар AHN, каждое здание страны, CC BY 4.0, без ключа), правила —
+    // eAIP LVNL (Зёйдас лежит в CTR Schiphol). Дрон-зоны PDOK/LVNL с 30.06.2026
+    // сняты с производства — их не обещаем. Квадрат — ядро Зёйдаса вокруг
+    // станции Амстердам-Зёйд: башни WTC, ABN AMRO, Symphony, Виньоли, Гершвин;
+    // RD и WGS84 связаны через lib/bag3d.mjs (Schreutelkorps, ~1 м).
+    // Первый квадрат 16.09 (52.3392–52.3483 × 4.8736–4.8912) стоял СЕВЕРО-
+    // ВОСТОЧНЕЕ станции: самое высокое здание в нём — 68 м, башен Зёйдаса не
+    // было ни одной, а станция сидела в юго-западном углу. Сдвинут на ядро.
+    // Замер 16.09 по первому квадрату: 3451 контур BAG, тег OSM выше лидара
+    // у 684 из 1425 домов, но на p50 0.4 м / p90 1.4 м / max 12 м — это шум
+    // двух съёмок одной семьи (амстердамский импорт высот в OSM тоже с AHN),
+    // а не мачты; поэтому osmTallerIsTag: false честен и здесь.
+    name: "Амстердам — Зёйдас",
+    bbox: { minLat: 52.3335, maxLat: 52.342564, minLon: 4.8620, maxLon: 4.8795 },
+    exportName: "CITY_AMSTERDAM",
+    committed: "qskyway.city.amsterdam.ts",
+    // Сетка из projection(): 1191×1002 м → 60×51 ячеек.
+    vertiports: [
+      { c: 2, r: 2, x: 50, y: 50 }, { c: 57, r: 2, x: 1150, y: 50 },
+      { c: 2, r: 48, x: 50, y: 970 }, { c: 57, r: 48, x: 1150, y: 970 },
+      { c: 30, r: 25, x: 610, y: 510 }, { c: 30, r: 48, x: 610, y: 970 },
+      { c: 12, r: 30, x: 250, y: 610 },
+    ],
+    measured: {
+      kind: "3dbag",
+      label: "3D BAG (TU Delft/Kadaster): лидар AHN, b3_h_dak_max − b3_h_maaiveld, CC BY 4.0",
+      marginM: 50,
+      nearRadiusM: 20,
+      // Максимум КРЫШИ по лидару; тег OSM выше него на доли метра (см. замер
+      // выше) — шум съёмок, не мачта и не ошибка: класс остаётся обмерным.
+      osmTallerIsTag: false,
+    },
+    header: [
+      "// QSkyway city digital-twin — Амстердам, Зёйдас. OpenStreetMap footprints",
+      "// (Overpass, ODbL) reconciled with 3D BAG LoD0 outlines and LiDAR (AHN) heights",
+      "// (TU Delft / Kadaster, CC BY 4.0) — see scripts/lib/bag3d.mjs. Regenerate with:",
+      "//   node scripts/fetch-city-twin.mjs amsterdam --write",
       "/* eslint-disable */",
       'import type { CityData } from "./qskyway.city";',
     ].join("\n"),
@@ -414,6 +458,12 @@ if (city.measured) {
     process.stderr.write(`  NYC Open Data: ${rows.length} rows, ${got.length} outlines with a height\n`);
     // Socrata geometry is GeoJSON, longitude first — already the shape we want.
     outlines.push(...got);
+  } else if (kind === "3dbag") {
+    // Контуры LoD0 + лидарные высоты — как citygml/socrata, только без файла:
+    // API отдаёт страницы по 100 зданий в квадрате RD.
+    process.stderr.write(`  3D BAG: fetching outlines…\n`);
+    const got = await fetchBag3dOutlines(wide, { log: (s) => process.stderr.write(s + "\n") });
+    for (const g of got) outlines.push({ h: g.h, ring: g.ring });
   } else if (kind === "i3s") {
     // Точки-центроиды из I3S-слоя города; каждая — квадрат 1×1 м, чтобы пройти
     // правило «центроид внутри контура OSM» в reconcileMeasuredOutlines.
@@ -456,6 +506,10 @@ if (city.measured) {
   //    DERIVED (hs=1), not measured: the value is surveyed, the identification
   //    is ours, and hs=1 is exactly the class SRC_CLEARANCE gives extra room.
   let contained = 0, near = 0, plateauTaller = 0, osmTaller = 0;
+  // На сколько тег OSM выше обмера там, где он выше: распределение отличает
+  // «шум двух съёмок» (метр-два) от «мачты и неверные теги» (десятки метров).
+  // Без него число osmTaller нечитаемо: 684 у Амстердама 16.09 могли быть и тем и другим.
+  const osmExcess = [];
   buildings.forEach((b, i) => {
     const p = measuredAt[i];
     if (p.how === "contained") {
@@ -486,6 +540,7 @@ if (city.measured) {
       // второе правило сомнительных высот его видит. Без флага — как прежде.
       if (b.stated && b.h > p.h) {
         osmTaller++;
+        osmExcess.push(b.h - p.h);
         if (!city.measured.osmTallerIsTag) b.hs = 0;
       } else {
         if (b.stated && p.h > b.h) plateauTaller++;
@@ -530,6 +585,13 @@ if (city.measured) {
     `${osmTaller} kept OSM's taller measurement), ${near} by proximity, ${added} outlines added ` +
     `that OSM has no footprint for\n`,
   );
+  if (osmExcess.length) {
+    const q = (p) => osmExcess.slice().sort((a, b) => a - b)[Math.min(osmExcess.length - 1, Math.floor(p * osmExcess.length))].toFixed(1);
+    process.stderr.write(
+      `  ${kind}: OSM tag above survey by p50 ${q(0.5)} m, p90 ${q(0.9)} m, max ${q(1)} m; ` +
+      `>5 m: ${osmExcess.filter((d) => d > 5).length}, >20 m: ${osmExcess.filter((d) => d > 20).length}\n`,
+    );
+  }
 
   sourceLabel = `OSM footprints (ODbL) + ${label}`;
   provenanceNote =

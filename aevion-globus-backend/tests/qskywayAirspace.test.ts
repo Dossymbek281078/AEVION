@@ -214,11 +214,11 @@ describe("покрытие регуляторным слоем названо т
   // при одном настоящем фиде: у Астаны правило в документе eAIP, у Токио — в
   // растровом слое MLIT. Читающий API напрямую делал вывод, что фид есть у всех.
   test("фид считается только там, где он действительно есть", () => {
-    const ids = ["astana", "nyc", "tokyo", "singapore"];
+    const ids = ["astana", "nyc", "tokyo", "singapore", "amsterdam"];
     const withFeed = ids.filter((id) => AIRSPACE[id]).length;
     const withLayer = ids.filter((id) => AIRSPACE[id] || PERMISSION[id]).length;
     expect(withFeed).toBe(1);            // только Нью-Йорк
-    expect(withLayer).toBe(4);           // + Астана, Токио и Сингапур, но не фидом
+    expect(withLayer).toBe(5);           // + Астана, Токио, Сингапур и Амстердам, но не фидом
     expect(withLayer).toBeGreaterThan(withFeed);
   });
 });

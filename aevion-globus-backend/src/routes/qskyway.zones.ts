@@ -91,6 +91,29 @@ export const NOFLY: Record<string, NoFlyZone[]> = {
     },
     { id: "nfz-crowd", name: "Плотная толпа — Марина-Бей (набережная)", kind: "temporary", center: [103.8590, 1.2830], radiusM: 200, until: "2026-12-31T16:00:00Z" },
   ],
+  amsterdam: [
+    {
+      // Амстердам, 16.09.2026. Реальный режим: весь квадрат Зёйдаса лежит в CTR
+      // Схипхола (eAIP NL, AD 2 EHAM 2.17: GND–3000 ft AMSL, класс C) — это
+      // описано в блоке airspace.permission как разрешительный режим на 100 %
+      // клеток, и кругом его не изобразить. Голландский слой «зоны запрета для
+      // дронов» (PDOK) снят с публикации 30.06.2026, векторных запретных зон
+      // внутри квадрата в eAIP нет. Круг ниже — НАША демо-геометрия над
+      // станцией Амстердам-Зёйд (узел поездов, метро и автобусов), не
+      // опубликованный контур, и об этом сказано прямо.
+      id: "nfz-station", name: "Станция Амстердам-Зёйд (демо-геометрия)", kind: "permanent",
+      center: [4.8728, 52.3389], radiusM: 220,
+      realityNote:
+        "Это НАША демо-окружность. Опубликованный режим над Зёйдасом один — CTR Схипхола (класс C, GND–3000 ft AMSL) "
+        + "по eAIP NL AD 2 EHAM 2.17, и он покрывает квадрат целиком: см. блок airspace.permission. Слой запретных "
+        + "зон для дронов PDOK снят с публикации 30.06.2026, векторных запретных зон внутри квадрата в eAIP нет.",
+      realityNoteEn:
+        "This is OUR demo circle. The only published regime over Zuidas is the Schiphol CTR (class C, GND–3000 ft "
+        + "AMSL) per eAIP NL AD 2 EHAM 2.17, and it covers the whole square: see airspace.permission. The PDOK "
+        + "drone no-fly layer was withdrawn on 2026-06-30; the eAIP publishes no vector prohibited areas inside the square.",
+    },
+    { id: "nfz-crowd", name: "Плотная толпа — Gustav Mahlerplein (площадь у ВТЦ)", kind: "temporary", center: [4.8737, 52.3400], radiusM: 180, until: "2026-12-31T16:00:00Z" },
+  ],
 };
 export const WIND: Record<string, WindConfig> = {
   // Астана — открытая степь, преобладающий юго-западный/южный ветер, сильный.
@@ -102,4 +125,7 @@ export const WIND: Record<string, WindConfig> = {
   // Сингапур — экватор, слабые ветры; северо-восточный муссон (дек–март)
   // преобладает по силе. Живой METAR WSSS (Чанги) перекрывает это значение.
   singapore: { fromDeg: 45, baseMs: 2.5, perBandMs: 1.0 },
+  // Амстердам — приморская равнина, преобладающий юго-западный ветер, свежий.
+  // Живой METAR EHAM (Схипхол, ~7 км от Зёйдаса) перекрывает это значение.
+  amsterdam: { fromDeg: 230, baseMs: 4, perBandMs: 1.4 },
 };

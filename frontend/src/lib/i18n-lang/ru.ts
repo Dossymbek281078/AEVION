@@ -7434,6 +7434,7 @@ const ru: Record<string, string> = {
   "qskyway.city.nyc": "Нью-Йорк — Мидтаун (Манхэттен)",
   "qskyway.city.tokyo": "Токио — Ниси-Синдзюку",
   "qskyway.city.singapore": "Сингапур — Марина-Бей / CBD",
+  "qskyway.city.amsterdam": "Амстердам — Зёйдас",
   "langSwitch.aria": "Язык интерфейса",
   "chain.room.qright": "Отметка авторства",
   "chain.room.qcontract": "Договор",

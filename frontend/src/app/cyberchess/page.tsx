@@ -4530,6 +4530,12 @@ export default function CyberChessPage(){
     // эффектах БЕЗ бампа bk, и без них snap записал бы значение на ход назад.
   },[bk,tab,on,over,setup,hist.length,variant,checksByWhite,checksByBlack,dropPool,diceFace,dicePieceType,diceLabel,variantArmies,variantStartFen]);
   useEffect(()=>{if(over)clearResume()},[over]);
+  // Баннер «Незавершённая партия» гасится, как только идёт ЛЮБАЯ живая партия (обход
+  // 15.09.2026, десктоп, Коуч): startGame его не снимал, автосейв выше уже перезаписал
+  // снимок новой партией, а «▶ Продолжить» ставил СТАРУЮ партию из state поверх живой —
+  // текущая терялась молча. Эффект, а не правка startGame: партии стартуют и из
+  // турнира/человека, одно место покрывает все входы.
+  useEffect(()=>{if(on&&!over)sResumeOffer(null)},[on,over]);
 
   /* ── Auto post-game analysis in Play/Coach for instant accuracy card ── */
   useEffect(()=>{

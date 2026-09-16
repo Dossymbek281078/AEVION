@@ -119,7 +119,7 @@ describe("цепочка окон: поздний успех — успех, м�
     expect(afterSecond.status).toBe("live");
     expect(afterSecond.buildLog).toMatch(/page answers 2xx/);
     const proj = (await request(app).get(`/api/devhub/projects/${id}`)).body.project;
-    expect(proj.deployUrl).toBe("https://abc.aevion-t.pages.dev");
+    expect(proj.deployUrl, "живой адрес — адрес ПРОЕКТА, не выкатки").toMatch(/^https:\/\/aevion-[a-z0-9-]+\.pages\.dev$/);
     expect(proj.status).toBe("live");
     expect(getProviderHealth("pages")?.ok).toBe(true);
   });
@@ -168,7 +168,7 @@ describe("recheck: старая «failed» лечится по требован�
     expect(r2.body.serves).toBe(true);
     expect((await deployment(app, id, deploymentId)).status).toBe("live");
     const proj = (await request(app).get(`/api/devhub/projects/${id}`)).body.project;
-    expect(proj.deployUrl).toBe("https://abc.aevion-t.pages.dev");
+    expect(proj.deployUrl, "живой адрес — адрес ПРОЕКТА, не выкатки").toMatch(/^https:\/\/aevion-[a-z0-9-]+\.pages\.dev$/);
     expect(getProviderHealth("pages")?.ok).toBe(true);
   });
 
@@ -200,13 +200,18 @@ describe("домен судится по DNS, а не по HTTPS", () => {
     expect(getProviderHealth("domain")?.ok).toBe(true);
   });
 
-  test("КОНТРОЛЬ: CNAME не разрешился — витрина domain красная и называет зону", async () => {
+  test("КОНТРОЛЬ: CNAME не разрешился — в момент ответа витрина НЕ красная (запись только создана); красная — когда страница уже ответила, а CNAME так и не виден", async () => {
     vercelDns();
     dnsProbe.cnameResolves = async () => false;
     const app = makeApp();
-    const { body } = await deployNew(app, "Shop");
+    const { id, deploymentId, body } = await deployNew(app, "Shop");
     expect(body.domainDns).toBe(false);
     expect(body.message).toMatch(/does not resolve/);
+    expect(getProviderHealth("domain"), "отказ сразу после записи — та же ложь, что HTTPS-проба").toBeNull();
+    pagesAlive = true;
+    fetchMock.mockImplementation(async (url: string) => (String(url).includes(".pages.dev") ? ok({}) : String(url).includes(".aevion.app") ? dead(526) : ok()));
+    await vi.advanceTimersByTimeAsync(4000 + 40_000);
+    expect((await deployment(app, id, deploymentId)).status).toBe("live");
     const h = getProviderHealth("domain");
     expect(h?.ok).toBe(false);
     expect(h?.reason).toMatch(/does not resolve/);

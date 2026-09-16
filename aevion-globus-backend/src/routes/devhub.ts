@@ -222,6 +222,30 @@ devhubRouter.use(
   dhSendLimit(),
 );
 
+/**
+ * Загрузки медиа — суточный потолок по адресу (15.09.2026).
+ *
+ * /media/upload-image кладёт в Cloudflare Images (платно за штуку и хранение),
+ * /media/upload-audio — в R2 (до 25 МБ, платно за объём). Обе ручки открыты гостю,
+ * месячного кредита у них нет, а ограничитель 30/мин по адресу за сутки пропускает
+ * 43 200 загрузок с одного адреса — терабайт в R2 или тысячи картинок в Images
+ * одним скриптом. Тот же класс, что кредит гостя по заголовку: без потолка по тому,
+ * чего клиент не выбирает, квота бесконечна. Число: человек за день столько не
+ * загружает; настраивается DEVHUB_UPLOAD_DAILY_LIMIT.
+ */
+function dhUploadDailyLimit() {
+  const raw = Number(process.env.DEVHUB_UPLOAD_DAILY_LIMIT);
+  const max = Number.isFinite(raw) && raw > 0 ? raw : 60;
+  return rateLimit({
+    windowMs: 24 * 60 * 60_000,
+    max,
+    keyPrefix: "dhupload-day",
+    message: "Суточный предел загрузок с этого адреса исчерпан. Продолжить можно завтра.",
+  });
+}
+
+devhubRouter.use(["/media/upload-image", "/media/upload-audio"], dhUploadDailyLimit());
+
 // Область запроса: адрес клиента для потолка кредита гостя (guestIpBudgetKey ниже).
 // Стоит ДО всех ручек: middleware действует только на зарегистрированные после него.
 const requestScope = new AsyncLocalStorage<{ ip: string }>();
@@ -731,7 +755,8 @@ function creditNote(verdict: CreditVerdict): { creditUnverified: true } | Record
 
 async function debitCredit(userId: string, capability: CapabilityKey, amount = 1): Promise<void> {
   const ipKey = guestIpBudgetKey(userId);
-  if (ipKey) await debitCredit(ipKey, capability, amount);
+  // Через обёртку: отказ списания по адресу должен быть виден так же, как по личности.
+  if (ipKey) await debitQuietly(ipKey, capability, amount);
   const month = creditMonth();
   const tier = await getUserTier(userId);
   if (!isDevHubDbReady()) {
@@ -898,19 +923,22 @@ function dnsProviderName(): string {
  * Стенд подменяет `dnsProbe.cnameResolves`, чтобы не ходить в сеть.
  */
 export const dnsProbe = {
-  async cnameResolves(host: string): Promise<boolean> {
-    try {
-      const r = await Promise.race([
-        dnsPromises.resolveCname(host),
-        new Promise<string[]>((_, reject) => {
-          const t = setTimeout(() => reject(new Error("dns timeout")), 3000);
-          t.unref?.();
-        }),
-      ]);
-      return Array.isArray(r) && r.length > 0;
-    } catch {
-      return false;
+  /** Несколько попыток: запись только что создана, у поставщика она видна через секунды (проба 15.09: false сразу, true через минуту). */
+  async cnameResolves(host: string, attempts = 3, delayMs = 2000): Promise<boolean> {
+    for (let i = 0; i < attempts; i++) {
+      try {
+        const r = await Promise.race([
+          dnsPromises.resolveCname(host),
+          new Promise<string[]>((_, reject) => {
+            const t = setTimeout(() => reject(new Error("dns timeout")), 3000);
+            t.unref?.();
+          }),
+        ]);
+        if (Array.isArray(r) && r.length > 0) return true;
+      } catch { /* не разрешилось — попробуем ещё */ }
+      if (i < attempts - 1) await new Promise((r) => setTimeout(r, delayMs));
     }
+    return false;
   },
 };
 
@@ -982,8 +1010,14 @@ async function markDeploymentLive(
     if (ready) {
       noteProviderSuccess("domain");
       domainNote = ` | domain: https://${customDomain} answers`;
-    } else {
+    } else if (await dnsProbe.cnameResolves(customDomain, 2, 1000)) {
+      noteProviderSuccess("domain");
       domainNote = ` | domain: https://${customDomain} not answering yet (Pages certificate pending); the DNS record is in place`;
+    } else {
+      // Страница уже отвечает, прошло не меньше окна проверки, а CNAME так и не
+      // виден — вот это отказ DNS, и витрина «домен» вправе покраснеть.
+      noteProviderFailure("domain", `${customDomain} does not resolve — the CNAME is not visible in the ${siteZone()} zone at ${dnsProviderName()}`);
+      domainNote = ` | domain: ${customDomain} does not resolve (CNAME not visible at ${dnsProviderName()})`;
     }
   }
   d.buildLog = (d.buildLog || "") + " | verify: page answers 2xx" + domainNote;
@@ -7353,14 +7387,21 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
       return res.status(502).json({ error: `CF Pages upload failed: ${wranglerResult.error}` });
     }
-    const pagesUrl = wranglerResult.url;
+    // Живой адрес — адрес ПРОЕКТА (<pageName>.pages.dev), а не адрес выкатки
+    // (<hash>.<pageName>.pages.dev), который wrangler печатает первым. Проба 15.09
+    // (probe-newcomer-c64315): адрес проекта и <slug>.aevion.app отвечали через
+    // минуту, адрес выкатки — не отвечал и через три (jina 422 при живых A-записях).
+    // Проверка шла именно по нему — отсюда «выкаток 6, успешных 0» за 30 дней.
+    // Людям тоже нужен адрес проекта: он не меняется от выкатки к выкатке.
+    const deploymentUrl = wranglerResult.url;
+    const pagesUrl = `https://${pageName}.pages.dev`;
 
     deployment.status = "building";
     deployment.deployUrl = pagesUrl;
     // Пропущенные файлы называются поимённо: молчаливый пропуск означал бы,
     // что на сайте не хватает страницы, а выкатка отчиталась успехом.
     deployment.buildLog =
-      `CF Pages deployment uploaded via wrangler` +
+      `CF Pages deployment uploaded via wrangler (${deploymentUrl}); live address ${pagesUrl}` +
       (wranglerResult.skipped.length
         ? ` | НЕ ЗАГРУЖЕНЫ ${wranglerResult.skipped.length} файл(ов) с недопустимым путём: ${wranglerResult.skipped.slice(0, 10).join(", ")}`
         : "");
@@ -7418,10 +7459,10 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
     // готовность HTTPS (сертификат Pages) проверяет та же цепочка после того, как
     // ответит pages.dev. Витрина «домен» отвечает за запись в DNS, не за сертификат.
     const domainDns = customDomain ? await dnsProbe.cnameResolves(customDomain) : false;
-    if (customDomain) {
-      if (domainDns) noteProviderSuccess("domain");
-      else noteProviderFailure("domain", `${customDomain} does not resolve — the CNAME is not visible in the ${siteZone()} zone at ${dnsProviderName()} yet`);
-    }
+    // «Ещё не видно» сразу после записи — не отказ: проба 15.09 дала false в момент
+    // ответа и true через минуту, а витрина краснела на 30 минут. Успех отмечаем
+    // сразу, отказ — только из цепочки окон (markDeploymentLive), когда прошло время.
+    if (customDomain && domainDns) noteProviderSuccess("domain");
     // HTTPS домена сразу после выкатки не готов никогда — поле остаётся ради
     // клиентов, которые его читают, и никогда не делает домен liveUrl.
     const domainReady = false;
@@ -7430,6 +7471,7 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       provider: "cloudflare-pages",
       deploymentId,
       pagesUrl,
+      deploymentUrl,
       domain: customDomain,
       domainUrl,
       domainReady,
@@ -7463,7 +7505,11 @@ devhubRouter.post("/projects/:id/deployments/:deployId/recheck", async (req, res
   if (!d) d = memDeployments.get(deployId) ?? null;
   if (!d) return res.status(404).json({ error: "deployment not found" });
   if (!d.deployUrl) return res.status(400).json({ error: "deployment has no address to check — the upload never finished" });
-  const serves = await verifyDeploymentServes(d.deployUrl, 1000, 3);
+  // Старые записи хранят адрес выкатки (<hash>.<проект>.pages.dev); он бывает мёртв
+  // при живом адресе проекта — спрашиваем оба, живым считаем адрес проекта.
+  const m = /^https:\/\/[a-z0-9]+\.([a-z0-9-]+\.pages\.dev)$/i.exec(d.deployUrl);
+  const projectUrl = m ? `https://${m[1]}` : d.deployUrl;
+  const serves = (await verifyDeploymentServes(projectUrl, 1000, 3)) || (projectUrl !== d.deployUrl && await verifyDeploymentServes(d.deployUrl, 1000, 2));
   if (!serves) {
     return res.json({ ok: true, serves: false, status: d.status, deployUrl: d.deployUrl, message: `${d.deployUrl} still does not answer 2xx` });
   }
@@ -7471,8 +7517,9 @@ devhubRouter.post("/projects/:id/deployments/:deployId/recheck", async (req, res
   const domainFailed = /\| domain: /.test(d.buildLog || "");
   const customDomain = project.customDomain
     || (dnsConfigured() && !domainFailed ? `${slugify(project.name)}-${project.id.slice(0, 6)}.${siteZone()}` : null);
-  await markDeploymentLive(d, project, d.deployUrl, customDomain);
-  return res.json({ ok: true, serves: true, status: "live", deployUrl: d.deployUrl, customDomain });
+  d.deployUrl = projectUrl;
+  await markDeploymentLive(d, project, projectUrl, customDomain);
+  return res.json({ ok: true, serves: true, status: "live", deployUrl: projectUrl, customDomain });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════

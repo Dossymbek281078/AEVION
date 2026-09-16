@@ -42,15 +42,17 @@ export default function PricingRefundPolicyPage() {
       ],
     },
     {
-      id: "annual",
+      // Оплата за срок вперёд (15.09.2026): годовой оплаты и её пропорционального
+      // возврата больше нет.
+      id: "term",
       icon: "📅",
       color: "#7c3aed",
-      title: tp("refund.section.annual.title"),
-      body: tp("refund.section.annual.body"),
+      title: tp("refund.section.term.title"),
+      body: tp("refund.section.term.body"),
       bullets: [
-        tp("refund.section.annual.b1"),
-        tp("refund.section.annual.b2"),
-        tp("refund.section.annual.b3"),
+        tp("refund.section.term.b1"),
+        tp("refund.section.term.b2"),
+        tp("refund.section.term.b3"),
       ],
     },
     {

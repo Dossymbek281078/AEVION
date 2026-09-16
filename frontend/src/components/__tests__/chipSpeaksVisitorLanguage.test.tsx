@@ -4,10 +4,11 @@
  * До 14.09.2026 все надписи чипа были зашиты по-русски: на 38 страницах
  * модулей посетитель, выбравший English, видел английскую страницу и
  * «Купить», «/мес», русские подсказки — ровно там, где решается покупка.
- * Сторожа русского текста у модулей этого не видели: они читают только
- * папку своей страницы, а чип общий.
  *
- * Проверяем три случая, и два из них — контроли:
+ * 15.09.2026 чип переведён на лестницу сроков; словарные ключи поменялись
+ * (from, appAlone, planetFrom, includedInPlanet), и все они обязаны быть
+ * переведены. Проверяем обе ветки чипа — приложение и модуль в подписке.
+ *
  *   en  — в тексте и подсказках чипа нет кириллицы (сама находка);
  *   ru  — «Купить» на месте (иначе «нет кириллицы» прошло бы и у пустого чипа);
  *   без провайдера — прежний русский текст (страницы и тесты вне I18nProvider
@@ -18,14 +19,7 @@ import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import { I18nProvider } from "@/lib/i18n";
 import ModulePricingChip from "../ModulePricingChip";
 
-const PRICING = {
-  tiers: [
-    { id: "lite", name: "Lite", priceMonthly: 19 },
-    { id: "medium", name: "Medium", priceMonthly: 29 },
-    { id: "full", name: "Full", priceMonthly: 49 },
-  ],
-  currencies: { USD: { rate: 1, symbol: "$", label: "USD" } },
-};
+vi.mock("@/lib/apiBase", () => ({ apiUrl: (p: string) => p }));
 
 const CYR_FROM = 0x400;
 const CYR_TO = 0x4ff;
@@ -54,17 +48,17 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function mockFetch() {
-  globalThis.fetch = vi.fn(async () => ({ ok: true, json: async () => PRICING })) as unknown as typeof fetch;
+function guest() {
+  globalThis.fetch = vi.fn(async () => ({ ok: false, json: async () => ({}) })) as unknown as typeof fetch;
 }
 
 describe("ModulePricingChip говорит на языке посетителя", () => {
-  it("en: ни в тексте, ни в подсказках чипа нет кириллицы", async () => {
-    mockFetch();
+  it.each(["qskyway", "cyberchess"])("en (%s): ни в тексте, ни в подсказках нет кириллицы", async (moduleId) => {
+    guest();
     setLangCookie("en");
     const { container } = render(
       <I18nProvider>
-        <ModulePricingChip moduleId="qskyway" />
+        <ModulePricingChip moduleId={moduleId} />
       </I18nProvider>,
     );
     await waitFor(() => expect(screen.getByText("Buy")).toBeTruthy());
@@ -74,7 +68,7 @@ describe("ModulePricingChip говорит на языке посетителя"
   });
 
   it("контроль ru: кнопка «Купить» и «/мес» на месте", async () => {
-    mockFetch();
+    guest();
     setLangCookie("ru");
     const { container } = render(
       <I18nProvider>
@@ -85,10 +79,10 @@ describe("ModulePricingChip говорит на языке посетителя"
     expect(visibleText(container)).toContain("/мес");
   });
 
-  it("контроль без провайдера: прежний русский текст, чип не падает", async () => {
-    mockFetch();
-    const { container } = render(<ModulePricingChip moduleId="qskyway" />);
+  it("контроль без провайдера: русский текст, подсказка называет цену лестницы", async () => {
+    guest();
+    const { container } = render(<ModulePricingChip moduleId="cyberchess" />);
     await waitFor(() => expect(screen.getByText("Купить")).toBeTruthy());
-    expect(visibleText(container)).toContain("Купить Lite $19/мес");
+    expect(visibleText(container)).toContain("от $12/мес при оплате за 12 месяцев");
   });
 });

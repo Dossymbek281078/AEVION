@@ -4,13 +4,16 @@ import type { ReactNode } from "react";
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "Pricing — Free, Pro $9, Team $49 · AEVION Constitution",
+  // 15.09.2026: Pro и Team отдельными подписками сняты — Pro входит в подписку
+  // AEVION (срок 1–12 месяцев, оплата вперёд). Цену в метаданных не называем:
+  // заголовок живёт в выдаче и превью месяцами и расходится с кассой молча.
+  title: "Pricing — Free and Pro in the AEVION subscription · AEVION Constitution",
   description:
-    "3 тарифа: Free (5 сохранений), Pro $9/mo (безлимит + AI без cap + clean PDF + embed), Team $49/mo (5 seats + admin + общие сценарии). Cancel anytime.",
+    "Free (5 сохранений, 10 AI-запросов в день) и Pro — безлимит, AI без лимита, clean PDF, embed — в подписке AEVION: все модули на срок от 1 до 12 месяцев, оплата за срок вперёд.",
   alternates: { canonical: `${SITE}/constitution/pricing` },
   openGraph: {
-    title: "Constitution Pricing — Free / Pro / Team",
-    description: "Constitution as a Service. От бесплатного редактора до team-плана с админкой и общими сценариями.",
+    title: "Constitution Pricing — Free / Pro",
+    description: "Constitution as a Service. От бесплатного редактора до Pro в подписке AEVION.",
     url: `${SITE}/constitution/pricing`,
     type: "website",
   },

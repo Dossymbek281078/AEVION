@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { PLANET_BASE_MONTHLY, TERM_NAME, TERM_TIERS, termPricePerMonth } from "@/lib/termPricing";
 
 export const runtime = "edge";
 export const alt = "AEVION — Full tier × modules matrix";
@@ -66,7 +67,7 @@ export default async function Image() {
               marginBottom: 12,
             }}
           >
-            ВСЕ МОДУЛИ × 4 ТАРИФА
+            ВСЕ МОДУЛИ × ВСЕ СРОКИ
           </div>
           <h1
             style={{
@@ -90,20 +91,25 @@ export default async function Image() {
               lineHeight: 1.3,
             }}
           >
-            Что включено, что доступно как add-on, что только в Enterprise — всё в одной таблице.
+            Любой платный срок открывает всю планету. Цена за месяц — чем длиннее срок, тем дешевле.
           </p>
         </div>
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", gap: 18 }}>
-            {/* Ladder MUST match TIERS in aevion-globus-backend/src/data/pricing.ts.
-                Until 2026-08-10 this card still showed the long-dead FREE/PRO $19/BUSINESS $99
-                ladder — a plan that no longer exists in any form. */}
+          <div style={{ display: "flex", gap: 10 }}>
+            {/* Лестница берётся из lib/termPricing.ts, а не вписывается руками: карточку
+                никто не открывает заново при смене цен, и здесь до 15.09.2026 жили
+                $19/$29/$49/$149 — лестница, которой уже не было. Копия termPricing
+                сверяется с бэкендом сторожем termPricingMatchesBackend. */}
             <Tier name="FREE" price="$0" highlight={false} />
-            <Tier name="LITE" price="$19" highlight={false} />
-            <Tier name="MEDIUM" price="$29" highlight />
-            <Tier name="FULL" price="$49" highlight={false} />
-            <Tier name="UNIVERSE" price="$149" highlight={false} />
+            {TERM_TIERS.map((term) => (
+              <Tier
+                key={term}
+                name={TERM_NAME[term].toUpperCase()}
+                price={`$${termPricePerMonth(PLANET_BASE_MONTHLY, term)}`}
+                highlight={term === "max"}
+              />
+            ))}
           </div>
           <div style={{ fontSize: 16, color: "#64748b" }}>aevion.app/pricing/compare</div>
         </div>

@@ -1,36 +1,47 @@
 import { ALL_PRODUCTS } from "./products";
+import { STANDALONE_APPS } from "./termPricing";
 
 /**
  * Название товара по слагу, который пишет платёжный вебхук.
  *
  * ЗАЧЕМ. В кабинете, в блоке «Оплачено отдельно — доступ активен», слаг
- * выводился КАК ЕСТЬ. То есть человек, заплативший $29 за AEVION IP Bureau,
- * видел у себя плашку `ip_bureau`. Внутреннее слово на экране заплатившего —
- * тот же класс, что «Запустите бэкенд на :4001» на публичной странице.
+ * выводился КАК ЕСТЬ. То есть человек, оплативший AEVION IP Bureau, видел у
+ * себя плашку `ip_bureau`. Внутреннее слово на экране заплатившего — тот же
+ * класс, что «Запустите бэкенд на :4001» на публичной странице.
  *
  * ПОЧЕМУ НЕ ПРОСТО ПОИСК ПО appId. Слаг рождается в бэкенде как
  * `ref.slice(4)` от ссылки варианта (`app_ip_bureau` -> `ip_bureau`), а в
- * каталоге у того же товара `appId: "aevion-ip-bureau"`. Замер 28.08.2026:
- * из девяти ссылок вебхука три не совпадают с каталогом —
+ * каталоге у того же товара `appId: "aevion-ip-bureau"`. Для пяти приложений,
+ * которые продаются отдельно, пары «слаг → id модуля» живут в STANDALONE_APPS
+ * (`./termPricing`) — оттуда их и берём, вторую копию не заводим.
  *
- *     qpaynet    <- каталог: qpaynet-embedded
- *     ip_bureau  <- каталог: aevion-ip-bureau
- *     smeta      <- каталог: smeta-trainer
+ * ⚠️ СНЯТЫЕ С ПРОДАЖИ (15.09.2026). QPayNet, QContract, Smeta Trainer и
+ * Constitution больше не продаются отдельно, их карточек в каталоге нет. Но
+ * подписки, купленные ДО этого, доживают оплаченный период, и кабинет обязан
+ * назвать их по-человечески. Поэтому названия снятых товаров — отдельным
+ * списком, который НЕ продаёт ничего (цен и ссылок в нём нет).
  *
- * — поэтому нужен явный список псевдонимов. Он маленький и держится рядом с
- * проверкой, которая краснеет, если появится ЧЕТВЁРТОЕ расхождение: молчаливо
- * показать сырой слаг снова не выйдет.
- *
- * И искать надо по ALL_PRODUCTS, а не по MODULES: последний содержит только
- * семь товаров Lemon Squeezy, а Constitution и «Анти-седина» лежат в GUIDES.
- * Мой первый вариант брал MODULES, и два слага из девяти остались бы сырыми —
- * это поймал собственный тест на полноте, ещё до коммита.
+ * Проверка полноты — `__tests__/appSlugTitle.test.ts`: каждая ссылка вебхука
+ * обязана разрешаться в название, молча показать сырой слаг снова не выйдет.
  */
+
+/** Слаги, которые записаны в вебхуке иначе, чем appId в каталоге. */
 const SLUG_ALIASES: Record<string, string> = {
-  qpaynet: "qpaynet-embedded",
-  ip_bureau: "aevion-ip-bureau",
+  ...Object.fromEntries(STANDALONE_APPS.map((a) => [a.slug, a.moduleId])),
   smeta: "smeta-trainer",
+  qpaynet: "qpaynet-embedded",
 };
+
+/** Названия товаров, снятых с отдельной продажи 15.09.2026, — по appId. */
+const RETIRED_TITLES: Record<string, string> = {
+  "qpaynet-embedded": "QPayNet",
+  qcontract: "QContract",
+  "smeta-trainer": "Smeta Trainer",
+  constitution: "Constitution",
+};
+
+const own = <T,>(o: Record<string, T>, k: string): T | undefined =>
+  Object.prototype.hasOwnProperty.call(o, k) ? o[k] : undefined;
 
 /**
  * Возвращает название товара или сам слаг, если товар не найден.
@@ -40,7 +51,7 @@ const SLUG_ALIASES: Record<string, string> = {
  */
 export function titleForAppSlug(slug: string): string {
   if (!slug) return slug;
-  const appId = SLUG_ALIASES[slug] ?? slug;
+  const appId = own(SLUG_ALIASES, slug) ?? slug;
   const found = ALL_PRODUCTS.find((m) => m.appId === appId);
-  return found?.title ?? slug;
+  return found?.title ?? own(RETIRED_TITLES, appId) ?? slug;
 }

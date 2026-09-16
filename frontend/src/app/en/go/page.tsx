@@ -3,6 +3,7 @@ import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { BuyLink } from "@/components/BuyLink";
 import { PageTracking } from "@/components/PageTracking";
 import { productById, channelFrom, withChannel, keepChannel, type Product } from "@/lib/products";
+import { fromPricePerMonth } from "@/lib/termPricing";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 
 // /en/go — англоязычная посадочная под ссылку в профиле.
@@ -56,6 +57,9 @@ const CURRENCY = new Intl.NumberFormat("en-US", {
 
 /** Цена берётся из каталога: вторая копия числа в вёрстке разошлась бы молча. */
 function price(p: Product): string {
+  // Term access (pricing policy of 15.09.2026): the honest floor is the month on
+  // the longest term, hence "from". The figure comes from the term ladder.
+  if (p.billing === "term") return `from ${CURRENCY.format(fromPricePerMonth(p.priceUsd))} / mo`;
   return CURRENCY.format(p.priceUsd) + (p.billing === "monthly" ? " / mo" : "");
 }
 
@@ -81,6 +85,26 @@ function Offer({
   format: string;
 }) {
   if (!p) return null;
+  const body = (
+    <>
+      <div style={styles.cardKicker}>{format}</div>
+      <div style={styles.cardTitle}>{title}</div>
+      <p style={styles.cardNote}>{note}</p>
+      <div style={styles.cardFoot}>
+        <span style={styles.cardPrice}>{price(p)}</span>
+        <span style={styles.cardBtn}>{cta}</span>
+      </div>
+    </>
+  );
+  // Term access leads to the pricing page (term choice), not to a checkout:
+  // checkout_start fires there, so a BuyLink here would count one purchase twice.
+  if (p.billing === "term") {
+    return (
+      <a href={withChannel(p.href, channel, "en-go")} style={styles.card}>
+        {body}
+      </a>
+    );
+  }
   return (
     <BuyLink
       href={withChannel(p.href, channel, "en-go")}
@@ -90,13 +114,7 @@ function Offer({
       channel={channel}
       style={styles.card}
     >
-      <div style={styles.cardKicker}>{format}</div>
-      <div style={styles.cardTitle}>{title}</div>
-      <p style={styles.cardNote}>{note}</p>
-      <div style={styles.cardFoot}>
-        <span style={styles.cardPrice}>{price(p)}</span>
-        <span style={styles.cardBtn}>{cta}</span>
-      </div>
+      {body}
     </BuyLink>
   );
 }
@@ -118,7 +136,9 @@ export default async function EnGoPage({
   const bookAudio = productById("lelzw");
   const bundle = productById("ghvzq");
   const antiGrey = productById("kkiavh");
-  const allAccess = productById("xpxzam");
+  // Whole-planet subscription for a term of 1–12 months (policy of 15.09.2026);
+  // the former All-Access product on Gumroad is no longer sold.
+  const allAccess = productById("aevion-planet");
 
   return (
     <main style={styles.page}>
@@ -202,10 +222,10 @@ export default async function EnGoPage({
           <Offer
             p={allAccess}
             channel={channel}
-            title="AEVION All-Access"
-            format="subscription"
-            note="Every module on one subscription instead of buying them one by one."
-            cta="Open"
+            title="AEVION subscription"
+            format="subscription · 1–12 months"
+            note="Every module for the term you choose, paid up front — the longer the term, the cheaper the month."
+            cta="Choose a term"
           />
         </section>
 

@@ -24,6 +24,7 @@ import { describe, expect, it } from "vitest";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { ALL_PRODUCTS } from "@/lib/products";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BACK = join(HERE, "..", "..", "..", "..", "aevion-globus-backend", "src");
@@ -42,6 +43,8 @@ const ROUTE_PREFIX: Record<string, string> = {
   "devhub": "devhub", "constitution": "constitution", "smeta-trainer": "smeta",
   "qventure": "qventure", "aevion-ip-bureau": "bureau", "qpaynet-embedded": "qpaynet",
   "cyberchess": "cyberchess", "qcontract": "qcontract",
+  // 15.09.2026: Multichat — одно из пяти приложений, продаваемых отдельно.
+  "multichat-engine": "multichat",
 };
 
 /**
@@ -57,19 +60,22 @@ const KNOWN_WITHOUT: Record<string, string> = {
   // состояние: платный модуль обязан что-то удерживать.
 };
 
-/** Не модуль, а НАБОР: своих маршрутов нет по устройству. */
-const BUNDLES = new Set(["aevion-all-access"]);
+/** Не модуль, а подписка на всю планету: своих маршрутов нет по устройству. */
+const BUNDLES = new Set(["aevion-planet"]);
 
+/**
+ * Платные подписки каталога — из настоящих объектов. С 15.09.2026 доступ
+ * продаётся на СРОК (billing "term"), а цены приложений вычисляются из лестницы
+ * сроков, поэтому разбор исходника по литералу `priceUsd: 123` и
+ * `billing: "monthly"` не нашёл бы ни одной подписки.
+ */
 function pricedModules(): Array<{ app: string; price: number }> {
-  const src = readFileSync(CATALOG, "utf8");
+  expect(readFileSync(CATALOG, "utf8")).toContain("export const MODULES");
   const out = new Map<string, number>();
-  for (const part of src.split(/\n\s*title:\s*"/).slice(1)) {
-    const app = /appId:\s*"([^"]+)"/.exec(part)?.[1];
-    const upTo = part.slice(0, part.indexOf("appId:"));
-    const price = /priceUsd:\s*([0-9]+)/.exec(upTo)?.[1];
-    const billing = /billing:\s*"([^"]+)"/.exec(upTo)?.[1];
-    // Разовые продукты (книги) доставляются письмом, маршрутного сторожа им не надо.
-    if (app && price && billing === "monthly" && !out.has(app)) out.set(app, Number(price));
+  for (const p of ALL_PRODUCTS) {
+    // Разовые продукты (книги, гайды) доставляются письмом, маршрутного сторожа им не надо.
+    if (!p.appId || p.billing === "once" || !(p.priceUsd > 0) || out.has(p.appId)) continue;
+    out.set(p.appId, p.priceUsd);
   }
   return [...out].map(([app, price]) => ({ app, price }));
 }

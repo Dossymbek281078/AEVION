@@ -1,5 +1,6 @@
 import { describe, test, expect } from "vitest";
-import { SUBSCRIPTIONS, GUIDES, type Product } from "../products";
+import { SUBSCRIPTIONS, GUIDES, MODULES, type Product } from "../products";
+import { PLANET_BASE_MONTHLY, fromPricePerMonth, termTotal } from "../termPricing";
 
 // Guard: one product card, one story about how much you get — 2026-08-11.
 //
@@ -8,13 +9,12 @@ import { SUBSCRIPTIONS, GUIDES, type Product } from "../products";
 // while the registry reported 36 live. Nothing broke — the card rendered
 // fine, it just contradicted itself in front of someone about to pay.
 //
-// `desc` is the seller's own wording, mirrored from Gumroad on purpose
-// (see the comment in products.ts): drifting from what the checkout page
-// shows would be worse than being imprecise. So the rule is not "no numbers
-// anywhere" — it is "the card must not state two different counts of the
-// same thing".
+// 15.09.2026: All-Access is no longer sold; the one subscription card is the
+// AEVION term subscription. The rule stays: a card must not state two
+// different counts of the same thing — and now also: the prices a card names
+// in words must be the ones the term ladder charges.
 
-const ALL: Product[] = [...SUBSCRIPTIONS, ...GUIDES];
+const ALL: Product[] = [...SUBSCRIPTIONS, ...GUIDES, ...MODULES];
 
 /** Counts of modules, in any of the shapes the catalogue has used. */
 function moduleCounts(text: string): number[] {
@@ -34,20 +34,25 @@ describe("a product card never states two different module counts", () => {
       ...moduleCounts(p.format),
     ];
     const distinct = [...new Set(counts)];
-    // One number is fine (it may be the seller's own wording). Two different
-    // ones on the same card is the defect this pins.
+    // One number is fine. Two different ones on the same card is the defect.
     expect(distinct.length).toBeLessThanOrEqual(1);
   });
 
-  test("All-Access specifically — the card that had both 15+ and 30+", () => {
-    const card = SUBSCRIPTIONS.find((p) => p.id === "xpxzam");
-    expect(card).toBeTruthy();
-    const inIncludes = moduleCounts((card!.includes || []).join(" "));
-    // The includes list no longer carries a count of its own; whatever the
-    // seller's desc says stands alone.
-    expect(inIncludes).toEqual([]);
-    // And it still tells the buyer what they get.
-    expect((card!.includes || []).join(" ")).toMatch(/Все живые продукты/i);
+  test("the subscription card names no module count at all and says what you get", () => {
+    const card = SUBSCRIPTIONS.find((p) => p.id === "aevion-planet");
+    expect(card, "the AEVION subscription card is missing").toBeTruthy();
+    // A count would go stale with the next release; «все модули» does not.
+    expect(moduleCounts([card!.desc, card!.format, ...(card!.includes || [])].join(" "))).toEqual([]);
+    expect((card!.includes || []).join(" ")).toMatch(/Все модули/i);
+  });
+
+  test("the subscription card quotes exactly the ladder's figures", () => {
+    const card = SUBSCRIPTIONS.find((p) => p.id === "aevion-planet")!;
+    const dollars = [...card.format.matchAll(/\$(\d+)/g)].map((m) => Number(m[1])).sort((a, b) => a - b);
+    expect(dollars).toEqual(
+      [fromPricePerMonth(PLANET_BASE_MONTHLY), termTotal(PLANET_BASE_MONTHLY, "lite")].sort((a, b) => a - b),
+    );
+    expect(card.priceUsd).toBe(termTotal(PLANET_BASE_MONTHLY, "lite"));
   });
 
   test("the guard catches the shape that shipped", () => {

@@ -10,6 +10,11 @@ import { apiUrl } from "@/lib/apiBase";
 import PurchaseReturnTracker from "@/components/PurchaseReturnTracker";
 import { естьСледОплаты } from "@/lib/paymentTrace";
 import { изСправочника } from "@/lib/mapLookup";
+import { termUnitKey } from "@/lib/pricingI18n";
+import { TERM_MONTHS } from "@/lib/termPricing";
+
+/** Сроки, которые касса может положить в `?term=`. Остальное — не срок, а мусор. */
+const ИЗВЕСТНЫЕ_СРОКИ = new Set<number>(Object.values(TERM_MONTHS));
 
 const APP_LINKS: Record<string, { name: string; href: string }> = {
   qcoreai:    { name: "QCoreAI", href: "/qcoreai" },
@@ -91,7 +96,11 @@ function SuccessInner() {
   const processor = изСправочника(PROCESSOR_LABEL, provider) ?? null;
   const stub = sp.get("stub") === "true";
   const tier = sp.get("tier") ?? sp.get("tierId");
-  const period = sp.get("period");
+  // Срок подписки в месяцах (с 15.09.2026 вместо period=monthly|annual). Значение
+  // из адреса проходит через закрытый список: подобранное `?term=` не печатается.
+  const termRaw = Number(sp.get("term"));
+  const termMonths = ИЗВЕСТНЫЕ_СРОКИ.has(termRaw) ? termRaw : null;
+  const срокСловом = termMonths ? `${termMonths} ${t(termUnitKey(termMonths))}` : null;
   const totalCents = sp.get("total");
   const trialDays = sp.get("trial") ? parseInt(sp.get("trial")!, 10) : 0;
   const appId = sp.get("appId") ?? "platform";
@@ -287,7 +296,7 @@ function SuccessInner() {
           provider={provider ?? "unknown"}
           tier={tier ?? undefined}
           value={totalUsd ?? undefined}
-          meta={{ period: period ?? null, sessionId: sessionId ?? saleId ?? null, stub }}
+          meta={{ termMonths, sessionId: sessionId ?? saleId ?? null, stub }}
         />
       )}
       <div style={{ marginBottom: 16 }}>
@@ -374,7 +383,11 @@ function SuccessInner() {
             }}
           >
             {t("pricing.checkoutSuccess.firstCharge")} <strong>{trialEndDate}</strong>
-            {period && <span style={{ opacity: 0.8 }}> · {period === "annual" ? t("pricing.checkoutSuccess.periodAnnual") : t("pricing.checkoutSuccess.periodMonthly")} {t("pricing.checkoutSuccess.subscriptionWord")}</span>}
+            {termMonths && (
+              <span style={{ opacity: 0.8 }}>
+                {" "}· {t("pricing.checkoutSuccess.termSubscription", { months: String(termMonths), unit: t(termUnitKey(termMonths)) })}
+              </span>
+            )}
           </div>
         )}
 
@@ -402,7 +415,7 @@ function SuccessInner() {
             <span>🔒</span>
             <span>{processor
               ? t("pricing.checkoutSuccess.providerBadge", { processor })
-              : t("pricing.checkoutSuccess.providerBadgeNoName")}{period ? ` · ${period === "annual" ? t("pricing.checkoutSuccess.periodAnnual") : t("pricing.checkoutSuccess.periodMonthly")}` : ""}</span>
+              : t("pricing.checkoutSuccess.providerBadgeNoName")}{срокСловом ? ` · ${срокСловом}` : ""}</span>
           </div>
         )}
 

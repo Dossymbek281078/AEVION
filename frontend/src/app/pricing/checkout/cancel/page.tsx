@@ -1,7 +1,7 @@
 "use client";
 
 import { естьСледОплаты } from "@/lib/paymentTrace";
-import { вспомнитьНамерение, тарифИзСсылки, тарифИзвестен } from "@/lib/checkoutIntent";
+import { тарифНамерения, тарифИзСсылки, тарифИзвестен } from "@/lib/checkoutIntent";
 import Link from "next/link";
 import { Suspense, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
@@ -41,7 +41,9 @@ function CancelInner() {
   const tier = первыйИзвестный(
     sp.get("tier"),
     тарифИзСсылки(sp.get("ref")),
-    вспомнитьНамерение()?.tier,
+    // Покупка отдельного приложения тарифа планеты не даёт: срок в её записи
+    // повёл бы кнопку на страницу всей планеты (см. тарифНамерения).
+    тарифНамерения(),
   );
 
   /*

@@ -31,7 +31,9 @@ export function suggestPromptsFor(m: PromptModule): string[] {
   if (/music|audio|awards|voice|sound|film/.test(h)) {
     prompts.push(`Compose a 10-second signature music clip for "${name}".`);
   } else if (/pay|fintech|bank|trade|card|checkout|commerce|invoice/.test(h)) {
-    prompts.push(`Create a $29 payment link for "${name} Pro".`);
+    // Сумма в подсказке не называется: выдуманная цена рядом с настоящим модулем
+    // читается как его цена (прежние «$29 … Pro» — снятый тариф, 15.09.2026).
+    prompts.push(`Create a payment link for "${name}".`);
   } else {
     prompts.push(`Write and voice a 20-second intro for "${name}".`);
   }

@@ -4,6 +4,20 @@ import { useState } from "react";
 import { activatable } from "@/lib/activatable";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
+import { PageTracking } from "@/components/PageTracking";
+import { PRICING_APP, PRICING_TERMS } from "@/lib/products";
+import { PLANET_BASE_MONTHLY, fromPricePerMonth, standaloneApp } from "@/lib/termPricing";
+
+// ⚠️ 15.09.2026 — новая ценовая политика (слово основателя). Карточки «Pro $19/mo»
+// и «Enterprise $99/mo» с переключателем «помесячно / за год» сняты: помесячной и
+// годовой оплаты больше нет, а этих цен не списывала ни одна касса. Теперь:
+//   · подписка AEVION — срок доступа ко всей планете, 1–12 месяцев, оплата вперёд;
+//   · Multichat — одно из пяти приложений, которые продаются и отдельно;
+//   · Enterprise — по запросу.
+// Числа — только из @/lib/termPricing.
+
+const PLANET_FROM = fromPricePerMonth(PLANET_BASE_MONTHLY);
+const MULTICHAT = standaloneApp("multichat");
 
 const PRO_BENEFITS = [
   "Unlimited AI sessions & history",
@@ -31,15 +45,18 @@ const ENTERPRISE_BENEFITS = [
 
 
 export default function QCoreUpgradePage() {
-  const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
   const [plan, setPlan] = useState<"pro" | "enterprise">("pro");
-
-  const proPrice = billing === "monthly" ? 19 : Math.round(19 * 0.8);
-  const enterprisePrice = billing === "monthly" ? 99 : Math.round(99 * 0.8);
 
   return (
     <>
       <Wave1Nav />
+      {/* Замер посещения. Страница ведёт к оплате — кнопка уводит на /pricing#tiers,
+          ссылка рядом на /pricing?app=multichat, — а посещение не считалось вовсе:
+          заходы сюда не попадали в знаменатель воронки, и конверсия выглядела лучше,
+          чем есть. Найдено 16.09.2026 сторожем trackingCoverage, когда он научился
+          видеть внутренние ссылки на страницу цен как признак покупки (после
+          лестницы сроков прямых ссылок в кассу в каталоге больше нет). */}
+      <PageTracking page="qcoreai-upgrade" />
       <ProductPageShell>
         <div style={{ maxWidth: 900, margin: "0 auto", padding: "48px 24px 80px" }}>
           {/* Header */}
@@ -76,65 +93,12 @@ export default function QCoreUpgradePage() {
             </p>
           </div>
 
-          {/* Billing toggle */}
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: 32, gap: 0 }}>
-            <button
-              {...activatable(() => setBilling("monthly"))}
-              role="radio"
-              aria-checked={billing === "monthly"}
-              aria-label="Оплата помесячно"
-              style={{
-                padding: "8px 24px",
-                borderRadius: "8px 0 0 8px",
-                border: "2px solid #0d9488",
-                background: billing === "monthly" ? "#0d9488" : "#fff",
-                color: billing === "monthly" ? "#fff" : "#0d9488",
-                fontWeight: 600,
-                cursor: "pointer",
-                fontSize: 14,
-              }}
-            >
-              Monthly
-            </button>
-            <button
-              {...activatable(() => setBilling("annual"))}
-              role="radio"
-              aria-checked={billing === "annual"}
-              aria-label="Оплата за год"
-              style={{
-                padding: "8px 24px",
-                borderRadius: "0 8px 8px 0",
-                border: "2px solid #0d9488",
-                borderLeft: "none",
-                background: billing === "annual" ? "#0d9488" : "#fff",
-                color: billing === "annual" ? "#fff" : "#0d9488",
-                fontWeight: 600,
-                cursor: "pointer",
-                fontSize: 14,
-              }}
-            >
-              Annual{" "}
-              <span
-                style={{
-                  background: "#fef3c7",
-                  color: "#92400e",
-                  borderRadius: 4,
-                  padding: "1px 6px",
-                  fontSize: 11,
-                  fontWeight: 700,
-                  marginLeft: 4,
-                }}
-              >
-                Save 20%
-              </span>
-            </button>
-          </div>
-
           {/* Plan cards */}
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "1fr 1fr",
+              // Одна колонка на телефоне: две карточки по 1fr на 390px не читались.
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
               gap: 20,
               marginBottom: 40,
             }}
@@ -144,7 +108,7 @@ export default function QCoreUpgradePage() {
               {...activatable(() => setPlan("pro"))}
               role="radio"
               aria-checked={plan === "pro"}
-              aria-label="Тариф Pro"
+              aria-label="Подписка AEVION"
               style={{
                 border: plan === "pro" ? "2px solid #0d9488" : "2px solid #e2e8f0",
                 borderRadius: 16,
@@ -156,8 +120,8 @@ export default function QCoreUpgradePage() {
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 18, color: "#0f172a" }}>Pro</div>
-                  <div style={{ color: "#64748b", fontSize: 13 }}>For individuals & teams</div>
+                  <div style={{ fontWeight: 700, fontSize: 18, color: "#0f172a" }}>AEVION subscription</div>
+                  <div style={{ color: "#64748b", fontSize: 13 }}>QCoreAI with every AEVION module</div>
                 </div>
                 {plan === "pro" && (
                   <span
@@ -175,15 +139,14 @@ export default function QCoreUpgradePage() {
                 )}
               </div>
               <div style={{ marginBottom: 20 }}>
+                <span style={{ color: "#64748b", fontSize: 14 }}>from </span>
                 <span style={{ fontSize: 36, fontWeight: 800, color: "#0d9488" }}>
-                  ${proPrice}
+                  ${PLANET_FROM}
                 </span>
                 <span style={{ color: "#64748b", fontSize: 14 }}>/mo</span>
-                {billing === "annual" && (
-                  <div style={{ color: "#64748b", fontSize: 12, marginTop: 2 }}>
-                    Billed annually (${proPrice * 12}/yr)
-                  </div>
-                )}
+                <div style={{ color: "#64748b", fontSize: 12, marginTop: 2 }}>
+                  A term of 1 to 12 months, paid up front · ${PLANET_BASE_MONTHLY} for one month
+                </div>
               </div>
               <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 8 }}>
                 {PRO_BENEFITS.map((b) => (
@@ -231,15 +194,9 @@ export default function QCoreUpgradePage() {
                 )}
               </div>
               <div style={{ marginBottom: 20 }}>
-                <span style={{ fontSize: 36, fontWeight: 800, color: "#7c3aed" }}>
-                  ${enterprisePrice}
+                <span style={{ fontSize: 30, fontWeight: 800, color: "#7c3aed" }}>
+                  On request
                 </span>
-                <span style={{ color: "#64748b", fontSize: 14 }}>/mo</span>
-                {billing === "annual" && (
-                  <div style={{ color: "#64748b", fontSize: 12, marginTop: 2 }}>
-                    Billed annually (${enterprisePrice * 12}/yr)
-                  </div>
-                )}
               </div>
               <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 8 }}>
                 {ENTERPRISE_BENEFITS.map((b) => (
@@ -281,16 +238,23 @@ export default function QCoreUpgradePage() {
             </p>
           </div>
 
-          {/* Кнопка ведёт на страницу тарифов — там настоящая касса.
+          {/* Multichat — одно из пяти приложений, которые продаются и отдельно. */}
+          {MULTICHAT ? (
+            <p style={{ textAlign: "center", color: "#475569", fontSize: 14, margin: "0 0 20px" }}>
+              Need only the model council?{" "}
+              <a href={PRICING_APP(MULTICHAT.slug)} style={{ color: "#0d9488", fontWeight: 700 }}>
+                {MULTICHAT.name} on its own — from ${fromPricePerMonth(MULTICHAT.baseMonthly)}/mo →
+              </a>
+            </p>
+          ) : null}
+
+          {/* Кнопка ведёт на страницу тарифов — там выбор срока и настоящая касса.
               До 23.08.2026 у неё не было ни onClick, ни type="submit", ни формы
               вокруг: нажатие не делало ничего, при том что страница обещала
-              переход к оплате. Цену в подписи не пишу намеренно — на странице
-              указано $19/мес за Pro, а касса считает по тарифу pro = $149/мес
-              (src/data/pricing.ts). Расхождение восьмикратное, и выбор цены —
-              решение основателя, а не правка кода. */}
+              переход к оплате. */}
           <button
             onClick={() => {
-              window.location.href = "/pricing";
+              window.location.href = plan === "pro" ? PRICING_TERMS : "/pricing";
             }}
             style={{
               width: "100%",
@@ -308,12 +272,11 @@ export default function QCoreUpgradePage() {
               marginBottom: 16,
             }}
           >
-            Upgrade to {plan === "pro" ? "Pro" : "Enterprise"} — $
-            {plan === "pro" ? proPrice : enterprisePrice}/mo
+            {plan === "pro" ? `Choose a term — from $${PLANET_FROM}/mo` : "Ask about Enterprise"}
           </button>
 
           <p style={{ textAlign: "center", color: "#94a3b8", fontSize: 13, margin: 0 }}>
-            Cancel anytime. No hidden fees. Invoices available for KZ businesses.
+            One payment for the whole term. No hidden fees. Invoices available for KZ businesses.
           </p>
         </div>
       </ProductPageShell>

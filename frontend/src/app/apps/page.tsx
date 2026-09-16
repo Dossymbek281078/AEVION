@@ -2,47 +2,32 @@
 
 import { channelNow } from "@/lib/channelNow";
 import { useEffect, useState } from "react";
-import { channelFrom, withChannel } from "@/lib/products";
+import { keepChannel, withChannel } from "@/lib/products";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { productById } from "@/lib/products";
 import { track } from "@/lib/track";
 import { PageTracking } from "@/components/PageTracking";
-
-type Billing = "monthly" | "annual";
+import {
+  PLANET_BASE_MONTHLY,
+  TERM_MONTHS,
+  TERM_NAME,
+  TERM_TIERS,
+  fromPricePerMonth,
+  termPricePerMonth,
+  termTotal,
+} from "@/lib/termPricing";
 
 /* ── Prices ─────────────────────────────────────────────────────────────────── */
-// ⚠️ Planet is the one paid AEVION offer whose price lives nowhere but this file.
-// Everything else resolves to a source of truth: tiers to data/pricing.ts (what
-// checkout.ts charges), one-off products and subscriptions to lib/products.ts
-// (verified against the live payment dashboards on 2026-07-26). These two numbers
-// have neither, and the checkout links below are raw Lemon Squeezy variant UUIDs
-// typed into this page — they bypass lib/products.ts AND the backend's
-// tier_planet_monthly / tier_planet_annual reference system
-// (data/lemonSqueezyVariants.ts), so nothing in the codebase can tell whether the
-// $250 shown here is what Lemon Squeezy actually bills.
+// ⚠️ 15.09.2026 — новая ценовая политика (слово основателя). Прежняя карточка
+// Planet с переключателем «помесячно / за год» и двумя прямыми ссылками Lemon
+// Squeezy снята: месячной и годовой оплаты больше нет. Тариф — это СРОК доступа
+// ко всей планете (1 / 3 / 6 / 9 / 12 месяцев), оплата за весь срок вперёд.
 //
-// That is the same shape as the "All-Access $59/мес" banner, which advertised a
-// price for years while the button opened a different product. Not changed here:
-// correcting it needs the real variant prices from the Lemon Squeezy dashboard,
-// and inventing a number would be worse than naming the gap. Fix = add Planet to
-// lib/products.ts with its verified price + href, then read it from there.
-// ПРОВЕРЕНО 30.08.2026, и пробел выше закрыт замером, а не догадкой.
-// Витрина Lemon Squeezy прочитана инструментом aevion-store-vs-price.mjs:
-//     магазин: AEVION Planet — Monthly  $250 / month
-//     магазин: AEVION Planet — Annual   $200 / month
-// Оба числа СОВПАДАЮТ с зашитыми ниже. То есть на сегодня страница называет
-// ту цену, которую списывает касса, — случай «All-Access $59», упомянутый
-// выше, здесь НЕ повторился.
-//
-// Что это НЕ отменяет: числа по-прежнему живут здесь, а не в lib/products.ts,
-// и следующее изменение цены в кабинете Lemon Squeezy разойдётся с ними так же
-// молча. Проверка — внешняя и ручная:
-//     node C:/Users/user/aevion-store-vs-price.mjs
-// Она читает живую витрину и печатает расхождения. Настоящая починка прежняя:
-// перенести Planet в lib/products.ts с проверенной ценой и ссылкой.
-const PLANET_MONTHLY = 250;
-const PLANET_ANNUAL_PER_MO = 200; // 12-month commitment, billed monthly
+// Ни одного числа в этом файле: лестница, цены месяца и итоги — из
+// @/lib/termPricing (копия реестра бэкенда под сторожем), карточки приложений —
+// из @/lib/products. Прямой кассы на новую лестницу нет (товары ещё заводятся в
+// магазине), поэтому кнопка ведёт на /pricing — к выбору срока и в кассу.
 
 /**
  * Описание приложения — только подача: иконка, категория, highlights.
@@ -63,7 +48,7 @@ interface AppDef {
   productId?: string;
 }
 
-type App = AppDef & { price: number; checkoutUrl?: string };
+type App = AppDef & { price: number; checkoutUrl?: string; term: boolean };
 
 const APP_DEFS: AppDef[] = [
   /* ── Developer ──────────────────────────────────────────────────────── */
@@ -102,6 +87,21 @@ const APP_DEFS: AppDef[] = [
     badge: "Free forever",
   },
   {
+    id: "multichat-engine",
+    productId: "multichat",
+    icon: "💬",
+    name: "AEVION Multichat",
+    tagline: "A council of models instead of one answer",
+    href: "/multichat-engine",
+    cat: "Developer",
+    // Текст — с посадочной модуля (/multichat-engine/launch), не сочинён здесь.
+    highlights: [
+      "Answers from four independent providers side by side",
+      "A map of where the models disagree",
+      "A receipt you can verify by link",
+    ],
+  },
+  {
     id: "tiktok-publisher",
     icon: "🎬",
     name: "TikTok Publisher",
@@ -133,8 +133,8 @@ const APP_DEFS: AppDef[] = [
     highlights: ["4-role advice panel", "Market sizing, stress test & red flags", "PDF export"],
   },
   {
+    // Отдельно не продаётся с 15.09.2026 — входит в подписку AEVION.
     id: "qpaynet",
-    productId: "qpaynet",
     icon: "💳",
     name: "QPayNet",
     tagline: "Embedded payment infrastructure",
@@ -144,8 +144,8 @@ const APP_DEFS: AppDef[] = [
   },
   /* ── Business & Legal ───────────────────────────────────────────────── */
   {
+    // Отдельно не продаётся с 15.09.2026 — входит в подписку AEVION.
     id: "qcontract",
-    productId: "qcontract",
     icon: "💣",
     name: "QContract",
     tagline: "Self-destructing secure documents",
@@ -158,8 +158,9 @@ const APP_DEFS: AppDef[] = [
     ],
   },
   {
+    // Constitution Pro / Team отдельными подписками сняты 15.09.2026 —
+    // модуль входит в подписку AEVION.
     id: "constitution",
-    productId: "pyiaz",
     icon: "📜",
     name: "Constitution — World-System Design Lab",
     tagline: "Political economy simulator",
@@ -215,12 +216,13 @@ const APP_DEFS: AppDef[] = [
       "12-week protocol with biomarker tracking",
       "Zn:Cu 8–15:1 melanin support guide",
     ],
-    // Единая цена везде: Gumroad Anti-Grey Protocol $19 (та же ссылка, что на /qmelanin).
+    // Единая цена везде: гайд Anti-Grey Protocol на Gumroad, разовая покупка
+    // (та же ссылка, что на /qmelanin).
   },
   /* ── Education ──────────────────────────────────────────────────────── */
   {
+    // Отдельно не продаётся с 15.09.2026 — входит в подписку AEVION.
     id: "smeta",
-    productId: "smeta",
     icon: "🏗",
     name: "Smeta Trainer",
     tagline: "AI construction estimating (Kazakhstan)",
@@ -255,7 +257,12 @@ const APP_DEFS: AppDef[] = [
  */
 const APPS: App[] = APP_DEFS.map((a) => {
   const product = a.productId ? productById(a.productId) : undefined;
-  return { ...a, price: product?.priceUsd ?? 0, checkoutUrl: product?.href };
+  return {
+    ...a,
+    price: product?.priceUsd ?? 0,
+    checkoutUrl: product?.href,
+    term: product?.billing === "term",
+  };
 });
 
 const CATS = ["Developer", "Finance", "Business", "Health", "Education"];
@@ -268,8 +275,17 @@ const CAT_COLOR: Record<string, string> = {
   Education: "#b45309",
 };
 
-const PAID_APPS = APPS.filter((a) => a.price > 0);
-const RACK_RATE = PAID_APPS.reduce((s, a) => s + a.price, 0);
+/** Приложения, которые продаются отдельно на срок (пять по политике 15.09.2026). */
+const TERM_APPS = APPS.filter((a) => a.term && a.price > 0);
+/** Пять приложений по отдельности за 1 месяц — против всей планеты за тот же месяц. */
+const RACK_RATE = TERM_APPS.reduce((s, a) => s + a.price, 0);
+const PLANET_FROM = fromPricePerMonth(PLANET_BASE_MONTHLY);
+/**
+ * Приложения, которые были бесплатными и до политики 15.09.2026 (у карточек не
+ * было цены). Всё остальное без товара в каталоге — прежние платные модули:
+ * отдельно их больше не продают, они входят в подписку AEVION.
+ */
+const FREE_APP_IDS = new Set(["qcoreai", "tiktok-publisher"]);
 
 export default function AppsPage() {
   // Метка канала для ссылок в кассу. Витрина модулей — клиентская
@@ -279,9 +295,7 @@ export default function AppsPage() {
   useEffect(() => {
     setChannel(channelNow());
   }, []);
-  const [billing, setBilling] = useState<Billing>("monthly");
-  const planetPrice = billing === "monthly" ? PLANET_MONTHLY : PLANET_ANNUAL_PER_MO;
-  const savings = RACK_RATE - planetPrice;
+  const planetHref = keepChannel("/pricing#tiers", channel);
 
   return (
     <div
@@ -326,7 +340,7 @@ export default function AppsPage() {
             Apps &amp; Pricing
           </h1>
           <p style={{ color: "#64748b", fontSize: 16, maxWidth: 500, margin: "0 auto" }}>
-            Use any app individually, or get the entire planet for less than two apps.
+            Five apps are sold on their own. The subscription opens every module for a term of 1 to 12 months.
           </p>
         </div>
 
@@ -351,91 +365,67 @@ export default function AppsPage() {
               <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
                 <span style={{ fontSize: 40 }}>🪐</span>
                 <div>
-                  <h2 style={{ fontSize: 26, fontWeight: 900, margin: 0, color: "#fff" }}>AEVION Planet</h2>
+                  <h2 style={{ fontSize: 26, fontWeight: 900, margin: 0, color: "#fff" }}>AEVION subscription</h2>
                   <p style={{ color: "rgba(255,255,255,0.7)", margin: 0, fontSize: 14 }}>
-                    All {APPS.length} apps · all future releases · priority support
+                    Every module · a term of 1 to 12 months · paid up front
                   </p>
                 </div>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {[
-                  "Every app — now & future",
-                  "Cross-app workflows",
-                  "3 team seats included",
-                  "Priority support",
-                  "Early access to new modules",
+                  "Every module — no per-module charge",
+                  "Modules released during your term are included",
+                  "The longer the term, the cheaper the month",
                 ].map((f) => (
                   <span key={f} style={{ background: "rgba(255,255,255,0.15)", borderRadius: 20, padding: "4px 12px", fontSize: 13, color: "#fff" }}>
                     ✓ {f}
                   </span>
                 ))}
               </div>
-              <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 13, marginTop: 16 }}>
-                Rack rate: <s>${RACK_RATE}/mo</s> — you save{" "}
-                <strong style={{ color: "#fff" }}>${savings}/mo ({Math.round((savings / RACK_RATE) * 100)}%)</strong>
+              <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 13, marginTop: 16 }}>
+                The five apps bought separately: ${RACK_RATE} for one month. The whole planet:
+                ${PLANET_BASE_MONTHLY} for one month, or ${PLANET_FROM}/mo on a 12-month term.
               </p>
-              {billing === "annual" && (
-                <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, margin: "4px 0 0" }}>
-                  12-month commitment · cancel to 6 mo penalty-free · to 3 mo with 10% fee
-                </p>
-              )}
             </div>
 
-            {/* right — price + toggle */}
-            <div style={{ textAlign: "center", minWidth: 200 }}>
-              {/* toggle */}
-              <div style={{ display: "inline-flex", background: "rgba(0,0,0,0.25)", borderRadius: 10, padding: 4, marginBottom: 18 }}>
-                {(["monthly", "annual"] as Billing[]).map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => setBilling(c)}
-                    style={{
-                      padding: "8px 18px",
-                      borderRadius: 8,
-                      border: "none",
-                      cursor: "pointer",
-                      fontSize: 13,
-                      fontWeight: 700,
-                      background: billing === c ? "#fff" : "transparent",
-                      color: billing === c ? "#0d9488" : "rgba(255,255,255,0.6)",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                    }}
-                  >
-                    {c === "monthly" ? "Monthly" : "Annual"}
-                    {c === "annual" && (
-                      <span style={{ fontSize: 10, background: "#fbbf24", color: "#000", borderRadius: 4, padding: "1px 6px" }}>
-                        SAVE 20%
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-
+            {/* right — term ladder */}
+            <div style={{ textAlign: "center", minWidth: 220, flex: "0 1 280px" }}>
               <div style={{ color: "#fff" }}>
-                <span style={{ fontSize: 52, fontWeight: 900, lineHeight: 1 }}>${planetPrice}</span>
+                <span style={{ fontSize: 15, opacity: 0.8 }}>from </span>
+                <span style={{ fontSize: 52, fontWeight: 900, lineHeight: 1 }}>${PLANET_FROM}</span>
                 <span style={{ fontSize: 15, opacity: 0.7 }}>/mo</span>
               </div>
-              {billing === "annual" && (
-                <p style={{ color: "rgba(255,255,255,0.55)", fontSize: 12, margin: "6px 0 0" }}>
-                  Billed monthly · 12-month commitment
-                </p>
-              )}
+              {/* Лестница сроков целиком: человек видит и цену месяца, и платёж
+                  за срок вперёд — до перехода к кассе, а не после. */}
+              <table style={{ width: "100%", marginTop: 14, borderCollapse: "collapse", fontSize: 13, color: "#fff" }}>
+                <tbody>
+                  {TERM_TIERS.map((t) => (
+                    <tr key={t} style={{ borderTop: "1px solid rgba(255,255,255,0.15)" }}>
+                      <td style={{ padding: "5px 4px", textAlign: "left", fontWeight: 700 }} translate="no">{TERM_NAME[t]}</td>
+                      <td style={{ padding: "5px 4px", textAlign: "left", opacity: 0.8 }}>
+                        {TERM_MONTHS[t]} mo
+                      </td>
+                      <td style={{ padding: "5px 4px", textAlign: "right" }}>
+                        ${termPricePerMonth(PLANET_BASE_MONTHLY, t)}/mo
+                      </td>
+                      <td style={{ padding: "5px 4px", textAlign: "right", opacity: 0.8 }}>
+                        ${termTotal(PLANET_BASE_MONTHLY, t)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
 
               <a
-                href={withChannel(billing === "annual"
-                  ? "https://aevion.lemonsqueezy.com/checkout/buy/a6a35e07-9942-4089-aec3-0faa0ea9b722"
-                  : "https://aevion.lemonsqueezy.com/checkout/buy/23fa912b-b6dc-4b42-8dd8-7498b6298b1b", channel, "apps")}
-                target="_blank"
-                rel="noopener noreferrer"
+                href={planetHref}
                 onClick={() =>
+                  // Намерение, а не начало оплаты: оплата начнётся на /pricing,
+                  // и там своё checkout_start — иначе покупка считалась бы дважды.
                   track({
-                    type: "checkout_start",
+                    type: "cta_click",
                     tier: "planet",
                     source: "apps/planet",
-                    value: planetPrice,
-                    meta: { period: billing, processor: "lemonsqueezy" },
+                    meta: { target: "pricing" },
                   })
                 }
                 style={{
@@ -450,7 +440,7 @@ export default function AppsPage() {
                   textDecoration: "none",
                 }}
               >
-                Get the Planet →
+                Choose a term →
               </a>
               <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 11, marginTop: 8 }}>
                 14-day money-back guarantee
@@ -465,7 +455,7 @@ export default function AppsPage() {
             Individual apps
           </h2>
           <p style={{ color: "#64748b", fontSize: 14, margin: 0 }}>
-            Subscribe to just what you need.
+            Five apps are sold on their own, on the same term ladder. Every other module comes with the AEVION subscription.
           </p>
         </div>
 
@@ -567,17 +557,53 @@ export default function AppsPage() {
                       }}
                     >
                       <div>
-                        <span style={{ fontSize: 24, fontWeight: 800, color: "#fff" }}>
-                          {app.price === 0 ? "Free" : `$${app.price}`}
-                        </span>
-                        {app.price > 0 && (
-                          <span style={{ fontSize: 13, color: "#64748b" }}>/mo</span>
+                        {app.term ? (
+                          <>
+                            <span style={{ fontSize: 13, color: "#64748b" }}>from </span>
+                            <span style={{ fontSize: 24, fontWeight: 800, color: "#fff" }}>
+                              ${fromPricePerMonth(app.price)}
+                            </span>
+                            <span style={{ fontSize: 13, color: "#64748b" }}>/mo</span>
+                          </>
+                        ) : app.price > 0 ? (
+                          <>
+                            <span style={{ fontSize: 24, fontWeight: 800, color: "#fff" }}>${app.price}</span>
+                            <span style={{ fontSize: 13, color: "#64748b" }}> one-time</span>
+                          </>
+                        ) : (
+                          <span style={{ fontSize: 15, fontWeight: 700, color: "#94a3b8" }}>
+                            {FREE_APP_IDS.has(app.id) ? "Free" : "In the subscription"}
+                          </span>
                         )}
                       </div>
-                      {app.checkoutUrl ? (
+                      {app.checkoutUrl && app.term ? (
                         <a
-                          href={app.checkoutUrl}
-                          aria-label={`Подписаться: ${app.name}`}
+                          href={keepChannel(app.checkoutUrl, channel)}
+                          aria-label={`Выбрать срок: ${app.name}`}
+                          onClick={() =>
+                            track({
+                              type: "cta_click",
+                              source: `apps/${app.id}`,
+                              meta: { module: app.id, target: "pricing" },
+                            })
+                          }
+                          style={{
+                            padding: "8px 18px",
+                            background: clr,
+                            color: "#fff",
+                            borderRadius: 8,
+                            fontWeight: 700,
+                            fontSize: 13,
+                            textDecoration: "none",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Choose a term →
+                        </a>
+                      ) : app.checkoutUrl ? (
+                        <a
+                          href={withChannel(app.checkoutUrl, channel, "apps")}
+                          aria-label={`Купить: ${app.name}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={() =>
@@ -599,12 +625,12 @@ export default function AppsPage() {
                             whiteSpace: "nowrap",
                           }}
                         >
-                          Subscribe →
+                          Buy →
                         </a>
                       ) : (
                         <Link
                           href={app.href}
-                          aria-label={`${app.price === 0 ? "Открыть бесплатно" : "Получить доступ"}: ${app.name}`}
+                          aria-label={`${app.price === 0 ? "Открыть" : "Получить доступ"}: ${app.name}`}
                           style={{
                             padding: "8px 18px",
                             background: clr,
@@ -616,7 +642,7 @@ export default function AppsPage() {
                             whiteSpace: "nowrap",
                           }}
                         >
-                          {app.price === 0 ? "Open free →" : "Get access →"}
+                          {app.price === 0 ? "Open →" : "Get access →"}
                         </Link>
                       )}
                     </div>
@@ -639,16 +665,16 @@ export default function AppsPage() {
           >
             {[
               {
-                q: "Can I cancel anytime?",
-                a: "Monthly plans cancel at any time. Annual plans can be reduced to 6 months with no penalty, or to 3 months with a 10% early-exit fee on the remaining balance.",
+                q: "How is it billed?",
+                a: "You choose a term — 1, 3, 6, 9 or 12 months — and pay for the whole term up front, in one payment. There is no monthly or annual billing. The longer the term, the cheaper the month.",
               },
               {
-                q: "Does Planet include future apps?",
-                a: "Yes — every new AEVION module released while your Planet subscription is active is automatically included at no extra cost.",
+                q: "Does the subscription include future apps?",
+                a: "Yes — every new AEVION module released while your paid term is active is included at no extra cost.",
               },
               {
-                q: "How many seats does Planet include?",
-                a: "Planet includes 3 seats. Additional seats are $49/user/month.",
+                q: "Which apps can I buy on their own?",
+                a: "Five: CyberChess, Multichat, QVenture, IP Bureau and DevHub — on the same term ladder. Every other module comes only with the AEVION subscription.",
               },
               {
                 q: "Are API quotas per seat or per account?",

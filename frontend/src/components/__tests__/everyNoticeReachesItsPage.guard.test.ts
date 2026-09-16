@@ -2,7 +2,7 @@ import { describe, test, expect } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ALL_PRODUCTS } from "@/lib/products";
+import { ALL_PRODUCTS, MODULE_NOTICES } from "@/lib/products";
 
 /**
  * Оговорка продукта доходит до страницы модуля, а не только до витрины цен.
@@ -58,7 +58,12 @@ function покрытые(): Set<string> {
 
 describe("оговорка продукта доходит до страницы модуля", () => {
   const есть = покрытые();
-  const сОговоркой = ALL_PRODUCTS.filter((p) => p.notice).map((p) => p.id);
+  // 15.09.2026: оговорки модулей, снятых с отдельной продажи, живут в
+  // MODULE_NOTICES — они обязаны доходить до страниц так же, как карточные.
+  const сОговоркой = [
+    ...ALL_PRODUCTS.filter((p) => p.notice).map((p) => p.id),
+    ...Object.keys(MODULE_NOTICES),
+  ];
 
   test("контроль: продукты с оговоркой в каталоге вообще есть", () => {
     // Иначе «все покрыты» означало бы «покрывать нечего».

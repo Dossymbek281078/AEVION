@@ -1,44 +1,44 @@
 /**
- * Gumroad — единственный живой процессинг (Paddle/Stripe/LemonSqueezy не прошли
- * KYC и мертвы). ЕДИНЫЙ источник правды по permalink'ам продуктов на фронте.
+ * Gumroad — ссылки на РАЗОВЫЕ товары (гайды и книги). ЕДИНЫЙ источник правды по
+ * permalink'ам Gumroad на фронте.
  *
- * Атрибуция выручки по приложению/бандлу в дашборде (/api/revenue/gumroad/*)
- * работает ТОЛЬКО если у продукта СВОЙ permalink. Пока заведён один продукт
- * (xpxzam) — все кнопки ведут в него и в дашборде всё падает в "platform".
+ * ⚠️ 15.09.2026 — новая ценовая политика (слово основателя): подписка AEVION —
+ * это СРОК доступа ко всей планете, оплата за срок вперёд через нашу кассу
+ * (/pricing → /api/pricing/checkout/session). Подписки на Gumroad сняты с продажи:
+ * All-Access (xpxzam), Constitution Pro (pyiaz) и Team (wjvquw). Их permalink'и
+ * отсюда убраны, и дефолтного товара больше НЕТ: прежде любой незнакомый ключ
+ * молча уводил покупателя в подписку All-Access, то есть в товар, который он не
+ * выбирал, — теперь незнакомый ключ ведёт на страницу цен.
  *
- * Чтобы развести выручку по приложениям:
+ * Атрибуция выручки по товару в дашборде (/api/revenue/gumroad/*) работает ТОЛЬКО
+ * если у товара СВОЙ permalink. Чтобы добавить разовый товар:
  *   1. Создать продукт в Gumroad → получить permalink (часть после /l/).
- *   2. Добавить строку в GUMROAD_PERMALINKS ниже (ключ = appId/bundleId или
- *      `${appId}:${tier}`).
+ *   2. Добавить строку в GUMROAD_PERMALINKS ниже (ключ = appId или `${appId}:${вариант}`).
  *   3. В Railway (backend) прописать обратный маппинг
  *      GUMROAD_APP_<PERMALINK_UPPER>=<appId> — его читает revenue-роут.
  */
 
 export const GUMROAD_STORE = "https://aevion.gumroad.com/l";
-export const GUMROAD_DEFAULT_PERMALINK = "xpxzam";
+
+/**
+ * Куда ведёт ключ, которого нет в словаре. Не товар Gumroad, а страница цен:
+ * там человек сам выбирает срок подписки или приложение. Молча продать ему
+ * «что-нибудь по умолчанию» нельзя — именно так кнопки модулей годами вели в
+ * подписку, которую он не выбирал.
+ */
+export const GUMROAD_FALLBACK_URL = "/pricing#tiers";
 
 /**
  * Ключ → permalink. Приоритет совпадения: `${key}:${tier}` → `${key}` → `${tier}`.
- * key = appId | bundleId | "platform" | "all-access".
- * Раскомментировать/добавлять по мере создания продуктов в Gumroad.
+ * Только разовые товары: подписок на Gumroad больше нет (см. шапку файла).
  */
 export const GUMROAD_PERMALINKS: Record<string, string> = {
-  // Заполнено 2026-07-26 по живому дашборду Gumroad. До этого вся карта была
-  // закомментирована, из-за чего gumroadPermalink() ВСЕГДА отдавала дефолт
-  // `xpxzam` — то есть кнопка «улучшить» в любом модуле вела покупателя в
-  // подписку All-Access $59/мес вместо продукта, который он смотрел.
-  "all-access": "xpxzam",     // AEVION All-Access $59/мес
-  constitution: "pyiaz",      // Constitution Pro $9/мес
-  "constitution:team": "wjvquw", // Constitution Team $49/мес
-  qrenew: "kkiavh",           // The Anti-Grey Protocol $19 (EN)
-  "qrenew:ru": "tmuyxw",      // Протокол «Анти-седина» $9 (RU)
-  "gratitude-book": "ghvzq",  // Gratitude ∞ Forever Young — полный пакет $29.99
-  // ВАЖНО: остальные модули (devhub, smeta, qventure, bureau, qpaynet,
-  // cyberchess, qcontract) продаются НЕ через Gumroad, а через LemonSqueezy —
-  // см. `@/lib/products`. Для них gumroadCheckoutUrl() по-прежнему отдаст
-  // дефолтный `xpxzam`; правильный чекаут этих модулей брать из каталога
-  // products.ts, а не отсюда. Развести это — отдельная задача по
-  // PaddleUpgradeButton (legacy-имя, ~11 импортов).
+  // Заполнено 2026-07-26 по живому дашборду Gumroad; 15.09.2026 убраны подписки.
+  qrenew: "kkiavh",           // The Anti-Grey Protocol (EN), разовая покупка
+  "qrenew:ru": "tmuyxw",      // Протокол «Анти-седина» (RU), разовая покупка
+  "gratitude-book": "ghvzq",  // Gratitude ∞ Forever Young — полный пакет
+  // Модули через Gumroad не продаются вовсе: подписка и пять приложений
+  // оформляются на /pricing (цены — `@/lib/termPricing`, карточки — `@/lib/products`).
 };
 
 /**
@@ -48,28 +48,28 @@ export const GUMROAD_PERMALINKS: Record<string, string> = {
  * — это функция Object, она истинна, и она возвращалась ВМЕСТО permalink. Дальше
  * из неё собирался URL чекаута вида
  * `gumroad.com/l/function Object() { [native code] }?wanted=true`.
- *
- * Сейчас словарь ПУСТ (все записи закомментированы), поэтому любой ключ уходит на
- * ссылку по умолчанию — любой, кроме ключа прототипа. То есть пустой словарь вёл
- * себя хуже, чем отсутствующий ключ, и заметить это можно было только на оплате.
  */
 const permalinkFor = (k: string): string | undefined =>
   Object.prototype.hasOwnProperty.call(GUMROAD_PERMALINKS, k) ? GUMROAD_PERMALINKS[k] : undefined;
 
-export function gumroadPermalink(opts: { key?: string; tier?: string } = {}): string {
+/** permalink товара или null, если такого разового товара на Gumroad нет. */
+export function gumroadPermalink(opts: { key?: string; tier?: string } = {}): string | null {
   const { key, tier } = opts;
   return (key && tier ? permalinkFor(`${key}:${tier}`) : undefined)
     ?? (key ? permalinkFor(key) : undefined)
     ?? (tier ? permalinkFor(tier) : undefined)
-    ?? GUMROAD_DEFAULT_PERMALINK;
+    ?? null;
 }
 
 /**
  * Полный URL Gumroad-чекаута. ?wanted=true сразу открывает overlay-чекаут;
  * app/tier/period — для аналитики (referrer), на оплату не влияют.
+ *
+ * Незнакомый ключ → GUMROAD_FALLBACK_URL (страница цен), а не чужой товар.
  */
 export function gumroadCheckoutUrl(opts: { key?: string; tier?: string; period?: string } = {}): string {
   const permalink = gumroadPermalink(opts);
+  if (!permalink) return GUMROAD_FALLBACK_URL;
   const params = new URLSearchParams({ wanted: "true" });
   if (opts.key) params.set("app", opts.key);
   if (opts.tier) params.set("tier", opts.tier);

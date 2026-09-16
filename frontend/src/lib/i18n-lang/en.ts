@@ -7397,6 +7397,7 @@ const en: Record<string, string> = {
   "qskyway.city.nyc": "New York — Midtown (Manhattan)",
   "qskyway.city.tokyo": "Tokyo — Nishi-Shinjuku",
   "qskyway.city.singapore": "Singapore — Marina Bay / CBD",
+  "qskyway.city.amsterdam": "Amsterdam — Zuidas",
   "langSwitch.aria": "Interface language",
   "chain.room.qright": "Authorship record",
   "chain.room.qcontract": "Contract",

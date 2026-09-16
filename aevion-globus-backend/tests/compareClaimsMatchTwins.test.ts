@@ -5,6 +5,7 @@ import { CITY } from "../src/routes/qskyway.city";
 import { CITY_NYC } from "../src/routes/qskyway.city.nyc";
 import { CITY_TOKYO } from "../src/routes/qskyway.city.tokyo";
 import { CITY_SINGAPORE } from "../src/routes/qskyway.city.singapore";
+import { CITY_AMSTERDAM } from "../src/routes/qskyway.city.amsterdam";
 
 // Страница /compare — продающая: числа на ней читают как проверяемые, и ссылка
 // рядом ведёт на живой API. Значит расхождение с данными твинов — не опечатка,
@@ -24,6 +25,7 @@ const CITIES: Record<string, { buildings: unknown[]; vertiports: unknown[]; data
   nyc: CITY_NYC as never,
   tokyo: CITY_TOKYO as never,
   singapore: CITY_SINGAPORE as never,
+  amsterdam: CITY_AMSTERDAM as never,
 };
 
 const COMPETITORS = fs.readFileSync(
@@ -48,7 +50,10 @@ describe("числа QSkyway на /compare сходятся с твинами", 
   const block = qskywayBlock();
 
   it("городов столько, сколько твинов", () => {
-    const m = block.match(/(\d+)\s+города/);
+    // «4 города», но «5 городов» — форма слова зависит от числа, как и у зданий ниже.
+    // Без `\b`: в JS граница слова знает только латиницу, после кириллицы её нет
+    // (`feedback_regex_word_boundary_cyrillic`) — поймано этим же тестом 16.09.
+    const m = block.match(/(\d+)\s+город(?:а|ов)(?![а-яё])/);
     expect(m, "в блоке нет утверждения о числе городов").not.toBeNull();
     expect(Number(m![1])).toBe(Object.keys(CITIES).length);
   });
@@ -85,7 +90,7 @@ describe("числа QSkyway на /compare сходятся с твинами", 
   it("провенанс высот назван по каждому городу так, как его считает движок", () => {
     for (const [id, c] of Object.entries(CITIES)) {
       const pct = c.dataQuality.measuredPct;
-      const label = { astana: "Астана", nyc: "Нью-Йорк", tokyo: "Токио", singapore: "Сингапур" }[id]!;
+      const label = { astana: "Астана", nyc: "Нью-Йорк", tokyo: "Токио", singapore: "Сингапур", amsterdam: "Амстердам" }[id]!;
       const m = block.match(new RegExp(`${label}[^;]*?(\\d+(?:\\.\\d+)?)%`));
       expect(m, `в блоке нет процента обмера для «${label}»`).not.toBeNull();
       expect(Number(m![1]), `${label}: на витрине ${m![1]}%, движок считает ${pct}%`).toBe(pct);

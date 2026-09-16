@@ -49,7 +49,7 @@ export default function QSkywayOg() {
             <span style={{ color: "#22d3ee" }}>for the urban sky</span>
           </div>
           <div style={{ fontSize: 26, color: "#c3d0e2", maxWidth: 1000, lineHeight: 1.4, display: "flex" }}>
-            Air-taxi corridors on real buildings in Astana, NYC, Tokyo &amp; Singapore, routed against the rules
+            Air-taxi corridors on real buildings in Astana, NYC, Tokyo, Singapore &amp; Amsterdam, routed against the rules
             their regulators actually publish — as a feed, as a map layer, and as a legal document.
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>

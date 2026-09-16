@@ -70,6 +70,7 @@ import { parseNycBuildings, nycBuildingsQuery } from "./lib/nyc-open-data.mjs";
 import { reconcileMeasuredOutlines } from "./lib/measured-outlines.mjs";
 import { fetchI3sBuildingPoints, pointAsTinyRing } from "./lib/i3s-points.mjs";
 import { fetchBag3dOutlines } from "./lib/bag3d.mjs";
+import { fetchBerlinOutlines } from "./lib/berlin-wfs.mjs";
 
 // The height model, the projection and the rasterizer live in
 // scripts/lib/city-twin-geometry.mjs so they can be unit-tested; this file is
@@ -289,6 +290,45 @@ const CITIES = {
       'import type { CityData } from "./qskyway.city";',
     ].join("\n"),
   },
+  berlin: {
+    // Шестой город, 16.09.2026. Обе половины открыты: высоты — WFS Сената
+    // «Gebäudehöhen (Umweltatlas)» (LoD2, dl-de-zero-2.0, lib/berlin-wfs.mjs),
+    // правило — ED-R 146 из AIP Germany ENR 5.1: круг 3 NM вокруг Рейхстага
+    // (N 52 31 07 E 013 22 34), GND–5000 ft MSL, разрешение только письменно от
+    // BAF. Квадрат — Потсдамер-плац: углы в 0.39–0.89 NM от Рейхстага, то есть
+    // целиком во ВНУТРЕННЕЙ зоне 1 NM (для БПЛА строже всего).
+    // Замер OSM 16.09: 1785 зданий, height у 87 % — уровень NYC/Токио.
+    name: "Берлин — Потсдамер-плац",
+    bbox: { minLat: 52.505, maxLat: 52.514064, minLon: 13.366, maxLon: 13.3836 },
+    exportName: "CITY_BERLIN",
+    committed: "qskyway.city.berlin.ts",
+    // Сетка из projection(): 1192×1002 м → 60×51 ячеек. Раскладка площадок —
+    // как у Амстердама после сдвига 16.09 (ни одна не в демо-круге).
+    vertiports: [
+      { c: 2, r: 2, x: 50, y: 50 }, { c: 57, r: 2, x: 1150, y: 50 },
+      { c: 2, r: 48, x: 50, y: 970 }, { c: 57, r: 48, x: 1150, y: 970 },
+      { c: 48, r: 30, x: 970, y: 610 }, { c: 30, r: 48, x: 610, y: 970 },
+      { c: 12, r: 30, x: 250, y: 610 },
+    ],
+    measured: {
+      kind: "berlin-wfs",
+      label: "Berlin Umweltatlas (Senat): LoD2 «Gebäudehöhen», поле hoehe, dl-de-zero-2.0",
+      marginM: 50,
+      nearRadiusM: 20,
+      // Чем меряет `hoehe` (конёк/максимум крыши) — смотреть гистограмму «тег OSM
+      // выше обмера» при первой сборке; до замера класс тега не ставим.
+      osmTallerIsTag: false,
+    },
+    header: [
+      "// QSkyway city digital-twin — Берлин, Потсдамер-плац. OpenStreetMap footprints",
+      "// (Overpass, ODbL) reconciled with the Berlin Senate's LoD2 building heights",
+      "// (WFS «Gebäudehöhen (Umweltatlas)», dl-de-zero-2.0) — see scripts/lib/berlin-wfs.mjs.",
+      "// Regenerate with:",
+      "//   node scripts/fetch-city-twin.mjs berlin --write",
+      "/* eslint-disable */",
+      'import type { CityData } from "./qskyway.city";',
+    ].join("\n"),
+  },
 };
 
 const cityId = process.argv[2];
@@ -387,9 +427,18 @@ const meta = [];
 // не читает, а лишнее поле в 500-килобайтном файле надо было бы поддерживать.
 const buildingTypes = [];
 const contradicted = [];
+// Контуры меньше 5 м² — не здания для маршрутизатора: в Берлине 16.09 это
+// 1661 стела Мемориала жертвам Холокоста (building=yes + man_made=stele,
+// 2.4×0.95 м, высота 4 м) в квадрате Потсдамер-плац — «зданий 1935, обмерено
+// 13.6 %», хотя настоящих зданий там ~270 и обмерен почти каждый. Порог
+// общий (а не по тегу stele): будки, киоски и опоры того же класса.
+const MIN_FOOTPRINT_M2 = 5;
+const ringAreaM2 = (r) => Math.abs(r.reduce((s, [x, y], k) => { const [x2, y2] = r[(k + 1) % r.length]; return s + x * y2 - x2 * y; }, 0) / 2);
+let tinySkipped = 0;
 for (const el of elements) {
   const { h, hs, stated, contradicted: was } = heightOf(el.tags);
   for (const r of ringsOf(el, proj)) {
+    if (ringAreaM2(r) < MIN_FOOTPRINT_M2) { tinySkipped++; continue; }
     if (was !== undefined) {
       contradicted.push({ i: buildings.length, h, was, levels: Number(el.tags["building:levels"]) });
     }
@@ -398,6 +447,7 @@ for (const el of elements) {
     meta.push({ id: `${el.type}/${el.id}`, name: el.tags?.name ?? el.tags?.["name:en"] ?? null });
   }
 }
+if (tinySkipped) process.stderr.write(`  OSM: ${tinySkipped} footprints under ${MIN_FOOTPRINT_M2} m² skipped (stelae, kiosks, poles)\n`);
 if (!buildings.length) throw new Error("Overpass returned no usable building footprints for this bbox");
 
 // ── measured heights from a second source (PLATEAU) ───────────────────────────
@@ -468,6 +518,11 @@ if (city.measured) {
     process.stderr.write(`  3D BAG: fetching outlines…\n`);
     const got = await fetchBag3dOutlines(wide, { log: (s) => process.stderr.write(s + "\n") });
     for (const g of got) outlines.push({ h: g.h, ring: g.ring });
+  } else if (kind === "berlin-wfs") {
+    // Контуры кадастра + высоты LoD2 из WFS Сената; сервер сам отдаёт WGS84.
+    process.stderr.write(`  Berlin WFS: fetching outlines…\n`);
+    const got = await fetchBerlinOutlines(wide, { log: (s) => process.stderr.write(s + "\n") });
+    for (const g of got) outlines.push({ h: g.h, ring: g.ring });
   } else if (kind === "i3s") {
     // Точки-центроиды из I3S-слоя города; каждая — квадрат 1×1 м, чтобы пройти
     // правило «центроид внутри контура OSM» в reconcileMeasuredOutlines.
@@ -514,6 +569,9 @@ if (city.measured) {
   // «шум двух съёмок» (метр-два) от «мачты и неверные теги» (десятки метров).
   // Без него число osmTaller нечитаемо: 684 у Амстердама 16.09 могли быть и тем и другим.
   const osmExcess = [];
+  // И КТО именно: три самых больших расхождения по имени — «max 42.7 м» без
+  // адресата не проверить ни по статье, ни по карте.
+  const osmExcessWho = [];
   buildings.forEach((b, i) => {
     const p = measuredAt[i];
     if (p.how === "contained") {
@@ -545,6 +603,7 @@ if (city.measured) {
       if (b.stated && b.h > p.h) {
         osmTaller++;
         osmExcess.push(b.h - p.h);
+        osmExcessWho.push({ d: b.h - p.h, osm: b.h, survey: p.h, id: meta[i].id, name: meta[i].name });
         if (!city.measured.osmTallerIsTag) b.hs = 0;
       } else {
         if (b.stated && p.h > b.h) plateauTaller++;
@@ -595,6 +654,9 @@ if (city.measured) {
       `  ${kind}: OSM tag above survey by p50 ${q(0.5)} m, p90 ${q(0.9)} m, max ${q(1)} m; ` +
       `>5 m: ${osmExcess.filter((d) => d > 5).length}, >20 m: ${osmExcess.filter((d) => d > 20).length}\n`,
     );
+    for (const w of osmExcessWho.sort((a, b) => b.d - a.d).slice(0, 3)) {
+      process.stderr.write(`    ${w.id} ${w.name ?? ""}: OSM ${w.osm} m vs survey ${w.survey} m (+${w.d.toFixed(1)})\n`);
+    }
   }
 
   sourceLabel = `OSM footprints (ODbL) + ${label}`;

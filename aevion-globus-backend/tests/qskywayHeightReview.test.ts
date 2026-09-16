@@ -4,6 +4,7 @@ import { CITY as ASTANA } from "../src/routes/qskyway.city";
 import { CITY_NYC } from "../src/routes/qskyway.city.nyc";
 import { CITY_TOKYO } from "../src/routes/qskyway.city.tokyo";
 import { CITY_AMSTERDAM } from "../src/routes/qskyway.city.amsterdam";
+import { CITY_BERLIN } from "../src/routes/qskyway.city.berlin";
 
 // Твин помечает высоту сомнительной двумя правилами. Одно — «тег спорит с
 // собственным счётом этажей»: там движок сам берёт счёт этажей, и в записи
@@ -25,6 +26,7 @@ const TWINS: Record<string, { dataQuality?: { suspect?: Suspect[] } }> = {
   nyc: CITY_NYC as never,
   tokyo: CITY_TOKYO as never,
   amsterdam: CITY_AMSTERDAM as never,
+  berlin: CITY_BERLIN as never,
 };
 
 /** Сомнительные, которые движок НЕ переопределил — только они требуют человека. */
@@ -85,7 +87,8 @@ describe("сомнительные высоты, которые код не за
 // единственный сомнительный случай закрыт разбором выше.
 describe("что задаёт высоту коридоров: обмер или чей-то тег", () => {
   // 16.09.2026: + Амстердам — лидар 3D BAG; верхушка (Symphony/ABN AMRO, 105–108 м) обмерена.
-  const SURVEYED = ["nyc", "tokyo", "amsterdam"];
+  // 16.09.2026: + Берлин — LoD2 Сената; верхушка (башни Потсдамер-плац, 99–115 м) обмерена.
+  const SURVEYED = ["nyc", "tokyo", "amsterdam", "berlin"];
 
   for (const city of SURVEYED) {
     it(`${city}: самое высокое препятствие обмерено, а не заявлено`, () => {

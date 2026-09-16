@@ -13,6 +13,7 @@ const CITY_STATION: Record<string, string> = {
   tokyo: "RJTT", // Tokyo Haneda Intl
   singapore: "WSSS", // Singapore Changi
   amsterdam: "EHAM", // Amsterdam Schiphol
+  berlin: "EDDB", // Berlin Brandenburg (Tegel/Tempelhof closed; ~20 km SE of Potsdamer Platz)
 };
 
 interface MetarWind { fromDeg: number; speedMs: number; obsTime: string; station: string; }

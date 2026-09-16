@@ -16,16 +16,16 @@ const TITLE = "QSkyway — navigation layer for the urban sky · навигац�
 // «Телеграм обрежет». Ничего не удаляю: длинный текст остаётся там, где
 // длина уместна, а превью получает свой.
 const OG_DESCRIPTION =
-  "3D-коридоры аэротакси по правилам, которые публикуют регуляторы: Астана, Нью-Йорк, Токио, Сингапур, Амстердам. " +
+  "3D-коридоры аэротакси по правилам, которые публикуют регуляторы: Астана, Нью-Йорк, Токио, Сингапур, Амстердам, Берлин. " +
   "Air-taxi corridors routed against published regulator rules.";
 
 const DESCRIPTION =
   "Навигационный слой городского неба: 3D-коридоры аэротакси по правилам, которые "
   + "регуляторы реально публикуют. "
   + "Provider-independent 3D air corridors + rules for air taxis, live on real buildings in "
-  + "Astana, NYC, Tokyo, Singapore & Amsterdam. Routed against what the regulators actually publish: FAA airspace "
+  + "Astana, NYC, Tokyo, Singapore, Amsterdam & Berlin. Routed against what the regulators actually publish: FAA airspace "
   + "ceilings over Manhattan, Japan's MLIT permission regime over Tokyo, CAAS permits over Singapore, the Schiphol CTR "
-  + "from the Dutch eAIP over Amsterdam, and Kazakhstan's "
+  + "from the Dutch eAIP over Amsterdam, ED-R 146 from the German AIP over Berlin, and Kazakhstan's "
   + "published prohibited area UAP28 covering all of the Astana twin. Live METAR wind, "
   + "height-data provenance, an airspace-slot "
   + "rights market, and every flight exportable as a signed justification document.";

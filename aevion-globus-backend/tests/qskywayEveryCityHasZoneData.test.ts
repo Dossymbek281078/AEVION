@@ -4,6 +4,7 @@ import { CITY_NYC } from "../src/routes/qskyway.city.nyc";
 import { CITY_TOKYO } from "../src/routes/qskyway.city.tokyo";
 import { CITY_SINGAPORE } from "../src/routes/qskyway.city.singapore";
 import { CITY_AMSTERDAM } from "../src/routes/qskyway.city.amsterdam";
+import { CITY_BERLIN } from "../src/routes/qskyway.city.berlin";
 import { NOFLY } from "../src/routes/qskyway.zones";
 
 /**
@@ -33,6 +34,7 @@ const CATALOGUE: Record<string, unknown> = {
   tokyo: CITY_TOKYO,
   singapore: CITY_SINGAPORE,
   amsterdam: CITY_AMSTERDAM,
+  berlin: CITY_BERLIN,
 };
 
 describe("каталог городов и данные о зонах не расходятся", () => {
@@ -49,7 +51,7 @@ describe("каталог городов и данные о зонах не ра�
     // Отрицательный контроль к повтору списка выше: если город добавят в
     // каталог и забудут здесь, первая проверка промолчит. Число сверяем
     // с реальным экспортом зон — он растёт вместе с городами.
-    expect(Object.keys(CATALOGUE).length, "список городов в проверке разошёлся с каталогом").toBe(5);
+    expect(Object.keys(CATALOGUE).length, "список городов в проверке разошёлся с каталогом").toBe(6);
     expect(Object.keys(NOFLY).length, "городов с зонами стало больше, чем знает проверка").toBeGreaterThanOrEqual(3);
   });
 });

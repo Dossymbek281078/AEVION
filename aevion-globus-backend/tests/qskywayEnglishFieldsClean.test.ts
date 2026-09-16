@@ -49,7 +49,7 @@ describe("англоязычные поля модуля действитель�
   test("ни в одном поле *En нет кириллицы", async () => {
     const found: { path: string; value: string }[] = [];
 
-    for (const city of ["astana", "nyc", "tokyo", "singapore", "amsterdam"]) {
+    for (const city of ["astana", "nyc", "tokyo", "singapore", "amsterdam", "berlin"]) {
       found.push(...englishFields((await request(app).get(`/api/qskyway/city?city=${city}`)).body, `city:${city}`));
       found.push(...englishFields((await request(app).get(`/api/qskyway/height-substitution?city=${city}`)).body, `subst:${city}`));
       const route = await request(app).post("/api/qskyway/route").send({ from: 0, to: 1, city });

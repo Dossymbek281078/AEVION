@@ -114,6 +114,27 @@ export const NOFLY: Record<string, NoFlyZone[]> = {
     },
     { id: "nfz-crowd", name: "Плотная толпа — Gustav Mahlerplein (площадь у ВТЦ)", kind: "temporary", center: [4.8737, 52.3400], radiusM: 180, until: "2026-12-31T16:00:00Z" },
   ],
+  berlin: [
+    {
+      // Берлин, 16.09.2026. Реальный режим: весь квадрат Потсдамер-плац лежит в
+      // ED-R 146 (круг 3 NM вокруг Рейхстага, GND–5000 ft MSL, AIP Germany
+      // ENR 5.1) и в его внутреннем ярусе 1 NM — это блок airspace.permission на
+      // 100 % клеток, кругом его не изобразить. Круг ниже — НАША демо-геометрия
+      // над форумом Sony Center (крытая площадь под куполом), не опубликованный
+      // контур, и об этом сказано прямо.
+      id: "nfz-sony", name: "Форум Sony Center (демо-геометрия)", kind: "permanent",
+      center: [13.3733, 52.5100], radiusM: 150,
+      realityNote:
+        "Это НАША демо-окружность. Опубликованный режим над Потсдамер-плац один — ED-R 146 (круг 3 NM вокруг "
+        + "Рейхстага, GND–5000 ft MSL, AIP Germany ENR 5.1), и он покрывает квадрат целиком, во внутреннем ярусе 1 NM: "
+        + "см. блок airspace.permission. Отдельных запретных зон внутри квадрата AIP не публикует.",
+      realityNoteEn:
+        "This is OUR demo circle. The only published regime over Potsdamer Platz is ED-R 146 (3 NM circle around "
+        + "the Reichstag, GND–5000 ft MSL, AIP Germany ENR 5.1), and it covers the whole square within its inner 1 NM "
+        + "tier: see airspace.permission. The AIP publishes no separate prohibited areas inside the square.",
+    },
+    { id: "nfz-crowd", name: "Плотная толпа — Потсдамер-плац (площадь у станции)", kind: "temporary", center: [13.3760, 52.5096], radiusM: 180, until: "2026-12-31T16:00:00Z" },
+  ],
 };
 export const WIND: Record<string, WindConfig> = {
   // Астана — открытая степь, преобладающий юго-западный/южный ветер, сильный.
@@ -128,4 +149,7 @@ export const WIND: Record<string, WindConfig> = {
   // Амстердам — приморская равнина, преобладающий юго-западный ветер, свежий.
   // Живой METAR EHAM (Схипхол, ~7 км от Зёйдаса) перекрывает это значение.
   amsterdam: { fromDeg: 230, baseMs: 4, perBandMs: 1.4 },
+  // Берлин — равнина, преобладающий западный/юго-западный ветер, умеренный.
+  // Живой METAR EDDB (Бранденбург, ~20 км к юго-востоку) перекрывает это значение.
+  berlin: { fromDeg: 250, baseMs: 3.5, perBandMs: 1.3 },
 };

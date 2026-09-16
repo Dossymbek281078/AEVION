@@ -95,9 +95,10 @@ export const LANG_KEY_COUNT: Record<Lang, number> = {
   // модулей была зашита по-русски; сторож chipSpeaksVisitorLanguage).
   // 15.09: +1 в ru/en/kk — qskyway.city.singapore (четвёртый город).
   // 16.09: +1 в ru/en/kk — qskyway.city.amsterdam (пятый город).
-  ru: 7463,
-  en: 7463,
-  kk: 7422,
+  // 16.09 (вечер): +1 в ru/en/kk — qskyway.city.berlin (шестой город).
+  ru: 7464,
+  en: 7464,
+  kk: 7423,
   de: 134,
   fr: 134,
   es: 134,

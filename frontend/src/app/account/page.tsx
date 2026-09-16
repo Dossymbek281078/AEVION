@@ -120,8 +120,8 @@ export default function AccountPage() {
     source: string | null; createdAt: string; modules: string[];
   } | null>(null);
   // Модули, купленные ОТДЕЛЬНОЙ подпиской. Без них страница говорила
-  // «Free plan — no active subscription» человеку, который платит $29/мес за
-  // QVenture: тариф у него действительно free, а покупка живёт в другой
+  // «Free plan — no active subscription» человеку, который оплатил QVenture
+  // отдельно: тариф у него действительно free, а покупка живёт в другой
   // таблице, и кабинет её не читал.
   const [ownedApps, setOwnedApps] = useState<string[]>([]);
 
@@ -709,7 +709,7 @@ export default function AccountPage() {
                       <div style={labelStyle}>Plan</div>
                       {/*
                         ⚠️ 31.08.2026: здесь печатался сырой идентификатор тарифа.
-                        Человек, заплативший $149 за «Universe», видел у себя «Pro» —
+                        Человек, оплативший «Universe» (тариф снят 15.09.2026), видел у себя «Pro» —
                         `capitalize` делал подмену правдоподобной, а не заметной.
 
                         Годами выглядело верно по СОВПАДЕНИЮ: у четырёх тарифов из

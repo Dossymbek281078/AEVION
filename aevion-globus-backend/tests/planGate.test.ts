@@ -21,8 +21,13 @@ describe("normalizeTier", () => {
     expect(normalizeTier("pro")).toBe("full");
     expect(normalizeTier("business")).toBe("full");
   });
+  it("every paid term (lite … max) is access to the whole planet — canonical full (15.09.2026)", () => {
+    // Тариф — это срок, а не набор модулей: lite и medium больше не урезанные наборы.
+    for (const t of ["lite", "medium", "pro", "full", "max"]) {
+      expect(normalizeTier(t), `${t} не открывает всю планету`).toBe("full");
+    }
+  });
   it("passes through canonical tiers and defaults unknown to free", () => {
-    expect(normalizeTier("medium")).toBe("medium");
     expect(normalizeTier("enterprise")).toBe("enterprise");
     expect(normalizeTier(null)).toBe("free");
     expect(normalizeTier("garbage")).toBe("free");
@@ -30,10 +35,9 @@ describe("normalizeTier", () => {
 });
 
 describe("tiersForModule", () => {
-  it("derives policy from MODULES_PRICING (qcoreai is medium+)", () => {
+  it("derives policy from MODULES_PRICING (qcoreai: every paid term, not free)", () => {
     const t = tiersForModule("qcoreai");
-    expect(t).toContain("medium");
-    expect(t).toContain("full");
+    for (const срок of ["lite", "medium", "pro", "full", "max"]) expect(t).toContain(срок);
     expect(t).not.toContain("free");
   });
   it("globus is free for everyone", () => {
@@ -52,13 +56,19 @@ describe("isModuleEntitled", () => {
   it("free cannot access a medium-tier module", () => {
     expect(isModuleEntitled(plan("free"), "qcoreai")).toBe(false);
   });
-  it("medium can access a medium-tier module", () => {
-    expect(isModuleEntitled(plan("medium"), "qcoreai")).toBe(true);
+  it("a resolved medium (or lite) plan can access a paid module", () => {
+    // Настоящий план приходит нормализованным (resolveUserPlan → normalizeTier).
+    expect(isModuleEntitled(plan(normalizeTier("medium")), "qcoreai")).toBe(true);
+    expect(isModuleEntitled(plan(normalizeTier("lite")), "healthai")).toBe(true);
+    // Контроль: нормализованный free — нет.
+    expect(isModuleEntitled(plan(normalizeTier("garbage")), "qcoreai")).toBe(false);
   });
   it("everyone can access a free module", () => {
     expect(isModuleEntitled(plan("free"), "globus")).toBe(true);
   });
-  it("lite grants only the chosen module", () => {
+  it("raw lite slot rule (not produced by resolveUserPlan since 15.09.2026) still grants only the chosen module", () => {
+    // Сырой tier "lite" план больше не получает: normalizeTier сводит его к full.
+    // Правило слота оставлено в isModuleEntitled — проверка, что оно не раздаёт лишнего.
     expect(isModuleEntitled(plan("lite", ["qcoreai"]), "qcoreai")).toBe(true);
     expect(isModuleEntitled(plan("lite", ["qsign"]), "qcoreai")).toBe(false);
   });

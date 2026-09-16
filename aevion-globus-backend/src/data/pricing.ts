@@ -16,43 +16,17 @@ import { computeFan, fanTotalUsd, capTotalDiscount, type AppliedFan } from "./di
 
 export type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 
-export type BillingPeriod = "monthly" | "annual";
-
 /**
- * Публичные тарифы: free / lite / medium / full / pro / enterprise.
- *   - lite   = 1 любой продукт на выбор ($19)
- *   - medium = куратор-бандл готовых апп ($29)
- *   - full   = все продукты ($49)
- *   - pro    = "Universe" — флагман, все продукты + расширенные лимиты ($149)
- * Годовая оплата = -2 месяца (×10).
+ * Публичные тарифы: free / lite / medium / pro / full / max / enterprise.
+ * С 15.09.2026 платный тариф — это СРОК доступа ко всей планете:
+ * lite 1 мес, medium 3, pro 6, full 9, max 12 (лестница TERM_* ниже).
+ * Цен здесь намеренно нет: 13.08.2026 пересказ цен в этой шапке уже разошёлся
+ * с TIERS. Числа живут только в TERM_* и PLANET_BASE_MONTHLY.
  *
- * Числа здесь — ПЕРЕСКАЗ значений из TIERS ниже, и 13.08.2026 они разошлись:
- * цены снизили ($24/$39/$89/$249.99 → $19/$29/$49/$149), а шапку не тронули.
- * Живут они в `priceMonthly` каждого тарифа; если правите цену — правьте и эти
- * четыре числа, либо не пишите их здесь вовсе.
- *
- * Репрайсинг 2026-07-22 (см. docs/PRICING_STRATEGY_2026-07.md): платформенные
- * тарифы подняты так, чтобы Universe/Full/Medium стоили выше эквивалентной
- * одиночной AI-подписки (Claude Pro/Max, ChatGPT Plus/Pro) — AEVION даёт
- * несравнимо больше ценности одной подпиской. Отдельные же продукты с прямым
- * конкурентом (cyberchess, qcoreai-addon — см. MODULES_PRICING ниже) идут
- * ПРОТИВОПОЛОЖНЫМ курсом: ~50% ниже своего конкурента, чтобы отвоёвывать
- * пользователей поштучно, пока монетизация всей платформы идёт через bundle.
- *
- * `pro` ЖИВОЙ публичный тариф (id "pro", имя "Universe") — есть в TIERS ниже,
- * реально продаётся через checkout.ts, попадает в /pricing/[tierId]. Раньше
- * был deprecated-заглушкой без объекта тарифа, отсюда старое допущение "не в
- * публичном TIERS" — но объект давно добавлен, а комментарий не обновили.
- * Для гейтинга модулей normalizeTier() в lib/planGate.ts маппит его в `full`
- * (не в `lite` — это была реальная ошибка: $149.99-клиент получал бы доступ
- * уровня $19-Lite; исправлено 2026-07-22).
- *
- * `business` — DEPRECATED legacy-алиас без собственного объекта тарифа.
- * Оставлен в union, чтобы старые Gumroad-ссылки/вебхуки (provisioning.ts)
- * продолжали компилироваться. В TIERS его нет. Маппинг при провижининге:
- * business → full.
+ * `business` — DEPRECATED legacy-алиас без собственного объекта тарифа, нужен
+ * старым ссылкам Gumroad (provisioning.ts). В TIERS его нет; выдаётся как full.
  */
-export type TierId = "free" | "lite" | "medium" | "full" | "enterprise" | "pro" | "business";
+export type TierId = "free" | "lite" | "medium" | "pro" | "full" | "max" | "enterprise" | "business";
 
 /** Модули, входящие в Medium-бандл (готовые consumer/prosumer-апп). */
 export const MEDIUM_BUNDLE: string[] = [
@@ -119,12 +93,12 @@ export interface PricingTier {
   id: TierId;
   name: string;
   tagline: string;
-  /** Цена в USD/мес при monthly. Для enterprise — null (по запросу). */
+  /** Цена месяца на этом сроке, USD. Для enterprise — null (по запросу). */
   priceMonthly: number | null;
-  /** Эффективная цена/мес при annual (-16%). null для free и enterprise. */
-  priceAnnualPerMonth: number | null;
-  /** Полная сумма annual (12 × priceAnnualPerMonth, если есть). */
-  priceAnnualTotal: number | null;
+  /** Срок доступа в месяцах (lite 1 … max 12). null — у free и enterprise срока нет. */
+  termMonths: number | null;
+  /** Платёж за весь срок вперёд = priceMonthly × termMonths. */
+  priceTermTotal: number | null;
   /** Что входит — короткие буллеты. */
   features: string[];
   /** Жёсткие лимиты для квот / биллинга. */
@@ -182,31 +156,9 @@ export interface PricingBundle {
  */
 export const MAX_PROMO_DISCOUNT_RATIO = 0.5;
 
-/**
- * Тарифы Конституции. Живут ЗДЕСЬ, а не в маршруте оплаты.
- *
- * До 13.08.2026 `routes/constitutionCheckout.ts` держал собственную таблицу
- * `{ pro: 9, team: 49 }`. Итого цена Конституции существовала в трёх местах:
- * этот прайс (модуль `constitution`, $9), таблица маршрута и панель магазина.
- * Три источника одного числа расходятся молча — сегодня этот класс сработал
- * трижды за день, поэтому таблицу свели сюда.
- *
- * `pro` обязан совпадать с ценой модуля `constitution` в MODULES_PRICING:
- * это один и тот же товар, проданный двумя путями. Совпадение проверяется
- * тестом, а не надеждой.
- */
-export const CONSTITUTION_TIERS = {
-  pro: { name: "Constitution Pro", priceUsd: 9 },
-  team: { name: "Constitution Team", priceUsd: 49 },
-} as const;
-
-export type ConstitutionTier = keyof typeof CONSTITUTION_TIERS;
-
-/** Подпись с ценой — чтобы её тоже не собирали руками в каждом месте. */
-export function constitutionTierLabel(tier: ConstitutionTier): string {
-  const t = CONSTITUTION_TIERS[tier];
-  return `${t.name} · $${t.priceUsd}/mo`;
-}
+// Тарифы Конституции (Pro $9, Team $49) сняты 15.09.2026: отдельно продаются только
+// STANDALONE_APPS, Конституция входит в подписку AEVION. Касса отвечает 410
+// (routes/constitutionCheckout.ts).
 
 // Веерные скидки живут отдельным файлом: лестницы — это данные о продажах, а не
 // про арифметику счёта, и меняются они чаще формулы.
@@ -238,20 +190,131 @@ export function currencyRate(currency: string): number {
 }
 
 
-/** Годовая сумма = -2 месяца (платишь за 10, получаешь 12). */
-const annualTotal = (m: number) => m * 10;
 /**
- * Эффективная цена/мес при годовой оплате.
+ * ЛЕСТНИЦА СРОКОВ — слово основателя 15.09.2026.
  *
- * ВАЖНО: аргумент здесь и у annualTotal — ОДНА И ТА ЖЕ месячная цена. 13.08.2026
- * цены снизили ($24/$39/$89/$249.99 → $19/$29/$49/$149), поправили priceMonthly
- * и annualTotal, а здесь остались старые числа — и каждый годовой план стал
- * выглядеть ДОРОЖЕ месячного: Lite показывал $20/мес при месячной цене $19,
- * Universe — $208 при $149. Та же карточка рядом обещала «2 месяца в подарок»
- * и «$190 в год», то есть противоречила сама себе тремя числами.
- * Сторож в tests/singlePriceSource.test.ts теперь этого не пропустит.
+ * Тариф называет СРОК доступа, а не набор модулей: любой платный тариф открывает
+ * всю планету AEVION, тарифы различаются только сроком и ценой месяца. Оплата —
+ * за весь срок вперёд, продление на тот же срок. Иначе Medium превращался бы в
+ * «$350 за один месяц и отмена», то есть дешевле Lite за тот же месяц.
+ *
+ * Та же лестница у каждого приложения, которое продаётся отдельно
+ * (STANDALONE_APPS ниже). Документ с обоснованием:
+ * Desktop/АЕВИОН/06-Витрина-цены-SEO/2026-09-15-ЦЕНОВАЯ-ПОЛИТИКА-тариф-это-срок.md
  */
-const annualPerMonth = (m: number) => Math.round((m * 10) / 12);
+export const TERM_TIERS = ["lite", "medium", "pro", "full", "max"] as const;
+export type TermTier = (typeof TERM_TIERS)[number];
+
+export const TERM_MONTHS: Record<TermTier, number> = { lite: 1, medium: 3, pro: 6, full: 9, max: 12 };
+
+/** Доля базовой цены месяца на ступени: у планеты это 400 / 350 / 300 / 250 / 200. */
+export const TERM_FACTOR: Record<TermTier, number> = { lite: 1, medium: 0.875, pro: 0.75, full: 0.625, max: 0.5 };
+
+export const TERM_NAME: Record<TermTier, string> = { lite: "Lite", medium: "Medium", pro: "Pro", full: "Full", max: "Max" };
+
+/** Цена месяца всей планеты на самом коротком сроке (Lite). */
+export const PLANET_BASE_MONTHLY = 400;
+
+export function isTermTier(id: string): id is TermTier {
+  return (TERM_TIERS as readonly string[]).includes(id);
+}
+
+/**
+ * Цена месяца на ступени лестницы.
+ *
+ * Базы выбраны кратными 8, и на каждой ступени выходят целые доллары. Нецелое
+ * число здесь — ошибка ДАННЫХ (кто-то поставил базу не кратной 8), а не повод
+ * округлять: округление молча разводит витрину и кассу на центы.
+ */
+export function termPricePerMonth(base: number, term: TermTier): number {
+  const v = base * TERM_FACTOR[term];
+  if (!Number.isInteger(v)) throw new Error(`term price is not whole dollars: ${base} x ${TERM_FACTOR[term]}`);
+  return v;
+}
+
+/** Платёж за весь срок вперёд. */
+export function termTotal(base: number, term: TermTier): number {
+  return termPricePerMonth(base, term) * TERM_MONTHS[term];
+}
+
+/** «3 месяца», «6 месяцев» — для подписей. */
+export function monthsLabelRu(n: number): string {
+  const d = n % 10;
+  const dd = n % 100;
+  if (d === 1 && dd !== 11) return `${n} месяц`;
+  if (d >= 2 && d <= 4 && (dd < 12 || dd > 14)) return `${n} месяца`;
+  return `${n} месяцев`;
+}
+
+/**
+ * Приложения, которые продаются ОТДЕЛЬНО от планеты. Больше — ничего: каждое
+ * лишнее отдельное приложение снижает причину брать планету целиком.
+ *
+ * `slug` — то, что вебхук пишет в AppSubscription (совпадает с прежними
+ * `ip_bureau` и `devhub`, чтобы уже выданные права не потерялись).
+ *
+ * Проверка «планета выгоднее всегда» — tests/termPricingLadder.test.ts: сумма пяти
+ * приложений на любой ступени дороже планеты на той же ступени.
+ */
+export interface StandaloneApp {
+  slug: string;
+  moduleId: string;
+  name: string;
+  baseMonthly: number;
+}
+
+export const STANDALONE_APPS: StandaloneApp[] = [
+  { slug: "cyberchess", moduleId: "cyberchess", name: "CyberChess", baseMonthly: 24 },
+  { slug: "multichat", moduleId: "multichat-engine", name: "Multichat", baseMonthly: 40 },
+  { slug: "qventure", moduleId: "qventure", name: "QVenture", baseMonthly: 80 },
+  { slug: "ip_bureau", moduleId: "aevion-ip-bureau", name: "IP Bureau", baseMonthly: 32 },
+  { slug: "devhub", moduleId: "devhub", name: "DevHub", baseMonthly: 200 },
+];
+
+export function standaloneApp(slugOrModuleId: string): StandaloneApp | null {
+  return STANDALONE_APPS.find((a) => a.slug === slugOrModuleId || a.moduleId === slugOrModuleId) ?? null;
+}
+
+/**
+ * Месячная квота токенов одинакова на всех сроках: срок меняет цену месяца, а не
+ * объём. Планета работает на моделях Anthropic, и Max за $200/мес стоит столько же,
+ * сколько их подписка Max, — без месячного потолка длинный тариф уходит в минус.
+ */
+const PLANET_LIMITS: TierLimits = {
+  modules: null,
+  qrightObjectsPerMonth: null,
+  qsignOpsPerDay: null,
+  llmTokensPerMonth: 50_000_000,
+  premiumTokensPerMonth: 5_000_000, // 10% of the overall cap
+  seats: 1,
+  supportSlaHours: 8,
+};
+
+function planetTier(id: TermTier, extra: Partial<PricingTier> = {}): PricingTier {
+  const months = TERM_MONTHS[id];
+  const perMonth = termPricePerMonth(PLANET_BASE_MONTHLY, id);
+  const total = perMonth * months;
+  const savingPct = Math.round((1 - TERM_FACTOR[id]) * 1000) / 10;
+  return {
+    id,
+    name: TERM_NAME[id],
+    tagline: `Вся планета AEVION на ${monthsLabelRu(months)}`,
+    priceMonthly: perMonth,
+    termMonths: months,
+    priceTermTotal: total,
+    features: [
+      "Все продукты AEVION в одной подписке",
+      "DevHub, Multichat, IP Bureau, CyberChess, QVenture и остальные модули",
+      "QCoreAI: 50 000 000 токенов / месяц",
+      months === 1 ? `$${total} за месяц` : `$${total} за ${monthsLabelRu(months)} — $${perMonth} в месяц`,
+      savingPct > 0 ? `Экономия ${savingPct}% против помесячной оплаты` : "Без обязательств дольше месяца",
+      "Приоритетная поддержка (8h SLA)",
+    ],
+    limits: { ...PLANET_LIMITS },
+    ctaLabel: `Выбрать ${TERM_NAME[id]}`,
+    ...extra,
+  };
+}
 
 export const TIERS: PricingTier[] = [
   {
@@ -259,8 +322,8 @@ export const TIERS: PricingTier[] = [
     name: "Free",
     tagline: "Старт без барьеров — для тех, кто только знакомится с AEVION",
     priceMonthly: 0,
-    priceAnnualPerMonth: 0,
-    priceAnnualTotal: 0,
+    termMonths: null,
+    priceTermTotal: 0,
     features: [
       "1 активный модуль на выбор",
       "QRight: до 10 объектов / месяц",
@@ -280,120 +343,18 @@ export const TIERS: PricingTier[] = [
     },
     ctaLabel: "Начать бесплатно",
   },
-  {
-    id: "lite",
-    name: "Lite",
-    tagline: "Один продукт AEVION на твой выбор",
-    priceMonthly: 19,
-    priceAnnualPerMonth: annualPerMonth(19),
-    priceAnnualTotal: annualTotal(19),
-    features: [
-      "1 любой продукт AEVION на выбор",
-      "Полный доступ к выбранному продукту",
-      "QCoreAI: 2 000 000 токенов / месяц",
-      "Сменить выбранный продукт — в кабинете",
-      "Email-поддержка (24h SLA)",
-      "Годовая оплата — 2 месяца в подарок",
-    ],
-    limits: {
-      modules: 1,
-      qrightObjectsPerMonth: null,
-      qsignOpsPerDay: 25,
-      llmTokensPerMonth: 2_000_000,
-      premiumTokensPerMonth: 200_000, // 10% of the overall cap
-      seats: 1,
-      supportSlaHours: 24,
-    },
-    ctaLabel: "Выбрать Lite",
-  },
-  {
-    id: "medium",
-    name: "Medium",
-    tagline: "Бандл готовых продуктов AEVION",
-    priceMonthly: 29,
-    priceAnnualPerMonth: annualPerMonth(29),
-    priceAnnualTotal: annualTotal(29),
-    features: [
-      "10 готовых продуктов AEVION в одной подписке",
-      "CyberChess, HealthAI, Multichat, QCoreAI, Smeta",
-      "QAI, QLearn, QNews, QStore, QMedia",
-      "QCoreAI: 10 000 000 токенов / месяц",
-      "Email-поддержка (24h SLA)",
-      "Годовая оплата — 2 месяца в подарок",
-    ],
-    limits: {
-      modules: MEDIUM_BUNDLE.length,
-      qrightObjectsPerMonth: null,
-      qsignOpsPerDay: 100,
-      llmTokensPerMonth: 10_000_000,
-      premiumTokensPerMonth: 1_000_000, // 10% of the overall cap
-      seats: 1,
-      supportSlaHours: 24,
-    },
-    ctaLabel: "Перейти на Medium",
-    highlight: true,
-  },
-  {
-    id: "full",
-    name: "Full",
-    tagline: "Вся экосистема AEVION без ограничений",
-    priceMonthly: 49,
-    priceAnnualPerMonth: annualPerMonth(49),
-    priceAnnualTotal: annualTotal(49),
-    features: [
-      "Все продукты AEVION (30+)",
-      "QRight + QSign + IP Bureau (полный доступ)",
-      "Финтех-стек: QTrade, QPayNet, QContract",
-      "QCoreAI: 50 000 000 токенов / месяц",
-      "Multichat Engine с агентами",
-      "Приоритетная поддержка (8h SLA)",
-      "Годовая оплата — 2 месяца в подарок",
-    ],
-    limits: {
-      modules: null,
-      qrightObjectsPerMonth: null,
-      qsignOpsPerDay: null,
-      llmTokensPerMonth: 50_000_000,
-      premiumTokensPerMonth: 5_000_000, // 10% of the overall cap
-      seats: 1,
-      supportSlaHours: 8,
-    },
-    ctaLabel: "Получить всё",
-  },
-  {
-    id: "pro",
-    name: "Universe",
-    tagline: "Всё AEVION в одном месте — флагман экосистемы (Apple-style)",
-    priceMonthly: 149,
-    priceAnnualPerMonth: annualPerMonth(149),
-    priceAnnualTotal: annualTotal(149),
-    features: [
-      "Всё из Full + приоритетный доступ ко всем новым модулям",
-      "QCoreAI: 200 000 000 токенов / месяц",
-      "AEVION Agent — одно окно: текст или действие",
-      "Оффлайн/локальные модели (приватность, $0 за токены)",
-      "Ранний доступ к site-builder и агентским фичам",
-      "Приоритетная поддержка (6h SLA)",
-      "Больше, чем один любой AI-сервис на максимальном тарифе — потому что тут вся платформа AEVION, а не один продукт",
-    ],
-    limits: {
-      modules: null,
-      qrightObjectsPerMonth: null,
-      qsignOpsPerDay: null,
-      llmTokensPerMonth: 200_000_000,
-      premiumTokensPerMonth: 20_000_000, // 10% of the overall cap
-      seats: 1,
-      supportSlaHours: 6,
-    },
-    ctaLabel: "Занять место во вселенной",
-  },
+  planetTier("lite"),
+  planetTier("medium"),
+  planetTier("pro"),
+  planetTier("full"),
+  planetTier("max", { highlight: true }),
   {
     id: "enterprise",
     name: "Enterprise",
     tagline: "Для корпораций, банков и государственного сектора",
     priceMonthly: null,
-    priceAnnualPerMonth: null,
-    priceAnnualTotal: null,
+    termMonths: null,
+    priceTermTotal: null,
     features: [
       "Выделенная инфраструктура (on-prem / VPC)",
       "SOC2 / ISO27001 пакет (по запросу)",
@@ -422,29 +383,38 @@ export const TIERS: PricingTier[] = [
  */
 // includedIn-схема новой модели:
 //   - globus              → free + все (публичный портал)
-//   - MEDIUM_BUNDLE (10)  → medium + full + enterprise
-//   - все остальные       → full + enterprise (Full = вся экосистема)
-//   - lite не перечисляется: это «1 любой на выбор», доступ хранится в подписке
+//   - все остальные       → любой платный срок (lite…max) + enterprise:
+//     тариф — это срок, а не набор модулей (15.09.2026)
+/**
+ * Цена надстройки = база лестницы отдельного приложения. Только STANDALONE_APPS:
+ * у остальных модулей addonMonthly = null — отдельно они не продаются (15.09.2026).
+ */
+function appBase(moduleId: string): number {
+  const app = standaloneApp(moduleId);
+  if (!app) throw new Error(`not a standalone app: ${moduleId}`);
+  return app.baseMonthly;
+}
+
 export const MODULES_PRICING: ModulePrice[] = [
   // ===== CORE / PLATFORM =====
   {
     id: "globus",
     addonMonthly: 0,
-    includedIn: ["free", "lite", "medium", "full", "enterprise"],
+    includedIn: ["free", "lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "live",
     oneLiner: "Центральная карта и портал экосистемы",
   },
   {
     id: "revenue-hub",
     addonMonthly: 0,
-    includedIn: ["free", "lite", "medium", "full", "enterprise"],
+    includedIn: ["free", "lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "live",
     oneLiner: "Внутренний модуль монетизации (auth-gated, не plan-gated)",
   },
   {
     id: "ventures",
     addonMonthly: 0,
-    includedIn: ["free", "lite", "medium", "full", "enterprise"],
+    includedIn: ["free", "lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "live",
     oneLiner: "Идея-Маркет: витрина бизнес-моделей + венчур AEVIA",
   },
@@ -453,22 +423,22 @@ export const MODULES_PRICING: ModulePrice[] = [
     // ~50% below Claude Pro / ChatGPT Plus ($20/mo) as a standalone AI
     // subscription — penetration pricing against single-purpose AI rivals,
     // same logic applied to cyberchess below. See docs/PRICING_STRATEGY_2026-07.md.
-    addonMonthly: 9.99,
-    includedIn: ["medium", "full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "live",
     oneLiner: "AI Core Engine: оркестрация агентов и LLM",
   },
   {
     id: "multichat-engine",
-    addonMonthly: 19,
-    includedIn: ["medium", "full", "enterprise"],
+    addonMonthly: appBase("multichat-engine"),
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "live",
     oneLiner: "Параллельные подчатики и агенты под задачи",
   },
   {
     id: "qfusionai",
-    addonMonthly: 29,
-    includedIn: ["full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "beta",
     oneLiner: "Гибридный движок поверх лучших AI-платформ",
   },
@@ -476,22 +446,22 @@ export const MODULES_PRICING: ModulePrice[] = [
   // ===== IP / LEGAL =====
   {
     id: "qright",
-    addonMonthly: 9,
-    includedIn: ["full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "live",
     oneLiner: "Регистрация цифровых объектов и подтверждение авторства",
   },
   {
     id: "qsign",
-    addonMonthly: 9,
-    includedIn: ["full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "live",
     oneLiner: "Цифровая подпись и проверка целостности",
   },
   {
     id: "aevion-ip-bureau",
-    addonMonthly: 29,
-    includedIn: ["full", "enterprise"],
+    addonMonthly: appBase("aevion-ip-bureau"),
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "live",
     oneLiner: "Электронное бюро авторства + сертификаты",
   },
@@ -499,29 +469,29 @@ export const MODULES_PRICING: ModulePrice[] = [
   // ===== FINTECH =====
   {
     id: "qtradeoffline",
-    addonMonthly: 15,
-    includedIn: ["full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "beta",
     oneLiner: "Офлайн-сделки и платежи без интернета",
   },
   {
     id: "qpaynet-embedded",
-    addonMonthly: 29,
-    includedIn: ["full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "beta",
     oneLiner: "Платёжное ядро для встраивания",
   },
   {
     id: "qmaskcard",
     addonMonthly: null,
-    includedIn: ["full", "enterprise"],
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "on_request",
     oneLiner: "Защищённая банковская карта (PCI-контур)",
   },
   {
     id: "veilnetx",
     addonMonthly: null,
-    includedIn: ["full", "enterprise"],
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "beta",
     oneLiner: "Privacy-крипто и приватная сеть",
   },
@@ -532,15 +502,15 @@ export const MODULES_PRICING: ModulePrice[] = [
     // ~50% below chess.com Diamond (~$20/mo monthly billing) — penetration
     // pricing against the direct single-purpose rival while it's still
     // building traction. See docs/PRICING_STRATEGY_2026-07.md.
-    addonMonthly: 19,
-    includedIn: ["medium", "full", "enterprise"],
+    addonMonthly: appBase("cyberchess"),
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "live",
     oneLiner: "Шахматная платформа нового поколения",
   },
   {
     id: "healthai",
-    addonMonthly: 19,
-    includedIn: ["medium", "full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "live",
     oneLiner: "Персональный AI-доктор (информационно)",
   },
@@ -564,100 +534,100 @@ export const MODULES_PRICING: ModulePrice[] = [
   {
     id: "qmelanin",
     name: "QMelanin — протокол против седины",
-    addonMonthly: 15,
-    includedIn: ["medium", "full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "beta",
     oneLiner: "Протокол против седины: анализы → питание (информационно)",
   },
   {
     id: "qrenew",
     name: "QRenew — клеточное обновление",
-    addonMonthly: 29,
-    includedIn: ["medium", "full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "beta",
     oneLiner: "Клеточное обновление: биовозраст + стек (информационно)",
   },
   {
     id: "smeta-trainer",
-    addonMonthly: 49,
-    includedIn: ["medium", "full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "beta",
     oneLiner: "AI-тренажёр сметного дела РК",
   },
   {
     id: "qai",
-    addonMonthly: 19,
-    includedIn: ["medium", "full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "live",
     oneLiner: "AI-ассистент общего назначения",
   },
   {
     id: "qlearn",
-    addonMonthly: 15,
-    includedIn: ["medium", "full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "live",
     oneLiner: "Платформа обучения с AI",
   },
   {
     id: "qnews",
-    addonMonthly: 9,
-    includedIn: ["medium", "full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "live",
     oneLiner: "Новости и AI-дайджест",
   },
   {
     id: "qstore",
-    addonMonthly: 15,
-    includedIn: ["medium", "full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "live",
     oneLiner: "Маркетплейс цифровых продуктов",
   },
   {
     id: "qmedia",
-    addonMonthly: 15,
-    includedIn: ["medium", "full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "live",
     oneLiner: "Медиа-хостинг и стриминг",
   },
   {
     id: "qlife",
-    addonMonthly: 19,
-    includedIn: ["full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "beta",
     oneLiner: "Долголетие и анти-эйджинг сценарии",
   },
   {
     id: "qgood",
-    addonMonthly: 15,
-    includedIn: ["full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "beta",
     oneLiner: "Психология и ментальное здоровье",
   },
   {
     id: "psyapp-deps",
-    addonMonthly: 19,
-    includedIn: ["full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "beta",
     oneLiner: "Выход из зависимостей с поддержкой AI",
   },
   {
     id: "qpersona",
-    addonMonthly: 29,
-    includedIn: ["full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "beta",
     oneLiner: "Цифровой аватар и персональный двойник",
   },
   {
     id: "kids-ai-content",
-    addonMonthly: 9,
-    includedIn: ["full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "beta",
     oneLiner: "Детский AI-контент на нескольких языках",
   },
   {
     id: "voice-of-earth",
     addonMonthly: null,
-    includedIn: ["full", "enterprise"],
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "soon",
     oneLiner: "Контент-сериал «Голос Земли»",
   },
@@ -665,22 +635,22 @@ export const MODULES_PRICING: ModulePrice[] = [
   // ===== MARKETPLACE / NETWORK =====
   {
     id: "qbuild",
-    addonMonthly: 19,
-    includedIn: ["full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "live",
     oneLiner: "Рекрутинг-платформа и ATS",
   },
   {
     id: "startup-exchange",
-    addonMonthly: 29,
-    includedIn: ["full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "beta",
     oneLiner: "Маркетплейс защищённых стартап-идей",
   },
   {
     id: "qventure",
-    addonMonthly: 39,
-    includedIn: ["full", "enterprise"],
+    addonMonthly: appBase("qventure"),
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "beta",
     oneLiner: "AI due-diligence: quant-скоринг + совет 4 ролей + стратегия входа",
   },
@@ -691,8 +661,8 @@ export const MODULES_PRICING: ModulePrice[] = [
     // купить модуль было нельзя ничем. Стены это не включает: qskyway нет в
     // PAYWALL_MODULES (проверено на проде 14.09).
     id: "qskyway",
-    addonMonthly: 19,
-    includedIn: ["full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "beta",
     oneLiner: "Провайдер-независимые 3D-аэрокоридоры для аэротакси над цифровым двойником города",
   },
@@ -700,29 +670,29 @@ export const MODULES_PRICING: ModulePrice[] = [
     // Рендер стоит реальных денег ($0.13-0.30/с движка) — модуль платный
     // с первого дня: addon поверх Full, себестоимость×~3 на типовой фильм/мес.
     id: "qreal",
-    addonMonthly: 29,
+    addonMonthly: null,
     includedIn: ["enterprise"],
     availability: "beta",
     oneLiner: "Полностью живое AI-видео без актёра: бриф → кадры → фильм с QC реализма и провенансом",
   },
   {
     id: "deepsan",
-    addonMonthly: 9,
-    includedIn: ["full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "beta",
     oneLiner: "Анти-хаос приложение для продуктивности",
   },
   {
     id: "mapreality",
     addonMonthly: null,
-    includedIn: ["full", "enterprise"],
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "soon",
     oneLiner: "Карта реальных потребностей сообществ",
   },
   {
     id: "qevents",
-    addonMonthly: 9,
-    includedIn: ["full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "live",
     oneLiner: "События, календарь и регистрации",
   },
@@ -731,42 +701,42 @@ export const MODULES_PRICING: ModulePrice[] = [
   {
     id: "z-tide",
     addonMonthly: null,
-    includedIn: ["full", "enterprise"],
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "beta",
     oneLiner: "Энергия и эмоция как валюта (концепт)",
   },
   {
     id: "qcontract",
-    addonMonthly: 19,
-    includedIn: ["full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "beta",
     oneLiner: "Самоуничтожающиеся смарт-документы",
   },
   {
     id: "shadownet",
     addonMonthly: null,
-    includedIn: ["full", "enterprise"],
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "soon",
     oneLiner: "Альтернативная приватная сеть (R&D)",
   },
   {
     id: "lifebox",
-    addonMonthly: 9,
-    includedIn: ["full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "beta",
     oneLiner: "Цифровой сейф для будущего",
   },
   {
     id: "constitution",
-    addonMonthly: 9,
-    includedIn: ["full", "enterprise"],
+    addonMonthly: null,
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "live",
     oneLiner: "AI-конституция и гражданские документы",
   },
   {
     id: "qchaingov",
     addonMonthly: null,
-    includedIn: ["full", "enterprise"],
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "beta",
     oneLiner: "DAO-управление экосистемой",
   },
@@ -807,7 +777,7 @@ export const MODULES_PRICING: ModulePrice[] = [
     // isModuleEntitled() для full/enterprise возвращает true раньше, чем
     // читает includedIn, а для прочих тарифов прежнее запасное значение
     // ["full","enterprise"] давало ровно тот же ответ — false.
-    includedIn: ["full"],
+    includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "live",
     oneLiner: "Браузерная IDE на движке VS Code: генерация кода и публикация",
     // Модуля НЕТ в data/projects.ts, поэтому имя обязано быть здесь — иначе
@@ -884,42 +854,10 @@ export const PROMO_CODES: PromoCode[] = [
 ];
 
 /** Сборки модулей со скидкой — для GTM-лендинга. */
-export const BUNDLES: PricingBundle[] = [
-  {
-    id: "ip-suite",
-    name: "IP Suite",
-    description: "QRight + QSign + IP Bureau — полный контур цифровой собственности",
-    modules: ["qright", "qsign", "aevion-ip-bureau"],
-    priceMonthly: 29,
-    // Пересчитано 14.08.2026 после сведения цены IP Bureau с кассой ($19 -> $29):
-    // по частям стало $47, значит скидка на деле 38%, а не 20%.
-    savingsPercent: 38,
-  },
-  {
-    id: "ai-suite",
-    name: "AI Suite",
-    description: "QCoreAI + Multichat + Kids AI — единая AI-платформа",
-    modules: ["qcoreai", "multichat-engine", "kids-ai-content"],
-    // Recomputed 2026-07-22 after qcoreai's addonMonthly dropped to 9.99:
-    // components now sum to 37.99 (9.99 + 19 + 9); 33 keeps a genuine ~13% bundle discount.
-    priceMonthly: 33,
-    savingsPercent: 13,
-  },
-  {
-    id: "fintech-suite",
-    name: "Fintech Suite",
-    description: "QTradeOffline + QPayNet + QContract — финансовый стек",
-    modules: ["qtradeoffline", "qpaynet-embedded", "qcontract"],
-    // 14.08.2026: было $79 при заявленных -8%. К этому моменту цены свелись к
-    // кассе (qpaynet $49 -> $29), и по частям стек стал стоить $63 — то есть
-    // "скидка" превратилась в НАЦЕНКУ +25%. Хуже того, тариф Full за $49 прямо
-    // перечисляет "Финтех-стек: QTrade, QPayNet, QContract", то есть сборка за
-    // $79 давала МЕНЬШЕ за БОЛЬШЕ. Сборка обязана быть дешевле тарифа, который
-    // её содержит, иначе это предложение, которое нельзя выбрать разумно.
-    priceMonthly: 39,
-    savingsPercent: 38,
-  },
-];
+// Наборы модулей со скидкой сняты 15.09.2026: любой платный срок открывает все
+// модули, а отдельно продаются только STANDALONE_APPS. Набор поверх этого
+// стал бы третьей ценой одного и того же доступа.
+export const BUNDLES: PricingBundle[] = [];
 
 /** Утилита: получить тариф по id (или null) */
 export function getTier(id: string): PricingTier | null {
@@ -936,12 +874,11 @@ export function getModulePrice(id: string): ModulePrice | null {
  *   - не существует
  *   - истёк (validUntil < now)
  *   - не применим к данному тарифу (tiers задан и tier не входит)
- *   - annualOnly=true, а period !== "annual"
+ *   - annualOnly=true, а тариф короче 12 месяцев (не max)
  */
 export function resolvePromoCode(
   raw: string | undefined,
   tierId: TierId,
-  period: BillingPeriod = "monthly",
 ): { promo: PromoCode | null; reason?: string } {
   if (!raw) return { promo: null };
   const code = raw.trim().toUpperCase();
@@ -950,7 +887,7 @@ export function resolvePromoCode(
   if (promo.validUntil && new Date(promo.validUntil) < new Date()) {
     return { promo: null, reason: "promo_expired" };
   }
-  if (promo.annualOnly && period !== "annual") {
+  if (promo.annualOnly && tierId !== "max") {
     return { promo: null, reason: "promo_annual_only" };
   }
   if (promo.tiers && promo.tiers.length > 0 && !promo.tiers.includes(tierId)) {
@@ -988,7 +925,8 @@ export interface AppliedPromo {
 
 export interface Quote {
   tierId: TierId;
-  period: BillingPeriod;
+  /** Срок тарифа в месяцах; null — free, enterprise, неизвестный тариф. */
+  termMonths: number | null;
   currency: CurrencyCode;
   lines: QuoteLine[];
   subtotal: number;
@@ -1007,13 +945,13 @@ export function buildQuote(input: {
   tierId: TierId;
   modules?: string[];
   seats?: number;
-  period?: BillingPeriod;
   currency?: CurrencyCode;
   promoCode?: string;
   /** Срок обязательства в месяцах: 24 и 36 дают ступень веера. */
   commitmentMonths?: number;
 }): Quote {
-  const period: BillingPeriod = input.period ?? "monthly";
+  const termMonths = getTier(input.tierId)?.termMonths ?? null;
+  const months = termMonths ?? 1;
   const currency: CurrencyCode = input.currency ?? "USD";
   const seats = Math.max(1, input.seats ?? 1);
   const tier = getTier(input.tierId);
@@ -1023,7 +961,7 @@ export function buildQuote(input: {
   if (!tier) {
     return {
       tierId: input.tierId,
-      period,
+      termMonths,
       currency,
       lines: [],
       subtotal: 0,
@@ -1043,10 +981,10 @@ export function buildQuote(input: {
   } else if (tierMonthly > 0) {
     lines.push({
       kind: "tier",
-      label: `Тариф ${tier.name} (${period === "annual" ? "годовая" : "месячная"} оплата)`,
+      label: `Тариф ${tier.name} — ${monthsLabelRu(months)} вперёд`,
       unitPrice: tierMonthly,
-      qty: period === "annual" ? 12 : 1,
-      total: period === "annual" ? tierMonthly * 12 : tierMonthly,
+      qty: months,
+      total: tierMonthly * months,
     });
   }
 
@@ -1058,8 +996,8 @@ export function buildQuote(input: {
       kind: "seat",
       label: `Дополнительные пользователи (${extraSeats} × $5/мес)`,
       unitPrice: 5,
-      qty: extraSeats * (period === "annual" ? 12 : 1),
-      total: extraSeats * 5 * (period === "annual" ? 12 : 1),
+      qty: extraSeats * months,
+      total: extraSeats * 5 * months,
     });
   }
 
@@ -1107,21 +1045,15 @@ export function buildQuote(input: {
       kind: "addon",
       label: `Модуль ${m.id}`,
       unitPrice: m.addonMonthly,
-      qty: period === "annual" ? 12 : 1,
-      total: m.addonMonthly * (period === "annual" ? 12 : 1),
+      qty: months,
+      total: m.addonMonthly * months,
     });
   }
 
   const subtotal = lines.reduce((s, l) => s + l.total, 0);
-  // 4) Годовая скидка = -2 месяца на тариф (не на seat/addon).
-  //    tierLine.total = monthly × 12; priceAnnualTotal = monthly × 10 → скидка = 2 месяца.
+  // 4) Отдельной «годовой» скидки больше нет (15.09.2026): выгода длинного срока
+  //    уже в цене месяца на лестнице (TERM_FACTOR), вторая скидка удвоила бы её.
   let discount = 0;
-  if (period === "annual" && tier.id !== "enterprise") {
-    const tierLine = lines.find((l) => l.kind === "tier");
-    if (tierLine && tier.priceAnnualTotal != null) {
-      discount = Math.max(0, tierLine.total - tier.priceAnnualTotal);
-    }
-  }
 
   // 5) Веер: ступени за объём модулей, мест и срок обязательства. Считается
   //    ПОСЛЕ годовой скидки и ДО промо-кода: годовая — свойство тарифа, веер —
@@ -1140,17 +1072,17 @@ export function buildQuote(input: {
   const fanUsd = fanTotalUsd(fans);
   discount += fanUsd;
 
-  // 6) Промо-код применяется на (subtotal - discount)
+  // 6) Промо-код применяется на (subtotal - discount). Фиксированный — ОДИН раз за покупку (15.09.2026): при умножении на срок TEAM100 «до $100» давал $900 на Full за 9 месяцев
   let promoApplied: AppliedPromo | null = null;
   let promoUsd = 0;
   if (input.promoCode) {
-    const { promo, reason } = resolvePromoCode(input.promoCode, tier.id, period);
+    const { promo, reason } = resolvePromoCode(input.promoCode, tier.id);
     if (promo) {
       const base = Math.max(0, subtotal - discount);
       const rawPromoUsd =
         promo.kind === "percent"
           ? Math.round((base * promo.amount) / 100)
-          : Math.min(base, promo.amount * (period === "annual" ? 12 : 1));
+          : Math.min(base, promo.amount);
       promoUsd = Math.min(rawPromoUsd, base * MAX_PROMO_DISCOUNT_RATIO);
       const rate = currencyRate(currency);
       promoApplied = {
@@ -1182,7 +1114,7 @@ export function buildQuote(input: {
 
   return {
     tierId: tier.id,
-    period,
+    termMonths,
     currency,
     lines: lines.map((l) => ({
       ...l,

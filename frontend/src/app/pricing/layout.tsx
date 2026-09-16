@@ -14,10 +14,10 @@ export const metadata: Metadata = {
   // поэтому корневой файл не тронут.
   title: { absolute: "AEVION Pricing — one subscription for IP, AI and fintech · Цены и тарифы" },
   description:
-    "Six plans (Free, Lite, Medium, Full, Universe, Enterprise) and every module "
-    + "under one subscription: estimate calculator, bundles, industry cases and a "
-    + "line to sales. "
-    + "6 тарифов AEVION (Free / Lite / Medium / Full / Universe / Enterprise) и все модули под одной подпиской. Калькулятор сметы, бандлы, индустриальные кейсы, контакты с продажами.",
+    "A plan is a term of access to the whole AEVION planet: Lite, Medium, Pro, Full "
+    + "and Max, paid up front — the longer the term, the cheaper the month. Free to "
+    + "start, Enterprise on request, five apps also sold separately. "
+    + "Тариф AEVION — это срок доступа ко всей планете: Lite, Medium, Pro, Full и Max с оплатой за срок вперёд — чем длиннее срок, тем дешевле месяц. Free для старта, Enterprise по запросу, пять приложений продаются и отдельно.",
   openGraph: {
     title: "Цены AEVION — все модули в одной подписке",
     description:

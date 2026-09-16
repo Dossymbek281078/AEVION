@@ -7,18 +7,24 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
 import { useI18n } from "@/lib/i18n";
+import { termUnitKey } from "@/lib/pricingI18n";
+import { isTermTier, termSavingPercent } from "@/lib/termPricing";
 
 type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
-type BillingPeriod = "monthly" | "annual";
-type TierId = "free" | "lite" | "medium" | "full" | "pro" | "enterprise";
+// Тариф — это срок доступа ко всей планете (15.09.2026): lite 1 мес … max 12.
+type TierId = "free" | "lite" | "medium" | "pro" | "full" | "max" | "enterprise";
+type ТарифБезСрока = "free" | "enterprise";
 
 interface PricingTier {
   id: TierId;
   name: string;
   tagline: string;
+  /** Цена месяца на этом сроке. */
   priceMonthly: number | null;
-  priceAnnualPerMonth: number | null;
-  priceAnnualTotal: number | null;
+  /** Срок в месяцах; null у free и enterprise. */
+  termMonths: number | null;
+  /** Платёж за весь срок вперёд. */
+  priceTermTotal: number | null;
   features: string[];
   limits: {
     modules: number | null;
@@ -50,35 +56,11 @@ interface PricingPayload {
 
 // Values below are i18n keys under "pricing.tierDetail.faq.*", resolved via
 // t() at render time (this object is module-level, outside the component).
-const TIER_FAQ: Record<TierId, { q: string; a: string }[]> = {
+const TIER_FAQ: Record<ТарифБезСрока, { q: string; a: string }[]> = {
   free: [
     { q: "pricing.tierDetail.faq.free.q1", a: "pricing.tierDetail.faq.free.a1" },
     { q: "pricing.tierDetail.faq.free.q2", a: "pricing.tierDetail.faq.free.a2" },
     { q: "pricing.tierDetail.faq.free.q3", a: "pricing.tierDetail.faq.free.a3" },
-  ],
-  lite: [
-    { q: "pricing.tierDetail.faq.lite.q1", a: "pricing.tierDetail.faq.lite.a1" },
-    { q: "pricing.tierDetail.faq.lite.q2", a: "pricing.tierDetail.faq.lite.a2" },
-    { q: "pricing.tierDetail.faq.lite.q3", a: "pricing.tierDetail.faq.lite.a3" },
-    { q: "pricing.tierDetail.faq.lite.q4", a: "pricing.tierDetail.faq.lite.a4" },
-  ],
-  medium: [
-    { q: "pricing.tierDetail.faq.medium.q1", a: "pricing.tierDetail.faq.medium.a1" },
-    { q: "pricing.tierDetail.faq.medium.q2", a: "pricing.tierDetail.faq.medium.a2" },
-    { q: "pricing.tierDetail.faq.medium.q3", a: "pricing.tierDetail.faq.medium.a3" },
-    { q: "pricing.tierDetail.faq.medium.q4", a: "pricing.tierDetail.faq.medium.a4" },
-  ],
-  full: [
-    { q: "pricing.tierDetail.faq.full.q1", a: "pricing.tierDetail.faq.full.a1" },
-    { q: "pricing.tierDetail.faq.full.q2", a: "pricing.tierDetail.faq.full.a2" },
-    { q: "pricing.tierDetail.faq.full.q3", a: "pricing.tierDetail.faq.full.a3" },
-    { q: "pricing.tierDetail.faq.full.q4", a: "pricing.tierDetail.faq.full.a4" },
-  ],
-  pro: [
-    { q: "pricing.tierDetail.faq.pro.q1", a: "pricing.tierDetail.faq.pro.a1" },
-    { q: "pricing.tierDetail.faq.pro.q2", a: "pricing.tierDetail.faq.pro.a2" },
-    { q: "pricing.tierDetail.faq.pro.q3", a: "pricing.tierDetail.faq.pro.a3" },
-    { q: "pricing.tierDetail.faq.pro.q4", a: "pricing.tierDetail.faq.pro.a4" },
   ],
   enterprise: [
     { q: "pricing.tierDetail.faq.enterprise.q1", a: "pricing.tierDetail.faq.enterprise.a1" },
@@ -88,9 +70,32 @@ const TIER_FAQ: Record<TierId, { q: string; a: string }[]> = {
   ],
 };
 
+// Сроки планеты (lite…max) отличаются только сроком и ценой месяца, состав у всех
+// один — вся планета. Поэтому у них ОБЩИЕ вопросы и аудитория с подстановками
+// ({name}, {months}, {unit}, {total}, {perMonth}, {saving}), а не четыре набора
+// текстов, которые при следующей смене цен разошлись бы с витриной (так было с
+// «$240 вместо $288» и «Medium ($29)» до 15.09.2026).
+const TERM_FAQ: { q: string; a: string }[] = [
+  { q: "pricing.tierDetail.faq.term.q1", a: "pricing.tierDetail.faq.term.a1" },
+  { q: "pricing.tierDetail.faq.term.q2", a: "pricing.tierDetail.faq.term.a2" },
+  { q: "pricing.tierDetail.faq.term.q3", a: "pricing.tierDetail.faq.term.a3" },
+  { q: "pricing.tierDetail.faq.term.q4", a: "pricing.tierDetail.faq.term.a4" },
+];
+
+const TERM_AUDIENCE = {
+  who: "pricing.tierDetail.audience.term.who",
+  usecase: [
+    "pricing.tierDetail.audience.term.usecase1",
+    "pricing.tierDetail.audience.term.usecase2",
+    "pricing.tierDetail.audience.term.usecase3",
+    "pricing.tierDetail.audience.term.usecase4",
+  ],
+  notFor: "pricing.tierDetail.audience.term.notFor",
+};
+
 // Values below are i18n keys under "pricing.tierDetail.audience.*", resolved
 // via t() at render time (this object is module-level, outside the component).
-const TIER_AUDIENCE: Record<TierId, { who: string; usecase: string[]; notFor: string }> = {
+const TIER_AUDIENCE: Record<ТарифБезСрока, { who: string; usecase: string[]; notFor: string }> = {
   free: {
     who: "pricing.tierDetail.audience.free.who",
     usecase: [
@@ -100,46 +105,6 @@ const TIER_AUDIENCE: Record<TierId, { who: string; usecase: string[]; notFor: st
       "pricing.tierDetail.audience.free.usecase4",
     ],
     notFor: "pricing.tierDetail.audience.free.notFor",
-  },
-  lite: {
-    who: "pricing.tierDetail.audience.lite.who",
-    usecase: [
-      "pricing.tierDetail.audience.lite.usecase1",
-      "pricing.tierDetail.audience.lite.usecase2",
-      "pricing.tierDetail.audience.lite.usecase3",
-      "pricing.tierDetail.audience.lite.usecase4",
-    ],
-    notFor: "pricing.tierDetail.audience.lite.notFor",
-  },
-  medium: {
-    who: "pricing.tierDetail.audience.medium.who",
-    usecase: [
-      "pricing.tierDetail.audience.medium.usecase1",
-      "pricing.tierDetail.audience.medium.usecase2",
-      "pricing.tierDetail.audience.medium.usecase3",
-      "pricing.tierDetail.audience.medium.usecase4",
-    ],
-    notFor: "pricing.tierDetail.audience.medium.notFor",
-  },
-  full: {
-    who: "pricing.tierDetail.audience.full.who",
-    usecase: [
-      "pricing.tierDetail.audience.full.usecase1",
-      "pricing.tierDetail.audience.full.usecase2",
-      "pricing.tierDetail.audience.full.usecase3",
-      "pricing.tierDetail.audience.full.usecase4",
-    ],
-    notFor: "pricing.tierDetail.audience.full.notFor",
-  },
-  pro: {
-    who: "pricing.tierDetail.audience.pro.who",
-    usecase: [
-      "pricing.tierDetail.audience.pro.usecase1",
-      "pricing.tierDetail.audience.pro.usecase2",
-      "pricing.tierDetail.audience.pro.usecase3",
-      "pricing.tierDetail.audience.pro.usecase4",
-    ],
-    notFor: "pricing.tierDetail.audience.pro.notFor",
   },
   enterprise: {
     who: "pricing.tierDetail.audience.enterprise.who",
@@ -215,7 +180,6 @@ export default function TierDetailPage() {
   const [data, setData] = useState<PricingPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [period, setPeriod] = useState<BillingPeriod>("annual");
   const [currency, setCurrency] = useState<CurrencyCode>("USD");
 
   useEffect(() => {
@@ -307,9 +271,24 @@ export default function TierDetailPage() {
     return `${symbol}${Math.round(usd * rate).toLocaleString("ru-RU")}`;
   };
 
-  const audience = TIER_AUDIENCE[tier.id];
-  const faq = TIER_FAQ[tier.id];
-  const showPrice = period === "annual" ? tier.priceAnnualPerMonth : tier.priceMonthly;
+  const срок = isTermTier(tier.id) ? tier.id : null;
+  const месяцев = tier.termMonths ?? 0;
+  // Подстановки общих текстов срока: числа — из ответа API, не из словаря.
+  const vars = {
+    name: tier.name,
+    months: String(месяцев),
+    unit: t(termUnitKey(месяцев)),
+    total: displayPrice(tier.priceTermTotal),
+    perMonth: displayPrice(tier.priceMonthly),
+    saving: String(срок ? termSavingPercent(срок) : 0),
+  };
+  const audience = срок ? TERM_AUDIENCE : (TIER_AUDIENCE[tier.id as ТарифБезСрока] ?? TIER_AUDIENCE.free);
+  // У Lite экономии нет — вместо «экономия 0%» отдельный ответ про лестницу.
+  const faq = срок
+    ? TERM_FAQ.map((f, i) => (i === 3 && срок === "lite" ? { ...f, a: "pricing.tierDetail.faq.term.a4one" } : f))
+    : (TIER_FAQ[tier.id as ТарифБезСрока] ?? []);
+  const showPrice = tier.priceMonthly;
+  const экономия = срок ? termSavingPercent(срок) : 0;
 
   return (
     <ProductPageShell maxWidth={1100}>
@@ -340,7 +319,7 @@ export default function TierDetailPage() {
           style={{
             display: "inline-block",
             padding: "4px 12px",
-            background: tier.id === "enterprise" ? "#0f172a" : tier.id === "pro" ? "#7c3aed" : "#0d9488",
+            background: tier.id === "enterprise" ? "#0f172a" : tier.highlight ? "#7c3aed" : "#0d9488",
             color: "#fff",
             fontSize: 11,
             fontWeight: 800,
@@ -373,6 +352,33 @@ export default function TierDetailPage() {
           {showPrice !== null && showPrice > 0 && (
             <span style={{ fontSize: 16, color: "#64748b", marginLeft: 4 }}>{t("pricing.tierDetail.hero.perMonth")}</span>
           )}
+          {tier.termMonths !== null && tier.priceTermTotal !== null && tier.priceTermTotal > 0 && (
+            <div style={{ fontSize: 16, fontWeight: 700, color: "#334155", marginTop: 6 }}>
+              {tier.termMonths === 1
+                ? t("pricing.home.tier.termTotalOne", { total: displayPrice(tier.priceTermTotal) })
+                : t("pricing.home.tier.termTotal", {
+                    total: displayPrice(tier.priceTermTotal),
+                    months: String(tier.termMonths),
+                    unit: t(termUnitKey(tier.termMonths)),
+                  })}
+            </div>
+          )}
+          {экономия > 0 && (
+            <span
+              style={{
+                display: "inline-block",
+                marginTop: 8,
+                background: "#d1fae5",
+                color: "#065f46",
+                fontSize: 12,
+                fontWeight: 800,
+                padding: "3px 10px",
+                borderRadius: 999,
+              }}
+            >
+              {t("pricing.home.tier.saving", { percent: String(экономия) })}
+            </span>
+          )}
         </div>
         <div
           style={{
@@ -382,34 +388,6 @@ export default function TierDetailPage() {
             flexWrap: "wrap",
           }}
         >
-          <div
-            style={{
-              display: "inline-flex",
-              background: "#f1f5f9",
-              borderRadius: 10,
-              padding: 4,
-              gap: 4,
-            }}
-          >
-            {(["monthly", "annual"] as BillingPeriod[]).map((p) => (
-              <button
-                key={p}
-                onClick={() => setPeriod(p)}
-                style={{
-                  padding: "6px 14px",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  borderRadius: 8,
-                  border: "none",
-                  cursor: "pointer",
-                  background: period === p ? "#fff" : "transparent",
-                  color: period === p ? "#0f172a" : "#64748b",
-                }}
-              >
-                {p === "monthly" ? t("pricing.tierDetail.hero.periodMonthly") : t("pricing.tierDetail.hero.periodAnnual")}
-              </button>
-            ))}
-          </div>
           <select
             value={currency}
             onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
@@ -454,7 +432,7 @@ export default function TierDetailPage() {
                 // This CTA hands off to the calculator rather than starting a
                 // checkout, so the funnel step is cta_click — without it the
                 // dashboard cannot tell which tier page sent someone to buy.
-                track({ type: "cta_click", tier: tierId, source: "pricing/[tierId]", meta: { period, currency } });
+                track({ type: "cta_click", tier: tierId, source: "pricing/[tierId]", meta: { termMonths: tier.termMonths, currency } });
                 router.push(`/pricing#calculator`);
               }}
               style={{
@@ -495,11 +473,11 @@ export default function TierDetailPage() {
             {t("pricing.tierDetail.audience.whoTitle")}
           </h3>
           <p style={{ margin: 0, marginBottom: 16, color: "#0f172a", fontSize: 14, lineHeight: 1.5 }}>
-            {t(audience.who)}
+            {t(audience.who, vars)}
           </p>
           <ul style={{ margin: 0, paddingLeft: 18, color: "#475569", fontSize: 13, lineHeight: 1.7 }}>
             {audience.usecase.map((u, i) => (
-              <li key={i}>{t(u)}</li>
+              <li key={i}>{t(u, vars)}</li>
             ))}
           </ul>
         </div>
@@ -515,7 +493,7 @@ export default function TierDetailPage() {
             {t("pricing.tierDetail.audience.notForTitle")}
           </h3>
           <p style={{ margin: 0, color: "#7f1d1d", fontSize: 14, lineHeight: 1.5 }}>
-            {t(audience.notFor)}
+            {t(audience.notFor, vars)}
           </p>
         </div>
       </section>
@@ -635,7 +613,7 @@ export default function TierDetailPage() {
         </h2>
         <div>
           {faq.map((f, i) => (
-            <FAQItem key={i} q={t(f.q)} a={t(f.a)} />
+            <FAQItem key={i} q={t(f.q, vars)} a={t(f.a, vars)} />
           ))}
         </div>
       </section>
@@ -678,7 +656,7 @@ export default function TierDetailPage() {
           ) : (
             <button
               onClick={() => {
-                track({ type: "cta_click", tier: tierId, source: "pricing/[tierId]#final", meta: { period, currency } });
+                track({ type: "cta_click", tier: tierId, source: "pricing/[tierId]#final", meta: { termMonths: tier.termMonths, currency } });
                 router.push("/pricing#calculator");
               }}
               style={{

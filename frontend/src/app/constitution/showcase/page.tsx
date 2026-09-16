@@ -10,6 +10,7 @@ import {
   type Sliders,
 } from "@/lib/constitution";
 import { useFunnel } from "@/lib/useFunnel";
+import { PLANET_BASE_MONTHLY, fromPricePerMonth } from "@/lib/termPricing";
 import { useI18n } from "@/lib/i18n";
 
 const SHOWCASE_PRESETS = [
@@ -234,7 +235,9 @@ console.log(items[0].id); // "open-access"`;
       <section className="px-6 py-12 bg-[#0b1736]/40">
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-2xl md:text-3xl font-bold text-[#f5d27a] mb-2">
-            $0 → $9 → $49
+            {/* 15.09.2026: Pro/Team отдельными подписками сняты — Pro в подписке
+                AEVION; «от» — месяц на 12-месячном сроке, из лестницы сроков. */}
+            Free → от ${fromPricePerMonth(PLANET_BASE_MONTHLY)}/мес
           </h2>
           <p className="text-[#9aa3c0] mb-6">
             {t("constitution.showcase.pricingDescription")}

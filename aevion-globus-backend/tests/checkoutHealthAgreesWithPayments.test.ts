@@ -137,21 +137,26 @@ describe("две ручки состояния согласны о том, кт�
     // разных вопроса под одним словом; проверяем именно РАЗНИЦУ.
     process.env.LEMON_SQUEEZY_API_KEY = "тест-ключ";
     process.env.LEMON_SQUEEZY_STORE_ID = "1234";
-    delete process.env.LEMON_SQUEEZY_VARIANT_LITE_MONTHLY;
+    delete process.env.LEMON_SQUEEZY_VARIANT_LITE;
 
     const без = await request(app()).get("/api/pricing/checkout/healthz");
     const s1 = без.body.providers.lemonsqueezy.sellable;
     expect(s1).toBeTruthy();
-    expect(s1.missing).toContain("tier_lite_monthly");
+    expect(s1.missing).toContain("tier_lite");
     // и при этом «настроен» остаётся true — без отдельного поля разница
     // была бы невидима
     expect(без.body.providers.lemonsqueezy.configured).toBe(true);
 
-    process.env.LEMON_SQUEEZY_VARIANT_LITE_MONTHLY = "12345";
+    process.env.LEMON_SQUEEZY_VARIANT_LITE = "12345";
     const с = await request(app()).get("/api/pricing/checkout/healthz");
     const s2 = с.body.providers.lemonsqueezy.sellable;
-    expect(s2.configured).toContain("tier_lite_monthly");
-    expect(s2.missing).not.toContain("tier_lite_monthly");
+    expect(s2.configured).toContain("tier_lite");
+    expect(s2.missing).not.toContain("tier_lite");
+    // С 15.09.2026 продаются 30 ссылок (5 сроков планеты + 5 приложений × 5);
+    // прежние tier_*_monthly в список продаваемого не входят.
+    expect(s2.configured.length + s2.missing.length).toBe(30);
+    expect([...s2.configured, ...s2.missing]).not.toContain("tier_lite_monthly");
+    delete process.env.LEMON_SQUEEZY_VARIANT_LITE;
 
     // Значения переменных — идентификаторы товара в чужой панели, их в
     // ответе быть не должно: возвращаем только имена ссылок.

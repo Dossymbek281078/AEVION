@@ -1,78 +1,65 @@
 "use client";
 
 import { useState } from "react";
-import { gumroadCheckoutUrl } from "@/lib/gumroad";
-import { productById, withChannel } from "@/lib/products";
+import { PRICING_TERMS, keepChannel, productById } from "@/lib/products";
+import { fromPricePerMonth } from "@/lib/termPricing";
 import { channelNow } from "@/lib/channelNow";
 import { track } from "@/lib/track";
 
-// Единственный живой процессинг — Gumroad (Paddle/Stripe/LemonSqueezy не в
-// primary). Кнопка ведёт на Gumroad-чекаут. Legacy-имя PaddleUpgradeButton
+// Кнопка апселла на страницах модулей. Legacy-имя PaddleUpgradeButton
 // реэкспортится из ./PaddleUpgradeButton для старых импортов (~11 модулей).
+//
+// ⚠️ 15.09.2026 — новая ценовая политика: подписка AEVION — это СРОК доступа ко
+// всей планете (1–12 месяцев), оплата за срок вперёд. Прежде баннер продавал
+// All-Access на Gumroad, товар снят с продажи. Теперь кнопка ведёт на страницу
+// цен, к выбору срока: там же и касса. Прямой ссылки в кассу на новую лестницу
+// нет (товары ещё заводятся в магазине), поэтому здесь её и не выдумываем.
+
+/** Подписка на всю планету — карточка каталога, из неё и цена, и адрес. */
+const PLANET_ID = "aevion-planet";
 
 interface Props {
   /**
-   * Tier tag for attribution only — the charge comes from the Gumroad product,
-   * not from this value. Defaults to `full`: the banner sells All-Access ("все
-   * модули включены"), and `full` is the closest tier label for that. It used to
-   * default to `pro` (Universe), which tagged every hand-off with a tier the copy
-   * never offered. `pro`/`business` stay accepted for legacy callers.
+   * Метка для аналитики, на цену не влияет. Прежние значения (`full`, `pro`,
+   * `business`) принимаются, чтобы не трогать страницы, которые их передают.
    */
-  tierId?: "full" | "pro" | "business";
+  tierId?: string;
   /** "button" — обычная кнопка, "banner" — полоса на всю ширину, "pill" — компактный */
   variant?: "button" | "banner" | "pill";
-  /** Название приложения — пробрасывается в Gumroad URL для аналитики атрибуции */
+  /** Название приложения — едет в событие аналитики, чтобы видеть, откуда пришли */
   appId?: string;
   label?: string;
   className?: string;
 }
 
 export function UpgradeButton({
-  tierId = "full",
+  tierId,
   variant = "button",
   appId = "platform",
   label,
   className = "",
 }: Props) {
   const [loading, setLoading] = useState(false);
-  // The Gumroad All-Access subscription this banner sells.
-  const allAccess = productById("xpxzam");
+  const planet = productById(PLANET_ID);
 
   function handleClick() {
     setLoading(true);
-    // Purchase intent from a module page. Without this the funnel dashboard
-    // only ever saw checkout_start from the /pricing table, so every upgrade
-    // started here (9 module pages) was invisible. track() uses sendBeacon,
-    // which survives the navigation below.
-    // Метку канала ставит сам track(): она нужна ВСЕМ событиям оплаты, а их
-    // отправителей десять. Держать её здесь значило бы завести десятую копию
-    // одного механизма — см. пояснение в lib/track.ts.
+    // Нажатие апселла — намерение, а не начало оплаты: оплата начнётся на
+    // /pricing, и там своё событие checkout_start. Слать его и здесь значило
+    // бы считать одну покупку дважды.
     track({
-      type: "checkout_start",
+      type: "cta_click",
       tier: tierId,
       source: `upgrade-button/${appId}`,
-      meta: { variant, processor: "gumroad" },
+      meta: { variant, target: "pricing" },
     });
-    // Gumroad hosted checkout — единственный живой рельс.
-    //
-    // Метка канала доводится до САМОЙ ОПЛАТЫ, а не только до нашего события.
-    // Обработчик оплаты уже умеет её принимать — читает url_params[channel] и
-    // url_params[utm_source]. Не хватало отправителя: эта кнопка стоит на
-    // девяти страницах модулей и уводила на кассу без метки, то есть про
-    // начатую оплату канал был известен, а про оплаченную — нет.
-    //
-    // Через withChannel, а не своей строкой: у Gumroad отчёт заводится по
-    // полной тройке utm, и неполный набор в него не попадает.
-    const channel = channelNow();
-    window.location.href = withChannel(
-      gumroadCheckoutUrl({ key: appId, tier: tierId }),
-      channel,
-      "upsell",
-    );
+    // Метка канала едет короткой ?c= до ХЕША — страница цен читает её через
+    // channelNow и доводит до кассы. keepChannel ставит её в правильное место.
+    window.location.href = keepChannel(planet?.href ?? PRICING_TERMS, channelNow());
   }
 
-  const defaultLabel = "Разблокировать всё";
-  const text = loading ? "Открываем оплату..." : (label ?? defaultLabel);
+  const defaultLabel = "Выбрать срок";
+  const text = loading ? "Открываем цены..." : (label ?? defaultLabel);
 
   if (variant === "banner") {
     return (
@@ -95,15 +82,15 @@ export function UpgradeButton({
               640px поведение остаётся прежним, побайтно. */}
         <div className="bg-gradient-to-r from-blue-600/20 to-violet-600/20 border border-blue-500/30 rounded-xl p-4 flex flex-wrap sm:flex-nowrap items-center justify-between gap-4">
           <div>
-            {/* This button opens the Gumroad product `xpxzam`, NOT a tier checkout,
-                so the price must come from the product catalogue — not from the tier
-                registry. $59 is the real Gumroad price, verified against the live
-                dashboard on 2026-07-26 (see lib/products.ts). Imported rather than
-                typed so it tracks the catalogue. */}
-            <div className="text-sm font-semibold text-white">
-              AEVION All-Access — ${allAccess?.priceUsd ?? 59}/мес
-            </div>
-            <div className="text-xs text-gray-400 mt-0.5">Все модули включены · Отмена в любой момент · Карта любого банка</div>
+            {/* Цена — только из каталога и лестницы сроков (@/lib/termPricing),
+                не литералом: баннер годами показывал число, которого касса не
+                списывала. «от» — это месяц на самом длинном сроке (12 месяцев). */}
+            {planet ? (
+              <div className="text-sm font-semibold text-white">
+                {planet.title} — от ${fromPricePerMonth(planet.priceUsd)}/мес
+              </div>
+            ) : null}
+            <div className="text-xs text-gray-400 mt-0.5">Все модули включены · срок от 1 до 12 месяцев · оплата за срок вперёд</div>
           </div>
           <button
             onClick={handleClick}

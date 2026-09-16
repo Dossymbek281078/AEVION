@@ -46,11 +46,13 @@ import {
   возвратКасаетсяДействующей,
   type Subscription,
 } from "./provisioning";
-import { periodForReference } from "../lib/payment/billingPeriod";
+import { termMonthsForReference } from "../lib/payment/billingPeriod";
 import {
   referenceForVariantId,
   resolveLemonSqueezyVariant,
   tierForLemonSqueezyReference,
+  priceForReference,
+  legacyStudioProVariantId,
   isAppReference,
   appSlugForReference,
   type LemonSqueezyReference,
@@ -152,7 +154,6 @@ const DEACTIVATE_EVENTS = new Set([
 
 function modulesForReference(ref: LemonSqueezyReference | null): string[] {
   if (!ref) return [];
-  if (ref.includes("medium")) return [...MEDIUM_BUNDLE];
   // full → [] is read as "all" by the welcome email + access is granted by tier;
   // lite → [] (1 product of choice, selected in the cabinet after checkout).
   return [];
@@ -266,7 +267,7 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
     // же факта. Переименуй кто-нибудь переменную в карте — прямое чтение
     // сохранило бы старое имя, выдача тарифа за $149 тихо перестала бы
     // срабатывать, а заплативший не получил бы ничего.
-    const studioVariant = resolveLemonSqueezyVariant("app_devhub");
+    const studioVariant = legacyStudioProVariantId();
     const variantId = String(attrs.variant_id ?? "");
     if (studioVariant && variantId === studioVariant && email) {
       const tier = revoke ? "free" : "pro";
@@ -324,7 +325,8 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
     if (attrs.total !== undefined && attrs.total !== null) {
       const paid = Number(attrs.total);
       const tier = TIERS.find((t) => t.id === tierForLemonSqueezyReference(ref));
-      const monthlyCents = tier && tier.priceMonthly != null ? Math.round(tier.priceMonthly * 100) : null;
+      const потолокUsd = priceForReference(ref);
+      const потолокCents = потолокUsd != null ? Math.round(потолокUsd * 100) : null;
       if (Number.isFinite(paid) && paid === 0) {
         // Ноль у платного тарифа — это не «дешевле», а «доступ бесплатно».
         console.warn(
@@ -332,14 +334,14 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
             `(купон на 100% или ошибка настройки варианта)`,
         );
         capture(new Error(`ls_zero_total_provisioned:${payload.data?.id ?? "?"}`), { route: "ls/webhook" });
-      } else if (Number.isFinite(paid) && monthlyCents !== null && paid > monthlyCents * 12) {
+      } else if (Number.isFinite(paid) && потолокCents !== null && paid > потолокCents) {
         // Порог — годовая стоимость по МЕСЯЧНОЙ цене. Годовой тариф у нас
         // дешевле двенадцати месяцев, скидки только уменьшают, поэтому всё,
         // что выше этой границы, законного прочтения не имеет: с человека
         // взяли больше, чем мы где-либо обещали. И он этого не увидит — наш
         // экран успеха показывает ОЖИДАЕМУЮ сумму из адреса возврата.
         console.warn(
-          `[ls/webhook] ${event}: списано ${paid} при потолке ${monthlyCents * 12} для тарифа ` +
+          `[ls/webhook] ${event}: списано ${paid} при потолке ${потолокCents} для тарифа ` +
             `${tier?.id ?? "?"} — с покупателя взяли БОЛЬШЕ обещанного`,
         );
         capture(new Error(`ls_overcharge:${payload.data?.id ?? "?"}`), { route: "ls/webhook" });
@@ -440,11 +442,11 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
       // paypal правило было изначально. Четвёртая касса отстала молча,
       // потому что правило жило тремя копиями — теперь оно одно
       // (lib/payment/billingPeriod).
-      const period = periodForReference(ref ?? "");
+      const termMonths = termMonthsForReference(ref ?? "");
       const result = await provisionSubscription({
         email,
         tierId,
-        period,
+        termMonths,
         modules,
         source: "lemonsqueezy",
         // ФАКТИЧЕСКИ списанное, а не то, что мы ожидали. Поле amountUsd в записи
@@ -489,7 +491,7 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         ts: new Date().toISOString(),
         email,
         tierId: "free",
-        period: "monthly",
+        termMonths: null,
         seats: 1,
         modules: [],
         trialDays: 0,

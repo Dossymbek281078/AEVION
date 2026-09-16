@@ -5,51 +5,60 @@ export const alt = "AEVION Tier";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-// Prices MUST match the tier registry in aevion-globus-backend/src/data/pricing.ts.
-// This card is a share surface — it is the classic place a retired price survives
-// a repricing, because nobody re-opens an OG image. Repriced 2026-07-22:
-// lite 19→24, medium 29→39, full 49→89, and `pro` (Universe) was missing entirely,
-// so /pricing/pro used to share a card reading "Medium $29".
-const TIER_DATA: Record<string, { name: string; price: string; tagline: string; gradient: string }> = {
+import { изСправочника } from "@/lib/mapLookup";
+import {
+  PLANET_BASE_MONTHLY,
+  TERM_MONTHS,
+  TERM_NAME,
+  TERM_TIERS,
+  termPricePerMonth,
+  termTotal,
+  type TermTier,
+} from "@/lib/termPricing";
+
+type TierCard = { name: string; price: string; total: string | null; tagline: string; gradient: string };
+
+// Карточка — поверхность для репостов, и это классическое место, где переживает
+// смену цен старая цифра: картинку никто не открывает заново. Так уже было дважды
+// (22.07 и 15.09.2026). Поэтому цены сроков НЕ вписаны руками, а считаются из
+// lib/termPricing.ts — той же копии, что сверяется с бэкендом сторожем
+// termPricingMatchesBackend.
+const GRADIENT: Record<TermTier, string> = {
+  lite: "linear-gradient(135deg, #0d9488, #0ea5e9)",
+  medium: "linear-gradient(135deg, #0ea5e9, #6366f1)",
+  pro: "linear-gradient(135deg, #4338ca, #a21caf)",
+  full: "linear-gradient(135deg, #7c3aed, #ec4899)",
+  max: "linear-gradient(135deg, #0f766e, #0f172a)",
+};
+
+const TIER_DATA: Record<string, TierCard> = {
   free: {
     name: "Free",
     price: "$0",
+    total: null,
     tagline: "Старт без барьеров",
     gradient: "linear-gradient(135deg, #475569, #94a3b8)",
   },
-  lite: {
-    name: "Lite",
-    price: "$19",
-    tagline: "Один продукт на выбор",
-    gradient: "linear-gradient(135deg, #0d9488, #0ea5e9)",
-  },
-  medium: {
-    name: "Medium",
-    price: "$29",
-    tagline: "Бандл из 10 продуктов",
-    gradient: "linear-gradient(135deg, #0ea5e9, #6366f1)",
-  },
-  full: {
-    name: "Full",
-    price: "$49",
-    tagline: "Вся экосистема AEVION",
-    gradient: "linear-gradient(135deg, #7c3aed, #ec4899)",
-  },
-  pro: {
-    name: "Universe",
-    price: "$149",
-    tagline: "Всё AEVION в одном месте",
-    gradient: "linear-gradient(135deg, #4338ca, #a21caf)",
-  },
+  ...Object.fromEntries(
+    TERM_TIERS.map((term): [TermTier, TierCard] => [
+      term,
+      {
+        name: TERM_NAME[term],
+        price: `$${termPricePerMonth(PLANET_BASE_MONTHLY, term)}`,
+        total: `$${termTotal(PLANET_BASE_MONTHLY, term)}`,
+        tagline: `Вся планета AEVION · ${TERM_MONTHS[term]} мес.`,
+        gradient: GRADIENT[term],
+      },
+    ]),
+  ),
   enterprise: {
     name: "Enterprise",
     price: "Custom",
+    total: null,
     tagline: "Для корпораций и госсектора",
     gradient: "linear-gradient(135deg, #0f172a, #1e293b)",
   },
 };
-
-import { изСправочника } from "@/lib/mapLookup";
 
 export default async function Image({ params }: { params: Promise<{ tierId: string }> }) {
   const { tierId } = await params;
@@ -131,13 +140,17 @@ export default async function Image({ params }: { params: Promise<{ tierId: stri
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
           <div style={{ display: "flex", flexDirection: "column" }}>
-            <span style={{ fontSize: 14, opacity: 0.7, fontWeight: 700, letterSpacing: "0.08em" }}>ОТ</span>
             <span style={{ fontSize: 96, fontWeight: 900, letterSpacing: "-0.04em", lineHeight: 1 }}>
               {tier.price}
               {tier.price !== "Custom" && (
                 <span style={{ fontSize: 32, opacity: 0.7, marginLeft: 8 }}>/мес</span>
               )}
             </span>
+            {tier.total && (
+              <span style={{ fontSize: 24, opacity: 0.85, fontWeight: 700, marginTop: 8 }}>
+                {tier.total} за весь срок вперёд
+              </span>
+            )}
           </div>
           <div style={{ fontSize: 16, opacity: 0.7 }}>aevion.app/pricing/{tierId}</div>
         </div>

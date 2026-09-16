@@ -30,9 +30,9 @@ const SLIDES = [
   {
     id: "pricing",
     label: "03 / Pricing",
-    title: "Free / Pro $9 / Team $49 — instant digital delivery",
+    title: "Free / Pro in the AEVION subscription — instant digital delivery",
     description:
-      "Free tier: 5 cloud saves, 10 AI requests/day, watermarked PDF. Pro ($9/mo): unlimited saves, unlimited AI, clean PDF, embed widget, custom themes. Team ($49/mo): 5 seats, shared scenarios, admin dashboard, CSV export, Slack support. All features are software-only — no physical goods, no manual work. Access activates within seconds of Lemon Squeezy webhook.",
+      "Free tier: 5 cloud saves, 10 AI requests/day, watermarked PDF. Pro comes with the AEVION subscription — every module for a term of 1 to 12 months, paid up front: unlimited saves, unlimited AI, clean PDF, embed widget, custom themes. All features are software-only — no physical goods, no manual work.",
     img: "/demo/pricing.jpeg",
     live: "/constitution/pricing",
     liveLabel: "See pricing →",

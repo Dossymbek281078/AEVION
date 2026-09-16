@@ -2251,9 +2251,9 @@ function ProPaywallBanner({
         </div>
         <div className="flex flex-col gap-2 flex-shrink-0">
           <a
-            href="https://aevion.gumroad.com/l/pyiaz"
-            target="_blank"
-            rel="noopener noreferrer"
+            // 15.09.2026: Constitution Pro отдельной подпиской (Gumroad pyiaz) снят —
+            // Pro входит в подписку AEVION, срок выбирается на странице цен.
+            href="/pricing#tiers"
             // Constitution keeps its own funnel (useFunnel → /api/constitution/funnel/track);
             // its /pricing page already fires upgrade_click here, this banner did not.
             onClick={() => track("upgrade_click", { tier: "pro", source: "constitution/inline-banner" })}
@@ -2262,7 +2262,7 @@ function ProPaywallBanner({
             Upgrade →
           </a>
           <span className="text-[10px] text-[#9aa3c0] text-center">
-            Gumroad · cancel anytime
+            AEVION · 1–12 months
           </span>
         </div>
       </div>

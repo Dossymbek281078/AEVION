@@ -94,12 +94,13 @@ const TIER_RANK: Record<CanonicalTier, number> = {
  */
 export function normalizeTier(tier: string | null | undefined): CanonicalTier {
   switch ((tier ?? "free").toLowerCase()) {
+    // С 15.09.2026 любой платный тариф — это срок доступа ко ВСЕЙ планете
+    // (data/pricing.ts, TERM_*): lite и medium больше не урезанные наборы.
     case "lite":
-      return "lite";
     case "medium":
-      return "medium";
-    case "full":
     case "pro":
+    case "full":
+    case "max":
     case "business":
       return "full";
     case "enterprise":

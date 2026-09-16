@@ -80,16 +80,25 @@ describe("отказ списания виден", () => {
       .split("\n")
       .map((l, n) => [n + 1, l] as const)
       .filter(([, l]) => l.includes("debitCredit("));
+    // 15.09.2026 (a6a372e75): списание гостя идёт ещё и по адресу клиента —
+    // рекурсивным вызовом ВНУТРИ самой debitCredit. Это не обход: отказ
+    // рекурсии ловит тот же catch с журналом, а у ключа guest-ip второго
+    // уровня нет. Разрешена ровно эта строка, а не «любой вызов внутри».
+    const recursion = "if (ipKey) await debitCredit(ipKey, capability, amount)";
     const allowed = lines.filter(
       ([, l]) =>
         l.includes("async function debitCredit(") ||
-        l.includes("return debitCredit(userId, capability, amount)"),
+        l.includes("return debitCredit(userId, capability, amount)") ||
+        l.includes(recursion),
     );
     expect(
       lines.filter((x) => !allowed.includes(x)).map(([n, l]) => `${n}: ${l.trim()}`),
       "списание зовут мимо обёртки — отказ снова невидим",
     ).toEqual([]);
-    expect(allowed.length, "объявление и обёртка должны быть на месте").toBe(2);
+    expect(
+      allowed.filter(([, l]) => !l.includes(recursion)).length,
+      "объявление и обёртка должны быть на месте",
+    ).toBe(2);
   });
 
   test("обёртка называет И что, И у кого не списалось", () => {

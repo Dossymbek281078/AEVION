@@ -52,8 +52,16 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const APP = resolve(HERE, "..");
 const SRC = resolve(APP, "..");
 
-/** Ждут решения основателя; список обязан только сокращаться. */
-const KNOWN = ["qcontract", "qpaynet"];
+/**
+ * Ждут решения основателя; список обязан только сокращаться.
+ * 15.09.2026: решение пришло — QContract и QPayNet сняты с отдельной продажи
+ * (входят в подписку AEVION). Цены у них нет, противоречия «платно и тут же
+ * демонстрация» больше нет, список пуст.
+ */
+const KNOWN: string[] = [];
+
+/** Признак цены у позиции каталога: литерал или вычисление из лестницы сроков. */
+const PRICED = /priceUsd:\s*(\d+|appBase\(|PLANET_BASE_MONTHLY)/;
 
 /** Варианты баннера, которые объявляют продукт демонстрацией. */
 function demoVariants(): string[] {
@@ -88,7 +96,8 @@ function pricedIds(): string[] {
   for (let i = 0; i < anchors.length; i += 1) {
     const end = i + 1 < anchors.length ? anchors[i + 1].at : src.length;
     const win = src.slice(anchors[i].at, end);
-    if (/priceUsd:\s*\d+/.test(win)) out.push(anchors[i].id);
+    // Литерал (гайды) или вычисление из лестницы сроков (политика 15.09.2026).
+    if (PRICED.test(win)) out.push(anchors[i].id);
   }
   return out;
 }
@@ -108,7 +117,7 @@ function pricedWithDemoNotice(): string[] {
   for (let i = 0; i < anchors.length; i += 1) {
     const end = i + 1 < anchors.length ? anchors[i + 1].at : src.length;
     const win = src.slice(anchors[i].at, end);
-    if (!/priceUsd:\s*\d+/.test(win)) continue;
+    if (!PRICED.test(win)) continue;
     const notice = /notice:\s*[\s\S]{0,40}?"([^"]{0,60})/.exec(win);
     if (notice && /Демонстрацион|Demonstration/.test(notice[1])) out.push(anchors[i].id);
   }

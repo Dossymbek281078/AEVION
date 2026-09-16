@@ -1,57 +1,71 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { TIERS, TERM_TIERS, TERM_MONTHS, TERM_NAME, STANDALONE_APPS, termTotal } from "../src/data/pricing";
+import { priceForReference, STOREFRONT_NAME_TO_REFERENCE } from "../src/data/lemonSqueezyVariants";
 
 /**
- * Сторож: цены в ИНСТРУКЦИИ по настройке кассы совпадают с тарифами.
+ * Сторож: ИНСТРУКЦИЯ по настройке кассы не расходится с тарифами.
  *
- * Повод (29.08.2026). В шапке lemonSqueezyVariants.ts лежало указание
- * человеку: завести в LemonSqueezy варианты по $24/$39/$89. Это цены
- * от 22.07; 13.08 их вернули к 19/29/49 (d424fbf07), и pricing.ts вместе
- * с ответом прода говорит именно так. Настроивший кассу по инструкции
- * списывал бы с покупателя БОЛЬШЕ, чем обещает витрина, — а несовпадение
- * витрины и списания в этом файле уже случалось раньше и описано в нём же.
+ * Повод (29.08.2026). В шапке lemonSqueezyVariants.ts лежало указание человеку:
+ * завести в Lemon Squeezy варианты по $24/$39/$89 — цены от 22.07, давно
+ * сменённые. Настроивший кассу по инструкции списывал бы с покупателя БОЛЬШЕ, чем
+ * обещает витрина.
  *
- * Комментарий — не код, его не проверяет ни тип, ни тест: он стареет
- * молча. Здесь он проверяется, потому что по нему делают денежное
- * действие руками.
- *
- * Знаменатель честный: три тарифа, у каждого месяц и год.
+ * С 15.09.2026 инструкция не пересказывает цены: она велит завести вариант
+ * «каждые N месяцев» с ценой ЗА ВЕСЬ СРОК, равной priceForReference, а товары
+ * называть ровно как в STOREFRONT_NAME_TO_REFERENCE. Поэтому сторож держит три
+ * вещи, по которым человек делает денежное действие руками:
+ *   • сроки в инструкции равны лестнице (TERM_MONTHS);
+ *   • в инструкции нет долларовых сумм — пересказ цены стареет молча;
+ *   • priceForReference, на который она ссылается, даёт платёж за срок тарифа и
+ *     приложения, а названия товаров несут тот же срок в месяцах.
  */
 const ФАЙЛ = join(__dirname, "..", "src", "data", "lemonSqueezyVariants.ts");
-const ЦЕНЫ = join(__dirname, "..", "src", "data", "pricing.ts");
-
-/** Месячная цена тарифа из pricing.ts — источник правды. */
-function тариф(id: string): number {
-  const s = readFileSync(ЦЕНЫ, "utf8");
-  const i = s.indexOf(`id: "${id}"`);
-  expect(i, `тариф ${id} не найден в pricing.ts`).toBeGreaterThan(-1);
-  const m = /priceMonthly:\s*([0-9]+)/.exec(s.slice(i, i + 700));
-  expect(m, `у тарифа ${id} не найдена priceMonthly`).not.toBeNull();
-  return Number(m![1]);
-}
+const текст = readFileSync(ФАЙЛ, "utf8");
+const шапка = текст.slice(0, текст.indexOf("import "));
 
 describe("инструкция по настройке кассы не расходится с тарифами", () => {
-  const текст = readFileSync(ФАЙЛ, "utf8");
+  it("контроль: шапка с инструкцией прочиталась", () => {
+    expect(шапка.length, "шапка файла пуста — сторож ослеп").toBeGreaterThan(200);
+    expect(шапка).toContain("priceForReference");
+  });
 
-  for (const [id, имя] of [["lite", "Lite"], ["medium", "Medium"], ["full", "Full"]]) {
-    it(`${имя}: цена в инструкции равна тарифу`, () => {
-      const цена = тариф(id);
-      // Строка вида " *      - Lite   $19/mo  + $190/yr variant"
-      const строка = текст.split(String.fromCharCode(10)).find((l) => l.includes(`- ${имя}`) && l.includes("/mo"));
-      expect(строка, `в инструкции нет строки настройки для ${имя}`).toBeTruthy();
-      const m = /\$([0-9]+)\/mo\s+\+\s+\$([0-9]+)\/yr/.exec(строка!);
-      expect(m, `в инструкции нет строки настройки для ${имя}`).not.toBeNull();
-      expect(Number(m![1]), `${имя}: инструкция велит взять не ту цену`).toBe(цена);
-      expect(Number(m![2]), `${имя}: годовая цена в инструкции не равна 10 месяцам`).toBe(цена * 10);
-    });
-  }
+  it("сроки ступеней в инструкции равны лестнице", () => {
+    const m = /lite (\d+) мес, medium (\d+), pro (\d+), full (\d+), max (\d+)/.exec(шапка);
+    expect(m, "строка со сроками ступеней исчезла из инструкции").not.toBeNull();
+    expect(m!.slice(1).map(Number), "инструкция велит завести не тот интервал подписки").toEqual(
+      TERM_TIERS.map((t) => TERM_MONTHS[t]),
+    );
+  });
 
-  it("строка «MUST match» называет действующие цены", () => {
-    const m = /lite (\d+)\/(\d+), medium (\d+)\/(\d+), full (\d+)\/(\d+)/.exec(текст);
-    expect(m, "строка со сводкой цен исчезла из инструкции").not.toBeNull();
-    expect([Number(m![1]), Number(m![3]), Number(m![5])]).toEqual([
-      тариф("lite"), тариф("medium"), тариф("full"),
-    ]);
+  it("инструкция не называет долларовых цен — их источник один", () => {
+    const строки = шапка.split(String.fromCharCode(10)).filter((l) => /\$\s?\d/.test(l));
+    expect(строки, "в инструкции снова пересказаны цены — они разойдутся с тарифами").toEqual([]);
+  });
+
+  it("цена варианта планеты = платёж за срок тарифа", () => {
+    for (const t of TERM_TIERS) {
+      const tier = TIERS.find((x) => x.id === t)!;
+      expect(priceForReference(`tier_${t}`), `tier_${t}: касса и тариф разошлись`).toBe(tier.priceTermTotal);
+    }
+  });
+
+  it("цена варианта приложения = платёж за срок по базе приложения", () => {
+    for (const a of STANDALONE_APPS) {
+      for (const t of TERM_TIERS) {
+        expect(priceForReference(`app_${a.slug}_${t}`), `app_${a.slug}_${t}`).toBe(termTotal(a.baseMonthly, t));
+      }
+    }
+  });
+
+  it("название товара на витрине несёт срок ступени в месяцах", () => {
+    const имена = Object.entries(STOREFRONT_NAME_TO_REFERENCE);
+    expect(имена.length).toBe(TERM_TIERS.length * (1 + STANDALONE_APPS.length));
+    for (const [имя, ref] of имена) {
+      const ступень = ref.slice(ref.lastIndexOf("_") + 1) as (typeof TERM_TIERS)[number];
+      expect(имя, `${ref}: название товара не называет ступень`).toContain(`— ${TERM_NAME[ступень]} (`);
+      expect(имя, `${ref}: название товара называет не тот срок`).toContain(`(${TERM_MONTHS[ступень]} mo)`);
+    }
   });
 });

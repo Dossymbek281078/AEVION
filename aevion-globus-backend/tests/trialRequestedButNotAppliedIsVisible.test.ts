@@ -27,7 +27,7 @@ vi.mock("../src/lib/sentry/platform", () => ({
   },
 }));
 
-process.env.GUMROAD_PERMALINK_TIER_LITE_MONTHLY = "lite-monthly-slug";
+process.env.GUMROAD_PERMALINK_TIER_LITE = "lite-slug";
 
 const { checkoutRouter } = await import("../src/routes/checkout");
 
@@ -41,7 +41,7 @@ function приложение() {
 async function сессия(trial: boolean) {
   return request(приложение())
     .post("/api/pricing/checkout/session")
-    .send({ tierId: "lite", period: "monthly", seats: 1, trial, email: "buyer@example.test" });
+    .send({ tierId: "lite", seats: 1, trial, email: "buyer@example.test" });
 }
 
 beforeEach(() => {

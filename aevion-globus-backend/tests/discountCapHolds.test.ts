@@ -1,38 +1,35 @@
 import { describe, test, expect } from "vitest";
-import { buildQuote } from "../src/data/pricing";
+import { buildQuote, TERM_TIERS, STANDALONE_APPS, getModulePrice } from "../src/data/pricing";
 import { MAX_TOTAL_DISCOUNT_RATIO } from "../src/data/discounts";
 
 /**
  * Сумма всех скидок не может превысить потолок — ни при каком сочетании.
  *
- * Скидок в системе четыре вида, и каждая по отдельности выглядит скромно:
- * годовая оплата (−17%), объём мест (до −30%), объём модулей (до −20%) и
- * промо-код (до −50% или фиксированная сумма). Вместе они способны отдать
- * товар почти даром, и по одной цифре итога это не заметить — ровно поэтому
- * потолок и появился.
+ * Каждая скидка по отдельности выглядит скромно: объём мест (до −30%), объём
+ * модулей (до −20%), срок обязательства (до −10%) и промо-код (до −50% или
+ * фиксированная сумма). Вместе они способны отдать товар почти даром, и по одной
+ * цифре итога это не заметить — ровно поэтому потолок и появился.
  *
- * Замер 19.08.2026 на новых ценах: по всем проверенным сочетаниям максимум
- * составил ровно 50%, и в самом тяжёлом случае (Full, 25 мест, 8 модулей,
- * TEAM100) потолок честно срезал $265.
+ * С 15.09.2026 тариф — это срок: отдельной годовой скидки нет (выгода длинного
+ * срока уже в цене месяца), модули на платном сроке входят в подписку, а
+ * фиксированный промокод применяется ОДИН раз за покупку. Складываются теперь
+ * места, срок обязательства и промокод; модули — на free, где надстройки платные.
  *
  * Тест проверяет не конкретные суммы, а СВОЙСТВО: сколько ни складывай, ниже
  * потолка не уйдёт. Суммы меняются с каждым репрайсом, свойство — нет.
  */
 
-const MODULES_8 = ["qright", "qsign", "qcoreai", "qai", "qlearn", "qnews", "qstore", "qmedia"];
+const НАДСТРОЙКИ = STANDALONE_APPS.map((a) => a.moduleId).filter((id) => (getModulePrice(id)?.addonMonthly ?? 0) > 0);
 
 /** Сочетания, где скидки складываются сильнее всего. */
 const CASES = [
-  { name: "один, помесячно", period: "monthly" as const, seats: 1, modules: [] as string[], promo: undefined },
-  { name: "один, годовая", period: "annual" as const, seats: 1, modules: [], promo: undefined },
-  { name: "25 мест, годовая", period: "annual" as const, seats: 25, modules: [], promo: undefined },
-  { name: "25 мест + 8 модулей", period: "annual" as const, seats: 25, modules: MODULES_8, promo: undefined },
-  { name: "всё + процентный промо", period: "annual" as const, seats: 25, modules: MODULES_8, promo: "AEVION20" },
-  { name: "всё + фиксированный промо", period: "annual" as const, seats: 25, modules: MODULES_8, promo: "TEAM100" },
-  { name: "всё + STARTUP50", period: "annual" as const, seats: 25, modules: MODULES_8, promo: "STARTUP50" },
+  { name: "один, без ничего", seats: 1, commitmentMonths: undefined, promo: undefined },
+  { name: "25 мест", seats: 25, commitmentMonths: undefined, promo: undefined },
+  { name: "25 мест + обязательство 36 мес", seats: 25, commitmentMonths: 36, promo: undefined },
+  { name: "всё + процентный промо", seats: 25, commitmentMonths: 36, promo: "AEVION20" },
+  { name: "всё + фиксированный промо", seats: 25, commitmentMonths: 36, promo: "TEAM100" },
+  { name: "всё + STARTUP50", seats: 25, commitmentMonths: 36, promo: "STARTUP50" },
 ];
-
-const TIERS = ["lite", "medium", "full", "pro"] as const;
 
 describe("потолок суммарной скидки держится", () => {
   test("контроль: потолок объявлен и разумен", () => {
@@ -41,10 +38,7 @@ describe("потолок суммарной скидки держится", () =
     //
     // Верхняя граница здесь не косметика. Проверено мутацией 19.08.2026: если
     // поднять сам потолок до 0.9, все проверки ниже проходят — они сравнивают
-    // скидку с ОБЪЯВЛЕННЫМ потолком, а не с разумным. То есть планку можно
-    // поднять молча, и сторож это одобрит. Поэтому граница 0.6: выше — значит
-    // мы отдаём больше половины продукта, и такое решение должно быть видимым
-    // (тест краснеет и требует поменять его же).
+    // скидку с ОБЪЯВЛЕННЫМ потолком, а не с разумным. Поэтому граница 0.6.
     expect(MAX_TOTAL_DISCOUNT_RATIO).toBeGreaterThan(0);
     expect(
       MAX_TOTAL_DISCOUNT_RATIO,
@@ -54,21 +48,27 @@ describe("потолок суммарной скидки держится", () =
 
   test("контроль: сочетания действительно дают заметную скидку", () => {
     // Иначе тест «не превышает потолок» проходил бы на нулевых скидках.
-    const q = buildQuote({ tierId: "full", period: "annual", seats: 25, modules: MODULES_8, promoCode: "TEAM100" } as never);
+    const q = buildQuote({ tierId: "full", seats: 25, commitmentMonths: 36, promoCode: "AEVION20" });
     const pct = (q.subtotal - q.total) / q.subtotal;
     expect(pct, "самое тяжёлое сочетание почти не даёт скидки — проверять нечего").toBeGreaterThan(0.3);
   });
 
-  for (const tier of TIERS) {
+  test("контроль: STARTUP50 поверх мест и срока упирается в потолок, и это сказано", () => {
+    // Случай, где потолок обязан СРАБОТАТЬ, а не только не нарушаться.
+    const q = buildQuote({ tierId: "lite", seats: 25, commitmentMonths: 36, promoCode: "STARTUP50" });
+    expect(q.discountCappedBy, "потолок не срезал ничего — проверка «не выше потолка» не видела его работы").toBeGreaterThan(0);
+    expect(q.notes.join(" ")).toContain("потолком");
+  });
+
+  for (const tier of TERM_TIERS) {
     for (const c of CASES) {
       test(`${tier} · ${c.name} — не ниже потолка`, () => {
         const q = buildQuote({
           tierId: tier,
-          period: c.period,
           seats: c.seats,
-          modules: c.modules,
+          commitmentMonths: c.commitmentMonths,
           promoCode: c.promo,
-        } as never);
+        });
 
         expect(q.subtotal, "смета без суммы — считать нечего").toBeGreaterThan(0);
         expect(q.total, "итог не может быть отрицательным").toBeGreaterThanOrEqual(0);
@@ -83,4 +83,11 @@ describe("потолок суммарной скидки держится", () =
       });
     }
   }
+
+  test("free с платными надстройками, местами, сроком и промо — не ниже потолка", () => {
+    // Скидка за объём модулей теперь возможна только вне подписки.
+    const q = buildQuote({ tierId: "free", modules: НАДСТРОЙКИ, seats: 25, commitmentMonths: 36, promoCode: "AEVION20" });
+    expect(q.subtotal).toBeGreaterThan(0);
+    expect((q.subtotal - q.total) / q.subtotal).toBeLessThanOrEqual(MAX_TOTAL_DISCOUNT_RATIO + 0.001);
+  });
 });

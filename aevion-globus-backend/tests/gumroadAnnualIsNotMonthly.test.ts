@@ -6,21 +6,21 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 /**
- * Сторож: годовая покупка у Gumroad записывается как ГОДОВАЯ.
+ * Сторож: покупка срока у Gumroad записывается СВОИМ сроком, а не месяцем.
  *
  * ЧТО БЫЛО (замер 03.09.2026). В обработчике стояло
  * `const period = isMembership ? "monthly" : "monthly"` — тернарник, у
  * которого обе ветки одинаковы, то есть флаг не влиял ни на что. Все покупки
- * записывались месячными.
+ * записывались месячными. Годовая покупка у Gumroad — РАЗОВЫЙ платёж:
+ * продления не будет, и человек, заплативший за год, терял доступ через месяц.
  *
- * Цена ошибки: Gumroad продаёт годовые тарифы (tier_lite_annual,
- * tier_medium_annual, tier_full_annual — у каждого своя переменная товара).
- * Срок доступа считается по периоду, а годовая покупка у Gumroad — РАЗОВЫЙ
- * платёж: продления не будет. Человек платил за год и терял доступ через
- * месяц, а следующего события пришлось бы ждать одиннадцать месяцев.
+ * С 15.09.2026 тариф — это СРОК: tier_max оплачивается за 12 месяцев вперёд,
+ * tier_medium за 3. Цена прежнего дефекта выросла: запись «1 месяц» по Max —
+ * это одиннадцать оплаченных месяцев без доступа.
  *
- * Проверяется ЗАПИСЬ, а не ответ 200: в журнале подписок должен стоять
- * период annual и срок примерно через год.
+ * Проверяется ЗАПИСЬ, а не ответ 200: в журнале подписок должен стоять срок в
+ * месяцах и дата окончания примерно через этот срок. Прежняя годовая ссылка
+ * (tier_full_annual) по-прежнему понимается — продления уже купленного.
  */
 vi.mock("../src/lib/sentry/platform", () => ({ makeServiceCapture: () => () => {} }));
 vi.mock("../src/lib/payment/gumroadProvider", () => ({
@@ -36,8 +36,10 @@ vi.mock("../src/lib/payment/gumroadProvider", () => ({
 const каталог = mkdtempSync(join(tmpdir(), "aevion-annual-"));
 const файл = join(каталог, "subs.jsonl");
 process.env.SUBSCRIPTIONS_FILE = файл;
-process.env.GUMROAD_PRODUCT_ANNUALTEST = "tier_full_annual";
-process.env.GUMROAD_PRODUCT_MONTHLYTEST = "tier_full_monthly";
+process.env.GUMROAD_PRODUCT_MAXTEST = "tier_max";
+process.env.GUMROAD_PRODUCT_MEDIUMTEST = "tier_medium";
+process.env.GUMROAD_PRODUCT_LITETEST = "tier_lite";
+process.env.GUMROAD_PRODUCT_LEGACYANNUAL = "tier_full_annual";
 
 let сырое: Record<string, string> = {};
 const { gumroadWebhookRouter } = await import("../src/routes/gumroadWebhook");
@@ -63,31 +65,48 @@ async function покупка(product: string) {
   return { res, запись: последняя };
 }
 
+const днейДоКонца = (запись: Record<string, unknown> | null) =>
+  (new Date(String(запись?.validUntil)).getTime() - Date.now()) / 86400000;
+
 beforeEach(() => {
   n += 0;
 });
 
-describe("годовая покупка Gumroad не становится месячной", () => {
-  test("годовой товар записан как annual и срок ~год", async () => {
-    const { res, запись } = await покупка("annualtest");
+describe("покупка срока у Gumroad не становится месячной", () => {
+  test("Max записан сроком 12 месяцев и доступом ~год", async () => {
+    const { res, запись } = await покупка("maxtest");
     expect(res.status, `покупка не прошла: ${JSON.stringify(res.body)}`).toBe(200);
-    expect(запись?.period, "годовая покупка записана НЕ как годовая").toBe("annual");
-
-    const до = new Date(String(запись?.validUntil)).getTime();
-    const дней = (до - Date.now()) / 86400000;
-    expect(
-      дней,
-      `срок ${Math.round(дней)} дней — человек заплатил за год, а доступ короче`
-    ).toBeGreaterThan(300);
+    expect(запись?.tierId).toBe("max");
+    expect(запись?.termMonths, "покупка на год записана НЕ годовой").toBe(12);
+    const дней = днейДоКонца(запись);
+    expect(дней, `срок ${Math.round(дней)} дней — человек заплатил за год, а доступ короче`).toBeGreaterThan(360);
   });
 
-  test("КОНТРОЛЬ: месячный товар остаётся месячным", async () => {
-    // Иначе «annual» удовлетворялось бы кодом, который всем ставит годовой
-    // период, — и мы дарили бы год за месячную цену.
-    const { запись } = await покупка("monthlytest");
-    expect(запись?.period, "месячная покупка записана как годовая").toBe("monthly");
-    const дней = (new Date(String(запись?.validUntil)).getTime() - Date.now()) / 86400000;
+  test("Medium записан сроком 3 месяца", async () => {
+    const { res, запись } = await покупка("mediumtest");
+    expect(res.status, `покупка не прошла: ${JSON.stringify(res.body)}`).toBe(200);
+    expect(запись?.tierId).toBe("medium");
+    expect(запись?.termMonths).toBe(3);
+    const дней = днейДоКонца(запись);
+    expect(дней).toBeGreaterThan(85);
+    expect(дней).toBeLessThan(95);
+  });
+
+  test("КОНТРОЛЬ: Lite остаётся на месяц", async () => {
+    // Иначе «длинный срок» удовлетворялось бы кодом, который всем ставит
+    // двенадцать месяцев, — и мы дарили бы год за месячную цену.
+    const { запись } = await покупка("litetest");
+    expect(запись?.termMonths, "месячная покупка записана длиннее месяца").toBe(1);
+    const дней = днейДоКонца(запись);
     expect(дней, `срок ${Math.round(дней)} дней — это не месяц`).toBeLessThan(40);
+  });
+
+  test("прежний годовой товар (продление) — 12 месяцев, тариф новой лестницы", async () => {
+    const { res, запись } = await покупка("legacyannual");
+    expect(res.status, `покупка не прошла: ${JSON.stringify(res.body)}`).toBe(200);
+    expect(запись?.tierId).toBe("full");
+    expect(запись?.termMonths, "прежняя годовая записана короче года").toBe(12);
+    expect(днейДоКонца(запись)).toBeGreaterThan(360);
   });
 });
 

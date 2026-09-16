@@ -110,4 +110,14 @@ describe("keepChannel — метка канала на ВНУТРЕННИХ пе
   it("неизвестный канал метки не порождает", () => {
     expect(keepChannel("/shop", "myspace")).toBe("/shop");
   });
+
+  it("метка встаёт ДО хеша: всё после # серверу не отправляется (15.09.2026)", () => {
+    // Покупка подписки и приложений ведёт на /pricing#tiers и /pricing?app=…#apps.
+    // Дописанная после якоря метка не доехала бы до channelNow вовсе.
+    expect(keepChannel("/pricing#tiers", "youtube")).toBe("/pricing?c=yt#tiers");
+    expect(keepChannel("/pricing?app=devhub#apps", "youtube")).toBe("/pricing?app=devhub&c=yt#apps");
+    // withChannel на внутреннем адресе даёт короткую метку, а не UTM-тройку кассы.
+    expect(withChannel("/pricing?app=devhub#apps", "tiktok", "shop")).toBe("/pricing?app=devhub&c=tt#apps");
+    expect(withChannel("/pricing#tiers", null, "shop")).toBe("/pricing#tiers");
+  });
 });

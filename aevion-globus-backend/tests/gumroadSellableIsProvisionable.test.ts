@@ -4,14 +4,14 @@ import { describe, test, expect, vi, afterEach, afterAll } from "vitest";
  * Что касса Gumroad считает «продаётся», то вебхук обязан уметь выдать.
  *
  * Замер 15.09.2026. `gumroadSellable` (касса и /checkout/healthz) считает
- * позицию продаваемой, если задана GUMROAD_PERMALINK_<ССЫЛКА>. Правил 17 позиций:
- * восемь тарифов и девять приложений. А вебхук узнавал только шесть тарифов
- * (lite/medium/full) — Planet и приложения человек мог оплатить, а в ответ
- * Gumroad получал 500 «неизвестный товар», и доступ не открывался. Своя
- * догадка тарифа по словам вдобавок отправляла Planet в lite.
+ * позицию продаваемой, если задана GUMROAD_PERMALINK_<ССЫЛКА>. А вебхук узнавал
+ * только часть тарифов — остальное человек мог оплатить, а в ответ Gumroad
+ * получал 500 «неизвестный товар», и доступ не открывался.
  *
- * Проверяется по каждой позиции: продаётся → узнаётся → даёт ровно то же,
- * что за неё же выдаёт вебхук Lemon Squeezy (общие функции).
+ * С 15.09.2026 позиций 30: пять ступеней срока всей планеты (tier_lite … tier_max)
+ * и пять ступеней каждого из пяти отдельных приложений (app_<slug>_<ступень>).
+ * Проверяется по каждой: продаётся → узнаётся → даёт ровно то же, что за неё же
+ * выдаёт вебхук Lemon Squeezy (общие функции).
  */
 vi.mock("../src/lib/sentry/platform", () => ({ makeServiceCapture: () => () => {} }));
 
@@ -23,6 +23,7 @@ const { gumroadSellable } = await import("../src/lib/payment/gumroadProvider");
 const { STOREFRONT_NAME_TO_REFERENCE, tierForLemonSqueezyReference, appSlugForReference } = await import(
   "../src/data/lemonSqueezyVariants"
 );
+const { TERM_TIERS, STANDALONE_APPS, TIERS, termTotal } = await import("../src/data/pricing");
 
 const ВСЕ = [...new Set(Object.values(STOREFRONT_NAME_TO_REFERENCE))];
 const ключ = (ref: string) => `GUMROAD_PERMALINK_${ref.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
@@ -41,11 +42,18 @@ afterAll(() => {
   if (прежняяОбщая !== undefined) process.env.GUMROAD_DEFAULT_PERMALINK = прежняяОбщая;
 });
 
+const ОЖИДАЕМО = TERM_TIERS.length * (1 + STANDALONE_APPS.length);
+
 describe("что продаётся через Gumroad, то вебхук выдаёт", () => {
-  test("контроль: позиций 17, среди них и тарифы (с Planet), и приложения", () => {
-    expect(ВСЕ.length).toBe(17);
-    expect(ВСЕ).toContain("tier_planet_monthly");
-    expect(ВСЕ.filter((r) => r.startsWith("app_")).length).toBe(9);
+  test("контроль: позиций 30 — пять сроков планеты и пять сроков у каждого из пяти приложений", () => {
+    expect(ОЖИДАЕМО).toBe(30);
+    expect(ВСЕ.length).toBe(ОЖИДАЕМО);
+    for (const t of TERM_TIERS) expect(ВСЕ).toContain(`tier_${t}`);
+    expect(ВСЕ.filter((r) => r.startsWith("app_")).length).toBe(25);
+    expect(ВСЕ).toContain("app_ip_bureau_max");
+    // Прежние позиции витрины не продаются.
+    expect(ВСЕ).not.toContain("tier_lite_monthly");
+    expect(ВСЕ).not.toContain("app_smeta");
   });
 
   test("КОНТРОЛЬ: без переменной позиция не продаётся и не узнаётся", () => {
@@ -62,6 +70,8 @@ describe("что продаётся через Gumroad, то вебхук выд
       expect(__testables.resolveReference({ product_permalink: слаг(ref) }), "вебхук не узнал оплаченный товар").toBe(ref);
       if (ref.startsWith("tier_")) {
         expect(__testables.tierForReference(ref), "тариф не совпал с Lemon Squeezy").toBe(tierForLemonSqueezyReference(ref));
+        // Ступень срока выдаётся САМА, а не входным тарифом.
+        expect(__testables.tierForReference(ref)).toBe(ref.slice(5));
         expect(__testables.moduleSlugForReference(ref), "тариф принят за приложение").toBeNull();
       } else {
         expect(__testables.moduleSlugForReference(ref), "приложение не совпало с Lemon Squeezy").toBe(appSlugForReference(ref));
@@ -69,59 +79,93 @@ describe("что продаётся через Gumroad, то вебхук выд
     });
   }
 
-  test("пара для healthz: что продаётся, то и выдаётся — по всем 17", () => {
+  test("пара для healthz: что продаётся, то и выдаётся — по всем 30", () => {
     for (const ref of ВСЕ) задать(ref);
     expect(gumroadProvisionable(ВСЕ).configured).toEqual(gumroadSellable(ВСЕ).configured);
-    expect(gumroadProvisionable(ВСЕ).configured.length).toBe(17);
+    expect(gumroadProvisionable(ВСЕ).configured.length).toBe(ОЖИДАЕМО);
   });
 
   test("КОНТРОЛЬ: общий товар по умолчанию — «продаётся» всё, «выдаётся» ничего", () => {
     process.env.GUMROAD_DEFAULT_PERMALINK = "https://aevion.gumroad.com/l/obshchij";
     поставлено.push("GUMROAD_DEFAULT_PERMALINK");
-    expect(gumroadSellable(ВСЕ).configured.length, "касса должна объявить всё продаваемым").toBe(17);
+    expect(gumroadSellable(ВСЕ).configured.length, "касса должна объявить всё продаваемым").toBe(ОЖИДАЕМО);
     expect(gumroadProvisionable(ВСЕ).configured, "расхождение не видно — прибор слеп").toEqual([]);
   });
 
-  describe("один товар на месячный и годовой период (aevion-lite, 15.09.2026)", () => {
-    const общий = () => {
-      process.env.GUMROAD_PERMALINK_TIER_LITE_MONTHLY = "aevion-lite";
-      process.env.GUMROAD_PERMALINK_TIER_LITE_ANNUAL = "https://aevion.gumroad.com/l/aevion-lite";
-      поставлено.push("GUMROAD_PERMALINK_TIER_LITE_MONTHLY", "GUMROAD_PERMALINK_TIER_LITE_ANNUAL");
+  describe("один товар Gumroad на несколько сроков (15.09.2026)", () => {
+    // Gumroad умеет у одной подписки месяц, квартал, полгода и год (девяти месяцев
+    // не умеет). Вебхук узнаёт по адресу ПЕРВУЮ ступень — самую короткую, а
+    // настоящий срок обязана решить ПРОВЕРЕННАЯ продажа. Иначе заплативший за год
+    // получает месяц.
+    const ОБЩИЙ = "https://aevion.gumroad.com/l/aevion-planet";
+    const общий = (ступени: readonly string[] = ["lite", "medium", "pro", "max"]) => {
+      for (const t of ступени) {
+        process.env[ключ(`tier_${t}`)] = ОБЩИЙ;
+        поставлено.push(ключ(`tier_${t}`));
+      }
     };
-    const период = (s: Record<string, unknown> | null, usd?: number) =>
-      __testables.периодПоПродаже("tier_lite_monthly", s, usd);
+    const срок = (s: Record<string, unknown> | null, usd?: number) =>
+      __testables.срокПоПродаже("tier_lite", s, usd);
+    const платёж = (t: string) => TIERS.find((x) => x.id === t)!.priceTermTotal!;
 
-    test("healthz: оба периода и продаются, и выдаются", () => {
+    test("healthz: все ступени общего товара и продаются, и выдаются", () => {
       общий();
-      const refs = ["tier_lite_monthly", "tier_lite_annual"];
+      const refs = ["tier_lite", "tier_medium", "tier_pro", "tier_max"];
       expect(gumroadProvisionable(refs).configured).toEqual(gumroadSellable(refs).configured);
+      expect(gumroadProvisionable(refs).configured.length).toBe(4);
     });
-    test("заплачено $190 — годовая", () => {
+    test("адрес общего товара узнаётся как самая короткая ступень", () => {
       общий();
-      expect(период({ price: "19000" }, 190)).toBe("tier_lite_annual");
+      expect(__testables.resolveReference({ product_permalink: "aevion-planet" })).toBe("tier_lite");
     });
-    test("заплачено $19 — месячная", () => {
+    test("проверенная продажа говорит yearly — Max (12 месяцев)", () => {
       общий();
-      expect(период({ price: "1900" }, 19)).toBe("tier_lite_monthly");
+      expect(срок({ recurrence: "yearly" }, undefined)).toBe("tier_max");
     });
-    test("проверенная продажа сама говорит yearly — годовая", () => {
+    test("quarterly — Medium, biannually — Pro, monthly — Lite", () => {
       общий();
-      expect(период({ recurrence: "yearly" }, undefined)).toBe("tier_lite_annual");
+      expect(срок({ recurrence: "quarterly" }, undefined)).toBe("tier_medium");
+      expect(срок({ recurrence: "biannually" }, undefined)).toBe("tier_pro");
+      expect(срок({ recurrence: "monthly" }, undefined)).toBe("tier_lite");
     });
-    test("КОНТРОЛЬ: продажа не проверена — месячная, а не догадка", () => {
+    test("повтора нет — решает сумма: платёж за год даёт Max, за квартал Medium", () => {
       общий();
-      expect(период(null, undefined)).toBe("tier_lite_monthly");
+      expect(срок({ price: String(платёж("max") * 100) }, платёж("max"))).toBe("tier_max");
+      expect(срок({}, платёж("medium"))).toBe("tier_medium");
+      expect(срок({}, платёж("lite"))).toBe("tier_lite");
     });
-    test("КОНТРОЛЬ: у годовой свой товар — период не трогаем", () => {
-      process.env.GUMROAD_PERMALINK_TIER_LITE_MONTHLY = "aevion-lite";
-      process.env.GUMROAD_PERMALINK_TIER_LITE_ANNUAL = "aevion-lite-year";
-      поставлено.push("GUMROAD_PERMALINK_TIER_LITE_MONTHLY", "GUMROAD_PERMALINK_TIER_LITE_ANNUAL");
-      expect(период({ price: "19000" }, 190)).toBe("tier_lite_monthly");
+    test("КОНТРОЛЬ: сумма не похожа ни на один срок — самая короткая ступень, а не догадка", () => {
+      общий();
+      // $700: дальше 10% от любого платежа за срок (400 / 1050 / 1800 / 2400).
+      expect(срок({}, 700)).toBe("tier_lite");
+    });
+    test("КОНТРОЛЬ: продажа не проверена — самая короткая ступень", () => {
+      общий();
+      expect(срок(null, undefined)).toBe("tier_lite");
+    });
+    test("КОНТРОЛЬ: yearly, а Max на этом товаре не заведён — срок не придумываем", () => {
+      общий(["lite", "medium"]);
+      expect(срок({ recurrence: "yearly" }, undefined)).toBe("tier_lite");
+    });
+    test("КОНТРОЛЬ: у Max свой товар — ступень Lite не трогаем", () => {
+      process.env[ключ("tier_lite")] = "aevion-lite";
+      process.env[ключ("tier_max")] = "aevion-max";
+      поставлено.push(ключ("tier_lite"), ключ("tier_max"));
+      expect(срок({ recurrence: "yearly" }, платёж("max"))).toBe("tier_lite");
+    });
+    test("приложение на общем товаре: сумма за год CyberChess даёт app_cyberchess_max", () => {
+      for (const t of ["lite", "max"]) {
+        process.env[ключ(`app_cyberchess_${t}`)] = "https://aevion.gumroad.com/l/cyberchess";
+        поставлено.push(ключ(`app_cyberchess_${t}`));
+      }
+      const годCyberChess = termTotal(24, "max");
+      expect(__testables.срокПоПродаже("app_cyberchess_lite", {}, годCyberChess)).toBe("app_cyberchess_max");
+      expect(__testables.срокПоПродаже("app_cyberchess_lite", {}, termTotal(24, "lite"))).toBe("app_cyberchess_lite");
     });
   });
 
   test("КОНТРОЛЬ: похожий, но другой адрес товара не узнаётся", () => {
-    задать("tier_lite_monthly");
-    expect(__testables.resolveReference({ product_permalink: `${слаг("tier_lite_monthly")}-x` })).toBe("unknown");
+    задать("tier_lite");
+    expect(__testables.resolveReference({ product_permalink: `${слаг("tier_lite")}-x` })).toBe("unknown");
   });
 });

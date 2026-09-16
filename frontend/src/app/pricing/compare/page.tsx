@@ -7,8 +7,9 @@ import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
 import { useI18n } from "@/lib/i18n";
+import { STANDALONE_APPS, fromPricePerMonth, standaloneApp } from "@/lib/termPricing";
 
-type TierId = "free" | "lite" | "medium" | "full" | "pro" | "enterprise";
+type TierId = "free" | "lite" | "medium" | "pro" | "full" | "max" | "enterprise";
 type ModuleKind = "core" | "product" | "service" | "experiment";
 type ModuleAvailability = "live" | "beta" | "soon" | "on_request";
 
@@ -16,8 +17,9 @@ interface PricingTier {
   id: TierId;
   name: string;
   tagline: string;
+  /** Цена месяца на сроке тарифа. */
   priceMonthly: number | null;
-  priceAnnualPerMonth: number | null;
+  termMonths: number | null;
   features: string[];
   ctaLabel: string;
   highlight?: boolean;
@@ -137,7 +139,7 @@ export default function PricingComparePage() {
     );
   }
 
-  const tierOrder: TierId[] = ["free", "lite", "medium", "full", "pro", "enterprise"];
+  const tierOrder: TierId[] = ["free", "lite", "medium", "pro", "full", "max", "enterprise"];
   const tiers = tierOrder
     .map((id) => data.tiers.find((t) => t.id === id))
     .filter((t): t is PricingTier => Boolean(t));
@@ -277,7 +279,7 @@ export default function PricingComparePage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "minmax(220px, 1.6fr) repeat(4, minmax(110px, 1fr))",
+              gridTemplateColumns: `minmax(220px, 1.6fr) repeat(${tiers.length}, minmax(110px, 1fr))`,
               gap: 6,
               fontSize: 11,
               fontWeight: 800,
@@ -311,14 +313,14 @@ export default function PricingComparePage() {
       <section
         style={{
           display: "grid",
-          gridTemplateColumns: "minmax(220px, 1.6fr) repeat(4, minmax(160px, 1fr))",
+          gridTemplateColumns: `minmax(220px, 1.6fr) repeat(${tiers.length}, minmax(110px, 1fr))`,
           gap: 12,
           marginBottom: 24,
         }}
       >
         <div />
         {tiers.map((t) => {
-          const price = t.priceAnnualPerMonth ?? t.priceMonthly;
+          const price = t.priceMonthly;
           return (
             <Link
               key={t.id}
@@ -412,7 +414,7 @@ export default function PricingComparePage() {
                   key={m.id}
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "minmax(220px, 1.6fr) repeat(4, minmax(110px, 1fr))",
+                    gridTemplateColumns: `minmax(220px, 1.6fr) repeat(${tiers.length}, minmax(110px, 1fr))`,
                     gap: 6,
                     padding: "12px 14px",
                     borderTop: i === 0 ? "none" : "1px solid rgba(15,23,42,0.05)",
@@ -523,7 +525,14 @@ export default function PricingComparePage() {
         </h3>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12, color: "#475569" }}>
           <LegendItem cell={<CheckMark />} label={tp("compareFull.legendIncluded")} />
-          <LegendItem cell={<span style={{ fontWeight: 800, color: "#0ea5e9" }}>+$9</span>} label={tp("compareFull.legendAddon")} />
+          <LegendItem
+            cell={
+              <span style={{ fontWeight: 800, color: "#0ea5e9" }}>
+                ${fromPricePerMonth(Math.min(...STANDALONE_APPS.map((a) => a.baseMonthly)))}
+              </span>
+            }
+            label={tp("compareFull.legendAddon")}
+          />
           <LegendItem cell={<span style={{ color: "#94a3b8" }}>—</span>} label={tp("compareFull.legendUnavailable")} />
           <LegendItem
             cell={<AvailabilityDot a="live" />}
@@ -592,23 +601,24 @@ function MatrixCell({
   if (included) {
     content = <CheckMark />;
     tone = "good";
-  } else if (m.addonMonthly === null) {
-    if (isEnterpriseSlot) {
-      content = <span style={{ fontSize: 11, fontWeight: 700, color: "#7c3aed" }}>by request</span>;
-    } else {
-      content = <span style={{ color: "#cbd5e1", fontSize: 16 }}>—</span>;
-      tone = "muted";
-    }
-  } else if (m.addonMonthly === 0) {
-    content = <span style={{ fontSize: 11, fontWeight: 800, color: "#0d9488" }}>FREE</span>;
-    tone = "good";
-  } else {
+  } else if (standaloneApp(m.id)) {
+    // Отдельно продаются только пять приложений (15.09.2026); «от» — месяц на
+    // самом длинном сроке, из lib/termPricing.ts.
     content = (
       <span style={{ fontSize: 12, fontWeight: 800, color: "#0ea5e9" }}>
-        +${m.addonMonthly}
+        ${fromPricePerMonth(standaloneApp(m.id)!.baseMonthly)}
         <span style={{ fontSize: 9, fontWeight: 700, color: "#64748b", marginLeft: 2 }}>/mo</span>
       </span>
     );
+  } else if (m.addonMonthly === 0) {
+    content = <span style={{ fontSize: 11, fontWeight: 800, color: "#0d9488" }}>FREE</span>;
+    tone = "good";
+  } else if (isEnterpriseSlot) {
+    content = <span style={{ fontSize: 11, fontWeight: 700, color: "#7c3aed" }}>by request</span>;
+  } else {
+    // Остальные модули отдельно не продаются: только в составе платного срока.
+    content = <span style={{ color: "#cbd5e1", fontSize: 16 }}>—</span>;
+    tone = "muted";
   }
 
   return (

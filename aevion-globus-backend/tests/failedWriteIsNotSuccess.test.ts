@@ -54,7 +54,7 @@ async function оплатил(email: string) {
   счётчик += 1;
   полезная = {
     pg_user_contact_email: email,
-    pg_order_id: "tier_medium_monthly",
+    pg_order_id: "tier_medium",
     pg_payment_id: `fw-${счётчик}`,
   };
   const a = express();
@@ -84,7 +84,10 @@ describe("отказ записи подписки не выдаётся за у
     // всегда, и сторож не про запись вовсе.
     const res = await оплатил("ok-write@example.com");
     expect(res.body.action).toBe("activated");
-    expect(resolvePlanFromPayload({ email: "ok-write@example.com" }).tier).toBe("medium");
+    // Купленная ступень записана (rawTier), доступ — ко всей планете (tier full).
+    const план = resolvePlanFromPayload({ email: "ok-write@example.com" });
+    expect(план.rawTier).toBe("medium");
+    expect(план.tier).toBe("full");
   });
 
   test("запись упала — касса получает ОТКАЗ, а не activated", async () => {

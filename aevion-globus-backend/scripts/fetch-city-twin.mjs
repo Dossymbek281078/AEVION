@@ -388,6 +388,11 @@ const CITIES = {
       { c: 48, r: 38, x: 970, y: 770 }, { c: 30, r: 48, x: 610, y: 970 },
       { c: 12, r: 30, x: 250, y: 610 },
     ],
+    // Заниженные теги, у которых есть опубликованная высота выше (безопасная
+    // сторона — большая): башня Предигеркирхе, самый высокий шпиль Цюриха.
+    publishedHeights: [
+      { osm: "way/1278829864", h: 97, source: "https://en.wikipedia.org/wiki/Predigerkirche_Zurich" },
+    ],
     measured: {
       kind: "swissbuildings",
       label: "swissBUILDINGS3D 3.0 (swisstopo): CityGML LoD2, measuredHeight, открытые данные",
@@ -872,6 +877,28 @@ if (typedGuesses) {
   );
 }
 
+// ── опубликованная высота ВЫШЕ тега: заниженное препятствие поднимаем ────────
+// Позиция модуля — чужой источник не переписываем: завышенный тег (Абу-Даби
+// Плаза, 382 при 310.8) стоит лишь крюка, и его разбор живёт в
+// src/data/qskywayHeightReview.ts. ЗАНИЖЕННЫЙ тег — другой класс: коридор,
+// посчитанный по нему, проходит ниже настоящей верхушки. 17.09.2026, Цюрих:
+// башня Предигеркирхе — тег 82 м, опубликовано 97 м (высочайший шпиль города),
+// обмер swissBUILDINGS до отдельного контура башни не дотянулся. Здесь
+// безопасная сторона — большая высота; случай остаётся виден: запись в suspect
+// с `was` (тег) и `source`, класс hs=1 (опубликовано, не обмерено нами).
+const raisedToPublished = [];
+for (const o of city.publishedHeights ?? []) {
+  const i = meta.findIndex((m) => m.id === o.osm);
+  if (i < 0) { process.stderr.write(`  ⚠ publishedHeights: ${o.osm} не найден в ответе OSM — поправка НЕ применена\n`); continue; }
+  if (buildings[i].h >= o.h) continue; // источник уже не ниже опубликованного — поправка не нужна
+  raisedToPublished.push({ i, osm: o.osm, h: o.h, was: buildings[i].h, source: o.source, why: "published height is above the OSM tag — understated obstacle raised to the published value" });
+  buildings[i].h = o.h;
+  if (buildings[i].hs === 2) buildings[i].hs = 1;
+}
+if (raisedToPublished.length) {
+  process.stderr.write(`  поднято до опубликованной высоты: ${raisedToPublished.map((r) => `${r.osm} ${r.was} → ${r.h} м`).join(", ")}\n`);
+}
+
 const { heights, src } = rasterize(buildings, COLS, ROWS);
 
 const measured = buildings.filter((b) => b.hs === 0).length;
@@ -997,18 +1024,20 @@ const maxMeasured = measuredHs.length >= 50 ? Math.max(...measuredHs) : 0;
 const aboveSurvey = maxMeasured > 0
   ? buildings
       .map((b, i) => ({ b, i }))
-      .filter(({ b, i }) => b.hs !== 0 && b.h > maxMeasured * 1.1 && !flagged.has(i))
+      // поднятые до опубликованной высоты уже разобраны (у них есть `was` и источник)
+      .filter(({ b, i }) => b.hs !== 0 && b.h > maxMeasured * 1.1 && !flagged.has(i) && !raisedToPublished.some((r) => r.i === i))
       .map(({ b, i }) => ({ i, osm: osmIdOf(i), h: b.h, times: Math.round((100 * b.h) / maxMeasured) / 100, why: "taller than anything the city measured" }))
   : [];
 const suspect = [
-  ...outliers.map((o) => ({ i: o.index, osm: osmIdOf(o.index), h: o.h, times: o.times, why: "towers over the city" })),
+  ...outliers.filter((o) => !raisedToPublished.some((r) => r.i === o.index)).map((o) => ({ i: o.index, osm: osmIdOf(o.index), h: o.h, times: o.times, why: "towers over the city" })),
   ...aboveSurvey,
+  ...raisedToPublished,
   ...contradicted.map((c) => ({ i: c.i, osm: osmIdOf(c.i), h: c.h, was: c.was, levels: c.levels, why: "height tag contradicted its own floor count" })),
 ];
 if (suspect.length) {
   process.stderr.write(
     `  ⚠ ${suspect.length} height(s) the source could not vouch for: ` +
-    `${suspect.map((o) => (o.times ? `${o.h} m (${o.times}x p99)` : `${o.was} m over ${o.levels} floors → ${o.h} m`)).join(", ")}
+    `${suspect.map((o) => (o.times ? `${o.h} m (${o.times}x p99)` : o.source ? `${o.was} m tag → ${o.h} m published` : `${o.was} m over ${o.levels} floors → ${o.h} m`)).join(", ")}
 `,
   );
 }

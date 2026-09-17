@@ -23,7 +23,9 @@ export interface CityData {
                  osm?: string | null;
                  /** set when the height stands out from the city */ times?: number;
                  /** set when the source's own floor count contradicted its height tag */
-                 was?: number; levels?: number }[];
+                 was?: number; levels?: number;
+                 /** set when an understated tag was raised to a PUBLISHED height: where that height is published */
+                 source?: string }[];
     /** Высоты, ВЗЯТЫЕ ИЗ СТАТИСТИКИ по типу застройки (75-й процентиль домов
      *  того же типа в этом городе), а не измеренные у этого дома и не выведенные
      *  из его этажности. Класс высоты у них остаётся `guessed`, но одного класса

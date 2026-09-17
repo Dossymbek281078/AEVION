@@ -1436,6 +1436,31 @@ describe("POST /api/devhub/projects/:id/agent/workflow", () => {
     expect(r.body.results[2].error).toMatch(/unknown step type/);
   });
 
+  test("шаг image идёт по той же цепочке, что ручка: OpenAI без кредитов → картинку даёт Gemini (17.09.2026)", async () => {
+    // До этой даты шаг сценария звал ТОЛЬКО OpenAI: при кончившихся кредитах
+    // сценарий терял картинку, хотя ручка /media/image рядом умела перейти дальше.
+    process.env.OPENAI_API_KEY = "sk-fake";
+    process.env.GEMINI_API_KEY = "gm-fake";
+    try {
+      const app = makeApp();
+      const id = await createProject(app);
+      fetchMock
+        .mockResolvedValueOnce(jsonResp(429, { error: { message: "You have no credits remaining.", code: "credit_balance_exhausted" } })) // openai
+        .mockResolvedValueOnce(jsonResp(200, { candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: Buffer.from("gm").toString("base64") } }] } }] })); // gemini
+
+      const r = await request(app)
+        .post(`/api/devhub/projects/${id}/agent/workflow`)
+        .send({ steps: [{ type: "image", prompt: "hero", saveAs: "public/hero.url.txt" }] });
+
+      expect(r.status).toBe(200);
+      expect(r.body.results[0].ok).toBe(true);
+      expect(String(r.body.results[0].output.url)).toContain(Buffer.from("gm").toString("base64"));
+      expect(String(fetchMock.mock.calls[1][0])).toContain("gemini-2.5-flash-image");
+    } finally {
+      delete process.env.GEMINI_API_KEY;
+    }
+  });
+
   test("independent non-code steps run concurrently, not sequentially, and results stay indexed by original step order", async () => {
     process.env.OPENAI_API_KEY = "sk-fake";
     process.env.ELEVENLABS_API_KEY = "el-fake";

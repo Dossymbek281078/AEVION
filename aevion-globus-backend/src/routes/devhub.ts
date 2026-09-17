@@ -4933,36 +4933,17 @@ devhubRouter.post("/media/payment-link", dhCostlyLimit("dhpaylink"), async (req,
   }
 });
 
-// POST /api/devhub/media/image — generate image via OpenAI DALL-E 3
-devhubRouter.post("/media/image", async (req, res) => {
-  const imgAuth = verifyBearerOptional(req);
-  const imgUserId = requesterId(req, imgAuth?.sub);
-  const { prompt, size = "1024x1024", quality = "standard" } = req.body || {};
-  if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
-    return res.status(400).json({ error: "prompt required" });
-  }
-  if (prompt.trim().length > 4000) {
-    return res.status(400).json({ error: "prompt too long (max 4000 chars)" });
-  }
-  const validSizes = ["1024x1024", "1792x1024", "1024x1792"];
-  if (!validSizes.includes(size)) {
-    return res.status(400).json({ error: `size must be one of ${validSizes.join(", ")}` });
-  }
+type ImageAttempt = { provider: string; status: number; error: string };
+type ImageResult = { provider: string; url?: string; b64?: string; revisedPrompt?: string | null };
 
-  const imgCredit = await checkCredit(imgUserId, "image");
-  if (!imgCredit.allowed) {
-    return res.status(402).json({
-      error: "Monthly image limit reached",
-      tier: imgCredit.tier, used: imgCredit.used, limit: imgCredit.limit,
-      upgrade: "/studio#upgrade",
-    });
-  }
-
+// Одна цепочка картинок на ВСЕ места, где DevHub рисует: ручка /media/image и шаг
+// «image» в сценариях агента. До 17.09.2026 шаг сценария звал только OpenAI и при
+// кончившихся кредитах падал, хотя ручка рядом уже умела перейти к следующему звену.
+async function generateImageViaChain(prompt: string, size: string, quality: unknown): Promise<{ result: ImageResult | null; attempts: ImageAttempt[] }> {
+  const cleanPrompt = prompt.trim();
   // Provider fallback chain: OpenAI → Cloudflare Workers AI → Together (FLUX
   // free tier). One paid provider hitting its billing wall must not take the
   // whole feature down when a $0 alternative is already configured.
-  type ImageAttempt = { provider: string; status: number; error: string };
-  type ImageResult = { provider: string; url?: string; b64?: string; revisedPrompt?: string | null };
   const [width, height] = size.split("x").map(Number);
   const attempts: ImageAttempt[] = [];
   let result: ImageResult | null = null;
@@ -4975,7 +4956,7 @@ devhubRouter.post("/media/image", async (req, res) => {
       const r = await fetch("https://api.openai.com/v1/images/generations", {
         method: "POST",
         headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "gpt-image-1", prompt: prompt.trim(), n: 1, size, quality: gptQuality }),
+        body: JSON.stringify({ model: "gpt-image-1", prompt: cleanPrompt, n: 1, size, quality: gptQuality }),
       });
       if (!r.ok) {
         attempts.push({ provider: "openai", status: r.status, error: `DALL-E error: ${(await r.text()).slice(0, 300)}` });
@@ -5000,7 +4981,7 @@ devhubRouter.post("/media/image", async (req, res) => {
       const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${cfAccount}/ai/run/@cf/black-forest-labs/flux-1-schnell`, {
         method: "POST",
         headers: { Authorization: `Bearer ${cfToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: prompt.trim(), width, height }),
+        body: JSON.stringify({ prompt: cleanPrompt, width, height }),
       });
       if (!r.ok) {
         attempts.push({ provider: "workers-ai", status: r.status, error: `Workers AI error: ${(await r.text()).slice(0, 300)}` });
@@ -5030,7 +5011,7 @@ devhubRouter.post("/media/image", async (req, res) => {
         method: "POST",
         headers: { "x-goog-api-key": geminiKey, "Content-Type": "application/json" },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: `Generate an image, ${aspect} composition: ${prompt.trim()}` }] }],
+          contents: [{ parts: [{ text: `Generate an image, ${aspect} composition: ${cleanPrompt}` }] }],
           generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
         }),
       });
@@ -5056,7 +5037,7 @@ devhubRouter.post("/media/image", async (req, res) => {
       const r = await fetch("https://api.together.xyz/v1/images/generations", {
         method: "POST",
         headers: { Authorization: `Bearer ${togetherKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "black-forest-labs/FLUX.1-schnell-Free", prompt: prompt.trim(), n: 1, width, height, response_format: "b64_json" }),
+        body: JSON.stringify({ model: "black-forest-labs/FLUX.1-schnell-Free", prompt: cleanPrompt, n: 1, width, height, response_format: "b64_json" }),
       });
       if (!r.ok) {
         attempts.push({ provider: "together", status: r.status, error: `Together error: ${(await r.text()).slice(0, 300)}` });
@@ -5074,10 +5055,40 @@ devhubRouter.post("/media/image", async (req, res) => {
     }
   }
 
+  return { result, attempts };
+}
+
+// POST /api/devhub/media/image — generate image via the provider chain (OpenAI → Workers AI → Gemini → Together)
+devhubRouter.post("/media/image", async (req, res) => {
+  const imgAuth = verifyBearerOptional(req);
+  const imgUserId = requesterId(req, imgAuth?.sub);
+  const { prompt, size = "1024x1024", quality = "standard" } = req.body || {};
+  if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+    return res.status(400).json({ error: "prompt required" });
+  }
+  if (prompt.trim().length > 4000) {
+    return res.status(400).json({ error: "prompt too long (max 4000 chars)" });
+  }
+  const validSizes = ["1024x1024", "1792x1024", "1024x1792"];
+  if (!validSizes.includes(size)) {
+    return res.status(400).json({ error: `size must be one of ${validSizes.join(", ")}` });
+  }
+
+  const imgCredit = await checkCredit(imgUserId, "image");
+  if (!imgCredit.allowed) {
+    return res.status(402).json({
+      error: "Monthly image limit reached",
+      tier: imgCredit.tier, used: imgCredit.used, limit: imgCredit.limit,
+      upgrade: "/studio#upgrade",
+    });
+  }
+
+  const { result, attempts } = await generateImageViaChain(prompt, size, quality);
+
   if (!result) {
     if (attempts.length === 0) {
       return res.status(503).json({
-        error: "No image provider configured — set OPENAI_API_KEY, or CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID (Workers AI), or TOGETHER_API_KEY",
+        error: "No image provider configured — set OPENAI_API_KEY, or CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID (Workers AI), or GEMINI_API_KEY, or TOGETHER_API_KEY",
         setupUrl: "https://platform.openai.com/api-keys",
         ...creditNote(imgCredit),
       });
@@ -5897,21 +5908,22 @@ async function executeWorkflowStepInner(
       return { step: i, type, ok: true, output: { files: files.map((f) => f.path), aiGenerated, ...(syntaxErrors ? { syntaxErrors } : {}), ...(selfCorrected ? { selfCorrected } : {}), checkpointId } };
     }
     if (type === "image") {
-      const apiKey = process.env.OPENAI_API_KEY;
-      if (!apiKey) throw new Error("OPENAI_API_KEY not set");
       const prompt = String(step.prompt || "");
       if (!prompt) throw new Error("prompt required for image step");
-      const dResp = await fetch("https://api.openai.com/v1/images/generations", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "gpt-image-1", prompt, n: 1, size: step.size || "1024x1024" }),
-      });
-      if (!dResp.ok) throw new Error(`DALL-E error: ${(await dResp.text()).slice(0, 200)}`);
-      const d = await dResp.json() as { data: Array<{ url: string }> };
-      const oaiUrl = d.data?.[0]?.url;
-      if (!oaiUrl) throw new Error("no image url returned");
-      const permanentUrl = await tryAutoUploadToCloudflare(oaiUrl);
-      const url = permanentUrl || oaiUrl;
+      const stepSize = ["1024x1024", "1792x1024", "1024x1792"].includes(String(step.size)) ? String(step.size) : "1024x1024";
+      const { result: img, attempts: imgAttempts } = await generateImageViaChain(prompt, stepSize, "standard");
+      if (!img) {
+        throw new Error(imgAttempts.length
+          ? `image providers failed: ${imgAttempts.map((a) => `${a.provider} ${a.status}`).join("; ")}`
+          : "No image provider configured — set OPENAI_API_KEY, or CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID (Workers AI), or GEMINI_API_KEY, or TOGETHER_API_KEY");
+      }
+      let url: string;
+      if (img.url) {
+        url = (await tryAutoUploadToCloudflare(img.url)) || img.url;
+      } else {
+        const permanent = await tryAutoUploadImageBufferToCloudflare(Buffer.from(img.b64 || "", "base64"), `devhub-image-${Date.now()}.png`);
+        url = permanent ?? `data:image/png;base64,${img.b64}`;
+      }
       const savedAs = step.saveAs ? String(step.saveAs) : `public/image-${i}.url.txt`;
       const f: DevHubFile = {
         id: crypto.randomUUID(), projectId: project.id, path: savedAs,

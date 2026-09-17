@@ -5,6 +5,8 @@ import { CITY_NYC } from "./qskyway.city.nyc";
 import { CITY_TOKYO } from "./qskyway.city.tokyo";
 import { CITY_SINGAPORE } from "./qskyway.city.singapore";
 import { CITY_AMSTERDAM } from "./qskyway.city.amsterdam";
+import { CITY_BERLIN } from "./qskyway.city.berlin";
+import { CITY_VIENNA } from "./qskyway.city.vienna";
 import { NOFLY, WIND, NoFlyZone } from "./qskyway.zones";
 import { getMetarWind, metarStatus } from "./qskyway.metar";
 import { AIRSPACE, CeilingField, airspaceContentHash, airspaceSummary, ceilingAt, ceilingField, signablePayload, NO_CEILING } from "./qskyway.airspace";
@@ -84,7 +86,7 @@ const DISCLAIMER =
   "Движок/PoC, не сертифицированное авиационное ПО. Данные зданий — OpenStreetMap (ODbL). Наземный ветер — реальный METAR. Потолки высоты NYC — реальный фид FAA UASFM (сетка допусков Part 107 для малых БВС, НЕ сертификация аэротакси). Токио — реальный режим разрешений MLIT/JCAB (полёт над плотно населённым районом требует разрешения министра); значение снято выборкой по растровым тайлам регулятора, а не загружено вектором. Астана — реальная ЗАПРЕТНАЯ зона UAP28 из AIP Казахстана (круг R=4.5 км, GND–4800 ft, круглосуточно): полёты над твином запрещены, а не разрешены по согласованию; маршрутизация в демо оставлена как расчёт. Точечные запретные зоны и рост ветра с высотой остаются иллюстративными. Полёты требуют допуска (U-space/UTM/CAAC).";
 
 // ── city registry ──────────────────────────────────────────────────────────
-const CITIES: Record<string, CityData> = { astana: CITY, nyc: CITY_NYC, tokyo: CITY_TOKYO, singapore: CITY_SINGAPORE, amsterdam: CITY_AMSTERDAM };
+const CITIES: Record<string, CityData> = { astana: CITY, nyc: CITY_NYC, tokyo: CITY_TOKYO, singapore: CITY_SINGAPORE, amsterdam: CITY_AMSTERDAM, berlin: CITY_BERLIN, vienna: CITY_VIENNA };
 // Нью-Йорк по умолчанию — решение основателя 14.09.2026. Только у него есть
 // издание ограничений FAA, доказательство даты и запись в реестре QRight; над
 // твином Астаны — запретная зона UAP28. Сторож причины:

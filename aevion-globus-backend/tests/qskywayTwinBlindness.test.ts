@@ -4,6 +4,8 @@ import { CITY } from "../src/routes/qskyway.city";
 import { CITY_NYC } from "../src/routes/qskyway.city.nyc";
 import { CITY_TOKYO } from "../src/routes/qskyway.city.tokyo";
 import { CITY_AMSTERDAM } from "../src/routes/qskyway.city.amsterdam";
+import { CITY_BERLIN } from "../src/routes/qskyway.city.berlin";
+import { CITY_VIENNA } from "../src/routes/qskyway.city.vienna";
 import type { CityData } from "../src/routes/qskyway.city";
 
 /**
@@ -36,13 +38,21 @@ const PROFILE: Record<string, { twin: CityData; total: number; measured: number;
   // по ядру Зёйдаса, +88 контуров, которых в OSM нет. Сингапура в профиле нет
   // намеренно: у него обмера ноль, и прибивать «не меньше нуля» нечего.
   amsterdam: { twin: CITY_AMSTERDAM, total: 586, measured: 559, guessed: 21 },
+  // Берлин (16.09.2026): LoD2 Сената (WFS Umweltatlas) — 264 из 274 по квадрату
+  // Потсдамер-плац. 274, а не 1935: 1661 «здания» первой сборки были стелами
+  // Мемориала (2.4×0.95 м, building=yes) — контуры <5 м² сборщик теперь отсекает.
+  berlin: { twin: CITY_BERLIN, total: 274, measured: 264, guessed: 3 },
+  // Вена (16.09.2026): Баукёрпермодель города (LOD1, верх тела ≈ карниз) —
+  // 741 из 897 по Внутреннему городу; тег OSM выше обмера у 130 домов на 4–7 м
+  // (скаты крыш над карнизом), берётся больший, класс остаётся обмерным.
+  vienna: { twin: CITY_VIENNA, total: 897, measured: 741, guessed: 22 },
 };
 
 describe("профиль слепых высот в твинах", () => {
   // Тот же предохранитель: профиль перебирается по PROFILE, и пустой объект
   // дал бы зелёный файл без единой проверки.
-  test("профиль описывает все четыре города с обмером", () => {
-    expect(Object.keys(PROFILE).length).toBe(4);
+  test("профиль описывает все шесть городов с обмером", () => {
+    expect(Object.keys(PROFILE).length).toBe(6);
   });
 
   for (const [city, p] of Object.entries(PROFILE)) {

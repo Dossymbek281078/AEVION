@@ -57,7 +57,10 @@ const src = {
   sourceUrl: "https://map.geo.admin.ch/?layers=ch.bazl.einschraenkungen-drohnen",
   authority: "BAZL / FOCA (Federal Office of Civil Aviation, Switzerland)",
   regime: "EU 2019/947 UAS geo-zones as published by BAZL: inside a CTR, UAS over 250 g are prohibited above 120 m AGL; exemption permits from the competent authority",
-  effective: `layer as served by geo.admin.ch on ${today} (BAZL publishes no per-zone effective date)`,
+  // BAZL не публикует даты вступления в силу по зонам — «редакцией» честно
+  // считается день, когда слой отдан geo.admin.ch. Короткая дата: поле идёт в
+  // плашку источника на странице, длинная фраза там переносилась на три строки.
+  effective: today,
   fetched: today,
   bbox,
   feed: "bazl",

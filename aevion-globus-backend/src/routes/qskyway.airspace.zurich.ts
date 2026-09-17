@@ -15,7 +15,7 @@ export const AIRSPACE_ZURICH: CityAirspace = {
   "sourceUrl": "https://map.geo.admin.ch/?layers=ch.bazl.einschraenkungen-drohnen",
   "authority": "BAZL / FOCA (Federal Office of Civil Aviation, Switzerland)",
   "regime": "EU 2019/947 UAS geo-zones as published by BAZL: inside a CTR, UAS over 250 g are prohibited above 120 m AGL; exemption permits from the competent authority",
-  "effective": "layer as served by geo.admin.ch on 2026-09-17 (BAZL publishes no per-zone effective date)",
+  "effective": "2026-09-17",
   "fetched": "2026-09-17",
   "bbox": {
     "minLat": 47.37,

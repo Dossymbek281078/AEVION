@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { gumroadSellable } from "../lib/payment/gumroadProvider";
-import { gumroadProvisionable } from "./gumroadWebhook";
+import { gumroadLegacyProvisionable, gumroadProvisionable } from "./gumroadWebhook";
 import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
 import { lemonSqueezyPaymentProvider } from "../lib/payment/lemonSqueezyProvider";
 import { payboxPaymentProvider, isPayboxConfigured, isPayboxWebhookSecretSet } from "../lib/payment/payboxProvider";
@@ -678,6 +678,10 @@ checkoutRouter.get("/healthz", (_req, res) => {
         // Пара к sellable: что вебхук по такой покупке ВЫДАСТ. Позиция из
         // sellable, которой нет здесь, — деньги без доступа (замер 15.09.2026).
         provisionable: gumroadProvisionable([...лс.configured, ...лс.missing]),
+        // Прежние тарифы (до 15.09.2026), которые Gumroad ещё продаёт и продлевает.
+        // provisionable выше смотрит только лестницу и по ним молчит: 17.09.2026 он
+        // отвечал «0 и 0», пока старые Lite/Medium/Full падали в 500 без доступа.
+        legacy: gumroadLegacyProvisionable(),
         webhook: "/api/gumroad/webhook",
         webhookConfigured: Boolean(process.env.GUMROAD_WEBHOOK_SECRET?.trim()),
         // ⚠️ У Gumroad `false` здесь НЕ означает «не выдаст». Замер 03.09.2026:

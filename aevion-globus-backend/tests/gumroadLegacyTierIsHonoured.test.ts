@@ -77,4 +77,13 @@ describe("старый тариф Gumroad выдаётся, а не падает
       delete process.env.GUMROAD_PERMALINK_TIER_LITE;
     }
   });
+
+  test("ручка состояния видит прежние тарифы: что продаётся и всё ли выдаётся", async () => {
+    const { gumroadLegacyProvisionable } = await import("../src/routes/gumroadWebhook");
+    const отчёт = gumroadLegacyProvisionable();
+    const ожидаемо = ["full", "lite", "medium"].flatMap((т) => [`tier_${т}_annual`, `tier_${т}_monthly`]).sort();
+    expect(отчёт.onSale, "продаются ровно те, у кого на проде задан адрес").toEqual(ожидаемо);
+    expect(отчёт.missing, "прежний тариф продаётся, а вебхук его не выдаёт").toEqual([]);
+    expect(отчёт.configured).toEqual(ожидаемо);
+  });
 });

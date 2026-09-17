@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { ALL_PRODUCTS } from "@/lib/products";
 
 /**
  * Продаём то, о чём платная стена НЕ ЗНАЕТ.
@@ -62,33 +63,31 @@ const ROOT = join(__dirname, "..", "..", "..", "..");
 const PRODUCTS = join(ROOT, "frontend", "src", "lib", "products.ts");
 const PRICING = join(ROOT, "aevion-globus-backend", "src", "data", "pricing.ts");
 
-/** Не модули: пакет из нескольких модулей и товары вне платформы. */
+/** Не модули: подписка на всю планету и товары вне платформы. */
 const NOT_A_MODULE = new Set([
-  "aevion-all-access", // пакет «вся экосистема», а не отдельный модуль
-  "gratitude-book",    // книга: файл, а не доступ к модулю
+  "aevion-planet",  // подписка на всю планету (срок 1–12 месяцев), а не отдельный модуль
+  "gratitude-book", // книга: файл, а не доступ к модулю
 ]);
 
-/** Известный долг на 29.08.2026. Убирать отсюда — только вместе с заведением модуля. */
-const KNOWN_UNREGISTERED = new Set([
-  // Условие исчезновения: РЕШЕНИЕ основателя о том, закрывать ли DevHub
-  // платной стеной. Это не работа и не отсутствие возможности — это
-  // незанятая позиция, и лежать она может долго, но не молча.
-  "devhub", // $149/мес, в MODULES_PRICING отсутствует — закрыть нельзя
-]);
+/**
+ * Известный долг. Убирать отсюда — только вместе с заведением модуля.
+ * 15.09.2026: DevHub заведён в MODULES_PRICING (приложение лестницы сроков) —
+ * строка убрана, список пуст, и это правильное состояние.
+ */
+const KNOWN_UNREGISTERED = new Set<string>([]);
 
+/**
+ * Продаваемое — из настоящих объектов каталога, а не регуляркой по исходнику:
+ * с 15.09.2026 цены приложений вычисляются из лестницы сроков (appBase("…")),
+ * и разбор литерала `priceUsd: 123` молча потерял бы все пять.
+ */
 function soldAppIds(): Array<{ appId: string; title: string; price: number }> {
-  const src = readFileSync(PRODUCTS, "utf8");
-  const out: Array<{ appId: string; title: string; price: number }> = [];
-  const blocks = src.match(/\{(?:[^{}]|\{[^{}]*\})*?\}/g) ?? [];
-  for (const b of blocks) {
-    const price = /priceUsd:\s*([0-9]+)/.exec(b);
-    const appId = /appId:\s*"([^"]+)"/.exec(b);
-    const title = /title:\s*"([^"]+)"/.exec(b);
-    if (price && appId) {
-      out.push({ appId: appId[1], title: title ? title[1] : appId[1], price: Number(price[1]) });
-    }
-  }
-  return out;
+  expect(readFileSync(PRODUCTS, "utf8")).toContain("export const MODULES");
+  return ALL_PRODUCTS.filter((p) => p.appId && p.priceUsd > 0).map((p) => ({
+    appId: p.appId!,
+    title: p.title,
+    price: p.priceUsd,
+  }));
 }
 
 function knownModules(): Set<string> {

@@ -39,7 +39,7 @@ type Props = { params: Promise<{ tierId: string }> };
  * TIERS в aevion-globus-backend/src/data/pricing.ts.
  */
 const ИЗВЕСТНЫЕ_ТАРИФЫ = new Set([
-  "free", "lite", "medium", "full", "pro", "enterprise",
+  "free", "lite", "medium", "pro", "full", "max", "enterprise",
 ]);
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {

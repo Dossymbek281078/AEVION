@@ -31,14 +31,14 @@ import {
   возвратКасаетсяДействующей,
   type Subscription,
 } from "./provisioning";
-import { periodForReference } from "../lib/payment/billingPeriod";
+import { termMonthsForReference } from "../lib/payment/billingPeriod";
 import {
   STOREFRONT_NAME_TO_REFERENCE,
   tierForLemonSqueezyReference,
   appSlugForReference,
   type LemonSqueezyReference,
 } from "../data/lemonSqueezyVariants";
-import { TIERS, type TierId } from "../data/pricing";
+import { TIERS, TERM_TIERS, standaloneApp, termTotal, type TierId, type TermTier } from "../data/pricing";
 import { getPool } from "../lib/dbPool";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
@@ -79,14 +79,11 @@ export const gumroadWebhookRouter = Router();
 // checkout layer builds the buy-URL from. Gumroad pings that permalink back, so
 // we can reverse-map it to a tier reference here — no separate opaque
 // GUMROAD_PRODUCT_<id> mapping needed for the four subscription tiers.
-const TIER_PERMALINK_ENV: Record<string, string> = {
-  GUMROAD_PERMALINK_TIER_LITE_MONTHLY: "tier_lite_monthly",
-  GUMROAD_PERMALINK_TIER_LITE_ANNUAL: "tier_lite_annual",
-  GUMROAD_PERMALINK_TIER_MEDIUM_MONTHLY: "tier_medium_monthly",
-  GUMROAD_PERMALINK_TIER_MEDIUM_ANNUAL: "tier_medium_annual",
-  GUMROAD_PERMALINK_TIER_FULL_MONTHLY: "tier_full_monthly",
-  GUMROAD_PERMALINK_TIER_FULL_ANNUAL: "tier_full_annual",
-};
+// С 15.09.2026 ступени лестницы сроков: GUMROAD_PERMALINK_TIER_LITE … _MAX.
+// Порядок важен: при общем товаре первой узнаётся самая короткая ступень.
+const TIER_PERMALINK_ENV: Record<string, string> = Object.fromEntries(
+  TERM_TIERS.map((t) => [`GUMROAD_PERMALINK_TIER_${t.toUpperCase()}`, `tier_${t}`]),
+);
 
 /**
  * Code-level defaults for the permalinks that actually exist in the AEVION
@@ -120,7 +117,7 @@ const KNOWN_PERMALINK_REFERENCE: Record<string, string> = {
   oijxmq: "external", // Протокол долголетия — 12 недель (RU) $19
   kkiavh: "external", // The Anti-Grey Protocol (EN) $19
   // Platform bundle — the whole ecosystem.
-  xpxzam: "tier_full_monthly", // AEVION All-Access $59/mo
+  xpxzam: "tier_lite", // AEVION All-Access $59/mo — снят с продажи 15.09.2026; продление выдаётся как Lite (1 месяц)
   // Constitution entry tier — same as the legacy default, made explicit.
   pyiaz: "constitution-pro", // Constitution Pro $9/mo
   // Team задан ЯВНО с 13.08.2026. Раньше он проваливался в общую ветку, и это
@@ -238,30 +235,65 @@ function moduleSlugForReference(ref: string): string | null {
  * Пинг не подписан, его `recurrence` НЕ читаем: иначе любой POST «yearly»
  * превращал бы месячную оплату в годовой доступ. Не удалось решить — месячная.
  */
-function периодПоПродаже(
+/**
+ * 15.09.2026: тариф — это срок. Один товар Gumroad может нести несколько сроков
+ * (месяц, квартал, полгода, год; девяти месяцев Gumroad не умеет). Узнанная по
+ * адресу ссылка тогда — первая ступень с этим адресом, самая короткая и дешёвая,
+ * а настоящий срок решает ПРОВЕРЕННАЯ продажа: её recurrence, иначе оплаченная
+ * сумма (±10% к платежу за срок). Не решилось — остаётся самая короткая ступень.
+ */
+const ПОВТОР_В_СРОК: Record<string, TermTier> = {
+  monthly: "lite",
+  quarterly: "medium",
+  biannually: "pro",
+  yearly: "max",
+  annually: "max",
+  annual: "max",
+};
+
+function срокПоПродаже(
   reference: string,
   sale: Record<string, unknown> | null,
   paidUsd: number | undefined,
 ): string {
-  const m = /^tier_([a-z]+)_monthly$/.exec(reference);
+  const m = /^(tier|app_[a-z_]+?)_(lite|medium|pro|full|max)$/.exec(reference);
   if (!m) return reference;
-  const годовая = `tier_${m[1]}_annual`;
+  const семья = m[1];
+  const ссылка = (t: TermTier) => `${семья}_${t}`;
   const слаг = (ref: string) =>
     permalinkSlug(process.env[`GUMROAD_PERMALINK_${ref.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`]);
-  if (!слаг(годовая) || слаг(годовая) !== слаг(reference)) return reference;
+  const свой = слаг(reference);
+  if (!свой) return reference;
+  const соседи = TERM_TIERS.filter((t) => слаг(ссылка(t)) === свой);
+  if (соседи.length < 2) return reference;
   const r = sale?.recurrence;
   const повтор = typeof r === "string" ? r.toLowerCase() : "";
-  if (повтор === "yearly" || повтор === "annual" || повтор === "annually") return годовая;
-  if (повтор === "monthly") return reference;
-  const годоваяЦена = TIERS.find((t) => t.id === m[1])?.priceAnnualTotal;
-  if (paidUsd !== undefined && typeof годоваяЦена === "number" && годоваяЦена > 0 && paidUsd >= годоваяЦена * 0.9) {
-    return годовая;
+  if (Object.prototype.hasOwnProperty.call(ПОВТОР_В_СРОК, повтор)) {
+    const поПовтору = ПОВТОР_В_СРОК[повтор];
+    return соседи.includes(поПовтору) ? ссылка(поПовтору) : reference;
   }
-  return reference;
+  if (paidUsd === undefined || !(paidUsd > 0)) return reference;
+  const цена = (t: TermTier): number | null => {
+    if (семья === "tier") return TIERS.find((x) => x.id === t)?.priceTermTotal ?? null;
+    const app = standaloneApp(семья.slice(4));
+    return app ? termTotal(app.baseMonthly, t) : null;
+  };
+  let лучший: TermTier | null = null;
+  let разница = Infinity;
+  for (const t of соседи) {
+    const p = цена(t);
+    if (p === null || p <= 0) continue;
+    const d = Math.abs(paidUsd - p) / p;
+    if (d <= 0.1 && d < разница) {
+      лучший = t;
+      разница = d;
+    }
+  }
+  return лучший ? ссылка(лучший) : reference;
 }
 
 /** Для сторожа «что продаётся — то выдаётся». Поведение не меняет. */
-export const __testables = { resolveReference, tierForReference, moduleSlugForReference, периодПоПродаже };
+export const __testables = { resolveReference, tierForReference, moduleSlugForReference, срокПоПродаже };
 
 /**
  * Какие позиции вебхук ВЫДАСТ, если их купят через Gumroad. Пара к
@@ -281,10 +313,11 @@ export function gumroadProvisionable(references: string[]): { configured: string
         process.env.GUMROAD_DEFAULT_PERMALINK,
     );
     const узнан = slug ? resolveReference({ product_permalink: slug }) : "unknown";
-    // Годовая на ОБЩЕМ с месячной товаре выдаётся годовой — период решает
-    // проверенная продажа (периодПоПродаже), а не порядок совпадения.
-    const годоваяНаОбщем = /_annual$/.test(ref) && узнан === ref.replace(/_annual$/, "_monthly");
-    (узнан === ref || годоваяНаОбщем ? configured : missing).push(ref);
+    // Ступень на ОБЩЕМ товаре (один адрес у нескольких сроков) выдаётся своим
+    // сроком: его решает проверенная продажа (срокПоПродаже), а не порядок совпадения.
+    const семья = (x: string) => x.replace(/_(lite|medium|pro|full|max)$/, "");
+    const ступеньНаОбщем = семья(ref) !== ref && узнан !== "unknown" && семья(узнан) === семья(ref);
+    (узнан === ref || ступеньНаОбщем ? configured : missing).push(ref);
   }
   return { configured: configured.sort(), missing: missing.sort() };
 }
@@ -550,7 +583,7 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
       if (Number.isFinite(paidCents) && paidCents > 0) paidUsd = paidCents / 100;
       // Один товар Gumroad на два периода: пинг не подписан, поэтому период
       // берём из ПРОВЕРЕННОЙ продажи (см. периодПоПродаже).
-      const уточнённая = периодПоПродаже(reference, sale, paidUsd);
+      const уточнённая = срокПоПродаже(reference, sale, paidUsd);
       if (уточнённая !== reference) {
         console.log(`[gumroad/webhook] sale ${saleId}: ${reference} → ${уточнённая} по проверенной продаже`);
         reference = уточнённая;
@@ -741,7 +774,7 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         ts: new Date().toISOString(),
         email,
         tierId: "free",
-        period: "monthly",
+        termMonths: null,
         seats: 1,
         modules: [],
         trialDays: 0,
@@ -767,12 +800,12 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
       //
       // Правило то же, что у paybox и paypal (periodForReference): решает
       // слово в ссылке заказа.
-      const period = periodForReference(reference);
+      const termMonths = termMonthsForReference(reference);
 
       const provResult = await provisionSubscription({
         email,
         tierId,
-        period,
+        termMonths,
         modules: [],
         source: "gumroad",
         // Сумма из ПРОДАЖИ (API), а не из пинга: пинг не подписан. Если сумма

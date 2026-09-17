@@ -38,10 +38,6 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "hero.C.title": "Запустите свой digital-продукт за 14 дней",
     "hero.C.subtitle": "Production-ready модули AEVION: AI, IP, fintech и compliance. Free trial 14 дней, без credit card. Customer Success включён бесплатно.",
 
-    /* Period / currency */
-    "period.monthly": "Месяц",
-    "period.annual": "Год (-16%)",
-
     /* Promo */
     "promo.activeBanner": "АКТИВНЫЕ ПРОМО:",
     "promo.copied": "✓ Скопировано",
@@ -51,16 +47,11 @@ const baseDict: Record<Lang, Record<string, string>> = {
     /* Tier CTA */
     "tier.popular": "ПОПУЛЯРНЫЙ",
     "tier.perMonth": "/мес",
-    "tier.perYear": "в год",
     "tier.byRequest": "По запросу",
     "tier.free": "Бесплатно",
     "tier.detailsLink": "Подробнее о {name} →",
     "tier.tryTrial": "Попробовать 14 дней бесплатно",
     "tier.openCalc": "Открыть калькулятор →",
-
-    /* Bundles */
-    "bundles.title": "Готовые сборки",
-    "bundles.subtitle": "Несколько модулей со скидкой — берите целевой контур одной кнопкой.",
 
     /* Industries */
     "industries.title": "Для вашей индустрии",
@@ -78,26 +69,22 @@ const baseDict: Record<Lang, Record<string, string>> = {
 
     /* Modules matrix */
     "modules.title": "Все модули",
-    "modules.subtitle": `${MODULE_NODES} продуктов AEVION. Покупаются отдельно или входят в тарифы.`,
+    "modules.subtitle": `${MODULE_NODES} продуктов AEVION. Все входят в любой платный тариф; пять приложений продаются и отдельно.`,
     "modules.colModule": "Модуль",
     "modules.colDescription": "Описание",
     "modules.colStatus": "Статус",
-    "modules.colAddon": "Add-on / мес",
+    "modules.colAddon": "Отдельно, от / мес",
     "modules.colIncluded": "Включено в",
 
     /* Calculator */
     "calc.title": "Калькулятор",
-    "calc.subtitle": "Соберите свою конфигурацию — смета пересчитывается на лету.",
+    "calc.subtitle": "Срок, пользователи и промокод — смета считает платёж за весь срок.",
     "calc.tier": "ТАРИФ",
     "calc.seats": "ПОЛЬЗОВАТЕЛИ (SEATS)",
     "calc.promo": "ПРОМО-КОД",
-    "calc.modules": "ДОПОЛНИТЕЛЬНЫЕ МОДУЛИ",
     "calc.estimate": "СМЕТА",
     "calc.recalc": "пересчёт...",
     "calc.freeBilling": "Бесплатный тариф — оплата не требуется.",
-    "calc.annualDiscount": "Годовая скидка",
-    "calc.totalYear": "ИТОГО / год",
-    "calc.totalMonth": "ИТОГО / месяц",
     "calc.payQuote": "Оплатить смету",
     "calc.opening": "Открываем оплату...",
     "calc.contactSales": "Связаться с продажами →",
@@ -110,7 +97,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     /* Full compare matrix */
     "compareFull.badge": "ПОЛНАЯ МАТРИЦА",
     "compareFull.title": "Сравнение тарифов и модулей",
-    "compareFull.subtitle": "Что включено в каждый тариф, что доступно как add-on, что только в Enterprise. Фильтруйте по типу модуля или скрывайте те, что ещё в работе.",
+    "compareFull.subtitle": "Что входит в каждый тариф и что только в Enterprise. Любой платный срок открывает все модули; пять приложений продаются и отдельно.",
     "compareFull.filterLabel": "ФИЛЬТР:",
     "compareFull.filterAll": "Все",
     "compareFull.hideUnavailable": "Скрыть SOON / by-request",
@@ -121,7 +108,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "compareFull.ctaSales": "Связаться с продажами",
     "compareFull.legendTitle": "ОБОЗНАЧЕНИЯ",
     "compareFull.legendIncluded": "Включено в тариф",
-    "compareFull.legendAddon": "Add-on к любому тарифу",
+    "compareFull.legendAddon": "Продаётся отдельно, цена от",
     "compareFull.legendUnavailable": "Недоступно на этом тарифе",
     "compareFull.legendLive": "В продакшене",
     "compareFull.legendBeta": "Бета-версия",
@@ -152,27 +139,27 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "refund.subtitle": "Без юридического жаргона. Что возвращаем, когда и как быстро. Если что-то неясно — напишите нам через форму связи.",
     "refund.tldr.title": "TL;DR — ОСНОВНОЕ",
     "refund.tldr.p1": "14 дней money-back на любой платный тариф — без вопросов.",
-    "refund.tldr.p2": "При даунгрейде — кредит за неиспользованное автоматически на счёте.",
-    "refund.tldr.p3": "Annual оплата — возврат пропорционально оставшимся месяцам.",
+    "refund.tldr.p2": "Смена тарифа — со следующего срока; текущий срок дорабатывает до конца.",
+    "refund.tldr.p3": "Отмена останавливает продление, доступ сохраняется до конца оплаченного срока.",
     "refund.tldr.p4": "Экспорт всех данных в JSON / PDF — кнопка в личном кабинете в любой момент.",
 
     "refund.section.moneyBack.title": "14-дневный money-back",
-    "refund.section.moneyBack.body": "Любую платную подписку можно вернуть в течение 14 календарных дней с даты первой оплаты. Без объяснения причин. Применяется к monthly и annual.",
+    "refund.section.moneyBack.body": "Любую платную подписку можно вернуть в течение 14 календарных дней с даты первой оплаты. Без объяснения причин. Применяется ко всем срокам — от Lite до Max.",
     "refund.section.moneyBack.b1": "Возврат возможен один раз на email/аккаунт.",
-    "refund.section.moneyBack.b2": "После 14-дневного окна возврат — только на usaule pro-rated основе при даунгрейде.",
+    "refund.section.moneyBack.b2": "После 14-дневного окна оплаченный срок не возвращается: отмена останавливает продление, доступ остаётся до конца срока.",
     "refund.section.moneyBack.b3": "Free тариф возврату не подлежит — он бесплатный.",
 
-    "refund.section.downgrade.title": "Даунгрейд и прорейтинг",
-    "refund.section.downgrade.body": "Если понижаете тариф в середине биллинг-периода — неиспользованная сумма автоматически зачисляется как кредит на следующий цикл.",
-    "refund.section.downgrade.b1": "Кредит хранится бессрочно, пока есть аккаунт.",
-    "refund.section.downgrade.b2": "При запросе вывода кредита — возврат на исходную карту в течение 5-10 рабочих дней.",
-    "refund.section.downgrade.b3": "Апгрейд в обратную сторону — кредит зачитывается автоматически.",
+    "refund.section.downgrade.title": "Смена тарифа",
+    "refund.section.downgrade.body": "Тарифы отличаются только сроком. Перейти на другой срок можно в любой момент: новый срок начнётся, когда закончится текущий оплаченный.",
+    "refund.section.downgrade.b1": "Доступ ко всем модулям сохраняется без перерыва.",
+    "refund.section.downgrade.b2": "Переход на более длинный срок даёт более низкую цену месяца со следующего платежа.",
+    "refund.section.downgrade.b3": "Спорные случаи — через форму связи, разберёмся вручную.",
 
-    "refund.section.annual.title": "Annual возвраты",
-    "refund.section.annual.body": "При отмене годовой подписки в первые 14 дней — полный возврат. Позже — пропорциональный возврат за полные неиспользованные месяцы (минус 16% годовой скидки).",
-    "refund.section.annual.b1": "Расчёт: (полная_сумма / 12) × неиспользованные_месяцы × 0.84.",
-    "refund.section.annual.b2": "Минимум 1 полный месяц использования — возврат от 0 до 11 месяцев.",
-    "refund.section.annual.b3": "Annual-промо (STARTUP50, EARLYBIRD) — возврат рассчитывается от уже промо-ставки.",
+    "refund.section.term.title": "Оплата за срок",
+    "refund.section.term.body": "Срок тарифа оплачивается целиком вперёд. В первые 14 дней — полный возврат. Позже отмена останавливает продление, а доступ сохраняется до последнего дня оплаченного срока.",
+    "refund.section.term.b1": "Продление — на тот же срок и по цене месяца той же ступени.",
+    "refund.section.term.b2": "Остановить продление можно в любой момент — через форму связи.",
+    "refund.section.term.b3": "Промокоды учитываются: возврат в первые 14 дней — от фактически оплаченной суммы.",
 
     "refund.section.usage.title": "Использование (usage-based)",
     "refund.section.usage.body": "Token-overage и per-action биллинг (например, lifetime-подпись QSign выше квоты тарифа) — НЕ подлежит возврату, так как ресурсы уже потрачены на нашей стороне.",
@@ -278,7 +265,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "affiliate.success.id": "ID заявки:",
     "affiliate.faq.title": "Частые вопросы",
     "affiliate.faq.q1": "Как именно считается 20%?",
-    "affiliate.faq.a1": "От нетто-суммы подписки приведённого клиента (после промо-кодов и налогов). Если клиент платит $19/мес на Lite — вы получаете $3.80 каждый месяц, пока он остаётся клиентом.",
+    "affiliate.faq.a1": "От нетто-суммы подписки приведённого клиента (после промокодов и налогов). Комиссия начисляется с каждого его платежа за срок — и при продлении, пока он остаётся клиентом.",
     "affiliate.faq.q2": "Что засчитывается как «приведённый клиент»?",
     "affiliate.faq.a2": "Любой пользователь, который перешёл по вашей реферальной ссылке (или ввёл ваш промо-код) и совершил оплату в течение 60 дней. Cookie window — 60 дней с момента первого клика.",
     "affiliate.faq.q3": "Когда происходят выплаты?",
@@ -542,9 +529,6 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "hero.C.title": "Ship your digital product in 14 days",
     "hero.C.subtitle": "Production-ready AEVION modules: AI, IP, fintech and compliance. Free trial 14 days, no credit card. Customer Success included.",
 
-    "period.monthly": "Monthly",
-    "period.annual": "Annual (-16%)",
-
     "promo.activeBanner": "ACTIVE PROMOS:",
     "promo.copied": "✓ Copied",
     "promo.upTo": "up to",
@@ -552,15 +536,11 @@ const baseDict: Record<Lang, Record<string, string>> = {
 
     "tier.popular": "POPULAR",
     "tier.perMonth": "/mo",
-    "tier.perYear": "per year",
     "tier.byRequest": "By request",
     "tier.free": "Free",
     "tier.detailsLink": "More about {name} →",
     "tier.tryTrial": "Try 14 days free",
     "tier.openCalc": "Open calculator →",
-
-    "bundles.title": "Pre-built suites",
-    "bundles.subtitle": "Multiple modules with a discount — pick the right contour in one click.",
 
     "industries.title": "For your industry",
     "industries.subtitle": "Cases and recommended stack for your vertical.",
@@ -575,25 +555,21 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "logos.label": "TRUSTED BY TEAMS ACROSS 30+ COUNTRIES",
 
     "modules.title": "All modules",
-    "modules.subtitle": `${MODULE_NODES} AEVION products. Buy individually or get them in tiers.`,
+    "modules.subtitle": `${MODULE_NODES} AEVION products. All included in every paid plan; five apps are also sold separately.`,
     "modules.colModule": "Module",
     "modules.colDescription": "Description",
     "modules.colStatus": "Status",
-    "modules.colAddon": "Add-on / mo",
+    "modules.colAddon": "Standalone, from / mo",
     "modules.colIncluded": "Included in",
 
     "calc.title": "Calculator",
-    "calc.subtitle": "Build your config — quote recalculates on the fly.",
+    "calc.subtitle": "Term, seats and promo code — the quote shows the payment for the full term.",
     "calc.tier": "TIER",
     "calc.seats": "USERS (SEATS)",
     "calc.promo": "PROMO CODE",
-    "calc.modules": "EXTRA MODULES",
     "calc.estimate": "QUOTE",
     "calc.recalc": "recalculating...",
     "calc.freeBilling": "Free tier — no payment required.",
-    "calc.annualDiscount": "Annual discount",
-    "calc.totalYear": "TOTAL / year",
-    "calc.totalMonth": "TOTAL / month",
     "calc.payQuote": "Pay quote",
     "calc.opening": "Opening checkout...",
     "calc.contactSales": "Contact sales →",
@@ -604,7 +580,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
 
     "compareFull.badge": "FULL MATRIX",
     "compareFull.title": "Compare tiers and modules",
-    "compareFull.subtitle": "What's included in each tier, what's available as add-on, what's Enterprise-only. Filter by module kind or hide work-in-progress.",
+    "compareFull.subtitle": "What each plan includes and what is Enterprise-only. Every paid term unlocks all modules; five apps are also sold separately.",
     "compareFull.filterLabel": "FILTER:",
     "compareFull.filterAll": "All",
     "compareFull.hideUnavailable": "Hide SOON / by-request",
@@ -615,7 +591,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "compareFull.ctaSales": "Contact sales",
     "compareFull.legendTitle": "LEGEND",
     "compareFull.legendIncluded": "Included in tier",
-    "compareFull.legendAddon": "Add-on to any tier",
+    "compareFull.legendAddon": "Sold separately, price from",
     "compareFull.legendUnavailable": "Not available on this tier",
     "compareFull.legendLive": "In production",
     "compareFull.legendBeta": "Beta",
@@ -644,27 +620,27 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "refund.subtitle": "No legal jargon. What we refund, when, and how fast. If something's unclear — write to us via the contact form.",
     "refund.tldr.title": "TL;DR — KEY POINTS",
     "refund.tldr.p1": "14-day money-back on any paid tier — no questions asked.",
-    "refund.tldr.p2": "On downgrade — credit for unused time auto-applied to your account.",
-    "refund.tldr.p3": "Annual — refund proportionally for remaining months.",
+    "refund.tldr.p2": "Changing plans applies from the next term; the current term runs to its end.",
+    "refund.tldr.p3": "Cancelling stops the renewal; access stays until the end of the paid term.",
     "refund.tldr.p4": "Export all your data to JSON / PDF — button in dashboard, anytime.",
 
     "refund.section.moneyBack.title": "14-day money-back",
-    "refund.section.moneyBack.body": "Any paid subscription can be refunded within 14 calendar days from first payment. No reason needed. Applies to monthly and annual.",
+    "refund.section.moneyBack.body": "Any paid subscription can be refunded within 14 calendar days from the first payment. No reason needed. Applies to every term, Lite through Max.",
     "refund.section.moneyBack.b1": "Refund available once per email/account.",
-    "refund.section.moneyBack.b2": "After the 14-day window — only pro-rated refund on downgrade.",
+    "refund.section.moneyBack.b2": "After the 14-day window the paid term is not refunded: cancelling stops the renewal and access stays until the term ends.",
     "refund.section.moneyBack.b3": "Free tier is not refundable — it's free.",
 
-    "refund.section.downgrade.title": "Downgrade & pro-rating",
-    "refund.section.downgrade.body": "When downgrading mid-cycle — unused amount is auto-credited to your next cycle.",
-    "refund.section.downgrade.b1": "Credit holds indefinitely while account exists.",
-    "refund.section.downgrade.b2": "On withdrawal request — refund to original card in 5-10 business days.",
-    "refund.section.downgrade.b3": "Upgrade back — credit auto-applied.",
+    "refund.section.downgrade.title": "Changing plans",
+    "refund.section.downgrade.body": "Plans differ only by term. You can switch to another term at any time: the new term starts when the current paid one ends.",
+    "refund.section.downgrade.b1": "Access to every module continues without a gap.",
+    "refund.section.downgrade.b2": "Moving to a longer term lowers the monthly price from the next payment.",
+    "refund.section.downgrade.b3": "Edge cases — use the contact form and we'll sort them out manually.",
 
-    "refund.section.annual.title": "Annual refunds",
-    "refund.section.annual.body": "Cancel annual in first 14 days — full refund. Later — pro-rated refund for full unused months (minus 16% annual discount).",
-    "refund.section.annual.b1": "Formula: (full_total / 12) × unused_months × 0.84.",
-    "refund.section.annual.b2": "Minimum 1 full month of usage — refund 0 to 11 months.",
-    "refund.section.annual.b3": "Annual promo (STARTUP50, EARLYBIRD) — refund computed from already-promo rate.",
+    "refund.section.term.title": "Paying for a term",
+    "refund.section.term.body": "A plan's term is paid in full up front. Within the first 14 days you get a full refund. After that, cancelling stops the renewal and access stays until the last day of the paid term.",
+    "refund.section.term.b1": "Renewal is for the same term at the same monthly price.",
+    "refund.section.term.b2": "You can stop the renewal at any time via the contact form.",
+    "refund.section.term.b3": "Promo codes count: a refund in the first 14 days is based on the amount actually paid.",
 
     "refund.section.usage.title": "Usage-based fees",
     "refund.section.usage.body": "Token overage and per-action billing (e.g. QSign signatures over tier quota) is NOT refundable, since resources were already consumed on our side.",
@@ -767,7 +743,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "affiliate.success.id": "Application ID:",
     "affiliate.faq.title": "FAQ",
     "affiliate.faq.q1": "How exactly is 20% calculated?",
-    "affiliate.faq.a1": "From the net subscription amount of the referred customer (after promo codes and taxes). If they pay $19/mo on Lite — you get $3.80 every month while they're a customer.",
+    "affiliate.faq.a1": "From the net subscription amount of the referred customer (after promo codes and taxes). You earn commission on every payment they make for a term — including renewals, for as long as they stay a customer.",
     "affiliate.faq.q2": "What counts as a referred customer?",
     "affiliate.faq.a2": "Any user who clicked your referral link (or used your promo code) and paid within 60 days. Cookie window: 60 days from first click.",
     "affiliate.faq.q3": "When are payouts?",
@@ -1013,6 +989,20 @@ const dict: Record<string, Record<string, string>> = {
   ru: { ...baseDict.ru, ...migrationsDict.ru },
   en: { ...baseDict.en, ...migrationsDict.en },
 };
+
+/**
+ * Ключ слова «месяц» в нужной форме для числа месяцев: 1 → one, 2–4 → few, иначе many
+ * (11–14 — many). Правило русское; в en и kk формы few и many совпадают, так что
+ * один вызов годится для всех трёх словарей. Ключи живут в i18n-lang: pricing.term.month.*.
+ */
+export function termUnitKey(months: number): string {
+  const n = Math.abs(Math.trunc(months)) % 100;
+  const d = n % 10;
+  if (n >= 11 && n <= 14) return "pricing.term.month.many";
+  if (d === 1) return "pricing.term.month.one";
+  if (d >= 2 && d <= 4) return "pricing.term.month.few";
+  return "pricing.term.month.many";
+}
 
 export function usePricingT() {
   const { lang } = useI18n();

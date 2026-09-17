@@ -5,9 +5,20 @@ import { useEffect, useState } from "react";
 import { useFunnel } from "@/lib/useFunnel";
 import { useI18n } from "@/lib/i18n";
 import { PageTracking } from "@/components/PageTracking";
+import { PLANET_BASE_MONTHLY, fromPricePerMonth } from "@/lib/termPricing";
+
+// ⚠️ 15.09.2026 — новая ценовая политика (слово основателя). Constitution Pro и
+// Team отдельными подписками сняты (Gumroad pyiaz / wjvquw). Pro-возможности
+// Конституции входят в подписку AEVION — срок доступа ко всей планете, 1–12
+// месяцев, оплата вперёд. Цена «от» — месяц на 12-месячном сроке, из лестницы
+// сроков (@/lib/termPricing), не литералом. Отдельного командного тарифа нет:
+// его колонка и вопрос о местах убраны, чтобы не продавать то, чего не купить.
+
+/** Страница цен AEVION, блок сроков подписки. */
+const PLANET_PRICING = "/pricing#tiers";
 
 type Tier = {
-  id: "free" | "pro" | "team";
+  id: "free" | "pro";
   name: string;
   price: string;
   period: string;
@@ -57,8 +68,8 @@ export default function ConstitutionPricingPage() {
     },
     {
       id: "pro",
-      name: "Pro",
-      price: "$9",
+      name: "Pro · AEVION",
+      price: `от $${fromPricePerMonth(PLANET_BASE_MONTHLY)}`,
       period: t("constitution.pricing.tier.period.monthly"),
       tagline: t("constitution.pricing.tier.pro.tagline"),
       features: [
@@ -70,28 +81,9 @@ export default function ConstitutionPricingPage() {
         t("constitution.pricing.tier.pro.feature.support"),
         t("constitution.pricing.tier.pro.feature.allFree"),
       ],
-      cta: "Upgrade to Pro →",
-      ctaHref: "https://aevion.gumroad.com/l/pyiaz",
+      cta: "Choose a term →",
+      ctaHref: PLANET_PRICING,
       highlight: true,
-    },
-    {
-      id: "team",
-      name: "Team",
-      price: "$49",
-      period: t("constitution.pricing.tier.period.monthly"),
-      tagline: t("constitution.pricing.tier.team.tagline"),
-      features: [
-        t("constitution.pricing.tier.team.feature.seats"),
-        t("constitution.pricing.tier.team.feature.admin"),
-        t("constitution.pricing.tier.team.feature.shared"),
-        t("constitution.pricing.tier.team.feature.csv"),
-        t("constitution.pricing.tier.team.feature.embed"),
-        t("constitution.pricing.tier.team.feature.academy"),
-        t("constitution.pricing.tier.team.feature.support"),
-        t("constitution.pricing.tier.team.feature.allPro"),
-      ],
-      cta: "Get Team →",
-      ctaHref: "https://aevion.gumroad.com/l/wjvquw",
     },
   ];
 
@@ -103,10 +95,6 @@ export default function ConstitutionPricingPage() {
     {
       q: t("constitution.pricing.faq.cancelAnytime.q"),
       a: t("constitution.pricing.faq.cancelAnytime.a"),
-    },
-    {
-      q: t("constitution.pricing.faq.teamSeats.q"),
-      a: t("constitution.pricing.faq.teamSeats.a"),
     },
     {
       q: t("constitution.pricing.faq.qsign.q"),
@@ -192,11 +180,11 @@ export default function ConstitutionPricingPage() {
             Constitution Pricing
           </h1>
           <p className="text-[#9aa3c0] mt-3 max-w-2xl mx-auto">
-            {t("constitution.pricing.header.subtitle")}
+            {t("constitution.pricing.header.subtitle", { price: `$${fromPricePerMonth(PLANET_BASE_MONTHLY)}` })}
           </p>
         </header>
 
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-12">
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-12 max-w-4xl mx-auto">
           {TIERS.map((tier) => (
             <div
               key={tier.id}
@@ -231,8 +219,6 @@ export default function ConstitutionPricingPage() {
               </ul>
               <a
                 href={tier.ctaHref}
-                target={tier.id !== "free" ? "_blank" : undefined}
-                rel={tier.id !== "free" ? "noopener noreferrer" : undefined}
                 onClick={() => {
                   if (tier.id !== "free") track("upgrade_click", { tier: tier.id });
                 }}
@@ -258,25 +244,21 @@ export default function ConstitutionPricingPage() {
                 <tr className="border-b border-[#d4af37]/20">
                   <th className="text-left py-2 text-[#9aa3c0] font-normal">Feature</th>
                   <th className="py-2 text-[#d4af37]">Free</th>
-                  <th className="py-2 text-[#f472b6]">Pro</th>
-                  <th className="py-2 text-cyan-300">Team</th>
+                  <th className="py-2 text-[#f472b6]">Pro · AEVION</th>
                 </tr>
               </thead>
               <tbody className="text-[#e7ecf8]">
-                <CompareRow feature={t("constitution.pricing.compare.feature.saved")} free="5" pro="♾" team="♾" />
-                <CompareRow feature={t("constitution.pricing.compare.feature.aiAdvisor")} free="10" pro="♾" team="♾" />
-                <CompareRow feature={t("constitution.pricing.compare.feature.pdfWatermark")} free="—" pro="✓" team="✓" />
-                <CompareRow feature={t("constitution.pricing.compare.feature.themes")} free="—" pro="✓" team="✓" />
-                <CompareRow feature={t("constitution.pricing.compare.feature.embed")} free="watermarked" pro="clean" team="branded" />
-                <CompareRow feature="Seats" free="1" pro="1" team="5+" />
-                <CompareRow feature="Admin dashboard" free="—" pro="—" team="✓" />
-                <CompareRow feature="Shared scenarios" free="—" pro="—" team="✓" />
-                <CompareRow feature={t("constitution.pricing.compare.feature.csv")} free="—" pro="✓" team="✓" />
-                <CompareRow feature="Priority support" free="—" pro="Email" team="Slack" />
-                <CompareRow feature="Real-time collab" free="✓" pro="✓" team="✓" />
-                <CompareRow feature={t("constitution.pricing.compare.feature.certificate")} free="✓" pro="✓" team="✓" />
-                <CompareRow feature="Planet publish" free="✓" pro="✓" team="✓" />
-                <CompareRow feature="Public REST API" free="✓ (240/min)" pro="✓ (240/min)" team="✓ (1200/min)" />
+                <CompareRow feature={t("constitution.pricing.compare.feature.saved")} free="5" pro="♾" />
+                <CompareRow feature={t("constitution.pricing.compare.feature.aiAdvisor")} free="10" pro="♾" />
+                <CompareRow feature={t("constitution.pricing.compare.feature.pdfWatermark")} free="—" pro="✓" />
+                <CompareRow feature={t("constitution.pricing.compare.feature.themes")} free="—" pro="✓" />
+                <CompareRow feature={t("constitution.pricing.compare.feature.embed")} free="watermarked" pro="clean" />
+                <CompareRow feature={t("constitution.pricing.compare.feature.csv")} free="—" pro="✓" />
+                <CompareRow feature="Priority support" free="—" pro="Email" />
+                <CompareRow feature="Real-time collab" free="✓" pro="✓" />
+                <CompareRow feature={t("constitution.pricing.compare.feature.certificate")} free="✓" pro="✓" />
+                <CompareRow feature="Planet publish" free="✓" pro="✓" />
+                <CompareRow feature="Public REST API" free="✓ (240/min)" pro="✓ (240/min)" />
               </tbody>
             </table>
           </div>
@@ -460,19 +442,16 @@ function CompareRow({
   feature,
   free,
   pro,
-  team,
 }: {
   feature: string;
   free: string;
   pro: string;
-  team: string;
 }) {
   return (
     <tr className="border-b border-[#d4af37]/10">
       <td className="py-2 text-[#9aa3c0]">{feature}</td>
       <td className="text-center py-2 font-mono">{free}</td>
       <td className="text-center py-2 font-mono text-[#f472b6]">{pro}</td>
-      <td className="text-center py-2 font-mono text-cyan-300">{team}</td>
     </tr>
   );
 }

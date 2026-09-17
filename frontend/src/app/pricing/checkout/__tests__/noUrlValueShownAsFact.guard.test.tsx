@@ -61,8 +61,9 @@ const ЭКРАНЫ = [
   {
     имя: "успех",
     Компонент: SuccessPage,
-    параметры: ["_ptxn", "appId", "gumroad", "paybox", "paypal", "period", "provider",
-                "sale_id", "session_id", "stub", "tier", "tierId", "total", "trial"],
+    // `term` — срок в месяцах (с 15.09.2026 вместо `period`).
+    параметры: ["_ptxn", "appId", "gumroad", "paybox", "paypal", "provider",
+                "sale_id", "session_id", "stub", "term", "tier", "tierId", "total", "trial"],
   },
   {
     имя: "отмена",

@@ -124,10 +124,16 @@ describe("Подсказка называет, чего не хватает", ()
     expect(без.body.canPay).toBe(true);
     expect(без.body.canStartPurchase).toBe(false);
 
+    // Прежний вариант (не продаётся с 15.09.2026) покупку НЕ начинает.
     process.env.LEMON_SQUEEZY_VARIANT_LITE_MONTHLY = "12345";
+    const прежний = await request(app()).get("/api/health/channels");
+    expect(прежний.body.canStartPurchase, "по снятому товару покупку не начать").toBe(false);
+    delete process.env.LEMON_SQUEEZY_VARIANT_LITE_MONTHLY;
+
+    process.env.LEMON_SQUEEZY_VARIANT_LITE = "12345";
     const с = await request(app()).get("/api/health/channels");
     expect(с.body.canStartPurchase).toBe(true);
-    delete process.env.LEMON_SQUEEZY_VARIANT_LITE_MONTHLY;
+    delete process.env.LEMON_SQUEEZY_VARIANT_LITE;
   });
 });
 

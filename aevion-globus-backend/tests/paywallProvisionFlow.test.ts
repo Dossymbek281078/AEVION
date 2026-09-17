@@ -64,7 +64,7 @@ describe("paywall provision flow — pay → access → expire", () => {
     const email = "buyer@test.aevion.dev";
     expect((await runGate(email)).status).toBe(402); // denied before purchase
 
-    await provisionSubscription({ email, tierId: "medium", period: "monthly", source: "gumroad" });
+    await provisionSubscription({ email, tierId: "medium", termMonths: 3, source: "gumroad" });
 
     const g = await runGate(email);
     expect(g.passed).toBe(true);      // gate let the request through
@@ -77,7 +77,7 @@ describe("paywall provision flow — pay → access → expire", () => {
     // Write a paid record that already lapsed yesterday.
     writeSubscription({
       id: "sub_expired", ts: new Date().toISOString(), email,
-      tierId: "medium", period: "monthly", seats: 1, modules: [], trialDays: 0,
+      tierId: "medium", termMonths: 3, seats: 1, modules: [], trialDays: 0,
       validUntil: new Date(Date.now() - 86_400_000).toISOString(),
       source: "gumroad",
     } as any);
@@ -87,13 +87,15 @@ describe("paywall provision flow — pay → access → expire", () => {
     expect(g.status).toBe(402);
   });
 
-  test("a lite subscription unlocks ONLY its chosen module", async () => {
+  test("a lite (1-month) subscription unlocks EVERY paid module, not only a chosen one", async () => {
+    // 15.09.2026: тариф — это срок доступа ко всей планете. Lite больше не
+    // «один модуль на выбор»: выбранный список на доступ не влияет.
     const email = "lite-buyer@test.aevion.dev";
-    await provisionSubscription({ email, tierId: "lite", period: "monthly", modules: ["healthai"], source: "gumroad" });
-    expect((await runGate(email)).passed).toBe(true);
-    // A different medium-tier module (qnews) is NOT unlocked by a lite pick
-    // of healthai — lite is one product of choice, not the whole medium tier.
+    await provisionSubscription({ email, tierId: "lite", termMonths: 1, modules: ["qsign"], source: "gumroad" });
+    expect((await runGate(email)).passed, "Lite не открыл модуль, входящий в подписку").toBe(true);
     const req = bearerReq(email);
-    expect(isModuleEntitled(resolveUserPlan(req), "qnews")).toBe(false);
+    expect(isModuleEntitled(resolveUserPlan(req), "qnews")).toBe(true);
+    // Контроль: у человека без подписки тот же модуль закрыт.
+    expect(isModuleEntitled(resolveUserPlan(bearerReq("nobody-lite@test.aevion.dev")), "qnews")).toBe(false);
   });
 });

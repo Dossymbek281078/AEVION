@@ -14,6 +14,7 @@ import {
 } from "@/lib/products";
 import { BuyLink } from "@/components/BuyLink";
 import { PageTracking } from "@/components/PageTracking";
+import { fromPricePerMonth } from "@/lib/termPricing";
 // Счётчик живых модулей — из pitchFacts, заперт на реестр сторожем.
 // До 10.08.2026 здесь стояло «29 живых модулей», пока реестр отдавал 36:
 // страница-хаб для ссылки в профиле занижала платформу на семь модулей
@@ -169,6 +170,9 @@ function LinkCard({
 
 function priceOf(p: Product | undefined): string | undefined {
   if (!p) return undefined;
+  // Срочный доступ (политика 15.09.2026): честная нижняя цена месяца — на самом
+  // длинном сроке, отсюда «от». Число — из лестницы сроков, не из вёрстки.
+  if (p.billing === "term") return `от ${CURRENCY.format(fromPricePerMonth(p.priceUsd))} / мес`;
   return CURRENCY.format(p.priceUsd) + (p.billing === "monthly" ? " / мес" : "");
 }
 
@@ -209,7 +213,9 @@ export default async function GoPage({
   const protocol = productById("oijxmq");
   const antiGreyRu = productById("tmuyxw");
   const bookFull = productById("ghvzq");
-  const allAccess = SUBSCRIPTIONS.find((s) => s.id === "xpxzam");
+  // Подписка на всю планету (срок 1–12 месяцев, политика 15.09.2026). Прежняя
+  // карточка вела в All-Access на Gumroad — товар снят с продажи.
+  const allAccess = SUBSCRIPTIONS.find((s) => s.id === "aevion-planet");
 
   // Язык объявляется на самом блоке: в корневом макете стоит lang="en"
   // (большая часть сайта английская), а эта страница русская — и
@@ -358,14 +364,13 @@ export default async function GoPage({
             note="Шахматы с ИИ-коучем, сметный тренажёр, венчурный аналитик, IP-бюро и другие."
           />
           {allAccess && (
+            // Не external: карточка ведёт на страницу цен (выбор срока), а не в
+            // кассу. checkout_start уйдёт там, при настоящем начале оплаты.
             <LinkCard
               href={withChannel(allAccess.href, channel, "go")}
-              external
-              product={allAccess}
-              channel={channel}
               kicker={allAccess.format}
               title="Доступ ко всему сразу"
-              note="Вместо покупки модулей поштучно."
+              note="Все модули AEVION на срок от 1 до 12 месяцев, оплата за срок вперёд."
               price={priceOf(allAccess)}
             />
           )}

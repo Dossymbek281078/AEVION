@@ -46,7 +46,8 @@ writeFileSync(
     ts: new Date().toISOString(),
     email: "buyer@example.test",
     tierId: "medium",
-    period: "annual",
+    // Запись после 15.09.2026: срок в месяцах вместо периода.
+    termMonths: 3,
     seats: 1,
     modules: [],
     trialDays: 0,
@@ -101,7 +102,7 @@ describe("статус выдачи различает три исхода", () 
     expect(r.status).toBe(200);
     expect(r.body.ready, "выдача есть, а ручка говорит «нет»").toBe(true);
     expect(r.body.tier, "тариф не тот, что записан").toBe("medium");
-    expect(r.body.period, "период потерялся").toBe("annual");
+    expect(r.body.termMonths, "срок потерялся").toBe(3);
   });
 
   test("старая запись без поля — находится по номеру подписки", async () => {
@@ -110,6 +111,8 @@ describe("статус выдачи различает три исхода", () 
     const r = await request(приложение()).get("/api/pricing/checkout/status?intentId=pay-999-2026");
     expect(r.body.ready, "старая запись не найдена по номеру подписки").toBe(true);
     expect(r.body.tier).toBe("lite");
+    // Запись до 15.09.2026 несёт period, а не termMonths — срок обязан читаться и из неё.
+    expect(r.body.termMonths, "срок старой месячной записи не прочитан").toBe(1);
   });
 
   test("КОРОТКИЙ идентификатор не совпадает с чужой подпиской", async () => {

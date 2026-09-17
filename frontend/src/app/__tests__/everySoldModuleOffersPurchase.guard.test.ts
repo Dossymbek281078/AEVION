@@ -103,6 +103,9 @@ const SIGNALS: Array<[string, (s: string) => boolean]> = [
   ["кнопка апгрейда", (s) => renders(s, "UpgradeButton")],
   ["BuyLink", (s) => renders(s, "BuyLink")],
   ["ссылка в кассу", (s) => s.includes("lemonsqueezy.com") || s.includes("gumroad.com")],
+  // 15.09.2026: пять приложений продаются через страницу цен с выбранным
+  // приложением — это и есть их касса (оттуда заказ уходит полем `app`).
+  ["ссылка к выбору срока", (s) => s.includes("/pricing?app=") || s.includes("PRICING_APP(")],
   ["ручка чекаута", (s) => s.includes("/api/pricing/checkout") || s.includes("checkout/session")],
   ["платная стена", (s) => renders(s, "PaywallScreen") || renders(s, "PaywallModal")],
 ];
@@ -148,7 +151,9 @@ function soldModules(): Array<{ id: string; dir: string }> {
   for (let i = 0; i < anchors.length; i += 1) {
     const end = i + 1 < anchors.length ? anchors[i + 1].at : cat.length;
     const win = cat.slice(anchors[i].at, end);
-    if (!/priceUsd:\s*\d+/.test(win)) continue;
+    // Цена бывает литералом (гайды) или вычислением из лестницы сроков
+    // (appBase("…"), политика 15.09.2026) — оба значат «продаётся».
+    if (!/priceUsd:\s*(\d+|appBase\(|PLANET_BASE_MONTHLY)/.test(win)) continue;
     const kind = /kind:\s*"([a-z]+)"/.exec(win);
     if (kind && kind[1] !== "module") continue;
     const app = /appId:\s*"([a-z0-9-]+)"/.exec(win);

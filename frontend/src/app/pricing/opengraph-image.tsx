@@ -1,5 +1,10 @@
 import { ImageResponse } from "next/og";
-import { MODULE_NODES, ENTRY_PAID_TIER_MONTHLY } from "@/data/pitchFacts";
+import { MODULE_NODES } from "@/data/pitchFacts";
+import { PLANET_BASE_MONTHLY, fromPricePerMonth } from "@/lib/termPricing";
+
+// «От» — самая низкая цена месяца, которую можно назвать честно: срок Max.
+// Берётся из lib/termPricing.ts; до 15.09.2026 здесь стояла цена прежнего Lite.
+const ОТ_В_МЕСЯЦ = `$${fromPricePerMonth(PLANET_BASE_MONTHLY)}`;
 
 export const runtime = "edge";
 // Count-free wording kept from main — one less number that can go stale. The
@@ -69,7 +74,7 @@ export default async function Image() {
               marginBottom: 12,
             }}
           >
-            FREE · PRO · BUSINESS · ENTERPRISE
+            FREE · LITE · MEDIUM · PRO · FULL · MAX · ENTERPRISE
           </div>
           <h1
             style={{
@@ -93,7 +98,7 @@ export default async function Image() {
               lineHeight: 1.3,
             }}
           >
-            Цифровая собственность · AI · подписи · платежи. От {ENTRY_PAID_TIER_MONTHLY}/мес.
+            Вся планета: цифровая собственность · AI · подписи · платежи. От {ОТ_В_МЕСЯЦ}/мес.
           </p>
         </div>
 
@@ -101,7 +106,7 @@ export default async function Image() {
           <div style={{ display: "flex", gap: 32 }}>
             <Stat value={`${MODULE_NODES}`} label="модулей" />
             <Stat value="30+" label="стран" />
-            <Stat value={ENTRY_PAID_TIER_MONTHLY} label="от/мес" />
+            <Stat value={ОТ_В_МЕСЯЦ} label="от/мес" />
             <Stat value="14" label="дней trial" />
           </div>
           <div style={{ fontSize: 16, color: "#64748b" }}>aevion.app/pricing</div>

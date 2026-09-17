@@ -30,17 +30,12 @@ const SRC = join(process.cwd(), "src");
 const HOSTS = ["gumroad.com/l/", "lemonsqueezy.com/checkout", "pricing/checkout/session"];
 
 /** Места, где метки нет осознанно или где её некому подхватить. */
-const DEBT = new Map([
-  [
-    "app/constitution/page.tsx",
-    "Копия файла в моей ветке от 18.08, четыре чужие ветки новее — правка " +
-      "поверх отстающей копии унесла бы их починки (правило 7в).",
-  ],
-  [
-    "app/constitution/pricing/page.tsx",
-    "Та же ветка и тот же владелец, что у страницы выше: чинить обе должен он.",
-  ],
-]);
+// 15.09.2026: обе страницы Конституции вышли из долга не починкой метки, а
+// снятием товара. Constitution Pro и Team на Gumroad сняты с продажи (подписка
+// AEVION — это срок доступа ко всей планете), прямых ссылок в чужую кассу на
+// этих страницах не осталось вовсе: они ведут на /pricing, а метку туда
+// доводит keepChannel. Долг пуст — и это правильное состояние.
+const DEBT = new Map<string, string>([]);
 
 function files(dir: string): string[] {
   const out: string[] = [];

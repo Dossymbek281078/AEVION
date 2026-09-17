@@ -1,3 +1,4 @@
+import { STANDALONE_APPS, TERM_TIERS } from "../data/pricing";
 /**
  * AEVION Revenue Hub — /api/revenue/*
  *
@@ -201,6 +202,12 @@ const LS_VARIANT_APP_ENV_SUFFIXES: Record<string, string> = {
   PLANET_MONTHLY: "planet",
   PLANET_ANNUAL: "planet",
 };
+// Отдельные приложения на лестнице сроков (15.09.2026): LEMON_SQUEEZY_VARIANT_<APP>_<СТУПЕНЬ>.
+for (const app of STANDALONE_APPS) {
+  for (const t of TERM_TIERS) {
+    LS_VARIANT_APP_ENV_SUFFIXES[`${app.slug.toUpperCase()}_${t.toUpperCase()}`] = app.slug === "ip_bureau" ? "ip-bureau" : app.slug;
+  }
+}
 
 let lsVariantAppCache: Record<string, string> | null = null;
 

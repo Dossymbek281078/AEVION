@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { HealthDisclaimer } from "@/components/HealthDisclaimer";
 import { keepChannel, productById, withChannel } from "@/lib/products";
+import { fromPricePerMonth } from "@/lib/termPricing";
 import { BuyLink } from "@/components/BuyLink";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
@@ -32,7 +33,9 @@ const PROTOCOL_PDF = productById("oijxmq");
  * Позиция каталога, а не хардкод: цена подписки уже менялась, и вторая её копия
  * в коде разошлась бы с чекаутом молча.
  */
-const ALL_ACCESS = productById("xpxzam");
+// С 15.09.2026 — подписка на всю планету на срок 1–12 месяцев (прежний товар
+// All-Access на Gumroad снят с продажи).
+const ALL_ACCESS = productById("aevion-planet");
 
 /**
  * Книга, из которой вырос протокол: «Gratitude ∞ Forever Young» — тот же
@@ -418,13 +421,11 @@ export default function LongevityClient({ channel = null }: { channel?: string |
             настоящий: предлагать подписку раньше значит просить денег до того,
             как показал ценность. Формулировка без обещаний результата — тема
             здоровья ограничена и у поисковиков, и у рекламных систем. */}
+        {/* Ведёт на страницу цен (выбор срока), а не в кассу, поэтому обычная
+            ссылка, а не BuyLink: checkout_start уйдёт там, при настоящей оплате. */}
         {ALL_ACCESS && (
-          <BuyLink
+          <a
             href={withChannel(ALL_ACCESS.href, channel, "longevity-upsell")}
-            source="longevity-upsell"
-            productId={ALL_ACCESS.id}
-            priceUsd={ALL_ACCESS.priceUsd}
-            channel={channel}
             style={styles.upsellCard}
           >
             <div style={styles.buyLeft}>
@@ -433,14 +434,14 @@ export default function LongevityClient({ channel = null }: { channel?: string |
               <p style={styles.buyDesc}>
                 Протокол долголетия — один из модулей AEVION. По подписке
                 открываются остальные: реестр прав, подпись документов, ИИ-инструменты,
-                платежи. Одна подписка вместо покупки по одному.
+                платежи. Срок от 1 до 12 месяцев, оплата за срок вперёд.
               </p>
             </div>
             <div style={styles.buyRight}>
-              <div style={styles.buyPrice}>${ALL_ACCESS.priceUsd}<span style={styles.upsellPer}>/мес</span></div>
-              <div style={styles.upsellBtn}>Открыть&nbsp;→</div>
+              <div style={styles.buyPrice}>от ${fromPricePerMonth(ALL_ACCESS.priceUsd)}<span style={styles.upsellPer}>/мес</span></div>
+              <div style={styles.upsellBtn}>Выбрать срок&nbsp;→</div>
             </div>
-          </BuyLink>
+          </a>
         )}
 
 

@@ -19,9 +19,12 @@ vi.mock("../src/lib/planGate", () => ({
 
 import { premiumQuotaGateForPayload, QUOTA_CALL_ESTIMATE_TOKENS } from "../src/lib/qcoreQuota";
 import { getMonthlyPremiumTokens } from "../src/services/qcoreai/store";
+import { getTier } from "../src/data/pricing";
 
-// lite: premiumTokensPerMonth = 200_000 (src/data/pricing.ts)
-const LIMIT = 200_000;
+// Предел берём ИЗ КАТАЛОГА, а не зашиваем: 15.09.2026 квота lite стала квотой всей
+// планеты, и зашитое 200 000 превратило бы «у самого предела» в «далеко до предела» —
+// сторож гонки проверял бы пустоту.
+const LIMIT = getTier("lite")!.limits.premiumTokensPerMonth as number;
 const payload = { sub: "user-fan-test" };
 
 beforeEach(() => {
@@ -34,6 +37,11 @@ afterEach(() => {
 });
 
 describe("премиум-затвор с запасом на параллельную группу", () => {
+  test("контроль: у lite есть премиум-предел, и группа из 8 меньше него", () => {
+    expect(LIMIT, "у lite нет премиум-предела — проверять нечего").toBeGreaterThan(0);
+    expect(8 * QUOTA_CALL_ESTIMATE_TOKENS).toBeLessThan(LIMIT);
+  });
+
   test("у самого предела: одиночный вызов проходит, группа из 8 — нет", async () => {
     // used чуть ниже предела: раньше ВСЕ восемь параллельных проверок
     // проходили здесь и предел переливался ×8.

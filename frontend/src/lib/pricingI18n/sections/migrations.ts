@@ -31,7 +31,7 @@ export const migrationsDict: { ru: Record<string, string>; en: Record<string, st
     "migrations.docusign.before.b2": "Audit-trail в отдельной системе, не интегрирован с реестром авторских прав",
     "migrations.docusign.before.b3": "Нет TSP-timestamp по умолчанию, для compliance — отдельный продукт",
 
-    "migrations.docusign.after.b1": "$19/мес/seat (Lite) или $9/мес add-on к любому тарифу — без overage",
+    "migrations.docusign.after.b1": "Подписи QSign входят в любой платный тариф AEVION — без доплат за конверт",
     "migrations.docusign.after.b2": "QRight + QSign в одном аккаунте: подпись автоматически фиксируется в реестре",
     "migrations.docusign.after.b3": "TSP-timestamp + audit-trail включены, SOC2 evidence pack одной кнопкой",
 
@@ -44,7 +44,7 @@ export const migrationsDict: { ru: Record<string, string>; en: Record<string, st
     "migrations.docusign.step4.title": "Cutover и отмена DocuSign",
     "migrations.docusign.step4.body": "Когда команда привыкла (обычно 5-14 дней) — отменяете DocuSign-подписку. Все active envelopes завершаются в DocuSign, новые — в AEVION.",
 
-    "migrations.docusign.quote": "Мы тратили $4 200/мес на DocuSign Business для 30 юристов. На AEVION Pro с annual-скидкой — $570/мес за тот же объём подписей. Цикл подписи сократился с 2 дней до 4 часов.",
+    "migrations.docusign.quote": "Мы тратили $4 200/мес на DocuSign Business для 30 юристов. На AEVION Pro — $570/мес за тот же объём подписей. Цикл подписи сократился с 2 дней до 4 часов.",
     "migrations.docusign.quoteBy": "Head of Operations, Almaty Law Group",
 
     "migrations.openai.before.b1": "$0.03/1k input + $0.06/1k output для GPT-4 — быстро добегает до $1k/мес для ML-команды",
@@ -91,7 +91,7 @@ export const migrationsDict: { ru: Record<string, string>; en: Record<string, st
     "migrations.patently.before.b2": "Регистрация артефактов через сторонние подрядчики, $720/реестр в среднем",
     "migrations.patently.before.b3": "Manual-сверка с EUIPO/USPTO/локальными патентными офисами",
 
-    "migrations.patently.after.b1": "$19/мес add-on (IP Bureau) к любому тарифу — все renewals и filing помощника включены",
+    "migrations.patently.after.b1": "IP Bureau — в любом платном тарифе или отдельным приложением: renewals и filing-помощник включены",
     "migrations.patently.after.b2": "QRight регистрация $190/реестр в среднем (зависит от объекта и юрисдикции)",
     "migrations.patently.after.b3": "Auto-renewals, auto-sync с EUIPO/USPTO/Россия/Казахстан/Узбекистан/etc.",
 
@@ -141,7 +141,7 @@ export const migrationsDict: { ru: Record<string, string>; en: Record<string, st
     "migrations.docusign.before.b2": "Audit trail in a separate system, not integrated with copyright registry",
     "migrations.docusign.before.b3": "No TSP timestamp by default; compliance is a separate product",
 
-    "migrations.docusign.after.b1": "$19/seat/mo (Lite) or $9/mo add-on on any tier — no overage",
+    "migrations.docusign.after.b1": "QSign signatures are included in every paid AEVION plan — no per-envelope overage",
     "migrations.docusign.after.b2": "QRight + QSign in one account: signature is auto-recorded in registry",
     "migrations.docusign.after.b3": "TSP timestamp + audit trail included, SOC2 evidence pack in one click",
 
@@ -154,7 +154,7 @@ export const migrationsDict: { ru: Record<string, string>; en: Record<string, st
     "migrations.docusign.step4.title": "Cutover and DocuSign cancel",
     "migrations.docusign.step4.body": "Once the team is comfortable (5-14 days) — cancel DocuSign. Active envelopes finish there, new ones go to AEVION.",
 
-    "migrations.docusign.quote": "We were paying $4,200/mo for DocuSign Business for 30 lawyers. AEVION Pro with annual discount — $570/mo for the same volume. Signing cycle dropped from 2 days to 4 hours.",
+    "migrations.docusign.quote": "We were paying $4,200/mo for DocuSign Business for 30 lawyers. AEVION Pro — $570/mo for the same volume. Signing cycle dropped from 2 days to 4 hours.",
     "migrations.docusign.quoteBy": "Head of Operations, Almaty Law Group",
 
     "migrations.openai.before.b1": "$0.03/1k input + $0.06/1k output for GPT-4 — quickly hits $1k/mo for an ML team",
@@ -201,7 +201,7 @@ export const migrationsDict: { ru: Record<string, string>; en: Record<string, st
     "migrations.patently.before.b2": "Artifact registration via third parties, $720/reg avg",
     "migrations.patently.before.b3": "Manual sync with EUIPO/USPTO/local patent offices",
 
-    "migrations.patently.after.b1": "$19/mo add-on (IP Bureau) on any tier — all renewals and filing assistant included",
+    "migrations.patently.after.b1": "IP Bureau — in every paid plan or as a standalone app: renewals and the filing assistant included",
     "migrations.patently.after.b2": "QRight registration $190/reg avg (depends on object and jurisdiction)",
     "migrations.patently.after.b3": "Auto-renewals, auto-sync with EUIPO/USPTO/Russia/Kazakhstan/Uzbekistan/etc.",
 

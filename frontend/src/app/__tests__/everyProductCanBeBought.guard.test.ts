@@ -1,80 +1,59 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { ALL_PRODUCTS, MODULES, SUBSCRIPTIONS } from "@/lib/products";
+import { STANDALONE_APPS } from "@/lib/termPricing";
 
 /**
- * У каждого товара каталога должна быть цена И ссылка кассы.
+ * У каждого товара каталога должна быть цена И путь к оплате.
  *
  * Класс, ради которого сторож: «кнопка купить ведёт в никуда». Он уже случался
  * дважды — 10.08 девять кнопок Lemon Squeezy считали мёртвыми (оказалось ложной
  * тревогой от User-Agent), а 23.08 на странице QCoreAI кнопка оплаты вела в
  * поля карты, которые никуда не отправлялись.
  *
- * Замер 29.08.2026: 16 товаров, у всех есть и цена, и ссылка (Gumroad или
- * Lemon Squeezy). Сторож держит этот ноль.
+ * ⚠️ 15.09.2026 — новая ценовая политика. Путь к оплате теперь двух видов:
+ *   · прямая ссылка продавца (Gumroad) — гайды и книги, разовая покупка;
+ *   · наша касса через страницу цен — подписка на всю планету (/pricing#tiers)
+ *     и пять отдельных приложений (/pricing?app=<slug>#apps).
+ * Сторож исполняет настоящие объекты каталога, а не грепает исходник: цена и
+ * адрес приложений вычисляются из лестницы сроков, литерала в файле нет.
  *
- * ЧЕГО ОН НЕ ДЕЛАЕТ. Он не ходит в сеть: живость ссылок проверяется отдельно и
- * вручную (29.08 — все 200, выдуманный товар 404). Сетевая проверка в наборе
- * тестов была бы то зелёной, то красной от чужой доступности, и её отключили
- * бы первой. Здесь проверяется НАЛИЧИЕ пути к оплате, а не его работа.
- *
- * Комментарии вырезаются: в них цитируются прежние разборы, и без этого
- * сторож считал бы примеры из объяснений за настоящие записи каталога.
+ * ЧЕГО ОН НЕ ДЕЛАЕТ. Он не ходит в сеть: живость ссылок проверяется отдельно.
+ * Здесь проверяется НАЛИЧИЕ пути к оплате, а не его работа.
  */
 
-const NL = String.fromCharCode(10);
-const CATALOG = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "lib", "products.ts");
-
-type Row = { id: string; price?: string; href: boolean };
-
-function catalog(): Row[] {
-  const raw = readFileSync(CATALOG, "utf8");
-  const src = raw
-    .split(NL)
-    .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*"))
-    .join(NL);
-
-  const rows: Row[] = [];
-  let at = 0;
-  for (;;) {
-    const i = src.indexOf('id: "', at);
-    if (i < 0) break;
-    at = i + 1;
-    const close = src.indexOf('"', i + 5);
-    const id = src.slice(i + 5, close);
-    const next = src.indexOf('id: "', at + 4);
-    const body = src.slice(i, next > 0 ? next : src.length);
-    rows.push({
-      id,
-      price: (body.match(/priceUsd:\s*([0-9.]+)/) || [])[1],
-      href: /href:\s*(GUM|LS|PADDLE|"https)/.test(body),
-    });
-  }
-  return rows;
-}
+const EXTERNAL = /^https:\/\/aevion\.(gumroad\.com\/l\/|lemonsqueezy\.com\/checkout\/buy\/)[A-Za-z0-9-]{4,}/;
+const PRICING = /^\/pricing(\?app=[a-z_]+)?#(tiers|apps)$/;
 
 describe("каждый товар каталога можно купить", () => {
-  const rows = catalog();
-
-  // Контроль охвата: без него сломанный разбор дал бы пустой список, и сторож
-  // ответил бы «нарушений нет», не посмотрев ни на один товар.
-  it("контроль прибора: каталог разобран", () => {
-    expect(rows.length, "не разобрал ни одного товара — сломан разбор файла")
-      .toBeGreaterThanOrEqual(10);
-    expect(rows.some((r) => r.id === "cyberchess"), "не нашёл известный товар").toBe(true);
+  // Контроль охвата: пустой каталог ответил бы «нарушений нет».
+  it("контроль прибора: каталог собран", () => {
+    expect(ALL_PRODUCTS.length, "каталог пуст или потерял товары").toBeGreaterThanOrEqual(10);
+    expect(ALL_PRODUCTS.some((p) => p.id === "cyberchess"), "не нашёл известный товар").toBe(true);
   });
 
   it("у каждого есть цена", () => {
-    const noPrice = rows.filter((r) => !r.price).map((r) => r.id);
+    const noPrice = ALL_PRODUCTS.filter((p) => !(Number.isFinite(p.priceUsd) && p.priceUsd > 0)).map((p) => p.id);
     expect(noPrice, `товар без цены — купить нельзя: ${noPrice.join(", ")}`).toEqual([]);
   });
 
-  it("у каждого есть ссылка кассы", () => {
-    const noHref = rows.filter((r) => !r.href).map((r) => r.id);
-    expect(
-      noHref,
-      `товар без ссылки кассы — кнопка ведёт в никуда: ${noHref.join(", ")}`,
-    ).toEqual([]);
+  it("у каждого есть путь к оплате: ссылка продавца или страница цен", () => {
+    const noHref = ALL_PRODUCTS.filter((p) => !EXTERNAL.test(p.href) && !PRICING.test(p.href)).map(
+      (p) => `${p.id} -> ${p.href}`,
+    );
+    expect(noHref, `товар без пути к оплате — кнопка ведёт в никуда: ${noHref.join(", ")}`).toEqual([]);
+  });
+
+  it("срочный доступ продаётся ТОЛЬКО через страницу цен, разовое — только ссылкой продавца", () => {
+    const wrong = ALL_PRODUCTS.filter((p) =>
+      p.billing === "term" ? !PRICING.test(p.href) : !EXTERNAL.test(p.href),
+    ).map((p) => `${p.id} (${p.billing}) -> ${p.href}`);
+    expect(wrong, "способ оплаты не совпадает с тем, как списываются деньги").toEqual([]);
+  });
+
+  it("отдельно продаются ровно пять приложений лестницы, остальное — одна подписка", () => {
+    expect(MODULES.map((m) => m.href).sort()).toEqual(
+      STANDALONE_APPS.map((a) => `/pricing?app=${a.slug}#apps`).sort(),
+    );
+    expect(SUBSCRIPTIONS.map((s) => s.href)).toEqual(["/pricing#tiers"]);
   });
 });

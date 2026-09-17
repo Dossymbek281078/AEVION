@@ -35,6 +35,9 @@ describe("разбор тарифа из ссылки заказа", () => {
     // предикате, который всегда false, — то есть сломало бы все покупки.
     expect(ссылкаПодписки("tier_medium_monthly")).toBe(true);
     expect(ссылкаПодписки("tier_lite_monthly")).toBe(true);
+    // Ссылки лестницы сроков (15.09.2026).
+    expect(ссылкаПодписки("tier_lite")).toBe(true);
+    expect(ссылкаПодписки("tier_max")).toBe(true);
   });
 
   it("контроль: подписочные ссылки по-прежнему разбираются", () => {
@@ -42,12 +45,17 @@ describe("разбор тарифа из ссылки заказа", () => {
     expect(tierForReference("tier_medium_monthly")).toBe("medium");
     expect(tierForReference("tier_full_annual")).toBe("full");
     expect(tierForReference("tier_lite_monthly")).toBe("lite");
+    expect(tierForReference("tier_max")).toBe("max");
+    expect(tierForReference("tier_medium")).toBe("medium");
   });
 
   it("незнакомая подписочная ссылка по-прежнему даёт lite", () => {
     // Прежнее поведение сохранено намеренно: у этой ветки своя история и
     // свои основания, трогать её без нужды нельзя.
-    expect(tierForReference("tier_pro_monthly")).toBe("pro");
+    expect(tierForReference("tier_zzz_monthly")).toBe("lite");
+    // Прежняя tier_pro_monthly — известная ссылка, а не «незнакомая»: прежний pro
+    // был всей экосистемой помесячно и выдаётся как full, а не как ступень pro (6 мес).
+    expect(tierForReference("tier_pro_monthly")).toBe("full");
   });
 
   it("номер второго пути оплаты НЕ похож на подписку", () => {
@@ -57,6 +65,16 @@ describe("разбор тарифа из ссылки заказа", () => {
       ссылкаПодписки(ссылка),
       "произвольный платёж принят за покупку подписки — человек получит тариф за любую сумму",
     ).toBe(false);
+  });
+
+  it("ссылка отдельного приложения подпиской НЕ считается, хоть и несёт слово ступени", () => {
+    // 15.09.2026: app_cyberchess_full содержит «full», и токенный поиск принял бы
+    // покупку одного приложения за тариф Full — всю планету за цену приложения.
+    for (const ссылка of ["app_cyberchess_full", "app_ip_bureau_pro", "app-devhub-max", "app_multichat_lite"]) {
+      expect(ссылкаПодписки(ссылка), `"${ссылка}" принята за подписку на тариф`).toBe(false);
+    }
+    // Контроль: ступень всей планеты с тем же словом — подписка.
+    expect(ссылкаПодписки("tier_full")).toBe(true);
   });
 
   it("ссылка оплаты бюро тоже не похожа на подписку", () => {

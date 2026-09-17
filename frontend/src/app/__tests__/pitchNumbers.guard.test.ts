@@ -238,33 +238,113 @@ const BACKEND_PRICING = path.resolve(
   "../aevion-globus-backend/src/data/pricing.ts",
 );
 
-/** tierId → priceMonthly as written in TIERS (null for enterprise). */
-function registryTierPrices(): Record<string, number | null> {
-  const src = readFileSync(BACKEND_PRICING, "utf8");
-  // Slice to the TIERS array — MODULES_PRICING below it also has `id:` keys.
-  const start = src.indexOf("export const TIERS");
-  const end = src.indexOf("export const MODULES_PRICING");
-  expect(
-    start >= 0 && end > start,
-    `Could not locate the TIERS array in ${BACKEND_PRICING}. If the registry was ` +
-      "restructured, update this guard — do not delete it.",
-  ).toBe(true);
-
-  const tiers: Record<string, number | null> = {};
-  const re = /id:\s*"([a-z]+)",[\s\S]*?priceMonthly:\s*([\d.]+|null)/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(src.slice(start, end))) !== null) {
-    tiers[m[1]] = m[2] === "null" ? null : Number(m[2]);
-  }
-  return tiers;
+/**
+ * ⚠️ РАЗБОР РЕЕСТРА ПЕРЕПИСАН 16.09.2026 — и прежний давал ЛОЖНЫЙ ЗЕЛЁНЫЙ.
+ *
+ * До лестницы сроков каждый платный тариф лежал в реестре литеральным объектом,
+ * и regexp `id: "..." … priceMonthly: N` находил все шесть. С 15.09.2026 платные
+ * тарифы строятся функцией `planetTier("lite")`: у них нет ни литерального
+ * `id:`, ни `priceMonthly:` — цена месяца считается из лестницы TERM_*. Прежний
+ * разбор находил ровно ДВА тарифа (free и enterprise) и отвечал на вопрос
+ * «какие цены в реестре» неполным списком; сообщения падений выглядели как
+ * «expected '$19' to be '$undefined'», то есть как расхождение цен, хотя сломан
+ * был прибор.
+ *
+ * Хуже всего это сказалось на OG-карточках ниже: `registryCardPrices()`
+ * возвращал `[0]`, карточки после перехода на вычисление тоже отдавали `[0]`
+ * (литералов в них больше нет), и сравнение `[0] === [0]` было ЗЕЛЁНЫМ при двух
+ * сломанных половинах. Зелёный за непроделанную работу — хуже отсутствия теста.
+ *
+ * Теперь лестница считается ТАК ЖЕ, как её считает реестр: цена месяца =
+ * PLANET_BASE_MONTHLY × TERM_FACTOR[срок], платёж за срок = цена месяца ×
+ * TERM_MONTHS[срок]. Это не второй способ счёта, а тот же самый, прочитанный из
+ * того же файла, — и ниже стоит контроль, что реестр действительно объявляет
+ * `priceTermTotal` произведением, а не своей отдельной формулой.
+ *
+ * Разбор ПОЗИЦИОННЫЙ, без регулярок, собранных из строк: такие теряют обратные
+ * слэши на границе вызова и молча находят ноль.
+ */
+function backendSource(): string {
+  return readFileSync(BACKEND_PRICING, "utf8");
 }
 
-/** Prices a public price card is allowed to show, ascending. */
-function registryCardPrices(): number[] {
-  const tiers = registryTierPrices();
-  return Object.values(tiers)
-    .filter((p): p is number => p !== null)
-    .sort((a, b) => a - b);
+/** Таблица `Record<TermTier, number>` из реестра по имени (TERM_MONTHS, TERM_FACTOR). */
+function registryRecord(src: string, name: string): Record<string, number> {
+  const at = src.indexOf(`export const ${name}: Record<TermTier, number> = {`);
+  if (at < 0) return {};
+  const open = src.indexOf("{", at);
+  const close = src.indexOf("}", open);
+  if (open < 0 || close < 0) return {};
+  const out: Record<string, number> = {};
+  for (const m of src.slice(open + 1, close).matchAll(/(\w+):\s*([\d.]+)/g)) out[m[1]] = Number(m[2]);
+  return out;
+}
+
+/** Числовая константа верхнего уровня, например PLANET_BASE_MONTHLY. */
+function registryNumber(src: string, name: string): number | null {
+  const head = `export const ${name} = `;
+  const at = src.indexOf(head);
+  if (at < 0) return null;
+  const from = at + head.length;
+  const raw = src.slice(from, src.indexOf(";", from)).trim();
+  return /^[\d.]+$/.test(raw) ? Number(raw) : null;
+}
+
+/** id сроков, которые реестр реально ставит в TIERS через planetTier(). */
+function registryTermIds(src: string): string[] {
+  const start = src.indexOf("export const TIERS");
+  const end = src.indexOf("export const MODULES_PRICING");
+  if (start < 0 || end < start) return [];
+  return [...src.slice(start, end).matchAll(/planetTier\("(\w+)"/g)].map((m) => m[1]);
+}
+
+/** Литеральные тарифы (free / enterprise) — у них цена написана прямо в объекте. */
+function registryLiteralTierPrices(src: string): Record<string, number | null> {
+  const start = src.indexOf("export const TIERS");
+  const end = src.indexOf("export const MODULES_PRICING");
+  if (start < 0 || end < start) return {};
+  const out: Record<string, number | null> = {};
+  for (const m of src
+    .slice(start, end)
+    .matchAll(/id:\s*"(\w+)",[\s\S]{0,400}?priceMonthly:\s*([\d.]+|null)/g)) {
+    out[m[1]] = m[2] === "null" ? null : Number(m[2]);
+  }
+  return out;
+}
+
+/** tierId → цена месяца. Семь тарифов: free, пять сроков, enterprise. */
+function registryTierPrices(): Record<string, number | null> {
+  const src = backendSource();
+  const base = registryNumber(src, "PLANET_BASE_MONTHLY");
+  const factor = registryRecord(src, "TERM_FACTOR");
+  const out: Record<string, number | null> = { ...registryLiteralTierPrices(src) };
+  for (const id of registryTermIds(src)) out[id] = (base as number) * factor[id];
+  return out;
+}
+
+/** tierId срока → платёж за весь срок вперёд (priceTermTotal реестра). */
+function registryTermTotals(): Record<string, number> {
+  const src = backendSource();
+  const base = registryNumber(src, "PLANET_BASE_MONTHLY") as number;
+  const factor = registryRecord(src, "TERM_FACTOR");
+  const months = registryRecord(src, "TERM_MONTHS");
+  const out: Record<string, number> = {};
+  for (const id of registryTermIds(src)) out[id] = base * factor[id] * months[id];
+  return out;
+}
+
+/**
+ * «$2.4M» / «$235K» / «≈ $2.76M ARR» → число долларов.
+ *
+ * Нужна, чтобы сверять ARR АРИФМЕТИКОЙ, а не сравнением литерала с литералом:
+ * это инвесторская модель, и ошибка в ней дороже ошибки в коде. Возвращает NaN,
+ * если разобрать не удалось, и тесты ниже проверяют это ОТДЕЛЬНО — молчаливый
+ * NaN в сравнении выглядел бы как расхождение, а не как поломка прибора.
+ */
+function money(s: string): number {
+  const m = /\$\s*([\d.]+)\s*([KM])/i.exec(s);
+  if (!m) return NaN;
+  return Number(m[1]) * (m[2].toUpperCase() === "M" ? 1_000_000 : 1_000);
 }
 
 /**
@@ -277,88 +357,220 @@ function registryCardPrices(): number[] {
 const IMPORT_TIMEOUT_MS = 30_000;
 
 describe("prices — derived surfaces stay in sync with the backend tier registry", () => {
-  it("the registry parses and still holds the six known tiers", () => {
+  it("контроль прибора: лестница и литеральные тарифы прочитались из реестра", () => {
+    const src = backendSource();
+    expect(src.length, "реестр не прочитан — ноль совпадений выглядел бы как успех").toBeGreaterThan(5000);
+    const start = src.indexOf("export const TIERS");
+    const end = src.indexOf("export const MODULES_PRICING");
+    expect(
+      start >= 0 && end > start,
+      `Could not locate the TIERS array in ${BACKEND_PRICING}. If the registry was ` +
+        "restructured, update this guard — do not delete it.",
+    ).toBe(true);
+
+    // Три таблицы лестницы. Пустая любая из них даёт NaN, а NaN печатается как
+    // «$NaN» и читается как расхождение цен, а не как слепота разбора.
+    expect(Object.keys(registryRecord(src, "TERM_FACTOR"))).toHaveLength(5);
+    expect(Object.keys(registryRecord(src, "TERM_MONTHS"))).toHaveLength(5);
+    expect(registryNumber(src, "PLANET_BASE_MONTHLY")).toBeGreaterThan(0);
+    // Обе половины разбора живы: пять сроков через planetTier и два литеральных.
+    expect(registryTermIds(src)).toHaveLength(5);
+    expect(Object.keys(registryLiteralTierPrices(src)).sort()).toEqual(["enterprise", "free"]);
+
+    // И что платёж за срок в реестре — ПРОИЗВЕДЕНИЕ, а не своя формула: иначе
+    // наш «цена месяца × месяцы» был бы вторым способом счёта, а не тем же.
+    expect(src).toContain("const total = perMonth * months");
+    expect(src).toContain("priceTermTotal: total");
+  }, IMPORT_TIMEOUT_MS);
+
+  it("реестр отдаёт СЕМЬ тарифов — free, пять сроков, enterprise", () => {
     const tiers = registryTierPrices();
     expect(Object.keys(tiers).sort()).toEqual(
-      ["enterprise", "free", "full", "lite", "medium", "pro"],
+      ["enterprise", "free", "full", "lite", "max", "medium", "pro"],
     );
     expect(tiers.enterprise).toBeNull();
+    expect(tiers.free).toBe(0);
+
+    // Лестница дешевеет с длиной срока. Сверяем НАПРАВЛЕНИЕ, а не пять чисел:
+    // числа уже заперты на реестр в lib/__tests__/termPricingMatchesBackend, и
+    // второй список литералов стал бы вторым источником правды. Если лестница
+    // перестанет дешеветь, «вход» и «верхняя ступень» ниже поменяются местами
+    // молча — вот это здесь и ловится.
+    const ladder = [tiers.lite, tiers.medium, tiers.pro, tiers.full, tiers.max] as number[];
+    expect(ladder[0], "вход лестницы — это и есть базовая цена месяца").toBe(
+      registryNumber(backendSource(), "PLANET_BASE_MONTHLY"),
+    );
+    for (let i = 1; i < ladder.length; i++) {
+      expect(ladder[i], `ступень ${i} должна быть дешевле предыдущей`).toBeLessThan(ladder[i - 1]);
+    }
   }, IMPORT_TIMEOUT_MS);
 
-  it("pitchFacts quotes the live ladder (entry / top-live-checkout / Universe)", async () => {
+  it("pitchFacts называет вход в лестницу и её верхнюю ступень", async () => {
     const tiers = registryTierPrices();
+    const totals = registryTermTotals();
     const facts = await import("@/data/pitchFacts");
 
+    // Вход — месяц на самом КОРОТКОМ сроке. Это наибольшая цена месяца и
+    // наименьший возможный платёж; не путать с «от $X/мес» на витрине, которое
+    // берётся с самого ДЛИННОГО срока (fromPricePerMonth).
     expect(
-      facts.ENTRY_PAID_TIER_MONTHLY,
-      "ENTRY_PAID_TIER_MONTHLY must equal the Lite price in data/pricing.ts",
+      facts.ENTRY_TERM_MONTHLY,
+      "ENTRY_TERM_MONTHLY — цена месяца на самом коротком сроке (lite) из data/pricing.ts",
     ).toBe(`$${tiers.lite}`);
 
-    // Universe (`pro`) has no Lemon Squeezy variant, so Full is the highest
-    // tier a visitor can actually subscribe to — see data/lemonSqueezyVariants.ts.
+    // Верхняя ступень. Оговорка «у Universe нет варианта LS, поэтому верхняя
+    // покупаемая ступень — Full» снята 16.09.2026: варианты заведены у всех пяти
+    // сроков, значит верх лестницы и есть верх с живой кассой.
     expect(
       facts.LIVE_TOP_TIER_MONTHLY,
-      "LIVE_TOP_TIER_MONTHLY must equal the Full price in data/pricing.ts",
-    ).toBe(`$${tiers.full}`);
+      "LIVE_TOP_TIER_MONTHLY — цена месяца на самом длинном сроке (max) из data/pricing.ts",
+    ).toBe(`$${tiers.max}`);
 
+    // Платёж за срок — из реестра, а НЕ годовая формула ×10: годовой оплаты нет.
     expect(
-      facts.UNIVERSE_SEAT_MONTHLY,
-      "UNIVERSE_SEAT_MONTHLY must equal the `pro` (Universe) price in data/pricing.ts",
-    ).toBe(`$${tiers.pro}`);
+      facts.LIVE_TOP_TIER_TERM_TOTAL,
+      "Платёж за срок = цена месяца × месяцы (priceTermTotal в data/pricing.ts). " +
+        "Это ARPU места за год, на котором стоит вся модель роста в pitchModel.ts.",
+    ).toBe(`$${totals.max.toLocaleString("en-US")}`);
   }, IMPORT_TIMEOUT_MS);
 
-  it("the Universe annual figure follows the registry's ×10 annual formula", async () => {
+  it("модель роста цитирует ЖИВУЮ лестницу, а не снятый помесячный план", async () => {
     const tiers = registryTierPrices();
-    const { UNIVERSE_SEAT_ANNUAL_TOTAL } = await import("@/data/pitchFacts");
-    const expected = `~$${Math.round((tiers.pro as number) * 10).toLocaleString("en-US")}/yr`;
-    expect(
-      UNIVERSE_SEAT_ANNUAL_TOTAL,
-      "Annual = pay for 10 months, get 12 (annualTotal() in data/pricing.ts). " +
-        "This figure is the seat ARPU the growth model runs on — if it drifts, every " +
-        "ARR row in pitchModel.ts is wrong.",
-    ).toBe(expected);
-  }, IMPORT_TIMEOUT_MS);
-
-  it("the growth model prices the Universe seat at the registry price", async () => {
-    const tiers = registryTierPrices();
+    const totals = registryTermTotals();
     const { launchGrowth } = await import("@/data/pitchModel");
 
-    expect(launchGrowth.seat.headline).toBe(`$${tiers.pro} / mo`);
+    expect(
+      launchGrowth.seat.headline,
+      "заголовок цены — это лестница «от дорогого короткого к дешёвому длинному»",
+    ).toBe(`$${tiers.lite} → $${tiers.max} / mo`);
+
     expect(
       launchGrowth.seat.honesty,
-      "The on-ramp ladder quoted next to the seat price must be the live one.",
-    ).toContain(`($0/$${tiers.lite}/$${tiers.medium}/$${tiers.full})`);
-  }, IMPORT_TIMEOUT_MS);
+      "Лестница рядом с ценой обязана быть той, что в реестре: Free плюс пять сроков.",
+    ).toContain(
+      `($0/$${tiers.lite}/$${tiers.medium}/$${tiers.pro}/$${tiers.full}/$${tiers.max})`,
+    );
 
-  it("the bottom-up model prices All-Access at the live Full tier", async () => {
-    const tiers = registryTierPrices();
-    const { unitEconomics } = await import("@/data/pitchModel");
-    const allAccess = unitEconomics.flagships.find((f) => f.module === "Ecosystem All-Access");
-    expect(allAccess, "The 'Ecosystem All-Access' flagship disappeared from unitEconomics").toBeTruthy();
+    // ARPU модели — платёж за длинный срок из реестра.
+    const assumptions = launchGrowth.assumptions.join(" ");
+    expect(assumptions).toContain(`$${totals.max.toLocaleString("en-US")}/yr`);
+    // И снятой формулы оплаты в тексте больше нет: вернётся фраза — вернётся и
+    // модель оплаты, которой у нас не существует.
     expect(
-      allAccess!.price.startsWith(`$${tiers.full}/mo`),
-      `All-Access is the Full tier — its modelled price must open with $${tiers.full}/mo, got: ${allAccess!.price}`,
-    ).toBe(true);
+      assumptions,
+      "годовой оплаты и формулы ×10 (плати за 10 месяцев, получи 12) больше нет",
+    ).not.toMatch(/list\s*×\s*10|pay for 10 months|annual plan is list/i);
   }, IMPORT_TIMEOUT_MS);
 
-  // OG cards are the classic laggard: nobody re-opens an image when a price
-  // changes. Compare the full set of prices on the card to the registry rather
-  // than banning old literals — that way an added tier fails too, and prose in
-  // comments can still mention a retired price.
-  const PRICE_CARDS: Array<{ rel: string; re: RegExp }> = [
-    { rel: "src/app/pricing/[tierId]/opengraph-image.tsx", re: /price:\s*"\$([\d.]+)"/g },
-    { rel: "src/app/pricing/compare/opengraph-image.tsx", re: /price="\$([\d.]+)"/g },
+  it("нижняя модель считает подписку по ПЛАТЕЖУ ЗА СРОК из реестра", async () => {
+    const tiers = registryTierPrices();
+    const totals = registryTermTotals();
+    const { unitEconomics } = await import("@/data/pitchModel");
+
+    const sub = unitEconomics.flagships.find((f) => f.module === "AEVION subscription (term ladder)");
+    expect(
+      sub,
+      "флагман «AEVION subscription (term ladder)» исчез из unitEconomics " +
+        "(до 15.09.2026 он назывался «Ecosystem All-Access» и был помесячным тарифом Full)",
+    ).toBeTruthy();
+
+    expect(
+      sub!.price.startsWith(`$${tiers.max}/mo`),
+      `подписка моделируется на самом длинном сроке — цена обязана открываться с ` +
+        `$${tiers.max}/mo, получено: ${sub!.price}`,
+    ).toBe(true);
+
+    // ARR считается АРИФМЕТИЧЕСКИ от платежа за срок, а не сверяется с литералом.
+    const seats = (s: string) => Number(s.replace(/[^\d]/g, ""));
+    expect(seats(sub!.beachhead.unit), "подписчиков в beachhead").toBe(1000);
+    expect(seats(sub!.regional.unit), "подписчиков в regional").toBe(10000);
+    expect(
+      money(sub!.beachhead.arr),
+      `${seats(sub!.beachhead.unit)} × $${totals.max} за срок`,
+    ).toBe(seats(sub!.beachhead.unit) * totals.max);
+    expect(
+      money(sub!.regional.arr),
+      `${seats(sub!.regional.unit)} × $${totals.max} за срок`,
+    ).toBe(seats(sub!.regional.unit) * totals.max);
+  }, IMPORT_TIMEOUT_MS);
+
+  it("итог равен СУММЕ трёх строк — итог не может разойтись со слагаемыми", async () => {
+    const { unitEconomics } = await import("@/data/pitchModel");
+    for (const scope of ["beachhead", "regional"] as const) {
+      const shown = unitEconomics.flagships.map((f) => f[scope].arr);
+      const parts = shown.map(money);
+      // Контроль прибора: NaN здесь значит «не разобрал», а не «не сходится».
+      expect(parts.some(Number.isNaN), `не разобрал ARR строк: ${shown.join(", ")}`).toBe(false);
+      expect(parts).toHaveLength(3);
+
+      const sum = parts.reduce((a, b) => a + b, 0);
+      const total = money(unitEconomics.totals[scope]);
+      expect(Number.isNaN(total), `не разобрал итог: ${unitEconomics.totals[scope]}`).toBe(false);
+      // Итог печатается округлённым до двух знаков в миллионах — сверяем с тем
+      // же округлением, а не побайтно.
+      const вМлн = (n: number) => Math.round(n / 10_000) / 100;
+      expect(
+        вМлн(total),
+        `итог ${unitEconomics.totals[scope]} не равен сумме строк (${shown.join(" + ")} = $${sum})`,
+      ).toBe(вМлн(sum));
+    }
+  }, IMPORT_TIMEOUT_MS);
+
+  it("pitchFacts и unitEconomics называют ОДИН И ТОТ ЖЕ итог", async () => {
+    // Главная страница и /pitch берут итог из разных мест: страница — из
+    // pitchFacts, /pitch — из unitEconomics.totals. Разойдись они, читатель
+    // одной платформы увидит два разных ответа про одну модель.
+    const facts = await import("@/data/pitchFacts");
+    const { unitEconomics } = await import("@/data/pitchModel");
+    expect(money(facts.BOTTOM_UP_BEACHHEAD_ARR)).toBe(money(unitEconomics.totals.beachhead));
+    expect(money(facts.BOTTOM_UP_REGIONAL_ARR)).toBe(money(unitEconomics.totals.regional));
+  }, IMPORT_TIMEOUT_MS);
+
+  /**
+   * OG-карточки — классический отстающий: картинку никто не открывает заново,
+   * когда меняется цена.
+   *
+   * ⚠️ СТАВКА ИЗМЕНЕНА 16.09.2026, потому что прежняя перестала что-либо
+   * проверять. Прежний тест сравнивал СПИСОК ЦЕН, вынутый со карточки
+   * шаблоном `price: "$N"`, со списком цен из реестра. Сломалось это с двух
+   * сторон разом: карточки перешли на вычисление из lib/termPricing (цен-
+   * литералов в них больше НЕТ, шаблон достаёт только `$0`), а разбор реестра
+   * отдавал `[0]`. `[0] === [0]` — зелёный при двух слепых половинах.
+   *
+   * Поэтому ставка теперь та же, что у UpgradeButton выше, и она проверяема:
+   * цена на карточке не ВПИСАНА, а СЧИТАЕТСЯ из лестницы. Такой тест не
+   * ломается от того, что в лестнице стало больше ступеней, и краснеет именно
+   * тогда, когда в карточку возвращают число.
+   */
+  const PRICE_CARDS = [
+    "src/app/pricing/[tierId]/opengraph-image.tsx",
+    "src/app/pricing/compare/opengraph-image.tsx",
   ];
 
-  for (const { rel, re } of PRICE_CARDS) {
-    it(`${rel} shows exactly the registry ladder`, () => {
-      const src = readFileSync(path.join(FRONTEND_ROOT, rel), "utf8");
-      const shown = [...src.matchAll(re)].map((m) => Number(m[1])).sort((a, b) => a - b);
+  for (const rel of PRICE_CARDS) {
+    it(`${rel} считает лестницу, а не вписывает цены`, () => {
+      const raw = readFileSync(path.join(FRONTEND_ROOT, rel), "utf8");
+      // Контроль прибора: файл прочитан и это действительно карточка.
+      expect(raw.length, `${rel} пуст или не прочитан`).toBeGreaterThan(500);
+      expect(raw, `${rel} не похожа на OG-карточку`).toContain("ImageResponse");
+
+      const code = stripComments(raw);
       expect(
-        shown,
-        `${rel} is a share card — its prices must be the live ladder from ` +
-          "aevion-globus-backend/src/data/pricing.ts (Enterprise shows a word, not a number).",
-      ).toEqual(registryCardPrices());
+        code.includes("PLANET_BASE_MONTHLY") && code.includes("termPricePerMonth("),
+        `${rel} обязана брать цену из @/lib/termPricing (PLANET_BASE_MONTHLY + ` +
+          "termPricePerMonth), а не печатать число: карточку никто не открывает заново " +
+          "при смене цен, и здесь уже дважды переживала смену цен старая цифра.",
+      ).toBe(true);
+
+      // Единственный допустимый литерал — $0 у Free: считать его из лестницы
+      // нечего, бесплатного тарифа в TERM_* нет. Комментарии вырезаны: в них
+      // карточки честно перечисляют, какие цены здесь жили до 15.09.2026, и
+      // сторож, краснеющий на собственном объяснении, снимается через неделю.
+      const literals = (code.match(/\$[0-9][0-9.,]*/g) ?? []).filter((x) => x !== "$0");
+      expect(
+        literals,
+        `${rel} печатает цену числом: ${literals.join(", ")}. Возьми её из lib/termPricing.`,
+      ).toEqual([]);
     }, IMPORT_TIMEOUT_MS);
   }
 });
@@ -386,19 +598,22 @@ function readBackend(rel: string): string {
 }
 
 describe("product prices — marketing copy stays pinned to the charging code", () => {
-  it("the All-Access upgrade banner carries no hardcoded price", () => {
+  it("the upgrade banner carries no hardcoded price", () => {
     const src = readFileSync(path.join(FRONTEND_ROOT, "src/components/UpgradeButton.tsx"), "utf8");
-    // This banner renders on 9 module pages next to a live checkout. It sat at
-    // "$59/мес" — a number no tier ever charged. The price must be imported.
+    // This banner renders on 9 module pages. It once sat at a monthly price no
+    // tier ever charged. The price must be imported, never typed.
     const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
     expect(
       /\$\s?\d/.test(code),
-      "UpgradeButton.tsx must not type a price literal — read it from @/lib/products.",
+      "UpgradeButton.tsx must not type a price literal — read it from @/lib/products and @/lib/termPricing.",
     ).toBe(false);
-    // It sells the Gumroad product `xpxzam`, not a tier, so the figure must come
-    // from the product catalogue (verified against the live Gumroad dashboard on
-    // 2026-07-26) — not from the tier registry.
-    expect(src).toContain('productById("xpxzam")');
+    // 15.09.2026: the Gumroad All-Access product is retired. The banner sells the
+    // AEVION term subscription: its card comes from the catalogue, the "from"
+    // figure from the term ladder.
+    expect(src).toContain("productById(PLANET_ID)");
+    expect(src).toContain('const PLANET_ID = "aevion-planet"');
+    expect(src).toContain("fromPricePerMonth(");
+    expect(src).not.toContain("xpxzam");
   }, IMPORT_TIMEOUT_MS);
 
   it("/investor quotes the live Bureau Verified price", () => {

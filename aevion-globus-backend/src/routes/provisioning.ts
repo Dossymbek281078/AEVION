@@ -12,7 +12,8 @@
 import { Router } from "express";
 import { existsSync, mkdirSync, appendFileSync, readFileSync, writeFileSync, renameSync } from "fs";
 import { join, dirname } from "path";
-import type { TierId, BillingPeriod } from "../data/pricing";
+import type { TierId } from "../data/pricing";
+import { TERM_MONTHS, isTermTier } from "../data/pricing";
 import { projects } from "../data/projects";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { degraded } from "../lib/degradedResponse";
@@ -79,7 +80,10 @@ export interface Subscription {
   ts: string;
   email: string;
   tierId: TierId;
-  period: BillingPeriod;
+  /** Срок покупки в месяцах (1/3/6/9/12); null — у free и у записи отзыва. */
+  termMonths: number | null;
+  /** Только у записей до 15.09.2026: "monthly"/"annual". Новые записи его не пишут. */
+  period?: "monthly" | "annual";
   seats: number;
   modules: string[];
   trialDays: number;
@@ -672,6 +676,7 @@ const TIER_DISPLAY: Record<TierId, string> = {
   lite: "Lite",
   medium: "Medium",
   full: "Full",
+  max: "Max",
   enterprise: "Enterprise",
   // ⚠️ 01.09.2026: здесь стояла ОТСТАВНАЯ цена. Она не совпадала ни с каталогом,
   // ни с продом — у Universe сейчас $149. Комментарий утверждал состояние,
@@ -689,7 +694,7 @@ const TIER_DISPLAY: Record<TierId, string> = {
   // got a welcome email headlined "Добро пожаловать в AEVION Lite". Same
   // mistaken assumption that once gated a Universe customer at Lite access
   // (fixed in planGate on 2026-07-22); this was the last copy of it.
-  pro: "Universe",
+  pro: "Pro",
   // business — genuinely deprecated, kept so old Gumroad webhooks resolve.
   business: "Full",
 };
@@ -838,9 +843,9 @@ function срокИзПодписки(sub: Subscription): Date {
   return new Date(Date.now() + sub.trialDays * 86400000);
 }
 
-export function вычислитьСрок(от: Date, period: BillingPeriod, trialDays: number): string {
+export function вычислитьСрок(от: Date, months: number, trialDays: number): string {
   if (trialDays > 0) return new Date(от.getTime() + trialDays * 86400000).toISOString();
-  const месяцев = period === "annual" ? 12 : 1;
+  const месяцев = Number.isFinite(months) && months >= 1 ? Math.floor(months) : 1;
   const год = от.getUTCFullYear();
   const месяц = от.getUTCMonth();
   const день = от.getUTCDate();
@@ -852,10 +857,19 @@ export function вычислитьСрок(от: Date, period: BillingPeriod, tr
   return цель.toISOString();
 }
 
+/** Срок записи в месяцах — понимает и записи до 15.09.2026 с полем period. */
+export function termMonthsOf(s: Pick<Subscription, "termMonths" | "period">): number | null {
+  if (typeof s.termMonths === "number") return s.termMonths;
+  if (s.period === "annual") return 12;
+  if (s.period === "monthly") return 1;
+  return null;
+}
+
 export async function provisionSubscription(input: {
   email: string;
   tierId: TierId;
-  period?: BillingPeriod;
+  /** Срок в месяцах; по умолчанию — срок самого тарифа (lite 1 … max 12). */
+  termMonths?: number | null;
   seats?: number;
   modules?: string[];
   trialDays?: number;
@@ -868,15 +882,15 @@ export async function provisionSubscription(input: {
   channel?: string;
 }): Promise<{ subscription: Subscription; emailSent: boolean; emailMode: "real" | "stub"; emailError?: string; emailDegraded?: boolean }> {
   const trialDays = input.trialDays ?? 0;
-  const period: BillingPeriod = input.period ?? "monthly";
-  const validUntil = вычислитьСрок(new Date(), period, trialDays);
+  const termMonths = input.termMonths ?? (isTermTier(input.tierId) ? TERM_MONTHS[input.tierId] : null);
+  const validUntil = вычислитьСрок(new Date(), termMonths ?? 1, trialDays);
 
   const subscription: Subscription = {
     id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     ts: new Date().toISOString(),
     email: input.email.toLowerCase(),
     tierId: input.tierId,
-    period,
+    termMonths,
     seats: input.seats ?? 1,
     modules: input.modules ?? [],
     trialDays,
@@ -1045,7 +1059,7 @@ export function aggregateSubscriptions(): {
   byTier: Record<TierId, number>;
   last7d: number;
   trialsActive: number;
-  recent: Array<{ id: string; ts: string; tierId: TierId; period: BillingPeriod; trial: boolean }>;
+  recent: Array<{ id: string; ts: string; tierId: TierId; termMonths: number | null; trial: boolean }>;
 } {
   const all = readSubscriptions();
   // Все семь тарифов перечислены явно: пропущенный ключ дал бы NaN в сводке.
@@ -1057,7 +1071,7 @@ export function aggregateSubscriptions(): {
   // `__proto__` исчезал из ответа, а `({}).count` становился NaN.
   const byTier: Record<TierId, number> = Object.assign(
     Object.create(null) as Record<TierId, number>,
-    { free: 0, lite: 0, medium: 0, full: 0, enterprise: 0, pro: 0, business: 0 },
+    { free: 0, lite: 0, medium: 0, pro: 0, full: 0, max: 0, enterprise: 0, business: 0 },
   );
   const cutoff7 = Date.now() - 7 * 86400000;
   const now = Date.now();
@@ -1076,7 +1090,7 @@ export function aggregateSubscriptions(): {
     id: s.id,
     ts: s.ts,
     tierId: s.tierId,
-    period: s.period,
+    termMonths: termMonthsOf(s),
     trial: s.trialDays > 0,
   }));
   return { total: all.length, byTier, last7d, trialsActive, recent };
@@ -1294,7 +1308,7 @@ provisioningRouter.get("/history", historyLookupLimiter, (req, res) => {
         id: s.id,
         ts: s.ts,
         tierId: s.tierId,
-        period: s.period,
+        termMonths: termMonthsOf(s),
         seats: s.seats,
         modules: s.modules,
         trialDays: s.trialDays,

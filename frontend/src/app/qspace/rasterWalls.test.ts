@@ -72,6 +72,20 @@ describe("стены по толщине штриха", () => {
     expect(косые[0].weight).toBeGreaterThanOrEqual(6);
     expect(findRooms(planFrom(r.segments, 10)).rooms.length).toBe(2);
   });
+  it("длинное окно полосой 2 px от простенка до простенка — стекло, простенки — стены; кромка столешницы поперёк стен — нет", () => {
+    const c = canvas(900, 500);
+    c.rect(50, 50, 800, 14); c.rect(50, 436, 800, 14); c.rect(836, 50, 14, 400); // верх, низ, право — толстые
+    // левая сторона: простенок 40 px, окно-полоса 2 px (тоньше порога стены 4 px) на 300 px (21 толщина — правило створа его не берёт), простенок
+    c.rect(50, 50, 14, 54); c.rect(56, 104, 2, 300); c.rect(50, 404, 14, 46);
+    // «столешница»: тонкая линия от левой стены до правой — упирается в стены ПОПЕРЁК
+    c.rect(64, 380, 772, 2);
+    const r = findWallsByThickness(c.data, c.w, c.h);
+    const стёкла = r.segments.filter((s) => s.glass);
+    expect(стёкла.length, JSON.stringify(стёкла)).toBe(1);
+    expect(стёкла[0].axis).toBe("v");
+    expect(Math.abs(стёкла[0].y2 - стёкла[0].y1)).toBeGreaterThan(280);
+    expect(findRooms(planFrom(r.segments, 12)).rooms.length).toBe(1);
+  });
   it("белый лист и тонкие линии — честный отказ словами", () => {
     const c = canvas(300, 200);
     expect(findWallsByThickness(c.data, c.w, c.h).warnings.join(" ")).toMatch(/нет тёмных линий/);
@@ -89,7 +103,7 @@ describe.skipIf(!existsSync(PNG_LAVIE))("LA VIE как картинка (PNG 200
   // ~9 м² — контур течёт через ОКНА КОСЫХ стен (стекло ищется только по осям) и широкие
   // проёмы. Прежний способ по прогонам на той же картинке: 41 отрезок, 1 комната, 11.6 м².
   // Цель — как у вектора: ≥ 8 комнат, 120–200 м²; порог ниже — сторож от регресса.
-  it("стены по толщине: наружная ~22 px, косое крыло найдено, стекло есть, комнат ≥ 5 (цель ≥ 8)", () => {
+  it("стены по толщине: наружная ~22 px, косое крыло найдено, стекло есть, комнат 10–18 и 115–165 м²", () => {
     const png = PNG.sync.read(readFileSync(PNG_LAVIE));
     // как в RasterReview: большая сторона до 2000 px (при 1400 перегородки 4 px истончаются до 1.6 и рвутся)
     const scale = Math.min(1, 2000 / Math.max(png.width, png.height));
@@ -108,7 +122,12 @@ describe.skipIf(!existsSync(PNG_LAVIE))("LA VIE как картинка (PNG 200
     expect(r.segments.length, строка).toBeGreaterThanOrEqual(100);
     expect(r.segments.filter((s) => s.axis === "d").length, строка).toBeGreaterThanOrEqual(6);
     expect(r.segments.filter((s) => s.glass).length, строка).toBeGreaterThanOrEqual(1);
-    // 17.09: простенки у окон (полосы штриховки) + гребень без порога толщины → 7 комнат; сторож — 5
-    expect(rooms.rooms.length, строка).toBeGreaterThanOrEqual(5);
+    // 17.09 утро: простенки у окон + гребень без порога толщины → 7 комнат, но 38 м²: всё большое
+    // утекало через длинные окна-полосы. 17.09 день: окна от простенка до простенка (7б) и дверь
+    // «торец к стене» → 14 комнат, 132 м² (вектор — 11 / 159). Сторож ниже замера, в обе стороны.
+    expect(rooms.rooms.length, строка).toBeGreaterThanOrEqual(10);
+    expect(rooms.rooms.length, строка).toBeLessThanOrEqual(18);
+    expect(rooms.totalArea, строка).toBeGreaterThanOrEqual(115);
+    expect(rooms.totalArea, строка).toBeLessThanOrEqual(165);
   }, 60_000);
 });

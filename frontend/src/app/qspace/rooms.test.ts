@@ -79,6 +79,17 @@ describe("выделение комнат", () => {
     expect(findRooms(plan).rooms.length).toBe(2);
   });
 
+  it("план с картинки: перегородка не дошла до стены на ширину двери — это дверь, комнат две; в векторе правило молчит", () => {
+    const plan = boxRoom(8, 5);
+    // перегородка от нижней стены вверх, до верхней не хватает 0.9 м — простенка у двери на картинке нет
+    plan.walls.push({ x1: 4, y1: 0, x2: 4, y2: 4.05, thickness: 0.1, height: 2.7 });
+    expect(findRooms({ ...plan, source: "raster" }).rooms.length).toBe(2);
+    expect(findRooms({ ...plan, source: "pdf" }).rooms.length).toBe(1);
+    // открытая зона шире двери (2.5 м) остаётся открытой и на картинке
+    const open = boxRoom(8, 5);
+    open.walls.push({ x1: 4, y1: 0, x2: 4, y2: 2.45, thickness: 0.1, height: 2.7 });
+    expect(findRooms({ ...open, source: "raster" }).rooms.length).toBe(1);
+  });
   it("щели между стенами не считаются комнатами", () => {
     // две стены рядом с зазором 8 см — это не помещение
     const plan: Plan = {

@@ -129,7 +129,13 @@ export function назначенияПоПодписям(
   for (const l of labels) {
     const t = roomTypeFromLabel(l.text);
     if (!t) continue;
-    const idx = roomAt((l.x - originPt.x) * metersPerPt, (l.y - originPt.y) * metersPerPt);
+    const x = (l.x - originPt.x) * metersPerPt, y = (l.y - originPt.y) * metersPerPt;
+    // Подпись бывает на самой границе (LA VIE: «Прачечная», «Мастер санузел» стоят в
+    // клетке стены, до комнаты 0.1–0.2 м) — ищем ближайшую комнату по кругу до 0.4 м
+    let idx = roomAt(x, y);
+    for (let rad = 0.1; idx === null && rad <= 0.4; rad += 0.1) {
+      for (let a = 0; a < 360 && idx === null; a += 30) idx = roomAt(x + rad * Math.cos((a * Math.PI) / 180), y + rad * Math.sin((a * Math.PI) / 180));
+    }
     if (idx === null) { unplaced.push(l.text); continue; }
     if (idx in types) continue;
     types[idx] = t;

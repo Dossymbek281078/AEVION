@@ -48,14 +48,25 @@ const JSONLD = {
       url: `${SITE}/constitution`,
       applicationCategory: "EducationalApplication",
       operatingSystem: "Web",
+      /**
+       * ТОЛЬКО бесплатное предложение.
+       *
+       * До 17.09.2026 здесь поисковикам объявлялся «Constitution Pro» за $9.
+       * Решение основателя 15.09: отдельно продаются шахматы, патентное бюро,
+       * DevHub, мультичат и бизнес-анализатор — Конституции среди них нет.
+       * Касса сайта отвечает на неё 410 `not_sold_separately`, в каталоге продаж
+       * (lib/products.ts) её нет.
+       *
+       * Оговорка: старая ссылка Gumroad на «Constitution Pro» ещё жива и выдаёт
+       * доступ — это забытый товар, снять его с публикации может только
+       * основатель в кабинете. Здесь закрывается реклама этого товара в поиске,
+       * а не сам товар.
+       *
+       * Ненулевую цену здесь можно объявлять только тому, что продаётся на сайте
+       * отдельно, — это стережёт structuredOffersMatchWhatWeSell.guard.
+       */
       offers: [
         { "@type": "Offer", price: "0", priceCurrency: "USD", name: "Free" },
-        {
-          "@type": "Offer",
-          price: "9",
-          priceCurrency: "USD",
-          name: "Constitution Pro",
-        },
       ],
       featureList: [
         "8 governance sliders",

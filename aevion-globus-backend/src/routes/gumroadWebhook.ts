@@ -128,6 +128,16 @@ const KNOWN_PERMALINK_REFERENCE: Record<string, string> = {
   wjvquw: "constitution-team", // Constitution Team $49/mo
 };
 
+/**
+ * Прежние тарифы (до 15.09.2026), по которым Gumroad ещё может продать и продлить:
+ * tier_<слово>_<monthly|annual>. Порядок важен — месячная раньше годовой: у Gumroad это
+ * один адрес, узнаётся самый короткий срок, настоящий решает проверенная продажа.
+ * Один список и для распознавания, и для ручки состояния: две копии разъехались бы молча.
+ */
+const ПРЕЖНИЕ_ТАРИФЫ: string[] = ["lite", "medium", "full", "planet", "pro"].flatMap((слово) =>
+  ["monthly", "annual"].map((период) => `tier_${слово}_${период}`),
+);
+
 /** Last path segment of a Gumroad permalink or full product URL, lowercased.
  *  "https://aevion.gumroad.com/l/xpxzam?x=1" → "xpxzam"; "xpxzam" → "xpxzam". */
 function permalinkSlug(v?: string | null): string {
@@ -162,6 +172,17 @@ function resolveReference(raw: Record<string, string>): string {
     for (const reference of new Set(Object.values(STOREFRONT_NAME_TO_REFERENCE))) {
       const envKey = `GUMROAD_PERMALINK_${reference.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
       if (permalinkSlug(process.env[envKey]) === pingSlug) return reference;
+    }
+    // 1в. Прежние тарифы (до 15.09.2026): tier_<слово>_<monthly|annual>. Замер на проде
+    //     17.09.2026: заданы GUMROAD_PERMALINK_TIER_{LITE,MEDIUM,FULL}_{MONTHLY,ANNUAL}, все
+    //     ведут на живые товары aevion-lite/medium/full, а вебхук их не читал — покупка и
+    //     ПРОДЛЕНИЕ старого тарифа кончались 500 unmapped_product: деньги списаны, доступа
+    //     нет. У Lemon Squeezy тот же случай решён (LEGACY_VARIANT_ENV). Снятие товара с
+    //     публикации новые продажи останавливает, продления уже проданного — нет.
+    //     Месячная раньше годовой: у Gumroad это один адрес, узнаётся самый короткий срок,
+    //     а настоящий решает проверенная продажа (срокПоПродаже).
+    for (const reference of ПРЕЖНИЕ_ТАРИФЫ) {
+      if (permalinkSlug(process.env[`GUMROAD_PERMALINK_${reference.toUpperCase()}`]) === pingSlug) return reference;
     }
   }
 
@@ -256,6 +277,23 @@ function срокПоПродаже(
   sale: Record<string, unknown> | null,
   paidUsd: number | undefined,
 ): string {
+  // Прежний тариф на общем адресе: месяц и год продавались одним товаром Gumroad, и по
+  // адресу период не узнать. Ошибка дорогая — годовой покупатель с месячной ссылкой
+  // теряет доступ через месяц (billingPeriod: _monthly = 1 мес, _annual = 12). Решает
+  // recurrence проверенной продажи; не решилось — самый короткий срок, как у лестницы.
+  // По сумме не угадываем: прежние цены жили в магазине, в коде их больше нет.
+  const прежний = /^tier_([a-z]+)_(monthly|annual)$/.exec(reference);
+  if (прежний) {
+    const слагПрежней = (ref: string) => permalinkSlug(process.env[`GUMROAD_PERMALINK_${ref.toUpperCase()}`]);
+    const месячная = `tier_${прежний[1]}_monthly`;
+    const годовая = `tier_${прежний[1]}_annual`;
+    const общий = слагПрежней(месячная) !== "" && слагПрежней(месячная) === слагПрежней(годовая);
+    if (!общий) return reference;
+    const r = sale?.recurrence;
+    const повтор = typeof r === "string" ? r.toLowerCase() : "";
+    if (повтор === "yearly" || повтор === "annually" || повтор === "annual") return годовая;
+    return месячная;
+  }
   const m = /^(tier|app_[a-z_]+?)_(lite|medium|pro|full|max)$/.exec(reference);
   if (!m) return reference;
   const семья = m[1];
@@ -320,6 +358,29 @@ export function gumroadProvisionable(references: string[]): { configured: string
     (узнан === ref || ступеньНаОбщем ? configured : missing).push(ref);
   }
   return { configured: configured.sort(), missing: missing.sort() };
+}
+
+/**
+ * Прежние тарифы, которые Gumroad СЕЙЧАС продаёт или продлевает (на проде задан их адрес),
+ * и выдаёт ли их вебхук. Пара к gumroadProvisionable, который смотрит только лестницу.
+ * 17.09.2026 ровно этот пробел был невидим: ручка отвечала «продаётся 0, не выдаётся 0»,
+ * а старые Lite/Medium/Full продавались и падали в 500 без доступа.
+ * Выдан — если вебхук узнал ссылку, дающую тот же тариф (лестница на том же адресе
+ * важнее прежней ссылки, и это тоже выдача).
+ */
+export function gumroadLegacyProvisionable(): { onSale: string[]; configured: string[]; missing: string[] } {
+  const onSale: string[] = [];
+  const configured: string[] = [];
+  const missing: string[] = [];
+  for (const ref of ПРЕЖНИЕ_ТАРИФЫ) {
+    const slug = permalinkSlug(process.env[`GUMROAD_PERMALINK_${ref.toUpperCase()}`]);
+    if (!slug) continue;
+    onSale.push(ref);
+    const узнан = resolveReference({ product_permalink: slug });
+    const выдан = узнан !== "unknown" && узнан !== "external" && tierForReference(узнан) === tierForReference(ref);
+    (выдан ? configured : missing).push(ref);
+  }
+  return { onSale: onSale.sort(), configured: configured.sort(), missing: missing.sort() };
 }
 
 // Liveness probe — Gumroad sends only POST, but a GET in the browser used to

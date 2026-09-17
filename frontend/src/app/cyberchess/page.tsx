@@ -2846,11 +2846,20 @@ export default function CyberChessPage(){
   const otpravitDaily=useCallback((srv:{day:string;sol:string[]})=>{
     (async()=>{
       try{
-        await fetch("/api-backend/api/cyberchess-daily/solve",{
+        const r=await fetch("/api-backend/api/cyberchess-daily/solve",{
           method:"POST",headers:{"Content-Type":"application/json"},
           body:JSON.stringify({day:srv.day,moves:srv.sol,timeMs:0,hintsUsed:0,
             userId:tournamentUserId(),name:tournamentDisplayName()||undefined}),
         });
+        // ОТКАЗ СЕРВЕРА (400 wrong_day после UTC-полуночи на открытой вкладке, 429,
+        // 5xx) — не исключение, и до 17.09.2026 проходил молча: человек решил, в
+        // таблице его нет, и почему — неизвестно. Сервер шлёт человеческую подсказку
+        // рядом с кодом; её и показываем (как на /cyberchess/daily), код — в консоль.
+        if(!r.ok){
+          let podskazka="Сервер не засчитал решение — обновите страницу и попробуйте ещё раз";
+          try{const j=await r.json();if(typeof j?.hint==="string"&&j.hint)podskazka=j.hint;console.warn("[daily] сервер отказал:",j?.error??r.status);}catch{console.warn("[daily] сервер отказал:",r.status);}
+          showToast(`Решение не попало в таблицу лидеров: ${podskazka}`,"error");
+        }
       }catch{
         // Награду человек уже получил; молчать про недоставленное решение
         // нельзя — иначе он не поймёт, почему его нет в таблице.
@@ -2862,12 +2871,20 @@ export default function CyberChessPage(){
   // Recompute daily puzzle whenever puzzles are loaded (once we know total count)
   useEffect(()=>{
     if(PUZZLES.length===0)return;
-    const tk=todayKey();const saved=ldDaily();
+    // Ключ дня — ДЕНЬ СЕРВЕРА (UTC, из /puzzle), а не местная дата: задача дня
+    // сменяется в 05:00 Алматы, и по местному ключу с 00:00 до 05:00 «сегодня»
+    // уже 18-е, а сервер отдаёт задачу 17-го. Решив её, человек помечал 18-е
+    // решённым — и настоящую задачу 18-го в 06:00 награда и отправка в таблицу
+    // уже не принимали («уже решено»): серия на сервере рвалась молча (17.09.2026).
+    // Пока ответ сервера не пришёл — не пишем: местный ключ перетёр бы сохранённое
+    // «решено» серверного дня, и награду можно было бы взять дважды.
+    if(!srvDaily&&!srvDailyFailed)return;
+    const tk=srvDaily?.day||todayKey();const saved=ldDaily();
     if(saved&&saved.date===tk){sDailyState(saved);return}
     const idx=pickDailyIdx(PUZZLES.length);
     const next:DailyState={v:1,date:tk,idx,solved:false};
     svDaily(next);sDailyState(next);
-  },[PUZZLES.length]);
+  },[PUZZLES.length,srvDaily?.day,srvDailyFailed]);
 
   // Watch-URL: on mount, if ?pgn=... is present, load the PGN into Analysis tab read-only.
   useEffect(()=>{
@@ -3798,16 +3815,33 @@ export default function CyberChessPage(){
     fetch(`/api-backend/api/cyberchess/matchmaking/match/${matchmakingId}/end`,{
       method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({userId,result,reason:over}),
-    }).then(r=>r.json()).then(data=>{
+    }).then(async r=>{
+      // ОТКАЗ СЕРВЕРА (404 матч не найден, 403 не участник, 400 исход, 409 нельзя
+      // присудить себе победу) до 17.09.2026 проходил молча: `.then(r=>r.json())`
+      // читал тело ошибки как данные, ratingDelta там нет — «тихо». Рейтинг не
+      // записан, а игрок не узнаёт. Сервер шлёт hint — показываем его.
+      if(!r.ok){
+        const j=await r.json().catch(()=>null);
+        console.warn("[matchmaking/end] сервер отказал:",j?.error??r.status);
+        showToast(`Результат матча не записан: ${j?.hint||j?.error||`ошибка ${r.status}`}`,"error");
+        return null;
+      }
+      return r.json();
+    }).then(data=>{
+      if(!data)return;
       const rd=data?.ratingDelta;
-      if(!rd)return; // оффлайн/без БД — тихо
+      if(!rd)return; // ok без ratingDelta — матч уже закрыт другой стороной / без БД: это не отказ
       const mine=pCol==="w"?rd.white:rd.black;
       if(!mine||typeof mine.after!=="number")return;
       const d=Math.round(mine.after-mine.before);
       sRatDelta({d,newRat:Math.round(mine.after),ts:Date.now()});
       try{localStorage.setItem("cyberchess.rating",String(Math.round(mine.after)))}catch{}
       window.setTimeout(()=>sRatDelta(null),4200);
-    }).catch(()=>{});
+    }).catch(()=>{
+      // Обрыв связи: результат не дошёл. Молчать нельзя — иначе рейтинг «просто не
+      // изменился», и человек не знает, что матч для сервера не закончен.
+      showToast("Результат матча не дошёл до сервера — проверьте связь","error");
+    });
   },[over,matchmakingId,pCol]);
 
   /* ── Auto-analysis at game-end (depth 10, silent — just populates move badges) ── */

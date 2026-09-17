@@ -89,7 +89,7 @@ describe.skipIf(!existsSync(PNG_LAVIE))("LA VIE как картинка (PNG 200
   // ~9 м² — контур течёт через ОКНА КОСЫХ стен (стекло ищется только по осям) и широкие
   // проёмы. Прежний способ по прогонам на той же картинке: 41 отрезок, 1 комната, 11.6 м².
   // Цель — как у вектора: ≥ 8 комнат, 120–200 м²; порог ниже — сторож от регресса.
-  it("стены по толщине: наружная ~22 px, косое крыло найдено, стекло есть, комнат ≥ 3 (цель ≥ 8)", () => {
+  it("стены по толщине: наружная ~22 px, косое крыло найдено, стекло есть, комнат ≥ 5 (цель ≥ 8)", () => {
     const png = PNG.sync.read(readFileSync(PNG_LAVIE));
     // как в RasterReview: большая сторона до 2000 px (при 1400 перегородки 4 px истончаются до 1.6 и рвутся)
     const scale = Math.min(1, 2000 / Math.max(png.width, png.height));
@@ -108,6 +108,7 @@ describe.skipIf(!existsSync(PNG_LAVIE))("LA VIE как картинка (PNG 200
     expect(r.segments.length, строка).toBeGreaterThanOrEqual(100);
     expect(r.segments.filter((s) => s.axis === "d").length, строка).toBeGreaterThanOrEqual(6);
     expect(r.segments.filter((s) => s.glass).length, строка).toBeGreaterThanOrEqual(1);
-    expect(rooms.rooms.length, строка).toBeGreaterThanOrEqual(3);
+    // 17.09: простенки у окон (полосы штриховки) + гребень без порога толщины → 7 комнат; сторож — 5
+    expect(rooms.rooms.length, строка).toBeGreaterThanOrEqual(5);
   }, 60_000);
 });

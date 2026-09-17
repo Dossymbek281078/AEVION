@@ -185,7 +185,9 @@ function houghSegments(pts: Array<[number, number, number]>, wallPx: number, ext
           const a = run[0][0] - ext, b = run[run.length - 1][0] + ext;
           const weights = run.map((q) => q[2]).sort((x, y) => x - y);
           // точка на прямой: (rho·cos, rho·sin) + s·(−sin, cos)
-          out.push({ x1: rho * cos - a * sin, y1: rho * sin + a * cos, x2: rho * cos - b * sin, y2: rho * sin + b * cos, weight: weights[Math.floor(weights.length / 2)], axis });
+          // осевая прямая — h/v (в 3° от оси), остальное — d: осевые сливаются с прямоугольниками и участвуют в стёклах
+          const ax: WallSeg["axis"] = axis !== "d" ? axis : Math.abs(sin) < 0.05 ? "v" : Math.abs(cos) < 0.05 ? "h" : "d";
+          out.push({ x1: rho * cos - a * sin, y1: rho * sin + a * cos, x2: rho * cos - b * sin, y2: rho * sin + b * cos, weight: weights[Math.floor(weights.length / 2)], axis: ax });
         }
         run = [];
       };
@@ -374,7 +376,10 @@ export function findWallsByThickness(rgba: Uint8ClampedArray, w: number, h: numb
     const i = y * w + x;
     if (!walls[i] || covered[i]) continue;
     const v = d2[i];
-    if (v >= rr * 3 && v >= d[i - 1] && v >= d[i + 1] && v >= d[i - w] && v >= d[i + w]) pts.push([x, y, (2 * v) / 3]);
+    // порог по толщине здесь НЕ повторяем: маска стен уже отобрана, а принятая
+    // заштрихованная полоса 5 px даёт гребень 2.5 px — ниже rr, и без этого
+    // простенки у окон LA VIE не давали ни одной точки (гребень — по d2, с полосами)
+    if (v >= 3 && v >= d2[i - 1] && v >= d2[i + 1] && v >= d2[i - w] && v >= d2[i + w]) pts.push([x, y, (2 * v) / 3]);
   }
   const hough = houghSegments(pts, wallPx, ext);
   segs.push(...hough);
@@ -510,8 +515,11 @@ export function findWallsByThickness(rgba: Uint8ClampedArray, w: number, h: numb
       const b = стены[j]; const lb = segLen(b);
       const vx = (b.x2 - b.x1) / lb, vy = (b.y2 - b.y1) / lb;
       if (Math.abs(ux * vx + uy * vy) < Math.cos((3 * Math.PI) / 180)) continue; // не коллинеарны
-      // стекло — между НАСТОЯЩИМИ стенами: обе от трёх толщин длиной; обрывки на мебели створа не дают
-      if (la < 3 * wallPx || lb < 3 * wallPx) continue;
+      // стекло — между НАСТОЯЩИМИ стенами: у осевых простенки бывают короткими (окно между
+      // двумя стойками по 40 px) — от полутора толщин; у косых — от трёх: обрывки на мебели
+      // лежат под случайными углами и створа не дают
+      const minNb = a.axis !== "d" && b.axis !== "d" ? 1.5 * wallPx : 3 * wallPx;
+      if (la < minNb || lb < minNb) continue;
       // b на прямой a: поперечное отклонение обоих концов в пределах толщины
       const off1 = Math.abs(-uy * (b.x1 - a.x1) + ux * (b.y1 - a.y1)), off2 = Math.abs(-uy * (b.x2 - a.x1) + ux * (b.y2 - a.y1));
       if (Math.max(off1, off2) > wallPx) continue;
@@ -541,6 +549,18 @@ export function findWallsByThickness(rgba: Uint8ClampedArray, w: number, h: numb
         for (let o = -Math.round(wallPx); o <= Math.round(wallPx) && !any; o++) any = inkAt(cx - uy * o, cy + ux * o);
         hit += any;
       }
+      // окно не пересекает другие стены: стекло через холл по мебели упиралось бы в перегородку
+      const gx1 = a.x1 + ux * la, gy1 = a.y1 + uy * la, gx2 = a.x1 + ux * q0, gy2 = a.y1 + uy * q0;
+      const пересекаетСтену = стены.some((c) => {
+        if (c === a || c === b) return false;
+        const d1 = (c.x2 - c.x1) * (gy1 - c.y1) - (c.y2 - c.y1) * (gx1 - c.x1), d2 = (c.x2 - c.x1) * (gy2 - c.y1) - (c.y2 - c.y1) * (gx2 - c.x1);
+        const d3 = (gx2 - gx1) * (c.y1 - gy1) - (gy2 - gy1) * (c.x1 - gx1), d4 = (gx2 - gx1) * (c.y2 - gy1) - (gy2 - gy1) * (c.x2 - gx1);
+        if (!(d1 * d2 < 0 && d3 * d4 < 0)) return false;
+        // пересечение у самого края окна — это простенок или его дубль, не преграда
+        const t = d3 / (d3 - d4);
+        return t * (q0 - la) > 1.5 * wallPx && (1 - t) * (q0 - la) > 1.5 * wallPx;
+      });
+      if (пересекаетСтену) continue;
       if (tot > 0 && hit / tot >= 0.6) {
         пары.add(key);
         glass.push({ x1: a.x1 + ux * la, y1: a.y1 + uy * la, x2: a.x1 + ux * q0, y2: a.y1 + uy * q0, weight: Math.max(2, minPx / 2), axis: a.axis, glass: true });

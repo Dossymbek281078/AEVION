@@ -163,6 +163,20 @@ function resolveReference(raw: Record<string, string>): string {
       const envKey = `GUMROAD_PERMALINK_${reference.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
       if (permalinkSlug(process.env[envKey]) === pingSlug) return reference;
     }
+    // 1в. Прежние тарифы (до 15.09.2026): tier_<слово>_<monthly|annual>. Замер на проде
+    //     17.09.2026: заданы GUMROAD_PERMALINK_TIER_{LITE,MEDIUM,FULL}_{MONTHLY,ANNUAL}, все
+    //     ведут на живые товары aevion-lite/medium/full, а вебхук их не читал — покупка и
+    //     ПРОДЛЕНИЕ старого тарифа кончались 500 unmapped_product: деньги списаны, доступа
+    //     нет. У Lemon Squeezy тот же случай решён (LEGACY_VARIANT_ENV). Снятие товара с
+    //     публикации новые продажи останавливает, продления уже проданного — нет.
+    //     Месячная раньше годовой: у Gumroad это один адрес, узнаётся самый короткий срок,
+    //     а настоящий решает проверенная продажа (срокПоПродаже).
+    for (const слово of ["lite", "medium", "full", "planet", "pro"]) {
+      for (const период of ["monthly", "annual"]) {
+        const reference = `tier_${слово}_${период}`;
+        if (permalinkSlug(process.env[`GUMROAD_PERMALINK_${reference.toUpperCase()}`]) === pingSlug) return reference;
+      }
+    }
   }
 
   // 2. Explicit per-product override by product_id.
@@ -256,6 +270,23 @@ function срокПоПродаже(
   sale: Record<string, unknown> | null,
   paidUsd: number | undefined,
 ): string {
+  // Прежний тариф на общем адресе: месяц и год продавались одним товаром Gumroad, и по
+  // адресу период не узнать. Ошибка дорогая — годовой покупатель с месячной ссылкой
+  // теряет доступ через месяц (billingPeriod: _monthly = 1 мес, _annual = 12). Решает
+  // recurrence проверенной продажи; не решилось — самый короткий срок, как у лестницы.
+  // По сумме не угадываем: прежние цены жили в магазине, в коде их больше нет.
+  const прежний = /^tier_([a-z]+)_(monthly|annual)$/.exec(reference);
+  if (прежний) {
+    const слагПрежней = (ref: string) => permalinkSlug(process.env[`GUMROAD_PERMALINK_${ref.toUpperCase()}`]);
+    const месячная = `tier_${прежний[1]}_monthly`;
+    const годовая = `tier_${прежний[1]}_annual`;
+    const общий = слагПрежней(месячная) !== "" && слагПрежней(месячная) === слагПрежней(годовая);
+    if (!общий) return reference;
+    const r = sale?.recurrence;
+    const повтор = typeof r === "string" ? r.toLowerCase() : "";
+    if (повтор === "yearly" || повтор === "annually" || повтор === "annual") return годовая;
+    return месячная;
+  }
   const m = /^(tier|app_[a-z_]+?)_(lite|medium|pro|full|max)$/.exec(reference);
   if (!m) return reference;
   const семья = m[1];

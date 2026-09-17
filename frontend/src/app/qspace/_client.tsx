@@ -30,7 +30,7 @@ import { текстPdf } from "./pdfText";
 import { назначенияПоПодписям, подписиИзТекста, type Подпись } from "./roomLabels";
 import { appliancesFromLabels, fixturesFromSegments } from "./fixtures";
 import type { Placement } from "./autoPlace";
-import { FINISH_PRESETS, drawMaterial, materialById, materialsFor } from "./materials";
+import { FINISH_PRESETS, LAYOUTS, composeMaterialId, drawMaterial, materialById, materialsFor, parseMaterialId, variantsOf } from "./materials";
 import { ROOM_TYPES, ROOM_TYPE_LABEL, guessRoomTypes, type RoomType } from "./roomTypes";
 import { STYLES, type Style } from "./styles";
 import { autoPlace } from "./autoPlace";
@@ -68,6 +68,44 @@ import {
 // ---------------------------------------------------------------------------
 // Текстуры отделки берутся из каталога materials.ts — данные отдельно от
 // отрисовки, поэтому каталог растёт без правки этого файла.
+
+/**
+ * Цвет и укладка для плитки, керамогранита и доски — «окно пожеланий» по комнате
+ * (основатель 15.09: «в ванной кафель или керамогранит, его цвет и рисунок на выбор
+ * из нашего каталога»). Показывается только там, где у позиции есть варианты;
+ * выбор пишется в тот же id пола/стен составной строкой и уходит в смету.
+ */
+function ВыборЦветаИУкладки({ id, name, onChange }: { id: string | undefined; name: string; onChange: (id: string) => void }) {
+  if (!id) return null;
+  const { base, colorway, layout } = parseMaterialId(id);
+  const m = materialById(base);
+  if (!m) return null;
+  const v = variantsOf(m);
+  if (v.colorways.length === 0) return null;
+  return (
+    <span style={{ display: "flex", gap: 4, marginTop: 3 }}>
+      <select
+        id={`${name}-color`}
+        aria-label="Цвет"
+        value={colorway ?? ""}
+        onChange={(e) => onChange(composeMaterialId(base, e.target.value || undefined, layout))}
+        style={{ fontSize: 12, flex: 1, minWidth: 0 }}
+      >
+        <option value="">цвет: как в каталоге</option>
+        {v.colorways.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
+      <select
+        id={`${name}-layout`}
+        aria-label="Укладка"
+        value={layout ?? "straight"}
+        onChange={(e) => onChange(composeMaterialId(base, colorway, e.target.value as import("./materials").Layout))}
+        style={{ fontSize: 12, flex: 1, minWidth: 0 }}
+      >
+        {v.layouts.map((l) => <option key={l} value={l}>{LAYOUTS.find((x) => x.id === l)?.name}</option>)}
+      </select>
+    </span>
+  );
+}
 
 function textureFor(id: string, roomW: number, roomH: number): THREE.Texture | null {
   const m = materialById(id);
@@ -1873,7 +1911,7 @@ export default function QSpaceClient() {
                         <select
                           id={`qspace-room-floor-${r.index}`}
                           aria-label={`Пол комнаты ${r.index}`}
-                          value={roomFloor[r.index] ?? ""}
+                          value={roomFloor[r.index] ? parseMaterialId(roomFloor[r.index]).base : ""}
                           onChange={(e) => setRoomFloor((f) => {
                             const next = { ...f };
                             if (e.target.value) next[r.index] = e.target.value; else delete next[r.index];
@@ -1884,13 +1922,14 @@ export default function QSpaceClient() {
                           <option value="">как общий ({materialById(floorMatId)?.name ?? "—"})</option>
                           {materialsFor("floor").map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                         </select>
+                        <ВыборЦветаИУкладки id={roomFloor[r.index]} name={`qspace-room-floor-${r.index}`} onChange={(v) => setRoomFloor((f) => ({ ...f, [r.index]: v }))} />
                       </label>
                       <label style={{ flex: "1 1 140px", minWidth: 0, fontSize: 12, color: "#6a645a" }}>
                         стены
                         <select
                           id={`qspace-room-wall-${r.index}`}
                           aria-label={`Стены комнаты ${r.index}`}
-                          value={roomWall[r.index] ?? ""}
+                          value={roomWall[r.index] ? parseMaterialId(roomWall[r.index]).base : ""}
                           onChange={(e) => setRoomWall((f) => {
                             const next = { ...f };
                             if (e.target.value) next[r.index] = e.target.value; else delete next[r.index];
@@ -1901,6 +1940,7 @@ export default function QSpaceClient() {
                           <option value="">как общие ({materialById(wallMatId)?.name ?? "—"})</option>
                           {materialsFor("wall").map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                         </select>
+                        <ВыборЦветаИУкладки id={roomWall[r.index]} name={`qspace-room-wall-${r.index}`} onChange={(v) => setRoomWall((f) => ({ ...f, [r.index]: v }))} />
                       </label>
                     </div>
                   </div>

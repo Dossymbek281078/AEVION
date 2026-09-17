@@ -67,13 +67,25 @@ export async function downloadOnce(href, dir) {
  * записи мы не используем, читаем до конца потока.
  */
 function gmlStream(zipFile) {
+  // Записей может быть больше одной: у тайла 1091-41 первой идёт ПАПКА
+  // `1091-41_citygml/` (stored, 0 байт), и чтение «первой записи» давало
+  // 0 зданий из 2.5 ГБ (замер 17.09). Идём по локальным заголовкам до .gml.
   const fd = fs.openSync(zipFile, "r");
   const head = Buffer.alloc(30);
-  fs.readSync(fd, head, 0, 30, 0);
-  if (head.readUInt32LE(0) !== 0x04034b50) throw new Error("not a zip local header");
-  const method = head.readUInt16LE(8), nameLen = head.readUInt16LE(26), extraLen = head.readUInt16LE(28);
+  let offset = 0, method = 0, start = 0;
+  for (let n = 0; n < 16; n++) {
+    fs.readSync(fd, head, 0, 30, offset);
+    if (head.readUInt32LE(0) !== 0x04034b50) { fs.closeSync(fd); throw new Error(`zip: no local header at ${offset}`); }
+    method = head.readUInt16LE(8);
+    const compressed = head.readUInt32LE(18), nameLen = head.readUInt16LE(26), extraLen = head.readUInt16LE(28);
+    const name = Buffer.alloc(nameLen);
+    fs.readSync(fd, name, 0, nameLen, offset + 30);
+    start = offset + 30 + nameLen + extraLen;
+    if (/\.gml$/i.test(name.toString("utf8"))) break;
+    if (compressed === 0xffffffff) { fs.closeSync(fd); throw new Error("zip64 entry before the .gml — not handled"); }
+    offset = start + compressed;
+  }
   fs.closeSync(fd);
-  const start = 30 + nameLen + extraLen;
   const raw = fs.createReadStream(zipFile, { start });
   if (method === 0) return raw;
   if (method !== 8) throw new Error(`zip method ${method} unsupported`);
@@ -112,9 +124,25 @@ export async function readSwissBuildings(zipFile, bbox, { log = () => {} } = {})
       if (!(h > 0)) { noHeight++; continue; }
       const gi = el.indexOf("<bldg:GroundSurface");
       const pi = gi >= 0 ? el.indexOf("<gml:posList", gi) : -1;
-      if (pi < 0) { noGround++; continue; }
-      const p0 = el.indexOf(">", pi) + 1, p1 = el.indexOf("<", p0);
-      const v = el.slice(p0, p1).trim().split(/\s+/).map(Number);
+      let v;
+      if (pi >= 0) {
+        const p0 = el.indexOf(">", pi) + 1, p1 = el.indexOf("<", p0);
+        v = el.slice(p0, p1).trim().split(/\s+/).map(Number);
+      } else {
+        // Без семантики поверхностей (BuildingPart с lod2Solid — 11 % тайла
+        // 1091-23, замер 17.09): земля — самый низкий ПЛОСКИЙ полигон солида.
+        let best = null, bestZ = Infinity;
+        for (let q = el.indexOf("<gml:posList"); q >= 0; q = el.indexOf("<gml:posList", q + 12)) {
+          const q0 = el.indexOf(">", q) + 1, q1 = el.indexOf("<", q0);
+          const w = el.slice(q0, q1).trim().split(/\s+/).map(Number);
+          if (w.length < 12) continue;
+          let zmin = Infinity, zmax = -Infinity;
+          for (let k = 2; k < w.length; k += 3) { if (w[k] < zmin) zmin = w[k]; if (w[k] > zmax) zmax = w[k]; }
+          if (zmax - zmin < 0.5 && zmin < bestZ) { bestZ = zmin; best = w; }
+        }
+        if (!best) { noGround++; continue; }
+        v = best;
+      }
       const ring = [];
       for (let k = 0; k + 2 < v.length; k += 3) ring.push(lv95ToWgs84(v[k], v[k + 1]));
       if (ring.length < 3) { noGround++; continue; }

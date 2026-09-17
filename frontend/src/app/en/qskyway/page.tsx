@@ -15,7 +15,7 @@ import ModulePricingChip from "@/components/ModulePricingChip";
 export const metadata: Metadata = {
   title: "QSkyway — navigation layer for the urban sky",
   description:
-    "Provider-independent 3D air corridors and rules for air taxis, live on real buildings in Astana, NYC, Tokyo, Singapore, Amsterdam, Berlin and Vienna. Routed against what regulators actually publish; live METAR wind; every flight exportable as a signed justification document.",
+    "Provider-independent 3D air corridors and rules for air taxis, live on real buildings in Astana, NYC, Tokyo, Singapore, Amsterdam, Berlin, Vienna and Zurich. Routed against what regulators actually publish; live METAR wind; every flight exportable as a signed justification document.",
   alternates: { canonical: "https://aevion.app/en/qskyway" },
   openGraph: {
     title: "QSkyway — navigation layer for the urban sky",
@@ -40,13 +40,14 @@ export default async function EnQskywayPage({
         <h1 style={styles.h1}>QSkyway — navigation layer for the urban sky</h1>
         <p style={styles.lede}>
           Provider-independent 3D air corridors for air taxis — live on real
-          buildings in Astana, New York, Tokyo, Singapore, Amsterdam, Berlin
-          and Vienna, routed against what the regulators actually publish (FAA
-          airspace ceilings over Manhattan, Japan&apos;s MLIT permission regime,
-          CAAS permits over Singapore, the Schiphol CTR from the Dutch eAIP
-          over Amsterdam&apos;s Zuidas, ED-R 146 from the German AIP over
+          buildings in Astana, New York, Tokyo, Singapore, Amsterdam, Berlin,
+          Vienna and Zurich, routed against what the regulators actually publish
+          (FAA airspace ceilings over Manhattan, Japan&apos;s MLIT permission
+          regime, CAAS permits over Singapore, the Schiphol CTR from the Dutch
+          eAIP over Amsterdam&apos;s Zuidas, ED-R 146 from the German AIP over
           Berlin&apos;s Potsdamer Platz, the LOWW control zone from Austro
           Control&apos;s own airspace feed over Vienna&apos;s Innere Stadt,
+          BAZL&apos;s drone geo-zone ceilings over central Zurich,
           Kazakhstan&apos;s published prohibited area over the Astana twin).
         </p>
         <p style={styles.note}>

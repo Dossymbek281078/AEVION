@@ -7359,6 +7359,7 @@ const kk: Record<string, string> = {
   "qskyway.city.amsterdam": "Амстердам — Зёйдас",
   "qskyway.city.berlin": "Берлин — Потсдамер-плац",
   "qskyway.city.vienna": "Вена — Ішкі қала",
+  "qskyway.city.zurich": "Цюрих — орталық",
   "langSwitch.aria": "Интерфейс тілі",
   "chain.room.qright": "Авторлық белгісі",
   "chain.room.qcontract": "Шарт",

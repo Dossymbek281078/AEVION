@@ -6,6 +6,7 @@ import { CITY_TOKYO } from "../src/routes/qskyway.city.tokyo";
 import { CITY_AMSTERDAM } from "../src/routes/qskyway.city.amsterdam";
 import { CITY_BERLIN } from "../src/routes/qskyway.city.berlin";
 import { CITY_VIENNA } from "../src/routes/qskyway.city.vienna";
+import { CITY_ZURICH } from "../src/routes/qskyway.city.zurich";
 import type { CityData } from "../src/routes/qskyway.city";
 
 /**

@@ -110,9 +110,10 @@ export const LANG_KEY_COUNT: Record<Lang, number> = {
   // 17.09: тот же конфликт второй раз — теперь с Берлином и Веной (qskyway.city.berlin,
   // qskyway.city.vienna, +2 в ru/en/kk). Опять не сторона, а счёт по слитым словарям:
   // уникальных ключей ru 7428, en 7428, kk 7387.
-  ru: 7428,
-  en: 7428,
-  kk: 7387,
+  // 17.09: +1 в ru/en/kk — qskyway.city.zurich (восьмой город).
+  ru: 7429,
+  en: 7429,
+  kk: 7388,
   de: 134,
   fr: 134,
   es: 134,

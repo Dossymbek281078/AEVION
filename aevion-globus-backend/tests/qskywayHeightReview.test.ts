@@ -6,6 +6,7 @@ import { CITY_TOKYO } from "../src/routes/qskyway.city.tokyo";
 import { CITY_AMSTERDAM } from "../src/routes/qskyway.city.amsterdam";
 import { CITY_BERLIN } from "../src/routes/qskyway.city.berlin";
 import { CITY_VIENNA } from "../src/routes/qskyway.city.vienna";
+import { CITY_ZURICH } from "../src/routes/qskyway.city.zurich";
 
 // Твин помечает высоту сомнительной двумя правилами. Одно — «тег спорит с
 // собственным счётом этажей»: там движок сам берёт счёт этажей, и в записи
@@ -29,6 +30,7 @@ const TWINS: Record<string, { dataQuality?: { suspect?: Suspect[] } }> = {
   amsterdam: CITY_AMSTERDAM as never,
   berlin: CITY_BERLIN as never,
   vienna: CITY_VIENNA as never,
+  zurich: CITY_ZURICH as never,
 };
 
 /** Сомнительные, которые движок НЕ переопределил — только они требуют человека. */
@@ -91,7 +93,8 @@ describe("что задаёт высоту коридоров: обмер или
   // 16.09.2026: + Амстердам — лидар 3D BAG; верхушка (Symphony/ABN AMRO, 105–108 м) обмерена.
   // 16.09.2026: + Берлин — LoD2 Сената; верхушка (башни Потсдамер-плац, 99–115 м) обмерена.
   // 16.09.2026: + Вена — Баукёрпермодель города; верхушка (собор Св. Стефана, 136 м) обмерена.
-  const SURVEYED = ["nyc", "tokyo", "amsterdam", "berlin", "vienna"];
+  // 17.09.2026: + Цюрих — swissBUILDINGS3D (measuredHeight по модели крыши).
+  const SURVEYED = ["nyc", "tokyo", "amsterdam", "berlin", "vienna", "zurich"];
 
   for (const city of SURVEYED) {
     it(`${city}: самое высокое препятствие обмерено, а не заявлено`, () => {

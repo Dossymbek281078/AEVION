@@ -424,6 +424,39 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
     expect(fluxBody).toMatchObject({ prompt: "a cat", width: 1024, height: 1024 });
   });
 
+  test("OpenAI без кредитов и Workers AI 401 → картинку отдаёт Gemini (17.09.2026: так было на проде, и картинок не было вовсе)", async () => {
+    process.env.OPENAI_API_KEY = "sk-fake";
+    process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
+    process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
+    process.env.GEMINI_API_KEY = "gm-fake";
+    try {
+      fetchMock
+        .mockResolvedValueOnce(jsonResp(429, { error: { message: "You have no credits remaining.", code: "credit_balance_exhausted" } })) // openai
+        .mockResolvedValueOnce(jsonResp(401, { success: false, errors: [{ code: 10000, message: "Authentication error" }] })) // workers ai
+        .mockResolvedValueOnce(jsonResp(200, { candidates: [{ content: { parts: [{ text: "here" }, { inlineData: { mimeType: "image/png", data: Buffer.from("gemini-bytes").toString("base64") } }] } }] })) // gemini
+        .mockResolvedValueOnce(jsonResp(401, { success: false })); // cf images upload — тот же мёртвый токен
+
+      const r = await request(makeApp())
+        .post("/api/devhub/media/image")
+        .send({ prompt: "a cat", size: "1792x1024" });
+
+      expect(r.status).toBe(200);
+      expect(r.body.provider).toBe("gemini");
+      expect(r.body.fallbackFrom).toEqual(["openai", "workers-ai"]);
+      expect(String(fetchMock.mock.calls[2][0])).toContain("gemini-2.5-flash-image:generateContent");
+      // Ключ уходит заголовком, а не в адресе: адрес попадает в журналы.
+      expect(String(fetchMock.mock.calls[2][0])).not.toContain("gm-fake");
+      const gmBody = JSON.parse((fetchMock.mock.calls[2][1] as any).body);
+      expect(gmBody.contents[0].parts[0].text).toContain("a cat");
+      expect(gmBody.contents[0].parts[0].text).toContain("landscape");
+      // Загрузка в Cloudflare не удалась — честный запасной вид, а не потеря картинки.
+      expect(r.body.storage).toBe("inline");
+      expect(String(r.body.url)).toContain(Buffer.from("gemini-bytes").toString("base64"));
+    } finally {
+      delete process.env.GEMINI_API_KEY;
+    }
+  });
+
   test("Together FLUX free tier serves when it is the only configured provider", async () => {
     process.env.TOGETHER_API_KEY = "tg-fake";
     fetchMock.mockResolvedValueOnce(jsonResp(200, {

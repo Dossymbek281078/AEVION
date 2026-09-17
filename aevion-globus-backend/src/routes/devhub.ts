@@ -5017,6 +5017,39 @@ devhubRouter.post("/media/image", async (req, res) => {
     }
   }
 
+  // Gemini (gemini-2.5-flash-image). 17.09.2026 на проде обе прежние руки были
+  // мертвы разом — OpenAI 429 «no credits remaining», Workers AI 401 — и картинки
+  // не работали вовсе, хотя ключ Gemini настроен и картинки отдаёт (проверено
+  // живым вызовом с ключом прода: 200 с inlineData). Размер модель выбирает сама,
+  // поэтому желаемое соотношение сторон уходит словами в подсказку.
+  const geminiKey = process.env.GEMINI_API_KEY?.trim();
+  if (!result && geminiKey) {
+    try {
+      const aspect = width === height ? "square" : width > height ? "landscape (wide)" : "portrait (tall)";
+      const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent", {
+        method: "POST",
+        headers: { "x-goog-api-key": geminiKey, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `Generate an image, ${aspect} composition: ${prompt.trim()}` }] }],
+          generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+        }),
+      });
+      if (!r.ok) {
+        attempts.push({ provider: "gemini", status: r.status, error: `Gemini error: ${(await r.text()).slice(0, 300)}` });
+      } else {
+        const data = await r.json() as { candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data?: string } }> } }> };
+        const b64 = data.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)?.inlineData?.data;
+        if (b64) {
+          result = { provider: "gemini", b64, revisedPrompt: null };
+        } else {
+          attempts.push({ provider: "gemini", status: 500, error: "no image in response" });
+        }
+      }
+    } catch (e: any) {
+      attempts.push({ provider: "gemini", status: 500, error: e?.message || "request failed" });
+    }
+  }
+
   const togetherKey = process.env.TOGETHER_API_KEY;
   if (!result && togetherKey) {
     try {

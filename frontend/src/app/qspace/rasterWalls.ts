@@ -53,7 +53,7 @@ export interface RasterWallsResult {
   /** счётчики по шагам — для разбора, почему нашлось столько */
   stats?: Record<string, number>;
   /** маски чернил и стен — только при debug, для разбора глазами */
-  masks?: { ink: Uint8Array; walls: Uint8Array };
+  masks?: { ink: Uint8Array; walls: Uint8Array; bands?: Array<{ x0: number; y0: number; x1: number; y1: number; count: number; gained: number; ok: boolean }> };
 }
 
 /** Скользящий максимум/минимум по строкам и столбцам (окно 2r+1), O(n). */
@@ -283,17 +283,30 @@ export function findWallsByThickness(rgba: Uint8ClampedArray, w: number, h: numb
   const gained = new Int32Array(hc.comps.length + 1);
   for (let i = 0; i < n; i++) if (inkClosed[i] && !ink[i]) gained[hc.labels[i]]++;
   const band = new Uint8Array(hc.comps.length + 1);
+  // «толстое рядом»: у конца полосы в полутора толщинах есть штрих толщиной от minPx —
+  // заштрихованная стена упирается в другую стену, а заштрихованный шкаф стоит в комнате
+  const толстоеРядом = (x: number, y: number): boolean => {
+    const R = Math.round(1.5 * wallPx);
+    for (let yy = Math.max(0, y - R); yy <= Math.min(h - 1, y + R); yy += 2) for (let xx = Math.max(0, x - R); xx <= Math.min(w - 1, x + R); xx += 2) if (d[yy * w + xx] >= minPx * 1.5) return true;
+    return false;
+  };
   hc.comps.forEach((c, k) => {
     const bw = c.x1 - c.x0 + 1, bh = c.y1 - c.y0 + 1;
-    if (gained[k + 1] >= 0.1 * c.count && Math.max(bw, bh) >= 3 * wallPx && Math.min(bw, bh) <= 1.5 * wallPx && Math.min(bw, bh) >= 3) band[k + 1] = 1;
+    // полоса рвётся штриховкой на куски по две толщины — принимаем от двух, сшивает закрытие маски стен
+    if (!(gained[k + 1] >= 0.25 * c.count && Math.max(bw, bh) >= 2 * wallPx && Math.min(bw, bh) <= 1.5 * wallPx && Math.min(bw, bh) >= 3)) return;
+    const cx = (c.x0 + c.x1) / 2, cy = (c.y0 + c.y1) / 2;
+    const концы: Array<[number, number]> = bw >= bh ? [[c.x0, cy], [c.x1, cy]] : [[cx, c.y0], [cx, c.y1]];
+    if (концы.some(([x, y]) => толстоеРядом(Math.round(x), Math.round(y)))) band[k + 1] = 1;
   });
   let hatched = 0;
   const ink2 = new Uint8Array(ink);
-  for (let i = 0; i < n; i++) if (inkClosed[i] && band[hc.labels[i]]) { if (!ink2[i]) hatched++; ink2[i] = 1; }
+  const bandPx = new Uint8Array(n);
+  for (let i = 0; i < n; i++) if (inkClosed[i] && band[hc.labels[i]]) { if (!ink2[i]) hatched++; ink2[i] = 1; bandPx[i] = 1; }
   const d2 = hatched > 0 ? distance(ink2, w, h) : d;
   const rr = Math.max(1, Math.round(minPx / 2));
   const core = new Uint8Array(n);
-  for (let i = 0; i < n; i++) if (ink2[i] && d2[i] >= rr * 3) core[i] = 1;
+  // принятая полоса — стена независимо от толщины: LA VIE — 5 px при пороге 5.5
+  for (let i = 0; i < n; i++) if ((ink2[i] && d2[i] >= rr * 3) || bandPx[i]) core[i] = 1;
   const walls = extrema(core, w, h, rr, true);
   // сшить разрывы скелета до толщины стены: закрытие радиусом wallPx/2 внутри чернил
   const closed = extrema(extrema(walls, w, h, Math.round(wallPx / 2), true), w, h, Math.round(wallPx / 2), false);
@@ -449,6 +462,38 @@ export function findWallsByThickness(rgba: Uint8ClampedArray, w: number, h: numb
   };
   segs = merge(segs);
 
+  // 6б. стыки: конец отрезка, не дошедший до соседней стены на полторы толщины,
+  //     дотягивается до пересечения с ней — иначе в углу щель, и комната «утекает»
+  //     (LA VIE: левая стена кухни обрывалась за 80 px до угла)
+  const snapLen = (q: WallSeg) => Math.hypot(q.x2 - q.x1, q.y2 - q.y1);
+  for (const a of segs) {
+    const la = snapLen(a); if (la === 0) continue;
+    const ux = (a.x2 - a.x1) / la, uy = (a.y2 - a.y1) / la;
+    for (const end of [1, 2] as const) {
+      const ex = end === 1 ? a.x1 : a.x2, ey = end === 1 ? a.y1 : a.y2;
+      const dir = end === 1 ? -1 : 1; // наружу от отрезка
+      let best: { t: number; x: number; y: number } | null = null;
+      for (const b of segs) {
+        if (b === a) continue;
+        const lb = snapLen(b); if (lb === 0) continue;
+        const vx = (b.x2 - b.x1) / lb, vy = (b.y2 - b.y1) / lb;
+        const den = ux * vy - uy * vx;
+        if (Math.abs(den) < 0.2) continue; // почти параллельны — не стык
+        // пересечение прямых: e + t·dir·u = b1 + s·v
+        const t = ((b.x1 - ex) * vy - (b.y1 - ey) * vx) / den * dir;
+        const sPar = ((b.x1 - ex) * uy - (b.y1 - ey) * ux) / den * dir;
+        // s вдоль b по её единичному вектору: пересчёт через проекцию точки
+        const px = ex + ux * t * dir, py = ey + uy * t * dir;
+        const sb = vx * (px - b.x1) + vy * (py - b.y1);
+        void sPar;
+        if (t < 0 || t > 1.5 * wallPx) continue;           // только вперёд и не дальше полутора толщин
+        if (sb < -1.5 * wallPx || sb > lb + 1.5 * wallPx) continue; // и в пределах соседа
+        if (!best || t < best.t) best = { t, x: px, y: py };
+      }
+      if (best && best.t > 0.5) { if (end === 1) { a.x1 = best.x; a.y1 = best.y; } else { a.x2 = best.x; a.y2 = best.y; } }
+    }
+  }
+
   // 7. стёкла: тонкие чернила в створе между коллинеарными стенами — под любым
   //    углом (в LA VIE окна стоят в косых стенах V-образного крыла; со стеклом
   //    только по осям контур крыла тёк и комнат было 3 вместо 11)
@@ -465,6 +510,8 @@ export function findWallsByThickness(rgba: Uint8ClampedArray, w: number, h: numb
       const b = стены[j]; const lb = segLen(b);
       const vx = (b.x2 - b.x1) / lb, vy = (b.y2 - b.y1) / lb;
       if (Math.abs(ux * vx + uy * vy) < Math.cos((3 * Math.PI) / 180)) continue; // не коллинеарны
+      // стекло — между НАСТОЯЩИМИ стенами: обе от трёх толщин длиной; обрывки на мебели створа не дают
+      if (la < 3 * wallPx || lb < 3 * wallPx) continue;
       // b на прямой a: поперечное отклонение обоих концов в пределах толщины
       const off1 = Math.abs(-uy * (b.x1 - a.x1) + ux * (b.y1 - a.y1)), off2 = Math.abs(-uy * (b.x2 - a.x1) + ux * (b.y2 - a.y1));
       if (Math.max(off1, off2) > wallPx) continue;
@@ -503,5 +550,5 @@ export function findWallsByThickness(rgba: Uint8ClampedArray, w: number, h: numb
   segs.push(...glass);
   if (glass.length) warnings.push(`Окна и витражи (${glass.length}) найдены как тонкие линии в створе стен и добавлены стеклом: контур замкнут для площадей, в 3D прозрачные.`);
   warnings.push(`Стены найдены по толщине штриха: наружная ${wallPx.toFixed(0)} px, порог ${minPx.toFixed(0)} px, отрезков ${segs.length - glass.length}. Это предположение по картинке — проверьте и уберите лишнее.`);
-  return { segments: segs, warnings, wallPx, minPx, inkFraction, stats, masks: debug ? { ink, walls } : undefined };
+  return { segments: segs, warnings, wallPx, minPx, inkFraction, stats, masks: debug ? { ink, walls, bands: hc.comps.map((c, k) => ({ x0: c.x0, y0: c.y0, x1: c.x1, y1: c.y1, count: c.count, gained: gained[k + 1], ok: band[k + 1] === 1 })) } : undefined };
 }

@@ -465,9 +465,40 @@ function parseStore(html) {
     if (!gumMap[it.slug])
       nahodki.push(`GUMROAD БЕЗ СОПОСТАВЛЕНИЯ: "${it.name}" (${it.slug}, $${it.priceUsd}) — покупка уйдёт в общую ветку`);
   }
-  for (const slug of Object.keys(gumMap)) {
-    if (!gumStore.some((it) => it.slug === slug))
-      nahodki.push(`GUMROAD НЕТ ТОВАРА: код знает слаг ${slug}, на витрине его нет — ссылка «купить» мертва`);
+  // 17.09.2026. Здесь стояло «на витрине его нет — ссылка «купить» мертва». Это был
+  // ВЫВОД из отсутствия, а не замер, и он оказался ложным: orcfbo, lelzw и ghvzq
+  // отвечают 200 по той самой ссылке, которую строит сайт (`?wanted=true`), — они
+  // просто не показаны на публичной витрине, в Gumroad товар бывает unlisted.
+  // Теперь спрашиваем саму ссылку. Контроль прибора: выдуманный слаг даёт 404.
+  const netNaVitrine = Object.keys(gumMap).filter((slug) => !gumStore.some((it) => it.slug === slug));
+  const neposkazany = [];
+  for (const slug of netNaVitrine) {
+    if (GUMROAD_HTML) {
+      // Витрина читалась из файла: сети мы не касались, значит про ссылку сказать
+      // нечего. Молчание честнее выдуманного вердикта в обе стороны.
+      neposkazany.push(`${slug} (ссылка НЕ проверялась: витрина читалась из файла)`);
+      continue;
+    }
+    let status = null;
+    try {
+      const r = await fetch(`https://aevion.gumroad.com/l/${slug}?wanted=true`, {
+        headers: { "user-agent": "Mozilla/5.0 (aevion-storefront-check)" },
+      });
+      status = r.status;
+    } catch (e) {
+      status = "нет ответа: " + e.message;
+    }
+    if (typeof status === "number" && status >= 200 && status < 300) {
+      neposkazany.push(`${slug} (не показан на витрине, ссылка отвечает ${status})`);
+    } else {
+      nahodki.push(`GUMROAD ССЫЛКА МЕРТВА: слаг ${slug} известен коду, страница покупки отвечает ${status}`);
+    }
+  }
+  if (neposkazany.length) {
+    console.log(
+      `ГРАНИЦА ПРОВЕРКИ: ${neposkazany.length} слагов Gumroad на витрине не показаны — это НЕ поломка: ` +
+        neposkazany.join(", ")
+    );
   }
   for (const it of gumStore) {
     const k = gumKatalog[it.slug];

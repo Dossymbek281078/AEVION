@@ -45,7 +45,72 @@ function readNameMap() {
   const re = /"([^"]+)":\s*"(tier_[a-z_]+|app_[a-z_]+)"/g;
   let m;
   while ((m = re.exec(block))) map[normName(m[1])] = m[2];
+  // 17.09.2026. С переходом на лестницу сроков таблица в коде собирается ВЫЧИСЛЕНИЕМ
+  // (Object.fromEntries из TERM_TIERS и STANDALONE_APPS), литеральных пар в файле не осталось,
+  // и регулярка выше вернула ПУСТО. Пустая таблица красит каждый товар витрины в «не опознан»:
+  // прогон дал 23 ложные находки при нуле настоящих. Поэтому имена, которых нет литералами,
+  // достраиваем ровно тем же шаблоном, что и код.
+  for (const [imya, ssylka] of Object.entries(generatedNames())) {
+    const k = normName(imya);
+    if (!(k in map)) map[k] = ssylka;
+  }
   return map;
+}
+
+/** Ступени сроков и отдельные приложения из pricing.ts. Разбор строковый: регулярки по этому файлу хрупки. */
+function readLadder() {
+  const src = fs.readFileSync(PRICING_TS, "utf8");
+  const cut = (start, close) => {
+    const i = src.indexOf(start);
+    if (i < 0) return "";
+    const j = src.indexOf(close, i + start.length);
+    return j < 0 ? "" : src.slice(i + start.length, j);
+  };
+  const clean = (s) => s.trim().split('"').join("").split("'").join("").trim();
+  const tiers = cut("export const TERM_TIERS = [", "]").split(",").map(clean).filter(Boolean);
+  const pairs = (block) => {
+    const out = {};
+    for (const part of block.split(",")) {
+      const i = part.indexOf(":");
+      if (i < 0) continue;
+      const k = clean(part.slice(0, i));
+      const v = clean(part.slice(i + 1));
+      if (k && v) out[k] = v;
+    }
+    return out;
+  };
+  const names = pairs(cut("export const TERM_NAME: Record<TermTier, string> = {", "}"));
+  const months = pairs(cut("export const TERM_MONTHS: Record<TermTier, number> = {", "}"));
+  const apps = [];
+  for (const chunk of cut("export const STANDALONE_APPS: StandaloneApp[] = [", "];").split("}")) {
+    const slug = chunk.indexOf("slug:");
+    const name = chunk.indexOf("name:");
+    if (slug < 0 || name < 0) continue;
+    const val = (from) => {
+      const a = chunk.indexOf('"', from);
+      const b = chunk.indexOf('"', a + 1);
+      return a < 0 || b < 0 ? "" : chunk.slice(a + 1, b);
+    };
+    const s = val(slug);
+    const n = val(name);
+    if (s && n) apps.push({ slug: s, name: n });
+  }
+  return { tiers, names, months, apps };
+}
+
+/** Названия товаров, как их строит код: «AEVION Planet — Lite (1 mo)», «AEVION DevHub — Max (12 mo)». */
+function generatedNames() {
+  const { tiers, names, months, apps } = readLadder();
+  const out = {};
+  if (!tiers.length || !Object.keys(names).length || !Object.keys(months).length) return out;
+  for (const t of tiers) {
+    if (!names[t] || !months[t]) continue;
+    out["AEVION Planet — " + names[t] + " (" + months[t] + " mo)"] = "tier_" + t;
+    for (const a of apps) {
+      out["AEVION " + a.name + " — " + names[t] + " (" + months[t] + " mo)"] = "app_" + a.slug + "_" + t;
+    }
+  }
+  return out;
 }
 
 /** Позиции каталога сайта, у которых касса LemonSqueezy. Ключ — идентификатор
@@ -162,21 +227,58 @@ async function fetchStore() {
 }
 
 function parseStore(html) {
-  const flat = html.replace(/\s+/g, " ");
   const items = [];
-  // Ссылка кассы идёт ПЕРЕД названием — берём её тем же проходом: это
-  // ТОЧНЫЙ ключ сверки с каталогом сайта. Сопоставлять по именам нельзя:
-  // `app_smeta` в коде против `smeta-trainer` в каталоге, и таких пар
-  // несколько — по именам сверка давала бы ложные срабатывания.
-  const re = /href="[^"]*\/checkout\/buy\/([0-9a-f-]{36})"[\s\S]*?<h2[^>]*>\s*([^<]+?)\s*<\/h2>\s*<p[^>]*>\s*\$([\d.,]+)\/(\w+)\s*<\/p>/g;
-  let m;
-  while ((m = re.exec(flat))) {
-    items.push({
-      checkoutId: m[1],
-      name: normName(m[2]),
-      priceUsd: parseFloat(m[3].replace(/,/g, "")),
-      period: m[4].toLowerCase(),
-    });
+  // 17.09.2026. Разбор посошный: от КАЖДОЙ ссылки кассы берём первый <h2> после
+  // неё и его <p>. Прежняя одна регулярка требовала «$X/период» и на товаре с
+  // ценой-диапазоном перескакивала к СЛЕДУЮЩЕМУ товару — то есть записывала
+  // ссылку одного товара с названием и ценой другого. Замер: ссылка
+  // 03a0022c (настоящий «AEVION Planet», $24.00 - $2,400.00) числилась как
+  // «AEVION Planet — Annual» $200/month. А checkoutId — ключ сверки с каталогом
+  // сайта, значит проверка цен сравнивала каталог одного товара с ценой соседа.
+  const сжать = (s) =>
+    s
+      .split(String.fromCharCode(10)).join(" ")
+      .split(String.fromCharCode(13)).join(" ")
+      .split(String.fromCharCode(9)).join(" ")
+      .split(String.fromCharCode(160)).join(" ");
+  const водну = (s) => {
+    let r = сжать(s);
+    while (r.indexOf("  ") >= 0) r = r.split("  ").join(" ");
+    return r.trim();
+  };
+  const метка = "/checkout/buy/";
+  for (let i = html.indexOf(метка); i >= 0; i = html.indexOf(метка, i + 1)) {
+    const checkoutId = html.slice(i + метка.length, i + метка.length + 36);
+    const h2 = html.indexOf("<h2", i);
+    if (h2 < 0) continue;
+    const ho = html.indexOf(">", h2);
+    const hc = html.indexOf("</h2>", ho);
+    if (ho < 0 || hc < 0) continue;
+    const name = normName(водну(html.slice(ho + 1, hc)));
+    if (!name) continue;
+    // Цена известна, только когда она названа одним числом с периодом.
+    // «$24.00 - $2,400.00» у товара с вариантами оставляем null: проверки цен
+    // такой товар пропускают, проверки имён — нет.
+    let priceUsd = null;
+    let period = null;
+    const p = html.indexOf("<p", hc);
+    if (p >= 0) {
+      const po = html.indexOf(">", p);
+      const pc = html.indexOf("</p>", po);
+      if (po >= 0 && pc >= 0) {
+        const текст = водну(html.slice(po + 1, pc));
+        const диапазон = текст.indexOf(" - ") >= 0;
+        const дробь = текст.indexOf("/");
+        if (!диапазон && текст.startsWith("$") && дробь > 0) {
+          const число = parseFloat(текст.slice(1, дробь).split(",").join("").trim());
+          if (!Number.isNaN(число)) {
+            priceUsd = число;
+            period = текст.slice(дробь + 1).trim().toLowerCase();
+          }
+        }
+      }
+    }
+    items.push({ checkoutId, name, priceUsd, period });
   }
   return items;
 }
@@ -203,15 +305,24 @@ function parseStore(html) {
   // Знаменатель у нас есть, и он независимый: справочник ссылок в коде.
   // Товаров на витрине не может быть меньше, чем ссылок, которые мы же на
   // неё и завели.
-  const nuzhno = Object.keys(nameMap).length;
-  if (store.length < nuzhno) {
+  // 17.09.2026. Знаменатель был ложный: число имён В КОДЕ. Он годился, пока карта
+  // повторяла витрину один к одному. С лестницей сроков код объявляет 30 сочетаний,
+  // а магазин продаёт их ОДНИМ товаром с вариантами: 17 товаров против 30 имён —
+  // и сверка отказывалась судить всегда, то есть молчала бы и о настоящем расхождении.
+  // Честный знаменатель лежит в той же странице: сколько на ней ссылок кассы.
+  const ssylok = html.split("/checkout/buy/").length - 1;
+  if (store.length < ssylok) {
     console.error(
-      `storefront-vs-code: разобрано ${store.length} товаров при ${nuzhno} ссылках в коде — ` +
-        "разбор НЕПОЛОН, судить по нему нельзя"
+      `storefront-vs-code: разобрано ${store.length} товаров при ${ssylok} ссылках кассы на странице — ` +
+        "разбор НЕПОЛОН, судить по нему нельзя. Частая причина: цена указана диапазоном " +
+        "(«$24.00 - $2,400.00» у товара с вариантами), а разбор ждёт «$X/период»"
     );
     process.exitCode = 2;
     return;
   }
+  // Сколько имён кода не встретилось на витрине — это НЕ повод отказываться судить
+  // (у товара с вариантами имя одно, а ссылок в коде пять), но знать полезно.
+  const imenVKode = Object.keys(nameMap).length;
 
   const byName = new Map(store.map((i) => [i.name, i]));
   const nahodki = [];
@@ -223,6 +334,9 @@ function parseStore(html) {
 
   // 2. Период списания против названия. Это и есть класс, который нашёлся.
   for (const it of store) {
+    // У товара с вариантами периода и цены нет (их несколько) — судить не о чем.
+    // Без этого пропуска он давал бы ложные находки «списывает null».
+    if (it.period == null || it.priceUsd == null) continue;
     const godovoi = /annual/i.test(it.name);
     const mesyachnyi = /monthly/i.test(it.name);
     if (godovoi && it.period !== "year")
@@ -233,6 +347,10 @@ function parseStore(html) {
 
   // 3. Цена тарифа против объявленной.
   for (const it of store) {
+    // Товар с вариантами показывает диапазон, а не одну цену. Контрольный прогон
+    // без этой строки дал «ЦЕНА: тариф max продаётся ($null/null)» — находку,
+    // которой нет: сравнивать не с чем, пока цена не названа одним числом.
+    if (it.priceUsd == null) continue;
     const ref = nameMap[it.name];
     if (!ref || !ref.startsWith("tier_")) continue;
     const tier = ref.slice("tier_".length).replace(/_(monthly|annual)$/, "");
@@ -249,7 +367,7 @@ function parseStore(html) {
   // 4. Живой товар, которого код не знает — не ошибка сама по себе, но выдать
   //    его нечем: сопоставления нет, значит и тариф по нему не назначить.
   for (const it of store) {
-    if (!nameMap[it.name]) nahodki.push(`НЕ ОПОЗНАН: на витрине "${it.name}" ($${it.priceUsd}/${it.period}), в коде такого названия нет`);
+    if (!nameMap[it.name]) nahodki.push(`НЕ ОПОЗНАН: на витрине "${it.name}" (${it.priceUsd == null ? "цена вариантами" : "$" + it.priceUsd + "/" + it.period}), в коде такого названия нет`);
   }
 
   // 5. Цена в магазине против цены в каталоге САЙТА, по точному ключу —
@@ -259,10 +377,13 @@ function parseStore(html) {
   for (const it of store) {
     const k = katalog[it.checkoutId];
     if (!k) continue;
-    if (Math.abs(k.priceUsd - it.priceUsd) > 0.009)
+    // Цена вариантами (null) — сравнивать не с чем. Без этой защиты
+    // Math.abs(k.priceUsd - null) равен самой цене каталога, то есть всегда
+    // больше порога: товар с диапазоном давал бы «КАТАЛОГ: … против $null».
+    if (it.priceUsd != null && Math.abs(k.priceUsd - it.priceUsd) > 0.009)
       nahodki.push(`КАТАЛОГ: "${it.name}" в магазине $${it.priceUsd}, на сайте позиция ${k.id} стоит $${k.priceUsd}`);
     const ozhidaem = k.billing === "monthly" ? "month" : k.billing === "annual" ? "year" : null;
-    if (ozhidaem && it.period !== ozhidaem)
+    if (ozhidaem && it.period != null && it.period !== ozhidaem)
       nahodki.push(`КАТАЛОГ: "${it.name}" в магазине списывает ${it.period}, на сайте позиция ${k.id} объявлена как ${k.billing}`);
   }
 
@@ -273,7 +394,7 @@ function parseStore(html) {
     const ref = nameMap[it.name];
     if (!ref || !ref.startsWith("app_")) continue;
     if (!katalog[it.checkoutId])
-      nahodki.push(`НЕ НА САЙТЕ: "${it.name}" ($${it.priceUsd}/${it.period}) продаётся в магазине, но в каталоге сайта его нет`);
+      nahodki.push(`НЕ НА САЙТЕ: "${it.name}" (${it.priceUsd == null ? "цена вариантами" : "$" + it.priceUsd + "/" + it.period}) продаётся в магазине, но в каталоге сайта его нет`);
   }
 
   // ── Вторая касса: Gumroad ────────────────────────────────────────────────

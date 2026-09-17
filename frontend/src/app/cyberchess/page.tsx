@@ -2846,11 +2846,20 @@ export default function CyberChessPage(){
   const otpravitDaily=useCallback((srv:{day:string;sol:string[]})=>{
     (async()=>{
       try{
-        await fetch("/api-backend/api/cyberchess-daily/solve",{
+        const r=await fetch("/api-backend/api/cyberchess-daily/solve",{
           method:"POST",headers:{"Content-Type":"application/json"},
           body:JSON.stringify({day:srv.day,moves:srv.sol,timeMs:0,hintsUsed:0,
             userId:tournamentUserId(),name:tournamentDisplayName()||undefined}),
         });
+        // ОТКАЗ СЕРВЕРА (400 wrong_day после UTC-полуночи на открытой вкладке, 429,
+        // 5xx) — не исключение, и до 17.09.2026 проходил молча: человек решил, в
+        // таблице его нет, и почему — неизвестно. Сервер шлёт человеческую подсказку
+        // рядом с кодом; её и показываем (как на /cyberchess/daily), код — в консоль.
+        if(!r.ok){
+          let podskazka="Сервер не засчитал решение — обновите страницу и попробуйте ещё раз";
+          try{const j=await r.json();if(typeof j?.hint==="string"&&j.hint)podskazka=j.hint;console.warn("[daily] сервер отказал:",j?.error??r.status);}catch{console.warn("[daily] сервер отказал:",r.status);}
+          showToast(`Решение не попало в таблицу лидеров: ${podskazka}`,"error");
+        }
       }catch{
         // Награду человек уже получил; молчать про недоставленное решение
         // нельзя — иначе он не поймёт, почему его нет в таблице.

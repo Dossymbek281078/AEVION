@@ -8,8 +8,18 @@ import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
 import { useI18n } from "@/lib/i18n";
+import { TERM_TIERS, TERM_NAME, type TermTier } from "@/lib/termPricing";
 
-type TierId = "free" | "lite" | "medium" | "full" | "pro" | "enterprise";
+/**
+ * Тарифы формы = ступени лестницы сроков плюс free и enterprise.
+ *
+ * ЛОКАЛЬНЫЙ СПИСОК ЗДЕСЬ БЫЛ ПРИЧИНОЙ ДЕФЕКТА, А НЕ УДОБСТВОМ. 04.09.2026 в нём
+ * не хватало `pro`, имя дописали руками; 15.09 лестница сменилась на сроки,
+ * появилась ступень `max` ($2 400 за 12 месяцев) — и дефект вернулся тем же
+ * местом, потому что лечили следствие, а не причину. Порождаем из TERM_TIERS:
+ * добавится ступень — форма подхватит её сама, и забыть будет нечего.
+ */
+type TierId = "free" | TermTier | "enterprise";
 
 /**
  * Тарифы, которые человек может ВЫБРАТЬ в форме, в порядке цены.
@@ -23,7 +33,7 @@ type TierId = "free" | "lite" | "medium" | "full" | "pro" | "enterprise";
  * указать свой тариф ни ссылкой, ни руками — обращение приходило в поддержку
  * обезличенным. Проверено по трём веткам: ни в одной не починено.
  */
-const ВЫБОР_ТАРИФА = ["lite", "medium", "full", "pro", "enterprise"] as const;
+const ВЫБОР_ТАРИФА: readonly TierId[] = [...TERM_TIERS, "enterprise"];
 
 /**
  * Что принимается из ссылки. Шире выбора на `free`: с бесплатного тарифа к нам
@@ -315,7 +325,10 @@ function ContactInner() {
               {/* Список ОДИН на форму и на разбор ссылки: два расходятся молча. */}
               {ВЫБОР_ТАРИФА.map((id) => (
                 <option key={id} value={id}>
-                  {id.charAt(0).toUpperCase() + id.slice(1)}
+                  {/* Подписи ступеней уже есть в источнике правды. charAt(0) даёт
+                      то же самое сегодня и разойдётся в первый день, когда имя
+                      ступени перестанет совпадать с её слагом. */}
+                  {id === "enterprise" ? "Enterprise" : id === "free" ? "Free" : TERM_NAME[id]}
                 </option>
               ))}
             </select>

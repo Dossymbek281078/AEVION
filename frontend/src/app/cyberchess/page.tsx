@@ -2871,12 +2871,20 @@ export default function CyberChessPage(){
   // Recompute daily puzzle whenever puzzles are loaded (once we know total count)
   useEffect(()=>{
     if(PUZZLES.length===0)return;
-    const tk=todayKey();const saved=ldDaily();
+    // Ключ дня — ДЕНЬ СЕРВЕРА (UTC, из /puzzle), а не местная дата: задача дня
+    // сменяется в 05:00 Алматы, и по местному ключу с 00:00 до 05:00 «сегодня»
+    // уже 18-е, а сервер отдаёт задачу 17-го. Решив её, человек помечал 18-е
+    // решённым — и настоящую задачу 18-го в 06:00 награда и отправка в таблицу
+    // уже не принимали («уже решено»): серия на сервере рвалась молча (17.09.2026).
+    // Пока ответ сервера не пришёл — не пишем: местный ключ перетёр бы сохранённое
+    // «решено» серверного дня, и награду можно было бы взять дважды.
+    if(!srvDaily&&!srvDailyFailed)return;
+    const tk=srvDaily?.day||todayKey();const saved=ldDaily();
     if(saved&&saved.date===tk){sDailyState(saved);return}
     const idx=pickDailyIdx(PUZZLES.length);
     const next:DailyState={v:1,date:tk,idx,solved:false};
     svDaily(next);sDailyState(next);
-  },[PUZZLES.length]);
+  },[PUZZLES.length,srvDaily?.day,srvDailyFailed]);
 
   // Watch-URL: on mount, if ?pgn=... is present, load the PGN into Analysis tab read-only.
   useEffect(()=>{

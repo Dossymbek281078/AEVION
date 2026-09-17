@@ -12,6 +12,33 @@
 
 export type Surface = "floor" | "wall";
 
+/** Рисунок укладки — то, что человек выбирает для плитки и доски. */
+export type Layout = "straight" | "offset" | "diagonal" | "herringbone";
+export const LAYOUTS: Array<{ id: Layout; name: string }> = [
+  { id: "straight", name: "прямая" },
+  { id: "offset", name: "со смещением" },
+  { id: "diagonal", name: "по диагонали" },
+  { id: "herringbone", name: "ёлочка" },
+];
+
+/** Цвет материала — палитра поверх позиции каталога; смета считает ту же позицию. */
+export interface Colorway { id: string; name: string; colors: string[] }
+export const TILE_COLORWAYS: Colorway[] = [
+  { id: "white", name: "белый", colors: ["#e4e1db", "#c4c0b8"] },
+  { id: "beige", name: "бежевый", colors: ["#dccdb8", "#bfae96"] },
+  { id: "grey", name: "серый", colors: ["#bdbbb6", "#9e9c97"] },
+  { id: "graphite", name: "графит", colors: ["#5a5b5c", "#434445"] },
+  { id: "terracotta", name: "терракота", colors: ["#c48a67", "#a36f50"] },
+  { id: "sage", name: "шалфей", colors: ["#b9c4b6", "#98a494"] },
+  { id: "navy", name: "синий", colors: ["#4f5f78", "#3b485c"] },
+];
+export const WOOD_COLORWAYS: Colorway[] = [
+  { id: "light", name: "светлый", colors: ["#dccbb0", "#d0bea2", "#c7b496"] },
+  { id: "natural", name: "натуральный", colors: ["#c9a87c", "#bd9a6c", "#b08c5f"] },
+  { id: "dark", name: "тёмный", colors: ["#7a5a42", "#6b4d38", "#5c422f"] },
+  { id: "grey", name: "серый", colors: ["#a8a29a", "#9a948b", "#8c867d"] },
+];
+
 export interface Material {
   id: string;
   name: string;
@@ -23,6 +50,8 @@ export interface Material {
   unitM: number;
   /** короткая честная подпись для человека */
   note: string;
+  /** рисунок укладки — только у разобранного составного id (см. materialById) */
+  layout?: Layout;
 }
 
 export const MATERIALS: Material[] = [
@@ -193,8 +222,52 @@ export function materialsFor(surface: Surface): Material[] {
   return MATERIALS.filter((m) => m.surface === surface);
 }
 
+/**
+ * Какие цвета и укладки доступны позиции: плитка и керамогранит — палитра плитки и
+ * четыре укладки; доска и паркет — палитра дерева, прямая / диагональ / ёлочка;
+ * краска, бетон, обои — ничего (их цвет — сама позиция).
+ */
+export function variantsOf(m: Material): { colorways: Colorway[]; layouts: Layout[] } {
+  if (m.pattern === "tile") return { colorways: TILE_COLORWAYS, layouts: ["straight", "offset", "diagonal", "herringbone"] };
+  if (m.pattern === "planks") return { colorways: WOOD_COLORWAYS, layouts: ["straight", "diagonal", "herringbone"] };
+  return { colorways: [], layouts: [] };
+}
+
+/**
+ * Составной id: `база|c=цвет|l=укладка`. Хранится там же, где обычный id (пол
+ * комнаты, проект), поэтому цвет и укладка переживают сохранение и попадают в смету
+ * отдельной строкой — «Плитка белая 60×60 · бежевый · по диагонали».
+ */
+export function composeMaterialId(base: string, colorway?: string, layout?: Layout): string {
+  return base + (colorway ? `|c=${colorway}` : "") + (layout && layout !== "straight" ? `|l=${layout}` : "");
+}
+
+export function parseMaterialId(id: string): { base: string; colorway?: string; layout?: Layout } {
+  const [base, ...rest] = id.split("|");
+  const out: { base: string; colorway?: string; layout?: Layout } = { base };
+  for (const part of rest) {
+    if (part.startsWith("c=")) out.colorway = part.slice(2);
+    else if (part.startsWith("l=")) out.layout = part.slice(2) as Layout;
+  }
+  return out;
+}
+
 export function materialById(id: string): Material | undefined {
-  return MATERIALS.find((m) => m.id === id);
+  const { base, colorway, layout } = parseMaterialId(id);
+  const m = MATERIALS.find((x) => x.id === base);
+  if (!m) return undefined;
+  if (!colorway && !layout) return m;
+  const v = variantsOf(m);
+  const cw = colorway ? v.colorways.find((c) => c.id === colorway) : undefined;
+  const lay = layout && v.layouts.includes(layout) ? layout : undefined;
+  if ((colorway && !cw) || (layout && !lay)) return undefined; // чужой цвет/укладка — не позиция каталога
+  return {
+    ...m,
+    id,
+    name: m.name + (cw ? ` · ${cw.name}` : "") + (lay ? ` · ${LAYOUTS.find((l) => l.id === lay)?.name}` : ""),
+    colors: cw ? cw.colors : m.colors,
+    layout: lay,
+  };
 }
 
 /**
@@ -220,10 +293,29 @@ export function drawMaterial(m: Material, pxPerM = 256): HTMLCanvasElement {
   }
 
   if (m.pattern === "tile") {
+    const grout = m.colors[1] ?? "#b5b1a9";
+    const lw = Math.max(2, size * 0.012);
+    if (m.layout === "herringbone") { drawHerringbone(ctx, size, [m.colors[0]], grout); return c; }
+    if (m.layout === "diagonal") {
+      // та же плитка, повёрнутая на 45°: рисуем 2×2 клетки и поворачиваем вокруг центра
+      ctx.fillStyle = m.colors[0]; ctx.fillRect(0, 0, size, size);
+      ctx.save(); ctx.translate(size / 2, size / 2); ctx.rotate(Math.PI / 4);
+      ctx.strokeStyle = grout; ctx.lineWidth = lw;
+      const k = size / Math.SQRT2;
+      for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(i * k, -size); ctx.lineTo(i * k, size); ctx.stroke(); ctx.beginPath(); ctx.moveTo(-size, i * k); ctx.lineTo(size, i * k); ctx.stroke(); }
+      ctx.restore();
+      return c;
+    }
     ctx.fillStyle = m.colors[0];
     ctx.fillRect(0, 0, size, size);
-    ctx.strokeStyle = m.colors[1] ?? "#b5b1a9";
-    ctx.lineWidth = Math.max(2, size * 0.012);
+    ctx.strokeStyle = grout;
+    ctx.lineWidth = lw;
+    if (m.layout === "offset") {
+      // кирпичная перевязка: две плитки по высоте, нижний ряд сдвинут на половину
+      ctx.strokeRect(0, 0, size, size / 2);
+      ctx.strokeRect(-size / 2, size / 2, size, size / 2); ctx.strokeRect(size / 2, size / 2, size, size / 2);
+      return c;
+    }
     ctx.strokeRect(0, 0, size, size);
     return c;
   }
@@ -237,7 +329,18 @@ export function drawMaterial(m: Material, pxPerM = 256): HTMLCanvasElement {
     return c;
   }
 
-  // planks — доски вразбежку
+  // planks — доски вразбежку; ёлочка и диагональ — свои укладки
+  if (m.layout === "herringbone") { drawHerringbone(ctx, size, m.colors, undefined); return c; }
+  if (m.layout === "diagonal") {
+    ctx.save(); ctx.translate(size / 2, size / 2); ctx.rotate(Math.PI / 4); ctx.translate(-size, -size);
+    const rowsD = 16, rowHD = (2 * size) / rowsD;
+    for (let row = 0; row < rowsD; row++) {
+      const off = (row % 2) * size;
+      for (let i = -1; i < 4; i++) { ctx.fillStyle = m.colors[(row + i + m.colors.length) % m.colors.length]; ctx.fillRect(i * size + off, row * rowHD, size - 2, rowHD - 2); }
+    }
+    ctx.restore();
+    return c;
+  }
   const rows = 8;
   const rowH = size / rows;
   for (let row = 0; row < rows; row++) {
@@ -248,4 +351,18 @@ export function drawMaterial(m: Material, pxPerM = 256): HTMLCanvasElement {
     }
   }
   return c;
+}
+
+/** Ёлочка: планки 1×4 под ±45°, чередование цветов; шов — цвет затирки, если задан. */
+function drawHerringbone(ctx: CanvasRenderingContext2D, size: number, colors: string[], grout: string | undefined): void {
+  const L = size / 2, W = size / 8;
+  ctx.fillStyle = grout ?? colors[0]; ctx.fillRect(0, 0, size, size);
+  let k = 0;
+  for (let y = -size; y < 2 * size; y += W) {
+    for (let x = -size; x < 2 * size; x += 2 * W) {
+      const col = colors[k++ % colors.length];
+      ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI / 4); ctx.fillStyle = col; ctx.fillRect(0, 0, L - 2, W - 2); ctx.restore();
+      ctx.save(); ctx.translate(x + W * Math.SQRT2, y); ctx.rotate(-Math.PI / 4); ctx.fillStyle = colors[k++ % colors.length]; ctx.fillRect(0, 0, L - 2, W - 2); ctx.restore();
+    }
+  }
 }

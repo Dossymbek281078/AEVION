@@ -146,6 +146,28 @@ describe("перевод DevHub не умирает вместе с квотой
     expect(callProviderMock).not.toHaveBeenCalled();
   });
 
+  test("6. первый запасной провайдер отказал (кредиты кончились) → берётся следующий, а не отказ", async () => {
+    // 17.09.2026 на проде: DeepL 456 и тут же OpenAI 429 credit_balance_exhausted —
+    // запасной путь из одного звена умер вместе с ним, хотя Gemini был настроен.
+    providersState.list = [
+      { id: "anthropic", configured: true, defaultModel: "claude-test" },
+      { id: "gemini", configured: true, defaultModel: "gemini-test" },
+      { id: "openai", configured: true, defaultModel: "gpt-test" },
+    ];
+    callProviderMock.mockImplementation(async (id: string) => {
+      if (id === "openai") throw new Error("openai 429: You have no credits remaining (code credit_balance_exhausted)");
+      return { reply: `Hallo Welt via ${id}`, model: "m", usage: {} };
+    });
+    fetchMock.mockResolvedValueOnce(QUOTA);
+
+    const r = await translate(makeApp());
+    expect(r.status).toBe(200);
+    // Порядок: openai (дешёвый) → gemini (бесплатный) — anthropic не первый.
+    expect(callProviderMock.mock.calls.map((c) => c[0])).toEqual(["openai", "gemini"]);
+    expect(r.body.provider).toBe("gemini");
+    expect(r.body.text).toBe("Hallo Welt via gemini");
+  });
+
   test("5. ключа DeepL нет + LLM есть → перевод через LLM с причиной deepl_not_configured", async () => {
     delete process.env.DEEPL_API_KEY;
     providersState.list = [{ id: "anthropic", configured: true, defaultModel: "claude-test" }];

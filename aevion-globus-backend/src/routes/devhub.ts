@@ -6478,15 +6478,25 @@ function deeplEndpoint(apiKey: string): string {
   return apiKey.endsWith(":fx") ? "https://api-free.deepl.com/v2/translate" : "https://api.deepl.com/v2/translate";
 }
 
-function llmTranslateCandidate(): { id: string; model: string } | null {
+// Порядок запасных переводчиков: дешёвый платный → бесплатные → остальные
+// настроенные. 17.09.2026 первый же прогон на проде показал, зачем нужен
+// СПИСОК, а не один кандидат: у OpenAI кончились кредиты (429
+// credit_balance_exhausted), и запасной путь из одного звена умер вместе с ним.
+const LLM_TRANSLATE_ORDER = ["openai", "gemini", "openrouter", "anthropic"];
+function llmTranslateCandidates(): Array<{ id: string; model: string }> {
   const configured = getProviders().filter((p) => p.configured && p.id !== "stub");
-  const pick = configured.find((p) => p.id === "openai") ?? configured.find((p) => p.id === "anthropic") ?? configured[0];
-  return pick ? { id: pick.id, model: pick.defaultModel } : null;
+  const rank = (id: string) => { const i = LLM_TRANSLATE_ORDER.indexOf(id); return i === -1 ? LLM_TRANSLATE_ORDER.length : i; };
+  return [...configured]
+    .sort((a, b) => rank(a.id) - rank(b.id))
+    .map((p) => ({ id: p.id, model: p.defaultModel }));
+}
+function llmTranslateCandidate(): { id: string; model: string } | null {
+  return llmTranslateCandidates()[0] ?? null;
 }
 
 async function translateViaLlm(text: string, targetLang: string, sourceLang?: string): Promise<{ text: string; provider: string } | null> {
-  const cand = llmTranslateCandidate();
-  if (!cand) return null;
+  const candidates = llmTranslateCandidates();
+  if (candidates.length === 0) return null;
   const from = sourceLang ? ` from the language with code ${sourceLang}` : "";
   const messages: ChatMessage[] = [
     {
@@ -6496,10 +6506,22 @@ async function translateViaLlm(text: string, targetLang: string, sourceLang?: st
     { role: "user", content: text },
   ];
   const maxTokens = Math.min(16_000, Math.max(512, Math.ceil(text.length * 1.5)));
-  const result = await callProvider(cand.id, messages, cand.model, 0, undefined, maxTokens);
-  const out = String(result?.reply ?? "").trim();
-  if (!out) return null;
-  return { text: out, provider: cand.id };
+  let lastError: unknown = null;
+  for (const cand of candidates) {
+    try {
+      const result = await callProvider(cand.id, messages, cand.model, 0, undefined, maxTokens);
+      const out = String(result?.reply ?? "").trim();
+      if (out) return { text: out, provider: cand.id };
+      lastError = new Error(`${cand.id} answered with an empty translation`);
+    } catch (e) {
+      lastError = e;
+      // Следующий провайдер, а отказ этого — в журнал: молчаливый переход
+      // спрятал бы кончившиеся кредиты (§16), и их бы никто не пополнил.
+      console.warn(`[devhub/translate] fallback ${cand.id} failed: ${redactInfraDetails(e)}`);
+    }
+  }
+  if (lastError) throw lastError;
+  return null;
 }
 
 async function translateText(text: string, targetLang: string, sourceLang?: unknown, formality?: unknown): Promise<TranslateOk | TranslateFail> {

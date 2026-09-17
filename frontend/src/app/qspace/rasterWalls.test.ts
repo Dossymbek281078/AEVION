@@ -86,6 +86,16 @@ describe("стены по толщине штриха", () => {
     expect(Math.abs(стёкла[0].y2 - стёкла[0].y1)).toBeGreaterThan(280);
     expect(findRooms(planFrom(r.segments, 12)).rooms.length).toBe(1);
   });
+  it("дуга двери и полотно под случайным углом не становятся косыми стенами", () => {
+    const c = canvas(700, 500);
+    c.rect(50, 50, 600, 14); c.rect(50, 436, 600, 14); c.rect(50, 50, 14, 400); c.rect(636, 50, 14, 400);
+    // четверть окружности R=55 (дверь ≈ 4 толщины стены, как на планах) штрихом 5 px и полотно под 25°
+    for (let a = 0; a <= 90; a += 0.2) { const r = (a * Math.PI) / 180; c.rect(Math.round(200 + 55 * Math.cos(r)), Math.round(436 - 55 * Math.sin(r)) - 2, 5, 5); }
+    for (let t = 0; t <= 55; t++) c.rect(Math.round(200 + t * Math.cos(0.436)), Math.round(436 - t * Math.sin(0.436)) - 2, 5, 5);
+    const r = findWallsByThickness(c.data, c.w, c.h);
+    expect(r.segments.filter((s) => s.axis === "d"), JSON.stringify(r.segments.filter((s) => s.axis === "d"))).toEqual([]);
+    expect(r.segments.filter((s) => s.axis !== "d" && !s.glass).length).toBe(4);
+  });
   it("белый лист и тонкие линии — честный отказ словами", () => {
     const c = canvas(300, 200);
     expect(findWallsByThickness(c.data, c.w, c.h).warnings.join(" ")).toMatch(/нет тёмных линий/);

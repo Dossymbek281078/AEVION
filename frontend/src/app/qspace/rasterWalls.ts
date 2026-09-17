@@ -385,7 +385,16 @@ export function findWallsByThickness(rgba: Uint8ClampedArray, w: number, h: numb
     // простенки у окон LA VIE не давали ни одной точки (гребень — по d2, с полосами)
     if (v >= 3 && v >= d2[i - 1] && v >= d2[i + 1] && v >= d2[i - w] && v >= d2[i + w]) pts.push([x, y, (2 * v) / 3]);
   }
-  const hough = houghSegments(pts, wallPx, ext);
+  const houghAll = houghSegments(pts, wallPx, ext);
+  // Короткие косые обрывки (дуги дверей, мебель, пучки на простенках) лежат под случайными
+  // углами, а настоящие косые стены плана держат 1–3 направления. Короткий (< 6 толщин) косой
+  // отрезок остаётся, только если вдоль его направления (±3°) набралось длинных стен на 12 толщин.
+  const degOf = (q: WallSeg) => ((Math.atan2(q.y2 - q.y1, q.x2 - q.x1) * 180) / Math.PI + 360) % 180;
+  const lenOf = (q: WallSeg) => Math.hypot(q.x2 - q.x1, q.y2 - q.y1);
+  const dirHist = new Float64Array(180);
+  for (const q of houghAll) if (q.axis === "d" && lenOf(q) >= 6 * wallPx) dirHist[Math.round(degOf(q)) % 180] += lenOf(q);
+  const dominant = (deg: number) => { let sum = 0; for (let o = -3; o <= 3; o++) sum += dirHist[(Math.round(deg) + o + 180) % 180]; return sum >= 12 * wallPx; };
+  const hough = houghAll.filter((q) => q.axis !== "d" || lenOf(q) >= 6 * wallPx || dominant(degOf(q)));
   segs.push(...hough);
   // 5б. ПОЛЫЕ стены — две параллельные тонкие линии на расстоянии от minPx до
   // 1.5 толщины (LA VIE: перегородки и часть наружных стен нарисованы контуром
@@ -640,11 +649,14 @@ export function findWallsByThickness(rgba: Uint8ClampedArray, w: number, h: numb
       }
     }
   }
-  // обрывки Хафа вдоль осевого окна (полоса даёт пучок линий ±3°) — не стены
-  const осевыеОкна = [...glass.filter((g) => g.axis !== "d"), ...простенки];
+  // обрывки Хафа вдоль осевой стены или окна (полоса даёт пучок линий ±3–8°) — дубли, не стены
+  const осевыеОкна = [...segs.filter((q) => q.axis !== "d"), ...glass.filter((g) => g.axis !== "d"), ...простенки];
   segs = segs.filter((q) => {
     if (q.axis !== "d") return true;
+    const qdeg = ((Math.atan2(q.y2 - q.y1, q.x2 - q.x1) * 180) / Math.PI + 360) % 180;
     return !осевыеОкна.some((g) => {
+      const off = g.axis === "v" ? Math.abs(qdeg - 90) : Math.min(qdeg, 180 - qdeg);
+      if (off > 8) return false;
       const dist = (x: number, y: number) => (g.axis === "v" ? Math.abs(x - g.x1) : Math.abs(y - g.y1));
       const along = (x: number, y: number) => (g.axis === "v" ? y : x);
       const lo = Math.min(along(g.x1, g.y1), along(g.x2, g.y2)) - 2 * wallPx, hi = Math.max(along(g.x1, g.y1), along(g.x2, g.y2)) + 2 * wallPx;

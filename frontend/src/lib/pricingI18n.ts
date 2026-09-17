@@ -50,7 +50,6 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "tier.byRequest": "По запросу",
     "tier.free": "Бесплатно",
     "tier.detailsLink": "Подробнее о {name} →",
-    "tier.tryTrial": "Попробовать 14 дней бесплатно",
     "tier.openCalc": "Открыть калькулятор →",
 
     /* Industries */
@@ -539,7 +538,6 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "tier.byRequest": "By request",
     "tier.free": "Free",
     "tier.detailsLink": "More about {name} →",
-    "tier.tryTrial": "Try 14 days free",
     "tier.openCalc": "Open calculator →",
 
     "industries.title": "For your industry",

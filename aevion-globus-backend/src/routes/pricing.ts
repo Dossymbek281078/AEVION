@@ -392,6 +392,10 @@ pricingRouter.post("/lead", (req, res) => {
     return res.status(500).json({ error: "storage_error" });
   }
 
+  // Порядок как у /apply: письмо запускается и НЕ ждётся — ответ человеку не
+  // задерживается почтой, а отказ отправки не роняет принятую заявку.
+  void уведомитьОЗаявке(lead);
+
   res.status(201).json({ ok: true, id: lead.id });
 });
 
@@ -689,9 +693,17 @@ function persistApplication(file: string, app: ProgramApplication) {
 // ⚠️ 19.08.2026: здесь стоял запасной адрес "hello@aevion.io" — и это ЧУЖОЙ
 // домен. aevion.io принадлежит другой компании с тем же названием (их
 // schema.org: «Aevion builds an AI-native personal operating system»,
-// контакт jonathan@aevion.io). Переменная NOTIFY_EMAIL на проде не задана,
-// значит внутренние уведомления о заявках — с именем, почтой, организацией,
+// контакт jonathan@aevion.io). ТОГДА переменная NOTIFY_EMAIL на проде не была
+// задана, и внутренние уведомления о заявках — с именем, почтой, организацией,
 // страной и каналом заявителя — уходили им.
+//
+// ⚠️ ПОПРАВКА 17.09.2026. Сегодня NOTIFY_EMAIL ЗАДАНА и непуста — замер по
+// сервису, значение не печатаем; рядом заданы BREVO_API_KEY, SMTP_HOST,
+// RESEND_API_KEY, то есть отправлять есть чем и есть куда. Прежняя фраза стояла
+// в НАСТОЯЩЕМ времени и говорила будущему читателю неправду про денежный канал:
+// прочитав её, легко решить, что уведомления некуда шлются, и не искать причину,
+// когда они перестанут приходить. Замер состояния живёт минуты — поэтому здесь
+// оставлена дата, а не «сейчас».
 //
 // Запасного адреса больше нет намеренно. Не задана переменная — уведомление
 // не отправляется, а пишется предупреждение: заявка при этом сохраняется, и
@@ -863,6 +875,63 @@ async function notifyApplication(app: ProgramApplication): Promise<void> {
     subject: `[${app.kind}] ${app.name} · ${app.organization ?? "—"}`,
     html: notifyHtml(app),
     text: `New ${app.kind} application: ${app.name} (${app.email}) · ${app.organization ?? "—"}\nID: ${app.id}\nDetails: ${app.details ?? "—"}`,
+  });
+}
+
+/**
+ * Уведомление о заявке из формы связи.
+ *
+ * ЗАЧЕМ. `POST /lead` проверял поля, дописывал строку в leads.jsonl и отвечал
+ * 201 — писем не уходило ни одного. Единственным читателем заявок была суточная
+ * сводка на ноутбуке. При этом `/pricing/[tierId]` обещает во ВСЕХ ТРЁХ языках
+ * «Customer Success свяжется в течение 24 часов». Обещание без механизма хуже
+ * отсутствия обещания: человек уходит и больше не пишет.
+ *
+ * Почему это не видел ни один сторож — дыра лежала в СТЫКЕ двух проверок:
+ * `supportChannelFailsLoudly` следит, чтобы отказ ЗАПИСИ не выдавался за
+ * принятое обращение, а `applicationsReachAHuman` спрашивает «дойдёт ли до
+ * человека», но по `/api/health/channels`, где слова lead нет вовсе. Оба
+ * зелёные и оба правы по своему вопросу.
+ *
+ * Образец — `notifyApplication` выше: письмо НЕ роняет операцию, ради которой
+ * шлётся, а незаданный адрес даёт видимое предупреждение, а не тишину. Отличие
+ * одно: автоответ заявителю здесь НЕ шлём — форма показывает «принято» сразу, и
+ * второе письмо человеку, который ждёт звонка, ничего не добавляет.
+ */
+async function уведомитьОЗаявке(lead: PricingLead): Promise<void> {
+  if (!NOTIFY_EMAIL) {
+    console.warn(
+      `[pricing/lead] NOTIFY_EMAIL не задан — уведомление о заявке не отправлено. ` +
+        `Заявка ${lead.id} сохранена, адресат уведомления не настроен.`,
+    );
+    return;
+  }
+  const строки: Array<[string, string | undefined]> = [
+    ["Имя", lead.name],
+    ["Почта", lead.email],
+    ["Организация", lead.company],
+    ["Отрасль", lead.industry],
+    ["Тариф", lead.tier],
+    ["Мест", lead.seats === undefined ? undefined : String(lead.seats)],
+    ["Модули", lead.modules?.join(", ")],
+    ["Откуда", lead.source],
+  ];
+  const видимые = строки.filter(([, v]) => v && v.length > 0) as Array<[string, string]>;
+  const html =
+    `<h2>Заявка с витрины${lead.tier ? ` — тариф ${lead.tier}` : ""}</h2>` +
+    `<table>${видимые.map(([k, v]) => `<tr><td><b>${k}</b></td><td>${v}</td></tr>`).join("")}</table>` +
+    (lead.message ? `<p><b>Сообщение</b><br>${lead.message}</p>` : "") +
+    `<p>ID: ${lead.id} · ${lead.ts}</p>`;
+  const text =
+    `Заявка с витрины${lead.tier ? ` (тариф ${lead.tier})` : ""}\n` +
+    видимые.map(([k, v]) => `${k}: ${v}`).join("\n") +
+    (lead.message ? `\nСообщение: ${lead.message}` : "") +
+    `\nID: ${lead.id} · ${lead.ts}`;
+  void отправитьПисьмо("pricing/lead -> внутреннее уведомление", {
+    to: NOTIFY_EMAIL,
+    subject: `[lead${lead.tier ? ` ${lead.tier}` : ""}] ${lead.name} · ${lead.company ?? "—"}`,
+    html,
+    text,
   });
 }
 

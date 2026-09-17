@@ -34,6 +34,12 @@ cd "$REPO_ROOT"
 
 SHA="$(git rev-parse HEAD)"
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+# Выкатчик часто стоит на чужой вершине detached (16.09.2026): «HEAD» в отметке
+# ничего не говорит сводке и deploy-check. Подписываем ветку, содержащую коммит.
+if [ "$BRANCH" = "HEAD" ]; then
+  BRANCH="$(git for-each-ref --contains HEAD --format="%(refname:short)" refs/heads | head -1)"
+  BRANCH="${BRANCH:-detached}"
+fi
 DIRTY=""
 if ! git diff --quiet || ! git diff --cached --quiet; then
   # Незакоммиченные правки означают, что отметка коммита будет ВРАТЬ: уедет

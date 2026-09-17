@@ -44,7 +44,7 @@ function dhCostlyLimit(keyPrefix: string) {
 }
 import { getPool } from "../lib/dbPool";
 import { ensureDevHubTables, isDevHubDbReady, getDevHubDbError } from "../lib/ensureDevHubTables";
-import { callProvider, streamProviderResilient, getProviders, type ChatImage } from "../services/qcoreai/providers";
+import { callProvider, streamProviderResilient, getProviders, type ChatImage, type ChatMessage } from "../services/qcoreai/providers";
 import { extractJsonObject, salvageCompleteArrayObjects } from "../services/qcoreai/jsonReply";
 import { smartComplete } from "../services/qcoreai/smartComplete";
 import { insertSmartRun, aggregateSmartRunsForUser } from "../lib/smartRunLog";
@@ -6460,7 +6460,152 @@ async function tryAutoUploadToCloudflare(sourceUrl: string): Promise<string | nu
   } catch { return null; }
 }
 
-// POST /api/devhub/media/translate — DeepL text translation
+// ─── Перевод: DeepL с честным запасным путём ────────────────────────────
+// 17.09.2026 на проде DeepL отвечал 456 (месячная квота исчерпана), и все три
+// ручки перевода DevHub были мертвы — при том, что в этом же файле настроенные
+// LLM генерируют код, и перевод им по силам. Правило одно на все три ручки:
+// сперва DeepL; нет ключа или квоты — та же LLM, что и генерация (callProvider),
+// а ответ ЧЕСТНО называет provider и причину. Провайдер «stub» запасным не
+// бывает никогда: он вернул бы заглушку под видом перевода — молчаливая ложь
+// (§16). Нет ни DeepL, ни LLM — прежний отказ с тем же текстом и кодом.
+type TranslateOk = {
+  ok: true; text: string; detectedSource?: string; provider: string;
+  fallbackFrom?: "deepl"; fallbackReason?: "deepl_quota_exhausted" | "deepl_not_configured";
+};
+type TranslateFail = { ok: false; status: 456 | 500 | 502 | 503; body: Record<string, unknown> };
+
+function deeplEndpoint(apiKey: string): string {
+  return apiKey.endsWith(":fx") ? "https://api-free.deepl.com/v2/translate" : "https://api.deepl.com/v2/translate";
+}
+
+// Порядок запасных переводчиков: дешёвый платный → бесплатные → остальные
+// настроенные. 17.09.2026 первый же прогон на проде показал, зачем нужен
+// СПИСОК, а не один кандидат: у OpenAI кончились кредиты (429
+// credit_balance_exhausted), и запасной путь из одного звена умер вместе с ним.
+const LLM_TRANSLATE_ORDER = ["openai", "gemini", "openrouter", "anthropic"];
+function llmTranslateCandidates(): Array<{ id: string; model: string }> {
+  const configured = getProviders().filter((p) => p.configured && p.id !== "stub");
+  const rank = (id: string) => { const i = LLM_TRANSLATE_ORDER.indexOf(id); return i === -1 ? LLM_TRANSLATE_ORDER.length : i; };
+  return [...configured]
+    .sort((a, b) => rank(a.id) - rank(b.id))
+    .map((p) => ({ id: p.id, model: p.defaultModel }));
+}
+function llmTranslateCandidate(): { id: string; model: string } | null {
+  return llmTranslateCandidates()[0] ?? null;
+}
+
+async function translateViaLlm(text: string, targetLang: string, sourceLang?: string): Promise<{ text: string; provider: string } | null> {
+  const candidates = llmTranslateCandidates();
+  if (candidates.length === 0) return null;
+  const from = sourceLang ? ` from the language with code ${sourceLang}` : "";
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content: `You are a translation engine. Translate the user's text${from} into the language with code ${targetLang}. Keep formatting, markup, code, placeholders and line breaks exactly as they are. Output only the translated text, with no preface, notes or quotes.`,
+    },
+    { role: "user", content: text },
+  ];
+  const maxTokens = Math.min(16_000, Math.max(512, Math.ceil(text.length * 1.5)));
+  let lastError: unknown = null;
+  for (const cand of candidates) {
+    try {
+      const result = await callProvider(cand.id, messages, cand.model, 0, undefined, maxTokens);
+      const out = String(result?.reply ?? "").trim();
+      if (out) return { text: out, provider: cand.id };
+      lastError = new Error(`${cand.id} answered with an empty translation`);
+    } catch (e) {
+      lastError = e;
+      // Следующий провайдер, а отказ этого — в журнал: молчаливый переход
+      // спрятал бы кончившиеся кредиты (§16), и их бы никто не пополнил.
+      console.warn(`[devhub/translate] fallback ${cand.id} failed: ${redactInfraDetails(e)}`);
+    }
+  }
+  if (lastError) throw lastError;
+  return null;
+}
+
+async function translateText(text: string, targetLang: string, sourceLang?: unknown, formality?: unknown): Promise<TranslateOk | TranslateFail> {
+  const apiKey = process.env.DEEPL_API_KEY;
+  const target = targetLang.toUpperCase().slice(0, 5);
+  const source = sourceLang ? String(sourceLang).toUpperCase().slice(0, 5) : undefined;
+
+  const fallback = async (reason: NonNullable<TranslateOk["fallbackReason"]>, onMiss: TranslateFail): Promise<TranslateOk | TranslateFail> => {
+    try {
+      const via = await translateViaLlm(text, target, source);
+      if (!via) return onMiss;
+      console.warn(`[devhub/translate] DeepL unavailable (${reason}) — translated via ${via.provider} instead`);
+      noteProviderSuccess("translate");
+      return { ok: true, text: via.text, provider: via.provider, fallbackFrom: "deepl", fallbackReason: reason };
+    } catch (e) {
+      console.warn(`[devhub/translate] DeepL unavailable (${reason}) and the fallback failed: ${redactInfraDetails(e)}`);
+      return onMiss;
+    }
+  };
+
+  if (!apiKey) {
+    return fallback("deepl_not_configured", {
+      ok: false, status: 503,
+      body: { error: "DeepL not configured — set DEEPL_API_KEY", setupUrl: "https://www.deepl.com/account/summary" },
+    });
+  }
+
+  const params = new URLSearchParams();
+  params.append("text", text);
+  params.append("target_lang", target);
+  if (source) params.append("source_lang", source);
+  if (formality && ["default", "more", "less", "prefer_more", "prefer_less"].includes(String(formality))) {
+    params.append("formality", String(formality));
+  }
+  const r = await fetch(deeplEndpoint(apiKey), {
+    method: "POST",
+    headers: { Authorization: `DeepL-Auth-Key ${apiKey}`, "Content-Type": "application/x-www-form-urlencoded" },
+    body: params.toString(),
+  });
+  if (r.status === 456) {
+    // 456 is DeepL's quota code. Worth naming, because their /v2/usage
+    // endpoint happily reports 0 of 1,000,000 characters used while every
+    // translate call is refused — the account state is only visible from a
+    // real call (verified against our own key, 2026-07-26).
+    const miss: TranslateFail = {
+      ok: false, status: 456,
+      body: {
+        error: "Translation unavailable — the DeepL account is out of quota. Their usage page can still show 0 used, so check the account or swap DEEPL_API_KEY.",
+        provider: "deepl",
+        accountUrl: "https://www.deepl.com/account/usage",
+      },
+    };
+    const out = await fallback("deepl_quota_exhausted", miss);
+    if (!out.ok) noteProviderFailure("translate", "DeepL says the quota is exhausted (456) — the key's own /v2/usage can still read 0");
+    return out;
+  }
+  if (!r.ok) {
+    const errText = await r.text();
+    // Сырое тело ответа поставщика наружу НЕ отдаём: 300 знаков чужого JSON
+    // граница показа не узнаёт (она ловит имена переменных и панели), и
+    // покупатель читал бы его в скобках после «Не удалось перевести».
+    // Ветка 456 выше — отдельный случай: её текст называет DEEPL_API_KEY, и
+    // именно поэтому граница его узнаёт и прячет, а подробность остаётся нам.
+    // Здесь такой приметы нет, поэтому категорию выбираем сами.
+    //
+    // Код ответа тоже свой: 502 — «посредник ответил ошибкой». Пропускать
+    // наружу статус поставщика значит выдавать его семантику за нашу.
+    noteProviderFailure("translate", `DeepL HTTP ${r.status}: ${errText.slice(0, 100)}`);
+    return {
+      ok: false, status: 502,
+      body: { error: "Translation provider returned an error — we know about it, try again later", code: "provider_error" },
+    };
+  }
+  const data = await r.json() as { translations?: Array<{ text: string; detected_source_language?: string }> };
+  const first = data.translations?.[0];
+  if (!first?.text) {
+    noteProviderFailure("translate", "DeepL answered 200 with no translation in the body");
+    return { ok: false, status: 500, body: { error: "no translation returned" } };
+  }
+  noteProviderSuccess("translate");
+  return { ok: true, text: first.text, detectedSource: first.detected_source_language, provider: "deepl" };
+}
+
+// POST /api/devhub/media/translate — DeepL text translation (LLM fallback when DeepL is out)
 devhubRouter.post("/media/translate", dhCostlyLimit("dhtranslate"), async (req, res) => {
   const { text, targetLang, sourceLang, formality } = req.body || {};
   if (!text || typeof text !== "string" || !text.trim()) return res.status(400).json({ error: "text required" });
@@ -6478,77 +6623,19 @@ devhubRouter.post("/media/translate", dhCostlyLimit("dhtranslate"), async (req, 
     });
   }
 
-  const apiKey = process.env.DEEPL_API_KEY;
-  if (!apiKey) {
-    return res.status(503).json({
-      error: "DeepL not configured — set DEEPL_API_KEY",
-      setupUrl: "https://www.deepl.com/account/summary",
-    });
-  }
-  const endpoint = apiKey.endsWith(":fx")
-    ? "https://api-free.deepl.com/v2/translate"
-    : "https://api.deepl.com/v2/translate";
-
   try {
-    const params = new URLSearchParams();
-    params.append("text", text);
-    params.append("target_lang", targetLang.toUpperCase().slice(0, 5));
-    if (sourceLang) params.append("source_lang", String(sourceLang).toUpperCase().slice(0, 5));
-    if (formality && ["default", "more", "less", "prefer_more", "prefer_less"].includes(String(formality))) {
-      params.append("formality", String(formality));
-    }
-    const r = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        Authorization: `DeepL-Auth-Key ${apiKey}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: params.toString(),
-    });
-    if (!r.ok) {
-      const errText = await r.text();
-      // 456 is DeepL's quota code. Worth naming, because their /v2/usage
-      // endpoint happily reports 0 of 1,000,000 characters used while every
-      // translate call is refused — the account state is only visible from a
-      // real call (verified against our own key, 2026-07-26).
-      if (r.status === 456) {
-        noteProviderFailure("translate", "DeepL says the quota is exhausted (456) — the key's own /v2/usage can still read 0");
-        return res.status(456).json({
-          error: "Translation unavailable — the DeepL account is out of quota. Their usage page can still show 0 used, so check the account or swap DEEPL_API_KEY.",
-          provider: "deepl",
-          accountUrl: "https://www.deepl.com/account/usage",
-        });
-      }
-      // Сырое тело ответа поставщика наружу НЕ отдаём: 300 знаков чужого JSON
-      // граница показа не узнаёт (она ловит имена переменных и панели), и
-      // покупатель читал бы его в скобках после «Не удалось перевести».
-      // Ветка 456 выше — отдельный случай: её текст называет DEEPL_API_KEY, и
-      // именно поэтому граница его узнаёт и прячет, а подробность остаётся нам.
-      // Здесь такой приметы нет, поэтому категорию выбираем сами.
-      //
-      // Код ответа тоже свой: 502 — «посредник ответил ошибкой». Пропускать
-      // наружу статус поставщика значит выдавать его семантику за нашу.
-      noteProviderFailure("translate", `DeepL HTTP ${r.status}: ${errText.slice(0, 100)}`);
-      return res.status(502).json({
-        error: "Translation provider returned an error — we know about it, try again later",
-        code: "provider_error",
-      });
-    }
-    const data = await r.json() as { translations: Array<{ text: string; detected_source_language: string }> };
-    const first = data.translations?.[0];
-    if (!first) {
-      noteProviderFailure("translate", "DeepL answered 200 with no translation in the body");
-      return res.status(500).json({ error: "no translation returned" });
-    }
-    noteProviderSuccess("translate");
+    const out = await translateText(text, targetLang, sourceLang, formality);
+    if (!out.ok) return res.status(out.status).json(out.body);
     await debitQuietly(trUserId, "translate");
     учтиБезЦены("translate", trUserId);
     res.json({
       ok: true,
       ...creditNote(trCredit),
-      text: first.text,
-      detectedSource: first.detected_source_language,
+      text: out.text,
+      detectedSource: out.detectedSource,
       targetLang: targetLang.toUpperCase(),
+      provider: out.provider,
+      ...(out.fallbackFrom ? { fallbackFrom: out.fallbackFrom, fallbackReason: out.fallbackReason } : {}),
     });
   } catch (e: any) {
     res.status(500).json({ error: redactInfraDetails(e) || "Translation failed" });
@@ -6582,9 +6669,6 @@ devhubRouter.post("/projects/:id/files/translate", dhCostlyLimit("dhtranslate"),
     });
   }
 
-  const apiKey = process.env.DEEPL_API_KEY;
-  if (!apiKey) return res.status(503).json({ error: "DeepL not configured — set DEEPL_API_KEY" });
-
   let file: DevHubFile | null;
   let readFailed = false;
   try { file = await dbGetFile(project.id, path); }
@@ -6596,34 +6680,10 @@ devhubRouter.post("/projects/:id/files/translate", dhCostlyLimit("dhtranslate"),
   if (!file && readFailed) return replyStorageUnavailable(res);
   if (!file) return res.status(404).json({ error: "file not found in project" });
 
-  const endpoint = apiKey.endsWith(":fx") ? "https://api-free.deepl.com/v2/translate" : "https://api.deepl.com/v2/translate";
   try {
-    const params = new URLSearchParams();
-    params.append("text", file.content);
-    params.append("target_lang", targetLang.toUpperCase().slice(0, 5));
-    const r = await fetch(endpoint, {
-      method: "POST",
-      headers: { Authorization: `DeepL-Auth-Key ${apiKey}`, "Content-Type": "application/x-www-form-urlencoded" },
-      body: params.toString(),
-    });
-    if (!r.ok) {
-      const errText = await r.text();
-      // 456 is DeepL's quota code. Worth naming, because their /v2/usage
-      // endpoint happily reports 0 of 1,000,000 characters used while every
-      // translate call is refused — the account state is only visible from a
-      // real call (verified against our own key, 2026-07-26).
-      if (r.status === 456) {
-        return res.status(456).json({
-          error: "Translation unavailable — the DeepL account is out of quota. Their usage page can still show 0 used, so check the account or swap DEEPL_API_KEY.",
-          provider: "deepl",
-          accountUrl: "https://www.deepl.com/account/usage",
-        });
-      }
-      return res.status(r.status).json({ error: `DeepL error: ${errText.slice(0, 300)}` });
-    }
-    const data = await r.json() as { translations: Array<{ text: string }> };
-    const translated = data.translations?.[0]?.text;
-    if (!translated) return res.status(500).json({ error: "no translation returned" });
+    const outcome = await translateText(file.content, targetLang);
+    if (!outcome.ok) return res.status(outcome.status).json(outcome.body);
+    const translated = outcome.text;
 
     const lang = targetLang.toLowerCase();
     const newPath = String(saveAs || path.replace(/(\.[^./]+)$/, `.${lang}$1`) || `${path}.${lang}`).slice(0, 200);
@@ -6653,6 +6713,8 @@ devhubRouter.post("/projects/:id/files/translate", dhCostlyLimit("dhtranslate"),
       path: newPath,
       bytes: translated.length,
       targetLang: targetLang.toUpperCase(),
+      provider: outcome.provider,
+      ...(outcome.fallbackFrom ? { fallbackFrom: outcome.fallbackFrom, fallbackReason: outcome.fallbackReason } : {}),
       storage,
       ...(storage === "memory"
         ? { warning: "Хранилище недоступно: перевод сохранён только до перезапуска сервиса." }
@@ -6809,11 +6871,13 @@ devhubRouter.post("/projects/:id/files/translate-bulk", dhCostlyLimit("dhtransla
     });
   }
 
-  const apiKey = process.env.DEEPL_API_KEY;
-  if (!apiKey) return res.status(503).json({ error: "DeepL not configured — set DEEPL_API_KEY" });
-  const endpoint = apiKey.endsWith(":fx") ? "https://api-free.deepl.com/v2/translate" : "https://api.deepl.com/v2/translate";
+  // Нет ни DeepL, ни настроенной LLM — отказать до обхода файлов: обход дал бы
+  // 200 с одинаковым отказом в каждой строке, а это тот же 503, только дороже.
+  if (!process.env.DEEPL_API_KEY && !llmTranslateCandidate()) {
+    return res.status(503).json({ error: "DeepL not configured — set DEEPL_API_KEY", setupUrl: "https://www.deepl.com/account/summary" });
+  }
 
-  const results: Array<{ path: string; targetLang: string; ok: boolean; outputPath?: string; bytes?: number; error?: string }> = [];
+  const results: Array<{ path: string; targetLang: string; ok: boolean; outputPath?: string; bytes?: number; provider?: string; error?: string }> = [];
 
   for (const p of paths) {
     let file: DevHubFile | null;
@@ -6827,25 +6891,12 @@ devhubRouter.post("/projects/:id/files/translate-bulk", dhCostlyLimit("dhtransla
     }
     for (const lang of targetLangs) {
       try {
-        const params = new URLSearchParams();
-        params.append("text", file.content);
-        params.append("target_lang", String(lang).toUpperCase().slice(0, 5));
-        const r = await fetch(endpoint, {
-          method: "POST",
-          headers: { Authorization: `DeepL-Auth-Key ${apiKey}`, "Content-Type": "application/x-www-form-urlencoded" },
-          body: params.toString(),
-        });
-        if (!r.ok) {
-          const errText = await r.text();
-          results.push({ path: file.path, targetLang: String(lang).toUpperCase(), ok: false, error: errText.slice(0, 200) });
+        const outcome = await translateText(file.content, String(lang));
+        if (!outcome.ok) {
+          results.push({ path: file.path, targetLang: String(lang).toUpperCase(), ok: false, error: String(outcome.body.error ?? "translation failed").slice(0, 200) });
           continue;
         }
-        const data = await r.json() as { translations: Array<{ text: string }> };
-        const translated = data.translations?.[0]?.text;
-        if (!translated) {
-          results.push({ path: file.path, targetLang: String(lang).toUpperCase(), ok: false, error: "no translation returned" });
-          continue;
-        }
+        const translated = outcome.text;
         const langLower = String(lang).toLowerCase();
         const newPath = file.path.replace(/(\.[^./]+)$/, `.${langLower}$1`) || `${file.path}.${langLower}`;
         const out: DevHubFile = {
@@ -6862,7 +6913,7 @@ devhubRouter.post("/projects/:id/files/translate-bulk", dhCostlyLimit("dhtransla
           if (existing) { existing.content = out.content; existing.updatedAt = out.updatedAt; }
           else memFiles.set(out.id, out); storageFallback = true;
         }
-        results.push({ path: file.path, targetLang: String(lang).toUpperCase(), ok: true, outputPath: newPath, bytes: translated.length });
+        results.push({ path: file.path, targetLang: String(lang).toUpperCase(), ok: true, outputPath: newPath, bytes: translated.length, provider: outcome.provider });
       } catch (e: any) {
         results.push({ path: file.path, targetLang: String(lang).toUpperCase(), ok: false, error: e?.message || "step failed" });
       }

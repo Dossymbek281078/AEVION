@@ -6849,6 +6849,12 @@ devhubRouter.post("/projects/:id/files/translate-bulk", dhCostlyLimit("dhtransla
     });
   }
 
+  // Нет ни DeepL, ни настроенной LLM — отказать до обхода файлов: обход дал бы
+  // 200 с одинаковым отказом в каждой строке, а это тот же 503, только дороже.
+  if (!process.env.DEEPL_API_KEY && !llmTranslateCandidate()) {
+    return res.status(503).json({ error: "DeepL not configured — set DEEPL_API_KEY", setupUrl: "https://www.deepl.com/account/summary" });
+  }
+
   const results: Array<{ path: string; targetLang: string; ok: boolean; outputPath?: string; bytes?: number; provider?: string; error?: string }> = [];
 
   for (const p of paths) {

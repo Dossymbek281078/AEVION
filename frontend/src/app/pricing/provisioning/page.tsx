@@ -16,16 +16,19 @@ import { useCallback, useEffect, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { useI18n } from "@/lib/i18n";
+import { termUnitKey } from "@/lib/pricingI18n";
 
-type TierId = "free" | "lite" | "medium" | "full" | "pro" | "enterprise";
-type BillingPeriod = "monthly" | "annual";
+// Тариф — это срок доступа ко всей планете (15.09.2026). Бэкенд отдаёт срок
+// в месяцах (`termMonths`) и сам переводит в него записи до 15.09 с полем period.
+type TierId = "free" | "lite" | "medium" | "pro" | "full" | "max" | "enterprise";
 type HistoryStatus = "active" | "trial" | "expired";
 
 interface HistoryItem {
   id: string;
   ts: string;
   tierId: TierId;
-  period: BillingPeriod;
+  /** Срок в месяцах; null — free/enterprise или неизвестный срок. */
+  termMonths: number | null;
   seats: number;
   modules: string[];
   trialDays: number;
@@ -50,15 +53,16 @@ interface StatsResp {
   byTier: Record<TierId, number>;
   last7d: number;
   trialsActive: number;
-  recent: Array<{ id: string; ts: string; tierId: TierId; period: BillingPeriod; trial: boolean }>;
+  recent: Array<{ id: string; ts: string; tierId: TierId; termMonths: number | null; trial: boolean }>;
 }
 
 const TIER_LABEL: Record<TierId, string> = {
   free: "Free",
   lite: "Lite",
   medium: "Medium",
+  pro: "Pro",
   full: "Full",
-  pro: "Universe",
+  max: "Max",
   enterprise: "Enterprise",
 };
 
@@ -66,8 +70,9 @@ const TIER_COLOR: Record<TierId, string> = {
   free: "text-slate-300 bg-slate-700/40 ring-slate-500/40",
   lite: "text-teal-200 bg-teal-500/15 ring-teal-400/40",
   medium: "text-sky-200 bg-sky-500/15 ring-sky-400/40",
-  full: "text-violet-200 bg-violet-500/15 ring-violet-400/40",
   pro: "text-fuchsia-200 bg-fuchsia-500/15 ring-fuchsia-400/40",
+  full: "text-violet-200 bg-violet-500/15 ring-violet-400/40",
+  max: "text-emerald-200 bg-emerald-500/15 ring-emerald-400/40",
   enterprise: "text-amber-200 bg-amber-500/15 ring-amber-400/40",
 };
 
@@ -293,7 +298,7 @@ export default function ProvisioningPage() {
                       {TIER_LABEL[r.tierId]}
                     </span>
                     <span className="text-slate-400">
-                      {r.period === "annual" ? t("pricing.provisioning.period.annual") : t("pricing.provisioning.period.monthly")}
+                      {r.termMonths ? `${r.termMonths} ${t(termUnitKey(r.termMonths))}` : "—"}
                     </span>
                     {r.trial && (
                       <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-200 ring-1 ring-amber-400/40">
@@ -356,7 +361,7 @@ function SubscriptionCard({ item }: { item: HistoryItem }) {
             {TIER_LABEL[item.tierId]}
           </span>
           <span className="text-xs text-slate-400">
-            {item.period === "annual" ? t("pricing.provisioning.period.annual") : t("pricing.provisioning.period.monthly")} · {item.seats}{" "}
+            {item.termMonths ? `${item.termMonths} ${t(termUnitKey(item.termMonths))} · ` : ""}{item.seats}{" "}
             {item.seats === 1 ? t("pricing.provisioning.seats.singular") : t("pricing.provisioning.seats.plural")}
           </span>
           <span

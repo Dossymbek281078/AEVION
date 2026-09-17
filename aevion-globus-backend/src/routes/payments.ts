@@ -1,3 +1,4 @@
+import { TIERS, isTermTier } from "../data/pricing";
 import { Router } from "express";
 import { payboxSecret, payboxMerchantId } from "../lib/payment/payboxProvider";
 import { isPayboxConfigured } from "../lib/payment/payboxProvider";
@@ -23,11 +24,21 @@ function gumroadConfigured(reference: string): boolean {
 
 /* ═══ Plans definition ═══ */
 
+// Платные планы = ступени лестницы сроков (15.09.2026), из единого источника цен.
+const TERM_PLANS = TIERS.filter((t) => isTermTier(t.id)).map((t) => ({
+  id: t.id,
+  name: t.name,
+  price: Math.round((t.priceTermTotal ?? 0) * 100),
+  currency: "usd",
+  interval: `${t.termMonths} month`,
+  reference: `tier_${t.id}`,
+  permalink: process.env[`GUMROAD_PERMALINK_TIER_${t.id.toUpperCase()}`],
+  features: t.features,
+}));
+
 const PLANS = [
   { id: "free", name: "Free", price: 0, currency: "usd", interval: "month", features: ["1 продукт на выбор (лимиты)", "QCoreAI 100K токенов/мес", "Публичный Globus", "Базовая аналитика"] },
-  { id: "lite", name: "Lite", price: 1900, currency: "usd", interval: "month", reference: "tier_lite_monthly", permalink: process.env.GUMROAD_PERMALINK_TIER_LITE_MONTHLY, features: ["1 любой продукт AEVION", "Полный доступ к выбранному", "QCoreAI 2M токенов/мес", "Email-поддержка"] },
-  { id: "medium", name: "Medium", price: 2900, currency: "usd", interval: "month", reference: "tier_medium_monthly", permalink: process.env.GUMROAD_PERMALINK_TIER_MEDIUM_MONTHLY, features: ["10 готовых продуктов", "CyberChess, HealthAI, Multichat, QCoreAI…", "QCoreAI 10M токенов/мес", "Email-поддержка"] },
-  { id: "full", name: "Full", price: 4900, currency: "usd", interval: "month", reference: "tier_full_monthly", permalink: process.env.GUMROAD_PERMALINK_TIER_FULL_MONTHLY, features: ["Все продукты AEVION (30+)", "IP-контур + финтех-стек", "QCoreAI 50M токенов/мес", "Приоритетная поддержка"] },
+  ...TERM_PLANS,
   { id: "enterprise", name: "Enterprise", price: 0, currency: "usd", interval: "month", features: ["Всё из Full", "Выделенная инфра / on-prem", "SLA до 1 часа", "Customer Success менеджер"] },
 ];
 
@@ -89,7 +100,7 @@ paymentsRouter.post("/gumroad/create-subscription", async (req, res) => {
     const auth = verifyBearerOptional(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const { reference, email } = req.body || {};
-    if (!reference) return res.status(400).json({ error: "reference required (e.g. tier_lite_monthly; see /api/payments/gumroad/plans)" });
+    if (!reference) return res.status(400).json({ error: "reference required (e.g. tier_lite; see /api/payments/gumroad/plans)" });
 
     if (!gumroadConfigured(String(reference))) {
       return res.json({ checkoutUrl: `https://app.gumroad.com/l/stub?ref=${reference}`, mode: "stub", provider: "gumroad" });

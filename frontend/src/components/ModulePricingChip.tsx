@@ -4,128 +4,86 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
-import { запомнитьНамерение } from "@/lib/checkoutIntent";
-import { withChannel } from "@/lib/products";
+import { PRICING_APP, PRICING_TERMS, keepChannel } from "@/lib/products";
 import { channelNow } from "@/lib/channelNow";
 import { useI18nOptional } from "@/lib/i18n";
+import {
+  PLANET_BASE_MONTHLY,
+  TERM_TIERS,
+  fromPricePerMonth,
+  standaloneApp,
+} from "@/lib/termPricing";
 
-// Compact pricing chip + one-click buy for module pages. Mirrors the REAL GTM
-// tiers (Lite / Medium / Full) from /api/pricing — the same prices the checkout
-// actually charges — so what a visitor sees equals what they pay.
+// Плашка цены и кнопка покупки на страницах модулей (~40 страниц).
 //
-// "Купить" opens the live LemonSqueezy checkout for Lite + this module: $19/mo,
-// "one product of your choice" with full access to it (the backend skips the
-// per-module add-on for Lite's chosen module, so the charge is exactly Lite's
-// price). "сравнить тарифы →" leads to /pricing?module=<id> with the product
-// pre-selected.
+// ⚠️ 15.09.2026 — НОВАЯ ЦЕНОВАЯ ПОЛИТИКА (слово основателя). Тариф — это СРОК
+// доступа ко всей планете (1–12 месяцев, оплата вперёд), и любой платный тариф
+// включает ВСЕ модули. Отдельно продаются только пять приложений.
 //
-// Previously this chip read /api/aevion/pricing (an à-la-carte $5/$9/$15 "solo"
-// model that has no real checkout SKU) — that advertised a price that was never
-// charged. Now it reads the GTM tiers that the checkout/LemonSqueezy flow
-// actually bills.
+//   одно из пяти приложений → «от $X/мес · <имя> отдельно · вся планета от $200/мес»,
+//                             кнопка ведёт на /pricing?app=<slug>#apps;
+//   любой другой модуль     → «Входит в подписку AEVION · от $200/мес»,
+//                             кнопка ведёт на /pricing#tiers.
 //
-// Data: pulls /api/pricing once per page-load and caches the in-flight promise
-// at module scope so N chips on one page = 1 request.
-
-type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
-
-interface Tier {
-  id: string;
-  name: string;
-  priceMonthly: number | null;
-}
-interface CurrencyRate {
-  rate: number;
-  symbol: string;
-  label: string;
-}
-interface PricingResponse {
-  tiers: Tier[];
-  currencies: Record<CurrencyCode, CurrencyRate>;
-}
-
-// Module-scoped cache: first chip on the page triggers the fetch, every
-// subsequent chip reuses the same promise. Survives chip-mount churn.
-let pricingPromise: Promise<PricingResponse | null> | null = null;
-
-function loadPricing(): Promise<PricingResponse | null> {
-  if (!pricingPromise) {
-    pricingPromise = fetch(apiUrl("/api/pricing"))
-      .then((r) => (r.ok ? r.json() : null))
-      .catch(() => null);
-  }
-  return pricingPromise;
-}
-
-function fmt(usd: number, code: CurrencyCode, rates: Record<CurrencyCode, CurrencyRate>): string {
-  const r = rates?.[code] ?? rates?.USD ?? { rate: 1, symbol: "$", label: "USD" };
-  const raw = usd * r.rate;
-  if (code === "USD" || code === "EUR") return `${r.symbol}${Math.round(raw * 100) / 100}`;
-  return `${Math.round(raw).toLocaleString("ru-RU")} ${r.symbol}`;
-}
+// Прежде плашка читала /api/pricing (лестница Lite/Medium/Full помесячно) и
+// одним нажатием оформляла Lite + модуль. Этой лестницы больше нет, а прямой
+// кассы на новую лестницу нет: товары ещё заводятся в магазине. Поэтому кнопка —
+// ссылка к выбору срока, а цены — из @/lib/termPricing (копия лестницы бэкенда
+// под сторожем termPricingMatchesBackend): запрос за ценами не нужен вовсе, и
+// плашка больше не пропадает, когда /api/pricing не ответил.
+//
+// «от» — месяц на самом длинном сроке (12 месяцев): это самая низкая цена,
+// которую можно назвать честно. Число руками не пишется.
 
 interface Props {
   moduleId: string;
-  currency?: CurrencyCode;
+  /**
+   * Оставлено для совместимости вызовов. Цены лестницы названы в долларах —
+   * так же, как на странице цен и в кассе; пересчёт в другие валюты не делаем,
+   * чтобы плашка не спорила с кассой.
+   */
+  currency?: "USD" | "EUR" | "KZT" | "RUB";
   /** Optional dark/light theme (defaults to light). */
   theme?: "light" | "dark";
-  /** Hide the one-click buy button (chip stays informational). Default false. */
+  /** Hide the buy link (chip stays informational). Default false. */
   hideBuy?: boolean;
 }
 
-export default function ModulePricingChip({ moduleId, currency = "USD", theme = "light", hideBuy = false }: Props) {
-  const [data, setData] = useState<PricingResponse | null>(null);
-  const [buying, setBuying] = useState(false);
-  const [buyError, setBuyError] = useState(false);
+/** Платные тарифы: любой из них включает все модули (политика 15.09.2026). */
+const PAID_PLANS = new Set<string>([...TERM_TIERS, "enterprise"]);
+
+export default function ModulePricingChip({ moduleId, theme = "light", hideBuy = false }: Props) {
   // 14.09.2026: тексты чипа были зашиты по-русски на 38 страницах модулей —
   // посетитель, выбравший English, видел «Купить» и «/мес» ровно там, где
   // решается покупка. Optional, а не useI18n: вне I18nProvider (тесты, редкие
-  // страницы) остаётся прежний русский текст, а не падение всего чипа.
+  // страницы) остаётся русский текст, а не падение всего чипа.
   const i18n = useI18nOptional();
   const tr = (key: string, ru: string, vars?: Record<string, string | number>): string =>
     i18n
       ? i18n.t(key, vars)
       : Object.entries(vars ?? {}).reduce((s, [k, v]) => s.split(`{${k}}`).join(String(v)), ru);
 
+  // Метка канала — после отрисовки: на сервере адреса нет, и ссылка, собранная
+  // при отрисовке, разошлась бы с разметкой.
+  const [channel, setChannel] = useState<string | null>(null);
   useEffect(() => {
-    let cancelled = false;
-    loadPricing().then((d) => {
-      if (!cancelled) setData(d);
-    });
-    return () => {
-      cancelled = true;
-    };
+    setChannel(channelNow());
   }, []);
 
   /*
-   * ⚠️ Стоит ЗДЕСЬ, до первого раннего возврата: хук после `return null`
-   * даёт «Rendered more hooks than during the previous render» — компонент
-   * падает у всех 37 модулей. Поймал собственный тест, глазами не видно.
+   * 🔴 НЕ ПРОДАЁМ ТО, ЧТО У ЧЕЛОВЕКА УЖЕ ЕСТЬ (01.09.2026, переосмыслено 15.09.2026).
    *
-   * 🔴 ПОКУПКА ВТОРОЙ РАЗ НЕ ДОЛЖНА ДАВАТЬ МЕНЬШЕ, ЧЕМ БЫЛО (01.09.2026).
+   * Любой платный тариф новой лестницы открывает все модули, поэтому подписчику
+   * кнопка «Купить» не показывается вовсе — вместо неё «Уже включено» и путь в
+   * кабинет. Тариф берётся из /api/me/entitlements (поле plan).
    *
-   * Кнопка жёстко оформляет тариф Lite: `tierId: "lite"`. Она стоит на 37
-   * страницах модулей и НИ РАЗУ не спрашивала, какой тариф у человека.
-   *
-   * Замер соседнего окна на сквозном стенде (настоящий вебхук, настоящий файл
-   * подписок, настоящая функция стены):
-   *
-   *     купил medium              -> medium
-   *     затем «докупил модуль»    -> LITE
-   *
-   * Для кассы «докупить модуль» и «перейти на Lite» — одно событие: ссылка
-   * заказа собирается как `tier_<id>_<период>`. То есть человек платил второй
-   * раз и получал МЕНЬШЕ доступа, чем имел, молча — ни предупреждения, ни следа.
-   *
-   * ⚠️ Чиню НЕ ценой и НЕ составом пакетов: это решение основателя. Убираю
-   * ровно вред — предложение, которое понижает. Кто уже платит больше Lite,
-   * видит не «Купить», а путь к своему тарифу.
-   *
-   * Незнание трактуется в пользу покупки: гость и человек без входа обязаны
-   * иметь возможность купить. Молчание сервера не должно закрывать кассу.
+   * Незнание трактуется в пользу покупки: гость, человек без входа и незнакомое
+   * значение тарифа видят кнопку. Молчание сервера не закрывает кассу.
+   * Карта доступа по модулям (modules[].entitled) кнопку НЕ прячет: у бесплатного
+   * тарифа entitled бывает истинным просто потому, что стена выключена, а у
+   * платного вопрос уже решён тарифом.
    */
-  const [ownTier, setOwnTier] = useState<string | null>(null);
-  const [ужеЕсть, setУжеЕсть] = useState(false);
+  const [ownPlan, setOwnPlan] = useState<string | null>(null);
 
   useEffect(() => {
     let живо = true;
@@ -133,17 +91,7 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!живо) return;
-        setOwnTier(typeof d?.plan === "string" ? d.plan.toLowerCase() : null);
-        // Карта доступа по модулям приходит в том же ответе, и мы её не читали.
-        // Замер 02.09.2026: ответ /api/me/entitlements это
-        // { plan, email, reason, modules: [{ module, requiredTiers, entitled }] }.
-        // Тариф отвечает на вопрос «понизит ли покупка», карта — на вопрос
-        // «а есть ли у него уже доступ». Это РАЗНЫЕ вопросы, и второй мы не
-        // задавали: подписчик Lite, которому этот модуль уже открыт, видел
-        // «Купить Lite» — предложение купить то, что у него есть.
-        const карта = Array.isArray(d?.modules) ? d.modules : [];
-        const мой = карта.find((m: { module?: string }) => m?.module === moduleId);
-        setУжеЕсть(мой?.entitled === true);
+        setOwnPlan(typeof d?.plan === "string" ? d.plan.toLowerCase() : null);
       })
       .catch(() => {});
     return () => {
@@ -151,84 +99,28 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
     };
   }, []);
 
-  // Порядок тарифов ровно тот, что у стены на сервере. Незнакомое значение —
-  // ноль: неизвестный тариф не повод запрещать покупку.
-  const RANK: Record<string, number> = { free: 0, lite: 1, medium: 2, full: 3, pro: 4, enterprise: 5 };
-  const покупкаПонизит = (RANK[ownTier ?? ""] ?? 0) > RANK.lite;
-  // Платящий, у которого доступ уже есть, покупать его повторно не должен.
-  // Бесплатный тариф исключён намеренно: у него entitled бывает истинным
-  // просто потому, что стена не включена, и прятать кнопку там значило бы
-  // убрать продажу вместо починки стены.
-  const платящий = (RANK[ownTier ?? ""] ?? 0) > RANK.free;
-  const незачемПокупать = покупкаПонизит || (платящий && ужеЕсть);
-  if (!data || !Array.isArray(data.tiers)) return null;
+  const незачемПокупать = ownPlan !== null && PAID_PLANS.has(ownPlan);
 
-  const findTier = (id: string) => data.tiers.find((t) => t.id === id);
-  const lite = findTier("lite");
-  const medium = findTier("medium");
-  const full = findTier("full");
-  // Lite is the entry the buy button charges — without it there's nothing to show.
-  if (!lite || lite.priceMonthly == null) return null;
+  const app = standaloneApp(moduleId);
+  const planetFrom = `$${fromPricePerMonth(PLANET_BASE_MONTHLY)}`;
+  const appFrom = app ? `$${fromPricePerMonth(app.baseMonthly)}` : null;
+  const href = keepChannel(app ? PRICING_APP(app.slug) : PRICING_TERMS, channel);
 
   const palette =
     theme === "dark"
       ? { bg: "rgba(255,255,255,0.04)", border: "rgba(255,255,255,0.12)", text: "#e2e8f0", muted: "#94a3b8", accent: "#34d399" }
       : { bg: "#f8fafc", border: "rgba(15,23,42,0.08)", text: "#0f172a", muted: "#64748b", accent: "#0d9488" };
 
-  const litePrice = fmt(lite.priceMonthly, currency, data.currencies);
+  const perMonth = tr("moduleChip.perMonth", "/мес");
 
-  // One-click checkout: Lite tier + this module → live LemonSqueezy hosted page.
-  // The backend /checkout/session picks the processor (LS primary → Gumroad →
-  // stub), treats this module as Lite's "one of choice" (no add-on), and returns
-  // a ready checkout URL. Email is collected on the hosted page.
-
-  async function buyNow() {
-    setBuying(true);
-    setBuyError(false);
-    // Same event the /pricing table fires, so the funnel dashboard counts a
-    // module-page purchase intent instead of silently missing it. sendBeacon
-    // inside track() survives the redirect to the processor.
-    // Единственный вход в кассу, КРОМЕ страницы цен, который идёт через наш
-    // /checkout/session — значит отказ отсюда вернётся на НАШ экран отмены.
-    // Остальные шесть ведут прямо к продавцу, и их отмена до нас не доходит.
-    // Тариф здесь известен заранее ("lite"), и без этой строки человек,
-    // передумавший в кассе, не увидел бы кнопки возврата к покупке.
-    запомнитьНамерение("lite", "monthly");
+  function onBuy() {
+    // Намерение, а не начало оплаты: оплата начнётся на /pricing, и там своё
+    // checkout_start. Слать его и здесь значило бы считать покупку дважды.
     track({
-      type: "checkout_start",
-      tier: "lite",
+      type: "cta_click",
       source: `module-chip/${moduleId}`,
-      meta: { period: "monthly", seats: 1, modules: 1, module: moduleId },
+      meta: { target: app ? "app" : "planet", ...(app ? { app: app.slug } : {}) },
     });
-    try {
-      const r = await fetch(apiUrl("/api/pricing/checkout/session"), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ tierId: "lite", period: "monthly", seats: 1, modules: [moduleId] }),
-      });
-      const j = await r.json();
-      if (j?.url) {
-        // Метка канала доводится до САМОЙ КАССЫ, а не только до нашего события.
-        //
-        // Найдено 31.08.2026 обходом пути покупателя в браузере: эта кнопка —
-        // ТРЕТИЙ путь оплаты, мимо обоих, что чинились накануне. Она не строит
-        // адрес сама, а получает готовый от бэкенда и уходит по нему как есть.
-        //
-        // Получатель давно готов: вебхук LemonSqueezy читает
-        // custom_data.channel (заведено 19.08.2026), а вебхук Gumroad —
-        // url_params[channel]. Не хватало отправителя, и покупка приходила в
-        // отчёт ниоткуда. withChannel сам знает обе кассы и подставляет нужную
-        // форму параметра.
-        const mark = channelNow();
-        window.location.href = withChannel(j.url, mark, "module-chip");
-        return; // keep the spinner while the browser navigates away
-      }
-      setBuyError(true);
-      setBuying(false);
-    } catch {
-      setBuyError(true);
-      setBuying(false);
-    }
   }
 
   return (
@@ -236,9 +128,6 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
     // переноса он не давал шапке сложиться на телефоне — страница ехала вбок.
     // Замер 27.08.2026 при экране 375: /lifebox чип 231px -> 203px, документ
     // 572 -> 375 (вместе с починкой баннера в UpgradeButton.tsx).
-    // Чип общий для 37 модульных страниц, поэтому правка здесь, а не в каждой
-    // шапке: соседняя вкладка (deploy/mobile-fixes-2026-08-27, коммит 7bdc947a1)
-    // чинит шапки по одной, и эти две правки складываются, не конфликтуя.
     <span
       style={{
         display: "inline-flex",
@@ -256,43 +145,44 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
       }}
     >
       <Link
-        href={`/pricing?module=${encodeURIComponent(moduleId)}`}
+        href={href}
         style={{ display: "inline-flex", flexWrap: "wrap", maxWidth: "100%", alignItems: "center", gap: 8, color: palette.text, textDecoration: "none" }}
-        title={tr("moduleChip.compareTitle", "Сравнить тарифы — Lite, Medium, Full")}
+        title={tr("moduleChip.compareTitle", "Сроки и цены: 1, 3, 6, 9 или 12 месяцев, оплата за срок вперёд")}
       >
-        <span><strong style={{ fontWeight: 800 }}>{litePrice}</strong>{tr("moduleChip.perMonth", "/мес")} ·<span translate="no" className="notranslate">{lite.name || "Lite"}</span></span>
-        {medium && medium.priceMonthly != null && (
+        {app && appFrom ? (
           <>
+            <span>
+              {tr("moduleChip.from", "от")} <strong style={{ fontWeight: 800 }}>{appFrom}</strong>
+              {perMonth}
+            </span>
             <span style={{ color: palette.muted }}>·</span>
-            <span><span translate="no" className="notranslate">{medium.name || "Medium"}</span> {fmt(medium.priceMonthly, currency, data.currencies)}</span>
-          </>
-        )}
-        {full && full.priceMonthly != null && (
-          <>
+            {/* Имя приложения — внутри словарной строки, но без машинного
+                перевода: «CyberChess» не должен стать «Кибершахматами». */}
+            <span translate="no" className="notranslate">
+              {tr("moduleChip.appAlone", "{name} отдельно", { name: app.name })}
+            </span>
             <span style={{ color: palette.muted }}>·</span>
-            {/* Имя тарифа — из /api/pricing, тем же словом, что на кассе и в
-                письме. Подпись «Полный доступ» была четвёртым названием той же
-                строки: человек искал «Full», а на витрине его не было. */}
             <span style={{ color: palette.accent, fontWeight: 700 }}>
-              <span translate="no" className="notranslate">{full.name || "Full"}</span> {fmt(full.priceMonthly, currency, data.currencies)}
+              {tr("moduleChip.planetFrom", "вся планета от {price}/мес", { price: planetFrom })}
+            </span>
+          </>
+        ) : (
+          <>
+            <span>
+              {tr("moduleChip.includedInPlanet", "Входит в подписку AEVION")}
+            </span>
+            <span style={{ color: palette.muted }}>·</span>
+            <span style={{ color: palette.accent, fontWeight: 700 }}>
+              {tr("moduleChip.from", "от")} <strong style={{ fontWeight: 800 }}>{planetFrom}</strong>
+              {perMonth}
             </span>
           </>
         )}
       </Link>
-      {/*
-        Покупателю, у которого тариф ВЫШЕ Lite, кнопка не показывается: она
-        оформила бы Lite и понизила его. Вместо неё — путь к своему тарифу.
-        Это не «спрятать кассу»: человек уже платит больше, продавать ему
-        меньшее за деньги нечестно.
-      */}
       {!hideBuy && незачемПокупать && (
         <Link
           href="/account"
-          title={
-            покупкаПонизит
-              ? tr("moduleChip.higherTierTitle", "У вас тариф выше Lite — эта кнопка оформила бы Lite и понизила доступ")
-              : tr("moduleChip.alreadyOpenTitle", "Этот модуль уже открыт вашим тарифом — покупать его повторно незачем")
-          }
+          title={tr("moduleChip.alreadyOpenTitle", "Ваша подписка AEVION уже открывает все модули — покупать этот отдельно незачем")}
           style={{
             padding: "6px 14px",
             borderRadius: 999,
@@ -308,34 +198,27 @@ export default function ModulePricingChip({ moduleId, currency = "USD", theme = 
         </Link>
       )}
       {!hideBuy && !незачемПокупать && (
-        <button
-          type="button"
-          onClick={buyNow}
-          disabled={buying}
+        <Link
+          href={href}
+          onClick={onBuy}
           title={
-            buyError
-              ? tr("moduleChip.errorTitle", "Ошибка — попробуйте ещё раз")
-              : tr("moduleChip.buyTitle", "Купить Lite {price}/мес — этот продукт, оплата картой", { price: litePrice })
+            app && appFrom
+              ? tr("moduleChip.buyTitle", "Выбрать срок и оплатить — от {price}/мес при оплате за 12 месяцев", { price: appFrom })
+              : tr("moduleChip.buyTitle", "Выбрать срок и оплатить — от {price}/мес при оплате за 12 месяцев", { price: planetFrom })
           }
           style={{
-            border: "none",
-            cursor: buying ? "wait" : "pointer",
             padding: "6px 14px",
             borderRadius: 999,
             fontSize: 12,
             fontWeight: 800,
             whiteSpace: "nowrap",
+            textDecoration: "none",
             color: "#fff",
-            background: buyError ? "#dc2626" : "linear-gradient(135deg, #0d9488, #0ea5e9)",
-            opacity: buying ? 0.7 : 1,
+            background: "linear-gradient(135deg, #0d9488, #0ea5e9)",
           }}
         >
-          {buying
-            ? tr("moduleChip.opening", "Открываем…")
-            : buyError
-              ? tr("moduleChip.retry", "Повторить")
-              : tr("moduleChip.buy", "Купить")}
-        </button>
+          {tr("moduleChip.buy", "Купить")}
+        </Link>
       )}
     </span>
   );

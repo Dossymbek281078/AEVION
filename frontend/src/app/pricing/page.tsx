@@ -1,26 +1,40 @@
 "use client";
 
 import { channelNow } from "@/lib/channelNow";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { CustomerLogosRow } from "@/components/CustomerLogosRow";
 import { apiUrl } from "@/lib/apiBase";
 import { fetchAiSavings } from "@/lib/aiSavings";
-import { gumroadCheckoutUrl } from "@/lib/gumroad";
 import { запомнитьНамерение } from "@/lib/checkoutIntent";
 import { channelFrom, withChannel } from "@/lib/products";
 import { track } from "@/lib/track";
 import { chargeCurrencyNoteKey, shouldWarnAboutCurrency } from "@/lib/chargeCurrencyNote";
-import { usePricingT } from "@/lib/pricingI18n";
+import { usePricingT, termUnitKey } from "@/lib/pricingI18n";
+import {
+  PLANET_BASE_MONTHLY,
+  STANDALONE_APPS,
+  TERM_MONTHS,
+  TERM_NAME,
+  TERM_TIERS,
+  fromPricePerMonth,
+  isTermTier,
+  standaloneApp,
+  termPricePerMonth,
+  termSavingPercent,
+  termTotal,
+  type TermTier,
+} from "@/lib/termPricing";
 import { useI18n } from "@/lib/i18n";
 import { useABVariant, getAllVariants } from "@/lib/abVariant";
 import AskAi from "@/components/AskAi";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 
 type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
-type BillingPeriod = "monthly" | "annual";
-type TierId = "free" | "lite" | "medium" | "full" | "pro" | "enterprise";
+// Тариф — это СРОК доступа ко всей планете (15.09.2026): lite 1 мес, medium 3,
+// pro 6, full 9, max 12. Периода месяц/год больше нет.
+type TierId = "free" | "lite" | "medium" | "pro" | "full" | "max" | "enterprise";
 
 // Все тиры идут через бэкенд /api/pricing/checkout/session — он сам выбирает
 // процессинг (LemonSqueezy primary → Gumroad fallback → stub).
@@ -38,9 +52,12 @@ interface PricingTier {
   id: TierId;
   name: string;
   tagline: string;
+  /** Цена месяца на этом сроке. */
   priceMonthly: number | null;
-  priceAnnualPerMonth: number | null;
-  priceAnnualTotal: number | null;
+  /** Срок в месяцах; null у free и enterprise. */
+  termMonths: number | null;
+  /** Платёж за весь срок вперёд. */
+  priceTermTotal: number | null;
   features: string[];
   limits: TierLimits;
   ctaLabel: string;
@@ -57,15 +74,6 @@ interface ModulePrice {
   oneLiner: string;
 }
 
-interface PricingBundle {
-  id: string;
-  name: string;
-  description: string;
-  modules: string[];
-  priceMonthly: number;
-  savingsPercent: number;
-}
-
 interface CurrencyMeta {
   rate: number;
   symbol: string;
@@ -75,10 +83,8 @@ interface CurrencyMeta {
 interface PricingPayload {
   generatedAt: string;
   currency: string;
-  annualDiscountPercent: number;
   tiers: PricingTier[];
   modules: ModulePrice[];
-  bundles: PricingBundle[];
   currencies: Record<CurrencyCode, CurrencyMeta>;
   notes: string[];
 }
@@ -114,7 +120,7 @@ interface TrustPayload {
 }
 
 interface QuoteLine {
-  kind: "tier" | "addon" | "seat" | "bundle";
+  kind: "tier" | "addon" | "seat";
   label: string;
   unitPrice: number;
   qty: number;
@@ -131,7 +137,8 @@ interface AppliedPromo {
 
 interface Quote {
   tierId: TierId;
-  period: BillingPeriod;
+  /** Срок тарифа в месяцах; null у free и enterprise. */
+  termMonths: number | null;
   currency: CurrencyCode;
   lines: QuoteLine[];
   subtotal: number;
@@ -143,6 +150,11 @@ interface Quote {
 
 const CARD = "0 4px 20px rgba(15,23,42,0.06)";
 const BORDER = "1px solid rgba(15,23,42,0.08)";
+
+/** Ссылка заказа отдельного приложения — та же форма, что в healthz и в кассе. */
+const ссылкаПриложения = (slug: string, term: TermTier) => `app_${slug}_${term}`;
+/** Метка «открываем оплату» у кнопки приложения: не пересекается с id тарифов. */
+const ключПриложения = (slug: string) => `app_${slug}`;
 
 function availabilityBadge(a: ModulePrice["availability"]) {
   const map: Record<ModulePrice["availability"], { bg: string; fg: string; label: string }> = {
@@ -190,21 +202,21 @@ export default function PricingPage() {
   const [newsletterError, setNewsletterError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [period, setPeriod] = useState<BillingPeriod>("annual");
   // Метка канала для ссылок в кассу. Держится в состоянии, а не читается прямо
   // при отрисовке: на сервере адреса ещё нет, и чтение из window разошлось бы с
-  // серверной разметкой. Заполняется в том же эффекте, что module и period.
+  // серверной разметкой. Заполняется в том же эффекте, что module.
   const [channel, setChannel] = useState<string | null>(null);
   const [currency, setCurrency] = useState<CurrencyCode>("USD");
 
-  // Калькулятор сметы
-  // Lite = 1 продукт на выбор: выбранный модуль для чекаута Lite
-  const [liteModule, setLiteModule] = useState<string>("");
+  // Срок для блока «Отдельные приложения». По умолчанию Lite (1 месяц): так
+  // цена на карточке совпадает с базой приложения, от которой считается лестница.
+  const [appTerm, setAppTerm] = useState<TermTier>("lite");
   // Модуль из deep-link (?module=) — для prominent hero-баннера «Купить <модуль>».
   const [heroModule, setHeroModule] = useState<string>("");
 
+  // Калькулятор сметы. Срок задаёт сам тариф, а все модули уже входят в любой
+  // платный срок — выбирать надстройки больше не из чего (15.09.2026).
   const [calcTier, setCalcTier] = useState<TierId>("medium");
-  const [calcModules, setCalcModules] = useState<string[]>([]);
   const [calcSeats, setCalcSeats] = useState(1);
   const [calcPromo, setCalcPromo] = useState("");
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -253,27 +265,29 @@ export default function PricingPage() {
   }
 
   async function startCheckout(opts: {
+    /** Срок (lite…max) или free/enterprise. У покупки приложения — его срок. */
     tierId: TierId;
-    modules?: string[];
+    /** Отдельное приложение (slug кассы): покупается оно, а не вся планета. */
+    app?: string;
     seats?: number;
-    period?: BillingPeriod;
     promoCode?: string;
     trial?: boolean;
   }) {
-    setCheckingOut(opts.tierId);
+    const ключ = opts.app ? ключПриложения(opts.app) : opts.tierId;
+    setCheckingOut(ключ);
     setCheckoutNotice(null);
     // Запоминаем тариф ДО ухода в кассу: касса вернёт отказавшегося на наш
     // экран без тарифа в адресе, и кнопка «вернуться к тарифу» иначе не
     // появляется вовсе (замер с контролем — см. lib/checkoutIntent.ts).
-    запомнитьНамерение(opts.tierId, opts.period ?? "monthly");
+    запомнитьНамерение(opts.tierId, opts.app);
     track({
       type: "checkout_start",
       tier: opts.tierId,
       source: "pricing",
       meta: {
-        period: opts.period ?? "monthly",
+        termMonths: isTermTier(opts.tierId) ? TERM_MONTHS[opts.tierId] : null,
+        app: opts.app ?? null,
         seats: opts.seats ?? 1,
-        modules: (opts.modules ?? []).length,
         variant_hero: heroVariant,
         variant_tierCards: tierCardsVariant,
       },
@@ -341,45 +355,43 @@ export default function PricingPage() {
   //
   // 14.09.2026: список стал ПОЛОЖИТЕЛЬНЫМ. Раньше страница спрашивала «нет ли
   // тарифа среди НЕнастроенных» (`sellable.missing`) и была слепа к тарифу,
-  // которого нет в справочнике товаров вовсе. Так жил флагман `pro`
-  // («Universe», $149/мес): его ссылки нет ни в configured, ни в missing,
-  // проверка отвечала «продаётся», кнопки «Занять место» и «Попробовать
-  // 14 дней» были живыми, а касса отвечала 503. Замер на живой /pricing после
-  // выкатки cycle16: подписи нет, обе кнопки активны.
-  // «Нет в списке плохих» — не то же самое, что «хорошо».
+  // которого нет в справочнике товаров вовсе: его ссылки нет ни в configured, ни
+  // в missing, проверка отвечала «продаётся», кнопки были живыми, а касса
+  // отвечала 503. «Нет в списке плохих» — не то же самое, что «хорошо».
   //
-  // Справочник на бэкенде намеренно НЕ расширен: запись `tier_pro_*` с пустой
-  // переменной ослепила бы двух сторожей, которые сейчас честно помнят, что
-  // товара у pro нет (pricedTierMustBeBuyable, everyPaidTierHasAPaymentPath).
+  // Форма ссылок с 15.09.2026: `tier_<срок>` для планеты и `app_<slug>_<срок>`
+  // для отдельного приложения. Периода в ссылке больше нет.
   const [sellableRefs, setSellableRefs] = useState<string[] | null>(null);
   // Ссылки, товар которых объявлен, но не настроен (`sellable.missing`). Нужны,
   // чтобы отличить АВАРИЮ кассы (переменная пропала) от ОТСУТСТВИЯ товара вовсе.
   const [missingRefs, setMissingRefs] = useState<string[] | null>(null);
-  /** Можно ли купить этот тариф прямо сейчас. Незнание = НЕ запрещаем. */
+  /** Можно ли купить товар с этой ссылкой прямо сейчас. Незнание = НЕ запрещаем. */
+  const продаётсяСсылка = (ссылка: string) =>
+    sellableRefs === null ? true : sellableRefs.includes(ссылка);
+  /** Можно ли купить этот тариф прямо сейчас. */
   const продаётся = (tierId: string) => {
     // Бесплатный тариф не покупается через кассу, и в справочнике товаров его
     // нет по определению: положительный список иначе погасил бы «Начать
     // бесплатно» и повесил на Free «оформить онлайн пока нельзя».
     if (tierId === "free") return true;
-    return sellableRefs === null ? true : sellableRefs.includes(`tier_${tierId}_${period}`);
+    return продаётсяСсылка(`tier_${tierId}`);
   };
   /**
-   * Товара у тарифа нет ВОВСЕ — его ссылки нет ни среди настроенных, ни среди
-   * ненастроенных. 14.09.2026 так жил Universe ($149): цена стояла, кнопки были
-   * серыми, и карточка выглядела как поломка. Решение основателя: пока товара нет —
-   * вместо цены и кнопок «Связаться», как у Enterprise.
+   * Товара у ссылки нет ВОВСЕ — её нет ни среди настроенных, ни среди
+   * ненастроенных. Решение основателя 14.09.2026: пока товара нет — вместо цены
+   * и кнопок «Связаться», как у Enterprise, а не серые кнопки, похожие на поломку.
    *
    * Это НЕ авария кассы: если у Lite пропадёт переменная, его ссылка окажется в
    * missing, и карточка по-прежнему скажет «оформить онлайн пока нельзя» у серой
    * кнопки — прятать цену при сбое настройки было бы ложью о тарифе.
    * Незнание (любой список не пришёл) ничего не прячет.
    */
-  const безТовара = (tierId: string) => {
-    if (tierId === "free" || tierId === "enterprise") return false;
+  const безТовараСсылка = (ссылка: string) => {
     if (sellableRefs === null || missingRefs === null) return false;
-    const ссылка = `tier_${tierId}_${period}`;
     return !sellableRefs.includes(ссылка) && !missingRefs.includes(ссылка);
   };
+  const безТовара = (tierId: string) =>
+    tierId === "free" || tierId === "enterprise" ? false : безТовараСсылка(`tier_${tierId}`);
 
   useEffect(() => {
     let cancelled = false;
@@ -428,7 +440,9 @@ export default function PricingPage() {
          * как «покупать нечего», а это худшая неправда на этой странице.
          * Поэтому — честная ошибка, которую человек увидит и обновит страницу.
          */
-        const обязательные = ["tiers", "modules", "bundles", "notes", "currencies"] as const;
+        // 15.09.2026: наборы (bundles) сняты, страница их больше не читает —
+        // поле из обязательных убрано, чтобы его исчезновение не роняло страницу.
+        const обязательные = ["tiers", "modules", "notes", "currencies"] as const;
         const поля = j as unknown as Record<string, unknown>;
         const нет = обязательные.filter((k) => поля[k] == null);
         if (нет.length > 0) throw new Error(`неполный ответ: нет ${нет.join(", ")}`);
@@ -503,21 +517,17 @@ export default function PricingPage() {
     track({ type: "ab_assigned", source: "pricing", meta: { key: "tierCards", value: v.tierCards } });
   }, []);
 
-  // Deep-link c модульной страницы: /pricing?module=<id> предвыбирает продукт
-  // для тарифа Lite (последняя миля — посетитель приходит с /cyberchess,
-  // /healthai и т.п. и сразу видит свой продукт в Lite, не ищет в дропдауне).
-  // ?period=annual переключает на годовой период. Без useSearchParams, чтобы
-  // не плодить Suspense-boundary в этом большом client-компоненте.
+  // Deep-link c модульной страницы: /pricing?module=<id> показывает баннер этого
+  // продукта (последняя миля — посетитель приходит с /cyberchess, /devhub и т.п.).
+  // Одно из пяти отдельных приложений — кнопка покупки на выбранном сроке;
+  // остальные модули — честное «входит в любой тариф». Без useSearchParams,
+  // чтобы не плодить Suspense-boundary в этом большом client-компоненте.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const mod = params.get("module");
-    if (mod && data?.modules?.some((m) => m.id === mod)) {
-      setLiteModule(mod);
+    if (mod && (standaloneApp(mod) || data?.modules?.some((m) => m.id === mod))) {
       setHeroModule(mod);
-    }
-    if (params.get("period") === "annual") {
-      setPeriod("annual");
     }
     // Без метки покупка приходит в отчёт как пришедшая ниоткуда: обработчик
     // оплаты читает url_params[channel], но эта ссылка его не передавала.
@@ -535,6 +545,18 @@ export default function PricingPage() {
     return `${symbol}${v.toLocaleString("ru-RU")}`;
   };
 
+  /** «$1 050 за 3 месяца» / «$400 за месяц» — платёж за весь срок. */
+  const заСрок = (totalUsd: number, months: number): string =>
+    months === 1
+      ? t("pricing.home.tier.termTotalOne", { total: displayPrice(totalUsd) })
+      : t("pricing.home.tier.termTotal", {
+          total: displayPrice(totalUsd),
+          months: String(months),
+          unit: t(termUnitKey(months)),
+        });
+  /** «1 месяц», «6 месяцев» — подпись срока на переключателе. */
+  const срокТекст = (months: number): string => `${months} ${t(termUnitKey(months))}`;
+
   async function recalc() {
     setQuoting(true);
     try {
@@ -543,9 +565,7 @@ export default function PricingPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           tierId: calcTier,
-          modules: calcModules,
           seats: calcSeats,
-          period,
           currency,
           promoCode: calcPromo || undefined,
         }),
@@ -572,12 +592,7 @@ export default function PricingPage() {
     const t = setTimeout(recalc, 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calcTier, calcModules, calcSeats, period, currency, calcPromo, data]);
-
-  const moduleSelectable = useMemo(() => {
-    if (!data) return [];
-    return data.modules.filter((m) => m.addonMonthly !== null && m.addonMonthly > 0);
-  }, [data]);
+  }, [calcTier, calcSeats, currency, calcPromo, data]);
 
   if (loading) {
     return (
@@ -615,44 +630,84 @@ export default function PricingPage() {
 
   return (
     <ProductPageShell maxWidth={1280}>
-      {/* Module deep-link hero — prominent «Купить <модуль>» когда пришли с
-          страницы продукта (/pricing?module=<id>). Закрывает последнюю милю:
-          заметная кнопка покупки именно этого продукта, валюта (вкл. KZT/PayBox)
-          берётся из общего тумблера ниже. */}
+      {/* Module deep-link hero — пришли со страницы продукта (/pricing?module=<id>).
+          Пять приложений продаются и отдельно: для них заметная кнопка покупки
+          на сроке из блока «Отдельные приложения». Остальные модули отдельно не
+          продаются — честно говорим, что модуль входит в любой тариф, и ведём к
+          тарифам. Валюта (вкл. KZT/PayBox) берётся из общего тумблера ниже. */}
       {heroModule && (() => {
         const m = data.modules.find((x) => x.id === heroModule);
-        const lite = data.tiers.find((t) => t.id === "lite");
-        if (!m) return null;
-        const litePrice = period === "annual" ? (lite?.priceAnnualTotal ?? null) : (lite?.priceMonthly ?? null);
+        const app = standaloneApp(heroModule);
+        const имя = app?.name ?? m?.name;
+        if (!имя) return null;
+        const рамка: React.CSSProperties = {
+          margin: "24px auto 0",
+          maxWidth: 760,
+          padding: "20px 24px",
+          borderRadius: 18,
+          background: "linear-gradient(135deg, rgba(13,148,136,0.10), rgba(14,165,233,0.10))",
+          border: "1px solid rgba(13,148,136,0.30)",
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 16,
+          textAlign: "left",
+        };
+        const значок: React.CSSProperties = {
+          fontSize: 12, fontWeight: 800, color: "#0d9488", letterSpacing: "0.04em", textTransform: "uppercase",
+        };
+        const кнопка: React.CSSProperties = {
+          padding: "12px 28px",
+          fontSize: 15,
+          fontWeight: 900,
+          borderRadius: 12,
+          border: "none",
+          color: "#fff",
+          background: "linear-gradient(135deg, #0d9488, #0ea5e9)",
+          whiteSpace: "nowrap",
+          textDecoration: "none",
+        };
+        if (!app) {
+          return (
+            <section style={рамка}>
+              <div>
+                <div style={значок}>{t("pricing.home.heroModule.badgeIncluded")}</div>
+                <div style={{ fontSize: 20, fontWeight: 900, color: "#0f172a", margin: "4px 0 2px" }}>
+                  {t("pricing.home.heroModule.includedLine", {
+                    name: имя,
+                    price: displayPrice(fromPricePerMonth(PLANET_BASE_MONTHLY)),
+                  })}
+                </div>
+              </div>
+              <a href="#tiers" style={кнопка}>
+                {t("pricing.home.heroModule.seePlans")}
+              </a>
+            </section>
+          );
+        }
+        const ссылка = ссылкаПриложения(app.slug, appTerm);
+        const ключ = ключПриложения(app.slug);
+        const нетТовара = безТовараСсылка(ссылка);
         return (
-          <section
-            style={{
-              margin: "24px auto 0",
-              maxWidth: 760,
-              padding: "20px 24px",
-              borderRadius: 18,
-              background: "linear-gradient(135deg, rgba(13,148,136,0.10), rgba(14,165,233,0.10))",
-              border: "1px solid rgba(13,148,136,0.30)",
-              display: "flex",
-              flexWrap: "wrap",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 16,
-              textAlign: "left",
-            }}
-          >
+          <section style={рамка}>
             <div>
-              <div style={{ fontSize: 12, fontWeight: 800, color: "#0d9488", letterSpacing: "0.04em", textTransform: "uppercase" }}>
-                {t("pricing.home.heroModule.badge")}
+              <div style={значок}>
+                {t("pricing.home.heroModule.badge")} · {TERM_NAME[appTerm]}
               </div>
               <div style={{ fontSize: 22, fontWeight: 900, color: "#0f172a", margin: "4px 0 2px" }}>
-                {m.name}
-                {litePrice !== null && (
+                {имя}
+                {!нетТовара && (
                   <span style={{ fontWeight: 700, color: "#334155", fontSize: 16 }}>
-                    {" "}— {displayPrice(litePrice)}/{period === "annual" ? t("pricing.home.heroModule.perYear") : t("pricing.home.heroModule.perMonth")}
+                    {" "}— {displayPrice(termPricePerMonth(app.baseMonthly, appTerm))}/{t("pricing.home.heroModule.perMonth")}
                   </span>
                 )}
               </div>
+              {!нетТовара && (
+                <div style={{ fontSize: 12, color: "#334155", fontWeight: 700, marginBottom: 2 }}>
+                  {заСрок(termTotal(app.baseMonthly, appTerm), TERM_MONTHS[appTerm])}
+                </div>
+              )}
               <div style={{ fontSize: 12, color: "#64748b" }}>
                 {t("pricing.home.heroModule.paymentCard")}{" "}
                 {/* Сведено 31.08: взята их сторона — та же логика, вынесенная в
@@ -665,37 +720,40 @@ export default function PricingPage() {
                 {чемСпишется()}
               </div>
             </div>
-            {!продаётся("lite") && (
-              /* Неактивная кнопка без объяснения — тупик молча: человек
-                 видел серую кнопку и не знал ни почему, ни что делать.
-                 Касса на этом пути отвечает честным 503 с текстом «напишите
-                 нам», но только ПОСЛЕ нажатия; здесь та же мысль сказана до. */
-              <p style={{ fontSize: 11, lineHeight: 1.4, color: "#64748b", marginBottom: 8 }}>
-                {t("pricing.home.tier.notSellable")}{" "}
-                <Link href="/pricing/contact?tier=lite" style={{ color: "#0d9488", fontWeight: 700 }}>
-                  {t("pricing.home.tier.notSellableCta")}
-                </Link>
-              </p>
+            {нетТовара ? (
+              <Link href={`/pricing/contact?tier=${appTerm}&app=${app.slug}`} style={{ ...кнопка, background: "#0f172a" }}>
+                {t("pricing.home.tier.notSellableCta")}
+              </Link>
+            ) : (
+              <>
+                {!продаётсяСсылка(ссылка) && (
+                  /* Неактивная кнопка без объяснения — тупик молча: человек
+                     видел серую кнопку и не знал ни почему, ни что делать.
+                     Касса на этом пути отвечает честным 503 с текстом «напишите
+                     нам», но только ПОСЛЕ нажатия; здесь та же мысль сказана до. */
+                  <p style={{ fontSize: 11, lineHeight: 1.4, color: "#64748b", marginBottom: 8 }}>
+                    {t("pricing.home.tier.notSellable")}{" "}
+                    <Link href={`/pricing/contact?tier=${appTerm}&app=${app.slug}`} style={{ color: "#0d9488", fontWeight: 700 }}>
+                      {t("pricing.home.tier.notSellableCta")}
+                    </Link>
+                  </p>
+                )}
+                <button
+                  type="button"
+                  disabled={checkingOut === ключ || !продаётсяСсылка(ссылка)}
+                  onClick={() => startCheckout({ tierId: appTerm, app: app.slug, seats: 1 })}
+                  style={{
+                    ...кнопка,
+                    cursor: checkingOut === ключ ? "wait" : "pointer",
+                    opacity: checkingOut === ключ ? 0.7 : 1,
+                  }}
+                >
+                  {checkingOut === ключ
+                    ? t("pricing.home.heroModule.openingCheckout")
+                    : t("pricing.home.heroModule.buyButton", { name: имя })}
+                </button>
+              </>
             )}
-            <button
-              type="button"
-              disabled={checkingOut === "lite" || !продаётся("lite")}
-              onClick={() => startCheckout({ tierId: "lite", period, seats: 1, modules: [heroModule] })}
-              style={{
-                padding: "12px 28px",
-                fontSize: 15,
-                fontWeight: 900,
-                borderRadius: 12,
-                border: "none",
-                cursor: checkingOut === "lite" ? "wait" : "pointer",
-                color: "#fff",
-                background: "linear-gradient(135deg, #0d9488, #0ea5e9)",
-                whiteSpace: "nowrap",
-                opacity: checkingOut === "lite" ? 0.7 : 1,
-              }}
-            >
-              {checkingOut === "lite" ? t("pricing.home.heroModule.openingCheckout") : t("pricing.home.heroModule.buyButton", { name: m.name })}
-            </button>
           </section>
         );
       })()}
@@ -906,7 +964,8 @@ export default function PricingPage() {
         </section>
       )}
 
-      {/* Period / Currency switch */}
+      {/* Currency switch. Переключателя месяц/год больше нет: срок задаёт сам
+          тариф (15.09.2026). */}
       <section
         style={{
           display: "flex",
@@ -916,35 +975,9 @@ export default function PricingPage() {
           marginBottom: 32,
         }}
       >
-        <div
-          style={{
-            display: "inline-flex",
-            background: "#f1f5f9",
-            borderRadius: 10,
-            padding: 4,
-            gap: 4,
-          }}
-        >
-          {(["monthly", "annual"] as BillingPeriod[]).map((p) => (
-            <button
-              key={p}
-              onClick={() => setPeriod(p)}
-              style={{
-                padding: "8px 16px",
-                fontSize: 13,
-                fontWeight: 700,
-                borderRadius: 8,
-                border: "none",
-                cursor: "pointer",
-                background: period === p ? "#fff" : "transparent",
-                color: period === p ? "#0f172a" : "#64748b",
-                boxShadow: period === p ? "0 2px 6px rgba(15,23,42,0.08)" : "none",
-              }}
-            >
-              {p === "monthly" ? tp("period.monthly") : tp("period.annual")}
-            </button>
-          ))}
-        </div>
+        <p style={{ width: "100%", margin: 0, textAlign: "center", fontSize: 14, color: "#334155", lineHeight: 1.5 }}>
+          {t("pricing.home.tier.termNote")}
+        </p>
         <select
           value={currency}
           onChange={(e) => {
@@ -1007,28 +1040,22 @@ export default function PricingPage() {
 
       {/* Tier cards */}
       <section
+        id="tiers"
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
           gap: 16,
           marginBottom: 56,
         }}
       >
         {data.tiers.map((tier) => {
-          // A/B/C variant for tier-cards:
-          //   A — no highlight (control)
-          //   B — highlight Medium (popular)
-          //   C — highlight Full
-          const isHighlight =
-            tierCardsVariant === "A"
-              ? false
-              : tierCardsVariant === "B"
-                ? tier.id === "medium"
-                : tier.id === "full";
+          // Подсветка — по решению основателя 15.09.2026: Max (бэкенд ставит
+          // highlight). Прежний A/B-тест подсветки Medium/Full снят вместе с
+          // прежней лестницей; вариант по-прежнему уходит в учёт покупки.
+          const isHighlight = tier.highlight === true;
           // Нет товара — цены не показываем: displayPrice(null) даст «по запросу», как у Enterprise.
-          const showPrice = безТовара(tier.id)
-            ? null
-            : period === "annual" ? tier.priceAnnualPerMonth : tier.priceMonthly;
+          const showPrice = безТовара(tier.id) ? null : tier.priceMonthly;
+          const экономия = isTermTier(tier.id) ? termSavingPercent(tier.id) : 0;
           return (
             <div
               key={tier.id}
@@ -1108,10 +1135,26 @@ export default function PricingPage() {
                     {tp("tier.perMonth")}
                   </span>
                 )}
-                {period === "annual" && !безТовара(tier.id) && tier.priceAnnualTotal !== null && tier.priceAnnualTotal > 0 && (
-                  <div style={{ fontSize: 11, color: isHighlight ? "#94a3b8" : "#64748b", marginTop: 4 }}>
-                    {displayPrice(tier.priceAnnualTotal)} {tp("tier.perYear")}
+                {!безТовара(tier.id) && tier.termMonths !== null && tier.priceTermTotal !== null && tier.priceTermTotal > 0 && (
+                  <div style={{ fontSize: 13, fontWeight: 700, color: isHighlight ? "#cbd5e1" : "#334155", marginTop: 4 }}>
+                    {заСрок(tier.priceTermTotal, tier.termMonths)}
                   </div>
+                )}
+                {!безТовара(tier.id) && экономия > 0 && (
+                  <span
+                    style={{
+                      display: "inline-block",
+                      marginTop: 6,
+                      background: isHighlight ? "rgba(52,211,153,0.18)" : "#d1fae5",
+                      color: isHighlight ? "#6ee7b7" : "#065f46",
+                      fontSize: 11,
+                      fontWeight: 800,
+                      padding: "2px 8px",
+                      borderRadius: 999,
+                    }}
+                  >
+                    {t("pricing.home.tier.saving", { percent: String(экономия) })}
+                  </span>
                 )}
               </div>
               {tier.id === "enterprise" || безТовара(tier.id) ? (
@@ -1137,30 +1180,6 @@ export default function PricingPage() {
                 </Link>
               ) : (
                 <>
-                {tier.id === "lite" && (
-                  <select
-                    value={liteModule}
-                    onChange={(e) => setLiteModule(e.target.value)}
-                    aria-label={t("pricing.home.tier.selectProductAria")}
-                    style={{
-                      width: "100%",
-                      padding: "9px 12px",
-                      fontSize: 12,
-                      fontWeight: 700,
-                      borderRadius: 10,
-                      border: isHighlight ? "1px solid rgba(255,255,255,0.25)" : "1px solid rgba(13,148,136,0.4)",
-                      marginBottom: 8,
-                      background: isHighlight ? "rgba(255,255,255,0.06)" : "#fff",
-                      color: isHighlight ? "#e2e8f0" : "#0f172a",
-                      boxSizing: "border-box",
-                    }}
-                  >
-                    <option value="">{t("pricing.home.tier.selectProductOption")}</option>
-                    {(data?.modules ?? []).map((m) => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
-                  </select>
-                )}
                 {!продаётся(tier.id) && (
                   /* Неактивная кнопка без объяснения — тупик молча. Раньше
                      человек видел просто серую кнопку и не знал ни почему,
@@ -1193,17 +1212,8 @@ export default function PricingPage() {
                     marginBottom: 8,
                     opacity: checkingOut === tier.id ? 0.7 : 1,
                   }}
-                  onClick={() => {
-                    if (tier.id === "lite") {
-                      if (!liteModule) {
-                        setCheckoutNotice(t("pricing.home.notice.selectLiteModule"));
-                        return;
-                      }
-                      startCheckout({ tierId: tier.id, period, seats: 1, modules: [liteModule] });
-                    } else {
-                      startCheckout({ tierId: tier.id, period, seats: 1 });
-                    }
-                  }}
+                  // Любой срок открывает всю планету: выбирать продукт больше не нужно.
+                  onClick={() => startCheckout({ tierId: tier.id, seats: 1 })}
                 >
                   {checkingOut === tier.id ? t("pricing.home.tier.openingCheckout") : tier.ctaLabel}
                 </button>
@@ -1233,13 +1243,7 @@ export default function PricingPage() {
                     // тарифа он кончается тем же 503. До 14.09 эта кнопка
                     // оставалась живой, даже когда основную уже гасили.
                     disabled={checkingOut === tier.id || !продаётся(tier.id)}
-                    onClick={() =>
-                      startCheckout(
-                        tier.id === "lite" && liteModule
-                          ? { tierId: tier.id, period, seats: 1, trial: true, modules: [liteModule] }
-                          : { tierId: tier.id, period, seats: 1, trial: true },
-                      )
-                    }
+                    onClick={() => startCheckout({ tierId: tier.id, seats: 1, trial: true })}
                   >
                     {tp("tier.tryTrial")}
                   </button>
@@ -1313,117 +1317,182 @@ export default function PricingPage() {
         })}
       </section>
 
-      {/* Bundles */}
-      <section style={{ marginBottom: 56 }}>
-        <h2
-          style={{
-            fontSize: 28,
-            fontWeight: 900,
-            margin: 0,
-            marginBottom: 8,
-            letterSpacing: "-0.02em",
-          }}
-        >
-          {tp("bundles.title")}
-        </h2>
-        <p style={{ color: "#64748b", margin: 0, marginBottom: 20 }}>
-          {tp("bundles.subtitle")}
-        </p>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-            gap: 16,
-          }}
-        >
-          {data.bundles.map((b) => (
-            <div
-              key={b.id}
+      {/*
+        Отдельные приложения — вместо наборов (сняты 15.09.2026).
+
+        Наборы показывали одну цену, а вели в кассу All-Access с другой: своей
+        кассы у них не было (разбор 02.09.2026). Здесь цена и покупка связаны
+        ОДНОЙ парой — срок + приложение: цена считается из lib/termPricing.ts
+        (копия сверяется с бэкендом), а в кассу уходит `{ tierId: срок, app }`,
+        по которому касса считает ту же сумму. Продаётся ли — по ссылке
+        `app_<slug>_<срок>` из healthz, тем же правилом, что у тарифов.
+      */}
+      {(() => {
+        const месяцев = TERM_MONTHS[appTerm];
+        const суммаПриложений = STANDALONE_APPS.reduce((s, a) => s + termTotal(a.baseMonthly, appTerm), 0);
+        const планета = termTotal(PLANET_BASE_MONTHLY, appTerm);
+        return (
+          <section id="apps" style={{ marginBottom: 56 }}>
+            <h2
               style={{
-                background: "#fff",
-                border: BORDER,
-                borderRadius: 14,
-                padding: 20,
-                boxShadow: CARD,
+                fontSize: 28,
+                fontWeight: 900,
+                margin: 0,
+                marginBottom: 8,
+                letterSpacing: "-0.02em",
               }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  marginBottom: 8,
-                }}
-              >
-                <h3 style={{ fontSize: 18, fontWeight: 900, margin: 0 }}>{b.name}</h3>
-                <span
+              {t("pricing.home.apps.title")}
+            </h2>
+            <p style={{ color: "#64748b", margin: 0, marginBottom: 16 }}>
+              {t("pricing.home.apps.subtitle")}
+            </p>
+            <div
+              role="group"
+              aria-label={t("pricing.home.apps.termAria")}
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                background: "#f1f5f9",
+                borderRadius: 10,
+                padding: 4,
+                gap: 4,
+                marginBottom: 20,
+              }}
+            >
+              {TERM_TIERS.map((term) => (
+                <button
+                  key={term}
+                  type="button"
+                  aria-pressed={appTerm === term}
+                  onClick={() => setAppTerm(term)}
                   style={{
-                    background: "#fef3c7",
-                    color: "#92400e",
-                    fontSize: 11,
-                    fontWeight: 800,
-                    padding: "2px 8px",
-                    borderRadius: 999,
+                    flex: "1 1 auto",
+                    padding: "8px 12px",
+                    fontSize: 13,
+                    fontWeight: 700,
+                    borderRadius: 8,
+                    border: "none",
+                    cursor: "pointer",
+                    background: appTerm === term ? "#fff" : "transparent",
+                    color: appTerm === term ? "#0f172a" : "#475569",
+                    boxShadow: appTerm === term ? "0 2px 6px rgba(15,23,42,0.08)" : "none",
                   }}
                 >
-                  −{b.savingsPercent}%
-                </span>
-              </div>
-              <p style={{ fontSize: 13, color: "#64748b", margin: 0, marginBottom: 12 }}>
-                {b.description}
-              </p>
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: 4,
-                  marginBottom: 12,
-                }}
-              >
-                {b.modules.map((mid) => (
-                  <span
-                    key={mid}
+                  {TERM_NAME[term]} · {срокТекст(TERM_MONTHS[term])}
+                </button>
+              ))}
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))",
+                gap: 16,
+              }}
+            >
+              {STANDALONE_APPS.map((a) => {
+                const ссылка = ссылкаПриложения(a.slug, appTerm);
+                const ключ = ключПриложения(a.slug);
+                const нетТовара = безТовараСсылка(ссылка);
+                const контакт = `/pricing/contact?tier=${appTerm}&app=${a.slug}`;
+                return (
+                  <div
+                    key={a.slug}
+                    data-app={a.slug}
                     style={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      padding: "2px 6px",
-                      background: "#f1f5f9",
-                      color: "#475569",
-                      borderRadius: 4,
-                      letterSpacing: "0.02em",
+                      background: "#fff",
+                      border: BORDER,
+                      borderRadius: 14,
+                      padding: 20,
+                      boxShadow: CARD,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 8,
                     }}
                   >
-                    {mid}
-                  </span>
-                ))}
-              </div>
-              <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 12 }}>
-                {displayPrice(b.priceMonthly)}
-                <span style={{ fontSize: 13, color: "#64748b", fontWeight: 600 }}> {t("pricing.home.bundles.perMonth")}</span>
-              </div>
-              <a
-                href={withChannel(gumroadCheckoutUrl({ key: b.id }), channel, "pricing")}
-                aria-label={`Получить доступ: набор ${b.id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: "block",
-                  textAlign: "center",
-                  padding: "8px 16px",
-                  borderRadius: 8,
-                  background: "linear-gradient(135deg, #0d9488, #0891b2)",
-                  color: "#fff",
-                  fontWeight: 700,
-                  fontSize: 13,
-                  textDecoration: "none",
-                }}
-              >
-                Get Access →
-              </a>
+                    <h3 style={{ fontSize: 18, fontWeight: 900, margin: 0 }}>{a.name}</h3>
+                    {нетТовара ? (
+                      <div style={{ fontSize: 20, fontWeight: 900 }}>{t("pricing.home.price.onRequest")}</div>
+                    ) : (
+                      <div>
+                        <span style={{ fontSize: 26, fontWeight: 900, letterSpacing: "-0.02em" }}>
+                          {displayPrice(termPricePerMonth(a.baseMonthly, appTerm))}
+                        </span>
+                        <span style={{ fontSize: 13, color: "#64748b", marginLeft: 4 }}>{tp("tier.perMonth")}</span>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#334155", marginTop: 2 }}>
+                          {заСрок(termTotal(a.baseMonthly, appTerm), месяцев)}
+                        </div>
+                      </div>
+                    )}
+                    {нетТовара ? (
+                      <Link
+                        href={контакт}
+                        style={{
+                          display: "block",
+                          marginTop: "auto",
+                          padding: "10px 16px",
+                          fontSize: 13,
+                          fontWeight: 800,
+                          borderRadius: 10,
+                          background: "#0f172a",
+                          color: "#fff",
+                          textAlign: "center",
+                          textDecoration: "none",
+                        }}
+                      >
+                        {t("pricing.home.tier.notSellableCta")}
+                      </Link>
+                    ) : (
+                      <>
+                        {!продаётсяСсылка(ссылка) && (
+                          <p style={{ fontSize: 11, lineHeight: 1.4, color: "#64748b", margin: 0 }}>
+                            {t("pricing.home.tier.notSellable")}{" "}
+                            <Link href={контакт} style={{ color: "#0d9488", fontWeight: 700 }}>
+                              {t("pricing.home.tier.notSellableCta")}
+                            </Link>
+                          </p>
+                        )}
+                        <button
+                          type="button"
+                          disabled={checkingOut === ключ || !продаётсяСсылка(ссылка)}
+                          onClick={() => startCheckout({ tierId: appTerm, app: a.slug, seats: 1 })}
+                          style={{
+                            marginTop: "auto",
+                            width: "100%",
+                            padding: "10px 16px",
+                            fontSize: 13,
+                            fontWeight: 800,
+                            borderRadius: 10,
+                            border: "none",
+                            cursor: checkingOut === ключ ? "wait" : "pointer",
+                            background: "#0d9488",
+                            color: "#fff",
+                            opacity: checkingOut === ключ ? 0.7 : 1,
+                          }}
+                        >
+                          {checkingOut === ключ
+                            ? t("pricing.home.tier.openingCheckout")
+                            : t("pricing.home.heroModule.buyButton", { name: a.name })}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          ))}
-        </div>
-      </section>
+            {/* Утверждение печатается, только если оно ВЕРНО на выбранном сроке:
+                сумма пяти приложений и цена планеты считаются здесь же. */}
+            {суммаПриложений > планета && (
+              <p data-testid="apps-vs-planet" style={{ margin: "16px 0 0", fontSize: 14, color: "#334155", lineHeight: 1.5 }}>
+                {t("pricing.home.apps.allFiveDearer", {
+                  apps: displayPrice(суммаПриложений),
+                  planet: displayPrice(планета),
+                })}
+              </p>
+            )}
+          </section>
+        );
+      })()}
 
       {/* Customer logos row */}
       <CustomerLogosRow label={tp("logos.label")} />
@@ -1586,13 +1655,16 @@ export default function PricingPage() {
                       {availabilityBadge(m.availability)}
                     </td>
                     <td style={{ padding: "10px 14px", textAlign: "right", fontWeight: 700 }}>
-                      {m.addonMonthly === null ? (
-                        <span style={{ color: "#94a3b8" }}>—</span>
-                      ) : m.addonMonthly === 0 ? (
-                        <span style={{ color: "#0d9488" }}>Free</span>
-                      ) : (
-                        displayPrice(m.addonMonthly)
-                      )}
+                      {/* Отдельно продаются только пять приложений; «от» — цена
+                          месяца на самом длинном сроке (lib/termPricing.ts). */}
+                      {(() => {
+                        const app = standaloneApp(m.id);
+                        return app ? (
+                          displayPrice(fromPricePerMonth(app.baseMonthly))
+                        ) : (
+                          <span style={{ color: "#94a3b8" }}>—</span>
+                        );
+                      })()}
                     </td>
                     <td style={{ padding: "10px 14px" }}>
                       <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
@@ -1795,59 +1867,10 @@ export default function PricingPage() {
                 )}
               </div>
             </div>
-            <div>
-              <label
-                style={{
-                  fontSize: 11,
-                  fontWeight: 800,
-                  color: "#94a3b8",
-                  letterSpacing: "0.06em",
-                  display: "block",
-                  marginBottom: 6,
-                }}
-              >
-                {tp("calc.modules")}
-              </label>
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: 6,
-                  maxHeight: 200,
-                  overflowY: "auto",
-                  padding: 6,
-                  background: "rgba(255,255,255,0.04)",
-                  borderRadius: 8,
-                }}
-              >
-                {moduleSelectable.map((m) => {
-                  const active = calcModules.includes(m.id);
-                  return (
-                    <button
-                      key={m.id}
-                      onClick={() =>
-                        setCalcModules((prev) =>
-                          active ? prev.filter((x) => x !== m.id) : [...prev, m.id]
-                        )
-                      }
-                      style={{
-                        padding: "5px 10px",
-                        fontSize: 11,
-                        fontWeight: 700,
-                        borderRadius: 6,
-                        border: "none",
-                        cursor: "pointer",
-                        background: active ? "#0d9488" : "rgba(255,255,255,0.08)",
-                        color: "#fff",
-                      }}
-                    >
-                      {m.code} · {symbol}
-                      {Math.round((m.addonMonthly ?? 0) * rate)}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            {/* Выбора надстроек больше нет: любой платный срок включает все модули. */}
+            <p style={{ margin: 0, fontSize: 12, color: "#94a3b8", lineHeight: 1.5 }}>
+              {t("pricing.home.calc.allIncluded")}
+            </p>
           </div>
           {/* Quote */}
           <div
@@ -1907,7 +1930,7 @@ export default function PricingPage() {
                       paddingBottom: 8,
                     }}
                   >
-                    <span>{tp("calc.annualDiscount")}</span>
+                    <span>{t("pricing.home.calc.discount")}</span>
                     <span>
                       −{symbol}
                       {quote.discount.toLocaleString("ru-RU")}
@@ -1925,7 +1948,12 @@ export default function PricingPage() {
                   }}
                 >
                   <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 700 }}>
-                    {period === "annual" ? tp("calc.totalYear") : tp("calc.totalMonth")}
+                    {quote.termMonths
+                      ? t("pricing.home.calc.totalTerm", {
+                          months: String(quote.termMonths),
+                          unit: t(termUnitKey(quote.termMonths)),
+                        })
+                      : t("pricing.home.calc.total")}
                   </span>
                   <span style={{ fontSize: 28, fontWeight: 900, letterSpacing: "-0.02em" }}>
                     {symbol}
@@ -1948,9 +1976,7 @@ export default function PricingPage() {
                     onClick={() =>
                       startCheckout({
                         tierId: calcTier,
-                        modules: calcModules,
                         seats: calcSeats,
-                        period,
                         promoCode: calcPromo || undefined,
                       })
                     }
@@ -2134,7 +2160,8 @@ export default function PricingPage() {
                   [t("pricing.home.compare.row.openApi"), "✓", "✓", "✓", "✓", "—"],
                   [
                     t("pricing.home.compare.row.comparablePrice"),
-                    t("pricing.home.compare.priceAevion"),
+                    // В долларах, как и цены конкурентов в строке: «от» — месяц на сроке Max.
+                    t("pricing.home.compare.priceAevion", { price: `$${fromPricePerMonth(PLANET_BASE_MONTHLY)}` }),
                     t("pricing.home.compare.priceDocusign"),
                     t("pricing.home.compare.priceStripe"),
                     t("pricing.home.compare.priceOpenai"),
@@ -2222,11 +2249,15 @@ export default function PricingPage() {
             },
             {
               q: t("pricing.home.faq.singleModule.q"),
-              a: t("pricing.home.faq.singleModule.a"),
+              a: t("pricing.home.faq.singleModule.a", { apps: STANDALONE_APPS.map((a) => a.name).join(", ") }),
             },
             {
               q: t("pricing.home.faq.bothSuites.q"),
-              a: t("pricing.home.faq.bothSuites.a"),
+              // Суммы — месяц на самом коротком сроке (Lite), из lib/termPricing.ts.
+              a: t("pricing.home.faq.bothSuites.a", {
+                apps: displayPrice(STANDALONE_APPS.reduce((s, a) => s + termPricePerMonth(a.baseMonthly, "lite"), 0)),
+                planet: displayPrice(termPricePerMonth(PLANET_BASE_MONTHLY, "lite")),
+              }),
             },
             {
               q: t("pricing.home.faq.onPremise.q"),

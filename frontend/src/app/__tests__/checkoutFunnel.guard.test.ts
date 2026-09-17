@@ -62,14 +62,10 @@ const EXEMPT: Array<{ rel: string; reason: string }> = [
     rel: "lib/products.ts",
     reason: "сам каталог товаров: хранит ссылки, ничего не рисует",
   },
-  {
-    rel: "components/ProductNotice.tsx",
-    reason:
-      "показывает ОГОВОРКУ продукта из каталога («демонстрационный режим», " +
-      "«не является лицензированным банком») и ничего не продаёт: ни ссылки " +
-      "на кассу, ни кнопки. В обход попал потому, что читает каталог — " +
-      "productById(). Событие воронки здесь было бы ложью: человек ничего не нажал",
-  },
+  // components/ProductNotice.tsx исключением БЫЛ: он читал каталог через
+  // productById() и потому попадал в обход, ничего не продавая. С 15.09.2026 он
+  // берёт оговорку через productNotice(), признаков чекаута в нём нет вовсе, и
+  // запись стала бы тихой дырой — сторож сам требует такие удалять.
   {
     rel: "lib/gumroad.ts",
     reason: "конструктор ссылок Gumroad, UI в нём нет",
@@ -145,13 +141,26 @@ describe("воронка оплаты — каждая точка входа ш�
     ).toEqual([]);
   });
 
-  it("событие есть у обеих ключевых точек: таблицы тарифов и чипа модуля", () => {
-    // Явная проверка двух самых нагруженных входов, чтобы правка обработчика
-    // не убрала событие незаметно для сплошного обхода.
+  it("событие есть у главной точки входа — таблицы тарифов", () => {
+    // Явная проверка самого нагруженного входа, чтобы правка обработчика не
+    // убрала событие незаметно для сплошного обхода.
     const files = new Map(checkoutFiles().map((f) => [f.rel, f.src]));
-    for (const rel of ["app/pricing/page.tsx", "components/ModulePricingChip.tsx"]) {
-      expect(files.get(rel), `${rel} перестал быть точкой входа в оплату — проверь, что это осознанно`).toBeTruthy();
-      expect(files.get(rel), `${rel} больше не шлёт checkout_start`).toContain("checkout_start");
-    }
+    const rel = "app/pricing/page.tsx";
+    expect(files.get(rel), `${rel} перестал быть точкой входа в оплату — проверь, что это осознанно`).toBeTruthy();
+    expect(files.get(rel), `${rel} больше не шлёт checkout_start`).toContain("checkout_start");
   }, SWEEP_TIMEOUT_MS);
+
+  it("чип модуля ведёт к выбору срока и шлёт намерение, а не второе начало оплаты", () => {
+    // 15.09.2026 — новая ценовая политика: чип больше НЕ открывает кассу сам
+    // (прямой кассы на лестницу сроков нет), он ведёт на /pricing, где и уходит
+    // checkout_start. Поэтому здесь проверяется другое: путь к оплате в чипе
+    // есть, и нажатие видно воронке событием намерения. Слать checkout_start и
+    // тут значило бы считать одну покупку дважды.
+    const src = readFileSync(path.join(SRC_ROOT, "components", "ModulePricingChip.tsx"), "utf8");
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    expect(code, "чип не ведёт ни к приложению, ни к подписке").toMatch(/PRICING_APP\(/);
+    expect(code).toMatch(/PRICING_TERMS/);
+    expect(code, "нажатие чипа не видно воронке").toContain('type: "cta_click"');
+    expect(code, "чип снова шлёт checkout_start — покупка посчитается дважды").not.toContain('type: "checkout_start"');
+  });
 });

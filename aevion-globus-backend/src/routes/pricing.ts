@@ -17,7 +17,7 @@ import {
   getModulePrice,
   resolvePromoCode,
   type CurrencyCode,
-  type BillingPeriod,
+  TERM_TIERS, TERM_MONTHS, TERM_FACTOR, STANDALONE_APPS, PLANET_BASE_MONTHLY, termPricePerMonth, termTotal,
   type TierId,
 } from "../data/pricing";
 import { projects } from "../data/projects";
@@ -114,14 +114,24 @@ pricingRouter.get("/", (_req, res) => {
   res.json({
     generatedAt: new Date().toISOString(),
     currency: "USD",
-    annualDiscountPercent: 16,
+    // Лестница сроков вместо годовой скидки (15.09.2026): тариф — это срок.
+    termLadder: TERM_TIERS.map((t) => ({ tierId: t, months: TERM_MONTHS[t], factor: TERM_FACTOR[t] })),
+    standaloneApps: STANDALONE_APPS.map((a) => ({
+      ...a,
+      terms: TERM_TIERS.map((t) => ({
+        tierId: t,
+        months: TERM_MONTHS[t],
+        pricePerMonth: termPricePerMonth(a.baseMonthly, t),
+        total: termTotal(a.baseMonthly, t),
+      })),
+    })),
     tiers: TIERS,
     modules: modulesEnriched,
     bundles: BUNDLES,
     currencies: CURRENCY_RATES,
     notes: [
       "Цены указаны в USD. Конвертация в KZT/RUB/EUR — справочная, окончательный счёт в USD.",
-      "Annual billing экономит 16% (≈2 месяца бесплатно).",
+      "Тариф — это срок: Lite 1 мес, Medium 3, Pro 6, Full 9, Max 12. Оплата за срок вперёд; чем длиннее срок, тем дешевле месяц.",
       "Enterprise — индивидуальный договор, фиксированный SLA, NDA/DPA.",
     ],
   });
@@ -192,14 +202,13 @@ pricingRouter.get("/bundles", (_req, res) => {
 
 /**
  * POST /api/pricing/quote
- * Body: { tierId, modules?, seats?, period?, currency? }
+ * Body: { tierId, modules?, seats?, currency? } — срок задаёт сам тариф
  * Возвращает смету: lines, subtotal, discount, total.
  *
  * Validation:
  *   - tierId обязателен и должен быть из known set
  *   - seats: integer 1..1000
  *   - modules: массив строк <= 30
- *   - period: 'monthly' | 'annual'
  *   - currency: 'USD' | 'EUR' | 'KZT' | 'RUB'
  */
 pricingRouter.post("/quote", (req, res) => {
@@ -215,7 +224,6 @@ pricingRouter.post("/quote", (req, res) => {
     return res.status(400).json({ error: "invalid_tier", tierId });
   }
   const seats = Number.isFinite(body.seats) ? Math.min(1000, Math.max(1, Math.floor(body.seats))) : 1;
-  const period: BillingPeriod = body.period === "annual" ? "annual" : "monthly";
   // `in` идёт по цепочке прототипов, поэтому `"constructor" in CURRENCY_RATES`
   // истинно — и валютой становилось само слово `constructor`, а курсом функция
   // Object.prototype.constructor. Смета уходила клиенту БЕЗ ЦИФР: HTTP 200,
@@ -233,7 +241,7 @@ pricingRouter.post("/quote", (req, res) => {
   const modules = Array.isArray(body.modules) ? body.modules.slice(0, 30).filter((x: unknown) => typeof x === "string") : [];
   const promoCode = typeof body.promoCode === "string" ? body.promoCode.trim().slice(0, 40) : undefined;
 
-  const quote = buildQuote({ tierId, modules, seats, period, currency, promoCode });
+  const quote = buildQuote({ tierId, modules, seats, currency, promoCode });
   res.json(quote);
 });
 
@@ -284,14 +292,13 @@ pricingRouter.post("/promo/validate", promoLimiter, (req, res) => {
   const body = req.body ?? {};
   const code = typeof body.code === "string" ? body.code.trim().slice(0, 40) : "";
   const tierId = body.tierId as TierId;
-  const period: BillingPeriod = body.period === "annual" ? "annual" : "monthly";
   if (!code) {
     return res.status(400).json({ valid: false, reason: "empty_code" });
   }
   if (!tierId || !getTier(tierId)) {
     return res.status(400).json({ valid: false, reason: "invalid_tier" });
   }
-  const { promo, reason } = resolvePromoCode(code, tierId, period);
+  const { promo, reason } = resolvePromoCode(code, tierId);
   if (!promo) {
     return res.json({ valid: false, reason });
   }
@@ -1503,10 +1510,10 @@ pricingRouter.get("/healthz", (_req, res) => {
 const PRICING_FAQ = [
   { id: "faq-01", q: "What is included in the Starter plan?", a: "Core platform access with up to 3 users, AI quota 1k calls/month, QSign basic.", category: "plans" },
   { id: "faq-02", q: "Can I upgrade mid-month?", a: "Yes. Upgrading applies pro-rated billing instantly.", category: "billing" },
-  { id: "faq-03", q: "Do you offer annual discounts?", a: "Annual billing saves 20% across all tiers.", category: "billing" },
+  { id: "faq-03", q: "Do longer terms cost less?", a: `Yes. Every plan is a term paid upfront — 1, 3, 6, 9 or 12 months. The whole platform costs $${PLANET_BASE_MONTHLY}/month on 1 month and $${termPricePerMonth(PLANET_BASE_MONTHLY, "max")}/month on 12.`, category: "billing" },
   { id: "faq-04", q: "Is there a free trial?", a: "14-day free trial on Growth and above. No credit card required.", category: "plans" },
   { id: "faq-05", q: "What payment methods do you accept?", a: "Visa, Mastercard, Kaspi, QR code (QazQR), wire transfer.", category: "billing" },
-  { id: "faq-06", q: "Can I cancel any time?", a: "Yes. Monthly plans cancel end-of-period; annual plans follow 30-day notice.", category: "billing" },
+  { id: "faq-06", q: "Can I cancel any time?", a: "Yes. Cancelling stops the renewal; access stays open until the paid term ends.", category: "billing" },
   { id: "faq-07", q: "What does Enterprise include?", a: "Unlimited seats, SLA 99.9%, dedicated Railway cluster, custom domain, SSO, on-prem option.", category: "enterprise" },
   { id: "faq-08", q: "Is there a minimum commitment for Enterprise?", a: "12-month contract minimum, custom pricing via quote request.", category: "enterprise" },
   { id: "faq-09", q: "How does per-seat pricing work?", a: "Each named user counts as a seat. Guest/viewer roles are free.", category: "plans" },
@@ -1590,7 +1597,7 @@ pricingRouter.get("/subscription/me", (req, res) => {
     res.json({
       subscription: {
         tierId: latest.tierId,
-        period: latest.period,
+        termMonths: typeof latest.termMonths === "number" ? latest.termMonths : latest.period === "annual" ? 12 : latest.period === "monthly" ? 1 : null,
         seats: latest.seats ?? 1,
         modules: Array.isArray(latest.modules) ? latest.modules : [],
         validUntil: latest.validUntil ?? null,

@@ -13,7 +13,7 @@ import { channelsHealthRouter } from "../src/routes/channelsHealth";
  * незаданной переменной сравнение не совпадает — обработчик доходит до
  * `return res.json({ ok: true, ignored: event })`.
  *
- * То есть заплативший $149 за DevHub Studio Pro получил бы успешный ответ и
+ * То есть заплативший за DevHub Pro получил бы успешный ответ и
  * НИ ОДНОГО права, магазин при этом деньги принял, а наша проверка каналов
  * продолжала бы отвечать «оплата настроена». Ровно тот класс, ради которого
  * ручка и заведена: она спрашивала «отвечает ли провайдер», а не «получилось
@@ -24,7 +24,10 @@ import { channelsHealthRouter } from "../src/routes/channelsHealth";
  */
 
 const KEYS = ["LEMON_SQUEEZY_API_KEY", "LEMON_SQUEEZY_STORE_ID"];
-const VARIANT = "LEMON_SQUEEZY_VARIANT_DEVHUB_STUDIO_PRO";
+// С 15.09.2026 продаются ступени сроков: app_devhub_pro -> LEMON_SQUEEZY_VARIANT_DEVHUB_PRO.
+// Прежняя …_DEVHUB_STUDIO_PRO только узнаётся вебхуком при продлении (проверка ниже).
+const VARIANT = "LEMON_SQUEEZY_VARIANT_DEVHUB_PRO";
+const LEGACY_VARIANT = "LEMON_SQUEEZY_VARIANT_DEVHUB_STUDIO_PRO";
 const saved: Record<string, string | undefined> = {};
 
 // Обход кеша модулей не нужен и вреден: и `set()`, и `variantMappingStatus()`
@@ -39,7 +42,7 @@ function app() {
 
 describe("оплата, превращающаяся в доступ", () => {
   beforeEach(() => {
-    for (const k of [...KEYS, VARIANT]) saved[k] = process.env[k];
+    for (const k of [...KEYS, VARIANT, LEGACY_VARIANT]) saved[k] = process.env[k];
   });
   afterEach(() => {
     for (const [k, v] of Object.entries(saved)) {
@@ -115,7 +118,28 @@ describe("оплата, превращающаяся в доступ", () => {
     expect(r.body.payments.lemonsqueezy.variants.varsSet).toBeGreaterThan(0);
     // Задана и ВЫГЛЯДИТ идентификатором — иначе до кассы доедет NaN.
     expect(r.body.payments.lemonsqueezy.variants.malformed).toEqual([]);
-    expect(r.body.payments.lemonsqueezy.variants.unmapped).not.toContain("app_devhub");
+    expect(r.body.payments.lemonsqueezy.variants.unmapped).not.toContain("app_devhub_pro");
+    // Соседняя ступень того же приложения не сопоставлена — счёт честный.
+    expect(r.body.payments.lemonsqueezy.variants.unmapped).toContain("app_devhub_max");
+  });
+
+  test("КОНТРОЛЬ: прежняя переменная не выдаёт себя за сопоставленный товар", async () => {
+    // Прежний вариант узнаётся вебхуком при продлении, но новых продаж по нему
+    // нет: засчитать его значило бы рапортовать «выдача настроена» при ни одной
+    // продаваемой позиции.
+    for (const k of KEYS) process.env[k] = "x";
+    const all = Object.keys(process.env).filter((k) => k.startsWith("LEMON_SQUEEZY_VARIANT_"));
+    const back: Record<string, string | undefined> = {};
+    for (const k of all) { back[k] = process.env[k]; delete process.env[k]; }
+    try {
+      process.env[LEGACY_VARIANT] = "999999";
+      const r = await request(app()).get("/api/health/channels");
+      expect(r.body.payments.lemonsqueezy.variants.varsSet).toBe(0);
+      expect(r.body.canGrant).toBe(false);
+    } finally {
+      delete process.env[LEGACY_VARIANT];
+      for (const [k, v] of Object.entries(back)) if (v !== undefined) process.env[k] = v;
+    }
   });
 
   test("секретов не отдаём: значения вариантов наружу не уходят", async () => {

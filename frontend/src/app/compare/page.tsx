@@ -17,6 +17,14 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
 import { indexCapabilities, type Capability, type CapabilityIndex } from "@/lib/devhubCapabilities";
+import { fromPricePerMonth, standaloneApp, termTotal } from "@/lib/termPricing";
+
+// Цена DevHub по лестнице сроков (политика 15.09.2026) — из @/lib/termPricing,
+// не литералом: прежняя цена пережила смену прайса именно потому, что была
+// вписана в текст словами.
+const DEVHUB_BASE = standaloneApp("devhub")?.baseMonthly ?? 0;
+const DEVHUB_MONTH = termTotal(DEVHUB_BASE, "lite");
+const DEVHUB_FROM = fromPricePerMonth(DEVHUB_BASE);
 
 /** Show the section that names where we are behind. Kept as one switch on
  *  purpose: it is a positioning decision, not an engineering one. */
@@ -407,8 +415,10 @@ export default function ComparePage() {
           <p style={{ fontSize: 13.5, color: "#334155", lineHeight: 1.65, margin: 0 }}>
             Набор из семи сервисов, которые обычно собирают вручную (билдер, видео,
             музыка, озвучка, картинки, 3D, хостинг), стоит около <strong>$162 в месяц</strong>{" "}
-            по их публичным ценам. Наш тариф — $149. Разница мала, и продавать её как
-            главную выгоду было бы неправдой. Настоящая разница в другом: не нужно
+            по их публичным ценам. DevHub стоит ${DEVHUB_MONTH} за месяц или ${DEVHUB_FROM} в
+            месяц при оплате за 12 месяцев вперёд: на коротком сроке он дороже набора, на
+            годовом — дешевле, и продавать это как главную выгоду было бы неправдой.
+            Настоящая разница в другом: не нужно
             переносить файлы между семью сервисами, у всего один общий контекст проекта.
             Насколько это быстрее в часах — <strong>мы не мерили и потому не пишем</strong>.
           </p>

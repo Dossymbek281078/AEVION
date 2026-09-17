@@ -3,79 +3,236 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * Витрина «Конституции» продаёт ПРЯМЫМИ ссылками на Gumroad, а цены на ней
- * написаны руками. Два числа и две ссылки живут в трёх файлах и держатся
- * вместе только вниманием — то есть не держатся.
+ * «Конституция» ОТДЕЛЬНО НЕ ПРОДАЁТСЯ — слово основателя 15.09.2026.
  *
- * Чем это кончается (проверено 29.08.2026 на бэкенде, где тот же класс был
- * настоящим дефектом): покупатель одного тарифа уходит на товар другого, то
- * есть платит не ту цену за не тот продукт. Ошибка не падает и не видна в
- * журналах — заметит её только человек, которому пришёл чужой счёт.
+ * ЧТО БЫЛО И ПОЧЕМУ ЭТОТ ФАЙЛ ПЕРЕПИСАН 16.09.2026.
+ * Прежний сторож сверял ДВА тарифа витрины (Pro $9 и Team $49) с двумя
+ * источниками правды: ценой из `CONSTITUTION_TIERS` в реестре бэкенда и
+ * ссылкой товара Gumroad из таблицы вебхука. Проверка была верной и поймала бы
+ * настоящий дефект — «покупатель одного тарифа уходит на товар другого».
  *
- * Источники правды здесь:
- *   цена   — CONSTITUTION_TIERS в бэкенде (`data/pricing.ts`);
- *   товар  — таблица вебхука (`gumroadWebhook.ts`), где ссылка Gumroad
- *            сопоставлена тарифу. Именно по ней выдаётся доступ после оплаты,
- *            поэтому она и есть настоящий ответ на вопрос «что это за товар».
+ * Только предмета больше нет. С 15.09.2026 отдельно продаются ровно пять
+ * приложений (CyberChess, Multichat, QVenture, IP Bureau, DevHub), а
+ * Конституция входит в подписку AEVION — срок доступа ко всей планете.
+ * `CONSTITUTION_TIERS` из реестра удалены, касса отвечает 410
+ * `not_sold_separately`, товары Gumroad `pyiaz` / `wjvquw` сняты. Сторож искал
+ * `id: "team"` и `priceUsd:` и падал на том, что их нет, — то есть красным его
+ * делало ИСПОЛНЕНИЕ решения основателя, а не дефект.
  *
- * Разбор позиционный, без регулярок, собранных из строк: такие теряют
- * обратные слэши на границе вызова и молча находят ноль.
+ * Утверждения не сняты, а ПЕРЕНАПРАВЛЕНЫ на новый смысл. Прежний вопрос был
+ * «совпадают ли две цены одного товара»; сегодняшний — «точно ли товара нет
+ * НИ НА ОДНОЙ из трёх поверхностей, и ведёт ли витрина туда, где продажа
+ * действительно есть». Класс опасности тот же: несколько поверхностей говорят
+ * о продаже, и разойтись они могут молча.
+ *
+ * Разбор позиционный, без регулярок, собранных из строк: такие теряют обратные
+ * слэши на границе вызова и молча находят ноль.
  */
 
 const root = join(__dirname, "..", "..", "..", "..", "..");
 const read = (p: string) => readFileSync(join(root, p), "utf-8");
 
-const page = read("frontend/src/app/constitution/pricing/page.tsx");
+const PAGE_REL = "frontend/src/app/constitution/pricing/page.tsx";
+const page = read(PAGE_REL);
 const pricing = read("aevion-globus-backend/src/data/pricing.ts");
-const webhook = read("aevion-globus-backend/src/routes/gumroadWebhook.ts");
+const checkout = read("aevion-globus-backend/src/routes/constitutionCheckout.ts");
 
-/** Значение поля внутри блока тарифа на витрине. */
+/** Снятые товары Gumroad Конституции — их не должно быть ни на одной поверхности. */
+const RETIRED_GUMROAD = ["pyiaz", "wjvquw"];
+
+/**
+ * Цена, ВПИСАННАЯ числом. Признак: `$` и сразу цифра.
+ *
+ * Вычисленная цена так не выглядит: в шаблоне стоит `$${fromPricePerMonth(...)}`,
+ * то есть после `$` идёт второй `$`. Контроль детектора — отдельным тестом ниже:
+ * без него «литералов нет» неотличимо от «не умею искать».
+ */
+const ЦЕНА_ЛИТЕРАЛОМ = /\$[0-9]/;
+
+/**
+ * Маска комментариев по файлу — СОСТОЯНИЕМ, а не по префиксу строки.
+ *
+ * Нужна, потому что витрина честно ПЕРЕЧИСЛЯЕТ снятые товары в шапке
+ * («Constitution Pro и Team отдельными подписками сняты (Gumroad pyiaz /
+ * wjvquw)»). Это объяснение, а не кнопка, и запрещать его нельзя: тогда в коде
+ * негде будет написать, почему товар снят. А продолжающие строки блочного
+ * комментария не начинаются ни с `//`, ни с `*`, поэтому по префиксу их не
+ * опознать — тот же урок, что в retiredPrices.guard и tierNamesExist.guard.
+ */
+function маскаКомментариев(lines: string[]): boolean[] {
+  let вБлоке = false;
+  return lines.map((line) => {
+    const открыт = line.includes("/*");
+    const закрыт = line.includes("*/");
+    const былВБлоке = вБлоке;
+    if (открыт && !закрыт) вБлоке = true;
+    else if (закрыт) вБлоке = false;
+    const t = line.trim();
+    return былВБлоке || открыт || t.startsWith("//") || t.startsWith("*");
+  });
+}
+
+const pageLines = page.split("\n");
+const pageComment = маскаКомментариев(pageLines);
+
+/** Строки витрины, которые являются КОДОМ и содержат образец. */
+function кодСоСтрокой(образец: string): string[] {
+  return pageLines
+    .map((line, i) => ({ line, n: i + 1 }))
+    .filter((x) => !pageComment[x.n - 1] && x.line.includes(образец))
+    .map((x) => `${PAGE_REL}:${x.n}  ${x.line.trim().slice(0, 90)}`);
+}
+
+/**
+ * Значение поля внутри блока тарифа на витрине (до конца строки).
+ *
+ * ⚠️ Якорь — `id: "<tier>",` С ЗАПЯТОЙ, и это не косметика. Без неё разбор
+ * попадает в ОБЪЯВЛЕНИЕ ТИПА `type Tier = { id: "free" | "pro"; … ctaHref:
+ * string; … }`, которое стоит ВЫШЕ данных, и возвращает `string;` вместо
+ * адреса. Поймано на себе 16.09.2026: для "pro" якорь без запятой работал по
+ * случайности (в типе написано `| "pro"`, без `id: `), а для "free" молча
+ * отвечал типом — то есть прибор уверенно отвечал не про тот предмет.
+ */
 function fieldAfterTier(tier: string, field: string): string {
-  const at = page.indexOf(`id: "${tier}"`);
+  const at = page.indexOf(`id: "${tier}",`);
   expect(at, `на витрине нет блока тарифа ${tier}`).toBeGreaterThan(-1);
   const window = page.slice(at, at + 2000);
-  const k = window.indexOf(`${field}: "`);
+  const k = window.indexOf(`${field}:`);
   expect(k, `у тарифа ${tier} нет поля ${field}`).toBeGreaterThan(-1);
-  const from = k + field.length + 3;
-  return window.slice(from, window.indexOf('"', from));
+  const from = k + field.length + 1;
+  const nl = window.indexOf("\n", from);
+  return window.slice(from, nl < 0 ? undefined : nl).trim();
 }
 
-/** Цена тарифа из источника правды бэкенда. */
-function backendPrice(tier: string): number {
-  const at = pricing.indexOf(`${tier}: { name:`);
-  expect(at, `в CONSTITUTION_TIERS нет тарифа ${tier}`).toBeGreaterThan(-1);
-  const window = pricing.slice(at, at + 200);
-  const k = window.indexOf("priceUsd:");
-  const digits = window.slice(k + 9).trim();
-  return Number.parseInt(digits, 10);
-}
+describe("Конституция отдельно не продаётся — три поверхности согласны", () => {
+  test("контроль прибора: все три файла прочитаны, непусты и опознаны", () => {
+    // Пустое или не то чтение дало бы «нарушений нет» — ответ на невыполненный
+    // поиск. Поэтому у каждого файла проверяется и размер, и опознавательный
+    // знак: иначе `indexOf(...) < 0` ниже означало бы «файл не тот», а
+    // читалось бы как «продажи нет».
+    expect(page.length, `${PAGE_REL} пуст или не прочитан`).toBeGreaterThan(1000);
+    expect(page, "это не витрина цен Конституции").toContain("ConstitutionPricingPage");
 
-/** Ссылка товара Gumroad, сопоставленная тарифу в таблице вебхука. */
-function permalinkFor(reference: string): string {
-  const at = webhook.indexOf(`: "${reference}"`);
-  expect(at, `в таблице вебхука нет ${reference}`).toBeGreaterThan(-1);
-  const lineStart = webhook.lastIndexOf("\n", at) + 1;
-  return webhook.slice(lineStart, at).trim();
-}
+    expect(pricing.length, "реестр цен пуст или не прочитан").toBeGreaterThan(5000);
+    expect(pricing, "это не реестр цен бэкенда").toContain("export const TIERS");
 
-describe("витрина «Конституции» не расходится с бэкендом", () => {
-  test.each([
-    ["pro", "constitution-pro"],
-    ["team", "constitution-team"],
-  ])("тариф %s: цена и товар совпадают с источниками правды", (tier, reference) => {
-    const shown = fieldAfterTier(tier, "price");
-    const real = backendPrice(tier);
-    expect(shown, `витрина показывает ${shown}, а расчёт идёт по $${real}`).toBe(`$${real}`);
-
-    const href = fieldAfterTier(tier, "ctaHref");
-    const expected = permalinkFor(reference);
-    expect(
-      href,
-      `кнопка тарифа ${tier} ведёт на ${href}, а доступ за этот тариф выдаётся по товару ${expected}`,
-    ).toContain(`/l/${expected}`);
+    expect(checkout.length, "маршрут кассы пуст или не прочитан").toBeGreaterThan(500);
+    expect(checkout, "это не маршрут кассы Конституции").toContain("constitutionCheckoutRouter");
   });
 
-  test("тарифы ведут на РАЗНЫЕ товары", () => {
-    expect(fieldAfterTier("pro", "ctaHref")).not.toBe(fieldAfterTier("team", "ctaHref"));
+  test("в реестре бэкенда больше нет CONSTITUTION_TIERS", () => {
+    // Пока эти тарифы существуют в реестре, любой вызывающий может посчитать по
+    // ним цену и начать продажу — то есть третью цену за один и тот же доступ.
+    expect(
+      pricing.includes("CONSTITUTION_TIERS"),
+      "CONSTITUTION_TIERS вернулись в реестр: Конституция входит в подписку AEVION, " +
+        "отдельных тарифов Pro/Team у неё больше нет (слово основателя 15.09.2026).",
+    ).toBe(false);
+    // Контроль: мы действительно смотрим в реестр, а не в пустоту, — рядом
+    // лежит живой символ того же файла.
+    expect(pricing).toContain("MAX_PROMO_DISCOUNT_RATIO");
+  });
+
+  test("касса Конституции отвечает 410 и ведёт на страницу цен", () => {
+    // Ручки оставлены намеренно: старые ссылки из писем и QR-кодов не должны
+    // вести в 404. Но продавать по снятой цене они не имеют права.
+    expect(checkout, "POST /session обязан отвечать 410").toContain("status(410)");
+    expect(checkout).toContain("not_sold_separately");
+    expect(checkout, "в ответе обязан быть адрес страницы цен").toContain("pricingUrl");
+    expect(checkout, "GET /go/:tier обязан вести на /pricing").toContain('redirect(302, `${publicBase()}/pricing`)');
+
+    // И в кассу поставщика не ходит ничего: иначе 410 был бы декорацией.
+    for (const слово of ["lemonsqueezy", "gumroad", "checkout/buy", "createCheckout"]) {
+      expect(
+        checkout.toLowerCase().includes(слово.toLowerCase()),
+        `маршрут снятой кассы обращается к провайдеру («${слово}») — он обязан только отказывать`,
+      ).toBe(false);
+    }
+  });
+
+  test("витрина не продаёт отдельный командный тариф", () => {
+    // Колонка Team и вопрос о числе мест убраны: продавать то, чего не купить,
+    // хуже, чем не показывать вовсе.
+    expect(
+      кодСоСтрокой('id: "team",'),
+      "на витрине снова блок тарифа Team — отдельного командного тарифа не существует",
+    ).toEqual([]);
+  });
+
+  test("витрина не ведёт в кассу снятых товаров Gumroad", () => {
+    // Сравниваем только КОД: в шапке витрины снятые permalink названы прямым
+    // текстом, и это правильно — так следующий читатель узнает, почему их
+    // больше нет. Опасна ссылка, а не упоминание.
+    for (const permalink of RETIRED_GUMROAD) {
+      expect(
+        кодСоСтрокой(permalink),
+        `витрина ведёт на снятый товар Gumroad «${permalink}» — Конституция входит в подписку AEVION`,
+      ).toEqual([]);
+    }
+  });
+
+  test("контроль прибора: упоминание в комментарии прощается, ссылка в коде — нет", () => {
+    // Без этого контроля «ссылок нет» неотличимо от «маска прощает всё».
+    // Проверяем на СВОЕЙ маске, а не на файле: файл сегодня чист, и на нём
+    // положительная ветка не проверяется.
+    const пример = [
+      "  /* Сняты с продажи: Gumroad pyiaz и wjvquw —",
+      "     их permalink покупателю не показываем нигде. */",
+      '  ctaHref: "https://aevion.gumroad.com/l/pyiaz",',
+    ];
+    const маска = маскаКомментариев(пример);
+    expect(маска, "продолжение блока и его начало — комментарий, третья строка — код").toEqual([
+      true,
+      true,
+      false,
+    ]);
+    const живые = пример.filter((line, i) => !маска[i] && line.includes("pyiaz"));
+    expect(живые, "настоящая ссылка в коде обязана находиться").toHaveLength(1);
+
+    // И на живой витрине упоминание в шапке ЕСТЬ — то есть прощает она не пустоту.
+    expect(
+      page.includes("pyiaz"),
+      "шапка витрины перестала объяснять, какие товары сняты — проверьте, что это намеренно",
+    ).toBe(true);
+  });
+
+  test("платная карточка витрины ведёт на /pricing, а не в свою кассу", () => {
+    const href = fieldAfterTier("pro", "ctaHref");
+    expect(
+      href.includes("PLANET_PRICING") || href.includes("/pricing"),
+      `платная карточка ведёт на ${href}; продажа живёт на /pricing (блок сроков), ` +
+        "своей кассы у Конституции больше нет",
+    ).toBe(true);
+    // Бесплатная карточка по-прежнему ведёт внутрь продукта, а не на цены:
+    // если обе поведут в одно место, выбор на витрине станет бессмысленным.
+    const free = fieldAfterTier("free", "ctaHref");
+    // Контроль прибора: мы читаем ДАННЫЕ, а не объявление типа. `string;` здесь
+    // означало бы, что якорь попал в `type Tier` выше — ровно это и случилось
+    // при первой версии этого файла.
+    expect(free, "разбор попал в объявление типа, а не в блок тарифа").not.toContain("string;");
+    expect(free).toContain("/constitution");
+  });
+
+  test("цена на витрине СЧИТАЕТСЯ из лестницы сроков, а не вписана числом", () => {
+    const price = fieldAfterTier("pro", "price");
+    expect(
+      price.includes("fromPricePerMonth("),
+      `цена платной карточки вписана как «${price}». Возьми её из @/lib/termPricing ` +
+        "(fromPricePerMonth) — иначе витрина переживёт смену лестницы со старым числом, " +
+        "как это уже было 13.08 и 15.09.2026.",
+    ).toBe(true);
+    expect(
+      ЦЕНА_ЛИТЕРАЛОМ.test(price),
+      `в цене платной карточки есть число: «${price}»`,
+    ).toBe(false);
+    expect(page, "витрина обязана импортировать лестницу").toContain("@/lib/termPricing");
+  });
+
+  test("контроль прибора: детектор вписанной цены краснеет на настоящем литерале", () => {
+    // Без этого «литералов нет» неотличимо от «шаблон ничего не умеет».
+    expect(ЦЕНА_ЛИТЕРАЛОМ.test('"$9",')).toBe(true);
+    expect(ЦЕНА_ЛИТЕРАЛОМ.test('"от $49/мес",')).toBe(true);
+    // И молчит на вычисленной цене — там после `$` идёт второй `$`.
+    expect(ЦЕНА_ЛИТЕРАЛОМ.test("`от $${fromPricePerMonth(PLANET_BASE_MONTHLY)}`,")).toBe(false);
   });
 });

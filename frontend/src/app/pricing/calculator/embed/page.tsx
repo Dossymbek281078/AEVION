@@ -1,28 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
 import { useI18n } from "@/lib/i18n";
+import { termUnitKey } from "@/lib/pricingI18n";
 
 type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
-type BillingPeriod = "monthly" | "annual";
-type TierId = "free" | "lite" | "medium" | "full" | "enterprise";
+// Тариф — это срок доступа ко всей планете (15.09.2026): периода месяц/год и
+// надстроек-модулей в калькуляторе больше нет, срок задаёт сам тариф.
+type TierId = "free" | "lite" | "medium" | "pro" | "full" | "max" | "enterprise";
 
 interface PricingTier {
   id: TierId;
   name: string;
   priceMonthly: number | null;
-  priceAnnualPerMonth: number | null;
+  termMonths: number | null;
   highlight?: boolean;
-}
-
-interface ModulePrice {
-  id: string;
-  name?: string;
-  code?: string;
-  addonMonthly: number | null;
-  includedIn: TierId[];
 }
 
 interface CurrencyMeta {
@@ -32,12 +26,11 @@ interface CurrencyMeta {
 
 interface PricingPayload {
   tiers: PricingTier[];
-  modules: ModulePrice[];
   currencies: Record<CurrencyCode, CurrencyMeta>;
 }
 
 interface QuoteLine {
-  kind: "tier" | "addon" | "seat" | "bundle";
+  kind: "tier" | "addon" | "seat";
   label: string;
   unitPrice: number;
   qty: number;
@@ -46,7 +39,8 @@ interface QuoteLine {
 
 interface Quote {
   tierId: TierId;
-  period: BillingPeriod;
+  /** Срок тарифа в месяцах; null у free и enterprise. */
+  termMonths: number | null;
   currency: CurrencyCode;
   lines: QuoteLine[];
   subtotal: number;
@@ -63,10 +57,8 @@ export default function PricingCalculatorEmbedPage() {
   const [data, setData] = useState<PricingPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tier, setTier] = useState<TierId>("medium");
-  const [period, setPeriod] = useState<BillingPeriod>("annual");
   const [currency, setCurrency] = useState<CurrencyCode>("USD");
   const [seats, setSeats] = useState(1);
-  const [modules, setModules] = useState<string[]>([]);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [showSnippet, setShowSnippet] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -99,7 +91,7 @@ export default function PricingCalculatorEmbedPage() {
         const r = await fetch(apiUrl("/api/pricing/quote"), {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ tierId: tier, modules, seats, period, currency }),
+          body: JSON.stringify({ tierId: tier, seats, currency }),
         });
         const j: Quote = await r.json();
         setQuote(j);
@@ -110,7 +102,7 @@ export default function PricingCalculatorEmbedPage() {
     }, 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tier, period, currency, seats, modules, data]);
+  }, [tier, currency, seats, data]);
 
   // PostMessage height для iframe-resize
   useEffect(() => {
@@ -125,11 +117,6 @@ export default function PricingCalculatorEmbedPage() {
     if (node) obs.observe(node);
     return () => obs.disconnect();
   }, []);
-
-  const moduleSelectable = useMemo(() => {
-    if (!data) return [];
-    return data.modules.filter((m) => m.addonMonthly !== null && m.addonMonthly > 0);
-  }, [data]);
 
   const snippet = `<iframe
   src="${SITE_ORIGIN}/pricing/calculator/embed?source=YOUR_SITE"
@@ -247,28 +234,6 @@ export default function PricingCalculatorEmbedPage() {
                 ))}
               </div>
             </Field>
-            <Field label={t("pricing.calculatorEmbed.fieldPeriod")}>
-              <div style={{ display: "inline-flex", background: "rgba(255,255,255,0.06)", borderRadius: 6, padding: 2 }}>
-                {(["monthly", "annual"] as BillingPeriod[]).map((p) => (
-                  <button
-                    key={p}
-                    onClick={() => setPeriod(p)}
-                    style={{
-                      padding: "4px 10px",
-                      fontSize: 11,
-                      fontWeight: 700,
-                      borderRadius: 4,
-                      border: "none",
-                      cursor: "pointer",
-                      background: period === p ? "#fff" : "transparent",
-                      color: period === p ? "#0f172a" : "#cbd5e1",
-                    }}
-                  >
-                    {p === "monthly" ? t("pricing.calculatorEmbed.periodMonthly") : t("pricing.calculatorEmbed.periodAnnual")}
-                  </button>
-                ))}
-              </div>
-            </Field>
             <Field label="SEATS">
               <input aria-label="Seats"
                 type="number"
@@ -307,45 +272,9 @@ export default function PricingCalculatorEmbedPage() {
                 ))}
               </select>
             </Field>
-            <Field label={t("pricing.calculatorEmbed.fieldModules")}>
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: 4,
-                  maxHeight: 140,
-                  overflowY: "auto",
-                  padding: 4,
-                  background: "rgba(255,255,255,0.04)",
-                  borderRadius: 6,
-                }}
-              >
-                {moduleSelectable.slice(0, 12).map((m) => {
-                  const active = modules.includes(m.id);
-                  return (
-                    <button
-                      key={m.id}
-                      onClick={() =>
-                        setModules((prev) => (active ? prev.filter((x) => x !== m.id) : [...prev, m.id]))
-                      }
-                      style={{
-                        padding: "3px 6px",
-                        fontSize: 10,
-                        fontWeight: 700,
-                        borderRadius: 4,
-                        border: "none",
-                        cursor: "pointer",
-                        background: active ? "#0d9488" : "rgba(255,255,255,0.08)",
-                        color: "#fff",
-                      }}
-                    >
-                      {m.code ?? m.id} +{symbol}
-                      {m.addonMonthly}
-                    </button>
-                  );
-                })}
-              </div>
-            </Field>
+            <div style={{ fontSize: 10, color: "#94a3b8", lineHeight: 1.4 }}>
+              {t("pricing.calculatorEmbed.allIncluded")}
+            </div>
           </div>
 
           {/* Quote */}
@@ -396,7 +325,12 @@ export default function PricingCalculatorEmbedPage() {
                   }}
                 >
                   <span style={{ fontSize: 9, color: "#94a3b8", fontWeight: 700, letterSpacing: "0.04em" }}>
-                    {period === "annual" ? t("pricing.calculatorEmbed.totalYear") : t("pricing.calculatorEmbed.totalMonth")}
+                    {quote.termMonths
+                      ? t("pricing.calculatorEmbed.totalTerm", {
+                          months: String(quote.termMonths),
+                          unit: t(termUnitKey(quote.termMonths)),
+                        })
+                      : t("pricing.calculatorEmbed.total")}
                   </span>
                   <span style={{ fontSize: 18, fontWeight: 900, letterSpacing: "-0.02em" }}>
                     {symbol}

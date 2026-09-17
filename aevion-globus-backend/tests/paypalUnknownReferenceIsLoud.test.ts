@@ -42,10 +42,17 @@ describe("незнакомая ссылка PayPal слышна", () => {
   });
 
   test("известные ссылки НЕ шумят", () => {
+    // Ссылки лестницы сроков — то, что касса строит с 15.09.2026.
+    expect(tierForReference("tier_lite")).toBe("lite");
+    expect(tierForReference("tier_medium")).toBe("medium");
+    expect(tierForReference("tier_pro")).toBe("pro");
+    expect(tierForReference("tier_full")).toBe("full");
+    expect(tierForReference("tier_max")).toBe("max");
+    // Прежние ссылки — продления уже купленного, тоже известны.
     expect(tierForReference("tier_lite_monthly")).toBe("lite");
     expect(tierForReference("tier_medium_monthly")).toBe("medium");
     expect(tierForReference("tier_full_annual")).toBe("full");
-    expect(tierForReference("tier_pro_monthly")).toBe("pro");
+    expect(tierForReference("tier_pro_monthly")).toBe("full");
     expect(tierForReference("tier_enterprise_annual")).toBe("enterprise");
     expect(
       [warn.mock.calls.length, тревоги.length],

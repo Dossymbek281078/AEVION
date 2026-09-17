@@ -11,6 +11,7 @@ import {
   type Product,
 } from "@/lib/products";
 import { PageTracking } from "@/components/PageTracking";
+import { PLANET_BASE_MONTHLY, termPricePerMonth } from "@/lib/termPricing";
 
 // /en/shop — английская витрина. Назначение координатора 07.09.2026:
 // /shop была худшей ДЕНЕЖНОЙ страницей для en-покупателя (73 % кириллицы в
@@ -29,14 +30,14 @@ import { PageTracking } from "@/components/PageTracking";
 // более сильного обещания нельзя).
 
 export const metadata: Metadata = {
-  title: "AEVION Shop — subscriptions, guides, modules",
+  title: "AEVION Shop — subscription, guides, apps",
   description:
-    "Everything you can buy at AEVION in one place: an all-access ecosystem subscription, science-based longevity guides and a book as one-time purchases, individual modules monthly. Instant delivery. Wellness and education, not medicine.",
+    "Everything you can buy at AEVION in one place: a subscription to the whole planet for a term of 1 to 12 months, science-based longevity guides and a book as one-time purchases, five apps on their own. Wellness and education, not medicine.",
   alternates: { canonical: "/en/shop" },
   openGraph: {
-    title: "AEVION Shop — subscriptions, guides, modules",
+    title: "AEVION Shop — subscription, guides, apps",
     description:
-      "All-access subscription, guides and a book as one-time purchases, modules monthly. Instant delivery. Wellness and education, not medicine.",
+      "A subscription for a term of 1 to 12 months, guides and a book as one-time purchases, five apps on their own. Wellness and education, not medicine.",
     type: "website",
     siteName: "AEVION",
   },
@@ -44,7 +45,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "AEVION Shop",
     description:
-      "Subscriptions, guides and modules. Instant delivery. Wellness and education, not medicine.",
+      "Subscription, guides and apps. Wellness and education, not medicine.",
   },
 };
 
@@ -60,28 +61,18 @@ export const EN_TEXTS: Record<
   string,
   { format: string; desc: string; includes?: string[]; notice?: string; badge?: string; titleEn?: string }
 > = {
-  // ── Подписки ──
-  xpxzam: {
+  // ── Подписка (политика 15.09.2026: срок доступа ко всей планете) ──
+  "aevion-planet": {
     badge: "ALL-IN-ONE",
-    format: "subscription · monthly",
-    desc: "Full platform access — 15+ modules: QRight, QSign, QCoreAI, QFusionAI, QPayNet, QTradeOffline, Constitution and more. One subscription, no limits.",
+    titleEn: "AEVION subscription",
+    format: "the whole planet · term of 1–12 months",
+    desc: "Access to every AEVION module for the term you choose: 1, 3, 6, 9 or 12 months. The longer the term, the cheaper the month. Paid for the whole term up front, in one payment.",
     includes: [
-      "Every live AEVION product",
-      "QRight · QSign · IP Bureau — full access",
-      "Fintech stack: QTrade, QPayNet, QContract",
-      "QCoreAI and Multichat Engine",
-      "New modules as they ship — no extra charge",
+      "Every AEVION module — no per-module charge",
+      "Terms: 1 · 3 · 6 · 9 · 12 months",
+      "The month gets cheaper with the term — half price on 12 months",
+      "New modules released during your paid term are included too",
     ],
-  },
-  wjvquw: {
-    format: "subscription · monthly",
-    desc: "World-order simulator: eight parameters, four pillars, live runs against historical regimes.",
-    includes: ["Package contents not described by the seller — being clarified"],
-  },
-  pyiaz: {
-    format: "subscription · monthly",
-    desc: "World-order simulator: eight parameters, four pillars, live runs against historical regimes.",
-    includes: ["Unlimited saves", "AI advisor", "Clean PDF export", "Embeddable widget"],
   },
   // ── Гайды и книги ──
   oijxmq: {
@@ -114,46 +105,31 @@ export const EN_TEXTS: Record<
     format: "PDF + EPUB",
     desc: "The book text only. The most affordable way in.",
   },
-  // ── Модули ──
+  // ── Отдельные приложения (только пять, политика 15.09.2026) ──
   devhub: {
     badge: "FLAGSHIP",
-    format: "module · subscription",
+    format: "app · term of 1–12 months",
     desc: "Browser IDE on the VS Code engine, AI code generation and deploys to Cloudflare Pages.",
   },
-  smeta: {
-    format: "module · subscription",
-    desc: "AI trainer for construction estimating in Kazakhstan: SSC/ESN corpus, mistake analysis, forms 1–3 and KS-2/KS-3. Russian-language interface.",
+  multichat: {
+    format: "app · term of 1–12 months",
+    desc: "One question — answers from models of four independent providers side by side, with a map of where they disagree and a receipt you can verify by link.",
   },
   qventure: {
-    format: "module · subscription",
+    format: "app · term of 1–12 months",
     desc: "Venture deal analysis: TAM/SOM, unit economics, founder-assumption checks.",
   },
   bureau: {
-    format: "module · subscription",
+    format: "app · term of 1–12 months",
     desc: "Proof of authorship: SHA-256 hash, timestamp and signature. The signing algorithm is named in the certificate itself.",
   },
-  qpaynet: {
-    badge: "BETA · DEMO",
-    format: "module · subscription",
-    desc: "Embedded-payments infrastructure: multi-currency, virtual cards, API and webhooks.",
-    notice:
-      "Demonstration mode. AEVION is not a licensed bank, payment institution or e-money issuer: no real funds or payments are processed — evaluation and learning only.",
-  },
   cyberchess: {
-    format: "module · subscription",
+    format: "app · term of 1–12 months",
     desc: "Chess platform: puzzles, an AI coach, and opponents that play like humans at your level.",
-  },
-  qcontract: {
-    badge: "BETA · DEMO",
-    format: "module · subscription",
-    desc: "Self-destructing protected documents: view and time limits, password and signature.",
-    notice:
-      "Demonstration mode. Documents and signatures created here are not legal advice and may have no legal force without independent review by a qualified professional.",
   },
 };
 
 function Card({ p, channel }: { p: Product; channel: string | null }) {
-  const isSub = p.billing === "monthly";
   const en = EN_TEXTS[p.id];
   // Товар без английского текста сюда не попадёт живым — храповик
   // enShopCoversCatalog роняет сборку раньше. Запасной путь всё равно
@@ -161,15 +137,12 @@ function Card({ p, channel }: { p: Product; channel: string | null }) {
   const format = en?.format ?? p.format;
   const desc = en?.desc ?? p.desc;
   const descLang = en ? undefined : "ru";
-  return (
-    <BuyLink
-      href={withChannel(p.href, channel, "en-shop")}
-      source="en-shop"
-      productId={p.id}
-      priceUsd={p.priceUsd}
-      channel={channel}
-      style={styles.card}
-    >
+  // Term access (subscription and the five apps, policy of 15.09.2026) leads to
+  // the pricing page, where the term is chosen and checkout_start fires — so a
+  // plain same-tab link here, not a BuyLink that would count the purchase twice.
+  const isTerm = p.billing === "term";
+  const inner = (
+    <>
       <div style={styles.cardTop}>
         {(en?.badge ?? p.badge) ? <span style={styles.badge}>{en?.badge ?? p.badge}</span> : null}
         <span style={styles.format}>{format}</span>
@@ -197,10 +170,31 @@ function Card({ p, channel }: { p: Product; channel: string | null }) {
       <div style={styles.cardFoot}>
         <span style={styles.price}>
           {CURRENCY.format(p.priceUsd)}
-          {isSub ? <span style={styles.per}>/mo</span> : null}
+          {isTerm ? <span style={styles.per}> for 1 month</span> : null}
         </span>
-        <span style={styles.buy}>{isSub ? "Subscribe" : "Buy"}&nbsp;→</span>
+        <span style={styles.buy}>{isTerm ? "Choose a term" : "Buy"}&nbsp;→</span>
       </div>
+    </>
+  );
+
+  if (isTerm) {
+    return (
+      <a href={withChannel(p.href, channel, "en-shop")} style={styles.card}>
+        {inner}
+      </a>
+    );
+  }
+
+  return (
+    <BuyLink
+      href={withChannel(p.href, channel, "en-shop")}
+      source="en-shop"
+      productId={p.id}
+      priceUsd={p.priceUsd}
+      channel={channel}
+      style={styles.card}
+    >
+      {inner}
     </BuyLink>
   );
 }
@@ -244,16 +238,21 @@ export default async function EnShopPage({
         <div style={styles.eyebrow}>AEVION · Shop</div>
         <h1 style={styles.h1}>Everything you can buy at AEVION</h1>
         <p style={styles.lede}>
-          One subscription for the whole ecosystem, guides and a book as
-          one-time purchases, individual modules monthly. Payment and instant
-          delivery via Gumroad and LemonSqueezy.
+          A subscription to the whole planet for a term of 1 to 12 months,
+          guides and books as one-time purchases, five apps on their own.
+          Guides and books are paid via Gumroad with instant delivery; the
+          subscription term and the apps are chosen on the pricing page.
         </p>
 
         <Section
-          title="Subscriptions"
-          note={`The same modules bought separately would cost ${CURRENCY.format(
+          title="AEVION subscription"
+          note={`The five apps bought separately — ${CURRENCY.format(
             MODULES_TOTAL_USD,
-          )} a month.`}
+          )} for one month; the whole planet — ${CURRENCY.format(
+            PLANET_BASE_MONTHLY,
+          )} for one month, or ${CURRENCY.format(
+            termPricePerMonth(PLANET_BASE_MONTHLY, "max"),
+          )} a month when paying for 12 months up front.`}
           items={SUBSCRIPTIONS}
           channel={channel}
         />
@@ -266,8 +265,8 @@ export default async function EnShopPage({
         />
 
         <Section
-          title="Modules by subscription"
-          note="A single product, billed monthly — when you need one tool rather than the whole ecosystem. Cancel any time."
+          title="Apps on their own"
+          note="Five apps are also sold separately — when you need one tool rather than the whole planet. A term of 1 to 12 months, paid up front; the longer the term, the cheaper the month. Every other module comes only with the AEVION subscription."
           items={MODULES}
           channel={channel}
         />

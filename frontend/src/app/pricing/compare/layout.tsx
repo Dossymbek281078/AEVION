@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Сравнение тарифов AEVION — все модули × 4 тарифа",
+  title: "Сравнение тарифов AEVION — все модули и сроки",
   description:
-    "Полная матрица: что входит в Free, Lite, Medium, Full, Universe и Enterprise. Все все модули AEVION — IP, AI, финтех, потребительские продукты — со статусами LIVE / BETA / SOON и ценами add-on.",
+    "Полная матрица: Free, сроки Lite, Medium, Pro, Full, Max и Enterprise. Любой платный срок открывает все модули AEVION — IP, AI, финтех, потребительские продукты — со статусами LIVE / BETA / SOON; пять приложений продаются и отдельно.",
   openGraph: {
     title: "Сравнение тарифов AEVION — полная матрица",
     description:
-      "Все все модули × 4 тарифа в одной таблице. Что включено, что доступно как add-on, что только в Enterprise.",
+      "Все модули и все сроки в одной таблице. Что входит в любой платный срок, что продаётся отдельно, что только в Enterprise.",
     type: "website",
     url: "https://aevion.app/pricing/compare",
     siteName: "AEVION",
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "AEVION — Полная матрица тарифов",
-    description: "все модули × Free / Lite / Medium / Full / Universe / Enterprise. Полное сравнение.",
+    description: "Все модули × Free / Lite / Medium / Pro / Full / Max / Enterprise. Полное сравнение.",
   },
   alternates: {
     canonical: "/pricing/compare",

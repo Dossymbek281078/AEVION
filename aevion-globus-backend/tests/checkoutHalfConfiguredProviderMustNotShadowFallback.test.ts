@@ -4,24 +4,24 @@ import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
 import { constitutionCheckoutRouter } from "../src/routes/constitutionCheckout";
 
 /**
- * Наполовину настроенный провайдер не имеет права заслонять запасной.
+ * Касса Конституции: старая ссылка не ведёт ни в ошибку, ни в продажу.
  *
- * Найдено 29.08.2026 по живой ошибке прода в Sentry:
- * "LemonSqueezy not configured. Required: LEMON_SQUEEZY_API_KEY,
- *  LEMON_SQUEEZY_STORE_ID, LEMON_SQUEEZY_CONSTITUTION_PRO_VARIANT_ID"
- * на POST /api/constitution/checkout/session.
+ * ИСТОРИЯ ФАЙЛА. 29.08.2026 здесь ловили живую ошибку прода: готовность Lemon
+ * Squeezy проверялась ОДНИМ ключом, а чек требует трёх значений — наполовину
+ * настроенный провайдер заслонял готовый Gumroad и падал пятисоткой, а человек по
+ * ссылке из письма уезжал на `?error=checkout_failed`. Сторож держал: неполная
+ * настройка не заслоняет запасной путь; товар Team не уводится на товар Pro.
  *
- * Причина не в LemonSqueezy. Готовность провайдера проверялась ОДНИМ ключом
- * (`Boolean(lsApiKey())`), а создание чека требует ТРЁХ значений. Основатель
- * завёл ключ — ветка включилась, заслонила готовый Gumroad и упала пятисоткой.
- * То есть проверка на нашей стороне была СЛАБЕЕ, чем у того, кто примет
- * значение дальше, — и платил за это покупатель.
+ * С 15.09.2026 (слово основателя) Конституция отдельно НЕ продаётся — она входит в
+ * подписку AEVION на любой срок. Предмет «какой провайдер выбран» исчез целиком:
+ * касса не выбирает никого. Имя файла прежнее, чтобы история не терялась, а защита
+ * переведена на то, что от той истории осталось главным:
  *
- * Тише всего это в GET /go/:tier: человек по ссылке из письма уезжал на
- * `?error=checkout_failed`, хотя касса была готова.
- *
- * Положительный случай здесь обязателен: без него починку удовлетворило бы и
- * «считать провайдера неготовым всегда», а это тоже потеря денег.
+ *   • ни одна настройка провайдера (неполная, полная, запасная ссылка Gumroad) не
+ *     включает продажу по снятой цене — ответ всегда 410 и адрес страницы цен;
+ *   • в кассу не уходит НИ ОДНОГО сетевого вызова (иначе вернулась бы третья цена
+ *     одного и того же доступа);
+ *   • ссылка из письма ведёт на страницу цен, а не на ошибку.
  */
 
 const app = express();
@@ -38,6 +38,11 @@ const KEYS = [
   "GUMROAD_DEFAULT_PERMALINK",
 ];
 let saved: Record<string, string | undefined> = {};
+const сеть = vi.fn(async () => ({
+  ok: true,
+  status: 200,
+  json: async () => ({ data: { id: "co_1", attributes: { url: "https://pay.example/co_1" } } }),
+}));
 
 beforeEach(() => {
   saved = {};
@@ -45,6 +50,8 @@ beforeEach(() => {
     saved[k] = process.env[k];
     delete process.env[k];
   }
+  сеть.mockClear();
+  vi.stubGlobal("fetch", сеть);
 });
 
 afterEach(() => {
@@ -55,135 +62,51 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("чекаут: неполная настройка провайдера не заслоняет запасной путь", () => {
-  test("один ключ API без магазина и варианта — не пятисотка, а честная заглушка", async () => {
+/** Настройки, каждая из которых раньше включала какой-то путь оплаты. */
+const НАСТРОЙКИ: Array<[string, Record<string, string>]> = [
+  ["ничего не настроено", {}],
+  ["один ключ Lemon Squeezy (наполовину настроен)", { LEMON_SQUEEZY_API_KEY: "test-key" }],
+  ["ключ и магазин без варианта", { LEMON_SQUEEZY_API_KEY: "test-key", LEMON_SQUEEZY_STORE_ID: "42" }],
+  [
+    "Lemon Squeezy настроен полностью",
+    { LEMON_SQUEEZY_API_KEY: "test-key", LEMON_SQUEEZY_STORE_ID: "42", LEMON_SQUEEZY_CONSTITUTION_PRO_VARIANT_ID: "777" },
+  ],
+  ["товар Pro на Gumroad", { GUMROAD_CONSTITUTION_PRO_PERMALINK: "pyiaz", GUMROAD_PERMALINK_CONSTITUTION_PRO: "pyiaz" }],
+  ["товар Team и общая запасная ссылка", { GUMROAD_CONSTITUTION_TEAM_PERMALINK: "wjvquw", GUMROAD_DEFAULT_PERMALINK: "xpxzam" }],
+];
+
+describe("Конституция отдельно не продаётся — при любой настройке кассы", () => {
+  for (const [имя, env] of НАСТРОЙКИ) {
+    for (const tier of ["pro", "team"]) {
+      test(`${имя}: ${tier} — 410 и страница цен, в кассу ни одного вызова`, async () => {
+        Object.assign(process.env, env);
+        const res = await request(app).post("/api/constitution/checkout/session").send({ tier });
+
+        expect(res.status, "снятый товар снова продаётся или касса упала").toBe(410);
+        expect(res.body.error).toBe("not_sold_separately");
+        expect(String(res.body.pricingUrl), "покупателя не направили к подписке").toMatch(/\/pricing$/);
+        expect(res.body.checkoutUrl, "выдана ссылка на оплату снятого товара").toBeUndefined();
+        expect(JSON.stringify(res.body), "в ответе всплыл товар Gumroad").not.toMatch(/pyiaz|wjvquw|xpxzam/);
+        expect(сеть, "касса сходила к провайдеру за снятым товаром").not.toHaveBeenCalled();
+      });
+    }
+  }
+
+  test("ссылка из письма ведёт на страницу цен, а не на ошибку — и при неполной настройке", async () => {
     process.env.LEMON_SQUEEZY_API_KEY = "test-key";
-
-    const res = await request(app)
-      .post("/api/constitution/checkout/session")
-      .send({ tier: "pro" });
-
-    expect(res.status, "покупатель получил ошибку сервера вместо кассы").toBe(200);
-    expect(res.body.provider).toBe("stub");
+    for (const tier of ["pro", "team"]) {
+      const res = await request(app).get(`/api/constitution/checkout/go/${tier}`);
+      expect(res.status).toBe(302);
+      expect(String(res.headers.location)).toMatch(/\/pricing$/);
+      expect(String(res.headers.location)).not.toContain("error=checkout_failed");
+    }
+    expect(сеть).not.toHaveBeenCalled();
   });
 
-  test("ключ и магазин есть, варианта тарифа нет — тоже не пятисотка", async () => {
-    process.env.LEMON_SQUEEZY_API_KEY = "test-key";
-    process.env.LEMON_SQUEEZY_STORE_ID = "42";
-
-    const res = await request(app)
-      .post("/api/constitution/checkout/session")
-      .send({ tier: "pro" });
-
-    expect(res.status).toBe(200);
-    expect(res.body.provider).toBe("stub");
-  });
-
-  test("ПОЛОЖИТЕЛЬНЫЙ КОНТРОЛЬ: все три значения — провайдер работает", async () => {
-    process.env.LEMON_SQUEEZY_API_KEY = "test-key";
-    process.env.LEMON_SQUEEZY_STORE_ID = "42";
-    process.env.LEMON_SQUEEZY_CONSTITUTION_PRO_VARIANT_ID = "777";
-
-    vi.stubGlobal("fetch", async () => ({
-      ok: true,
-      status: 200,
-      json: async () => ({ data: { id: "co_1", attributes: { url: "https://pay.example/co_1" } } }),
-    }));
-
-    const res = await request(app)
-      .post("/api/constitution/checkout/session")
-      .send({ tier: "pro" });
-
-    expect(res.status).toBe(200);
-    expect(res.body.provider, "проверка стала строже, чем нужно: касса не открылась").toBe("lemonsqueezy");
-    expect(res.body.checkoutUrl).toBe("https://pay.example/co_1");
-  });
-
-  test("ссылка из письма: неполная настройка ведёт на страницу цен, а не на ошибку", async () => {
-    process.env.LEMON_SQUEEZY_API_KEY = "test-key";
-
-    const res = await request(app).get("/api/constitution/checkout/go/pro");
-
-    expect(res.status).toBe(302);
-    expect(String(res.headers.location)).not.toContain("error=checkout_failed");
-  });
-});
-
-describe("Gumroad: решение о готовности и сама ссылка — из одного источника", () => {
-  test("ссылка ведёт на НАСТРОЕННЫЙ товар, а не на выдуманный адрес", async () => {
-    // pyiaz — настоящая ссылка товара, видна в таблице gumroadWebhook.ts
-    process.env.GUMROAD_CONSTITUTION_PRO_PERMALINK = "pyiaz";
-
-    const res = await request(app)
-      .post("/api/constitution/checkout/session")
-      .send({ tier: "pro" });
-
-    expect(res.status).toBe(200);
-    expect(res.body.provider).toBe("gumroad");
-    expect(
-      String(res.body.checkoutUrl),
-      "покупателя ведут на адрес, которого нет в Gumroad",
-    ).toContain("pyiaz");
-    expect(String(res.body.checkoutUrl)).not.toContain("constitution-pro");
-  });
-
-  test("имя, которое читает провайдер, тоже включает оплату", async () => {
-    process.env.GUMROAD_PERMALINK_CONSTITUTION_PRO = "pyiaz";
-
-    const res = await request(app)
-      .post("/api/constitution/checkout/session")
-      .send({ tier: "pro" });
-
-    expect(res.body.provider, "рабочая настройка объявлена отсутствующей").toBe("gumroad");
-  });
-});
-
-describe("тариф Team не уводится на товар Pro", () => {
-  test("настроен только Pro — покупателя Team НЕ ведут на чужой товар", async () => {
-    process.env.GUMROAD_CONSTITUTION_PRO_PERMALINK = "pyiaz"; // товар Pro
-
-    const res = await request(app)
-      .post("/api/constitution/checkout/session")
-      .send({ tier: "team" });
-
-    expect(res.status).toBe(200);
-    expect(
-      String(res.body.checkoutUrl ?? ""),
-      "покупатель тарифа Team уходит на товар Pro — чужой продукт и чужая цена",
-    ).not.toContain("pyiaz");
-    expect(res.body.provider).toBe("stub");
-  });
-
-  test("свой товар у Team работает", async () => {
-    process.env.GUMROAD_CONSTITUTION_TEAM_PERMALINK = "wjvquw"; // товар Team
-
-    const res = await request(app)
-      .post("/api/constitution/checkout/session")
-      .send({ tier: "team" });
-
-    expect(res.body.provider).toBe("gumroad");
-    expect(String(res.body.checkoutUrl)).toContain("wjvquw");
-  });
-});
-
-describe("общая запасная ссылка не должна перебивать товар тарифа", () => {
-  test("при заданной GUMROAD_DEFAULT_PERMALINK покупатель Team идёт на СВОЙ товар", async () => {
-    // Найдено вычиткой дифа, а не тестом: reference уходит провайдеру, а тот
-    // разрешает ссылку в порядке
-    //   GUMROAD_PERMALINK_<REFERENCE> -> GUMROAD_DEFAULT_PERMALINK -> сам reference
-    // То есть общая запасная ссылка имеет приоритет НАД именем товара, которое
-    // мы передали. Если она задана, все тарифы уедут на один товар.
-    process.env.GUMROAD_CONSTITUTION_TEAM_PERMALINK = "wjvquw"; // товар Team
-    process.env.GUMROAD_DEFAULT_PERMALINK = "xpxzam";           // All-Access $59
-
-    const res = await request(app)
-      .post("/api/constitution/checkout/session")
-      .send({ tier: "team" });
-
-    expect(res.body.provider).toBe("gumroad");
-    expect(
-      String(res.body.checkoutUrl),
-      "покупателя Team уводит на общий товар вместо его собственного",
-    ).toContain("wjvquw");
+  test("КОНТРОЛЬ: 410 — ответ именно этой ручки, а не всего роутера", async () => {
+    // Иначе «410 при любой настройке» проходило бы на заглушке, которая отвечает
+    // 410 на что угодно.
+    const res = await request(app).post("/api/constitution/checkout/nope").send({});
+    expect(res.status).toBe(404);
   });
 });

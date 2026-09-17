@@ -33,6 +33,10 @@ function тарифыБэкенда(src: string): string[] {
   const re = /id:\s*"([a-z][a-z-]*)"/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(блок))) out.push(m[1]);
+  // С 15.09.2026 сроки планеты (lite…max) объявлены вызовом `planetTier("<срок>")`,
+  // а не литералом `id:` — без этого разбор видел бы только free и enterprise.
+  const reСрок = /planetTier\(\s*"([a-z][a-z-]*)"/g;
+  while ((m = reСрок.exec(блок))) out.push(m[1]);
   return out;
 }
 

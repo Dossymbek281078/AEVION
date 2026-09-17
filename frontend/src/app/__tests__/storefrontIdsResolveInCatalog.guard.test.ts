@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { ALL_PRODUCTS } from "@/lib/products";
+import { STANDALONE_APPS } from "@/lib/termPricing";
 
 /**
  * Идентификаторы витрины сходятся с каталогом цен — и расхождение не растёт.
@@ -47,29 +49,50 @@ const IZVESTNYE = [
   "tiktok-publisher",  // в каталоге НЕТ вовсе
 ];
 
-const TOVARY = join(TUT, "..", "..", "lib", "products.ts");
-
-/** Цена товара на витрине: id -> priceUsd. */
+/**
+ * Цена товара на витрине: id -> priceUsd.
+ *
+ * 15.09.2026: цены отдельных приложений в каталоге больше не литералы — они
+ * вычисляются из лестницы сроков (appBase("…")). Разбор исходника регуляркой
+ * стал бы слепым (нашёл бы только гайды), поэтому берём настоящие объекты.
+ */
 function ceniVitriny(): Record<string, number> {
-  const src = readFileSync(TOVARY, "utf8");
+  // Товар кладётся под ОБОИМИ именами — id витрины и appId. У витрины «bureau»
+  // и «multichat», у каталога бэкенда «aevion-ip-bureau» и «multichat-engine»:
+  // по одному лишь id витрины сравнимыми оказывались ДВА товара из пяти, охват
+  // падал молча. А по одному лишь appId схлопывались гайды (у трёх гайдов один
+  // appId «qrenew», у трёх книг — «gratitude-book»), и уже контроль «цены
+  // витрины разобраны» мерил не то. Оба ключа ведут к одной цене, поэтому
+  // расхождения такая запись создать не может.
   const out: Record<string, number> = {};
-  // Окно в 400 знаков теряло два товара: у bureau и cyberchess цена стоит
-  // дальше от идентификатора. Границей служит закрывающая скобка объекта,
-  // а не выдуманное число знаков — иначе знаменатель молча занижается.
-  const re = /id:\s*"([a-z0-9-]+)"[^}]*?priceUsd:\s*([0-9.]+)/g;
-  for (let m = re.exec(src); m; m = re.exec(src)) out[m[1]] = Number(m[2]);
+  for (const p of ALL_PRODUCTS) {
+    out[p.id] = p.priceUsd;
+    if (p.appId) out[p.appId] = p.priceUsd;
+  }
   return out;
 }
 
-/** Цена модуля в каталоге: id -> addonMonthly. */
+/**
+ * Цена модуля в каталоге бэкенда: id -> addonMonthly.
+ *
+ * addonMonthly бывает литералом или `appBase("<moduleId>")` — ссылкой на
+ * STANDALONE_APPS бэкенда. Их фронтовая копия сверяется с бэкендом сторожем
+ * termPricingMatchesBackend, поэтому разрешаем ссылку через неё: иначе все пять
+ * приложений выпали бы из сверки молча, а знаменатель ниже упал бы до нуля.
+ */
 function ceniKataloga(): Record<string, number> {
   const src = readFileSync(KATALOG, "utf8");
   const out: Record<string, number> = {};
-  // Та же граница, что и у витрины: закрывающая скобка объекта. С окном в
-  // 120 знаков каталог давал 33 модуля вместо 35 и терял cyberchess — то есть
-  // ЗАНИЖАЛ охват сверки, а именно охват тут и есть предмет проверки.
-  const re = /id:\s*"([a-z0-9-]+)",[^}]*?addonMonthly:\s*([0-9.]+)/g;
-  for (let m = re.exec(src); m; m = re.exec(src)) out[m[1]] = Number(m[2]);
+  // Граница — закрывающая скобка объекта, а не число знаков: с окном в 120
+  // знаков каталог терял cyberchess и занижал охват сверки.
+  const re = /id:\s*"([a-z0-9-]+)",[^}]*?addonMonthly:\s*(?:([0-9.]+)|appBase\("([a-z0-9-]+)"\))/g;
+  for (let m = re.exec(src); m; m = re.exec(src)) {
+    if (m[2]) out[m[1]] = Number(m[2]);
+    else {
+      const app = STANDALONE_APPS.find((a) => a.moduleId === m![3]);
+      if (app) out[m[1]] = app.baseMonthly;
+    }
+  }
   return out;
 }
 
@@ -142,7 +165,25 @@ describe("идентификаторы витрины сходятся с кат
     const v = ceniVitriny();
     const k = ceniKataloga();
     expect(Object.keys(v).length, "цены витрины не разобраны").toBeGreaterThan(10);
-    expect(Object.keys(k).length, "цены каталога не разобраны").toBeGreaterThan(20);
+    // 15.09.2026: у снятых с отдельной продажи модулей addonMonthly стал null,
+    // поэтому порог «больше 20» описывал прежний прайс. Теперь контроль другой:
+    // приложения лестницы, у которых цена в каталоге ЕСТЬ, обязаны совпадать с
+    // ней до цента, и таких должно быть не меньше трёх.
+    //
+    // Почему не «все пять»: у DevHub addonMonthly намеренно null — по решению
+    // основателя 14.09.2026 цену надстройки к коротким срокам он не назначал,
+    // и касса считает его через buildQuote. Требовать здесь число значило бы
+    // краснеть на осознанном решении.
+    const сцены = STANDALONE_APPS.filter((a) => a.moduleId in k);
+    for (const app of сцены) {
+      expect(k[app.moduleId], `цена ${app.moduleId} расходится с лестницей сроков`).toBe(app.baseMonthly);
+    }
+    // ЗНАМЕНАТЕЛЬ: сколько приложений вообще удалось сверить. Молча упавший
+    // охват оставил бы зелёный цвет при исчезнувшей защите.
+    expect(
+      сцены.length,
+      `сверено приложений: ${сцены.map((a) => a.moduleId).join(", ") || "ни одного"} — сверка ослабла`,
+    ).toBeGreaterThanOrEqual(3);
 
     const obshie = Object.keys(v).filter((id) => id in k);
     const rashozhdeniya = obshie.filter((id) => Math.abs(v[id] - k[id]) > 0.01)

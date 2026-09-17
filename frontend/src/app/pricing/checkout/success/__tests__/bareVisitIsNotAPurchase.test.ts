@@ -24,7 +24,7 @@ describe("след оплаты", () => {
     expect(следОплаты({ provider: "paybox", ref: "abc" }), "PayBox").toBe(true);
     expect(следОплаты({ provider: "paypal", ref: "abc" }), "PayPal").toBe(true);
     expect(следОплаты({ provider: "gumroad" }), "Gumroad").toBe(true);
-    // У LemonSqueezy в адресе НЕТ провайдера — только tier/period/total.
+    // У LemonSqueezy в адресе НЕТ провайдера — только tier/term/total.
     expect(следОплаты({ total: 49 }), "LemonSqueezy").toBe(true);
   });
 

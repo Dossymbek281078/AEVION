@@ -54,7 +54,7 @@ async function уведомление(email: string) {
   счётчик += 1;
   полезная = {
     pg_user_contact_email: email,
-    pg_order_id: "tier_medium_monthly",
+    pg_order_id: "tier_medium",
     pg_payment_id: `sig-${счётчик}`,
   };
   const a = express();
@@ -83,7 +83,9 @@ describe("подпись PayBox проверяется по-настоящему
     const email = "sig-ok@example.com";
     const res = await уведомление(email);
     expect(res.body.action).toBe("activated");
-    expect(resolvePlanFromPayload({ email }).tier).toBe("medium");
+    // Купленная ступень записана как есть, доступ — ко всей планете.
+    expect(resolvePlanFromPayload({ email }).rawTier).toBe("medium");
+    expect(resolvePlanFromPayload({ email }).tier).toBe("full");
   });
 
   test("неверная подпись — 401 и НИКАКОЙ выдачи", async () => {
@@ -118,7 +120,7 @@ describe("подпись PayPal проверяется по-настоящему
     полезнаяPaypal = {
       id: `pp-sig-${счётчик}`,
       payer: { email_address: email },
-      custom_id: JSON.stringify({ reference: "tier_medium_monthly" }),
+      custom_id: JSON.stringify({ reference: "tier_medium" }),
     };
     const a = express();
     a.use((req, _r, next) => {
@@ -138,7 +140,8 @@ describe("подпись PayPal проверяется по-настоящему
     const email = "pp-ok@example.com";
     const res = await уведомлениеPaypal(email);
     expect(res.body.action).toBe("activated");
-    expect(resolvePlanFromPayload({ email }).tier).toBe("medium");
+    expect(resolvePlanFromPayload({ email }).rawTier).toBe("medium");
+    expect(resolvePlanFromPayload({ email }).tier).toBe("full");
   });
 
   test("неверная подпись — 401 и НИКАКОЙ выдачи", async () => {

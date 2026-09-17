@@ -42,7 +42,10 @@ function soldModules(): Array<{ id: string; appId: string }> {
   for (let i = 0; i < anchors.length; i += 1) {
     const end = i + 1 < anchors.length ? anchors[i + 1].at : src.length;
     const win = src.slice(anchors[i].at, end);
-    if (!/priceUsd:\s*\d/.test(win)) continue;
+    // 15.09.2026: цена в каталоге вычисляется из лестницы сроков (appBase("...")),
+    // а не стоит числом. Требование «есть число» ослепило бы сторожа на всех пяти
+    // приложениях сразу, и он молча проверял бы пустой список.
+    if (!/priceUsd:\s*(\d|appBase\()/.test(win)) continue;
     const kind = /kind:\s*"([a-z]+)"/.exec(win);
     if (kind && kind[1] !== "module") continue;
     const app = /appId:\s*"([a-z0-9_-]+)"/.exec(win);

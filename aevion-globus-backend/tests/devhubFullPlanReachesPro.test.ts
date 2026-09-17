@@ -8,6 +8,11 @@ import { join } from "node:path";
 /**
  * Подписчик Full получает DevHub Pro — решение основателя 14.09.2026.
  *
+ * С 15.09.2026 тариф — это СРОК доступа ко всей планете: любой платный срок
+ * (Lite 1 мес … Max 12) открывает все модули, значит и DevHub Pro. Прежнее
+ * «Lite — один модуль на выбор, без DevHub бесплатный» больше не правило:
+ * выбранный список модулей на доступ не влияет.
+ *
  * До этого дня тариф DevHub брался только из его собственных таблиц, и человек,
  * купивший Full ради «всех продуктов AEVION», видел в DevHub бесплатный тариф.
  * Отдельно закреплена ловушка: явный «free» в таблице DevHub (так вебхук отмечает
@@ -33,7 +38,7 @@ const past = new Date(Date.now() - 86400000).toISOString();
 
 function subscription(tierId: string | null, validUntil = future, modules: string[] = []) {
   const body = tierId
-    ? JSON.stringify({ id: "t", ts: new Date().toISOString(), email: EMAIL, tierId, period: "monthly", seats: 1, modules, trialDays: 0, validUntil }) + "\n"
+    ? JSON.stringify({ id: "t", ts: new Date().toISOString(), email: EMAIL, tierId, termMonths: 1, seats: 1, modules, trialDays: 0, validUntil }) + "\n"
     : "";
   writeFileSync(process.env.SUBSCRIPTIONS_FILE as string, body);
 }
@@ -73,8 +78,18 @@ describe("подписка платформы открывает DevHub Pro", ()
     expect(await tier()).toBe("free");
   });
 
-  test("Lite без выбранного DevHub — бесплатный", async () => {
+  test("Lite (1 месяц) без выбранного DevHub — тоже Pro: срок открывает всю планету", async () => {
     subscription("lite", future, ["qsign"]); database();
+    expect(await tier(), "заплативший за Lite не получил DevHub, входящий в подписку").toBe("pro");
+  });
+
+  test.each(["medium", "pro", "max"])("действующий срок %s — Pro", async (срок) => {
+    subscription(срок); database();
+    expect(await tier(), `подписчик ${срок} видит бесплатный DevHub`).toBe("pro");
+  });
+
+  test("КОНТРОЛЬ: истёкший Lite — бесплатный", async () => {
+    subscription("lite", past, ["devhub"]); database();
     expect(await tier()).toBe("free");
   });
 

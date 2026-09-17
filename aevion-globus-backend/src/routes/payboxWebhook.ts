@@ -26,8 +26,8 @@ import {
   возвратКасаетсяДействующей,
   type Subscription,
 } from "./provisioning";
-import type { TierId, BillingPeriod } from "../data/pricing";
-import { periodForReference } from "../lib/payment/billingPeriod";
+import type { TierId } from "../data/pricing";
+import { termMonthsForReference, tierIdForReference } from "../lib/payment/billingPeriod";
 import { местИзКассы, модулиИзКассы } from "../lib/payment/customData";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
@@ -72,8 +72,10 @@ export function tierForReference(ref: string): TierId {
   // Сверяем ТОЧНЫМ префиксом, а не подстрокой: `includes("pro")` поймал бы и
   // `tier_promo_*`. Ниже по течению оба значения понятны — normalizeTier
   // переводит "pro" в "full", "enterprise" оставляет как есть.
-  if (r.startsWith("tier_pro_")) return "pro";
-  if (r.startsWith("tier_enterprise_")) return "enterprise";
+  // Ссылки лестницы сроков (tier_lite … tier_max) и прежние tier_<тариф>_<период>
+  // разбирает общее правило; эвристика ниже — только для чужих ссылок.
+  const точно = tierIdForReference(r);
+  if (точно) return точно;
   if (r.includes("medium")) return "medium";
   if (r.includes("full") || r.includes("all-access") || r.includes("business") || r.includes("team")) return "full";
   if (!r.includes("lite")) {
@@ -157,7 +159,7 @@ payboxWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
         ts: new Date().toISOString(),
         email,
         tierId: "free",
-        period: "monthly",
+        termMonths: null,
         seats: 1,
         modules: [],
         trialDays: 0,
@@ -228,7 +230,7 @@ payboxWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
       }
 
       const tierId = tierForReference(reference);
-      const period = periodForReference(reference);
+      const termMonths = termMonthsForReference(reference);
       // СУММА — только если касса рассчиталась в долларах.
       //
       // 🔴 Ловушка единиц, из-за которой поле должно оставаться пустым в
@@ -261,7 +263,7 @@ payboxWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
       const provResult = await provisionSubscription({
         email,
         tierId,
-        period,
+        termMonths,
         seats,
         modules,
         source: "paybox",
@@ -288,7 +290,7 @@ payboxWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
           capture(e, { route: "paybox/webhook", email, module });
         }
       }
-      console.log(`[paybox/webhook] paid → provisioned ${tierId}/${period} for ${email} (ref=${reference})`);
+      console.log(`[paybox/webhook] paid → provisioned ${tierId}/${termMonths}m for ${email} (ref=${reference})`);
       return res.json({ ok: true, action: "activated", tierId, email, subscriptionId: provResult.subscription.id });
     }
 

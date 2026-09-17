@@ -12,14 +12,16 @@ import {
   withChannel,
   type Product,
 } from "@/lib/products";
+import { PLANET_BASE_MONTHLY, termPricePerMonth } from "@/lib/termPricing";
 import { PageTracking } from "@/components/PageTracking";
 
 // AEVION Shop — единая витрина всех покупаемых товаров.
 //
 // Товары берутся из `@/lib/products` — единого каталога, а не из списка в этом файле.
 // До 2026-07-26 здесь было 3 позиции хардкодом при 15 живых чекаутах: покупатель
-// видел книгу и два гайда, а подписки ($59/$49/$9 в мес) и семь модулей с рабочей
-// оплатой на витрину не попадали вовсе.
+// видел книгу и два гайда, а подписки и модули с рабочей оплатой на витрину не
+// попадали вовсе. С 15.09.2026 на витрине: подписка на всю планету (срок 1–12
+// месяцев), гайды и книги, пять приложений отдельно.
 //
 // Стиль — светлый газетный (память feedback_aevion_light_newspaper_ui): бумага,
 // serif-заголовки, тонкие линейки, золото акцентом. Раньше страница была тёмной.
@@ -31,9 +33,9 @@ export const metadata: Metadata = {
   // режут около шестидесяти знаков — второй бренд выталкивал оттуда
   // нужные слова. Страницам БЕЗ имени в заголовке шаблон по-прежнему нужен,
   // поэтому корневой файл не тронут.
-  title: { absolute: "Магазин AEVION — подписки, гайды, модули" },
+  title: { absolute: "Магазин AEVION — подписка, гайды, приложения" },
   description:
-    "Все товары AEVION в одном месте: подписка на всю экосистему, научные гайды о долголетии и книга разовой покупкой, отдельные модули помесячно. Мгновенная выдача. Wellness и образование, не медицина.",
+    "Все товары AEVION в одном месте: подписка на всю планету на срок от 1 до 12 месяцев, научные гайды о долголетии и книга разовой покупкой, пять приложений отдельно. Wellness и образование, не медицина.",
   // СВОЙ canonical, и для этой страницы он важнее, чем для большинства.
   // На неё ведут ссылки с меткой канала: ?c=tt, ?c=ig, ?c=dz и ещё семь.
   // Без canonical поисковик вправе счесть каждый вариант отдельной
@@ -45,9 +47,9 @@ export const metadata: Metadata = {
   // пересылают чаще прочих. Оговорку «не медицина» держим и здесь — она
   // должна доезжать до человека вместе со ссылкой, а не только на странице.
   openGraph: {
-    title: "Магазин AEVION — подписки, гайды, модули",
+    title: "Магазин AEVION — подписка, гайды, приложения",
     description:
-      "Подписка на экосистему, научные гайды и книга разовой покупкой, модули помесячно. Мгновенная выдача. Wellness и образование, не медицина.",
+      "Подписка на всю планету на срок от 1 до 12 месяцев, научные гайды и книга разовой покупкой, пять приложений отдельно. Wellness и образование, не медицина.",
     type: "website",
     siteName: "AEVION",
   },
@@ -55,7 +57,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Магазин AEVION",
     description:
-      "Подписки, гайды и модули. Мгновенная выдача. Wellness и образование, не медицина.",
+      "Подписка на срок, гайды и приложения. Wellness и образование, не медицина.",
   },
 };
 
@@ -67,19 +69,16 @@ const CURRENCY = new Intl.NumberFormat("en-US", {
 });
 
 function Card({ p, channel }: { p: Product; channel: string | null }) {
-  // Ориентируемся на СПОСОБ СПИСАНИЯ, а не на тип товара: модули формально не
-  // «подписки», но списываются ежемесячно — и покупатель обязан видеть это
-  // до нажатия кнопки, а не в письме от LemonSqueezy.
-  const isSub = p.billing === "monthly";
-  return (
-    <BuyLink
-      href={withChannel(p.href, channel, "shop")}
-      source="shop"
-      productId={p.id}
-      priceUsd={p.priceUsd}
-      channel={channel}
-      style={styles.card}
-    >
+  // Ориентируемся на СПОСОБ СПИСАНИЯ, а не на тип товара: покупатель обязан
+  // видеть, что платит за срок вперёд, до нажатия кнопки, а не в письме кассы.
+  //
+  // Срочный доступ (подписка и пять приложений, политика 15.09.2026) ведёт на
+  // страницу цен — там выбирается срок и открывается касса, и там же уходит
+  // checkout_start. Поэтому здесь обычная ссылка в той же вкладке, а не BuyLink:
+  // иначе одна покупка считалась бы в воронке дважды.
+  const isTerm = p.billing === "term";
+  const inner = (
+    <>
       <div style={styles.cardTop}>
         {p.badge ? <span style={styles.badge}>{p.badge}</span> : null}
         <span style={styles.format}>{p.format}</span>
@@ -107,10 +106,31 @@ function Card({ p, channel }: { p: Product; channel: string | null }) {
       <div style={styles.cardFoot}>
         <span style={styles.price}>
           {CURRENCY.format(p.priceUsd)}
-          {isSub ? <span style={styles.per}>/мес</span> : null}
+          {isTerm ? <span style={styles.per}> за месяц</span> : null}
         </span>
-        <span style={styles.buy}>{isSub ? "Подписаться" : "Купить"}&nbsp;→</span>
+        <span style={styles.buy}>{isTerm ? "Выбрать срок" : "Купить"}&nbsp;→</span>
       </div>
+    </>
+  );
+
+  if (isTerm) {
+    return (
+      <a href={withChannel(p.href, channel, "shop")} style={styles.card}>
+        {inner}
+      </a>
+    );
+  }
+
+  return (
+    <BuyLink
+      href={withChannel(p.href, channel, "shop")}
+      source="shop"
+      productId={p.id}
+      priceUsd={p.priceUsd}
+      channel={channel}
+      style={styles.card}
+    >
+      {inner}
     </BuyLink>
   );
 }
@@ -178,15 +198,20 @@ export default async function ShopPage({
         <div style={styles.eyebrow}>AEVION · Магазин</div>
         <h1 style={styles.h1}>Всё, что можно купить в AEVION</h1>
         <p style={styles.lede}>
-          Подписка на всю экосистему, гайды и книга разовой покупкой, отдельные модули помесячно.
-          Оплата и мгновенная выдача — через Gumroad и LemonSqueezy.
+          Подписка на всю планету на срок от 1 до 12 месяцев, гайды и книги разовой покупкой,
+          пять приложений отдельно. Гайды и книги оплачиваются через Gumroad с мгновенной
+          выдачей; срок подписки и приложения выбирается на странице цен.
         </p>
 
         <Section
-          title="Подписки"
-          note={`Те же модули по отдельности — ${CURRENCY.format(
+          title="Подписка AEVION"
+          note={`Пять приложений по отдельности — ${CURRENCY.format(
             MODULES_TOTAL_USD,
-          )} в месяц.`}
+          )} за месяц; вся планета — ${CURRENCY.format(
+            PLANET_BASE_MONTHLY,
+          )} за месяц или ${CURRENCY.format(
+            termPricePerMonth(PLANET_BASE_MONTHLY, "max"),
+          )} в месяц при оплате за 12 месяцев вперёд.`}
           items={SUBSCRIPTIONS}
           channel={channel}
         />
@@ -199,8 +224,8 @@ export default async function ShopPage({
         />
 
         <Section
-          title="Модули по подписке"
-          note="Отдельный продукт помесячно — если нужен один инструмент, а не вся экосистема. Списание ежемесячное, отменить можно в любой момент."
+          title="Отдельные приложения"
+          note="Пять приложений продаются и по отдельности — если нужен один инструмент, а не вся планета. Срок от 1 до 12 месяцев, оплата за срок вперёд; чем длиннее срок, тем дешевле месяц. Остальные модули входят только в подписку AEVION."
           items={MODULES}
           channel={channel}
         />

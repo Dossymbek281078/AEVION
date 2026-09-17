@@ -88,7 +88,7 @@ describe("подмена товара по умолчанию", () => {
      */
     process.env.LEMON_SQUEEZY_API_KEY = "test-key";
     process.env.LEMON_SQUEEZY_STORE_ID = "111";
-    process.env.LEMON_SQUEEZY_VARIANT_LITE_MONTHLY = "333";
+    process.env.LEMON_SQUEEZY_VARIANT_LITE = "333";
 
     const предупреждения: string[] = [];
     vi.spyOn(console, "warn").mockImplementation((...a: unknown[]) => {
@@ -102,8 +102,8 @@ describe("подмена товара по умолчанию", () => {
     }));
 
     await lemonSqueezyPaymentProvider.createIntent({
-      reference: "tier_lite_monthly",
-      amountCents: 1900,
+      reference: "tier_lite",
+      amountCents: 40000,
       currency: "USD",
       description: "Lite",
       email: "a@b.co",

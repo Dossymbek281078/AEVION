@@ -1,4 +1,4 @@
-import { productById } from "@/lib/products";
+import { productNotice } from "@/lib/products";
 
 /**
  * Оговорка продукта — там, где даются обещания, а не только там, где платят.
@@ -34,7 +34,9 @@ export function ProductNotice({
   /** Страницы модулей тёмные; тёмный текст на тёмном фоне не читается. */
   theme?: "light" | "dark";
 }) {
-  const notice = productById(productId)?.notice;
+  // productNotice, а не productById: с 15.09.2026 QPayNet и QContract отдельно не
+  // продаются, карточек в каталоге у них нет, а оговорка на странице модуля нужна.
+  const notice = productNotice(productId);
   if (!notice) return null;
   return (
     <div

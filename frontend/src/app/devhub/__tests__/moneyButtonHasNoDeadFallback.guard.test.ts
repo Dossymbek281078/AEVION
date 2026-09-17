@@ -54,7 +54,9 @@ describe("денежная кнопка DevHub", () => {
     // покраснеет раньше, чем покупатель увидит блок без кнопки.
     const p = productById("devhub");
     expect(p, "товара devhub нет в каталоге — покупать нечем").toBeTruthy();
-    expect(p!.href, "у товара нет адреса кассы").toMatch(/^https?:\/\//);
+    // 15.09.2026: DevHub — приложение лестницы сроков; путь к оплате — страница
+    // цен с выбранным приложением (там срок и касса), а не прямая ссылка продавца.
+    expect(p!.href, "у товара нет пути к оплате").toBe("/pricing?app=devhub#apps");
     expect(p!.priceUsd).toBeGreaterThan(0);
   });
 

@@ -6,22 +6,51 @@
  *   1. `/shop/page.tsx`      — 3 товара хардкодом;
  *   2. `/apps/page.tsx`      — 7 модулей с checkoutUrl (LemonSqueezy + Gumroad);
  *   3. `lib/gumroad.ts`      — GUMROAD_PERMALINKS полностью закомментирован, из-за чего
- *                              gumroadPermalink() всегда отдаёт дефолт `xpxzam` (All-Access $59)
+ *                              gumroadPermalink() всегда отдавал дефолтную подписку
  *                              — то есть кнопка «купить» в любом модуле вела в подписку;
  *   4. backend `revenue.ts`  — PERMALINK_TO_APP, самый полный список (8 permalink'ов).
  * Покупатель при этом видел на витрине 3 позиции из 15 живых.
  *
- * Цены сверены 2026-07-26 напрямую с дашбордом Gumroad (8 позиций Published) и
- * с `/apps/page.tsx` (LemonSqueezy). Не выдумывать записи: товар попадает сюда,
- * только если у него есть живой чекаут.
+ * Цены гайдов и книг сверены 2026-07-26 с дашбордом Gumroad. Не выдумывать записи:
+ * товар попадает сюда, только если его можно оплатить — прямой ссылкой продавца
+ * (гайды, книги) или через нашу кассу на /pricing (подписка и пять приложений).
  *
  * Бэкенд-зеркало: `aevion-globus-backend/src/routes/gumroadWebhook.ts` (permalink → tier)
  * и `routes/revenue.ts` (permalink → appId). Фронт и бэк — раздельные TS-проекты,
  * общего импорта нет, поэтому связь через комментарии, как и в `lib/gumroad.ts`.
  */
 
+import {
+  PLANET_BASE_MONTHLY,
+  STANDALONE_APPS,
+  fromPricePerMonth,
+  standaloneApp,
+  termTotal,
+} from "./termPricing";
+
+/*
+ * ⚠️ 15.09.2026 — НОВАЯ ЦЕНОВАЯ ПОЛИТИКА (слово основателя).
+ *
+ * Тариф = СРОК доступа ко ВСЕЙ планете: 1 / 3 / 6 / 9 / 12 месяцев, оплата за
+ * весь срок вперёд. Отдельно продаются только ПЯТЬ приложений (CyberChess,
+ * Multichat, QVenture, IP Bureau, DevHub) — по той же лестнице сроков.
+ * Сняты с продажи: All-Access (Gumroad xpxzam), Universe, Planet, наборы,
+ * Constitution Pro/Team как отдельные подписки и отдельные продажи всех прочих
+ * модулей (QPayNet, QContract, Smeta и др.). Книги и гайды — без изменений.
+ *
+ * Числа здесь не пишутся руками: цены и лестница — только из `./termPricing`.
+ * Прямых ссылок Lemon Squeezy на товары новой лестницы нет (товары ещё
+ * заводятся в магазине), поэтому покупка подписки и приложения ведёт на нашу
+ * страницу цен, а оттуда — в кассу (`POST /api/pricing/checkout/session`).
+ */
+
 export type ProductKind = "subscription" | "guide" | "book" | "module";
-export type Processor = "gumroad" | "lemonsqueezy";
+/**
+ * gumroad / lemonsqueezy — прямая ссылка в кассу продавца (гайды и книги).
+ * aevion — наша касса: страница /pricing выбирает срок и отправляет заказ в
+ * `/api/pricing/checkout/session`; провайдера выбирает бэкенд.
+ */
+export type Processor = "gumroad" | "lemonsqueezy" | "aevion";
 
 export interface Product {
   /** Gumroad permalink или slug модуля — стабильный ключ для атрибуции */
@@ -30,16 +59,24 @@ export interface Product {
   /** Формат/язык — короткая строка под заголовком */
   format: string;
   desc: string;
-  /** Цена в USD. Для повторяющихся списаний — за месяц. */
+  /**
+   * Цена в USD. Разовый товар — цена покупки. Срочный доступ (`billing: "term"`) —
+   * платёж за самый короткий срок, 1 месяц (ступень Lite); месяц на длинном
+   * сроке дешевле — см. `fromPricePerMonth` в `./termPricing`.
+   */
   priceUsd: number;
   /**
-   * Как списываются деньги. ПРОВЕРЕНО 26.07.2026 на живых чекаутах, а не по
-   * названию товара: все семь модулей на LemonSqueezy отдают «billed every
-   * month». До этой проверки они были подписаны в каталоге как «разовая
-   * лицензия» — человек, нажав «Купить» за $149, попадал бы на ежемесячное
-   * списание. Поле обязательное именно поэтому: угадывать здесь нельзя.
+   * Как списываются деньги. Поле обязательное: 26.07.2026 модули были подписаны
+   * «разовой лицензией», а касса списывала ежемесячно — угадывать здесь нельзя.
+   *
+   *   once  — разовая покупка (гайды, книги);
+   *   term  — доступ на выбранный срок (1–12 месяцев), оплата за весь срок
+   *           ВПЕРЁД одним платежом (политика 15.09.2026);
+   *   monthly — ежемесячное списание. В каталоге с 15.09.2026 не используется:
+   *           месячной и годовой оплаты больше нет. Оставлено в типе для
+   *           старых подписок, которые ещё доживают свой период.
    */
-  billing: "monthly" | "once";
+  billing: "monthly" | "once" | "term";
   kind: ProductKind;
   processor: Processor;
   href: string;
@@ -58,76 +95,68 @@ export interface Product {
 }
 
 const GUM = (permalink: string) => `https://aevion.gumroad.com/l/${permalink}?wanted=true`;
-const LS = (id: string) => `https://aevion.lemonsqueezy.com/checkout/buy/${id}`;
+// Помощника LS(id) больше нет: с 15.09.2026 ни один товар каталога не ведёт прямо
+// в вариант Lemon Squeezy — месячные варианты сняты, новая лестница продаётся
+// через /pricing. Появится прямая ссылка — вернуть помощник, а не вписывать адрес.
 
-/** Подписки. Состав обязателен — до 26.07.2026 покупатель All-Access видел
- *  цену $59/мес и НИ СЛОВА о том, что входит. */
+/** Страница цен, блок сроков подписки на всю планету. */
+export const PRICING_TERMS = "/pricing#tiers";
+
+/**
+ * Покупка отдельного приложения: страница цен с выбранным приложением.
+ * Хеш — в самом конце: параметры после `#` браузер не отправляет, и метка
+ * канала, дописанная туда, потерялась бы (см. keepChannel ниже).
+ */
+export const PRICING_APP = (slug: string) => `/pricing?app=${encodeURIComponent(slug)}#apps`;
+
+const usd = (n: number) => `$${n}`;
+
+/** Приложение, которое продаётся отдельно. Неизвестный id — ошибка сборки
+ *  каталога, а не товар без цены: молча продавать «$undefined» нельзя. */
+function soldApp(id: string) {
+  const app = standaloneApp(id);
+  if (!app) throw new Error(`products.ts: «${id}» нет в STANDALONE_APPS — отдельно не продаётся`);
+  return app;
+}
+
+/** Цена за самый короткий срок (1 месяц, Lite) — то, что стоит в priceUsd. */
+const appBase = (id: string) => soldApp(id).baseMonthly;
+/** Слаг, который касса ждёт в поле `app`. */
+const appHref = (id: string) => PRICING_APP(soldApp(id).slug);
+const appFormat = (id: string) =>
+  `приложение · от ${usd(fromPricePerMonth(soldApp(id).baseMonthly))}/мес`;
+
+/**
+ * Подписка — одна: срок доступа ко ВСЕЙ планете (решение основателя 15.09.2026).
+ *
+ * Прежние три позиции сняты с продажи: All-Access (Gumroad xpxzam) и
+ * Constitution Pro / Team (pyiaz / wjvquw) отдельными подписками больше не
+ * продаются — Constitution входит в подписку AEVION. Их permalink на Gumroad
+ * покупателю не показываем нигде.
+ */
 export const SUBSCRIPTIONS: Product[] = [
   {
-    id: "xpxzam",
-    title: "AEVION All-Access",
-    format: "подписка · $59 / мес",
-    // Формулировка сверена с текстом самого продавца на Gumroad, а не сочинена из тарифов.
+    id: "aevion-planet",
+    title: "Подписка AEVION",
+    format: `вся планета · от ${usd(fromPricePerMonth(PLANET_BASE_MONTHLY))}/мес · от ${usd(
+      termTotal(PLANET_BASE_MONTHLY, "lite"),
+    )} за месяц`,
     desc:
-      "Полный доступ к платформе — 15+ модулей: QRight, QSign, QCoreAI, QFusionAI, QPayNet, " +
-      "QTradeOffline, Constitution и другие. Одна подписка, без лимитов.",
-    priceUsd: 59,
-    billing: "monthly",
+      "Доступ ко всем модулям AEVION на выбранный срок: 1, 3, 6, 9 или 12 месяцев. " +
+      "Чем длиннее срок, тем дешевле месяц. Оплата за весь срок вперёд, одним платежом.",
+    priceUsd: PLANET_BASE_MONTHLY,
+    billing: "term",
     kind: "subscription",
-    processor: "gumroad",
-    href: GUM("xpxzam"),
-    appId: "aevion-all-access",
+    processor: "aevion",
+    href: PRICING_TERMS,
+    appId: "aevion-planet",
     badge: "Всё сразу",
     includes: [
-      // Здесь стояло «30+ модулей», а строкой выше в desc — «15+». Два разных
-      // числа в одной карточке товара, при 36 живых по реестру. desc трогать
-      // нельзя: он намеренно повторяет текст продавца на Gumroad, и разойтись
-      // с чекаутом хуже, чем быть неточным. Поэтому здесь число убрано —
-      // покупателю важно «все», а не цифра, которая устареет к следующему релизу.
-      "Все живые продукты AEVION",
-      "QRight · QSign · IP Bureau — полный доступ",
-      "Финтех-стек: QTrade, QPayNet, QContract",
-      "QCoreAI и Multichat Engine",
-      "Новые модули по мере выхода — без доплаты",
+      "Все модули AEVION — без доплаты за каждый",
+      "Сроки: 1 · 3 · 6 · 9 · 12 месяцев",
+      "Месяц дешевеет с длиной срока — вдвое на 12 месяцах",
+      "Новые модули, вышедшие в оплаченный срок, — тоже включены",
     ],
-  },
-  {
-    id: "wjvquw",
-    title: "Constitution Team",
-    format: "подписка · $49 / мес",
-    desc:
-      "Симулятор мироустройства: восемь параметров, четыре опоры, живой прогон в исторические режимы."
-      // Хвост с перечнем возможностей УБРАН 07.09.2026: он дословно копировал
-      // фичи Pro ($9), а includes этой же карточки честно говорит «состав не
-      // описан продавцом». Карточка за $49 противоречила сама себе — покупатель
-      // видел два ответа об одном. Что Team ДОБАВЛЯЕТ к Pro — решение
-      // основателя; до него desc не обещает ничего сверх симулятора.
-      ,
-    priceUsd: 49,
-    billing: "monthly",
-    kind: "subscription",
-    processor: "gumroad",
-    href: GUM("wjvquw"),
-    appId: "constitution",
-    // ⚠️ На Gumroad у Pro ($9) и Team ($49) СОВПАДАЮЩЕЕ описание — покупателю не видно,
-    // за что доплата впятеро. Состав придумывать нельзя; до решения основателя честно
-    // говорим то, что известно.
-    includes: ["Состав пакета не описан продавцом — уточняется"],
-  },
-  {
-    id: "pyiaz",
-    title: "Constitution Pro",
-    format: "подписка · $9 / мес",
-    desc:
-      "Симулятор мироустройства: восемь параметров, четыре опоры, живой прогон в исторические режимы. " +
-      "Безлимит сохранений, ИИ-советник, чистый PDF, виджет для встраивания.",
-    priceUsd: 9,
-    billing: "monthly",
-    kind: "subscription",
-    processor: "gumroad",
-    href: GUM("pyiaz"),
-    appId: "constitution",
-    includes: ["Безлимит сохранений", "ИИ-советник", "Чистый PDF", "Виджет для встраивания"],
   },
 ];
 
@@ -215,51 +244,59 @@ export const GUIDES: Product[] = [
   },
 ];
 
-/** Модули. ВСЕ СЕМЬ — ежемесячная подписка через LemonSqueezy (проверено на живых
- *  чекаутах 26.07.2026: «billed every month»), а не разовая покупка. Ссылки сверены
- *  с `/apps/page.tsx` — там же живут описания и highlights. */
+/**
+ * Отдельные приложения — ТОЛЬКО пять (политика 15.09.2026): CyberChess, Multichat,
+ * QVenture, IP Bureau, DevHub. Цена и слаг кассы — из STANDALONE_APPS
+ * (`./termPricing`), здесь только подача. Остальные модули отдельно не
+ * продаются: они входят в подписку AEVION. Сняты с отдельной продажи Smeta
+ * Trainer, QPayNet, QContract — страницы модулей на месте, кнопки покупки нет.
+ *
+ * Прямых ссылок Lemon Squeezy на новую лестницу нет, поэтому href ведёт на
+ * `/pricing?app=<slug>#apps`: там выбирается срок, и заказ уходит в кассу полем
+ * `app`. Прежние ссылки LS на месячные варианты покупателю не показываются.
+ */
 export const MODULES: Product[] = [
   {
     id: "devhub",
     title: "DevHub Studio Pro",
-    format: "модуль · подписка",
+    format: appFormat("devhub"),
     desc: "Браузерная IDE на движке VS Code, генерация кода AI и деплой на Cloudflare Pages.",
-    priceUsd: 149,
-    billing: "monthly",
+    priceUsd: appBase("devhub"),
+    billing: "term",
     kind: "module",
-    processor: "lemonsqueezy",
-    href: LS("ab30b6f3-1d69-4db6-b7ab-86ef0d363a57"),
+    processor: "aevion",
+    href: appHref("devhub"),
     appId: "devhub",
     badge: "Флагман",
   },
   {
-    id: "smeta",
-    title: "Smeta Trainer",
-    format: "модуль · подписка",
-    desc: "AI-тренажёр сметного дела РК: корпус ССЦ/ЭСН, разбор ошибок студента, формы 1–3 и КС-2/КС-3.",
-    priceUsd: 49,
-    billing: "monthly",
+    id: "multichat",
+    title: "AEVION Multichat",
+    format: appFormat("multichat"),
+    // Текст — с посадочной самого модуля (/multichat-engine/launch), не сочинён здесь.
+    desc: "Один вопрос — ответы моделей четырёх независимых поставщиков рядом, с картой расхождений и чеком, который проверяется по ссылке.",
+    priceUsd: appBase("multichat"),
+    billing: "term",
     kind: "module",
-    processor: "lemonsqueezy",
-    href: LS("91c430c8-74f8-46f2-9499-816c93533ef4"),
-    appId: "smeta-trainer",
+    processor: "aevion",
+    href: appHref("multichat"),
+    appId: "multichat-engine",
   },
   {
     id: "qventure",
     title: "QVenture",
-    format: "модуль · подписка",
+    format: appFormat("qventure"),
     desc: "Разбор венчурной сделки: TAM/SOM, юнит-экономика, проверка допущений основателя.",
-    priceUsd: 39,
-    billing: "monthly",
+    priceUsd: appBase("qventure"),
+    billing: "term",
     kind: "module",
-    processor: "lemonsqueezy",
-    href: LS("79ca3e07-6c75-4de7-8052-0f3bb99277a2"),
+    processor: "aevion",
+    href: appHref("qventure"),
     appId: "qventure",
   },
   {
     id: "bureau",
     title: "AEVION IP Bureau",
-    format: "модуль · подписка",
     // ИСПРАВЛЕНО 21.08.2026. Прежний текст обещал «подпись Ed25519» и
     // «привязку ко времени через OpenTimestamps». Оба обещания уже были
     // признаны неподтверждёнными 19.08 и внесены в catalogClaims.guard —
@@ -276,34 +313,18 @@ export const MODULES: Product[] = [
     // Продукт продаётся за доказуемость, поэтому неточность здесь дороже
     // обычной: покупатель платит именно за свойство, которого не было.
     desc: "Доказательство авторства: хеш SHA-256, отметка времени и подпись сертификата — алгоритм и режим подписи названы в самом сертификате.",
-    priceUsd: 29,
-    billing: "monthly",
+    format: appFormat("bureau"),
+    priceUsd: appBase("bureau"),
+    billing: "term",
     kind: "module",
-    processor: "lemonsqueezy",
-    href: LS("be5cf241-159f-4f1c-9818-1e9634ba5fab"),
+    processor: "aevion",
+    href: appHref("bureau"),
     appId: "aevion-ip-bureau",
-  },
-  {
-    id: "qpaynet",
-    title: "QPayNet",
-    format: "модуль · подписка",
-    desc: "Инфраструктура встроенных платежей: мультивалютность, виртуальные карты, API и вебхуки.",
-    notice:
-      "Демонстрационный режим. AEVION не является лицензированным банком, платёжным " +
-      "институтом или эмитентом электронных денег: реальные средства и платежи не " +
-      "обрабатываются — только оценка и обучение.",
-    priceUsd: 29,
-    billing: "monthly",
-    kind: "module",
-    processor: "lemonsqueezy",
-    href: LS("f0966b9a-6c3c-41ee-9b36-e2fd1a0a82a3"),
-    appId: "qpaynet-embedded",
-    badge: "Бета · демо",
   },
   {
     id: "cyberchess",
     title: "CyberChess",
-    format: "модуль · подписка",
+    format: appFormat("cyberchess"),
     // Числа задач тут НЕТ намеренно, и вот почему — проверено 28.08.2026.
     // Ручка, дающая настоящий размер банка, нашлась: /api/cyberchess-puzzles/meta
     // отдаёт bankTotal 502584. Я вписал «полмиллиона задач» — и тут же проверил
@@ -313,33 +334,52 @@ export const MODULES: Product[] = [
     // Вернуть можно, но вместе со сторожем, который сверяет её с ручкой.
     // Слово «пазлы» из описания убрано: в модуле их зовут задачами.
     desc: "Шахматная платформа: задачи, ИИ-тренер и соперники, играющие по-человечески на своём уровне.",
-    priceUsd: 19,
-    billing: "monthly",
+    priceUsd: appBase("cyberchess"),
+    billing: "term",
     kind: "module",
-    processor: "lemonsqueezy",
-    href: LS("11a4bb2a-2549-4352-a87f-80a8bdad64bd"),
+    processor: "aevion",
+    href: appHref("cyberchess"),
     appId: "cyberchess",
-  },
-  {
-    id: "qcontract",
-    title: "QContract",
-    format: "модуль · подписка",
-    desc: "Самоуничтожающиеся защищённые документы: лимиты просмотров и срока, пароль и подпись.",
-    notice:
-      "Демонстрационный режим. Документы и подписи, созданные здесь, не являются " +
-      "юридической консультацией и могут не иметь силы без независимой проверки " +
-      "квалифицированным специалистом.",
-    priceUsd: 19,
-    billing: "monthly",
-    kind: "module",
-    processor: "lemonsqueezy",
-    href: LS("8175a6b2-f3fa-4b51-bed6-da993267701d"),
-    appId: "qcontract",
-    badge: "Бета · демо",
   },
 ];
 
+// Сторож на сборке каталога: отдельно продаётся ровно то, что названо в
+// STANDALONE_APPS. Шестое приложение в MODULES без строки в лестнице (или
+// потерянное пятое) — это кнопка «купить» к товару, которого касса не знает.
+{
+  const inCatalog = new Set(MODULES.map((m) => soldApp(m.id).slug));
+  const missing = STANDALONE_APPS.filter((a) => !inCatalog.has(a.slug)).map((a) => a.slug);
+  if (missing.length || inCatalog.size !== MODULES.length) {
+    throw new Error(`products.ts: MODULES расходится с STANDALONE_APPS (нет: ${missing.join(", ") || "—"})`);
+  }
+}
+
 export const ALL_PRODUCTS: Product[] = [...SUBSCRIPTIONS, ...GUIDES, ...MODULES];
+
+/**
+ * Оговорки модулей, которые ОТДЕЛЬНО НЕ ПРОДАЮТСЯ, но живут на сайте и входят в
+ * подписку AEVION. До 15.09.2026 текст жил в карточках QPayNet и QContract; снять
+ * карточку с продажи не значит снять оговорку со страницы модуля — там по-прежнему
+ * даются обещания («12-rail checkout», подписи документов), и условие, на котором
+ * они верны, человек обязан видеть. Отрисовывает `components/ProductNotice.tsx`.
+ */
+export const MODULE_NOTICES: Record<string, string> = {
+  qpaynet:
+    "Демонстрационный режим. AEVION не является лицензированным банком, платёжным " +
+    "институтом или эмитентом электронных денег: реальные средства и платежи не " +
+    "обрабатываются — только оценка и обучение.",
+  qcontract:
+    "Демонстрационный режим. Документы и подписи, созданные здесь, не являются " +
+    "юридической консультацией и могут не иметь силы без независимой проверки " +
+    "квалифицированным специалистом.",
+};
+
+/** Оговорка продукта или модуля: сперва карточка каталога, затем MODULE_NOTICES. */
+export function productNotice(id: string): string | undefined {
+  const own = productById(id)?.notice;
+  if (own) return own;
+  return Object.prototype.hasOwnProperty.call(MODULE_NOTICES, id) ? MODULE_NOTICES[id] : undefined;
+}
 
 const BY_ID = new Map(ALL_PRODUCTS.map((p) => [p.id, p]));
 
@@ -353,8 +393,8 @@ export function productById(id: string): Product | undefined {
   return BY_ID.get(id);
 }
 
-/** Сумма месячных цен модулей — используется, чтобы честно показать выгоду подписки.
- *  Все модули списываются ежемесячно, поэтому сумма тоже месячная. */
+/** Сумма цен пяти приложений за 1 месяц (Lite) — чтобы честно сравнить с подпиской
+ *  на всю планету за тот же срок. Обе суммы — платёж за один месяц доступа. */
 export const MODULES_TOTAL_USD = MODULES.reduce((s, p) => s + p.priceUsd, 0);
 
 /* ── Атрибуция канала ────────────────────────────────────────────────────────
@@ -469,6 +509,10 @@ function utmMedium(channel: string): string {
  */
 export function withChannel(href: string, channel: string | null, landing = "site"): string {
   if (!channel) return href;
+  // Внутренний адрес (/pricing?app=…#apps) — не касса продавца: странице цен
+  // нужна короткая метка ?c=, которую читает channelNow, и её надо вставить ДО
+  // хеша. Дописанная после `#` UTM-тройка до сервера не доехала бы вовсе.
+  if (href.startsWith("/")) return keepChannel(href, channel);
   const sep = href.includes("?") ? "&" : "?";
   if (href.includes("lemonsqueezy.com")) {
     return `${href}${sep}checkout[custom][channel]=${encodeURIComponent(channel)}`;
@@ -504,6 +548,11 @@ export function channelParam(channel: string | null): string | null {
 export function keepChannel(path: string, channel: string | null): string {
   const c = channelParam(channel);
   if (!c) return path;
-  const sep = path.includes("?") ? "&" : "?";
-  return `${path}${sep}c=${encodeURIComponent(c)}`;
+  // Хеш остаётся в конце: `/pricing#tiers?c=yt` потерял бы метку (всё после `#`
+  // браузер считает якорем и серверу не отправляет).
+  const hashAt = path.indexOf("#");
+  const base = hashAt >= 0 ? path.slice(0, hashAt) : path;
+  const hash = hashAt >= 0 ? path.slice(hashAt) : "";
+  const sep = base.includes("?") ? "&" : "?";
+  return `${base}${sep}c=${encodeURIComponent(c)}${hash}`;
 }

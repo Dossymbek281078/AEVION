@@ -610,8 +610,9 @@ function parseSolution(raw: unknown): string[] {
   return s.split(/[\s,]+/).filter(Boolean);
 }
 
-async function dailyFromBank(day: string): Promise<Puzzle | null> {
-  if (bankPuzzleCache && bankPuzzleCache.day === day) return bankPuzzleCache.puzzle;
+async function dailyFromBank(day: string, useCache = true): Promise<Puzzle | null> {
+  // useCache=false — для /history: кэш хранит ОДИН день, и прошлые дни через него не пройдут.
+  if (useCache && bankPuzzleCache && bankPuzzleCache.day === day) return bankPuzzleCache.puzzle;
   try {
     const pool = getPool();
     if (!pool) return null;
@@ -647,7 +648,7 @@ async function dailyFromBank(day: string): Promise<Puzzle | null> {
       theme: String(row.theme || row.name || "Тактика"),
       rating: Number(row.rating) || 1200,
     };
-    bankPuzzleCache = { day, puzzle };
+    if (useCache) bankPuzzleCache = { day, puzzle };
     return puzzle;
   } catch (e) {
     console.error("[cyberchess-daily] банк задач не ответил:", (e as Error).message);
@@ -713,17 +714,23 @@ router.get('/puzzle', async (_req: Request, res: Response) => {
  * Returns the last N daily puzzles (defaults to 7, max 30) from the same pool
  * and the same selection function as /puzzle.
  */
-router.get('/history', (req: Request, res: Response) => {
+router.get('/history', async (req: Request, res: Response) => {
   const rawDays = parseInt(String(req.query.days || '7'), 10);
   const days = Number.isFinite(rawDays) && rawDays > 0 ? Math.min(rawDays, 30) : 7;
   const today = dayIndex();
-  const out: Array<{ day: string; id: string; theme: string; rating: number }> = [];
+  // Та же выборка, что у /puzzle: сперва банк по хешу даты, резервный пул — только если
+  // банк не ответил. До 17.09.2026 история считалась ТОЛЬКО по резервному пулу и на
+  // проде называла p025 в день, когда /puzzle отдавал li_40lsJ из банка, — то есть
+  // публичная ручка описывала задачи, которых никто не решал. fromBank у каждой
+  // записи — машинный признак источника, как у /puzzle.
+  const out: Array<{ day: string; id: string; theme: string; rating: number; fromBank: boolean }> = [];
   for (let i = 0; i < days; i++) {
     const di = today - i;
     const date = new Date(di * 86400000).toISOString().slice(0, 10);
-    const p = pickDailyPuzzle(POOL, di);
+    const fromBank = i === 0 ? await dailyFromBank(date) : await dailyFromBank(date, false);
+    const p = fromBank ?? pickDailyPuzzle(POOL, di);
     if (!p) continue;
-    out.push({ day: date, id: p.id, theme: p.theme, rating: p.rating });
+    out.push({ day: date, id: p.id, theme: p.theme, rating: p.rating, fromBank: !!fromBank });
   }
   return res.json({ days, history: out });
 });

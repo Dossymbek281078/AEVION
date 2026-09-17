@@ -109,7 +109,7 @@ export const LANG_KEY_COUNT: Record<Lang, number> = {
   // с Object.keys(dict).length.
   ru: 7426,
   en: 7426,
-  kk: 7385,
+  kk: 7426,
   de: 134,
   fr: 134,
   es: 134,

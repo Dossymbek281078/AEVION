@@ -3807,16 +3807,33 @@ export default function CyberChessPage(){
     fetch(`/api-backend/api/cyberchess/matchmaking/match/${matchmakingId}/end`,{
       method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({userId,result,reason:over}),
-    }).then(r=>r.json()).then(data=>{
+    }).then(async r=>{
+      // ОТКАЗ СЕРВЕРА (404 матч не найден, 403 не участник, 400 исход, 409 нельзя
+      // присудить себе победу) до 17.09.2026 проходил молча: `.then(r=>r.json())`
+      // читал тело ошибки как данные, ratingDelta там нет — «тихо». Рейтинг не
+      // записан, а игрок не узнаёт. Сервер шлёт hint — показываем его.
+      if(!r.ok){
+        const j=await r.json().catch(()=>null);
+        console.warn("[matchmaking/end] сервер отказал:",j?.error??r.status);
+        showToast(`Результат матча не записан: ${j?.hint||j?.error||`ошибка ${r.status}`}`,"error");
+        return null;
+      }
+      return r.json();
+    }).then(data=>{
+      if(!data)return;
       const rd=data?.ratingDelta;
-      if(!rd)return; // оффлайн/без БД — тихо
+      if(!rd)return; // ok без ratingDelta — матч уже закрыт другой стороной / без БД: это не отказ
       const mine=pCol==="w"?rd.white:rd.black;
       if(!mine||typeof mine.after!=="number")return;
       const d=Math.round(mine.after-mine.before);
       sRatDelta({d,newRat:Math.round(mine.after),ts:Date.now()});
       try{localStorage.setItem("cyberchess.rating",String(Math.round(mine.after)))}catch{}
       window.setTimeout(()=>sRatDelta(null),4200);
-    }).catch(()=>{});
+    }).catch(()=>{
+      // Обрыв связи: результат не дошёл. Молчать нельзя — иначе рейтинг «просто не
+      // изменился», и человек не знает, что матч для сервера не закончен.
+      showToast("Результат матча не дошёл до сервера — проверьте связь","error");
+    });
   },[over,matchmakingId,pCol]);
 
   /* ── Auto-analysis at game-end (depth 10, silent — just populates move badges) ── */

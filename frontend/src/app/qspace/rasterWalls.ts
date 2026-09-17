@@ -599,7 +599,8 @@ export function findWallsByThickness(rgba: Uint8ClampedArray, w: number, h: numb
       const runs: Array<[number, number]> = [];
       if (a < A) for (let b = 0; b < B; ) {
         if (!at(a, b)) { b++; continue; }
-        let e = b; while (e < B && at(a, e)) e++;
+        // скан и JPEG рвут полосу окна шумом: разрыв до 2 px прогон не прерывает
+        let e = b; while (e < B && (at(a, e) || (e + 1 < B && at(a, e + 1)) || (e + 2 < B && at(a, e + 2)))) e++;
         if (e - b >= minRun) runs.push([b, e - 1]);
         b = e;
       }

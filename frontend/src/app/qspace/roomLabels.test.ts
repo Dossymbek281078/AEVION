@@ -72,7 +72,7 @@ describe.skipIf(!existsSync(LAVIE))("LA VIE.pdf: подписи комнат", (
     await doc.destroy();
     const items = tc.items.flatMap((it) => ("str" in it ? [{ str: it.str, transform: it.transform, width: it.width }] : []));
     const тексты = подписиИзТекста(items).map((p) => p.text.toLowerCase());
-    for (const ожид of ["кухня", "холл", "мастер спальня", "детский санузел", "гардероб", "прачечная"]) {
+    for (const ожид of ["кухня", "холл", "мастер спальня", "детский санузел", "гардероб", "прачечная", "мастер санузел"]) {
       expect(тексты.some((t) => t.includes(ожид)), `нет «${ожид}» среди: ${тексты.join(" | ")}`).toBe(true);
     }
     const комнатных = тексты.filter((t) => roomTypeFromLabel(t) !== null);
@@ -95,6 +95,15 @@ describe("назначенияПоПодписям", () => {
     );
     expect(r.types).toEqual({ 1: "kitchen", 2: "bedroom" });
     expect(r.names).toEqual({ 1: "Кухня", 2: "Мастер спальня" });
+    expect(r.unplaced).toEqual(["Гардероб"]);
+  });
+  it("подпись на границе (в клетке стены, до комнаты 0.2 м) уходит ближайшей комнате; дальше 0.4 м — вне", () => {
+    const roomAt = (x: number, y: number) => (x >= 1 && x <= 3 && y >= 1 && y <= 3 ? 7 : null);
+    const r = назначенияПоПодписям(
+      [{ text: "Прачечная", x: 8, y: 20 }, { text: "Гардероб", x: 0, y: 20 }], // (0.8,2) — в 0.2 м от комнаты; (0,2) — в 1 м
+      { x: 0, y: 0 }, 0.1, roomAt,
+    );
+    expect(r.names).toEqual({ 7: "Прачечная" });
     expect(r.unplaced).toEqual(["Гардероб"]);
   });
 });

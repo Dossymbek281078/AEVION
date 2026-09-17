@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MATERIALS, materialById, materialsFor } from "./materials";
+import { MATERIALS, materialById, materialsFor, variantsOf, composeMaterialId, parseMaterialId } from "./materials";
 
 describe("каталог материалов", () => {
   it("идентификаторы уникальны — иначе выбор материала молча возьмёт не тот", () => {
@@ -84,5 +84,31 @@ describe("подписи материалов не расходятся с ри�
     expect(длинаИзПодписи("матовая")).toBeNull();
     // «3 мм» и «м²» не должны читаться как метры
     expect(длинаИзПодписи("шов 3 мм условный")).toBeNull();
+  });
+});
+
+describe("цвет и укладка плитки/доски — составной id", () => {
+  it("плитка даёт 7 цветов и 4 укладки, доска — 4 цвета и 3, краска — ничего", () => {
+    expect(variantsOf(materialById("tile-white")!).colorways.length).toBe(7);
+    expect(variantsOf(materialById("tile-white")!).layouts).toEqual(["straight", "offset", "diagonal", "herringbone"]);
+    expect(variantsOf(materialById("parquet-oak")!).layouts).toEqual(["straight", "diagonal", "herringbone"]);
+    expect(variantsOf(materialById("paint-sage")!)).toEqual({ colorways: [], layouts: [] });
+  });
+  it("составной id разбирается обратно, имя несёт цвет и укладку, палитра — цвета выбора", () => {
+    const id = composeMaterialId("tile-white", "beige", "diagonal");
+    expect(id).toBe("tile-white|c=beige|l=diagonal");
+    expect(parseMaterialId(id)).toEqual({ base: "tile-white", colorway: "beige", layout: "diagonal" });
+    const m = materialById(id)!;
+    expect(m.name).toBe("Плитка белая 60×60 · бежевый · по диагонали");
+    expect(m.colors[0]).toBe("#dccdb8");
+    expect(m.layout).toBe("diagonal");
+    expect(m.unitM).toBe(0.6);
+    // прямая укладка в id не пишется — это умолчание
+    expect(composeMaterialId("tile-white", undefined, "straight")).toBe("tile-white");
+  });
+  it("чужой цвет или укладка не являются позицией каталога", () => {
+    expect(materialById("tile-white|c=purple")).toBeUndefined();
+    expect(materialById("paint-sage|l=diagonal")).toBeUndefined();
+    expect(materialById("tile-white|c=grey")?.id).toBe("tile-white|c=grey");
   });
 });

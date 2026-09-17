@@ -629,7 +629,12 @@ async function main() {
   const cov = cs2.json?.airspaceCoverage ?? (await jget("/api/qskyway/cities")).json?.airspaceCoverage;
   // 15.09.2026: от числа городов, а не «3 и 2» — с Сингапуром их 4, режимов разрешений 3.
   const nCities = cityIds.length;
-  assert(cov?.withRegulatoryLayer === nCities && cov?.withFeed === 1 && cov?.withCeilings === 1 && cov?.withPermissionRegime === nCities - 1, "every city has a published rule, and only one of them publishes a feed", `layer=${cov?.withRegulatoryLayer} feed=${cov?.withFeed} ceil=${cov?.withCeilings} perm=${cov?.withPermissionRegime} cities=${nCities}`);
+  // 17.09.2026: фидов-потолков стало ДВА (FAA у Нью-Йорка, BAZL у Цюриха) — «ровно один»
+  // было свойством состава городов, а не правилом. Правило: у каждого города ровно
+  // один слой (фид-потолок ЛИБО режим разрешений), фидов не меньше одного, и
+  // потолки есть ровно там, где есть фид.
+  const nFeeds = cov?.withFeed ?? 0;
+  assert(cov?.withRegulatoryLayer === nCities && nFeeds >= 1 && cov?.withCeilings === nFeeds && cov?.withPermissionRegime === nCities - nFeeds, "every city has a published rule: a ceiling feed or a permission regime, never neither", `layer=${cov?.withRegulatoryLayer} feed=${cov?.withFeed} ceil=${cov?.withCeilings} perm=${cov?.withPermissionRegime} cities=${nCities}`);
   assert(Array.isArray(cov?.missing) && cov.missing.length === 0, "nothing is left claiming no regulator source", (cov?.missing ?? []).join(","));
   const justTk = await jpost("/api/qskyway/route/justification", { from: 0, to: 1, city: "tokyo" });
   assert(justTk.json?.document?.permission?.authority && /MLIT/.test(justTk.json.document.permission.authority), "[tokyo] justification carries the permission regime it must disclose");

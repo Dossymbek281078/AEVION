@@ -6316,7 +6316,7 @@ export default function CyberChessPage(){
             буквах доски «c»/«d» (100% наложения), а любой другой bottom попадал на BottomNav.
             Строка шапки сдвигает контент вниз — накрывать ей нечего по построению; и отступ
             152px под скроллером больше не нужен. Десктоп — fixed top:156 (см. ниже). */}
-        {on&&!over&&tab!=="play"&&!isHumanGame&&vwPx<769&&<button onClick={()=>sTab("play")} title="Вернуться к партии — часы на паузе, пока ты здесь" className="cc-focus-ring" style={{flex:"1 1 100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"9px 14px",borderRadius:RADIUS.full,border:"none",background:"linear-gradient(135deg,#059669,#10b981)",color:"#fff",fontSize:14,fontWeight:900,cursor:"pointer",boxShadow:SHADOW.sm}}>
+        {on&&!over&&tab!=="play"&&!isHumanGame&&vwPx<769&&<button onClick={()=>sTab("play")} title="Вернуться к партии — часы на паузе, пока ты здесь" className="cc-focus-ring" style={{flex:"1 1 100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"9px 14px",borderRadius:RADIUS.full,border:"none",background:"linear-gradient(135deg,#059669,#10b981)",color:"#fff",fontSize:14,fontWeight:900,cursor:"pointer"}}>
           <span style={{fontSize:15,lineHeight:1}}>▶</span><span>Вернуться к партии</span><span style={{fontSize:11,fontWeight:700,opacity:0.85,background:"rgba(255,255,255,0.2)",padding:"2px 8px",borderRadius:999}}>⏸ пауза</span>
         </button>}
       </div>}

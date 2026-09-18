@@ -436,8 +436,10 @@ function parseStore(html) {
   // $9.99 и выдали за неё платный ТАРИФ. Это единственная проверка, которая
   // ловит такой товар ДО первой продажи.
   let gumStore = null;
+  let gumHtml = "";
   try {
-    gumStore = parseGumroad(await fetchGumroad());
+    gumHtml = await fetchGumroad();
+    gumStore = parseGumroad(gumHtml);
   } catch (e) {
     console.error("storefront-vs-code: витрину Gumroad прочитать НЕ удалось — " + e.message);
     process.exitCode = 2;
@@ -449,12 +451,21 @@ function parseStore(html) {
     process.exitCode = 2;
     return;
   }
-  // Тот же знаменатель для второй кассы: сопоставлений в коде столько-то,
-  // товаров на витрине не может быть меньше.
-  if (gumStore.length < Object.keys(gumMap).length) {
+  // 18.09.2026. Знаменатель полноты — САМА витрина, а не карта в коде. Прежде здесь
+  // стояло «сопоставлений в коде столько-то, товаров на витрине не может быть меньше» —
+  // и это неверно: в Gumroad товар бывает unlisted (на профиле не показан, ссылка
+  // покупки жива), у нас таких 3 из 9. Прогон отвечал кодом 2 «разбор НЕПОЛОН» при
+  // ПОЛНОМ разборе (6 из 6 показанных), каждое утро красил сводку и не доходил до
+  // ветки ниже, которая эти непоказанные слаги и проверяет по ссылке. Разбор неполон,
+  // только если ссылок /l/<слаг> на странице больше, чем разобрано, либо не разобрано
+  // ничего. Регулярка собрана без обратных слэшей намеренно (§2е — съеденный слэш).
+  const shownSlugs = new Set(
+    [...gumHtml.matchAll(new RegExp("gumroad[.]com/l/([a-z0-9_-]+)", "gi"))].map((m) => m[1].toLowerCase())
+  );
+  if (gumStore.length === 0 || gumStore.length < shownSlugs.size) {
     console.error(
       `storefront-vs-code: Gumroad разобрано ${gumStore.length} товаров при ` +
-        `${Object.keys(gumMap).length} сопоставлениях в коде — разбор НЕПОЛОН`
+        `${shownSlugs.size} ссылках /l/ на витрине — разбор НЕПОЛОН`
     );
     process.exitCode = 2;
     return;

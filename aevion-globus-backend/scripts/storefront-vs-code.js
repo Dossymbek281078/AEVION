@@ -57,6 +57,33 @@ function readNameMap() {
   return map;
 }
 
+/**
+ * Названия товаров ПРЕЖНЕЙ модели (планы до 15.09.2026), как они заведены в магазине.
+ * Выводятся из ключей LEGACY_VARIANT_ENV: исчезнет ссылка из кода — исчезнет и имя здесь.
+ * Сами названия в коде не живут (они в LemonSqueezy), поэтому правило именования зашито:
+ * tier_<план>_<период> -> «AEVION <План> — <Monthly|Annual>», app_<слаг> -> «AEVION <Имя>».
+ * Замер 18.09.2026: 18 таких товаров на витрине, вебхук узнаёт их как legacy и выдаёт
+ * ступень по LEGACY_TIER — то есть Full — Monthly за $49 даёт 9 месяцев нового прайса.
+ */
+function legacyStorefrontNames() {
+  const src = fs.readFileSync(VARIANTS_TS, "utf8");
+  const start = src.indexOf("LEGACY_VARIANT_ENV");
+  if (start < 0) return {};
+  const block = src.slice(start, src.indexOf("};", start));
+  const plan = { lite: "Lite", medium: "Medium", full: "Full", planet: "Planet", pro: "Universe" };
+  const app = {
+    qventure: "QVenture", qpaynet: "QPayNet", qcontract: "QContract", constitution: "Constitution Lab",
+    ip_bureau: "IP Bureau", qrenew: "QRenew", smeta: "Smeta Trainer", cyberchess: "CyberChess Pro",
+    devhub: "DevHub Studio Pro",
+  };
+  const out = {};
+  for (const m of block.matchAll(new RegExp("(tier_([a-z]+)_(monthly|annual)|app_([a-z_]+)):", "g"))) {
+    if (m[2] && plan[m[2]]) out[normName(`AEVION ${plan[m[2]]} — ${m[3] === "monthly" ? "Monthly" : "Annual"}`)] = m[1];
+    else if (m[4] && app[m[4]]) out[normName(`AEVION ${app[m[4]]}`)] = m[1];
+  }
+  return out;
+}
+
 /** Ступени сроков и отдельные приложения из pricing.ts. Разбор строковый: регулярки по этому файлу хрупки. */
 function readLadder() {
   const src = fs.readFileSync(PRICING_TS, "utf8");
@@ -398,8 +425,27 @@ function parseStore(html) {
 
   // 4. Живой товар, которого код не знает — не ошибка сама по себе, но выдать
   //    его нечем: сопоставления нет, значит и тариф по нему не назначить.
+  //    18.09.2026: три исхода вместо одного. Носитель вариантов (лестница сроков) уже
+  //    разобран пунктом 1 — не повторять. Товар ПРЕЖНЕЙ модели вебхук узнаёт как legacy
+  //    и ВЫДАЁТ по нему ступень — это не «не опознан», а утечка цены, и лечится она не
+  //    кодом, а снятием товара с публикации рукой основателя; печатаем ОДНОЙ строкой
+  //    с адресом инструкции, а не восемнадцатью. Остальное — настоящий «не опознан».
+  const legacy = legacyStorefrontNames();
+  const prezhnie = [];
   for (const it of store) {
-    if (!nameMap[it.name]) nahodki.push(`НЕ ОПОЗНАН: на витрине "${it.name}" (${it.priceUsd == null ? "цена вариантами" : "$" + it.priceUsd + "/" + it.period}), в коде такого названия нет`);
+    if (nameMap[it.name]) continue;
+    if (it === nositel) continue;
+    const cena = it.priceUsd == null ? "цена вариантами" : "$" + it.priceUsd + "/" + it.period;
+    if (legacy[it.name]) { prezhnie.push(`"${it.name}" (${cena}) → ${legacy[it.name]}`); continue; }
+    nahodki.push(`НЕ ОПОЗНАН: на витрине "${it.name}" (${cena}), в коде такого названия нет`);
+  }
+  if (prezhnie.length) {
+    nahodki.push(
+      `ПРЕЖНЯЯ МОДЕЛЬ: ${prezhnie.length} товаров планов до 15.09 ещё опубликованы — вебхук выдаёт по ним ` +
+        `ступень по LEGACY_TIER (Full — Monthly $49 даёт 9 месяцев нового прайса). Лечится не кодом: снять с ` +
+        `публикации рукой основателя, инструкция Desktop/АЕВИОН/06-Витрина-цены-SEO/` +
+        `2026-09-17-ВАША-РУКА-снять-старые-товары-в-Lemon-Squeezy.md. Поимённо: ${prezhnie.join(", ")}`
+    );
   }
 
   // 5. Цена в магазине против цены в каталоге САЙТА, по точному ключу —

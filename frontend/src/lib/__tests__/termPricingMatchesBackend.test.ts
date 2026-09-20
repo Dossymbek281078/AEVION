@@ -18,10 +18,12 @@ function record(name: string): Record<string, number> {
 }
 
 describe("лестница сроков сайта совпадает с бэкендом", () => {
-  test("КОНТРОЛЬ прибора: в источнике нашлись все три таблицы и пять приложений", () => {
+  // 20.09.2026: приложений стало девять — по слову основателя «везде должны быть цены»
+  // добавлены QRight, QSign, Startup Exchange, QSkyway. Ступеней срока по-прежнему пять.
+  test("КОНТРОЛЬ прибора: в источнике нашлись все три таблицы и девять приложений", () => {
     expect(Object.keys(record("TERM_MONTHS"))).toHaveLength(5);
     expect(Object.keys(record("TERM_FACTOR"))).toHaveLength(5);
-    expect([...backend.matchAll(/\{ slug: "[^"]+", moduleId: "[^"]+", name: "[^"]+", baseMonthly: \d+ \}/g)]).toHaveLength(5);
+    expect([...backend.matchAll(/\{ slug: "[^"]+", moduleId: "[^"]+", name: "[^"]+", baseMonthly: \d+ \}/g)]).toHaveLength(9);
   });
 
   test("сроки и доли цены", () => {

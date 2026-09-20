@@ -25,7 +25,7 @@ import {
 import { parseDxf } from "./dxf";
 import { estimateCsv, estimatePlan } from "./estimate";
 import { planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
-import { масштабПоРазмерам, надёжностьМасштаба, предупреждениеОбОсях, словаИзТекста } from "./dimensionScale";
+import { масштабПоРазмерам, надёжностьМасштаба, областьПлана, предупреждениеОбОсях, словаИзТекста } from "./dimensionScale";
 import { листПлана, текстPdf, текстСтраниц } from "./pdfText";
 import { назначенияПоПодписям, подписиИзТекста, type Подпись } from "./roomLabels";
 import { appliancesFromLabels, fixturesFromSegments } from "./fixtures";
@@ -1112,7 +1112,8 @@ export default function QSpaceClient() {
     setPdfLabels(подписи);
     if (масштаб && src.extentPt > 0) {
       const extentM = Math.round((src.extentPt * масштаб.mmPerPt) / 10) / 100;
-      const r = planFromPdfSegments(src, extentM, "размеры");
+      // прямоугольник плана по размерным цепочкам: рамка, легенда и таблицы листа — вне его
+      const r = planFromPdfSegments(src, extentM, "размеры", текст.ok ? областьПлана(словаИзТекста(текст.items)) : null);
       if (r.plan) {
         setPdfExtent(String(extentM));
         setWarnings([

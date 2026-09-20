@@ -158,3 +158,24 @@ function плотнаяГруппа(значения: number[]): number[] {
 function медиана(отсортированные: number[]): number {
   return отсортированные[Math.floor(отсортированные.length / 2)];
 }
+
+/**
+ * Где на листе сам ПЛАН: прямоугольник вокруг размерных чисел. Размерные цепочки стоят
+ * вдоль стен, а рамка, штамп, легенда и экспликация — вне их. Замер 20.09 на листе
+ * «обмерный план» из альбома: без обрезки габарит 21 м и «комната» 153 м² из рамки при
+ * 55 м² по экспликации. Выбросы (число высоты в легенде вдали от плана) отсекаются по
+ * медиане: дальше 2.5 медианных отклонений — не план. Прямоугольник расширен на 8 %.
+ */
+export function областьПлана(слова: СловоНаЛисте[]): { x0: number; y0: number; x1: number; y1: number } | null {
+  if (слова.length < 6) return null;
+  const медиана = (a: number[]): number => { const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
+  const xs = слова.map((w) => w.x), ys = слова.map((w) => w.y);
+  const mx = медиана(xs), my = медиана(ys);
+  const madX = медиана(xs.map((x) => Math.abs(x - mx))) || 1, madY = медиана(ys.map((y) => Math.abs(y - my))) || 1;
+  const свои = слова.filter((w) => Math.abs(w.x - mx) <= 2.5 * madX * 1.4826 + 1 && Math.abs(w.y - my) <= 2.5 * madY * 1.4826 + 1);
+  if (свои.length < 6) return null;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const w of свои) { x0 = Math.min(x0, w.x); y0 = Math.min(y0, w.y); x1 = Math.max(x1, w.x); y1 = Math.max(y1, w.y); }
+  const dx = (x1 - x0) * 0.08, dy = (y1 - y0) * 0.08;
+  return { x0: x0 - dx, y0: y0 - dy, x1: x1 + dx, y1: y1 + dy };
+}

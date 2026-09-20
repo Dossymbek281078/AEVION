@@ -155,6 +155,25 @@ export const NOFLY: Record<string, NoFlyZone[]> = {
     },
     { id: "nfz-crowd", name: "Плотная толпа — Штефансплац и Грабен", kind: "temporary", center: [16.3705, 48.2088], radiusM: 160, until: "2026-12-31T16:00:00Z" },
   ],
+  zurich: [
+    {
+      // Цюрих, 17.09.2026. Реальный режим — ПОТОЛОК из фида BAZL (слой airspace):
+      // весь квадрат в CTR ZURICH, «>250 г запрещены выше 120 м AGL». Запретных
+      // зон-кругов регулятор над центром не публикует. Круг ниже — НАША
+      // демо-геометрия над Гроссмюнстером, не опубликованный контур.
+      id: "nfz-grossmuenster", name: "Гроссмюнстер (демо-геометрия)", kind: "permanent",
+      center: [8.5440, 47.3702], radiusM: 150,
+      realityNote:
+        "Это НАША демо-окружность. Опубликованное правило над центром Цюриха — дрон-геозоны BAZL (geo.admin.ch): "
+        + "весь квадрат в CTR ZURICH с потолком 120 м над землёй для БПЛА тяжелее 250 г — см. блок airspace, "
+        + "он вобран вектором. Отдельных запретных зон над центром BAZL не публикует.",
+      realityNoteEn:
+        "This is OUR demo circle. The published rule over central Zurich is BAZL's UAS geo-zone feed (geo.admin.ch): "
+        + "the whole square lies in CTR ZURICH with a 120 m AGL ceiling for UAS over 250 g — see the airspace "
+        + "block, ingested as vectors. BAZL publishes no separate prohibited areas over the centre.",
+    },
+    { id: "nfz-crowd", name: "Плотная толпа — Главный вокзал и Банхофштрассе", kind: "temporary", center: [8.5403, 47.3779], radiusM: 180, until: "2026-12-31T16:00:00Z" },
+  ],
 };
 export const WIND: Record<string, WindConfig> = {
   // Астана — открытая степь, преобладающий юго-западный/южный ветер, сильный.
@@ -175,4 +194,7 @@ export const WIND: Record<string, WindConfig> = {
   // Вена — Венская котловина, преобладающий западный/северо-западный ветер.
   // Живой METAR LOWW (Швехат, ~17 км) перекрывает это значение.
   vienna: { fromDeg: 300, baseMs: 3.5, perBandMs: 1.3 },
+  // Цюрих — долина Лиммата, слабые ветры, преобладающий западный/северо-западный
+  // (бизе — с северо-востока). Живой METAR LSZH (~10 км) перекрывает это значение.
+  zurich: { fromDeg: 290, baseMs: 3, perBandMs: 1.2 },
 };

@@ -50,8 +50,18 @@
 // because the search was for a feed rather than for the rule, is exactly what
 // hid Astana's UAP28 for weeks.
 
+// ── 17.09.2026: второй фид — BAZL/FOCA (Цюрих) ─────────────────────────────
+// Швейцарское ведомство гражданской авиации публикует дрон-геозоны (EU 2019/947)
+// ВЕКТОРОМ в geo.admin.ch (слой ch.bazl.einschraenkungen-drohnen, REST identify,
+// GeoJSON). Над центром Цюриха это CTR ZURICH: «БПЛА тяжелее 250 г запрещены
+// выше 120 м над землёй; исключение — по разрешению». Это ПОТОЛОК, то есть
+// ровно то, что моделирует этот слой; отличие от FAA одно — зона задана
+// полигоном, а не прямоугольником, поэтому у ячейки появилось поле `rings`.
+// Снимок: qskyway.airspace.zurich.ts, генератор scripts/fetch-bazl-airspace.mjs.
+
 import crypto from "crypto";
 import { AIRSPACE_NYC } from "./qskyway.airspace.nyc";
+import { AIRSPACE_ZURICH } from "./qskyway.airspace.zurich";
 import type { CityData } from "./qskyway.city";
 
 /** One source cell exactly as the regulator publishes it (axis-aligned lon/lat rect). */
@@ -69,6 +79,14 @@ export interface AirspaceCell {
   airportName: string | null;
   laanc: boolean;
   effective: string | null;
+  /**
+   * Полигональные зоны (BAZL): внешние кольца [lon, lat]. Есть кольца — ячейка
+   * действует там, где центр клетки внутри хотя бы одного; нет — как прежде,
+   * прямоугольник min/max. У FAA колец нет, и их подпись/якорь не меняются.
+   */
+  rings?: [number, number][][];
+  /** текст правила словами регулятора (BAZL) — для читателя снимка, не для подписи */
+  note?: string;
 }
 
 export interface CityAirspace {
@@ -81,9 +99,25 @@ export interface CityAirspace {
   /** the envelope this snapshot was queried with — replayed by the freshness check */
   bbox: { minLat: number; maxLat: number; minLon: number; maxLon: number };
   cells: AirspaceCell[];
+  /** какой фид переспрашивать при проверке свежести; по умолчанию FAA */
+  feed?: "faa" | "bazl";
 }
 
-export const AIRSPACE: Record<string, CityAirspace> = { nyc: AIRSPACE_NYC };
+export const AIRSPACE: Record<string, CityAirspace> = { nyc: AIRSPACE_NYC, zurich: AIRSPACE_ZURICH };
+
+function pointInRing(ring: [number, number][], lon: number, lat: number): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if ((yi > lat) !== (yj > lat) && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+function cellCovers(cell: AirspaceCell, lon: number, lat: number): boolean {
+  if (lon < cell.minLon || lon > cell.maxLon || lat < cell.minLat || lat > cell.maxLat) return false;
+  return cell.rings ? cell.rings.some((ring) => pointInRing(ring, lon, lat)) : true;
+}
 
 /** Altitude used for grid cells the feed does not cover — "no published constraint". */
 export const NO_CEILING = Infinity;
@@ -139,9 +173,7 @@ export function ceilingField(cityId: string, city: CityData): CeilingField | nul
       // Overlapping publications are possible; the binding constraint is the lowest.
       let ceil = NO_CEILING;
       for (const cell of src.cells) {
-        if (lon >= cell.minLon && lon <= cell.maxLon && lat >= cell.minLat && lat <= cell.maxLat) {
-          ceil = Math.min(ceil, cell.ceilingM);
-        }
+        if (cellCovers(cell, lon, lat)) ceil = Math.min(ceil, cell.ceilingM);
       }
       if (ceil !== NO_CEILING) {
         ceilings[r * cols + c] = ceil;
@@ -184,7 +216,9 @@ export function ceilingAt(field: CeilingField | null, c: number, r: number): num
 export function signablePayload(src: CityAirspace): string {
   const cells = [...src.cells]
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-    .map((c) => [c.id, c.minLon, c.maxLon, c.minLat, c.maxLat, c.ceilingFt, c.airspaceClass ?? "", c.airportIcao ?? "", c.laanc ? 1 : 0]);
+    // Кольца попадают в подпись ТОЛЬКО у полигональных ячеек: у FAA их нет, и
+    // кортеж — а с ним contentHash, заякоренный в Bitcoin, — не меняется.
+    .map((c) => [c.id, c.minLon, c.maxLon, c.minLat, c.maxLat, c.ceilingFt, c.airspaceClass ?? "", c.airportIcao ?? "", c.laanc ? 1 : 0, ...(c.rings ? [c.rings] : [])]);
   return JSON.stringify({
     authority: src.authority,
     source: src.source,

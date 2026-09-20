@@ -7400,6 +7400,7 @@ const en: Record<string, string> = {
   "qskyway.city.amsterdam": "Amsterdam — Zuidas",
   "qskyway.city.berlin": "Berlin — Potsdamer Platz",
   "qskyway.city.vienna": "Vienna — Innere Stadt",
+  "qskyway.city.zurich": "Zurich — city centre",
   "langSwitch.aria": "Interface language",
   "chain.room.qright": "Authorship record",
   "chain.room.qcontract": "Contract",

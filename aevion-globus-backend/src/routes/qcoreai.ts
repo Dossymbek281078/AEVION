@@ -534,18 +534,23 @@ qcoreaiRouter.post("/chat", anonChatCeiling, exposeCeilingRemaining, chatLimiter
     if (await enforcePremiumModelQuota(req, res, providerId, modelName)) return;
 
     const result = await callProviderResilient(providerId, messages, modelName, temperature);
+    // Ответ мог прийти от другого поставщика (закрытый по лимиту пропущен) —
+    // учёт и интерфейс получают того, кто ответил на самом деле.
+    const usedId = result.providerUsed ?? providerId;
+    const usedProvider = getProviders().find((p) => p.id === usedId) ?? provider;
     // Count usage toward the free-tier monthly quota (single-shot /chat does
     // not persist a QCoreRun/QCoreMessage, so it must ledger explicitly).
     if (auth?.sub) {
       const { tokensIn, tokensOut } = usageToTokens(result.usage);
-      addTokenUsage(auth.sub, tokensIn, tokensOut, { provider: providerId, model: modelName }).catch(() => {});
+      addTokenUsage(auth.sub, tokensIn, tokensOut, { provider: usedId, model: result.model }).catch(() => {});
     }
     res.json({
-      mode: providerId,
-      provider: provider.name,
+      mode: usedId,
+      provider: usedProvider.name,
       model: result.model,
       reply: result.reply,
       usage: result.usage,
+      ...(result.failedOver ? { failedOver: result.failedOver } : {}),
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "chat failed"; // только для журнала

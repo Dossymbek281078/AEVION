@@ -72,6 +72,7 @@ import { fetchI3sBuildingPoints, pointAsTinyRing } from "./lib/i3s-points.mjs";
 import { fetchBag3dOutlines } from "./lib/bag3d.mjs";
 import { fetchBerlinOutlines } from "./lib/berlin-wfs.mjs";
 import { fetchWienBodies } from "./lib/wien-wfs.mjs";
+import { findTileZips, downloadOnce, readSwissBuildings } from "./lib/swissbuildings.mjs";
 
 // The height model, the projection and the rasterizer live in
 // scripts/lib/city-twin-geometry.mjs so they can be unit-tested; this file is
@@ -369,6 +370,46 @@ const CITIES = {
       'import type { CityData } from "./qskyway.city";',
     ].join("\n"),
   },
+  zurich: {
+    // Восьмой город, 17.09.2026. Высоты — swissBUILDINGS3D 3.0 (swisstopo,
+    // CityGML LoD2, measuredHeight, lib/swissbuildings.mjs); правило — ФИД
+    // регулятора BAZL (geo.admin.ch, ch.bazl.einschraenkungen-drohnen): над
+    // всем квадратом CTR ZURICH — «>250 г запрещены выше 120 м AGL», то есть
+    // ПОТОЛОК (слой airspace, как фид FAA у NYC), не разрешение. Квадрат —
+    // центр между вокзалом и Гроссмюнстером; лежит на стыке тайлов 1091-23/24.
+    name: "Цюрих — центр",
+    bbox: { minLat: 47.37, maxLat: 47.379064, minLon: 8.532, maxLon: 8.547808 },
+    exportName: "CITY_ZURICH",
+    committed: "qskyway.city.zurich.ts",
+    // Сетка из projection(): 1192×1002 м → 60×51 ячеек; раскладка как у Вены.
+    vertiports: [
+      { c: 2, r: 2, x: 50, y: 50 }, { c: 57, r: 2, x: 1150, y: 50 },
+      { c: 2, r: 48, x: 50, y: 970 }, { c: 57, r: 48, x: 1150, y: 970 },
+      { c: 48, r: 38, x: 970, y: 770 }, { c: 30, r: 48, x: 610, y: 970 },
+      { c: 12, r: 30, x: 250, y: 610 },
+    ],
+    // Заниженные теги, у которых есть опубликованная высота выше (безопасная
+    // сторона — большая): башня Предигеркирхе, самый высокий шпиль Цюриха.
+    publishedHeights: [
+      { osm: "way/1278829864", h: 97, source: "https://en.wikipedia.org/wiki/Predigerkirche_Zurich" },
+    ],
+    measured: {
+      kind: "swissbuildings",
+      label: "swissBUILDINGS3D 3.0 (swisstopo): CityGML LoD2, measuredHeight, открытые данные",
+      marginM: 50,
+      nearRadiusM: 20,
+      // measuredHeight по модели крыши — что с мачтами, смотреть гистограмму первой сборки.
+      osmTallerIsTag: false,
+    },
+    header: [
+      "// QSkyway city digital-twin — Цюрих, центр. OpenStreetMap footprints (Overpass,",
+      "// ODbL) reconciled with swisstopo swissBUILDINGS3D 3.0 (CityGML LoD2, measuredHeight,",
+      "// open data) — see scripts/lib/swissbuildings.mjs. Regenerate with:",
+      "//   node scripts/fetch-city-twin.mjs zurich --write",
+      "/* eslint-disable */",
+      'import type { CityData } from "./qskyway.city";',
+    ].join("\n"),
+  },
 };
 
 const cityId = process.argv[2];
@@ -570,6 +611,18 @@ if (city.measured) {
     process.stderr.write(`  Wien WFS: fetching bodies…\n`);
     const got = await fetchWienBodies(wide, { log: (s) => process.stderr.write(s + "\n") });
     for (const g of got) outlines.push({ h: g.h, ring: g.ring });
+  } else if (kind === "swissbuildings") {
+    // swissBUILDINGS3D 3.0: тайлы CityGML по STAC, по 190 МБ zip / 1.8 ГБ GML;
+    // скачиваются один раз в .aevion-data/swissbuildings (gitignored) и
+    // читаются потоком (~7 мин на тайл). Квадрат может лежать на стыке тайлов.
+    const dir = new URL("../.aevion-data/swissbuildings/", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+    const tiles = await findTileZips(wide);
+    process.stderr.write(`  swissBUILDINGS3D: ${tiles.length} tile(s) cover the box: ${tiles.map((t) => `${t.tile}@${t.year}`).join(", ")}\n`);
+    for (const t of tiles) {
+      const zip = await downloadOnce(t.href, dir);
+      const got = await readSwissBuildings(zip, wide, { log: (s) => process.stderr.write(s + "\n") });
+      for (const g of got) outlines.push({ h: g.h, ring: g.ring });
+    }
   } else if (kind === "i3s") {
     // Точки-центроиды из I3S-слоя города; каждая — квадрат 1×1 м, чтобы пройти
     // правило «центроид внутри контура OSM» в reconcileMeasuredOutlines.
@@ -824,6 +877,28 @@ if (typedGuesses) {
   );
 }
 
+// ── опубликованная высота ВЫШЕ тега: заниженное препятствие поднимаем ────────
+// Позиция модуля — чужой источник не переписываем: завышенный тег (Абу-Даби
+// Плаза, 382 при 310.8) стоит лишь крюка, и его разбор живёт в
+// src/data/qskywayHeightReview.ts. ЗАНИЖЕННЫЙ тег — другой класс: коридор,
+// посчитанный по нему, проходит ниже настоящей верхушки. 17.09.2026, Цюрих:
+// башня Предигеркирхе — тег 82 м, опубликовано 97 м (высочайший шпиль города),
+// обмер swissBUILDINGS до отдельного контура башни не дотянулся. Здесь
+// безопасная сторона — большая высота; случай остаётся виден: запись в suspect
+// с `was` (тег) и `source`, класс hs=1 (опубликовано, не обмерено нами).
+const raisedToPublished = [];
+for (const o of city.publishedHeights ?? []) {
+  const i = meta.findIndex((m) => m.id === o.osm);
+  if (i < 0) { process.stderr.write(`  ⚠ publishedHeights: ${o.osm} не найден в ответе OSM — поправка НЕ применена\n`); continue; }
+  if (buildings[i].h >= o.h) continue; // источник уже не ниже опубликованного — поправка не нужна
+  raisedToPublished.push({ i, osm: o.osm, h: o.h, was: buildings[i].h, source: o.source, why: "published height is above the OSM tag — understated obstacle raised to the published value" });
+  buildings[i].h = o.h;
+  if (buildings[i].hs === 2) buildings[i].hs = 1;
+}
+if (raisedToPublished.length) {
+  process.stderr.write(`  поднято до опубликованной высоты: ${raisedToPublished.map((r) => `${r.osm} ${r.was} → ${r.h} м`).join(", ")}\n`);
+}
+
 const { heights, src } = rasterize(buildings, COLS, ROWS);
 
 const measured = buildings.filter((b) => b.hs === 0).length;
@@ -949,18 +1024,20 @@ const maxMeasured = measuredHs.length >= 50 ? Math.max(...measuredHs) : 0;
 const aboveSurvey = maxMeasured > 0
   ? buildings
       .map((b, i) => ({ b, i }))
-      .filter(({ b, i }) => b.hs !== 0 && b.h > maxMeasured * 1.1 && !flagged.has(i))
+      // поднятые до опубликованной высоты уже разобраны (у них есть `was` и источник)
+      .filter(({ b, i }) => b.hs !== 0 && b.h > maxMeasured * 1.1 && !flagged.has(i) && !raisedToPublished.some((r) => r.i === i))
       .map(({ b, i }) => ({ i, osm: osmIdOf(i), h: b.h, times: Math.round((100 * b.h) / maxMeasured) / 100, why: "taller than anything the city measured" }))
   : [];
 const suspect = [
-  ...outliers.map((o) => ({ i: o.index, osm: osmIdOf(o.index), h: o.h, times: o.times, why: "towers over the city" })),
+  ...outliers.filter((o) => !raisedToPublished.some((r) => r.i === o.index)).map((o) => ({ i: o.index, osm: osmIdOf(o.index), h: o.h, times: o.times, why: "towers over the city" })),
   ...aboveSurvey,
+  ...raisedToPublished,
   ...contradicted.map((c) => ({ i: c.i, osm: osmIdOf(c.i), h: c.h, was: c.was, levels: c.levels, why: "height tag contradicted its own floor count" })),
 ];
 if (suspect.length) {
   process.stderr.write(
     `  ⚠ ${suspect.length} height(s) the source could not vouch for: ` +
-    `${suspect.map((o) => (o.times ? `${o.h} m (${o.times}x p99)` : `${o.was} m over ${o.levels} floors → ${o.h} m`)).join(", ")}
+    `${suspect.map((o) => (o.times ? `${o.h} m (${o.times}x p99)` : o.source ? `${o.was} m tag → ${o.h} m published` : `${o.was} m over ${o.levels} floors → ${o.h} m`)).join(", ")}
 `,
   );
 }

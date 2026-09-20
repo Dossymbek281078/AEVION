@@ -6,6 +6,7 @@ import { CITY_TOKYO } from "../src/routes/qskyway.city.tokyo";
 import { CITY_AMSTERDAM } from "../src/routes/qskyway.city.amsterdam";
 import { CITY_BERLIN } from "../src/routes/qskyway.city.berlin";
 import { CITY_VIENNA } from "../src/routes/qskyway.city.vienna";
+import { CITY_ZURICH } from "../src/routes/qskyway.city.zurich";
 
 // Твин помечает высоту сомнительной двумя правилами. Одно — «тег спорит с
 // собственным счётом этажей»: там движок сам берёт счёт этажей, и в записи
@@ -29,6 +30,7 @@ const TWINS: Record<string, { dataQuality?: { suspect?: Suspect[] } }> = {
   amsterdam: CITY_AMSTERDAM as never,
   berlin: CITY_BERLIN as never,
   vienna: CITY_VIENNA as never,
+  zurich: CITY_ZURICH as never,
 };
 
 /** Сомнительные, которые движок НЕ переопределил — только они требуют человека. */
@@ -91,6 +93,9 @@ describe("что задаёт высоту коридоров: обмер или
   // 16.09.2026: + Амстердам — лидар 3D BAG; верхушка (Symphony/ABN AMRO, 105–108 м) обмерена.
   // 16.09.2026: + Берлин — LoD2 Сената; верхушка (башни Потсдамер-плац, 99–115 м) обмерена.
   // 16.09.2026: + Вена — Баукёрпермодель города; верхушка (собор Св. Стефана, 136 м) обмерена.
+  // 17.09.2026: Цюрих сюда НЕ входит, и это честно: его верхушка — башня
+  // Предигеркирхе, до отдельного контура которой обмер swissBUILDINGS3D не
+  // дотянулся; у неё своя проверка ниже (заниженный тег поднят до опубликованного).
   const SURVEYED = ["nyc", "tokyo", "amsterdam", "berlin", "vienna"];
 
   for (const city of SURVEYED) {
@@ -119,6 +124,29 @@ describe("что задаёт высоту коридоров: обмер или
     const top = [...bs].sort((a, z) => (z.h ?? 0) - (a.h ?? 0))[0];
     expect(top.h).toBe(382);
     expect(top.hs, "если верхушка стала обмеренной — исключение больше не нужно").toBe(1);
+  });
+
+  it("Цюрих: заниженный тег шпиля поднят до опубликованной высоты, и это видно в данных", () => {
+    // Башня Предигеркирхе (way/1278829864): тег OSM 82 м, опубликовано 97 м —
+    // самый высокий шпиль города. Заниженное препятствие опасно (коридор по тегу
+    // прошёл бы ниже верхушки), поэтому сборщик поднимает его до опубликованного
+    // (`publishedHeights` в scripts/fetch-city-twin.mjs). Требуем ТРИ вещи: в
+    // твине стоит большая высота; случай не спрятан — есть запись с `was` и
+    // источником; класс не выдан за обмер (hs=1: опубликовано, не обмерено нами).
+    const twin = TWINS.zurich as unknown as {
+      buildings: { h?: number; hs?: number }[];
+      dataQuality: { suspect?: (Suspect & { osm?: string; source?: string })[] };
+    };
+    const s = (twin.dataQuality.suspect ?? []).find((x) => x.osm === "way/1278829864");
+    expect(s, "разбор шпиля пропал из твина — пересборка без publishedHeights?").toBeTruthy();
+    expect(s!.was).toBe(82);
+    expect(s!.h).toBe(97);
+    expect(s!.source).toMatch(/^https:\/\//);
+    const b = twin.buildings[s!.i];
+    expect(b.h, "в твине осталась заниженная высота").toBe(97);
+    expect(b.hs, "опубликованная высота выдана за обмер").toBe(1);
+    const top = [...twin.buildings].sort((a, z) => (z.h ?? 0) - (a.h ?? 0))[0];
+    expect(top.h, "верхушка Цюриха — не шпиль Предигеркирхе: проверить твин").toBe(97);
   });
 });
 

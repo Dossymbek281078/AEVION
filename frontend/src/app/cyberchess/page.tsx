@@ -6120,7 +6120,7 @@ export default function CyberChessPage(){
         {/* «Все разделы» — видимый навигационный хаб. Делает обнаружимыми ВСЕ режимы и
             киллер-фичи (Турниры/Экономика/Тренинг/Реплеи/Студия/CPI), которые раньше были
             доступны только по прямому URL или через Ctrl+K. Зелёный акцент = заметность. */}
-        <button onClick={()=>sShowSections(true)} title="Все разделы — турниры, экономика, тренинг, реплеи, рейтинг…" className="cc-focus-ring"
+        {vwPx>=769&&<button onClick={()=>sShowSections(true)} title="Все разделы — турниры, экономика, тренинг, реплеи, рейтинг…" className="cc-focus-ring"
           style={{
             display:"inline-flex",alignItems:"center",gap:6,
             padding:"7px 14px",borderRadius:RADIUS.full,
@@ -6129,10 +6129,10 @@ export default function CyberChessPage(){
           }}>
           <span style={{fontSize:14}}>☰</span>
           <span>Все разделы</span>
-        </button>
+        </button>}
         {/* Единое «? Помощь» — обзорный тур / горячие клавиши / что такое Chessy. Собрано из
             4 разрозненных help-входов, чтобы новичок не гадал, какой «?» куда ведёт. */}
-        <div style={{position:"relative",flexShrink:0}}>
+        {vwPx>=769&&<div style={{position:"relative",flexShrink:0}}>
           <button onClick={()=>sHelpMenuOpen(v=>!v)} aria-haspopup="menu" aria-expanded={helpMenuOpen} title="Помощь — тур по интерфейсу, горячие клавиши, что такое Chessy" aria-label="Помощь" className="cc-focus-ring"
             style={{display:"inline-flex",alignItems:"center",gap:5,padding:"7px 13px",borderRadius:RADIUS.full,
               border:`1.5px solid ${helpMenuOpen?"#2563eb":"#3b82f6"}`,background:helpMenuOpen?"rgba(37,99,235,0.18)":"rgba(59,130,246,0.12)",color:"#2563eb",
@@ -6156,11 +6156,11 @@ export default function CyberChessPage(){
               </button>)}
             </div>
           </>}
-        </div>
+        </div>}
         {/* Аккаунт — вход в общий AEVION-аккаунт. Вошёл → рейтинг/история следуют за
             игроком между устройствами (не только этот браузер). Ссылки на общий
             /auth и /account платформы, свой UI не плодим. */}
-        {ccAuth.checked&&(ccAuth.user
+        {vwPx>=769&&ccAuth.checked&&(ccAuth.user
           ? <a href="/account" title={`Аккаунт: ${ccAuth.user.email||ccAuth.user.name||"вошёл"} — рейтинг и история синхронизируются между устройствами`} className="cc-focus-ring"
               style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 12px",borderRadius:RADIUS.full,
                 border:`1.5px solid ${CC.brand}`,background:CC.brandSoft,color:CC.brand,
@@ -6178,7 +6178,7 @@ export default function CyberChessPage(){
         )}
         {/* Bookmark counter — visible chip when any saved positions exist. Click opens the
             command palette pre-filtered to "открыть" so the bookmark list is the top result. */}
-        {bookmarks.length>0&&<button onClick={()=>sPalOpen(true)} title={`${bookmarks.length} закладок · клик откроет палитру (Ctrl+K)`} className="cc-focus-ring"
+        {vwPx>=769&&bookmarks.length>0&&<button onClick={()=>sPalOpen(true)} title={`${bookmarks.length} закладок · клик откроет палитру (Ctrl+K)`} className="cc-focus-ring"
           style={{
             display:"inline-flex",alignItems:"center",gap:5,
             padding:"5px 10px",borderRadius:RADIUS.full,
@@ -6191,7 +6191,7 @@ export default function CyberChessPage(){
         <div style={{flex:1}}/>
 
         {/* Профиль — рейтинг + Chessy (микро-лейбл убран: чистая шапка) */}
-        <div className="cc-hzone" style={{display:"flex",alignItems:"center",gap:3,flexShrink:0}}>
+        {vwPx>=769&&<div className="cc-hzone" style={{display:"flex",alignItems:"center",gap:3,flexShrink:0}}>
           <div style={{display:"inline-flex",alignItems:"center",gap:6}}>
         {/* Rating badge */}
         <div style={{
@@ -6278,7 +6278,7 @@ export default function CyberChessPage(){
           </button>
         </div>
           </div>
-        </div>
+        </div>}
 
         {/* Часто нужное — настройки, звук, мобильная панель — остаётся в шапке */}
         <div style={{display:"inline-flex",alignItems:"center",gap:4,flexShrink:0,padding:3,borderRadius:RADIUS.md,background:CC.surface2,border:`1px solid ${CC.border}`}}>
@@ -6315,8 +6315,9 @@ export default function CyberChessPage(){
             Тестер 18.09.2026 (партия кликами, 390px, Коуч): fixed-пилюля с bottom:88 лежала на
             буквах доски «c»/«d» (100% наложения), а любой другой bottom попадал на BottomNav.
             Строка шапки сдвигает контент вниз — накрывать ей нечего по построению; и отступ
-            152px под скроллером больше не нужен. Десктоп — fixed top:156 (см. ниже). */}
-        {on&&!over&&tab!=="play"&&!isHumanGame&&vwPx<769&&<button onClick={()=>sTab("play")} title="Вернуться к партии — часы на паузе, пока ты здесь" className="cc-focus-ring" style={{flex:"1 1 100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"9px 14px",borderRadius:RADIUS.full,border:"none",background:"linear-gradient(135deg,#059669,#10b981)",color:"#fff",fontSize:14,fontWeight:900,cursor:"pointer"}}>
+            152px под скроллером больше не нужен. С 19.09.2026 так на ЛЮБОЙ ширине: десктопная
+            fixed-пилюля top:156 при прокрутке «Анализа» ложилась на 8-ю горизонталь доски. */}
+        {on&&!over&&tab!=="play"&&!isHumanGame&&<button onClick={()=>sTab("play")} title="Вернуться к партии — часы на паузе, пока ты здесь" className="cc-focus-ring" style={{flex:vwPx<769?"1 1 100%":"0 0 auto",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"9px 14px",borderRadius:RADIUS.full,border:"none",background:"linear-gradient(135deg,#059669,#10b981)",color:"#fff",fontSize:14,fontWeight:900,cursor:"pointer"}}>
           <span style={{fontSize:15,lineHeight:1}}>▶</span><span>Вернуться к партии</span><span style={{fontSize:11,fontWeight:700,opacity:0.85,background:"rgba(255,255,255,0.2)",padding:"2px 8px",borderRadius:999}}>⏸ пауза</span>
         </button>}
       </div>}
@@ -12774,63 +12775,10 @@ ${question.trim()}`;
       })()}
     </Modal>
 
-    {/* «Вернуться к партии» — плавающая пилюля, видна с ЛЮБОЙ вкладки, когда идёт живая
-        партия против компьютера, а игрок ушёл в анализ/коуч/пазлы. Часы стоят на паузе —
-        можно вернуться в любой момент (по просьбе основателя). В партии с человеком не
-        показываем: оттуда уходить нельзя, поэтому tab всегда «play». */}
-    {on&&!over&&tab!=="play"&&!isHumanGame&&vwPx>=769&&<button onClick={()=>sTab("play")}
-      title="Вернуться к партии — часы на паузе, пока ты здесь"
-      style={{
-        // bottom на телефоне поднят над BottomNav (sticky bottom:0, ~54px, порог 769 —
-        // тот же, что у BottomNav): при bottom:20 пилюля ложилась РОВНО на вкладки
-        // Анализ/Коуч и, будучи выше по z, делала их ненажимаемыми. Замер 15.09.2026
-        // на 390px: elementFromPoint над вкладкой Коуч возвращал эту пилюлю.
-        // На ДЕСКТОПЕ (≥769) — ВВЕРХУ под шапкой, по центру, а не внизу: раскладка
-        // фиксированной высоты, доска анализа доходит до низа экрана, и центральная
-        // пилюля с bottom:20 ложилась на c1–h1 И на ряд ввода ходов «Перевернуть · Новая
-        // партия · Голос · Ход текстом» (скрин основателя 15.09.2026, Коуч, ~2000px: ряда
-        // не видно вовсе). Левый нижний угол не универсален — при сдвинутой раскладке
-        // (боковая панель) ряд ввода начинается с x≈217 и попал бы под пилюлю. Вверху:
-        // контент с y≈148, тулбар «⚙ 🔊 Ещё» слева (x<260), баннер с ≈230, доска с ≈430 —
-        // центрированная пилюля на top:156 ни с чем не пересекается на любой ширине.
-        // На телефоне с 18.09.2026 fixed-пилюли НЕТ: строка в потоке внутри sticky-шапки (см. шапку).
-        position:"fixed",top:156,left:"50%",transform:"translateX(-50%)",zIndex:Z.modal,
-        display:"inline-flex",alignItems:"center",gap:9,
-        padding:"11px 20px",borderRadius:RADIUS.full,border:"none",
-        background:"linear-gradient(135deg,#059669,#10b981)",color:"#fff",
-        fontSize:14,fontWeight:900,letterSpacing:0.2,cursor:"pointer",
-        boxShadow:"0 8px 28px rgba(5,150,105,0.45)",
-        animation:"cc-evdelta-in 0.3s ease-out",
-      }}>
-      <span style={{fontSize:16,lineHeight:1}}>▶</span>
-      <span>Вернуться к партии</span>
-      <span style={{fontSize:11,fontWeight:700,opacity:0.85,background:"rgba(255,255,255,0.2)",padding:"2px 8px",borderRadius:999}}>⏸ пауза</span>
-    </button>}
+    {/* «Вернуться к партии» живёт строкой в потоке sticky-шапки (см. шапку); fixed-пилюли нет ни на одной ширине с 19.09.2026. */}
 
-    {/* Floating keyboard hint pill — bottom-right, кликабельно открывает help.
-        Только там, где есть КЛАВИАТУРА. На телефоне подсказка про горячие
-        клавиши бессмысленна и при этом перекрывала главную кнопку «Играть»:
-        замер 21.08 при ширине 390 — пилюля на y=745, кнопка на y=710..784. */}
-    {!streamerMode&&!showHelp&&vwPx>=900&&<button onClick={()=>sShowHelp(true)} title="Показать горячие клавиши"
-      style={{
-        // bottom:64 (не 16) — пилюля ИИ-коуча уже сидит в правом нижнем углу;
-        // ставим кнопку помощи НАД ней, чтобы не было наложения. (Фикс наезда справа.)
-        position:"fixed",bottom:64,right:"calc(16px + var(--aevion-projects-w, 0px))",zIndex:Z.sticky,
-        display:"inline-flex",alignItems:"center",gap:6,
-        padding:"6px 12px 6px 6px",
-        background:CC.surface1,
-        border:`1px solid ${CC.border}`,
-        borderRadius:RADIUS.full,
-        boxShadow:SHADOW.md,
-        cursor:"pointer",
-        transition:`transform ${MOTION.fast} ${MOTION.ease}, box-shadow ${MOTION.base} ${MOTION.ease}`,
-      }}
-      onMouseEnter={e=>{const el=e.currentTarget as HTMLButtonElement;el.style.transform="translateY(-1px)";el.style.boxShadow=SHADOW.lg}}
-      onMouseLeave={e=>{const el=e.currentTarget as HTMLButtonElement;el.style.transform="";el.style.boxShadow=SHADOW.md}}
-    >
-      <kbd style={{fontFamily:"ui-monospace, SFMono-Regular, monospace",fontWeight:900,fontSize:11,padding:"2px 8px",borderRadius:RADIUS.sm,background:CC.surface3,border:`1px solid ${CC.border}`,color:CC.text}}>?</kbd>
-      <span style={{fontSize:11,fontWeight:700,color:CC.textDim,letterSpacing:0.2}}>горячие клавиши</span>
-    </button>}
+    {/* Плавающей пилюли «горячие клавиши» больше нет (19.09.2026): на 1920 она накрывала кнопку «Войти» в панели
+        «Анализ варианта» правой колонки. Клавиши доступны из «Помощь», «Ещё», палитры (Ctrl+K) и по клавише «?». */}
 
     {/* AI Rival greeting */}
     <Modal open={showRivalGreet&&!!rivalProfile} onClose={()=>sShowRivalGreet(false)} size="sm"

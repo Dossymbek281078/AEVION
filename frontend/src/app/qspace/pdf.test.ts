@@ -78,6 +78,17 @@ describe("PDF без слоёв: размерные цепочки и фигур
     // контроль: без чисел линия остаётся
     expect(planFromPdfSegments(src, 8).plan!.walls.length).toBe(5);
   });
+  it("короткие косые штрихи (штриховка, засечки) — не стены, длинная косая стена остаётся", async () => {
+    // коробка 400×300 (8 м на 1000 пт → 100 пт = 0.8 м), косая стена 200 пт (1.6 м) и 8 штрихов по 30 пт (0.24 м)
+    const штрихи = Array.from({ length: 8 }, (_, i) => `${120 + i * 30} 120 m ${140 + i * 30} 140 l`).join(" ") + " S";
+    const src = await readPdfSegments(makePdf(`100 100 400 300 re S 100 100 m 300 300 l S ${штрихи}`));
+    const числа = [150, 250, 350, 450, 200, 300].map((x) => ({ x, y: 40 }));
+    const r = planFromPdfSegments(src, 8, "размеры", null, числа);
+    expect(r.warnings.join(" ")).toMatch(/Короткие косые штрихи \(8/);
+    expect(r.plan!.walls.length).toBe(5);
+    // контроль: без размерных чисел правило молчит — штрихи остаются
+    expect(planFromPdfSegments(src, 8).plan!.walls.length).toBe(13);
+  });
   it("отрезки одного пути несут общий номер, контур заливки помечен fill", async () => {
     const src = await readPdfSegments(makePdf("0 0 m 100 0 l 100 50 l h B 200 0 m 300 0 l S"));
     const пути = new Set(src.segments.map((s) => s.path));

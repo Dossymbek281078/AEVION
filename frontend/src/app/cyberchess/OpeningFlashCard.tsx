@@ -89,7 +89,7 @@ export default function OpeningFlashCard({
         style={{
           position: "fixed",
           bottom: 24,
-          right: 24,
+          left: 24, // слева: правый низ занят панелями правой колонки (см. page.tsx у <OpeningFlashCard)
           width: 280,
           zIndex: 200,
           background: surface,

@@ -1127,6 +1127,10 @@ export default function CyberChessPage(){
   useIsoLayoutEffect(()=>{if(!hasCompletedOnboarding())sShowOnboarding(true)},[]);
 
   useIsoLayoutEffect(()=>{const up=()=>{sVwPx(window.innerWidth);sVhPx(window.innerHeight)};up();window.addEventListener("resize",up);return()=>window.removeEventListener("resize",up);},[]);
+  // Тосты общего провайдера — над BottomNav на телефоне (тестер 20.09.2026, 390px: тост
+  // «Мат в 2 · Лёгкая · Эндшпиль · 849 ×» лежал на иконках нава даже внизу прокрутки).
+  useEffect(()=>{try{document.documentElement.style.setProperty("--aevion-toast-lift",vwPx<769?"64px":"0px")}catch{}
+    return()=>{try{document.documentElement.style.removeProperty("--aevion-toast-lift")}catch{}}},[vwPx]);
   // Layout-fill (исправлено 2026-06-14): доска квадратная, узкое место — ВЫСОТА.
   // Большой запас по высоте (vhPx-280: header+часы+координаты+нижние контролы+браузерные
   // баннеры) чтобы доска НИКОГДА не вылезала за окно и не обрезалась снизу. По ширине
@@ -15366,7 +15370,10 @@ ${question.trim()}`;
       />
     </div>}
     {/* Opening Flash Card — плавающая карточка дебюта */}
-    {currentOpening&&<OpeningFlashCard
+    {/* Только ≥769: на телефоне fixed-карточка 280px накрывала бы доску или нав. Слева внизу —
+        тестер 18–20.09 на 1920/1366: справа внизу она ложилась на «Точность / Оценка по ходам»,
+        на чипы тем задач («🏁 Эндшпиль») и на кнопку «Войти» панели «Анализ варианта». */}
+    {currentOpening&&vwPx>=769&&<OpeningFlashCard
       open={showOpeningCard}
       opening={currentOpening}
       currentPly={hist.length}

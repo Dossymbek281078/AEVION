@@ -90,6 +90,8 @@ const DOOR_MAX = 1.6;
 function closeDoorGaps(
   walls: Plan["walls"],
   mark: (x1: number, y1: number, x2: number, y2: number, t: number) => void,
+  /** план с картинки: допуск соосности шире и есть правило «торец к стене» */
+  raster = false,
 ): number {
   const ось = (w: Plan["walls"][number]): "h" | "v" | null => {
     if (Math.abs(w.y2 - w.y1) < 1e-6 && Math.abs(w.x2 - w.x1) > 1e-6) return "h";
@@ -122,7 +124,8 @@ function closeDoorGaps(
       if (Math.abs(ux * bdy - uy * bdx) / bl > 0.03) continue; // не параллельны
       // расстояние концов b до прямой a
       const perp = (px: number, py: number) => Math.abs((px - a.x1) * uy - (py - a.y1) * ux);
-      if (perp(b.x1, b.y1) > 0.08 || perp(b.x2, b.y2) > 0.08) continue; // параллельны, но не на одной прямой
+      const допуск = raster ? 0.15 : 0.08; // на картинке оси одной стены гуляют на 5–10 px
+      if (perp(b.x1, b.y1) > допуск || perp(b.x2, b.y2) > допуск) continue; // параллельны, но не на одной прямой
       const proj = (px: number, py: number) => (px - a.x1) * ux + (py - a.y1) * uy;
       const a0 = 0, a1 = al;
       const b0 = Math.min(proj(b.x1, b.y1), proj(b.x2, b.y2));
@@ -138,6 +141,41 @@ function closeDoorGaps(
       if (уже.has(ключ) || уже.has(обратный)) continue;
       уже.add(ключ);
       mark(x1, y1, x2, y2, t);
+      closed++;
+    }
+  }
+  // «Торец к стене» — только для плана с картинки. В векторе дверь чертят с простенками по
+  // обе стороны, и правила «торец к торцу» хватает; на картинке короткий простенок (20–40 px)
+  // отрезком не становится, и перегородка просто не доходит до поперечной стены на ширину
+  // двери. LA VIE PNG 17.09: обе нижние спальни сливались с холлом в одну область 107 м².
+  // Торец смотрит вдоль своей стены; ближайшая поперечная стена на 0.5–1.6 м — дверь.
+  if (raster) for (const a of walls) {
+    if (a.glass) continue;
+    const al = Math.hypot(a.x2 - a.x1, a.y2 - a.y1); if (al < DOOR_MIN) continue; // обрывок дверь не держит
+    const ux = (a.x2 - a.x1) / al, uy = (a.y2 - a.y1) / al;
+    for (const end of [1, 2] as const) {
+      const ex = end === 1 ? a.x1 : a.x2, ey = end === 1 ? a.y1 : a.y2, dir = end === 1 ? -1 : 1;
+      let best = Infinity, bt = 0;
+      for (const b of walls) {
+        if (b === a) continue;
+        const bl = Math.hypot(b.x2 - b.x1, b.y2 - b.y1); if (bl < 1e-6) continue;
+        const vx = (b.x2 - b.x1) / bl, vy = (b.y2 - b.y1) / bl;
+        const den = ux * vy - uy * vx;
+        if (Math.abs(den) < 0.5) continue; // нужна поперечная стена, не попутная
+        const t = (((b.x1 - ex) * vy - (b.y1 - ey) * vx) / den) * dir;
+        const px = ex + ux * t * dir, py = ey + uy * t * dir;
+        const sb = vx * (px - b.x1) + vy * (py - b.y1);
+        if (sb < -b.thickness / 2 || sb > bl + b.thickness / 2) continue;
+        const gap = t - b.thickness / 2;
+        if (t > -a.thickness && gap < best) { best = gap; bt = t; }
+      }
+      // ближайшая преграда: ближе двери — торец уже примыкает; дальше — открытая зона
+      if (best < DOOR_MIN || best > DOOR_MAX) continue;
+      const x2 = ex + ux * bt * dir, y2 = ey + uy * bt * dir;
+      const ключ = [ex, ey, x2, y2].map((v) => Math.round(v / 0.1)).join(",");
+      if (уже.has(ключ)) continue;
+      уже.add(ключ);
+      mark(ex, ey, x2, y2, a.thickness);
       closed++;
     }
   }
@@ -226,7 +264,7 @@ export function findRooms(plan: Plan, opts: { minAreaM2?: number } = {}): RoomsR
   closeDoorGaps(plan.walls, (x1, y1, x2, y2, t) => {
     markWall(grid, gw, gh, ox, oy, x1, y1, x2, y2, t);
     markWall(закрытия, gw, gh, ox, oy, x1, y1, x2, y2, t);
-  });
+  }, plan.source === "raster");
   for (let i = 0; i < закрытия.length; i++) if (стеныДо[i] !== 0) закрытия[i] = 0;
   let закрыто = 0;
   {

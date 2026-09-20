@@ -6311,6 +6311,14 @@ export default function CyberChessPage(){
             </div>
           </>}
         </div>
+        {/* Телефон: «Вернуться к партии» — строкой В ПОТОКЕ внутри sticky-шапки, а не fixed внизу.
+            Тестер 18.09.2026 (партия кликами, 390px, Коуч): fixed-пилюля с bottom:88 лежала на
+            буквах доски «c»/«d» (100% наложения), а любой другой bottom попадал на BottomNav.
+            Строка шапки сдвигает контент вниз — накрывать ей нечего по построению; и отступ
+            152px под скроллером больше не нужен. Десктоп — fixed top:156 (см. ниже). */}
+        {on&&!over&&tab!=="play"&&!isHumanGame&&vwPx<769&&<button onClick={()=>sTab("play")} title="Вернуться к партии — часы на паузе, пока ты здесь" className="cc-focus-ring" style={{flex:"1 1 100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"9px 14px",borderRadius:RADIUS.full,border:"none",background:"linear-gradient(135deg,#059669,#10b981)",color:"#fff",fontSize:14,fontWeight:900,cursor:"pointer"}}>
+          <span style={{fontSize:15,lineHeight:1}}>▶</span><span>Вернуться к партии</span><span style={{fontSize:11,fontWeight:700,opacity:0.85,background:"rgba(255,255,255,0.2)",padding:"2px 8px",borderRadius:999}}>⏸ пауза</span>
+        </button>}
       </div>}
 
       {/* AEVION ecosystem strip удалён 2026-05-13 — отвлекал от игры, занимал зону.
@@ -6360,7 +6368,7 @@ export default function CyberChessPage(){
         // два выкаченных варианта (64 и 152) не сдвинули низ доски ни на пиксель — 724/844
         // и 694/780. 152 = 88 (отступ пилюли) + 56 (её высота с чипом) + 8. Условие — ровно
         // то же, что у пилюли. Замеры 15.09.2026.
-        return<div style={{flex:1,minHeight:0,overflowY:"auto",marginBottom:16,display:"flex",flexDirection:"column",gap:SPACE[3],maxWidth:1180,width:"100%",marginInline:"auto",paddingBottom:(on&&!over&&tab!=="play"&&!isHumanGame&&vwPx<769)?152:0}}>
+        return<div style={{flex:1,minHeight:0,overflowY:"auto",marginBottom:16,display:"flex",flexDirection:"column",gap:SPACE[3],maxWidth:1180,width:"100%",marginInline:"auto"}}>
 
           {/* ─── ДОСКА ПЕРВЫМ ДЕЛОМ ───
               Человек, открывший шахматы, доски не видел вовсе: экран начинался
@@ -12770,7 +12778,7 @@ ${question.trim()}`;
         партия против компьютера, а игрок ушёл в анализ/коуч/пазлы. Часы стоят на паузе —
         можно вернуться в любой момент (по просьбе основателя). В партии с человеком не
         показываем: оттуда уходить нельзя, поэтому tab всегда «play». */}
-    {on&&!over&&tab!=="play"&&!isHumanGame&&<button onClick={()=>sTab("play")}
+    {on&&!over&&tab!=="play"&&!isHumanGame&&vwPx>=769&&<button onClick={()=>sTab("play")}
       title="Вернуться к партии — часы на паузе, пока ты здесь"
       style={{
         // bottom на телефоне поднят над BottomNav (sticky bottom:0, ~54px, порог 769 —
@@ -12785,8 +12793,8 @@ ${question.trim()}`;
         // (боковая панель) ряд ввода начинается с x≈217 и попал бы под пилюлю. Вверху:
         // контент с y≈148, тулбар «⚙ 🔊 Ещё» слева (x<260), баннер с ≈230, доска с ≈430 —
         // центрированная пилюля на top:156 ни с чем не пересекается на любой ширине.
-        // На телефоне — по центру над BottomNav (как было).
-        position:"fixed",...(vwPx<769?{bottom:88}:{top:156}),left:"50%",transform:"translateX(-50%)",zIndex:Z.modal,
+        // На телефоне с 18.09.2026 fixed-пилюли НЕТ: строка в потоке внутри sticky-шапки (см. шапку).
+        position:"fixed",top:156,left:"50%",transform:"translateX(-50%)",zIndex:Z.modal,
         display:"inline-flex",alignItems:"center",gap:9,
         padding:"11px 20px",borderRadius:RADIUS.full,border:"none",
         background:"linear-gradient(135deg,#059669,#10b981)",color:"#fff",

@@ -408,7 +408,13 @@ eventsRouter.post("/", (req, res) => {
 export function видОтправителя(ua: string | undefined | null): "probe" | "headless" | "bot" | null {
   const u = String(ua ?? "").trim();
   if (!u) return null;
-  if (u.includes("AEVION-probe")) return "probe";
+  // Любая НАША метка, а не перечень известных. 20.09.2026 перечень уже подвёл:
+  // фильтр знал `AEVION-probe`, а в данных нашлась вторая семья —
+  // `AEVION-checkout-gate-probe`, 24 события, и все шесть «человеческих»
+  // начатых оплат за двое суток оказались ею. То есть отчёт сказал бы
+  // «шесть человек дошли до кассы и не заплатили» — решение по такому числу
+  // повело бы чинить страницу оплаты вместо привлечения трафика.
+  if (/AEVION-[A-Za-z0-9._-]*probe|AEVION-probe/i.test(u)) return "probe";
   if (/Headless/i.test(u)) return "headless";
   if (/\b(crawler|spider|slurp)\b|bot\/|\bbot\b|curl\/|wget|python-requests|node-fetch|axios\/|got\/|PostmanRuntime|playwright|puppeteer|lighthouse/i.test(u)) return "bot";
   return null;

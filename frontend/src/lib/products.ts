@@ -341,6 +341,58 @@ export const MODULES: Product[] = [
     href: appHref("cyberchess"),
     appId: "cyberchess",
   },
+  // 20.09.2026, слово основателя «везде должны быть цены». Товаров в кассе у этих
+  // четырёх пока нет: страница цен честно покажет цену и «связаться» вместо кнопки
+  // (сторож unsellableTierExplainsItself). Кнопки зажгутся сами, когда появятся
+  // варианты и переменные LEMON_SQUEEZY_VARIANT_<SLUG>_<СТУПЕНЬ>.
+  {
+    id: "qright",
+    title: "QRight",
+    format: appFormat("qright"),
+    desc: "Регистрация авторства: фиксация даты и содержания работы, выгрузка доказательств.",
+    priceUsd: appBase("qright"),
+    billing: "term",
+    kind: "module",
+    processor: "aevion",
+    href: appHref("qright"),
+    appId: "qright",
+  },
+  {
+    id: "qsign",
+    title: "QSign",
+    format: appFormat("qsign"),
+    desc: "Подпись документов и проверка целостности: канонический JSON, сверка по отпечатку.",
+    priceUsd: appBase("qsign"),
+    billing: "term",
+    kind: "module",
+    processor: "aevion",
+    href: appHref("qsign"),
+    appId: "qsign",
+  },
+  {
+    id: "startup-exchange",
+    title: "Startup Exchange",
+    format: appFormat("startup_exchange"),
+    desc: "Витрина идей, MVP и готовых продуктов: разместить, найти, договориться о сделке.",
+    priceUsd: appBase("startup_exchange"),
+    billing: "term",
+    kind: "module",
+    processor: "aevion",
+    href: appHref("startup_exchange"),
+    appId: "startup-exchange",
+  },
+  {
+    id: "qskyway",
+    title: "QSkyway",
+    format: appFormat("qskyway"),
+    desc: "Навигация воздушных коридоров города: маршруты, высоты, ограничения и ветер.",
+    priceUsd: appBase("qskyway"),
+    billing: "term",
+    kind: "module",
+    processor: "aevion",
+    href: appHref("qskyway"),
+    appId: "qskyway",
+  },
 ];
 
 // Сторож на сборке каталога: отдельно продаётся ровно то, что названо в

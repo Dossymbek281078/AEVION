@@ -5121,7 +5121,7 @@ const ru: Record<string, string> = {
   "pricing.home.apps.title": "Отдельные приложения",
   "pricing.home.apps.subtitle": "Пять приложений продаются и без тарифа — по той же лестнице сроков. Остальные модули входят только в тарифы.",
   "pricing.home.apps.termAria": "Срок для отдельных приложений",
-  "pricing.home.apps.allFiveDearer": "Все пять приложений по отдельности — {apps} за этот срок — дороже всей планеты: {planet}.",
+  "pricing.home.apps.allAppsDearer": "Все приложения по отдельности — {apps} за этот срок — дороже всей планеты: {planet}.",
   "pricing.home.calc.total": "ИТОГО",
   "pricing.home.calc.totalTerm": "ИТОГО за {months} {unit}",
   "pricing.home.calc.discount": "Скидки",

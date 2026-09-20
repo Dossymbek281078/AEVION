@@ -60,6 +60,12 @@ export const STANDALONE_APPS: StandaloneApp[] = [
   { slug: "qventure", moduleId: "qventure", name: "QVenture", baseMonthly: 80 },
   { slug: "ip_bureau", moduleId: "aevion-ip-bureau", name: "IP Bureau", baseMonthly: 32 },
   { slug: "devhub", moduleId: "devhub", name: "DevHub", baseMonthly: 200 },
+  // 20.09.2026: цена есть у каждого модуля запуска. Копия обязана совпадать с
+  // бэкендом — сторож termPricingMatchesBackend краснеет при расхождении.
+  { slug: "qright", moduleId: "qright", name: "QRight", baseMonthly: 24 },
+  { slug: "qsign", moduleId: "qsign", name: "QSign", baseMonthly: 24 },
+  { slug: "startup_exchange", moduleId: "startup-exchange", name: "Startup Exchange", baseMonthly: 40 },
+  { slug: "qskyway", moduleId: "qskyway", name: "QSkyway", baseMonthly: 56 },
 ];
 
 /** По slug, id модуля или короткому id витрины ("bureau" → IP Bureau). */

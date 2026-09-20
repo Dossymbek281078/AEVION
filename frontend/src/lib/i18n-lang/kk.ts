@@ -5121,7 +5121,7 @@ const kk: Record<string, string> = {
   "pricing.home.apps.title": "Жеке қосымшалар",
   "pricing.home.apps.subtitle": "Бес қосымша тарифсіз де сатылады — сол мерзім баспалдағы бойынша. Қалған модульдер тек тарифтерге кіреді.",
   "pricing.home.apps.termAria": "Жеке қосымшалардың мерзімі",
-  "pricing.home.apps.allFiveDearer": "Бес қосымшаны жеке алу — осы мерзімге {apps} — бүкіл планетадан қымбат: {planet}.",
+  "pricing.home.apps.allAppsDearer": "Барлық қосымшаны жеке алу — осы мерзімге {apps} — бүкіл планетадан қымбат: {planet}.",
   "pricing.home.calc.total": "БАРЛЫҒЫ",
   "pricing.home.calc.totalTerm": "{months} {unit} үшін БАРЛЫҒЫ",
   "pricing.home.calc.discount": "Жеңілдіктер",

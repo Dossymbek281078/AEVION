@@ -23,13 +23,25 @@ import { chromium } from "playwright";
 const BASE = process.env.BASE || "https://aevion.app";
 const CASHIER = /lemonsqueezy\.com/i;
 
-/** Пять приложений со своей ценой — ровно те, у кого касса настроена. */
-const APPS = ["devhub", "cyberchess", "multichat", "qventure", "ip_bureau"];
+/**
+ * Пять приложений со своей ценой и ТО, КАК их кнопка подписана на витрине.
+ *
+ * ⚠️ Имя обязательно. Замер DOM 20.09.2026: на странице цен две секции —
+ * `#tiers` с кнопками «Выбрать Lite … Max» (подписка на всю планету) и `#apps`
+ * с кнопками «Купить CyberChess», «Купить DevHub» и т.д. Пока проба брала
+ * первую попавшуюся кнопку по слову «выбрать|купить», она нажимала кнопку
+ * ПЛАНЕТЫ на любой странице — и «все пять приложений доходят до кассы» было
+ * зелёным, которое ничего не проверяло.
+ */
+const APPS = [
+  { slug: "devhub", label: "DevHub" },
+  { slug: "cyberchess", label: "CyberChess" },
+  { slug: "multichat", label: "Multichat" },
+  { slug: "qventure", label: "QVenture" },
+  { slug: "ip_bureau", label: "IP Bureau" },
+];
 
-/** Подписи, по которым человек узнаёт кнопку покупки. */
-const BUY_TEXT = /купить|оформить|подписаться|buy|subscribe|checkout|выбрать/i;
-
-async function probe(page, url, label) {
+async function probe(page, url, label, section, want) {
   const out = { label, url, verdict: "", landed: "" };
   try {
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
@@ -47,12 +59,13 @@ async function probe(page, url, label) {
    * разный ответ на одной и той же странице — признак шаткого прибора, а не
    * дефекта витрины.
    */
-  const buy = page.locator("a, button").filter({ hasText: BUY_TEXT });
+  const buy = page.locator(`#${section}`).locator("a, button").filter({ hasText: want });
   let clicked = null;
   try {
     const n = await buy.count();
     if (n > 0) {
       const first = buy.first();
+      await first.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => {});
       await first.waitFor({ state: "visible", timeout: 8000 });
       clicked = { el: first, text: ((await first.innerText()) || "").trim() };
     }
@@ -85,8 +98,20 @@ async function probe(page, url, label) {
   const all = [...urls, ...frames, page.url()];
   const cashier = all.find((u) => CASHIER.test(u));
 
+  /*
+   * Различаем ДВА разных исхода, которые оба выглядят как «мы в кассе».
+   * Замер 20.09.2026: часть прогонов приводит на корзину товара
+   * (…/checkout/cart/<id>), а часть — на общую страницу магазина
+   * (…/checkout?custom=1), где выбранного товара нет. Для покупателя это
+   * разные вещи: во втором случае он нажал «Купить DevHub» и оказался в
+   * магазине без DevHub. Причина расхождения на 20.09 НЕ установлена —
+   * ограничитель темпа исключён (30/мин по адресу, столько не было).
+   */
+  const PRODUCT_CART = /lemonsqueezy\.com\/(checkout\/(cart|buy)\/|buy\/)/i;
+
   out.landed = cashier || page.url();
-  if (cashier) out.verdict = "ДОШЛА ДО КАССЫ";
+  if (cashier && PRODUCT_CART.test(cashier)) out.verdict = "ДОШЛА ДО КАССЫ";
+  else if (cashier) out.verdict = "довела до МАГАЗИНА, но не до товара";
   else if (page.url() !== before) out.verdict = "ушла НЕ в кассу";
   else out.verdict = "нажалась, адрес не изменился";
   out.button = clicked.text.slice(0, 40);
@@ -105,16 +130,74 @@ async function main() {
 
   const results = [];
   try {
+    /*
+     * Проба ОБЯЗАНА называть себя. 20.09.2026 первый прогон этого файла оставил
+     * на боевой аналитике 23 события «дошёл до кассы», неотличимых от живого
+     * человека, — и они тут же были прочитаны как посетители. Правило §19:
+     * создающий запрос на прод идёт только с пометкой. Слово probe в
+     * User-Agent ловится общим признаком робота в разборе событий.
+     */
+    /*
+     * ⚠️ Метка — СУФФИКС к настоящему User-Agent браузера, а не замена его.
+     * Первая попытка поставила «Mozilla/5.0 (compatible; …probe…)» целиком, и
+     * витрина отдала другое содержимое: все пять нажатий свелись к одной кассе,
+     * контроль «адреса обязаны различаться» это поймал и уронил прогон с кодом 2.
+     * Сайт ведёт себя иначе для неизвестного клиента, поэтому проба обязана
+     * оставаться похожей на браузер и при этом называть себя.
+     */
+    /*
+     * 🔴 ЗАМЕР 20.09.2026: метка в User-Agent ЛОМАЕТ измерение.
+     * Четыре прогона со строкой «AEVION-probe» в UA дали общую страницу
+     * магазина вместо корзины товара — у всех шести целей, включая контрольную
+     * подписку планеты. Два прогона без метки дали шесть разных корзин.
+     * То есть касса (или её скрипт на нашей странице) отказывается собирать
+     * корзину для клиента, который выглядит необычно.
+     *
+     * Отсюда честная развилка, и она не в мою пользу: либо проба называет себя
+     * и меряет НЕ ТО, либо меряет верно и оставляет в аналитике события,
+     * неотличимые от живого покупателя. Выбрано второе, потому что сторож,
+     * дающий неверный ответ, хуже сторожа, о котором знают.
+     *
+     * Поэтому: метка по умолчанию ВЫКЛЮЧЕНА, включается переменной
+     * AEVION_PROBE_UA=1 (для случаев, когда важнее не пачкать аналитику), и
+     * каждый прогон пишет отметку времени в локальный журнал, чтобы разбор
+     * событий мог исключить это окно.
+     */
+    const PROBE_UA = process.env.AEVION_PROBE_UA
+      ? "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
+        "Chrome/128.0.0.0 Safari/537.36 AEVION-probe/1.0"
+      : null;
+    const ctxOpts = PROBE_UA ? { userAgent: PROBE_UA } : {};
+
+    const started = new Date().toISOString();
+    console.log(
+      `⚠️ Прогон пишет события в БОЕВУЮ аналитику (page_view + checkout_start).\n` +
+        `   Начало ${started} — исключайте это окно при разборе посетителей.`,
+    );
+    try {
+      const { appendFileSync } = await import("node:fs");
+      appendFileSync(
+        "C:/Users/user/aevion-checkout-gate-runs.log",
+        `${started} checkout-button-reaches-cashier, целей ${APPS.length + 1}, метка UA ${PROBE_UA ? "вкл" : "выкл"}\n`,
+      );
+    } catch { /* журнал не критичен для прогона */ }
+
     for (const app of APPS) {
-      const ctx = await browser.newContext();
+      const ctx = await browser.newContext(ctxOpts);
       const page = await ctx.newPage();
-      results.push(await probe(page, `${BASE}/pricing?app=${app}#apps`, `приложение ${app}`));
+      // Подпись кнопки берём ТЕКСТОМ, без регулярки: экранирование на этой
+      // машине съедается на границе вызова, и "Купить\s+" превращается в
+      // "Купитьs+" — фильтр молча не находит ничего.
+      const want = `Купить ${app.label}`;
+      results.push(
+        await probe(page, `${BASE}/pricing?app=${app.slug}#apps`, `приложение ${app.slug}`, "apps", want),
+      );
       await ctx.close();
     }
     // Контроль: подписка планеты — путь, который заведомо продаётся.
-    const ctx = await browser.newContext();
+    const ctx = await browser.newContext(ctxOpts);
     const page = await ctx.newPage();
-    results.push(await probe(page, `${BASE}/pricing#tiers`, "КОНТРОЛЬ подписка планеты"));
+    results.push(await probe(page, `${BASE}/pricing#tiers`, "КОНТРОЛЬ подписка планеты", "tiers", /Выбрать\s+Lite/i));
     await ctx.close();
   } finally {
     await browser.close();

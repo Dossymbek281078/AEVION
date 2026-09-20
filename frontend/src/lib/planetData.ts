@@ -49,6 +49,24 @@ export function isProbeArtifact(a: RecentArtifact): boolean {
   if (/^k-?[0-9]{13}$/.test(key)) return true;
   return (a.submissionTitle ?? "").toLowerCase().startsWith("smoke");
 }
+
+/**
+ * То же про ЛЕНТУ активности (20.09.2026). Фильтр выше защищал только главную:
+ * она грузит артефакты через `fetchRecentArtifacts`, а лента `/planet` и
+ * `/planet/activity` берёт данные другим путём (`catalog.planet.activity`) и проб
+ * не отсекала. Замер на проде в день запуска: 24 записи из 50 — наши прогоны
+ * (`title: "smoke-music-1784717120863"`, `ref: "smoke-music-test"`), у настоящих
+ * записей заголовка нет вовсе, а `ref` — обычный идентификатор.
+ * Поля у ленты другие, поэтому отдельная функция, а не переиспользование:
+ * одна форма данных — одна проверка.
+ */
+export function isProbeActivity(a: { title?: string | null; ref?: string | null }): boolean {
+  const title = (a.title ?? "").toLowerCase();
+  const ref = (a.ref ?? "").toLowerCase();
+  if (title.startsWith("smoke") || title.startsWith("test")) return true;
+  if (ref.startsWith("smoke") || ref.startsWith("test") || ref.endsWith("-test")) return true;
+  return /^k-?[0-9]{13}$/.test(ref) || /^k-?[0-9]{13}$/.test(title);
+}
 const TTL_MS = 30_000;
 
 type Cache<T> = { at: number; value: T } | null;

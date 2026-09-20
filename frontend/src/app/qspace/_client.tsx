@@ -1092,7 +1092,7 @@ export default function QSpaceClient() {
       const лист = листПлана(тексты, src.pageSegmentCounts ?? []);
       if (лист !== null && лист !== src.page) {
         src = await readPdfSegments(bytes, { page: лист });
-        src.warnings = src.warnings.map((w) => (w.startsWith("В файле") ? w.replace(/\(на ней больше всего линий\)/, "(по подписи листа)") : w));
+        src.warnings = src.warnings.map((w) => (w.startsWith("В файле") ? w.replace(/взята страница (\d+)\./, "взята страница $1 (по подписи листа).") : w));
       }
     }
     setPdfBytes({ bytes, name });

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { KeepChannelLink } from "./KeepChannelLink";
 import { tierLabel, type PaywallPayload, type CanonicalTier } from "@/lib/paywall";
+import { WaitlistIfMissing } from "./FooterWaitlist";
 
 /**
  * Reusable blocking screen rendered when the backend returns a 402
@@ -150,6 +151,26 @@ export function PaywallScreen({ payload, backHref = "/", backLabel = "← На �
         <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 28, lineHeight: 1.5 }}>
           Уже оплатили? <Link href="/account" style={{ color: "#0d9488", textDecoration: "underline" }}>Проверьте статус подписки</Link>
         </p>
+
+        {/*
+          Тому, кто сегодня платить не готов, тоже есть что предложить — иначе он
+          уходит бесследно. Этот экран видит КАЖДЫЙ, кто пришёл в закрытый модуль
+          без оплаты: 19 страниц пользуются им (замер 20.09.2026), и ни на одной
+          не было способа оставить адрес.
+
+          Обещание держим буквальным: подписка пишется в constitution_waitlist и
+          сразу шлёт подтверждающее письмо, а рассылка о новых модулях —
+          единственное, что мы по ней делаем. Скидок и пробных доступов не
+          обещаем: их нет.
+        */}
+        <div style={{ maxWidth: 520, margin: "28px auto 0", textAlign: "left" }}>
+          <WaitlistIfMissing
+            source="paywall"
+            title="Платить сегодня рано? Оставьте адрес"
+            description="Напишем, когда у AEVION откроются новые модули и возможности."
+            buttonLabel="Сообщить мне"
+          />
+        </div>
       </div>
     </main>
   );

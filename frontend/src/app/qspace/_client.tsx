@@ -1113,7 +1113,9 @@ export default function QSpaceClient() {
     if (масштаб && src.extentPt > 0) {
       const extentM = Math.round((src.extentPt * масштаб.mmPerPt) / 10) / 100;
       // прямоугольник плана по размерным цепочкам: рамка, легенда и таблицы листа — вне его
-      const r = planFromPdfSegments(src, extentM, "размеры", текст.ok ? областьПлана(словаИзТекста(текст.items)) : null);
+      // без слоёв: прямоугольник плана по размерным цепочкам, а сами цепочки (линии с числами вдоль) — не стены
+      const слова = текст.ok ? словаИзТекста(текст.items) : [];
+      const r = planFromPdfSegments(src, extentM, "размеры", областьПлана(слова), слова);
       if (r.plan) {
         setPdfExtent(String(extentM));
         setWarnings([

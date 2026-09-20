@@ -195,9 +195,19 @@ console.log(items[0].id); // "open-access"`;
                 key={i}
                 className="border-l-4 border-[#d4af37]/40 pl-4 py-2"
               >
-                <p className="text-[#e7ecf8] italic mb-2">"{q.text}"</p>
+                {/*
+                  Кавычек здесь БЫТЬ НЕ ДОЛЖНО. Тексты — сжатый пересказ идей
+                  своими словами, а не выписки из книг: в кавычках рядом с
+                  фамилией автора это читается как прямая цитата, то есть как
+                  ложное свидетельство. Проверить дословность мы не можем и
+                  выдумывать точные формулировки не станем — честнее назвать
+                  пересказ пересказом (замер 20.09.2026, тот же класс, что
+                  выдуманные отзывы на витрине QBuild).
+                */}
+                <p className="text-[#e7ecf8] italic mb-2">{q.text}</p>
                 <div className="text-xs text-[#9aa3c0]">
-                  — <b className="text-[#d4af37]">{q.cite}</b> ·{" "}
+                  {t("constitution.showcase.paraphrase")}:{" "}
+                  <b className="text-[#d4af37]">{q.cite}</b> ·{" "}
                   <i>{q.work}</i>
                 </div>
               </blockquote>

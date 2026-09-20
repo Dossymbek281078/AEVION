@@ -596,8 +596,19 @@ export function planFromPdfSegments(
   knownExtentM: number,
   /** откуда габарит: назвал человек или посчитан по размерным числам чертежа */
   источникМасштаба: "человек" | "размеры" = "человек",
+  /** прямоугольник плана на листе (пт): линии вне него — рамка, легенда, таблицы */
+  область?: { x0: number; y0: number; x1: number; y1: number } | null,
 ): PdfResult {
   const warnings = [...src.warnings];
+  if (область) {
+    const внутри = (x: number, y: number) => x >= область.x0 && x <= область.x1 && y >= область.y0 && y <= область.y1;
+    const до = src.segments.length;
+    const оставить = src.segments.filter((s) => внутри(s.x1, s.y1) && внутри(s.x2, s.y2));
+    if (оставить.length >= 4 && оставить.length < до) {
+      src = { ...src, segments: оставить, glassSegments: (src.glassSegments ?? []).filter((s) => внутри(s.x1, s.y1) && внутри(s.x2, s.y2)) };
+      warnings.push(`План найден по размерным цепочкам: вне их прямоугольника ${до - оставить.length} линий (рамка, легенда, таблицы) — в модель не взяты.`);
+    }
+  }
   if (src.segments.length === 0 || src.extentPt <= 0) {
     return { plan: null, warnings, metersPerPt: 0, extentPt: src.extentPt, truncated: 0 };
   }

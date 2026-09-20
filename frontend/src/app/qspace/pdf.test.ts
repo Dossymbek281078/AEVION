@@ -50,6 +50,16 @@ function makePdf2(p1: string, p2: string): Uint8Array {
   return new TextEncoder().encode(body);
 }
 
+describe("planFromPdfSegments с областью плана: линии вне прямоугольника не стены", () => {
+  it("комната внутри области остаётся, таблица снаружи выпадает, и это сказано словами", async () => {
+    const src = await readPdfSegments(makePdf("100 100 200 150 re S 600 100 100 50 re S"));
+    const r = planFromPdfSegments(src, 8, "размеры", { x0: 90, y0: 90, x1: 310, y1: 260 });
+    expect(r.plan!.walls.length).toBe(4);
+    expect(r.warnings.join(" ")).toMatch(/вне их прямоугольника 4 линий/);
+    expect(findRooms(r.plan!).rooms.length).toBe(1);
+  });
+});
+
 describe("многостраничный PDF (альбом дизайн-проекта) разбирается по страницам", () => {
   // Замер 20.09.2026: альбомы на 15 и 45 страниц ложились друг на друга — 0 и 1 комната.
   const стр1 = "0 0 400 300 re S";                                // коробка, 4 линии

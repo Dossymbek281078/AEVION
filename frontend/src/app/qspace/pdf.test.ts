@@ -90,8 +90,8 @@ describe("PDF без слоёв: размерные цепочки и фигур
     expect(planFromPdfSegments(src, 8).plan!.walls.length).toBe(13);
   });
   it("выносные линии размеров (короткие, упёртые в цепочку) — не стены; план получает looseWalls", async () => {
-    // коробка, размерная линия y=40 с числами и две выносные линии от неё вверх по 30 пт (0.24 м)
-    const src = await readPdfSegments(makePdf("100 100 400 300 re S 100 40 m 500 40 l S 100 40 m 100 70 l S 500 40 m 500 70 l S"));
+    // коробка (8 м на 400 пт), размерная линия y=40 с числами и две выносные линии от неё вверх по 20 пт (0.4 м)
+    const src = await readPdfSegments(makePdf("100 100 400 300 re S 100 40 m 500 40 l S 100 40 m 100 60 l S 500 40 m 500 60 l S"));
     const числа = [150, 250, 350, 450, 200, 300].map((x) => ({ x, y: 44 }));
     const r = planFromPdfSegments(src, 8, "размеры", null, числа);
     expect(r.warnings.join(" ")).toMatch(/Выносные линии размеров \(2\)/);

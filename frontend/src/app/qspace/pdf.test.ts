@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
+import { MAX_SEGMENTS, planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
+import { findRooms } from "./rooms";
 
 /** Собирает минимальный НЕсжатый PDF с потоком содержимого. */
 function makePdf(content: string): Uint8Array {
@@ -11,6 +12,28 @@ function makePdf(content: string): Uint8Array {
     "trailer\n<< /Root 1 0 R >>\n%%EOF\n";
   return new TextEncoder().encode(body);
 }
+
+describe("PDF без слоёв: рамка листа и линии через весь лист — не стены", () => {
+  // Замер 20.09.2026 на обмерном плане Belmont (56 тыс. линий, слоёв нет): рамка листа и
+  // штамп становились «комнатами» на 48 и 41 м², выноска через весь лист резала план.
+  it("комната 200×150 внутри рамки 1000×700 с диагональю через лист: комната одна, рамка — нет", async () => {
+    const рамка = "0 0 1000 700 re S";
+    const диагональ = "0 0 m 1000 700 l S";
+    const комната = "400 300 200 150 re S";
+    // у настоящего листа внутри рамки много линий (размеры, мебель): 60 коротких штрихов
+    const штрихи = Array.from({ length: 60 }, (_, i) => `${420 + i * 2} 250 m ${421 + i * 2} 250 l`).join(" ") + " S";
+    const src = await readPdfSegments(makePdf(`${рамка} ${диагональ} ${комната} ${штрихи}`));
+    expect(src.segments.length).toBe(69);
+    const r = planFromPdfSegments(src, 10);
+    expect(r.warnings.join(" ")).toMatch(/Рамка листа: 4/);
+    expect(r.warnings.join(" ")).toMatch(/длиннее листа/);
+    expect(r.plan!.walls.length).toBe(4); // штрихи короче 5 см отпадают позже, как и раньше
+    const rooms = findRooms(r.plan!);
+    expect(rooms.rooms.length).toBe(1);
+    expect(rooms.totalArea).toBeGreaterThan(1.8); // 2×1.5 м минус толщина стен на сетке 5 см
+    expect(rooms.totalArea).toBeLessThan(3.1);
+  });
+});
 
 describe("readPdfSegments — что нашлось в файле", () => {
   it("прямоугольник (re) даёт четыре отрезка и габарит в пунктах", async () => {
@@ -267,13 +290,13 @@ describe("planFromPdfSegments — масштаб задаёт человек", (
 
   it("обрезка длинного чертежа называет число отброшенных", () => {
     const many: PdfSegments = {
-      segments: Array.from({ length: 450 }, (_, i) => ({ x1: 0, y1: i, x2: 400, y2: i })),
+      segments: Array.from({ length: MAX_SEGMENTS + 50 }, (_, i) => ({ x1: 0, y1: i, x2: 400, y2: i })),
       warnings: [],
-      extentPt: 450,
+      extentPt: MAX_SEGMENTS + 50,
     };
     const r = planFromPdfSegments(many, 9);
     expect(r.truncated).toBe(50);
-    expect(r.plan!.walls.length).toBe(400);
+    expect(r.plan!.walls.length).toBe(MAX_SEGMENTS);
     expect(r.warnings.join(" ")).toContain("отброшено 50");
   });
 });

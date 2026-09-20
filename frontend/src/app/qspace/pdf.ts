@@ -51,7 +51,7 @@ export interface PdfResult {
   originPt?: { x: number; y: number };
 }
 
-const MAX_SEGMENTS = 400;
+export const MAX_SEGMENTS = 1500;
 /**
  * Потолок, когда линии уже отобраны по слою стен.
  *
@@ -602,6 +602,35 @@ export function planFromPdfSegments(
   let truncated = 0;
   // После отбора по слою короткие линии — настоящие грани стен, резать их нельзя.
   const поСлою = (src.wallLayers?.length ?? 0) > 0;
+  // PDF без слоёв (замер 20.09 на обмерном плане Belmont, 56 тыс. линий): рамка листа
+  // становилась «комнатой» на 48 м², а выноска через весь лист резала план. Два признака,
+  // безвредные для простой коробки (у неё наружные стены и есть габарит):
+  //  • рамка — линии ровно по краю общего прямоугольника, когда внутри есть своё содержимое
+  //    (≥ 50 линий) с отступом от края ≥ 3 % по всем четырём сторонам;
+  //  • выноска — линия длиннее любой стороны листа: так лежат только диагонали.
+  if (!поСлою && list.length > 0) {
+    let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+    for (const s of list) { bx0 = Math.min(bx0, s.x1, s.x2); by0 = Math.min(by0, s.y1, s.y2); bx1 = Math.max(bx1, s.x1, s.x2); by1 = Math.max(by1, s.y1, s.y2); }
+    const W = bx1 - bx0, H = by1 - by0, eps = 0.005 * Math.max(W, H);
+    const сторона = Math.max(W, H) * 1.02;
+    const безВыносок = list.filter((s) => Math.hypot(s.x2 - s.x1, s.y2 - s.y1) <= сторона);
+    if (безВыносок.length < list.length) {
+      warnings.push(`Линии длиннее листа (выноски через весь чертёж): ${list.length - безВыносок.length} — не стены, выброшены.`);
+      list = безВыносок;
+      const наКраю = (s: PdfSegments["segments"][number]) =>
+      (Math.abs(s.x1 - bx0) < eps && Math.abs(s.x2 - bx0) < eps) || (Math.abs(s.x1 - bx1) < eps && Math.abs(s.x2 - bx1) < eps) ||
+      (Math.abs(s.y1 - by0) < eps && Math.abs(s.y2 - by0) < eps) || (Math.abs(s.y1 - by1) < eps && Math.abs(s.y2 - by1) < eps);
+    const внутри = list.filter((s) => !наКраю(s));
+    if (внутри.length >= 50 && внутри.length < list.length) {
+      let ix0 = Infinity, iy0 = Infinity, ix1 = -Infinity, iy1 = -Infinity;
+      for (const s of внутри) { ix0 = Math.min(ix0, s.x1, s.x2); iy0 = Math.min(iy0, s.y1, s.y2); ix1 = Math.max(ix1, s.x1, s.x2); iy1 = Math.max(iy1, s.y1, s.y2); }
+      if (ix0 - bx0 >= 0.03 * W && bx1 - ix1 >= 0.03 * W && iy0 - by0 >= 0.03 * H && by1 - iy1 >= 0.03 * H) {
+        warnings.push(`Рамка листа: ${list.length - внутри.length} линий по краю чертежа — не стены, выброшены.`);
+        list = внутри;
+      }
+    }
+  }
+  }
   const предел = поСлою ? MAX_WALL_LAYER_SEGMENTS : MAX_SEGMENTS;
   if (list.length > предел) {
     list = [...list]

@@ -8273,8 +8273,10 @@ export default function CyberChessPage(){
               />
             </div>
           </div>
-          <div style={{display:"flex",alignItems:"center",paddingLeft:23,width:bw,gap:4}}>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div>
+          {/* Телефон: палитра тем и масштаб уходят на вторую строку, а буквы a–h занимают всю ширину
+              доски — иначе на 390 сетка букв сжималась до ~70px и «ABCDEFGH» слипалось слева (тестер 20.09.2026). */}
+          <div style={{display:"flex",alignItems:"center",paddingLeft:23,width:bw,gap:4,flexWrap:vwPx<769?"wrap":"nowrap"}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:vwPx<769?"1 1 100%":1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div>
             <div style={{display:"flex",gap:3,flexShrink:0,alignItems:"center"}}>
               {BOARD_THEMES.slice(0,8).map((th,i)=><button key={i} title={`Тема: ${th.name}`} aria-label={`Тема доски: ${th.name}`} aria-pressed={boardTheme===i} onClick={()=>sBoardTheme(i)} style={{width:22,height:22,borderRadius:"50%",border:boardTheme===i?`2px solid ${CC.text}`:`2px solid ${CC.border}`,background:th.dark,cursor:"pointer",padding:0,flexShrink:0,outline:"none",transition:"transform 120ms",transform:boardTheme===i?"scale(1.18)":"scale(1)"}}/>)}
               <div style={{width:1,height:12,background:CC.border,margin:"0 2px"}}/>

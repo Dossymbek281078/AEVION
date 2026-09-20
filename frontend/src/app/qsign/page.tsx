@@ -5,6 +5,7 @@ import { useI18nOptional } from "@/lib/i18n";
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
+import { WaitlistIfMissing } from "@/components/FooterWaitlist";
 import { useToast } from "@/components/ToastProvider";
 import { PipelineSteps } from "@/components/PipelineSteps";
 import { Wave1Nav } from "@/components/Wave1Nav";
@@ -1988,6 +1989,21 @@ export default function QSignPage() {
               cryptographically valid but report <code>valid=false</code>.
             </li>
           </ol>
+        </div>
+
+        {/* Приём адреса. Общего подвала у /qsign нет: маршрут в APP_PREFIXES
+            (ClientProviders), и замер 20.09.2026 показал на странице НОЛЬ полей
+            почты — человек, которому рано подписываться, уходил бесследно.
+            Блок сам не нарисуется, если поле на странице появится. */}
+        <div style={{ maxWidth: 560, margin: "32px 0 0" }}>
+          <WaitlistIfMissing
+            lang="en"
+            source="qsign:page"
+            title="Not signing today? Leave your email"
+            description="We write when QSign gets new keys, formats and integrations."
+            buttonLabel="Notify me"
+            doneText="Done — your address is saved. A confirmation is already in your inbox."
+          />
         </div>
       </ProductPageShell>
     </main>

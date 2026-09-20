@@ -43,7 +43,24 @@ export function hasOtherEmailField(root: ParentNode, mine: Element | null): bool
   return поля.some((поле) => !mine || !mine.contains(поле));
 }
 
-export function FooterWaitlist() {
+/**
+ * Приём адреса, который не появляется там, где он уже есть.
+ *
+ * Пропы нужны полноэкранным оболочкам (/build, /qsign и другие APP_PREFIXES):
+ * подвала они не рисуют вовсе, а страница бывает англоязычной. Значения по
+ * умолчанию — те, что нужны подвалу; второй реализации не заводим.
+ */
+export type WaitlistIfMissingProps = {
+  lang?: "ru" | "en";
+  title?: string;
+  description?: string;
+  buttonLabel?: string;
+  doneText?: string;
+  /** Своя пометка источника вместо `footer:<путь>`. Режется до 60 знаков схемой. */
+  source?: string;
+};
+
+export function FooterWaitlist(props: WaitlistIfMissingProps = {}) {
   const pathname = usePathname();
   const [показывать, установить] = useState(false);
   const [узел, запомнить] = useState<HTMLDivElement | null>(null);
@@ -67,14 +84,21 @@ export function FooterWaitlist() {
   return (
     <div ref={запомнить} data-testid="footer-waitlist" style={{ maxWidth: 560, margin: "0 0 24px" }}>
       <WaitlistCapture
-        source={footerWaitlistSource(pathname)}
+        source={(props.source ?? footerWaitlistSource(pathname)).slice(0, 60)}
         tone="light"
-        title="Не готовы сегодня — оставьте адрес"
-        description="Напишем, когда откроется то, что вы смотрели, и пришлём условия раннего доступа."
+        lang={props.lang ?? "ru"}
+        title={props.title ?? "Не готовы сегодня — оставьте адрес"}
+        description={
+          props.description ??
+          "Напишем, когда откроется то, что вы смотрели, и пришлём условия раннего доступа."
+        }
         promise=""
-        buttonLabel="Сообщить мне"
-        doneText="Готово — адрес записан. Подтверждение уже ушло вам на почту."
+        buttonLabel={props.buttonLabel ?? "Сообщить мне"}
+        doneText={props.doneText ?? "Готово — адрес записан. Подтверждение уже ушло вам на почту."}
       />
     </div>
   );
 }
+
+/** То же самое под именем по смыслу, а не по месту рождения. */
+export const WaitlistIfMissing = FooterWaitlist;

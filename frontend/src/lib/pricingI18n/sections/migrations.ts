@@ -44,8 +44,6 @@ export const migrationsDict: { ru: Record<string, string>; en: Record<string, st
     "migrations.docusign.step4.title": "Cutover и отмена DocuSign",
     "migrations.docusign.step4.body": "Когда команда привыкла (обычно 5-14 дней) — отменяете DocuSign-подписку. Все active envelopes завершаются в DocuSign, новые — в AEVION.",
 
-    "migrations.docusign.quote": "Мы тратили $4 200/мес на DocuSign Business для 30 юристов. На AEVION Pro — $570/мес за тот же объём подписей. Цикл подписи сократился с 2 дней до 4 часов.",
-    "migrations.docusign.quoteBy": "Head of Operations, Almaty Law Group",
 
     "migrations.openai.before.b1": "$0.03/1k input + $0.06/1k output для GPT-4 — быстро добегает до $1k/мес для ML-команды",
     "migrations.openai.before.b2": "Нет встроенного аудита и compliance-evidence для regulated-industries",
@@ -64,8 +62,6 @@ export const migrationsDict: { ru: Record<string, string>; en: Record<string, st
     "migrations.openai.step4.title": "Production rollout",
     "migrations.openai.step4.body": "Постепенный rollout с feature-flag (canary 5% → 50% → 100%). Зеркальные логи 30 дней для отката.",
 
-    "migrations.openai.quote": "Заменили GPT-4 на QCoreAI за 5 дней. Качество — equivalent для наших задач. Биллинг упал с $1 800/мес до $980/мес. И теперь у нас audit-trail, который требует compliance.",
-    "migrations.openai.quoteBy": "VP Engineering, KazFin Holding",
 
     "migrations.stripe.before.b1": "Single-provider роутинг — нет резерва при downtime эквайера",
     "migrations.stripe.before.b2": "Latency 540ms+ для cross-border транзакций",
@@ -84,8 +80,6 @@ export const migrationsDict: { ru: Record<string, string>; en: Record<string, st
     "migrations.stripe.step4.title": "Полный cutover",
     "migrations.stripe.step4.body": "Stripe становится одним из мерчантов в QPayNet, не основным. Reconciliation через единый dashboard. Sub-минутный switch при downtime.",
 
-    "migrations.stripe.quote": "Latency платежей упал на 42%, success-rate auto-routing — 98.2%. Time-to-market новой интеграции с локальным эквайером — с 7.5 мес до 2.4 мес.",
-    "migrations.stripe.quoteBy": "VP Engineering, KazFin Holding",
 
     "migrations.patently.before.b1": "$59-99/мес/seat за tracking renewals и filing помощника",
     "migrations.patently.before.b2": "Регистрация артефактов через сторонние подрядчики, $720/реестр в среднем",
@@ -104,8 +98,6 @@ export const migrationsDict: { ru: Record<string, string>; en: Record<string, st
     "migrations.patently.step4.title": "Активация авто-renewals",
     "migrations.patently.step4.body": "Уведомления за 90/30/7 дней до renewal. После cutover — ваш Patently аккаунт можно отменить, AEVION уже владеет всем календарём.",
 
-    "migrations.patently.quote": "Вели 400+ клиентов в Patently. После миграции на AEVION IP Bureau — стоимость регистрации упала с $720 до $190, missed renewals — с 2-3/год до 0. Партнёры теперь видят полный портфель в одном дашборде.",
-    "migrations.patently.quoteBy": "Managing Partner, NeoLaw Patent Group",
 
     "migrations.faq.title": "Частые вопросы",
     "migrations.faq.q1": "А если миграция «застрянет»?",
@@ -154,8 +146,6 @@ export const migrationsDict: { ru: Record<string, string>; en: Record<string, st
     "migrations.docusign.step4.title": "Cutover and DocuSign cancel",
     "migrations.docusign.step4.body": "Once the team is comfortable (5-14 days) — cancel DocuSign. Active envelopes finish there, new ones go to AEVION.",
 
-    "migrations.docusign.quote": "We were paying $4,200/mo for DocuSign Business for 30 lawyers. AEVION Pro — $570/mo for the same volume. Signing cycle dropped from 2 days to 4 hours.",
-    "migrations.docusign.quoteBy": "Head of Operations, Almaty Law Group",
 
     "migrations.openai.before.b1": "$0.03/1k input + $0.06/1k output for GPT-4 — quickly hits $1k/mo for an ML team",
     "migrations.openai.before.b2": "No built-in audit and compliance evidence for regulated industries",
@@ -174,8 +164,6 @@ export const migrationsDict: { ru: Record<string, string>; en: Record<string, st
     "migrations.openai.step4.title": "Production rollout",
     "migrations.openai.step4.body": "Gradual rollout with feature-flag (canary 5% → 50% → 100%). Mirror logs 30 days for rollback.",
 
-    "migrations.openai.quote": "Replaced GPT-4 with QCoreAI in 5 days. Quality is equivalent for our use case. Bill dropped from $1,800/mo to $980/mo. And now we have an audit trail compliance requires.",
-    "migrations.openai.quoteBy": "VP Engineering, KazFin Holding",
 
     "migrations.stripe.before.b1": "Single-provider routing — no failover during acquirer downtime",
     "migrations.stripe.before.b2": "540ms+ latency on cross-border transactions",
@@ -194,8 +182,6 @@ export const migrationsDict: { ru: Record<string, string>; en: Record<string, st
     "migrations.stripe.step4.title": "Full cutover",
     "migrations.stripe.step4.body": "Stripe becomes one merchant in QPayNet, not the only one. Reconciliation via unified dashboard. Sub-minute switch on downtime.",
 
-    "migrations.stripe.quote": "Payment latency dropped 42%, auto-routing success rate is 98.2%. Time-to-market for new acquirer integration — from 7.5 months to 2.4.",
-    "migrations.stripe.quoteBy": "VP Engineering, KazFin Holding",
 
     "migrations.patently.before.b1": "$59-99/seat/mo for renewal tracking and filing assistant",
     "migrations.patently.before.b2": "Artifact registration via third parties, $720/reg avg",
@@ -214,8 +200,6 @@ export const migrationsDict: { ru: Record<string, string>; en: Record<string, st
     "migrations.patently.step4.title": "Activate auto-renewals",
     "migrations.patently.step4.body": "Reminders 90/30/7 days before renewal. After cutover — Patently account can be cancelled, AEVION owns the calendar.",
 
-    "migrations.patently.quote": "We were running 400+ clients in Patently. After migrating to AEVION IP Bureau — cost per registration dropped from $720 to $190, missed renewals from 2-3/yr to 0. Partners now see the full portfolio in one dashboard.",
-    "migrations.patently.quoteBy": "Managing Partner, NeoLaw Patent Group",
 
     "migrations.faq.title": "FAQ",
     "migrations.faq.q1": "What if migration gets stuck?",

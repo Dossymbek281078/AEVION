@@ -130,6 +130,25 @@ async function probe(page, url, label, section, want) {
 }
 
 async function main() {
+  /*
+   * Журнал прогонов пишется ПЕРВЫМ делом — до запуска браузера.
+   * 20.09.2026 он стоял после `chromium.launch`, и оба прогона после правки не
+   * состоялись (слот тяжёлых работ был занят). Файла не появилось вовсе: код
+   * был, механизм не исполнялся ни разу. Это ровно тот класс «написано, но не
+   * вызывается», из-за которого обещание «прогон можно исключить из аналитики»
+   * оставалось пустым.
+   */
+  const started = new Date().toISOString();
+  console.log("⚠️ Прогон пишет события в БОЕВУЮ аналитику (page_view + checkout_start).");
+  console.log(`   Начало ${started} — исключайте это окно при разборе посетителей.`);
+  try {
+    const { appendFileSync } = await import("node:fs");
+    const строка = `${started} checkout-button-reaches-cashier, целей ${APPS.length + 1}`;
+    appendFileSync("C:/Users/user/aevion-checkout-gate-runs.log", строка + String.fromCharCode(10));
+  } catch (e) {
+    console.error("журнал прогонов НЕ записан:", String(e.message).slice(0, 60));
+  }
+
   let browser;
   try {
     browser = await chromium.launch({ headless: true });
@@ -180,18 +199,6 @@ async function main() {
       : null;
     const ctxOpts = PROBE_UA ? { userAgent: PROBE_UA } : {};
 
-    const started = new Date().toISOString();
-    console.log(
-      `⚠️ Прогон пишет события в БОЕВУЮ аналитику (page_view + checkout_start).\n` +
-        `   Начало ${started} — исключайте это окно при разборе посетителей.`,
-    );
-    try {
-      const { appendFileSync } = await import("node:fs");
-      appendFileSync(
-        "C:/Users/user/aevion-checkout-gate-runs.log",
-        `${started} checkout-button-reaches-cashier, целей ${APPS.length + 1}, метка UA ${PROBE_UA ? "вкл" : "выкл"}\n`,
-      );
-    } catch { /* журнал не критичен для прогона */ }
 
     for (const app of APPS) {
       const ctx = await browser.newContext(ctxOpts);

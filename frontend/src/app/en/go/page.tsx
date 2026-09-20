@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { языки } from "@/lib/hreflang";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { BuyLink } from "@/components/BuyLink";
 import { PageTracking } from "@/components/PageTracking";
@@ -33,7 +34,7 @@ export const metadata: Metadata = {
   title: "AEVION — the book behind the videos",
   description:
     "Gratitude Forever Young: a 90-day practice, four minutes a day. Plus evidence-graded protocols on pigment aging. Wellness and education, not diagnosis or treatment.",
-  alternates: { canonical: "https://aevion.app/en/go" },
+  alternates: { canonical: "https://aevion.app/en/go", languages: языки("/en/go") },
   openGraph: {
     title: "AEVION — the book behind the videos",
     description: "A 90-day practice, four minutes a day. Evidence-first, no promises of outcome.",

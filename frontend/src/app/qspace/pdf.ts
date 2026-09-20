@@ -649,6 +649,8 @@ export function planFromPdfSegments(
 
   let list = src.segments;
   let truncated = 0;
+  // PDF без слоёв после чистки по размерным числам: стены неточные, двери — как у растра
+  let стеныНеточные = false;
   // PDF без слоёв — альбом дизайн-проекта (ArchiCAD и т. п.). Замер 20.09 на листе
   // «обмерный план»: несущие стены — закрашенные многоугольники (B), перегородки —
   // узкие ЗАМКНУТЫЕ прямоугольники обводкой (путь из четырёх отрезков), а размерные
@@ -697,8 +699,26 @@ export function planFromPdfSegments(
       return размерныеЧисла.some((w) => (h ? Math.abs(w.y - c) : Math.abs(w.x - c)) <= допуск && (h ? w.x : w.y) >= lo - допуск && (h ? w.x : w.y) <= hi + допуск);
     };
     const до = list.length;
+    const цепочки = list.filter(размерная);
     list = list.filter((s) => !размерная(s));
     if (list.length < до) warnings.push(`Размерные цепочки (${до - list.length} линий с числами вдоль них) — не стены, в модель не взяты.`);
+    // выносные линии: короткие осевые отрезки (≤ 0.5 м), упирающиеся концом в цепочку (≤ 0.1 м)
+    if (цепочки.length > 0) {
+      const рядом = 0.1 / metersPerPt, короткий = 0.5 / metersPerPt;
+      const касается = (x: number, y: number) => цепочки.some((c) => {
+        const h = Math.abs(c.y1 - c.y2) < 1e-6;
+        const lo = h ? Math.min(c.x1, c.x2) : Math.min(c.y1, c.y2), hi = h ? Math.max(c.x1, c.x2) : Math.max(c.y1, c.y2);
+        return (h ? Math.abs(y - c.y1) : Math.abs(x - c.x1)) <= рядом && (h ? x : y) >= lo - рядом && (h ? x : y) <= hi + рядом;
+      });
+      const доВыносных = list.length;
+      list = list.filter((s) => {
+        const осевая = Math.abs(s.x1 - s.x2) < 1e-6 || Math.abs(s.y1 - s.y2) < 1e-6;
+        if (!осевая || Math.hypot(s.x2 - s.x1, s.y2 - s.y1) > короткий) return true;
+        return !(касается(s.x1, s.y1) || касается(s.x2, s.y2));
+      });
+      if (list.length < доВыносных) warnings.push(`Выносные линии размеров (${доВыносных - list.length}) — не стены.`);
+    }
+    стеныНеточные = true;
     // короткие косые штрихи (штриховка стен, засечки размеров, значки мебели) — не стены:
     // косая стена короче 0.6 м на плане не встречается, а штрих штриховки — 0.2–0.5 м
     const доШтрихов = list.length;
@@ -831,7 +851,7 @@ export function planFromPdfSegments(
   }
 
   return {
-    plan: { name: "Импорт PDF", walls: [...сведение.walls, ...стеклянные], openings: [], source: "pdf" },
+    plan: { name: "Импорт PDF", walls: [...сведение.walls, ...стеклянные], openings: [], source: "pdf", ...(стеныНеточные ? { looseWalls: true } : {}) },
     warnings,
     metersPerPt,
     extentPt: src.extentPt,

@@ -320,7 +320,18 @@ export function allAppSlugs(): string[] {
 
 /** "ip_bureau" → "aevion-ip-bureau"; для совпадающих имён вернёт как есть. */
 export function moduleIdForAppSlug(slug: string): string {
-  return APP_SLUG_TO_MODULE_ID[slug] ?? slug;
+  const прямо = APP_SLUG_TO_MODULE_ID[slug];
+  if (прямо) return прямо;
+  // 🔴 20.09.2026: таблица выше ведётся РУКАМИ, и каталог её обогнал. В этот день
+  // добавили QRight, QSign, QSkyway и Startup Exchange; у последнего slug и
+  // moduleId различаются (`startup_exchange` против `startup-exchange`), строки в
+  // таблице нет — и обратный поиск возвращал null. Практически это «деньги взяли,
+  // выдать нечего»: гейт не находит покупку и разворачивает заплатившего.
+  //
+  // Спрашиваем сам каталог: у позиции уже есть moduleId, и он источник правды.
+  // Так следующий новый модуль не сломает сопоставление молча.
+  const из_каталога = STANDALONE_APPS.find((a) => a.slug === slug);
+  return из_каталога?.moduleId ?? slug;
 }
 
 /** Обратное: id модуля → slug подписки, если такой модуль вообще продаётся. */

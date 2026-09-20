@@ -26,7 +26,7 @@ import { parseDxf } from "./dxf";
 import { estimateCsv, estimatePlan } from "./estimate";
 import { planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
 import { масштабПоРазмерам, надёжностьМасштаба, предупреждениеОбОсях, словаИзТекста } from "./dimensionScale";
-import { текстPdf } from "./pdfText";
+import { текстPdf, текстСтраниц } from "./pdfText";
 import { назначенияПоПодписям, подписиИзТекста, type Подпись } from "./roomLabels";
 import { appliancesFromLabels, fixturesFromSegments } from "./fixtures";
 import type { Placement } from "./autoPlace";
@@ -279,6 +279,8 @@ export default function QSpaceClient() {
   const [pendingRestore, setPendingRestore] = useState<Pick<Project, "placed"> | null>(null);
   // PDF разобран, но масштаб ещё не назван человеком — план не строим.
   const [pdfPending, setPdfPending] = useState<PdfSegments | null>(null);
+  /** байты открытого PDF — чтобы перечитать другую страницу альбома без повторной загрузки */
+  const [pdfBytes, setPdfBytes] = useState<{ bytes: Uint8Array; name: string } | null>(null);
   /** подписи из текста того же PDF — нужны и при масштабе, заданном человеком */
   const [pdfLabels, setPdfLabels] = useState<Подпись[]>([]);
   /** сантехника и мебель, узнанные на чертеже: стоят сразу и первыми при любом стиле */
@@ -1078,8 +1080,71 @@ export default function QSpaceClient() {
     return строки;
   }, []);
 
+  const открытьPdf = useCallback(async (bytes: Uint8Array, name: string, page?: number) => {
+    setPdfPending(null);
+    setPdfLabels([]);
+    let src = await readPdfSegments(bytes, { page });
+    // Альбом дизайн-проекта: без указания страницы ищем лист по подписи —
+    // «обмерный план», «план стен/перегородок», «планировочное решение».
+    // Страница розеток или потолков тоже несёт стены, но с лишними линиями.
+    if (page === undefined && (src.pages ?? 1) > 1) {
+      const тексты = await текстСтраниц(bytes);
+      const idx = тексты.findIndex((t, k) => /обмерн|план стен|перегород|планировоч|план помещ|план квартиры|план дома/i.test(t) && (src.pageSegmentCounts?.[k] ?? 0) >= 100);
+      if (idx >= 0 && idx + 1 !== src.page) {
+        src = await readPdfSegments(bytes, { page: idx + 1 });
+        src.warnings = src.warnings.map((w) => (w.startsWith("В файле") ? w.replace(/\(на ней больше всего линий\)/, "(по подписи листа)") : w));
+      }
+    }
+    setPdfBytes({ bytes, name });
+    if (src.segments.length === 0) {
+      // Отказ показывается отказом: почему не вышло — словами, а не пустотой.
+      setWarnings(src.warnings);
+      setUnitLabel("");
+      return;
+    }
+    setPdfPending(src);
+    // Масштаб — из размерных чисел самого чертежа («1400», «2000» цепочкой
+    // вдоль стен). Нашёлся — модель строится сразу, а поле габарита остаётся
+    // для поправки. Не нашёлся — спрашиваем человека и говорим, почему.
+    const текст = await текстPdf(bytes, src.page ?? 1);
+    const масштаб = текст.ok ? масштабПоРазмерам(словаИзТекста(текст.items)) : null;
+    const подписи = текст.ok ? подписиИзТекста(текст.items) : [];
+    setPdfLabels(подписи);
+    if (масштаб && src.extentPt > 0) {
+      const extentM = Math.round((src.extentPt * масштаб.mmPerPt) / 10) / 100;
+      const r = planFromPdfSegments(src, extentM, "размеры");
+      if (r.plan) {
+        setPdfExtent(String(extentM));
+        setWarnings([
+          `Масштаб найден по размерам на чертеже — ${надёжностьМасштаба(масштаб.agree)}: `
+          + `${масштаб.mmPerPt.toFixed(1)} мм в пункте листа, его подтверждают ${масштаб.agree} пар размеров из ${масштаб.pairs}. `
+          + (масштаб.agree < 5
+            ? "Пар мало — сверьте с чертежом длину большей стороны ниже, три пары могут совпасть случайно. "
+            : "Модель построена — если большая сторона плана на самом деле другая, поправьте число ниже."),
+          ...предупреждениеОбОсях(масштаб),
+          ...r.warnings,
+          ...назначитьПоПодписям({ plan: r.plan, originPt: r.originPt, metersPerPt: r.metersPerPt }, подписи, src.otherSegments),
+        ]);
+        поставитьЧертёж({ ...r.plan, name });
+        setUnitLabel(`масштаб по размерам чертежа: ${extentM} м по большей стороне`);
+        return;
+      }
+    }
+    const почему = !текст.ok
+      ? "Размерные числа на чертеже прочитать не удалось. "
+      : "Размерных цепочек на чертеже не нашлось — масштаб неизвестен. ";
+    setWarnings([
+      `Найдено линий: ${src.segments.length}. ${почему}`
+      + "Укажите длину БОЛЬШЕЙ стороны плана в метрах, и модель построится.",
+      ...src.warnings,
+    ]);
+    setUnitLabel("");
+    return;
+  }, [поставитьЧертёж, назначитьПоПодписям]);
+
   const onFile = useCallback(async (f: File) => {
     setPdfPending(null);
+    setPdfBytes(null);
     setPdfLabels([]);
     setИмяФайла(f.name);
     // Предел размера — ПЕРЕД чтением, а не после. Дальше по всем трём веткам
@@ -1107,51 +1172,7 @@ export default function QSpaceClient() {
       return;
     }
     if (/\.pdf$/i.test(f.name)) {
-      const bytes = new Uint8Array(await f.arrayBuffer());
-      const src = await readPdfSegments(bytes);
-      if (src.segments.length === 0) {
-        // Отказ показывается отказом: почему не вышло — словами, а не пустотой.
-        setWarnings(src.warnings);
-        setUnitLabel("");
-        return;
-      }
-      setPdfPending(src);
-      // Масштаб — из размерных чисел самого чертежа («1400», «2000» цепочкой
-      // вдоль стен). Нашёлся — модель строится сразу, а поле габарита остаётся
-      // для поправки. Не нашёлся — спрашиваем человека и говорим, почему.
-      const текст = await текстPdf(bytes);
-      const масштаб = текст.ok ? масштабПоРазмерам(словаИзТекста(текст.items)) : null;
-      const подписи = текст.ok ? подписиИзТекста(текст.items) : [];
-      setPdfLabels(подписи);
-      if (масштаб && src.extentPt > 0) {
-        const extentM = Math.round((src.extentPt * масштаб.mmPerPt) / 10) / 100;
-        const r = planFromPdfSegments(src, extentM, "размеры");
-        if (r.plan) {
-          setPdfExtent(String(extentM));
-          setWarnings([
-            `Масштаб найден по размерам на чертеже — ${надёжностьМасштаба(масштаб.agree)}: `
-            + `${масштаб.mmPerPt.toFixed(1)} мм в пункте листа, его подтверждают ${масштаб.agree} пар размеров из ${масштаб.pairs}. `
-            + (масштаб.agree < 5
-              ? "Пар мало — сверьте с чертежом длину большей стороны ниже, три пары могут совпасть случайно. "
-              : "Модель построена — если большая сторона плана на самом деле другая, поправьте число ниже."),
-            ...предупреждениеОбОсях(масштаб),
-            ...r.warnings,
-            ...назначитьПоПодписям({ plan: r.plan, originPt: r.originPt, metersPerPt: r.metersPerPt }, подписи, src.otherSegments),
-          ]);
-          поставитьЧертёж({ ...r.plan, name: f.name });
-          setUnitLabel(`масштаб по размерам чертежа: ${extentM} м по большей стороне`);
-          return;
-        }
-      }
-      const почему = !текст.ok
-        ? "Размерные числа на чертеже прочитать не удалось. "
-        : "Размерных цепочек на чертеже не нашлось — масштаб неизвестен. ";
-      setWarnings([
-        `Найдено линий: ${src.segments.length}. ${почему}`
-        + "Укажите длину БОЛЬШЕЙ стороны плана в метрах, и модель построится.",
-        ...src.warnings,
-      ]);
-      setUnitLabel("");
+      await открытьPdf(new Uint8Array(await f.arrayBuffer()), f.name);
       return;
     }
     const text = await f.text();
@@ -1159,7 +1180,7 @@ export default function QSpaceClient() {
     setWarnings(r.warnings);
     setUnitLabel(r.plan ? r.unitLabel : "");
     if (r.plan) поставитьЧертёж({ ...r.plan, name: f.name });
-  }, [поставитьЧертёж, назначитьПоПодписям]);
+  }, [открытьPdf, поставитьЧертёж]);
 
   /** Переписать высоту у всех стен плана — она хранится у стены, не глобально. */
   const applyHeight = useCallback((v: string) => {
@@ -1668,6 +1689,27 @@ export default function QSpaceClient() {
         <ul style={S.warnings} role="status">
           {warnings.map((w, i) => <li key={i}>{w}</li>)}
         </ul>
+      )}
+
+      {pdfPending && (pdfPending.pages ?? 1) > 1 && pdfBytes && (
+        <div style={S.scaleBox}>
+          <label htmlFor="qspace-pdf-page" style={{ fontSize: 14 }}>
+            Страница альбома (взята {pdfPending.page} из {pdfPending.pages}):
+          </label>
+          <select
+            id="qspace-pdf-page"
+            value={pdfPending.page ?? 1}
+            onChange={(e) => { void открытьPdf(pdfBytes.bytes, pdfBytes.name, Number(e.target.value)); }}
+            style={S.scaleInput}
+          >
+            {(pdfPending.pageSegmentCounts ?? []).map((n, k) => (
+              <option key={k} value={k + 1}>{k + 1} — {n} линий</option>
+            ))}
+          </select>
+          <span style={S.hint}>
+            Нужен лист с планом стен (обмерный план, план перегородок). Лист розеток или потолков даст лишние «стены».
+          </span>
+        </div>
       )}
 
       {pdfPending && (

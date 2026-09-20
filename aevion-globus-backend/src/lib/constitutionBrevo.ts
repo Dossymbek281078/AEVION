@@ -702,3 +702,80 @@ export async function sendAgencyLeadNotice(lead: {
   }
   return true;
 }
+
+/**
+ * Подтверждение ЧЕЛОВЕКУ, что его заявка дошла.
+ *
+ * Повод (20.09.2026). Страница пишет «Заявка отправлена», а в почте у человека
+ * пусто: единственное письмо уходило нам. Для холодного посетителя, который нас
+ * ещё не знает, это выглядит как «отправил в никуда», и он пишет второй раз или
+ * уходит совсем.
+ *
+ * Границы, сознательно:
+ *   • шлём ТОЛЬКО когда контакт — почта. На телефон писать нечем, и выдумывать
+ *     канал нельзя;
+ *   • письмо не роняет приём заявки: заявка уже сохранена, и её судьба не должна
+ *     зависеть от почтового провайдера;
+ *   • отказ не молчит — в журнале остаётся ЧТО и КОМУ не ушло (§16г).
+ *
+ * Обещания в тексте держим ровно те, что уже стоят на странице: вернуть результат
+ * в течение рабочего дня и ничего не списывать. Лишнее обещание здесь дороже
+ * молчания: письмо читают именно те, кто ещё сомневается.
+ */
+/** Кому можно отправить подтверждение: почта — адрес, телефон и мусор — null. */
+export function адресатПодтвержденияЗаявки(contact: string): string | null {
+  const c = String(contact || "").trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(c) ? c : null;
+}
+
+/** Текст подтверждения отдельно от отправки — чтобы обещания можно было проверить тестом. */
+export function строкиПодтвержденияЗаявки(lead: { name?: string }): string[] {
+  const имя = lead.name ? `${lead.name}, ` : "";
+  return [
+    `${имя}заявка получена — она уже у нас, ничего делать не нужно.`,
+    `${имя}заявка получена — она уже у нас, ничего делать не нужно.`,
+    "",
+    "Что дальше: разберём ваши данные и вернём результат в течение рабочего дня —",
+    "карточки, черновики ответов или очередь писем, смотря что вы прислали.",
+    "Бесплатно и без договора: сначала работа, потом разговор о пилоте.",
+    "",
+    "Если ответа не будет к завтрашнему вечеру — ответьте на это письмо, значит",
+    "оно потерялось у нас, а не у вас.",
+    "",
+    "— AEVION Automation",
+  ];
+}
+
+export async function sendAgencyLeadReceipt(lead: {
+  contact: string;
+  message: string;
+  name?: string;
+}): Promise<boolean> {
+  const адрес = адресатПодтвержденияЗаявки(lead.contact);
+  if (!адрес) return false;
+
+  const эк = (s: string) =>
+    String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const строки = строкиПодтвержденияЗаявки(lead);
+
+  const payload: ConstitutionEmailPayload = {
+    to: [{ email: адрес }],
+    subject: "Ваша заявка получена — AEVION Automation",
+    htmlContent:
+      `<div style="font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;color:#0f172a">` +
+      строки.map((s) => (s ? `<p style="margin:0 0 8px">${эк(s)}</p>` : "")).join("") +
+      `</div>`,
+    textContent: строки.join("\n"),
+    tags: ["agency-lead-receipt"],
+  };
+
+  const result = await sendBrevoEmail(payload);
+  if (!result.ok) {
+    console.error(`[Brevo] agency-lead receipt failed for ${lead.contact}:`, result.error);
+    return false;
+  }
+  if (result.degraded) {
+    console.warn(`[Brevo] agency-lead receipt degraded: ${result.degradedReason}`);
+  }
+  return true;
+}

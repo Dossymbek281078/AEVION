@@ -6302,6 +6302,14 @@ export default function CyberChessPage(){
             <div onClick={()=>sMoreMenuOpen(false)} style={{position:"fixed",inset:0,zIndex:190}}/>
             <div role="menu" style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:200,minWidth:240,padding:10,borderRadius:RADIUS.lg,background:CC.surface1,border:`1px solid ${CC.borderStrong}`,boxShadow:SHADOW.lg,display:"flex",flexDirection:"column",gap:4}}>
               {[
+                // Телефон (<769): то, что убрано из шапки ради одной строки (20.09.2026), живёт здесь —
+                // вход/аккаунт, рейтинг и Chessy (→ дашборд «Профиль»), «Все разделы».
+                ...(vwPx<769?[
+                  ...(ccAuth.checked&&!ccAuth.user?[{ic:<span style={{fontSize:14}} aria-hidden>👤</span>,lbl:"Войти в аккаунт AEVION",act:()=>{window.location.href="/auth?next=/cyberchess"}}]:[]),
+                  ...(ccAuth.user?[{ic:<span style={{fontSize:14}} aria-hidden>👤</span>,lbl:"Мой аккаунт AEVION",act:()=>{window.location.href="/account"}}]:[]),
+                  {ic:<span style={{fontSize:14}} aria-hidden>◆</span>,lbl:`Рейтинг ${rat} · Chessy ${chessy.balance}`,act:()=>sShowStatsDashboard(true)},
+                  {ic:<span style={{fontSize:14}} aria-hidden>☰</span>,lbl:"Все разделы",act:()=>sShowSections(true)},
+                ]:[]),
                 {ic:<Icon.Help width={16} height={16}/>,lbl:"Горячие клавиши",act:()=>sShowHelp(true)},
                 {ic:<span style={{fontSize:15}} aria-hidden>🎵</span>,lbl:"Музыка",act:()=>sShowMusicPlayer(true)},
                 {ic:<span style={{fontSize:14}} aria-hidden>⛶</span>,lbl:"Полноэкранный режим",act:()=>{const el=document.documentElement;if(!document.fullscreenElement){el.requestFullscreen?.().catch(()=>{})}else{document.exitFullscreen?.().catch(()=>{})}}},

@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import Link from "next/link";
 import { KeepChannelLink } from "./KeepChannelLink";
 import { repoUrl } from "@/lib/repoUrl";
+import { FooterWaitlist } from "./FooterWaitlist";
 
 /**
  * Ссылка подвала. Раньше тот же объект стиля был вписан в каждую из двенадцати
@@ -118,6 +119,13 @@ export function SiteFooter() {
             </a>
           </div>
         </div>
+      </div>
+
+      {/* Приём адреса — последняя возможность не потерять посетителя: у 12 из 15
+          страниц, куда ведут посты, своего поля нет (замер 20.09.2026). Блок сам
+          не рисуется там, где приём адреса уже есть, — см. FooterWaitlist. */}
+      <div style={{ maxWidth: 1280, margin: "28px auto 0" }}>
+        <FooterWaitlist />
       </div>
 
       {/* Bottom bar */}

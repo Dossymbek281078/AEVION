@@ -2150,6 +2150,7 @@ const ru: Record<string, string> = {
   "constitution.showcase.quote3": "Общие ресурсы лучше всего управляются полицентричными сообществами, не централизованным государством.",
   "constitution.showcase.quote4": "Кто принимает решение, должен лично нести его последствия.",
   "constitution.showcase.quotesHeading": "На чьих плечах",
+  "constitution.showcase.paraphrase": "пересказ идеи",
   "constitution.showcase.whatFloorBold": "пол снизу",
   "constitution.showcase.whatFloorParenthetical": "(UBI, образование, медицина),",
   "constitution.showcase.whatGrowingBold": "растущий пирог",

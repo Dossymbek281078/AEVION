@@ -2150,6 +2150,7 @@ const en: Record<string, string> = {
   "constitution.showcase.quote3": "Common resources are best governed by polycentric communities, not a centralized state.",
   "constitution.showcase.quote4": "Whoever makes the decision must personally bear its consequences.",
   "constitution.showcase.quotesHeading": "Standing on whose shoulders",
+  "constitution.showcase.paraphrase": "idea paraphrased from",
   "constitution.showcase.whatFloorBold": "floor below",
   "constitution.showcase.whatFloorParenthetical": "(UBI, education, healthcare),",
   "constitution.showcase.whatGrowingBold": "growing pie",

@@ -2150,6 +2150,7 @@ const kk: Record<string, string> = {
   "constitution.showcase.quote3": "Ортақ ресурстарды орталықтандырылған мемлекет емес, полицентрлі қауымдастықтар жақсы басқарады.",
   "constitution.showcase.quote4": "Шешім қабылдаған адам оның салдарын жеке өзі көтеруі керек.",
   "constitution.showcase.quotesHeading": "Кімнің иығында тұрмыз",
+  "constitution.showcase.paraphrase": "идея баяндамасы",
   "constitution.showcase.whatFloorBold": "төменгі шек",
   "constitution.showcase.whatFloorParenthetical": "(әмбебап негізгі табыс, білім, медицина),",
   "constitution.showcase.whatGrowingBold": "өсіп келе жатқан пирог",

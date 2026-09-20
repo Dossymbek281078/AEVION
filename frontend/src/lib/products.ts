@@ -379,7 +379,7 @@ export const MODULES: Product[] = [
     kind: "module",
     processor: "aevion",
     href: appHref("startup_exchange"),
-    appId: "startup_exchange",
+    appId: "startup-exchange",
   },
   {
     id: "qskyway",

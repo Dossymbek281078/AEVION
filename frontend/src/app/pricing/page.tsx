@@ -638,7 +638,8 @@ export default function PricingPage() {
   return (
     <ProductPageShell maxWidth={1280}>
       {/* Module deep-link hero — пришли со страницы продукта (/pricing?module=<id>).
-          Пять приложений продаются и отдельно: для них заметная кнопка покупки
+          Часть приложений продаётся и отдельно (список — STANDALONE_APPS,
+          20.09.2026 их девять): для них заметная кнопка покупки
           на сроке из блока «Отдельные приложения». Остальные модули отдельно не
           продаются — честно говорим, что модуль входит в любой тариф, и ведём к
           тарифам. Валюта (вкл. KZT/PayBox) берётся из общего тумблера ниже. */}
@@ -1488,10 +1489,10 @@ export default function PricingPage() {
               })}
             </div>
             {/* Утверждение печатается, только если оно ВЕРНО на выбранном сроке:
-                сумма пяти приложений и цена планеты считаются здесь же. */}
+                сумма всех приложений и цена планеты считаются здесь же. */}
             {суммаПриложений > планета && (
               <p data-testid="apps-vs-planet" style={{ margin: "16px 0 0", fontSize: 14, color: "#334155", lineHeight: 1.5 }}>
-                {t("pricing.home.apps.allFiveDearer", {
+                {t("pricing.home.apps.allAppsDearer", {
                   apps: displayPrice(суммаПриложений),
                   planet: displayPrice(планета),
                 })}
@@ -1662,7 +1663,7 @@ export default function PricingPage() {
                       {availabilityBadge(m.availability)}
                     </td>
                     <td style={{ padding: "10px 14px", textAlign: "right", fontWeight: 700 }}>
-                      {/* Отдельно продаются только пять приложений; «от» — цена
+                      {/* Отдельно продаются только приложения из STANDALONE_APPS; «от» — цена
                           месяца на самом длинном сроке (lib/termPricing.ts). */}
                       {(() => {
                         const app = standaloneApp(m.id);

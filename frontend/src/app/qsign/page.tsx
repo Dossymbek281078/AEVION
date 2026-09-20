@@ -1998,7 +1998,7 @@ export default function QSignPage() {
         <div style={{ maxWidth: 560, margin: "32px 0 0" }}>
           <WaitlistIfMissing
             lang="en"
-            source="qsign:page"
+            source="qsign-page"
             title="Not signing today? Leave your email"
             description="We write when QSign gets new keys, formats and integrations."
             buttonLabel="Notify me"

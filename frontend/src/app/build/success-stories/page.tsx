@@ -207,9 +207,9 @@ export default async function SuccessStoriesPage() {
       */}
       <div className="mx-auto mt-10 max-w-xl px-4">
         <WaitlistIfMissing
-          source="build:success-stories"
+          source="build-success-stories"
           title="Историй пока нет — напишем, когда появятся"
-          description="Первые истории найма на QBuild придут вам письмом."
+          description="Напишем, когда на AEVION появятся новости — в том числе первые истории найма."
           buttonLabel="Сообщить мне"
         />
       </div>

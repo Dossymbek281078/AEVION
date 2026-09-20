@@ -209,9 +209,9 @@ export default function BuildHomePage() {
       <div className="mt-10 max-w-xl">
         <WaitlistIfMissing
           lang="en"
-          source="build:home"
+          source="build-home"
           title="Not hiring today? Leave your email"
-          description="We write when new projects and crews appear on the exchange."
+          description="We write when AEVION has news - new modules and openings included."
           buttonLabel="Notify me"
           doneText="Done — your address is saved. A confirmation is already in your inbox."
         />

@@ -1133,15 +1133,20 @@ export default function CyberChessPage(){
   // тестер 20.09.2026 (390) видел тост «Эндшпиль · Лёгкая…» на «Перевернуть · Новая партия».
   // Отступ сверху — по ФАКТИЧЕСКОЙ высоте sticky-шапки через ResizeObserver: со строкой
   // «Вернуться к партии» шапка выше, и константа 64px ложилась на ⚙ ☰.
+  // Берём НИЗ шапки в координатах окна, а не высоту: при scrollTop 0 шапка стоит ниже верхней
+  // полосы оболочки (~70px), и «высота+8» клала тост на «Вернуться к партии» (тестер 20.09, 390 puzzles).
+  // Плашка языка на телефоне — position:absolute (правило в <style> ниже): фиксированная закрывала
+  // прокрученный к верху ряд чипов («📡 Стрим» под «RU ▼», тестер 20.09, низ страницы).
   useEffect(()=>{const r=document.documentElement.style;
     const apply=()=>{try{
-      if(vwPx<769){const h=(document.querySelector("[data-cc-header]")?.getBoundingClientRect().height)||56;r.setProperty("--aevion-toast-top",`${Math.round(h)+8}px`);r.setProperty("--aevion-toast-bottom","auto");r.setProperty("--aevion-toast-lift","0px");}
+      if(vwPx<769){const rc=document.querySelector("[data-cc-header]")?.getBoundingClientRect();const h=rc?Math.max(rc.bottom,rc.height):56;r.setProperty("--aevion-toast-top",`${Math.round(Math.max(56,h))+8}px`);r.setProperty("--aevion-toast-bottom","auto");r.setProperty("--aevion-toast-lift","0px");}
       else{r.removeProperty("--aevion-toast-top");r.removeProperty("--aevion-toast-bottom");r.setProperty("--aevion-toast-lift","0px");}
     }catch{}};
     apply();
     const el=document.querySelector("[data-cc-header]");
     const ro=(el&&typeof ResizeObserver!=="undefined")?new ResizeObserver(apply):null; if(el&&ro)ro.observe(el);
-    return()=>{ro?.disconnect();try{for(const k of ["--aevion-toast-top","--aevion-toast-bottom","--aevion-toast-lift"])r.removeProperty(k)}catch{}}},[vwPx]);
+    window.addEventListener("scroll",apply,{passive:true}); // низ шапки в окне меняется прокруткой, а не только размером
+    return()=>{ro?.disconnect();window.removeEventListener("scroll",apply);try{for(const k of ["--aevion-toast-top","--aevion-toast-bottom","--aevion-toast-lift"])r.removeProperty(k)}catch{}}},[vwPx]);
   // Layout-fill (исправлено 2026-06-14): доска квадратная, узкое место — ВЫСОТА.
   // Большой запас по высоте (vhPx-280: header+часы+координаты+нижние контролы+браузерные
   // баннеры) чтобы доска НИКОГДА не вылезала за окно и не обрезалась снизу. По ширине
@@ -11835,7 +11840,7 @@ ${question.trim()}`;
           <div style={{marginTop:SPACE[3],fontSize:11,color:CC.textDim,textAlign:"center"}}>Клик мимо — отмена</div>
         </div>
       </div>}
-      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}@keyframes spin{to{transform:rotate(360deg)}}@keyframes diceRoll{0%{transform:rotate(0) scale(0.5);opacity:0.3}50%{transform:rotate(180deg) scale(1.15)}100%{transform:rotate(360deg) scale(1);opacity:1}}@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}@keyframes fadeInUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@keyframes pop{0%{transform:scale(0.85);opacity:0}60%{transform:scale(1.05)}100%{transform:scale(1);opacity:1}}@keyframes sf-depth-pulse{0%{opacity:0.45;transform:scale(0.96)}50%{opacity:1;transform:scale(1.04)}100%{opacity:0.85;transform:scale(1)}}@keyframes pip-suggest-pulse{0%,100%{box-shadow:0 0 0 0 rgba(168,85,247,0.6)}50%{box-shadow:0 0 0 8px rgba(168,85,247,0)}}`}</style>
+      <style>{`@media (max-width:768px){[data-app-shell-pill]{position:absolute !important}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}@keyframes spin{to{transform:rotate(360deg)}}@keyframes diceRoll{0%{transform:rotate(0) scale(0.5);opacity:0.3}50%{transform:rotate(180deg) scale(1.15)}100%{transform:rotate(360deg) scale(1);opacity:1}}@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}@keyframes fadeInUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@keyframes pop{0%{transform:scale(0.85);opacity:0}60%{transform:scale(1.05)}100%{transform:scale(1);opacity:1}}@keyframes sf-depth-pulse{0%{opacity:0.45;transform:scale(0.96)}50%{opacity:1;transform:scale(1.04)}100%{opacity:0.85;transform:scale(1)}}@keyframes pip-suggest-pulse{0%,100%{box-shadow:0 0 0 0 rgba(168,85,247,0.6)}50%{box-shadow:0 0 0 8px rgba(168,85,247,0)}}`}</style>
     {/* Games History Modal */}
     {gamesModalOpen&&(()=>{
       // Library v2 — full search/sort/filter/PGN export/delete.

@@ -12480,7 +12480,8 @@ ${question.trim()}`;
         «Играть» и на нижнюю навигацию — то есть первый экран новичка вёл не
         к игре, а к предложению включить чужой стрим. Про перекрытие доски
         здесь уже думали (условие !on ниже), про мобильный первый экран — нет. */}
-    {showPipSuggest&&!on&&!anyOnboardingModal&&vwPx>=900&&<div
+    {/* !setup: на лаунчпаде подсказка стрима накрывала плитку «Онлайн-матч» и блок писем (скрин 1920, 20.09.2026) */}
+    {showPipSuggest&&!on&&!setup&&!anyOnboardingModal&&vwPx>=900&&<div
       role="alert"
       style={{
         position:"fixed",right:"calc(20px + var(--aevion-projects-w, 0px))",bottom:POLOSA_VSPLYVASHEK,zIndex:7900,

@@ -1131,11 +1131,17 @@ export default function CyberChessPage(){
   // «Мат в 2 · Лёгкая · Эндшпиль · 849 ×» лежал на иконках нава даже внизу прокрутки).
   // На телефоне тосты СВЕРХУ (под шапкой): любой низ занят рядом кнопок партии и BottomNav —
   // тестер 20.09.2026 (390) видел тост «Эндшпиль · Лёгкая…» на «Перевернуть · Новая партия».
-  useEffect(()=>{const r=document.documentElement.style;try{
-      if(vwPx<769){r.setProperty("--aevion-toast-top","64px");r.setProperty("--aevion-toast-bottom","auto");r.setProperty("--aevion-toast-lift","0px");}
+  // Отступ сверху — по ФАКТИЧЕСКОЙ высоте sticky-шапки через ResizeObserver: со строкой
+  // «Вернуться к партии» шапка выше, и константа 64px ложилась на ⚙ ☰.
+  useEffect(()=>{const r=document.documentElement.style;
+    const apply=()=>{try{
+      if(vwPx<769){const h=(document.querySelector("[data-cc-header]")?.getBoundingClientRect().height)||56;r.setProperty("--aevion-toast-top",`${Math.round(h)+8}px`);r.setProperty("--aevion-toast-bottom","auto");r.setProperty("--aevion-toast-lift","0px");}
       else{r.removeProperty("--aevion-toast-top");r.removeProperty("--aevion-toast-bottom");r.setProperty("--aevion-toast-lift","0px");}
-    }catch{}
-    return()=>{try{for(const k of ["--aevion-toast-top","--aevion-toast-bottom","--aevion-toast-lift"])r.removeProperty(k)}catch{}}},[vwPx]);
+    }catch{}};
+    apply();
+    const el=document.querySelector("[data-cc-header]");
+    const ro=(el&&typeof ResizeObserver!=="undefined")?new ResizeObserver(apply):null; if(el&&ro)ro.observe(el);
+    return()=>{ro?.disconnect();try{for(const k of ["--aevion-toast-top","--aevion-toast-bottom","--aevion-toast-lift"])r.removeProperty(k)}catch{}}},[vwPx]);
   // Layout-fill (исправлено 2026-06-14): доска квадратная, узкое место — ВЫСОТА.
   // Большой запас по высоте (vhPx-280: header+часы+координаты+нижние контролы+браузерные
   // баннеры) чтобы доска НИКОГДА не вылезала за окно и не обрезалась снизу. По ширине
@@ -6008,7 +6014,7 @@ export default function CyberChessPage(){
         <button onClick={()=>sStreamerMode(false)} style={{padding:"6px 10px",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer"}}>✕</button>
       </div>}
       {/* Sticky glass header */}
-      {!streamerMode&&<div style={{
+      {!streamerMode&&<div data-cc-header="1" style={{
         position:"sticky",top:0,zIndex:Z.sticky,
         // Телефон: справа 100px под плавающую языковую пилюлю «RU ▼» (AppShellLanguagePill, fixed
         // top:12/right:12) — на 390 она ложилась на ☰/🔊 шапки (тестер 20.09.2026).
@@ -7497,7 +7503,7 @@ export default function CyberChessPage(){
       {/* Телефон: чипов больше, чем ширины (390: «…Стри» обрезался, «Видео»/«Ещё» недостижимы —
           тестер 20.09.2026). Ряд прокручивается по горизонтали, полоса прокрутки скрыта. */}
       {!streamerMode&&!setup&&on&&tab==="play"&&(
-        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"nowrap",overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none",paddingBottom:2}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"nowrap",overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none",paddingBottom:2,paddingRight:vwPx<769?96:0}}>
           {([
             ...(isHumanGame?[]:[
               {icon:TAB_META.analysis.icon,label:TAB_META.analysis.label,hint:"Анализ позиции",accent:TAB_META.analysis.hue, act:()=>sTab("analysis")},

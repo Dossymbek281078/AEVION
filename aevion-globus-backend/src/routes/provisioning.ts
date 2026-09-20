@@ -59,6 +59,47 @@ const PACKAGE_ROOT = join(__dirname, "..", "..");
  * Тот же класс, что копия записи прав в вебхуке: две реализации одного,
  * расходятся молча, и разницу видно только при сравнении.
  */
+/**
+ * Где лежат записи о покупках и переживут ли они выкатку — ФАКТОМ, а не догадкой.
+ *
+ * ЗАЧЕМ. 20.09.2026 я час шёл по ложному следу: комментарий ниже (замер 01.09)
+ * говорил «SUBSCRIPTIONS_FILE не задана, том подключён — файл В КОНТЕЙНЕРЕ», и из
+ * этого следовало, что каждая выкатка стирает оплаченный доступ. Проверка показала
+ * обратное: события лежат в том же каталоге `data`, их 10229 штук с 26 мая, и
+ * `/health` честно говорит про них `onVolume: true`. То есть каталог НА ТОМЕ, а
+ * комментарий устарел и вводил в заблуждение.
+ *
+ * Чтобы следующий не повторил этот час, ответ становится ПОЛЕМ в /health рядом с
+ * eventsStore, а не рассуждением о путях. Форма нарочно та же, что у событий.
+ */
+export function subsStoreStatus(): {
+  persistedByEnv: boolean;
+  onVolume: boolean | null;
+  exists: boolean;
+  count: number | null;
+  oldest: string | null;
+} {
+  const persistedByEnv = Boolean(process.env.SUBSCRIPTIONS_FILE?.trim());
+  const file = subsFile().split(String.fromCharCode(92)).join("/");
+  const mount = process.env.RAILWAY_VOLUME_MOUNT_PATH?.trim() || null;
+  const onVolume = mount ? file.startsWith(mount.split(String.fromCharCode(92)).join("/")) : null;
+  if (!existsSync(subsFile())) return { persistedByEnv, onVolume, exists: false, count: 0, oldest: null };
+  // Счёт и дату берём из тех же записей, что решают доступ, — иначе поле
+  // отвечало бы про другой файл. Сбой чтения даёт null, а НЕ ноль: «не знаю»
+  // и «пусто» здесь разные ответы.
+  try {
+    const all = readSubscriptions();
+    const oldest = all.reduce<string | null>((acc, x) => {
+      const t = Date.parse(x.ts);
+      if (!Number.isFinite(t)) return acc;
+      return acc === null || t < Date.parse(acc) ? x.ts : acc;
+    }, null);
+    return { persistedByEnv, onVolume, exists: true, count: all.length, oldest };
+  } catch {
+    return { persistedByEnv, onVolume, exists: true, count: null, oldest: null };
+  }
+}
+
 export function subsFile(): string {
   const fromEnv = process.env.SUBSCRIPTIONS_FILE?.trim();
   if (fromEnv) return fromEnv;
@@ -1210,8 +1251,16 @@ provisioningRouter.get("/subscriptions/by-channel", (req, res) => {
   //
   // Поэтому рядом с числами идёт происхождение: на диске ли файл и какая
   // запись самая старая. Читатель панели обязан подписать окно данных, а не
-  // выдавать его за всю историю. Замер 01.09.2026: SUBSCRIPTIONS_FILE на проде
-  // не задана, том подключён — то есть файл В КОНТЕЙНЕРЕ.
+  // выдавать его за всю историю. ⚠️ ПОПРАВКА 20.09.2026. Здесь стояло: «замер
+  // 01.09: SUBSCRIPTIONS_FILE на проде не задана, том подключён — то есть файл В
+  // КОНТЕЙНЕРЕ». Из этого следует, что выкатка стирает оплаченный доступ, и я
+  // потратил час на эту тревогу. Она ЛОЖНАЯ: переменная действительно не задана,
+  // но путь по умолчанию ведёт в тот же каталог `data`, что и у событий, а
+  // /health про события говорит onVolume: true и показывает 10229 записей с 26
+  // мая. Каталог НА ТОМЕ — записи выкатку переживают.
+  //
+  // Спрашивать это рассуждением о путях больше не нужно: в /health есть поле
+  // subsStore той же формы, что eventsStore (см. subsStoreStatus выше).
   const mount = process.env.RAILWAY_VOLUME_MOUNT_PATH?.trim() || null;
   const file = subsFile().split(String.fromCharCode(92)).join("/");
   const onVolume = mount ? file.startsWith(mount.split(String.fromCharCode(92)).join("/")) : false;

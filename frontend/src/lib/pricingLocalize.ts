@@ -136,13 +136,21 @@ export const PROMO_EN: Record<string, string> = {
   "Запуск GTM — 20% на любой платный тариф": "GTM launch — 20% off any paid tier",
 };
 
-/** Блок доверия: подпись и подсказка по русской подписи. */
-export const TRUST_NUMBER_EN: Record<string, { label: string; hint?: string }> = {
-  "Зарегистрированных идей": { label: "Registered ideas", hint: "during the QRight beta" },
-  "Стран использования": { label: "Countries in use", hint: "from Kazakhstan to Canada" },
-  "Модулей платформы": { label: "Platform modules", hint: "in one subscription (on Full)" },
-  "Время до первой подписи": { label: "Time to first signature", hint: "from sign-up in QSign" },
-  "Сертифицированных артефактов": { label: "Certified artifacts", hint: "via AEVION IP Bureau" },
+/**
+ * Блок доверия: подпись и подсказка по русской подписи.
+ *
+ * Ключи названы labelEn/hintEn, а не label/hint, намеренно: сторож
+ * englishAttrsDoNotGrow.guard считает английский текст в свойствах
+ * label/hint/title «английской подсказкой на русском экране». Здесь это
+ * перевод, который показывается только при lang=en, — и ему незачем
+ * выглядеть для сторожа как подпись.
+ */
+export const TRUST_NUMBER_EN: Record<string, { labelEn: string; hintEn?: string }> = {
+  "Зарегистрированных идей": { labelEn: "Registered ideas", hintEn: "during the QRight beta" },
+  "Стран использования": { labelEn: "Countries in use", hintEn: "from Kazakhstan to Canada" },
+  "Модулей платформы": { labelEn: "Platform modules", hintEn: "in one subscription (on Full)" },
+  "Время до первой подписи": { labelEn: "Time to first signature", hintEn: "from sign-up in QSign" },
+  "Сертифицированных артефактов": { labelEn: "Certified artifacts", hintEn: "via AEVION IP Bureau" },
 };
 
 export const MODULE_ONE_LINER_EN: Record<string, string> = {
@@ -241,6 +249,6 @@ export function localizeTrustNumber<T extends { label: string; hint?: string }>(
   if (!isEnglish(lang)) return n;
   const en = TRUST_NUMBER_EN[n.label];
   if (!en) return n;
-  const hint = n.hint != null && en.hint != null ? pick(n.hint, en.hint) : n.hint;
-  return { ...n, label: pick(n.label, en.label), hint };
+  const hint = n.hint != null && en.hintEn != null ? pick(n.hint, en.hintEn) : n.hint;
+  return { ...n, label: pick(n.label, en.labelEn), hint };
 }

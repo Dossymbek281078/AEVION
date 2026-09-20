@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, cleanup, act } from "@testing-library/react";
 import { I18nProvider } from "@/lib/i18n";
 import { PLANET_BASE_MONTHLY, STANDALONE_APPS, termPricePerMonth, termTotal } from "@/lib/termPricing";
+import { localizeTier } from "@/lib/pricingLocalize";
 
 /**
  * Непокупаемый тариф обязан ОБЪЯСНИТЬ себя, а не просто погаснуть.
@@ -140,6 +141,23 @@ function кнопкаОплатыКалькулятора(калькулятор
  * лежит в той же карточке, что и основная кнопка покупки; основная — другая кнопка
  * этой карточки. Она гаснет по тому же правилу продаваемости, что и снятая.
  */
+/**
+ * Подписи кнопки покупки на двух языках — из ТОГО ЖЕ источника, что у страницы.
+ *
+ * 🔴 20.09.2026: здесь стояло `toContain("Купить")`, и три проверки покраснели.
+ * Причина не в кнопке: в этот день появился `pricingLocalize`, а провайдер языка
+ * стартует с "en" (`useState<Lang>("en")`), поэтому в тестовой среде страница
+ * рисует «Choose Pro». Раньше подпись оставалась русской при любом языке.
+ *
+ * Держать здесь язык нельзя: это сделало бы проверку про перевод, а она про то,
+ * ТА ЛИ кнопка найдена. Поэтому спрашиваем сам механизм локализации.
+ */
+function подписиПокупки(id: string): string[] {
+  const ru = "Купить";
+  const en = localizeTier({ id, ctaLabel: ru, tagline: "", features: [] }, "en").ctaLabel;
+  return [ru, en];
+}
+
 function кнопкаПокупкиСрока(id: string): HTMLButtonElement | null {
   const калькуляторКарточки = document.querySelector<HTMLButtonElement>(`button[aria-label$=": ${id}"]`);
   const карточкаСрока = калькуляторКарточки?.parentElement;
@@ -206,7 +224,10 @@ describe("непокупаемый тариф объясняет себя", () =
     expect(текст, "подписи о недоступности нет").toMatch(/онлайн|online/i);
     const покупка = кнопкаПокупкиСрока("pro");
     expect(покупка, "кнопки покупки у pro не нашлось — проверка ниже пустая").not.toBeNull();
-    expect(покупка?.textContent, "нашлась не та кнопка карточки").toContain("Купить");
+    expect(
+      подписиПокупки("pro").some((п) => (покупка?.textContent ?? "").includes(п)),
+      `нашлась не та кнопка карточки: «${покупка?.textContent}»`,
+    ).toBe(true);
     expect(покупка?.disabled, "при аварии кассы кнопка покупки осталась живой").toBe(true);
   });
 
@@ -259,7 +280,10 @@ describe("непокупаемый тариф объясняет себя", () =
     ).toBe(false);
     const покупка = кнопкаПокупкиСрока("pro");
     expect(покупка, "кнопки покупки у pro не нашлось — проверка ниже пустая").not.toBeNull();
-    expect(покупка?.textContent, "нашлась не та кнопка карточки").toContain("Купить");
+    expect(
+      подписиПокупки("pro").some((п) => (покупка?.textContent ?? "").includes(п)),
+      `нашлась не та кнопка карточки: «${покупка?.textContent}»`,
+    ).toBe(true);
     expect(покупка?.disabled, "незнание погасило покупку срока").toBe(false);
     const купитьПриложение = карточка("devhub").querySelector("button");
     expect(купитьПриложение, "кнопки покупки приложения нет — проверка ниже пустая").not.toBeNull();
@@ -280,7 +304,10 @@ describe("непокупаемый тариф объясняет себя", () =
 
     const покупка = кнопкаПокупкиСрока("pro");
     expect(покупка, "кнопки покупки у pro не нашлось — проверка ниже пустая").not.toBeNull();
-    expect(покупка?.textContent, "нашлась не та кнопка карточки").toContain("Купить");
+    expect(
+      подписиПокупки("pro").some((п) => (покупка?.textContent ?? "").includes(п)),
+      `нашлась не та кнопка карточки: «${покупка?.textContent}»`,
+    ).toBe(true);
     expect(покупка?.disabled, "кнопка покупки погашена у продаваемого тарифа").toBe(false);
 
     const калькулятор = await калькуляторНа("Pro");

@@ -11,6 +11,7 @@ import {
   freeTokenLimit,
   premiumQuotaGateForRequest,
   type PremiumQuotaGate,
+  hasMultichatPass,
 } from "../lib/qcoreQuota";
 import { resolveUserPlan } from "../lib/planGate";
 import { getTier, TIERS } from "../data/pricing";
@@ -534,18 +535,23 @@ qcoreaiRouter.post("/chat", anonChatCeiling, exposeCeilingRemaining, chatLimiter
     if (await enforcePremiumModelQuota(req, res, providerId, modelName)) return;
 
     const result = await callProviderResilient(providerId, messages, modelName, temperature);
+    // Ответ мог прийти от другого поставщика (закрытый по лимиту пропущен) —
+    // учёт и интерфейс получают того, кто ответил на самом деле.
+    const usedId = result.providerUsed ?? providerId;
+    const usedProvider = getProviders().find((p) => p.id === usedId) ?? provider;
     // Count usage toward the free-tier monthly quota (single-shot /chat does
     // not persist a QCoreRun/QCoreMessage, so it must ledger explicitly).
     if (auth?.sub) {
       const { tokensIn, tokensOut } = usageToTokens(result.usage);
-      addTokenUsage(auth.sub, tokensIn, tokensOut, { provider: providerId, model: modelName }).catch(() => {});
+      addTokenUsage(auth.sub, tokensIn, tokensOut, { provider: usedId, model: result.model }).catch(() => {});
     }
     res.json({
-      mode: providerId,
-      provider: provider.name,
+      mode: usedId,
+      provider: usedProvider.name,
       model: result.model,
       reply: result.reply,
       usage: result.usage,
+      ...(result.failedOver ? { failedOver: result.failedOver } : {}),
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "chat failed"; // только для журнала
@@ -1319,13 +1325,18 @@ qcoreaiRouter.get("/me/token-quota", async (req, res) => {
     const premiumLimit = isFree ? null : (tier?.limits.premiumTokensPerMonth ?? null);
     const used = await getMonthlyTokens(auth.sub);
     const premiumUsed = premiumLimit != null ? await getMonthlyPremiumTokens(auth.sub) : 0;
-    const metered = isFree
+    // Подписка на Multichat ($40/мес) снимает оба потолка — ручка обязана
+    // показывать то же, что делает сторож (qcoreQuota), иначе UI рисует
+    // «37 400 / 100 000» покупателю, которого никто не остановит.
+    const appPass = await hasMultichatPass(auth as unknown as Record<string, unknown>);
+    const metered = !appPass && (isFree
       ? process.env.QCOREAI_FREE_QUOTA === "1"
-      : process.env.QCOREAI_TIER_QUOTA === "1" && limit != null;
-    const premiumMetered = !isFree && process.env.QCOREAI_PREMIUM_QUOTA === "1" && premiumLimit != null;
+      : process.env.QCOREAI_TIER_QUOTA === "1" && limit != null);
+    const premiumMetered = !appPass && !isFree && process.env.QCOREAI_PREMIUM_QUOTA === "1" && premiumLimit != null;
     res.json({
       tier: plan.tier,
       rawTier: plan.rawTier,
+      ...(appPass ? { appPass: "multichat" } : {}),
       metered,
       usedTokens: used,
       limitTokens: metered ? limit : null,

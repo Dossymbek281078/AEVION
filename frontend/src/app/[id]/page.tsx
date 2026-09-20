@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import ModulePricingChip from "@/components/ModulePricingChip";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { AgentPromptChips } from "@/components/AgentPromptChips";
@@ -287,6 +288,18 @@ export default async function ProjectByIdPage({
           >
             {t("modulePage.btn.qrightPrefill")}
           </Link>
+        </div>
+
+        {/*
+          Плашка цены и кнопка покупки. Эта страница — подхват для модулей без
+          своей страницы (замер 20.09.2026: qpaynet-embedded и qbuild), и до
+          сих пор она была единственной страницей модуля БЕЗ пути к оплате:
+          35 модулей несут чип на своей странице, devhub/bureau/constitution —
+          свою кассу, а попавшие сюда не показывали ничего. Ставим тот же
+          компонент, что и везде, а не второй способ покупки.
+        */}
+        <div style={{ marginTop: 14 }}>
+          <ModulePricingChip moduleId={project.id} />
         </div>
 
         <AgentPromptChips prompts={suggestPromptsFor(project)} />

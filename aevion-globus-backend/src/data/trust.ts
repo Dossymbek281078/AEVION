@@ -24,79 +24,13 @@ export interface Testimonial {
   rating?: number;
 }
 
-export const TESTIMONIALS: Testimonial[] = [
-  {
-    id: "t-startup-1",
-    author: "Айгерим Б.",
-    role: "Founder",
-    company: "Inkubator KZ",
-    quote:
-      "Раньше я платила DocuSign + Patently + ChatGPT отдельно. Теперь всё под одним аккаунтом за $19/мес. Зарегистрировала 47 идей за месяц — без юриста.",
-    industry: "startups",
-    module: "qright",
-    avatarColor: "#7c3aed",
-    rating: 5,
-  },
-  {
-    id: "t-creator-1",
-    author: "Дмитрий В.",
-    role: "Технический блогер",
-    company: "Independent",
-    quote:
-      "QSign + QRight закрыли вопрос с авторством статей навсегда. Каждый черновик автоматически в реестре. За 6 месяцев — 3 случая копирования, все доказали через certified PDF.",
-    industry: "creators",
-    module: "qsign",
-    avatarColor: "#be185d",
-    rating: 5,
-  },
-  {
-    id: "t-law-1",
-    author: "Алексей М.",
-    role: "Партнёр",
-    company: "IP Practice (12 юристов)",
-    quote:
-      "Заменили DocuSign + Patently + Notion + ChatGPT на один Business. Экономия на стеке — $480/месяц. Audit-export к ФАС в 1 клик. Кейс года.",
-    industry: "law-firms",
-    module: "aevion-ip-bureau",
-    avatarColor: "#92400e",
-    rating: 5,
-  },
-  {
-    id: "t-bank-1",
-    author: "Customer Success Lead",
-    role: "Финансовый холдинг",
-    company: "Top-5 банк KZ (NDA)",
-    quote:
-      "Pilot QSign+аудит для KYC-onboarding снизил time-to-onboard клиента с 3 дней до 12 минут. SLA 1h работает как часы.",
-    industry: "banks",
-    module: "qsign",
-    avatarColor: "#1e3a8a",
-    rating: 5,
-  },
-  {
-    id: "t-gov-1",
-    author: "Заместитель руководителя",
-    role: "Цифровизация",
-    company: "Гос. структура (NDA)",
-    quote:
-      "Open-source модули, локализация в KZ, on-prem развёртывание — это то, что мы искали 2 года. AEVION — единственное предложение на рынке с таким набором.",
-    industry: "government",
-    module: "qchaingov",
-    avatarColor: "#065f46",
-    rating: 5,
-  },
-  {
-    id: "t-dev-1",
-    author: "Серик А.",
-    role: "Tech Lead",
-    company: "FinTech Startup",
-    quote:
-      "OpenAPI + JSONL + checkout API из коробки. Интегрировали за 2 дня вместо 2 недель со Stripe+SendGrid+Auth0 связкой. Просто работает.",
-    industry: "startups",
-    avatarColor: "#0d9488",
-    rating: 5,
-  },
-];
+// 20.09.2026, перед платной рекламой: шесть отзывов были ДЕМО-СЦЕНАРИЯМИ
+// (заголовок файла так и говорил: «соответствуют реальной активности или
+// демо-сценариям»), с вымышленными «Top-5 банк KZ (NDA)» и «Гос. структура (NDA)».
+// Публиковать выдуманные отзывы под рекламу нельзя — это ложная реклама, а не
+// маркетинг. Страница цен прячет блок при пустом списке (testimonials.length > 0).
+// Настоящий отзыв добавляется сюда только с письменного согласия автора.
+export const TESTIMONIALS: Testimonial[] = [];
 
 export interface TrustNumber {
   label: string;
@@ -105,8 +39,10 @@ export interface TrustNumber {
 }
 
 export const TRUST_NUMBERS: TrustNumber[] = [
-  { label: "Зарегистрированных идей", value: "12 000+", hint: "за время бета-периода в QRight" },
-  { label: "Стран использования", value: "30+", hint: "от Казахстана до Канады" },
+  // 20.09.2026: четыре счётчика без источника СНЯТЫ до решения основателя —
+  // замер 28.08 давал 13 идей, 7 артефактов и 3 страны против «12 000+», «3 200+»
+  // и «30+»; «<60s до первой подписи» никто не мерил. Перед платной рекламой
+  // страница обязана называть только то, что подтверждается ручкой.
   // ⚠️ ЧЕТЫРЕ ПРОБЛЕМЫ В ЭТОМ БЛОКЕ, найдено 10.08.2026 при аудите числовых
   // утверждений. Две выведены из кода и исправлены, две ждут решения основателя.
   //
@@ -152,7 +88,6 @@ export const TRUST_NUMBERS: TrustNumber[] = [
   // 14.09.2026: оговорка «кроме DevHub Studio» снята — основатель решил, что DevHub входит
   // в Full, и routes/devhub.ts признаёт права платформы (getUserTierChecked).
   { label: "Модулей платформы", value: "42", hint: "в одной подписке (на Full)" },
-  { label: "Время до первой подписи", value: "<60s", hint: "от регистрации в QSign" },
   // ✅ ИСПРАВЛЕНО 19.08.2026 (пункт 3 из списка выше). Было: value "99.5%",
   //    hint «Business · 99.95% Enterprise». Три ошибки в одной строке:
   //    (а) 99.5% — это уровень тарифа Scale за $249, а не общий;
@@ -165,7 +100,6 @@ export const TRUST_NUMBERS: TrustNumber[] = [
   //    обязательство, которого мы не брали. Поэтому строка теперь называет
   //    лестницу целиком и ровно ту, что отдаётся машинам.
   { label: "API uptime SLA", value: "99.0–99.9%", hint: "Build 99.0 · Scale 99.5 · Enterprise 99.9 (GET /api/quotas)" },
-  { label: "Сертифицированных артефактов", value: "3 200+", hint: "через AEVION IP Bureau" },
 ];
 
 export interface TrustBadge {

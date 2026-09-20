@@ -127,6 +127,23 @@ export const EN_TEXTS: Record<
     format: "app · term of 1–12 months",
     desc: "Chess platform: puzzles, an AI coach, and opponents that play like humans at your level.",
   },
+  // Четыре приложения получили цену 20.09.2026 — переводы точные, без новых обещаний.
+  qright: {
+    format: "app · term of 1–12 months",
+    desc: "Authorship registration: the date and content of a work are recorded, and the evidence can be exported.",
+  },
+  qsign: {
+    format: "app · term of 1–12 months",
+    desc: "Document signing and integrity checks: canonical JSON, verification by fingerprint.",
+  },
+  "startup-exchange": {
+    format: "app · term of 1–12 months",
+    desc: "A showcase of ideas, MVPs and finished products: publish one, find one, agree on a deal.",
+  },
+  qskyway: {
+    format: "app · term of 1–12 months",
+    desc: "Navigation of a city’s air corridors: routes, altitudes, restrictions and wind.",
+  },
 };
 
 function Card({ p, channel }: { p: Product; channel: string | null }) {

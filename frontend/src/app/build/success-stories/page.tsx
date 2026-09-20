@@ -27,6 +27,32 @@ type HireRow = {
   acceptedAt: string;
 };
 
+/**
+ * Наш прогон, а не настоящий наём (20.09.2026, день запуска).
+ *
+ * Замер на проде: GET /api/build/stats/hires?limit=20 — ВСЕ 20 записей наши:
+ * vacancyTitle "smoke welder 1785059381597", projectTitle "smoke project …",
+ * recruiterName и workerName "deleted user". То есть публичная страница
+ * «Success stories» целиком состояла из выдуманных наймов.
+ *
+ * Пустая лента после фильтра — законный случай: у страницы есть честное
+ * «историй пока нет», и оно правдивее двадцати наших проб.
+ */
+export function isProbeHire(h: {
+  vacancyTitle?: string | null;
+  projectTitle?: string | null;
+  recruiterName?: string | null;
+  workerName?: string | null;
+}): boolean {
+  // Слово ЦЕЛИКОМ, а не начало строки: контроль поймал, что "Smokehouse chef" —
+  // настоящая вакансия — попадала в пробы и исчезла бы с витрины.
+  const МЕТКИ = ["smoke", "probe", "test"];
+  const слова = (s: string) => s.toLowerCase().split(/[^a-zа-яё0-9]+/i).filter(Boolean);
+  return [h.vacancyTitle, h.projectTitle, h.recruiterName, h.workerName]
+    .map((v) => v ?? "")
+    .some((v) => слова(v).some((w) => МЕТКИ.includes(w)));
+}
+
 async function fetchHires(): Promise<HireRow[]> {
   try {
     const r = await fetch(`${getApiBase()}/api/build/stats/hires?limit=20`, {
@@ -35,7 +61,8 @@ async function fetchHires(): Promise<HireRow[]> {
     });
     if (!r.ok) return [];
     const j = await r.json();
-    return j?.data?.items ?? [];
+    const items: HireRow[] = j?.data?.items ?? [];
+    return items.filter((h) => !isProbeHire(h));
   } catch {
     return [];
   }

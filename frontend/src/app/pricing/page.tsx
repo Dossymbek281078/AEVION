@@ -13,6 +13,13 @@ import { track } from "@/lib/track";
 import { chargeCurrencyNoteKey, shouldWarnAboutCurrency } from "@/lib/chargeCurrencyNote";
 import { usePricingT, termUnitKey } from "@/lib/pricingI18n";
 import {
+  localizeModuleOneLiner,
+  localizeNotes,
+  localizePromoDescription,
+  localizeTier,
+  localizeTrustNumber,
+} from "@/lib/pricingLocalize";
+import {
   PLANET_BASE_MONTHLY,
   STANDALONE_APPS,
   TERM_MONTHS,
@@ -183,7 +190,7 @@ function availabilityBadge(a: ModulePrice["availability"]) {
 
 export default function PricingPage() {
   const tp = usePricingT();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const heroVariant = useABVariant("hero");
   const heroPrefix = heroVariant === "A" ? "" : `${heroVariant}.`;
   const tierCardsVariant = useABVariant("tierCards");
@@ -631,7 +638,8 @@ export default function PricingPage() {
   return (
     <ProductPageShell maxWidth={1280}>
       {/* Module deep-link hero — пришли со страницы продукта (/pricing?module=<id>).
-          Пять приложений продаются и отдельно: для них заметная кнопка покупки
+          Часть приложений продаётся и отдельно (список — STANDALONE_APPS,
+          20.09.2026 их девять): для них заметная кнопка покупки
           на сроке из блока «Отдельные приложения». Остальные модули отдельно не
           продаются — честно говорим, что модуль входит в любой тариф, и ведём к
           тарифам. Валюта (вкл. KZT/PayBox) берётся из общего тумблера ниже. */}
@@ -813,7 +821,7 @@ export default function PricingPage() {
             border: "1px solid rgba(13,148,136,0.12)",
           }}
         >
-          {trust.numbers.slice(0, 6).map((n, i) => (
+          {trust.numbers.slice(0, 6).map((nRu) => localizeTrustNumber(nRu, lang)).map((n, i) => (
             <div
               key={i}
               style={{
@@ -930,7 +938,7 @@ export default function PricingPage() {
                   })
                   .catch(() => {});
               }}
-              title={p.description}
+              title={localizePromoDescription(p.description, lang)}
               style={{
                 padding: "6px 12px",
                 fontSize: 12,
@@ -1048,7 +1056,7 @@ export default function PricingPage() {
           marginBottom: 56,
         }}
       >
-        {data.tiers.map((tier) => {
+        {data.tiers.map((tierRu) => localizeTier(tierRu, lang)).map((tier) => {
           // Подсветка — по решению основателя 15.09.2026: Max (бэкенд ставит
           // highlight). Прежний A/B-тест подсветки Medium/Full снят вместе с
           // прежней лестницей; вариант по-прежнему уходит в учёт покупки.
@@ -1462,10 +1470,10 @@ export default function PricingPage() {
               })}
             </div>
             {/* Утверждение печатается, только если оно ВЕРНО на выбранном сроке:
-                сумма пяти приложений и цена планеты считаются здесь же. */}
+                сумма всех приложений и цена планеты считаются здесь же. */}
             {суммаПриложений > планета && (
               <p data-testid="apps-vs-planet" style={{ margin: "16px 0 0", fontSize: 14, color: "#334155", lineHeight: 1.5 }}>
-                {t("pricing.home.apps.allFiveDearer", {
+                {t("pricing.home.apps.allAppsDearer", {
                   apps: displayPrice(суммаПриложений),
                   planet: displayPrice(планета),
                 })}
@@ -1630,13 +1638,13 @@ export default function PricingPage() {
                       </div>
                     </td>
                     <td style={{ padding: "10px 14px", color: "#475569", maxWidth: 360 }}>
-                      {m.oneLiner}
+                      {localizeModuleOneLiner(m.id, m.oneLiner, lang)}
                     </td>
                     <td style={{ padding: "10px 14px", textAlign: "center" }}>
                       {availabilityBadge(m.availability)}
                     </td>
                     <td style={{ padding: "10px 14px", textAlign: "right", fontWeight: 700 }}>
-                      {/* Отдельно продаются только пять приложений; «от» — цена
+                      {/* Отдельно продаются только приложения из STANDALONE_APPS; «от» — цена
                           месяца на самом длинном сроке (lib/termPricing.ts). */}
                       {(() => {
                         const app = standaloneApp(m.id);
@@ -1732,7 +1740,7 @@ export default function PricingPage() {
                 {tp("calc.tier")}
               </label>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {data.tiers.map((t) => (
+                {data.tiers.map((tierRu) => localizeTier(tierRu, lang)).map((t) => (
                   <button
                     key={t.id}
                     onClick={() => setCalcTier(t.id)}
@@ -1838,7 +1846,7 @@ export default function PricingPage() {
               <div id="calc-promo-msg" role="status" aria-live="polite">
                 {quote?.promo && (
                   <div style={{ marginTop: 4, fontSize: 11, color: "#34d399" }}>
-                    ✓ {quote.promo.description}
+                    ✓ {localizePromoDescription(quote.promo.description, lang)}
                   </div>
                 )}
                 {calcPromo && !quote?.promo && quote?.notes.some((n) => n.toLowerCase().includes("промо")) && (
@@ -2453,7 +2461,7 @@ export default function PricingPage() {
             lineHeight: 1.6,
           }}
         >
-          {data.notes.map((n, i) => (
+          {localizeNotes(data.notes, lang).map((n, i) => (
             <li key={i}>{n}</li>
           ))}
         </ul>

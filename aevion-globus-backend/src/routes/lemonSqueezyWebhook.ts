@@ -108,6 +108,8 @@ interface LsSubscriptionPayload {
   meta?: {
     event_name?: string;
     custom_data?: { reference?: string; email?: string; module?: string; channel?: string };
+    /** Покупка из тестового режима кассы — не выручка. Добавлено 20.09.2026. */
+    test_mode?: boolean;
   };
   data?: {
     id?: string;
@@ -442,6 +444,17 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
       // paypal правило было изначально. Четвёртая касса отстала молча,
       // потому что правило жило тремя копиями — теперь оно одно
       // (lib/payment/billingPeriod).
+      // ТЕСТОВЫЙ РЕЖИМ КАССЫ. LemonSqueezy шлёт `meta.test_mode: true` для покупок
+      // из тестового режима. Замер 20.09.2026: слова `test_mode` не было в бэкенде
+      // НИ РАЗУ — такая покупка провизионилась как настоящая и попадала в выручку.
+      //
+      // Доступ выдаём (в этом и смысл проверки — пройти цепочку целиком: подпись,
+      // права, письмо), но признак кладём В ДАННЫЕ, чтобы отличить проверку от
+      // выручки. Оговорка в комментарии этого не даёт — нужен именно флаг в записи.
+      const testMode = payload.meta?.test_mode === true;
+      if (testMode) {
+        console.warn("[lemonsqueezy] ТЕСТОВАЯ покупка (meta.test_mode): ref=%s — доступ выдан, в выручку не считать", ref ?? "?");
+      }
       const termMonths = termMonthsForReference(ref ?? "");
       const result = await provisionSubscription({
         email,
@@ -449,6 +462,7 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         termMonths,
         modules,
         source: "lemonsqueezy",
+        ...(testMode ? { testMode: true } : {}),
         // ФАКТИЧЕСКИ списанное, а не то, что мы ожидали. Поле amountUsd в записи
         // подписки существовало давно и не заполнялось НИКЕМ — оно молча
         // исчезло бы, и никто бы не заметил.

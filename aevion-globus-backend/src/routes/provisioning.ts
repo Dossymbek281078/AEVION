@@ -116,6 +116,20 @@ export interface Subscription {
    * таблице». Добавлено 19.08.2026.
    */
   channel?: string;
+  /**
+   * Покупка из ТЕСТОВОГО режима кассы (`meta.test_mode` у LemonSqueezy).
+   *
+   * ЗАЧЕМ ПОЛЕ, А НЕ ОГОВОРКА. Замер 20.09.2026: `test_mode` не встречался в
+   * бэкенде НИ РАЗУ, то есть тестовая покупка провизионилась как настоящая и
+   * попадала в выручку. При этом через LemonSqueezy за всё время прошёл ОДИН
+   * заказ — своя же подписка: первая живая проверка выдачи впереди, и делать
+   * её придётся именно тестовым режимом. Значит признак обязан жить В ДАННЫХ,
+   * иначе отличить проверку от выручки будет нечем.
+   *
+   * Доступ при этом выдаётся: смысл проверки в том, чтобы пройти цепочку
+   * целиком — вебхук, права, письмо.
+   */
+  testMode?: boolean;
 }
 
 function ensureDir(file: string) {
@@ -880,6 +894,8 @@ export async function provisionSubscription(input: {
   paddleTransactionId?: string;
   source?: string;
   channel?: string;
+  /** Покупка из тестового режима кассы — см. Subscription.testMode. */
+  testMode?: boolean;
 }): Promise<{ subscription: Subscription; emailSent: boolean; emailMode: "real" | "stub"; emailError?: string; emailDegraded?: boolean }> {
   const trialDays = input.trialDays ?? 0;
   const termMonths = input.termMonths ?? (isTermTier(input.tierId) ? TERM_MONTHS[input.tierId] : null);
@@ -901,6 +917,7 @@ export async function provisionSubscription(input: {
     providerPaymentId: input.providerPaymentId,
     source: input.source,
     channel: input.channel,
+    ...(input.testMode ? { testMode: true } : {}),
   };
 
   writeSubscription(subscription);

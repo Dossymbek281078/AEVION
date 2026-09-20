@@ -22,6 +22,7 @@ import { applyOgEtag, applyEtag } from "../lib/ogEtag";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { csvNeutralizeFormula } from "../lib/csv";
 import { safeErrorText } from "../lib/safeError";
+import { безПроб, просятПробы } from "../lib/probeRows";
 const capturePlanetError = makeServiceCapture("planet");
 
 const PLANET_WEBHOOK_DELIVERY_CFG = {
@@ -2074,8 +2075,20 @@ planetComplianceRouter.get("/artifacts/recent", async (req, res) => {
       params
     );
 
+    // Наши пробы посетителю не показываем (§19): прятать надо там, где данные
+    // отдаются, иначе следующая страница покажет их снова. Скрытое названо
+    // числом — оговорка в комментарии не заменяет поле в ответе.
+    const { видимые, скрыто } = безПроб(
+      (r.rows as Array<{ submissionTitle?: string | null; productKey?: string | null }>).map((row) => ({
+        ...row,
+        title: row.submissionTitle ?? null,
+        ref: row.productKey ?? null,
+      })),
+      просятПробы(req.query),
+    );
     res.json({
-      items: r.rows,
+      items: видимые.map(({ title: _t, ref: _r, ...row }) => row),
+      probesHidden: скрыто,
       sort,
       generatedAt: new Date().toISOString(),
     });
@@ -3789,8 +3802,11 @@ planetComplianceRouter.get("/activity", planetEmbedRateLimit, async (req, res) =
       for (const row of r.rows) merged.push(row as any);
     }
     merged.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
-    const items = merged.slice(0, limit);
-    res.json({ items, count: items.length, kinds });
+    // Пробы прячем ДО обрезки по limit: иначе лента посетителя худеет на число
+    // наших записей, и на маленьком лимите он видит пустоту вместо работ.
+    const { видимые, скрыто } = безПроб(merged, просятПробы(req.query));
+    const items = видимые.slice(0, limit);
+    res.json({ items, count: items.length, probesHidden: скрыто, kinds });
   } catch (err: any) {
     capturePlanetError(err, { route: "activity" });
     res.status(500).json({ error: "activity feed failed" });

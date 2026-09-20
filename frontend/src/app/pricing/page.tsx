@@ -1227,34 +1227,15 @@ export default function PricingPage() {
                 </button>
                 </>
               )}
-              {/* Пробный период и калькулятор — только у тарифа, у которого ЕСТЬ товар:
-                  у тарифа без товара обе кнопки вели бы к погашенной оплате. */}
+              {/* Калькулятор — только у тарифа, у которого ЕСТЬ товар: у тарифа без
+                  товара кнопка вела бы к погашенной оплате.
+
+                  Кнопки «Попробовать 14 дней бесплатно» здесь больше нет — решение
+                  основателя 17.09.2026: пробный период не нужен. Она обещала то, чего
+                  касса не делала никогда: 14 дней применялись только при нулевой цене,
+                  при обычной покупке списывалась полная сумма. */}
               {tier.id !== "enterprise" && tier.id !== "free" && !безТовара(tier.id) && (
                 <>
-                  <button
-                    style={{
-                      width: "100%",
-                      padding: "8px 16px",
-                      fontSize: 12,
-                      fontWeight: 800,
-                      borderRadius: 8,
-                      border: isHighlight
-                        ? "1px solid rgba(255,255,255,0.2)"
-                        : "1px solid rgba(13,148,136,0.4)",
-                      cursor: "pointer",
-                      background: "transparent",
-                      color: isHighlight ? "#5eead4" : "#0d9488",
-                      marginBottom: 6,
-                    }}
-                    aria-label={`${tp("tier.tryTrial")}: ${tier.id}`}
-                    // Пробный период идёт через ту же кассу: для непокупаемого
-                    // тарифа он кончается тем же 503. До 14.09 эта кнопка
-                    // оставалась живой, даже когда основную уже гасили.
-                    disabled={checkingOut === tier.id || !продаётся(tier.id)}
-                    onClick={() => startCheckout({ tierId: tier.id, seats: 1, trial: true })}
-                  >
-                    {tp("tier.tryTrial")}
-                  </button>
                   <button
                     style={{
                       width: "100%",

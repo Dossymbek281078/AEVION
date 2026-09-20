@@ -39,7 +39,8 @@ const ЗАКРЕПЛЕНО: Array<[string, string[]]> = [
   // Добавлено 04.09.2026: класс «одно имя у нескольких действий».
   // Эти подписи различают элементы внутри цикла — без них читалка
   // объявит несколько одинаковых строк, и выбрать будет нельзя.
-  ["pricing/page.tsx", ["tier.tryTrial\")}: ${tier.id}", "tier.openCalc\")}: ${tier.id}"]],
+  // tier.tryTrial убран 17.09.2026 вместе с кнопкой пробного периода (решение основателя).
+  ["pricing/page.tsx", ["tier.openCalc\")}: ${tier.id}"]],
   ["ventures/IdeaMarket.tsx", ["Отметить интерес", "${i.name}"]],
   ["devhub/page.tsx", ["snip.copyAria", "snip.starAria", "${s.title}"]],
   ["smeta-trainer/drawings-practice/finishing/page.tsx", ["Проверить ответ: ${ex.title}"]],

@@ -28,13 +28,17 @@ describe("тосты на телефоне — над BottomNav", () => {
   });
 });
 
-describe("карточка теории дебюта — слева внизу и только на десктопе", () => {
-  it("рендер гейтится vwPx>=769", () => {
-    expect(page).toContain("{currentOpening&&vwPx>=769&&<OpeningFlashCard");
-    expect(page).not.toContain("{currentOpening&&<OpeningFlashCard");
+describe("карточка теории дебюта — в потоке левой колонки, не fixed", () => {
+  it("рендерится ОДИН раз, внутри aside после карточки «Партия»", () => {
+    expect(page.split("<OpeningFlashCard").length - 1).toBe(1);
+    const i = page.indexOf("<OpeningFlashCard");
+    const before = page.slice(Math.max(0, i - 700), i);
+    expect(before).toContain("Коуч: <b style={{color:CC.text}}>супер-GM</b>");
+    expect(page.slice(i, page.indexOf("/>}", i) + 3)).toContain("onDismiss");
+    expect(page.indexOf("</aside>;", i)).toBeGreaterThan(i);
   });
-  it("fixed слева, не справа", () => {
-    expect(card).toMatch(/position: "fixed",\n\s*bottom: 24,\n\s*left: 24,/);
-    expect(card).not.toMatch(/bottom: 24,\n\s*right: 24,/);
+  it("компонент не fixed: position relative, ширина колонки", () => {
+    expect(card).toMatch(/position: "relative",\n\s*width: "100%",/);
+    expect(card).not.toContain('position: "fixed"');
   });
 });

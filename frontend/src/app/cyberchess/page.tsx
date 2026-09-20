@@ -5999,7 +5999,9 @@ export default function CyberChessPage(){
       {/* Sticky glass header */}
       {!streamerMode&&<div style={{
         position:"sticky",top:0,zIndex:Z.sticky,
-        margin:"0 -12px 12px",padding:"10px 12px",
+        // Телефон: справа 100px под плавающую языковую пилюлю «RU ▼» (AppShellLanguagePill, fixed
+        // top:12/right:12) — на 390 она ложилась на ☰/🔊 шапки (тестер 20.09.2026).
+        margin:"0 -12px 12px",padding:vwPx<769?"10px 100px 10px 12px":"10px 12px",
         background:CC.surfaceGlass,backdropFilter:"blur(14px)",WebkitBackdropFilter:"blur(14px)",
         borderBottom:`1px solid ${CC.border}`,
         display:"flex",alignItems:"center",gap:SPACE[3],flexWrap:"wrap"
@@ -6012,7 +6014,9 @@ export default function CyberChessPage(){
             display:"flex",alignItems:"center",justifyContent:"center",
             fontSize:19,color:"#fff",boxShadow:SHADOW.sm
           }}>♞</div>
-          <div style={{lineHeight:1.15}}>
+          {/* Телефон: текст логотипа скрыт ВИЗУАЛЬНО (clip), h1 остаётся в дереве доступности —
+              иначе шапка на 390 не помещается в одну строку и заворачивается. */}
+          <div style={vwPx<769?{position:"absolute",width:1,height:1,overflow:"hidden",clip:"rect(0 0 0 0)",whiteSpace:"nowrap"}:{lineHeight:1.15}}>
             {/* Заголовок первого уровня, а не крупный текст. Замер 27.08.2026:
                 на ГЛАВНОЙ странице модуля не было ни одного h1 — для экранного
                 диктора страница безымянна, а поиск не понимает, о чём она.
@@ -6287,7 +6291,7 @@ export default function CyberChessPage(){
         {/* Часто нужное — настройки, звук, мобильная панель — остаётся в шапке */}
         <div style={{display:"inline-flex",alignItems:"center",gap:4,flexShrink:0,padding:3,borderRadius:RADIUS.md,background:CC.surface2,border:`1px solid ${CC.border}`}}>
         <Btn variant="secondary" size="sm" icon={<Icon.Settings/>} onClick={()=>sShowSettings(true)} title="Настройки" ariaLabel="Настройки" style={{padding:"6px 10px",minHeight:36,minWidth:36}}/>
-        <Btn variant={muted?"danger":"secondary"} size="sm" icon={muted?<Icon.Mute/>:<Icon.Sound/>} onClick={()=>{sMuted(v=>!v);showToast(muted?"Звук включён":"Звук выключен","info")}} title={muted?"Включить звук (M)":"Выключить звук (M)"} ariaLabel={muted?"Включить звук":"Выключить звук"} style={{padding:"6px 10px",minHeight:36,minWidth:36}}/>
+        {vwPx>=769&&<Btn variant={muted?"danger":"secondary"} size="sm" icon={muted?<Icon.Mute/>:<Icon.Sound/>} onClick={()=>{sMuted(v=>!v);showToast(muted?"Звук включён":"Звук выключен","info")}} title={muted?"Включить звук (M)":"Выключить звук (M)"} ariaLabel={muted?"Включить звук":"Выключить звук"} style={{padding:"6px 10px",minHeight:36,minWidth:36}}/>}
         {/* Mobile sidebar toggle — visible only on mobile via CSS */}
         <button onClick={()=>sMobileSidebarOpen(v=>!v)} title="Открыть боковую панель" aria-label="Свернуть боковую панель" style={{padding:"6px 10px",minHeight:36,minWidth:36,border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,background:mobileSidebarOpen?CC.brandSoft:CC.surface1,color:mobileSidebarOpen?CC.brand:"inherit",cursor:"pointer",fontSize:18,fontWeight:700,display:"none",alignItems:"center",justifyContent:"center"}} className="cc-mobile-sidebar-btn">☰</button>
         </div>
@@ -7571,6 +7575,16 @@ export default function CyberChessPage(){
               <div style={{fontSize:13,color:CC.textDim,marginTop:3}}>Движок: <b style={{color:sfOk?CC.text:CC.gold}}>{sfOk?"Stockfish 18 · d22":"не запустился — считает запасной расчёт"}</b></div>
               <div style={{fontSize:13,color:CC.textDim,marginTop:3}}>Коуч: <b style={{color:CC.text}}>супер-GM</b></div>
             </Card>
+            {/* Теория дебюта — в потоке, после «Партии»: ничего не накрывает по построению */}
+            {currentOpening&&<OpeningFlashCard
+      open={showOpeningCard}
+      opening={currentOpening}
+      currentPly={hist.length}
+      isPlayerTurn={game.turn()===pCol}
+      onDismiss={()=>sShowOpeningCard(false)}
+      surface={CC.surface1} border={CC.border}
+      text={CC.text} textDim={CC.textDim} accent={CC.brand}
+    />}
           </aside>;
         })()}
         {/* Колонка доски: не растягиваем (flex:0 1 auto) — иначе мелкая доска центрируется
@@ -15378,18 +15392,8 @@ ${question.trim()}`;
       />
     </div>}
     {/* Opening Flash Card — плавающая карточка дебюта */}
-    {/* Только ≥769: на телефоне fixed-карточка 280px накрывала бы доску или нав. Слева внизу —
-        тестер 18–20.09 на 1920/1366: справа внизу она ложилась на «Точность / Оценка по ходам»,
-        на чипы тем задач («🏁 Эндшпиль») и на кнопку «Войти» панели «Анализ варианта». */}
-    {currentOpening&&vwPx>=769&&<OpeningFlashCard
-      open={showOpeningCard}
-      opening={currentOpening}
-      currentPly={hist.length}
-      isPlayerTurn={game.turn()===pCol}
-      onDismiss={()=>sShowOpeningCard(false)}
-      surface={CC.surface1} border={CC.border}
-      text={CC.text} textDim={CC.textDim} accent={CC.brand}
-    />}
+    {/* Карточка теории дебюта живёт в потоке левой колонки под «Партией» (см. aside) — fixed-вариант
+        на 1366×768 ложился на саму карточку «Партия» (тестер 20.09.2026). */}
     <PlayerStatsDashboard
       open={showStatsDashboard}
       onClose={()=>sShowStatsDashboard(false)}

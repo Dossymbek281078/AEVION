@@ -47,5 +47,9 @@ describe("«Вернуться к партии» — только в поток�
     expect(src).toContain('lbl:"Войти в аккаунт AEVION",act:()=>{window.location.href="/auth?next=/cyberchess"}');
     expect(src).toContain("lbl:`Рейтинг ${rat} · Chessy ${chessy.balance}`,act:()=>sShowStatsDashboard(true)");
     expect(src).toContain('lbl:"Все разделы",act:()=>sShowSections(true)');
+    // одна строка на 390: отступ справа под плавающую «RU ▼», текст логотипа clip, звук только ≥769
+    expect(src).toContain('padding:vwPx<769?"10px 100px 10px 12px":"10px 12px"');
+    expect(src).toContain('clip:"rect(0 0 0 0)"');
+    expect(src).toContain('{vwPx>=769&&<Btn variant={muted?"danger":"secondary"}');
   });
 });

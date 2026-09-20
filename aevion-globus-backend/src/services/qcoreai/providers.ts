@@ -1214,24 +1214,51 @@ export async function* streamProviderResilient(
   model: string,
   temperature: number
 ): AsyncGenerator<StreamEvent> {
-  const candidates = fallbackCandidates(providerId, model);
-  let lastErr: unknown;
-  for (let i = 0; i < candidates.length; i++) {
-    let emitted = false;
-    try {
-      for await (const ev of streamProvider(providerId, messages, candidates[i], temperature)) {
-        if (ev.kind === "text" && ev.text) emitted = true;
-        yield ev;
-      }
-      recordOutcome(providerId, candidates[i], true);
-      return; // completed successfully
-    } catch (e) {
-      recordOutcome(providerId, candidates[i], false);
-      lastErr = e;
-      // Can't retry once text is out, or if error isn't retryable, or if this
-      // was the last candidate.
-      if (emitted || !isRetryableProviderError(e) || i === candidates.length - 1) throw e;
-    }
+  // Поставщик, закрытый по лимиту (см. providerOutages), не запускается вовсе:
+  // 20.09.2026 критик консилиума получил Anthropic и упал, хотя чат уже знал,
+  // что тот закрыт до 01.10. Роль уходит следующему настроенному с его моделью;
+  // переход возможен только пока ни одного слова не напечатано.
+  const tried = new Set<string>();
+  let currentProvider = providerId;
+  let currentModel = model;
+  if (isProviderOutOfService(currentProvider)) {
+    const alt = getProviders().find((p) => p.configured && p.id !== "stub" && !isProviderOutOfService(p.id));
+    if (alt) { currentProvider = alt.id; currentModel = alt.defaultModel; }
   }
-  if (lastErr) throw lastErr;
+  for (;;) {
+    tried.add(currentProvider);
+    const candidates = fallbackCandidates(currentProvider, currentModel);
+    let lastErr: unknown;
+    let switched = false;
+    for (let i = 0; i < candidates.length; i++) {
+      let emitted = false;
+      try {
+        for await (const ev of streamProvider(currentProvider, messages, candidates[i], temperature)) {
+          if (ev.kind === "text" && ev.text) emitted = true;
+          yield ev;
+        }
+        recordOutcome(currentProvider, candidates[i], true);
+        return; // completed successfully
+      } catch (e) {
+        recordOutcome(currentProvider, candidates[i], false);
+        lastErr = e;
+        // Can't retry once text is out.
+        if (emitted) throw e;
+        const outage = providerOutageReason(e);
+        if (outage) {
+          noteProviderOutage(currentProvider, outage);
+          const next = getProviders().find((p) => p.configured && p.id !== "stub" && !tried.has(p.id) && !isProviderOutOfService(p.id));
+          if (!next) throw e;
+          console.warn(`[providers] stream ${currentProvider} → ${next.id}: ${outage.slice(0, 100)}`);
+          currentProvider = next.id;
+          currentModel = next.defaultModel;
+          switched = true;
+          break;
+        }
+        // Not retryable, or this was the last candidate.
+        if (!isRetryableProviderError(e) || i === candidates.length - 1) throw e;
+      }
+    }
+    if (!switched) { if (lastErr) throw lastErr; return; }
+  }
 }

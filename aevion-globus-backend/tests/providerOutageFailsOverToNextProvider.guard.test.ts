@@ -22,6 +22,7 @@ import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
 
 import {
   callProvider,
+  streamProviderResilient,
   resolveProvider,
   isProviderOutOfService,
   listProviderOutages,
@@ -100,6 +101,21 @@ describe("поставщик, закрытый по лимиту, не роня�
     const r = await callProvider("openrouter", MESSAGES, "free-model", 0.2);
     expect(r.reply).toBe("PROBE-OK");
     expect(r.providerUsed).toBe("gemini");
+  });
+
+  test("6. потоковый вызов роли не запускает закрытого поставщика — уходит к следующему сразу", async () => {
+    // Консилиум 20.09: критику назначили Anthropic, чат уже знал, что тот закрыт.
+    fetchMock.mockResolvedValueOnce(ANTHROPIC_LIMIT).mockResolvedValueOnce(GEMINI_OK);
+    await callProvider("anthropic", MESSAGES, "claude-opus-4-8", 0.2);
+    expect(isProviderOutOfService("anthropic")).toBe(true);
+
+    // Поток: сеть «падает» — нам важен только АДРЕС первого вызова.
+    fetchMock.mockRejectedValueOnce(new Error("network down (probe)"));
+    const gen = streamProviderResilient("anthropic", MESSAGES, "claude-opus-4-8", 0.2);
+    await expect((async () => { for await (const _ of gen) { /* пусто */ } })()).rejects.toThrow(/network down/);
+    const streamCall = fetchMock.mock.calls[2];
+    expect(String(streamCall[0])).toContain("generativelanguage.googleapis.com");
+    expect(String(streamCall[0])).not.toContain("anthropic.com");
   });
 
   test("5. ошибка другого рода не меняет поставщика и не закрывает его", async () => {

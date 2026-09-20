@@ -143,3 +143,91 @@ export function назначенияПоПодписям(
   }
   return { types, names, unplaced };
 }
+
+/** Строка экспликации помещений: «№ | Наименование | Площадь». */
+export interface СтрокаЭкспликации { n: number; name: string; area?: number }
+
+/** Горизонтальные элементы текста по строкам (одна базовая линия ±2 пт), в порядке x. */
+function строкиТекста(items: ЭлементТекста[]): Array<Array<{ s: string; x: number; y: number; size: number }>> {
+  const ячейки = items
+    .filter((it) => it.transform && it.transform.length >= 6 && Math.abs(it.transform[1]) <= 0.05 * Math.abs(it.transform[0]) && (it.str ?? "").trim())
+    .map((it) => ({ s: it.str.trim(), x: it.transform[4], y: it.transform[5], size: Math.abs(it.transform[3]) || Math.abs(it.transform[0]) }))
+    .sort((a, b) => b.y - a.y || a.x - b.x);
+  const строки: Array<typeof ячейки> = [];
+  for (const c of ячейки) {
+    const last = строки[строки.length - 1];
+    if (last && Math.abs(last[0].y - c.y) <= 2) last.push(c); else строки.push([c]);
+  }
+  return строки.map((r) => r.sort((a, b) => a.x - b.x));
+}
+
+const ИМЯ_ПОМЕЩЕНИЯ = /^[А-ЯЁа-яё][А-ЯЁа-яё \-\/]{2,30}$/;
+const ПЛОЩАДЬ = /^(\d{1,4})[,.](\d{1,2})\s*м?/;
+
+/**
+ * Таблица экспликации с листа: «1 | Коридор | 6,45», «4 | Кухня-гостиная | 19,08».
+ * Замер 20.09 на двух альбомах: OTDL — 6 строк с именами; design-project — «Помещение 1/2»
+ * (имена без смысла, но площади есть). Номер — первая ячейка строки из 1–2 цифр, имя —
+ * ближайшая кириллическая ячейка справа, площадь — первое число с запятой после имени.
+ */
+export function экспликацияИзТекста(items: ЭлементТекста[]): СтрокаЭкспликации[] {
+  const out = new Map<number, СтрокаЭкспликации>();
+  for (const row of строкиТекста(items)) {
+    for (let i = 0; i < row.length; i++) {
+      if (!/^\d{1,2}$/.test(row[i].s)) continue;
+      const n = Number(row[i].s);
+      const имя = row.slice(i + 1, i + 3).find((c) => ИМЯ_ПОМЕЩЕНИЯ.test(c.s));
+      if (!имя) continue;
+      const после = row.slice(row.indexOf(имя) + 1, row.indexOf(имя) + 4).find((c) => ПЛОЩАДЬ.test(c.s));
+      const m = после ? ПЛОЩАДЬ.exec(после.s) : null;
+      if (!out.has(n)) out.set(n, { n, name: имя.s, area: m ? Number(m[1] + "." + m[2]) : undefined });
+      break;
+    }
+  }
+  return [...out.values()].sort((a, b) => a.n - b.n);
+}
+
+/**
+ * Номера помещений НА ПЛАНЕ: одиночные цифры 1–2 знаков, не в строке таблицы (рядом нет
+ * кириллического имени) и не показатель степени у «м²» (мельче обычных цифр листа).
+ */
+export function номераНаПлане(items: ЭлементТекста[], экспл: СтрокаЭкспликации[]): Подпись[] {
+  const известные = new Set(экспл.map((e) => e.n));
+  const out: Подпись[] = [];
+  const все: Array<{ s: string; x: number; y: number; size: number }> = [];
+  for (const row of строкиТекста(items)) for (const c of row) if (/^\d{1,2}$/.test(c.s)) все.push(c);
+  const размеры = все.map((c) => c.size).sort((a, b) => a - b);
+  const типичный = размеры.length ? размеры[Math.floor(размеры.length / 2)] : 0;
+  for (const row of строкиТекста(items)) {
+    const таблица = row.some((c) => ИМЯ_ПОМЕЩЕНИЯ.test(c.s));
+    for (const c of row) {
+      if (!/^\d{1,2}$/.test(c.s) || таблица) continue;
+      if (!известные.has(Number(c.s))) continue;
+      if (типичный > 0 && c.size < 0.8 * типичный) continue; // степень у «м²»
+      out.push({ text: c.s, x: c.x + c.size * 0.3, y: c.y + c.size * 0.35 });
+    }
+  }
+  return out;
+}
+
+/** Имена и типы комнат по номерам на плане и экспликации; areas — площади по чертежу. */
+export function назначенияПоНомерам(
+  номера: Подпись[],
+  экспл: СтрокаЭкспликации[],
+  originPt: { x: number; y: number },
+  metersPerPt: number,
+  roomAt: (x: number, y: number) => number | null,
+): { types: Record<number, RoomType>; names: Record<number, string>; areas: Record<number, number>; unplaced: string[] } {
+  const types: Record<number, RoomType> = {}, names: Record<number, string> = {}, areas: Record<number, number> = {};
+  const unplaced: string[] = [];
+  const поНомеру = new Map(экспл.map((e) => [e.n, e]));
+  for (const l of номера) {
+    const строка = поНомеру.get(Number(l.text)); if (!строка) continue;
+    const room = roomAt((l.x - originPt.x) * metersPerPt, (l.y - originPt.y) * metersPerPt);
+    if (room === null || names[room] !== undefined) { unplaced.push(`${строка.n} ${строка.name}`); continue; }
+    names[room] = строка.name;
+    const t = roomTypeFromLabel(строка.name); if (t) types[room] = t;
+    if (строка.area !== undefined) areas[room] = строка.area;
+  }
+  return { types, names, areas, unplaced };
+}

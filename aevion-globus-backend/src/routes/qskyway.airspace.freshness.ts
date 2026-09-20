@@ -78,8 +78,9 @@ export function compareSnapshot(src: CityAirspace, live: LiveCell[]) {
   // поэтому устойчивый ключ можно вывести для ОБЕИХ сторон прямо сейчас — не
   // пересобирая слой и не трогая подписанное содержимое, которому иначе
   // потребовалось бы переякорение в Bitcoin.
+  const prefix = src.feed === "bazl" ? "bazl" : "faa";
   const keyOf = (c: { minLat: number; minLon: number; airportIcao?: string | null }) =>
-    stableCellId({ minLat: c.minLat, minLon: c.minLon, airportIcao: c.airportIcao ?? null });
+    stableCellId({ minLat: c.minLat, minLon: c.minLon, airportIcao: c.airportIcao ?? null }, { prefix });
   const liveById = new Map(live.map((c) => [c.id, c.ceilingFt])); // живой id уже устойчивый
   const snapById = new Map(src.cells.map((c) => [keyOf(c), c.ceilingFt]));
   let cellsAdded = 0, cellsRemoved = 0, cellsChanged = 0;
@@ -100,9 +101,52 @@ export function compareSnapshot(src: CityAirspace, live: LiveCell[]) {
   };
 }
 
+const BAZL_IDENTIFY = "https://api3.geo.admin.ch/rest/services/api/MapServer/identify";
+
+/**
+ * Тот же вопрос фиду BAZL: какие дрон-геозоны накрывают квадрат сейчас. Ключ
+ * ячейки — юго-западный угол полигона (как у FAA — угол прямоугольника), потолок
+ * у CTR-зон один: 120 м AGL = 394 ft. Даты у слоя нет — publishedEffective
+ * остаётся null, а дрейф ловится по составу и потолкам зон.
+ */
+async function liveBazl(src: CityAirspace): Promise<LiveCell[]> {
+  const params = new URLSearchParams({
+    geometry: `${src.bbox.minLon},${src.bbox.minLat},${src.bbox.maxLon},${src.bbox.maxLat}`,
+    geometryType: "esriGeometryEnvelope",
+    layers: "all:ch.bazl.einschraenkungen-drohnen",
+    tolerance: "0",
+    sr: "4326",
+    geometryFormat: "geojson",
+    returnGeometry: "true",
+  });
+  const res = await fetch(`${BAZL_IDENTIFY}?${params}`, { signal: AbortSignal.timeout(30_000) });
+  if (!res.ok) throw new Error(`http ${res.status}`);
+  const data = (await res.json()) as {
+    results?: Array<{ properties?: { zone_restriction_en?: string; zone_name_en?: string }; geometry?: { type: string; coordinates: number[][][] | number[][][][] } }>;
+  };
+  const live = data.results ?? [];
+  if (!live.length) throw new Error("feed returned no zones");
+  return live.map((f) => {
+    const polys = f.geometry?.type === "MultiPolygon" ? (f.geometry.coordinates as number[][][][]) : [f.geometry?.coordinates as number[][][]];
+    const pts = polys.flatMap((p) => p?.[0] ?? []);
+    const m = (f.properties?.zone_restriction_en ?? "").match(/(\d+)\s*m above ground/);
+    const ceilingM = m ? Number(m[1]) : 0;
+    return {
+      id: stableCellId({ minLat: Math.min(...pts.map((p) => p[1])), minLon: Math.min(...pts.map((p) => p[0])), airportIcao: null }, { prefix: "bazl" }),
+      ceilingFt: Math.round(ceilingM / 0.3048),
+      effective: null,
+    };
+  });
+}
+
 async function checkCity(cityId: string, src: CityAirspace): Promise<void> {
   const prev = verdicts.get(cityId) ?? blank(src);
   try {
+    if (src.feed === "bazl") {
+      const diff = compareSnapshot(src, await liveBazl(src));
+      verdicts.set(cityId, { checked: true, ...diff, snapshotEffective: src.effective, checkedAt: new Date().toISOString(), error: null });
+      return;
+    }
     const params = new URLSearchParams({
       geometry: `${src.bbox.minLon},${src.bbox.minLat},${src.bbox.maxLon},${src.bbox.maxLat}`,
       geometryType: "esriGeometryEnvelope",

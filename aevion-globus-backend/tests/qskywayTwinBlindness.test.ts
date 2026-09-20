@@ -6,6 +6,7 @@ import { CITY_TOKYO } from "../src/routes/qskyway.city.tokyo";
 import { CITY_AMSTERDAM } from "../src/routes/qskyway.city.amsterdam";
 import { CITY_BERLIN } from "../src/routes/qskyway.city.berlin";
 import { CITY_VIENNA } from "../src/routes/qskyway.city.vienna";
+import { CITY_ZURICH } from "../src/routes/qskyway.city.zurich";
 import type { CityData } from "../src/routes/qskyway.city";
 
 /**
@@ -46,13 +47,17 @@ const PROFILE: Record<string, { twin: CityData; total: number; measured: number;
   // 741 из 897 по Внутреннему городу; тег OSM выше обмера у 130 домов на 4–7 м
   // (скаты крыш над карнизом), берётся больший, класс остаётся обмерным.
   vienna: { twin: CITY_VIENNA, total: 897, measured: 741, guessed: 22 },
+  // Цюрих (17.09.2026): swissBUILDINGS3D 3.0 — 1186 из 1474 по центру (квадрат
+  // на стыке тайлов 1091-23/41). Первая сборка дала 68 (4.6 %): второй тайл
+  // начинался с записи-папки в zip и читался как пустой — этот пол ловит повтор.
+  zurich: { twin: CITY_ZURICH, total: 1474, measured: 1186, guessed: 65 },
 };
 
 describe("профиль слепых высот в твинах", () => {
   // Тот же предохранитель: профиль перебирается по PROFILE, и пустой объект
   // дал бы зелёный файл без единой проверки.
-  test("профиль описывает все шесть городов с обмером", () => {
-    expect(Object.keys(PROFILE).length).toBe(6);
+  test("профиль описывает все семь городов с обмером", () => {
+    expect(Object.keys(PROFILE).length).toBe(7);
   });
 
   for (const [city, p] of Object.entries(PROFILE)) {

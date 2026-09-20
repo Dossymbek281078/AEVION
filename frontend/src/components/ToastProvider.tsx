@@ -103,7 +103,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           // --aevion-toast-lift: страница может поднять тосты над своей нижней навигацией
           // (CyberChess на телефоне: тост «Мат в 2 · Лёгкая…» ложился на BottomNav, 20.09.2026).
           // По умолчанию 0 — остальные потребители провайдера не меняются.
-          bottom: "calc(16px + var(--aevion-toast-lift, 0px))",
+          // --aevion-toast-top: страница может перенести тосты НАВЕРХ (CyberChess на телефоне: любой
+          // низ занят кнопками партии и BottomNav; 20.09.2026). По умолчанию auto — как было.
+          top: "var(--aevion-toast-top, auto)",
+          bottom: "var(--aevion-toast-bottom, calc(16px + var(--aevion-toast-lift, 0px)))",
           zIndex: 9999,
           display: "flex",
           flexDirection: "column",

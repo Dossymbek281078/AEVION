@@ -35,6 +35,46 @@ describe("PDF без слоёв: рамка листа и линии через 
   });
 });
 
+/** Двухстраничный PDF: у каждой страницы свой поток содержимого. */
+function makePdf2(p1: string, p2: string): Uint8Array {
+  const NL = String.fromCharCode(10);
+  const body = [
+    "%PDF-1.4",
+    "1 0 obj", "<< /Type /Pages /Kids [2 0 R 4 0 R] /Count 2 >>", "endobj",
+    "2 0 obj", "<< /Type /Page /Parent 1 0 R /Contents 3 0 R >>", "endobj",
+    "3 0 obj", "<< /Length " + p1.length + " >>", "stream", p1, "endstream", "endobj",
+    "4 0 obj", "<< /Type /Page /Parent 1 0 R /Contents 5 0 R >>", "endobj",
+    "5 0 obj", "<< /Length " + p2.length + " >>", "stream", p2, "endstream", "endobj",
+    "trailer", "<< /Root 1 0 R >>", "%%EOF", "",
+  ].join(NL);
+  return new TextEncoder().encode(body);
+}
+
+describe("многостраничный PDF (альбом дизайн-проекта) разбирается по страницам", () => {
+  // Замер 20.09.2026: альбомы на 15 и 45 страниц ложились друг на друга — 0 и 1 комната.
+  const стр1 = "0 0 400 300 re S";                                // коробка, 4 линии
+  const стр2 = "0 0 400 300 re S 200 0 m 200 300 l S 50 50 m 60 50 l S"; // та же коробка + перегородка + штрих: 6 линий
+  it("без указания берётся страница с наибольшим числом линий, и это сказано словами", async () => {
+    const src = await readPdfSegments(makePdf2(стр1, стр2));
+    expect(src.pages).toBe(2);
+    expect(src.page).toBe(2);
+    expect(src.pageSegmentCounts).toEqual([4, 6]);
+    expect(src.segments.length).toBe(6);
+    expect(src.warnings.join(" ")).toMatch(/В файле 2 страниц — взята страница 2/);
+  });
+  it("указанная страница берётся целиком и без чужих линий", async () => {
+    const src = await readPdfSegments(makePdf2(стр1, стр2), { page: 1 });
+    expect(src.page).toBe(1);
+    expect(src.segments.length).toBe(4);
+    expect(findRooms(planFromPdfSegments(src, 8).plan!).rooms.length).toBe(1);
+  });
+  it("одностраничный файл страниц не объявляет и предупреждения о выборе не даёт", async () => {
+    const src = await readPdfSegments(makePdf("0 0 400 300 re S"));
+    expect(src.pages ?? 1).toBe(1);
+    expect(src.warnings.join(" ")).not.toMatch(/страниц/);
+  });
+});
+
 describe("readPdfSegments — что нашлось в файле", () => {
   it("прямоугольник (re) даёт четыре отрезка и габарит в пунктах", async () => {
     // 0,0 размером 400×300 пунктов

@@ -58,6 +58,13 @@ describe("planFromPdfSegments с областью плана: линии вне 
     expect(r.warnings.join(" ")).toMatch(/вне их прямоугольника 4 линий/);
     expect(findRooms(r.plan!).rooms.length).toBe(1);
   });
+  it("со слоем стен область не применяется: стены точные, а цепочки не окружают весь план (LA VIE: кухня отрезалась)", async () => {
+    const src = await readPdfSegments(makePdf("100 100 200 150 re S 600 100 100 50 re S"));
+    const соСлоем: PdfSegments = { ...src, wallLayers: ["Стены"] };
+    const r = planFromPdfSegments(соСлоем, 8, "размеры", { x0: 90, y0: 90, x1: 310, y1: 260 });
+    expect(r.plan!.walls.length).toBe(8);
+    expect(r.warnings.join(" ")).not.toMatch(/вне их прямоугольника/);
+  });
 });
 
 describe("многостраничный PDF (альбом дизайн-проекта) разбирается по страницам", () => {

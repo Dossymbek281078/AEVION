@@ -600,7 +600,9 @@ export function planFromPdfSegments(
   область?: { x0: number; y0: number; x1: number; y1: number } | null,
 ): PdfResult {
   const warnings = [...src.warnings];
-  if (область) {
+  // Только для PDF БЕЗ слоя стен: со слоем стены точные и лишнего нет, а размерные
+  // цепочки не обязаны окружать весь план (LA VIE 20.09: обрезка отрезала кухню, 11 → 7 комнат).
+  if (область && (src.wallLayers?.length ?? 0) === 0) {
     const внутри = (x: number, y: number) => x >= область.x0 && x <= область.x1 && y >= область.y0 && y <= область.y1;
     const до = src.segments.length;
     const оставить = src.segments.filter((s) => внутри(s.x1, s.y1) && внутри(s.x2, s.y2));

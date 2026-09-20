@@ -25,6 +25,10 @@ import { mergeDoubleWalls } from "./wallMerge";
 import { isGlassLayer, isWallLayer } from "./wallLayer";
 
 export interface PdfSegments {
+  /** страниц в файле и какая взята (1..pages); линий на каждой — чтобы предложить выбор */
+  pages?: number;
+  page?: number;
+  pageSegmentCounts?: number[];
   /** `layer` — имя слоя PDF, если линия лежала внутри метки /OC … BDC. */
   segments: Array<{ x1: number; y1: number; x2: number; y2: number; layer?: string }>;
   warnings: string[];
@@ -51,7 +55,7 @@ export interface PdfResult {
   originPt?: { x: number; y: number };
 }
 
-const MAX_SEGMENTS = 400;
+export const MAX_SEGMENTS = 1500;
 /**
  * Потолок, когда линии уже отобраны по слою стен.
  *
@@ -396,7 +400,10 @@ function слоиИзФайла(тексты: string[]): Map<string, string> {
 }
 
 /** Первый проход: что вообще есть в файле. Масштаб ещё не выбран. */
-export async function readPdfSegments(bytes: Uint8Array): Promise<PdfSegments> {
+/** Какую страницу многостраничного PDF разбирать (1..pages); без указания — с наибольшим числом линий. */
+export interface ReadPdfOptions { page?: number }
+
+export async function readPdfSegments(bytes: Uint8Array, opts: ReadPdfOptions = {}): Promise<PdfSegments> {
   const warnings: string[] = [];
   const head = new TextDecoder("latin1").decode(bytes.subarray(0, 8));
   if (!head.startsWith("%PDF-")) {
@@ -415,30 +422,45 @@ export async function readPdfSegments(bytes: Uint8Array): Promise<PdfSegments> {
   const поНомеру = new Map<number, string>();
   ids.forEach((id, i) => { if (id !== null && !поНомеру.has(id)) поНомеру.set(id, texts[i]); });
   const вГруппах = new Set<number>();
-  const потоки: string[] = [];
+  // Каждая группа /Contents — одна СТРАНИЦА. Замер 20.09 на альбомах дизайн-проектов
+  // (15 и 45 страниц): без разбора по страницам все листы ложились друг на друга —
+  // 0 комнат из 15-страничного альбома, 1 из 45-страничного. Потоки без страницы
+  // (формы, старые файлы) идут отдельной «страницей» и берутся, только если она одна.
+  const страницы: string[][] = [];
   for (const g of порядокСодержимого([весьФайл, ...texts])) {
     const части = g.map((n) => поНомеру.get(n));
     if (части.some((x) => x === undefined) || g.some((n) => вГруппах.has(n))) continue;
     g.forEach((n) => вГруппах.add(n));
-    потоки.push((части as string[]).join(String.fromCharCode(10)));
+    страницы.push([(части as string[]).join(String.fromCharCode(10))]);
   }
-  texts.forEach((t, i) => { const id = ids[i]; if (id === null || !вГруппах.has(id)) потоки.push(t); });
+  const безСтраницы: string[] = [];
+  texts.forEach((t, i) => { const id = ids[i]; if (id === null || !вГруппах.has(id)) безСтраницы.push(t); });
+  if (страницы.length === 0) страницы.push(безСтраницы);
+  else if (страницы.length === 1) страницы[0].push(...безСтраницы);
 
-  const segments: СырыйОтрезок[] = [];
-  for (const t of потоки) {
-    for (const s of segmentsFromContent(t)) {
-      // Порог в пунктах ЛИСТА (после матрицы cm). Прежний 1 пт на плане в
-      // масштабе LA VIE (42.6 мм/пт) выбрасывал бы всё короче 4 см, включая
-      // торцы тонких перегородок; 0.2 пт ≈ 9 мм отсекает только точки.
-      if (Math.hypot(s.x2 - s.x1, s.y2 - s.y1) >= 0.2) segments.push(s);
-    }
+  const порог = (s: СырыйОтрезок) => Math.hypot(s.x2 - s.x1, s.y2 - s.y1) >= 0.2;
+  // Порог в пунктах ЛИСТА (после матрицы cm). Прежний 1 пт на плане в
+  // масштабе LA VIE (42.6 мм/пт) выбрасывал бы всё короче 4 см, включая
+  // торцы тонких перегородок; 0.2 пт ≈ 9 мм отсекает только точки.
+  const поСтраницам = страницы.map((потоки) => потоки.flatMap((t) => segmentsFromContent(t).filter(порог)));
+  const pageSegmentCounts = поСтраницам.map((x) => x.length);
+  let page = 1;
+  if (страницы.length > 1) {
+    const запрошена = opts.page !== undefined && opts.page >= 1 && opts.page <= страницы.length ? opts.page : 0;
+    page = запрошена || pageSegmentCounts.indexOf(Math.max(...pageSegmentCounts)) + 1;
+    warnings.push(
+      `В файле ${страницы.length} страниц — взята страница ${page}${запрошена ? "" : " (на ней больше всего линий)"}. `
+      + "Если это не план стен (а, например, план розеток или потолков) — выберите другую страницу.",
+    );
   }
+  const segments: СырыйОтрезок[] = поСтраницам[page - 1];
 
+  const страничное = { pages: страницы.length, page, pageSegmentCounts };
   if (segments.length === 0) {
     const hint = other > 0
       ? "Похоже, это СКАН: внутри картинка, а не чертёж. Линий в файле нет — распознавание растра будет в следующей версии."
       : "В PDF не нашлось линий (операторы m/l/re). Возможно, чертёж вставлен картинкой.";
-    return { segments: [], warnings: [hint], extentPt: 0 };
+    return { segments: [], warnings: [hint], extentPt: 0, ...страничное };
   }
 
   // Слой стен — первым делом, до габарита: масштаб считается по ГАБАРИТУ, и
@@ -559,7 +581,7 @@ export async function readPdfSegments(bytes: Uint8Array): Promise<PdfSegments> {
   if (other > 0) {
     warnings.push(`Часть содержимого пропущена (${other} поток(ов) картинок или неподдержанного сжатия).`);
   }
-  return { segments: used, warnings, extentPt, wallLayers, glassSegments, layerCounts, otherSegments };
+  return { segments: used, warnings, extentPt, wallLayers, glassSegments, layerCounts, otherSegments, ...страничное };
 }
 
 /**
@@ -574,8 +596,21 @@ export function planFromPdfSegments(
   knownExtentM: number,
   /** откуда габарит: назвал человек или посчитан по размерным числам чертежа */
   источникМасштаба: "человек" | "размеры" = "человек",
+  /** прямоугольник плана на листе (пт): линии вне него — рамка, легенда, таблицы */
+  область?: { x0: number; y0: number; x1: number; y1: number } | null,
 ): PdfResult {
   const warnings = [...src.warnings];
+  // Только для PDF БЕЗ слоя стен: со слоем стены точные и лишнего нет, а размерные
+  // цепочки не обязаны окружать весь план (LA VIE 20.09: обрезка отрезала кухню, 11 → 7 комнат).
+  if (область && (src.wallLayers?.length ?? 0) === 0) {
+    const внутри = (x: number, y: number) => x >= область.x0 && x <= область.x1 && y >= область.y0 && y <= область.y1;
+    const до = src.segments.length;
+    const оставить = src.segments.filter((s) => внутри(s.x1, s.y1) && внутри(s.x2, s.y2));
+    if (оставить.length >= 4 && оставить.length < до) {
+      src = { ...src, segments: оставить, glassSegments: (src.glassSegments ?? []).filter((s) => внутри(s.x1, s.y1) && внутри(s.x2, s.y2)) };
+      warnings.push(`План найден по размерным цепочкам: вне их прямоугольника ${до - оставить.length} линий (рамка, легенда, таблицы) — в модель не взяты.`);
+    }
+  }
   if (src.segments.length === 0 || src.extentPt <= 0) {
     return { plan: null, warnings, metersPerPt: 0, extentPt: src.extentPt, truncated: 0 };
   }
@@ -602,6 +637,35 @@ export function planFromPdfSegments(
   let truncated = 0;
   // После отбора по слою короткие линии — настоящие грани стен, резать их нельзя.
   const поСлою = (src.wallLayers?.length ?? 0) > 0;
+  // PDF без слоёв (замер 20.09 на обмерном плане Belmont, 56 тыс. линий): рамка листа
+  // становилась «комнатой» на 48 м², а выноска через весь лист резала план. Два признака,
+  // безвредные для простой коробки (у неё наружные стены и есть габарит):
+  //  • рамка — линии ровно по краю общего прямоугольника, когда внутри есть своё содержимое
+  //    (≥ 50 линий) с отступом от края ≥ 3 % по всем четырём сторонам;
+  //  • выноска — линия длиннее любой стороны листа: так лежат только диагонали.
+  if (!поСлою && list.length > 0) {
+    let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+    for (const s of list) { bx0 = Math.min(bx0, s.x1, s.x2); by0 = Math.min(by0, s.y1, s.y2); bx1 = Math.max(bx1, s.x1, s.x2); by1 = Math.max(by1, s.y1, s.y2); }
+    const W = bx1 - bx0, H = by1 - by0, eps = 0.005 * Math.max(W, H);
+    const сторона = Math.max(W, H) * 1.02;
+    const безВыносок = list.filter((s) => Math.hypot(s.x2 - s.x1, s.y2 - s.y1) <= сторона);
+    if (безВыносок.length < list.length) {
+      warnings.push(`Линии длиннее листа (выноски через весь чертёж): ${list.length - безВыносок.length} — не стены, выброшены.`);
+      list = безВыносок;
+      const наКраю = (s: PdfSegments["segments"][number]) =>
+      (Math.abs(s.x1 - bx0) < eps && Math.abs(s.x2 - bx0) < eps) || (Math.abs(s.x1 - bx1) < eps && Math.abs(s.x2 - bx1) < eps) ||
+      (Math.abs(s.y1 - by0) < eps && Math.abs(s.y2 - by0) < eps) || (Math.abs(s.y1 - by1) < eps && Math.abs(s.y2 - by1) < eps);
+    const внутри = list.filter((s) => !наКраю(s));
+    if (внутри.length >= 50 && внутри.length < list.length) {
+      let ix0 = Infinity, iy0 = Infinity, ix1 = -Infinity, iy1 = -Infinity;
+      for (const s of внутри) { ix0 = Math.min(ix0, s.x1, s.x2); iy0 = Math.min(iy0, s.y1, s.y2); ix1 = Math.max(ix1, s.x1, s.x2); iy1 = Math.max(iy1, s.y1, s.y2); }
+      if (ix0 - bx0 >= 0.03 * W && bx1 - ix1 >= 0.03 * W && iy0 - by0 >= 0.03 * H && by1 - iy1 >= 0.03 * H) {
+        warnings.push(`Рамка листа: ${list.length - внутри.length} линий по краю чертежа — не стены, выброшены.`);
+        list = внутри;
+      }
+    }
+  }
+  }
   const предел = поСлою ? MAX_WALL_LAYER_SEGMENTS : MAX_SEGMENTS;
   if (list.length > предел) {
     list = [...list]

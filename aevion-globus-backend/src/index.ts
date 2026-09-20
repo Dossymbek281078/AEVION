@@ -74,6 +74,7 @@ import { constitutionProRouter } from "./routes/constitutionPro";
 import { constitutionAdminRouter, constitutionTelemetry, constitutionBanGate } from "./routes/constitutionAdmin";
 import { constitutionFunnelTrackRouter, constitutionFunnelAdminRouter } from "./routes/constitutionFunnel";
 import { constitutionWaitlistRouter, constitutionWaitlistAdminRouter } from "./routes/constitutionWaitlist";
+import { agencyLeadRouter } from "./routes/agencyLead";
 import { constitutionStatusRouter, startUptimeChecker } from "./routes/constitutionStatus";
 import { constitutionCheckoutRouter } from "./routes/constitutionCheckout";
 import { planetConstitutionSocialRouter } from "./routes/planetConstitutionSocial";
@@ -1291,6 +1292,9 @@ app.use("/api/admin/constitution", constitutionAdminRouter);
 app.use("/api/admin/constitution/funnel", constitutionFunnelAdminRouter);
 app.use("/api/constitution/funnel", constitutionFunnelTrackRouter);
 app.use("/api/constitution/waitlist", constitutionWaitlistRouter);
+// Приём заявок с сайта агентства (20.09.2026): до этого форма открывала почтовую
+// программу посетителя, и на телефоне заявка просто терялась.
+app.use("/api/agency", agencyLeadRouter);
 app.use("/api/admin/constitution/waitlist", constitutionWaitlistAdminRouter);
 app.use("/api/constitution/status", constitutionStatusRouter);
 app.use("/api/constitution/checkout", constitutionCheckoutRouter);

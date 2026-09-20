@@ -48,7 +48,7 @@ import { PV, ev, mm, best } from "./chessEngine";
 import { classifyDrop } from "./moveQuality";
 import PostGameCard from "./PostGameCard";
 import DeepAnalysisPanel from "./DeepAnalysisPanel";
-import { temaZadachiRu, fazaRu } from "./puzzleLabels";
+import { temaZadachiRu, fazaRu, imyaZadachiBezPovtorov } from "./puzzleLabels";
 import { tochnostSohranennoy } from "./postGameSummary";
 import { RANKS, gRank } from "./rating";
 import { pickDailyIdx } from "./dailyPick";
@@ -5343,7 +5343,7 @@ export default function CyberChessPage(){
     else if(pzMode==="rush"){/* keep running deadline */}
     else startClock(0);
     // имя банковской задачи часто = её тема → «Эндшпиль · Эндшпиль»; дубль не печатаем (тестер 20.09.2026)
-    showToast([pz.name,temaZadachiRu(pz.theme)].filter((v,i,a)=>v&&a.indexOf(v)===i).concat(String(pz.r)).join(" · "),"info");
+    showToast([...imyaZadachiBezPovtorov(pz),temaZadachiRu(pz.theme)].filter(Boolean).concat(String(pz.r)).join(" · "),"info");
     // reset per-puzzle stopwatch
     if(pzTimerIntervalRef.current)clearInterval(pzTimerIntervalRef.current);
     pzTimerRef.current=Date.now();sPzTimer(0);paintPzTimer(0);
@@ -10296,7 +10296,7 @@ export default function CyberChessPage(){
               <div style={{padding:"14px 16px"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,marginBottom:10}}>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12,fontWeight:700,color:T.dim,marginBottom:2,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>{pzCurrent.name}</div>
+                    {imyaZadachiBezPovtorov(pzCurrent).length>0&&<div style={{fontSize:12,fontWeight:700,color:T.dim,marginBottom:2,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>{imyaZadachiBezPovtorov(pzCurrent).join(" · ")}</div>}
                     <div style={{fontSize:18,fontWeight:900,color:T.text,lineHeight:1.2}}>
                       {pzCurrent.side==="w"?"⚪":"⚫"} {pzCurrent.goal==="Mate"?`Мат в ${pzCurrent.mateIn}`:"Найди лучший ход"}
                     </div>

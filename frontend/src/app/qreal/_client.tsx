@@ -6,6 +6,7 @@
 // Все строки — через useI18n (ключи qreal.* в i18n-data.ts, en/ru/kk).
 
 import { useCallback, useEffect, useState } from "react";
+import ModulePricingChip from "@/components/ModulePricingChip";
 import { apiUrl } from "@/lib/apiBase";
 import { useI18n } from "@/lib/i18n";
 
@@ -312,6 +313,14 @@ export default function QRealClient() {
           <h1 className="mt-2 font-serif text-5xl leading-tight">QReal Studio</h1>
           <p className="mt-3 max-w-3xl font-serif text-xl leading-relaxed text-neutral-700">{t("qreal.hero.lead")}</p>
           <p className="mt-3 max-w-3xl text-sm leading-relaxed text-red-700">{t("qreal.hero.ethics")}</p>
+          {/*
+            Замер 20.09.2026: QReal был единственным модулем со своей страницей
+            и БЕЗ какого-либо пути к оплате — ни чипа, ни собственной кассы.
+            Ставим тот же компонент, что на остальных 35 страницах модулей.
+          */}
+          <div className="mt-4">
+            <ModulePricingChip moduleId="qreal" />
+          </div>
         </header>
 
         {/* Живое сравнение движков */}

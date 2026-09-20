@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import QSpaceClient from "./_client";
 import { PageTracking } from "@/components/PageTracking";
+import { WaitlistCapture } from "@/components/WaitlistCapture";
 
 const TITLE = "QSpace — 3D-модельер помещений из 2D-плана";
 // Описание перечисляет ВСЕ три формата входа. Прежде здесь стоял только DXF —
@@ -33,11 +34,30 @@ export const metadata: Metadata = {
 
 // MVP открыт без платной стены: смотреть и примерять можно всем.
 // Монетизация (экспорт слоёв, смета, GLB) — этап 2, там и появится paywall.
+//
+// 18.09.2026: до появления цены у страницы не было НИ ОДНОГО пути к деньгам —
+// ни кнопки, ни формы (замер на проде: 0 «купить», 0 цен, 0 заявок). Человек,
+// дочитавший до 3D-модели и списка материалов, уходил без следа. Пока цену не
+// назвал основатель, путь один — заявка в общий лист ожидания с пометкой
+// источника: она даёт имена покупателей для исследования воронки.
 export default function Page() {
   return (
     <>
       <PageTracking page="qspace" />
       <QSpaceClient />
+      <section
+        aria-label="Расчёт отделки по вашему плану"
+        style={{ maxWidth: 760, margin: "32px auto 48px", padding: "0 16px" }}
+      >
+        <WaitlistCapture
+          source="qspace"
+          tone="light"
+          title="Хотите расчёт отделки по вашему плану?"
+          description="Оставьте почту — пришлём смету материалов и варианты дизайна по вашему чертежу, когда откроем платный расчёт."
+          promise="Одно письмо, когда платный расчёт откроется. Без рассылок."
+          buttonLabel="Получить расчёт"
+        />
+      </section>
     </>
   );
 }

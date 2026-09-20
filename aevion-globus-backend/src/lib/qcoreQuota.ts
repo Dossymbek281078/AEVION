@@ -47,6 +47,28 @@ import { verifyBearerOptional } from "./authJwt";
 import { getMonthlyTokens, getMonthlyPremiumTokens } from "../services/qcoreai/store";
 import { isPremiumModel } from "../services/qcoreai/pricing";
 import { getTier } from "../data/pricing";
+import { appSubscriptionState } from "./appEntitlements";
+
+/**
+ * Подписка на Multichat как отдельное приложение ($40/мес по лестнице сроков)
+ * снимает месячные потолки токенов — и общий для бесплатных, и на премиум-модели.
+ *
+ * Зачем (20.09.2026, день запуска): вебхук писал покупку в AppSubscription, а
+ * дальше её никто не читал — модуль вне платной стены, потолки считались по
+ * тарифу планеты. Покупатель за $40 получал ровно то же, что гость. Теперь
+ * «бесплатно — попробовать, $40 — работать без потолка». Отказ чтения базы
+ * читается как «нет подписки»: лучше лишний раз показать потолок, чем раздать
+ * безлимит по ошибке чтения.
+ */
+export async function hasMultichatPass(payload: Record<string, unknown> | null | undefined): Promise<boolean> {
+  const email = payload && typeof payload.email === "string" ? payload.email : null;
+  if (!email) return false;
+  try {
+    return (await appSubscriptionState(email, "multichat-engine")) === "active";
+  } catch {
+    return false;
+  }
+}
 
 const PUBLIC_BASE = (process.env.AEVION_PUBLIC_BASE_URL ?? "https://aevion.app").replace(/\/+$/, "");
 
@@ -109,8 +131,9 @@ export type MonthlyQuotaState = { used: number; limit: number; rawTier: string; 
  * Нужна веерам: они решают ДО старта, хватит ли остатка на всю пачку.
  */
 export async function monthlyQuotaHeadroom(req: Request): Promise<MonthlyQuotaState | null> {
-  const auth = verifyBearerOptional(req) as { sub?: string } | null;
+  const auth = verifyBearerOptional(req) as { sub?: string; email?: string } | null;
   if (!auth?.sub) return null; // anonymous — unmetered, unchanged
+  if (await hasMultichatPass(auth)) return null; // подписка Multichat: без потолка
 
   const plan = resolveUserPlan(req);
 
@@ -206,6 +229,7 @@ async function checkPremiumQuotaForPayload(
 ): Promise<PremiumQuotaHit | null> {
   if (process.env.QCOREAI_PREMIUM_QUOTA !== "1") return null; // dormant unless flipped on
   if (!isPremiumModel(provider, model)) return null; // not a premium model — nothing to check
+  if (await hasMultichatPass(payload)) return null; // подписка Multichat: без потолка
 
   const sub = payload && typeof payload.sub === "string" ? payload.sub : null;
   if (!sub) return null; // anonymous — unmetered, unchanged

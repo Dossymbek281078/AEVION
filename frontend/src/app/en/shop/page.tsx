@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { языки } from "@/lib/hreflang";
 import { BuyLink } from "@/components/BuyLink";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 import {
@@ -33,7 +34,7 @@ export const metadata: Metadata = {
   title: "AEVION Shop — subscription, guides, apps",
   description:
     "Everything you can buy at AEVION in one place: a subscription to the whole planet for a term of 1 to 12 months, science-based longevity guides and a book as one-time purchases, five apps on their own. Wellness and education, not medicine.",
-  alternates: { canonical: "/en/shop" },
+  alternates: { canonical: "/en/shop", languages: языки("/en/shop") },
   openGraph: {
     title: "AEVION Shop — subscription, guides, apps",
     description:

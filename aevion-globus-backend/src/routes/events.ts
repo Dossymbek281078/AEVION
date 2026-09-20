@@ -385,6 +385,41 @@ eventsRouter.post("/", (req, res) => {
  * Суммарные метрики по последним N событиям.
  * Защищён ADMIN_TOKEN (header X-Admin-Token).
  */
+/**
+ * Кто прислал событие: человек или наша же автоматика.
+ *
+ * 🔴 ЗАЧЕМ. Замер 20.09.2026 по 200 последним событиям прода: 183 из 200 (91 %)
+ * прислали НЕ люди — 59 помеченных зондов `AEVION-probe/1.0` и 124 безымянных
+ * HeadlessChrome. Хуже всего вышло на деньгах: `checkout_start` за сутки было
+ * 47, и ВСЕ до одного зондовые, то есть «47 начатых оплат и ноль покупок»
+ * читалось как провал конверсии, тогда как настоящих начатых оплат ноль.
+ * Решение по такой панели принимать нельзя: она показывает нашу собственную
+ * тень и называет её спросом.
+ *
+ * Возвращаем ВИД, а не «да/нет»: зонд и headless чинятся по-разному (первому
+ * достаточно фильтра, второму нужна метка в самом зонде), и складывать их в
+ * одно число значит потерять этот след.
+ *
+ * Пустой UA НЕ считаем автоматикой намеренно: в журнале есть записи старше
+ * того дня, когда UA начали сохранять, и записать их в роботы значило бы
+ * тихо переписать историю. Их число отдаётся отдельным полем `withoutUa` —
+ * это честно названная слепая зона, а не ноль.
+ */
+export function видОтправителя(ua: string | undefined | null): "probe" | "headless" | "bot" | null {
+  const u = String(ua ?? "").trim();
+  if (!u) return null;
+  // Любая НАША метка, а не перечень известных. 20.09.2026 перечень уже подвёл:
+  // фильтр знал `AEVION-probe`, а в данных нашлась вторая семья —
+  // `AEVION-checkout-gate-probe`, 24 события, и все шесть «человеческих»
+  // начатых оплат за двое суток оказались ею. То есть отчёт сказал бы
+  // «шесть человек дошли до кассы и не заплатили» — решение по такому числу
+  // повело бы чинить страницу оплаты вместо привлечения трафика.
+  if (/AEVION-[A-Za-z0-9._-]*probe|AEVION-probe/i.test(u)) return "probe";
+  if (/Headless/i.test(u)) return "headless";
+  if (/\b(crawler|spider|slurp)\b|bot\/|\bbot\b|curl\/|wget|python-requests|node-fetch|axios\/|got\/|PostmanRuntime|playwright|puppeteer|lighthouse/i.test(u)) return "bot";
+  return null;
+}
+
 eventsRouter.get("/summary", (req, res) => {
   const required = process.env.ADMIN_TOKEN?.trim();
   if (required) {
@@ -491,12 +526,19 @@ eventsRouter.get("/summary", (req, res) => {
   // видно, что именно хотели купить.
   const byProduct = Object.create(null) as Record<string, number>;
   const sids = new Set<string>();
+  const автоматика = Object.create(null) as Record<string, number>;
+  let безUa = 0;
   let total = 0;
 
   for (const line of tail) {
     try {
       const ev = JSON.parse(line) as AnalyticsEvent;
       if (ev.ts && new Date(ev.ts).getTime() < sinceMs) continue;
+      // Автоматику считаем ОТДЕЛЬНО и в воронку не пускаем — см. видОтправителя().
+      const ua = (ev as { ua?: string }).ua;
+      const вид = видОтправителя(ua);
+      if (вид) { автоматика[вид] = (автоматика[вид] ?? 0) + 1; continue; }
+      if (!String(ua ?? "").trim()) безUa += 1;
       total += 1;
       byType[ev.type] = (byType[ev.type] ?? 0) + 1;
       if (ev.source) bySource[ev.source] = (bySource[ev.source] ?? 0) + 1;
@@ -541,6 +583,12 @@ eventsRouter.get("/summary", (req, res) => {
     windowHours: sinceHours,
     // Обрезано ли окно журналом: если да, «за 30 дней» отвечено НЕ за 30 дней.
     truncated: обрезано,
+    // Что ИМЕННО посчитано: все числа выше — про людей. Автоматику не
+    // выбрасываем молча, а называем: молчаливый пропуск неотличим от нуля.
+    countsExclude: "automated",
+    automatedEvents: Object.values(автоматика).reduce((a, b) => a + b, 0),
+    automatedByKind: автоматика,
+    withoutUa: безUa,
     consideredEvents: tail.length,
     totalEvents: lines.length,
   });
@@ -590,6 +638,7 @@ eventsRouter.get("/aggregate", (req, res) => {
     return period === "hour" ? iso.slice(0, 13) + ":00:00Z" : iso.slice(0, 10) + "T00:00:00Z";
   }
 
+  let автоматика = 0;
   const buckets = new Map<string, { total: number; counts: Record<string, number> }>();
   const lines = content.split("\n").filter((l) => l.trim().length > 0);
 
@@ -601,6 +650,11 @@ eventsRouter.get("/aggregate", (req, res) => {
       continue;
     }
     if (!ev.ts || new Date(ev.ts).getTime() < sinceMs) continue;
+    // Та же причина, что и в /summary: 91 % событий прода 20.09.2026 прислала
+    // наша же автоматика. Срез по вариантам A/B, посчитанный по ней, сравнивает
+    // не тексты на экране, а поведение зондов — и выбранный «победитель» был бы
+    // выбран монеткой. Число отброшенных названо полем `automatedEvents`.
+    if (видОтправителя((ev as { ua?: string }).ua)) { автоматика += 1; continue; }
     const key = bucketKey(ev.ts);
     let b = buckets.get(key);
     if (!b) {
@@ -617,7 +671,7 @@ eventsRouter.get("/aggregate", (req, res) => {
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([bucket, v]) => ({ bucket, total: v.total, counts: v.counts }));
 
-  res.json({ period, groupBy, windowHours: sinceHours, buckets: sorted });
+  res.json({ period, groupBy, windowHours: sinceHours, buckets: sorted, countsExclude: "automated", automatedEvents: автоматика });
 });
 
 /**

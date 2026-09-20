@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { языки } from "@/lib/hreflang";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { BuyLink } from "@/components/BuyLink";
@@ -42,7 +43,7 @@ export const metadata: Metadata = {
   // страницей — вес входа воронки размазывается по десяти адресам.
   // Проверено на живом сайте 30.08.2026: canonical не отдавался вовсе
   // (контроль: /pricing свой отдаёт, значит проба различает).
-  alternates: { canonical: "/shop" },
+  alternates: { canonical: "/shop", languages: языки("/shop") },
   // Своя карточка предпросмотра: это страница с кассами, и ссылку на неё
   // пересылают чаще прочих. Оговорку «не медицина» держим и здесь — она
   // должна доезжать до человека вместе со ссылкой, а не только на странице.

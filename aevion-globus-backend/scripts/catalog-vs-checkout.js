@@ -39,9 +39,22 @@ function readCatalog() {
     items.push({ id: m[1], priceUsd: parseFloat(m[2]), billing: m[3] });
   }
   // К каждой позиции — её реальная ссылка оплаты: у Gumroad permalink, у LS uuid варианта.
+  //
+  // 🔴 20.09.2026: ссылки тоже режем ПО ГРАНИЦАМ ПОЗИЦИЙ. Жадный поиск от id
+  // перескакивал через позицию: у `aevion-planet` собственной ссылки оплаты нет
+  // (её href ведёт на нашу же страницу цен), и регулярка приписывала ей href
+  // СЛЕДУЮЩЕГО товара. Дальше карточка проверялась как Gumroad, адрес строился из
+  // id — и ежедневный аудит выдавал вечный FAIL «карточка отдала HTTP 404» на
+  // позиции, которая через Gumroad не продаётся вовсе. Вечно красный сторож
+  // перестают читать; ровно этот дефект чинили сегодня утром в соседней проверке.
+  //
+  // Тот же приём, что уже применён ниже для notice, — и по той же причине.
   const links = {};
-  const lre = /id:\s*"([^"]+)",[\s\S]*?href:\s*(GUM|LS)\("([^"]+)"\)/g;
-  while ((m = lre.exec(src))) links[m[1]] = { processor: m[2] === "GUM" ? "gumroad" : "lemonsqueezy", ref: m[3] };
+  for (const segment of src.split(/id:\s*"/).slice(1)) {
+    const id = segment.slice(0, segment.indexOf('"'));
+    const hm = /href:\s*(GUM|LS)\("([^"]+)"\)/.exec(segment);
+    if (id && hm) links[id] = { processor: hm[1] === "GUM" ? "gumroad" : "lemonsqueezy", ref: hm[2] };
+  }
   // Есть ли у позиции предупреждение (Product.notice) — нужно, чтобы поймать модуль,
   // который на своей странице объявил себя демонстрацией, а на витрине об этом молчит.
   //
@@ -64,7 +77,10 @@ function readCatalog() {
 }
 
 async function checkGumroad(item) {
-  const url = `https://aevion.gumroad.com/l/${item.id}`;
+  // Адрес берём из ref — настоящего permalink, а НЕ из id позиции каталога.
+  // Они совпадают у большинства товаров и расходятся там, где это важно;
+  // «404 от выдуманного адреса» — отдельный класс ложных находок (см. правила).
+  const url = `https://aevion.gumroad.com/l/${item.ref || item.id}`;
   const r = await fetch(url, { headers: { Accept: "text/html" } });
   if (!r.ok) return { status: "FAIL", why: `карточка отдала HTTP ${r.status}` };
   const html = await r.text();
@@ -200,7 +216,10 @@ async function checkDemoDisclosure(item) {
   for (const item of catalog) {
     if (!item.ref) {
       skip++;
-      console.log(`SKIP  ${item.id.padEnd(10)} ссылку оплаты в каталоге разобрать не удалось`);
+      // Отличаем «у позиции НЕТ внешней кассы» от «прибор не смог разобрать».
+      // У aevion-planet href ведёт на нашу же страницу сроков (PRICING_TERMS):
+      // товара в магазине у неё нет по замыслу, и это не повод краснеть.
+      console.log(`SKIP  ${item.id.padEnd(10)} внешней ссылки оплаты у позиции нет (продаётся лестницей сроков)`);
       continue;
     }
     let res;

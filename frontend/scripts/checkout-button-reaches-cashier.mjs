@@ -107,7 +107,18 @@ async function probe(page, url, label, section, want) {
    * магазине без DevHub. Причина расхождения на 20.09 НЕ установлена —
    * ограничитель темпа исключён (30/мин по адресу, столько не было).
    */
-  const PRODUCT_CART = /lemonsqueezy\.com\/(checkout\/(cart|buy)\/|buy\/)/i;
+  /*
+   * ⚠️ Поправка 20.09.2026, вечер: сюда обязан входить `/checkout/custom/`.
+   *
+   * Без него проба называла «общей страницей магазина» ПЕРСОНАЛЬНУЮ кассу
+   * товара и роняла прогон зря. Проверено прямым опросом ручки
+   * POST /api/pricing/checkout/session по каждому из пяти приложений: все
+   * отвечают 200 и дают СВОЙ подписанный адрес вида
+   * `…/checkout/custom/<uuid>?signature=…` — шесть запросов, шесть разных
+   * адресов. Отрицательный контроль: выдуманное приложение получает 400
+   * `invalid_app`, то есть ручка проверяет вход, а не выдаёт что попало.
+   */
+  const PRODUCT_CART = /lemonsqueezy\.com\/(checkout\/(cart|buy|custom)\/|buy\/)/i;
 
   out.landed = cashier || page.url();
   if (cashier && PRODUCT_CART.test(cashier)) out.verdict = "ДОШЛА ДО КАССЫ";

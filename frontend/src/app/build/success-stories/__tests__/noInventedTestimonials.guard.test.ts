@@ -42,3 +42,21 @@ describe("на витрине успеха нет выдуманных отзы�
     expect(/Реальные люди/i.test(строка), "обещание вернулось").toBe(false);
   });
 });
+
+describe("на страницах цен нет выдуманных отзывов клиентов", () => {
+  // Тот же класс, найденный свипом 20.09: страница миграций показывала цитаты с
+  // названиями компаний и числами против DocuSign/OpenAI/Stripe/Patently.
+  const МИГРАЦИИ = join(КОРЕНЬ, "lib/pricingI18n/sections/migrations.ts");
+
+  it("КОНТРОЛЬ прибора: файл миграций читается и строки в нём есть", () => {
+    const s = readFileSync(МИГРАЦИИ, "utf8");
+    expect(s.includes("migrations."), "смотрю не тот файл").toBe(true);
+  });
+
+  it("цитат и их авторов в словаре миграций нет", () => {
+    const s = readFileSync(МИГРАЦИИ, "utf8");
+    const найдено = [".quote\"", ".quoteBy\"", "Almaty Law Group", "KazFin Holding", "NeoLaw Patent Group"]
+      .filter((k) => s.includes(k));
+    expect(найдено, "вернулись выдуманные отзывы на странице миграций").toEqual([]);
+  });
+});

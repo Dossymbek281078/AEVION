@@ -1129,8 +1129,13 @@ export default function CyberChessPage(){
   useIsoLayoutEffect(()=>{const up=()=>{sVwPx(window.innerWidth);sVhPx(window.innerHeight)};up();window.addEventListener("resize",up);return()=>window.removeEventListener("resize",up);},[]);
   // Тосты общего провайдера — над BottomNav на телефоне (тестер 20.09.2026, 390px: тост
   // «Мат в 2 · Лёгкая · Эндшпиль · 849 ×» лежал на иконках нава даже внизу прокрутки).
-  useEffect(()=>{try{document.documentElement.style.setProperty("--aevion-toast-lift",vwPx<769?"64px":"0px")}catch{}
-    return()=>{try{document.documentElement.style.removeProperty("--aevion-toast-lift")}catch{}}},[vwPx]);
+  // На телефоне тосты СВЕРХУ (под шапкой): любой низ занят рядом кнопок партии и BottomNav —
+  // тестер 20.09.2026 (390) видел тост «Эндшпиль · Лёгкая…» на «Перевернуть · Новая партия».
+  useEffect(()=>{const r=document.documentElement.style;try{
+      if(vwPx<769){r.setProperty("--aevion-toast-top","64px");r.setProperty("--aevion-toast-bottom","auto");r.setProperty("--aevion-toast-lift","0px");}
+      else{r.removeProperty("--aevion-toast-top");r.removeProperty("--aevion-toast-bottom");r.setProperty("--aevion-toast-lift","0px");}
+    }catch{}
+    return()=>{try{for(const k of ["--aevion-toast-top","--aevion-toast-bottom","--aevion-toast-lift"])r.removeProperty(k)}catch{}}},[vwPx]);
   // Layout-fill (исправлено 2026-06-14): доска квадратная, узкое место — ВЫСОТА.
   // Большой запас по высоте (vhPx-280: header+часы+координаты+нижние контролы+браузерные
   // баннеры) чтобы доска НИКОГДА не вылезала за окно и не обрезалась снизу. По ширине
@@ -1222,6 +1227,11 @@ export default function CyberChessPage(){
   const[useCustom,sUseCustom]=useState(false);
   const[showCustom,sShowCustom]=useState(false);
   const[on,sOn]=useState(false);
+  // «Сдаться»/«Ничья» без системного confirm(): первый тап взводит кнопку (подпись меняется на
+  // вопрос), второй тап в течение 4 с выполняет. Системное окно браузера — чужой интерфейс
+  // поверх партии, на телефоне блокирует экран; у chess.com/lichess подтверждение встроенное (20.09.2026).
+  const[armed,sArmed]=useState<"resign"|"draw"|null>(null);
+  useEffect(()=>{if(!armed)return;const t=setTimeout(()=>sArmed(null),4000);return()=>clearTimeout(t)},[armed]);
   const[setup,sSetup]=useState(true);
   // Board editor state (Coach tab)
   const[editorMode,sEditorMode]=useState(false);
@@ -5326,7 +5336,8 @@ export default function CyberChessPage(){
     else if(pzMode==="custom")startClock(pzCustomSec);
     else if(pzMode==="rush"){/* keep running deadline */}
     else startClock(0);
-    showToast(`${pz.name} · ${temaZadachiRu(pz.theme)} · ${pz.r}`,"info");
+    // имя банковской задачи часто = её тема → «Эндшпиль · Эндшпиль»; дубль не печатаем (тестер 20.09.2026)
+    showToast([pz.name,temaZadachiRu(pz.theme)].filter((v,i,a)=>v&&a.indexOf(v)===i).concat(String(pz.r)).join(" · "),"info");
     // reset per-puzzle stopwatch
     if(pzTimerIntervalRef.current)clearInterval(pzTimerIntervalRef.current);
     pzTimerRef.current=Date.now();sPzTimer(0);paintPzTimer(0);
@@ -7483,8 +7494,10 @@ export default function CyberChessPage(){
           В партии с ЧЕЛОВЕКОМ (P2P/hotseat) движковые «уходы» (Анализ/Коуч/Пазлы/Ещё)
           скрыты — иначе игрок подсматривал бы оценку движка против живого соперника.
           Остаются только неигровые оверлеи (Стрим/Видео), которые не уводят с доски. */}
+      {/* Телефон: чипов больше, чем ширины (390: «…Стри» обрезался, «Видео»/«Ещё» недостижимы —
+          тестер 20.09.2026). Ряд прокручивается по горизонтали, полоса прокрутки скрыта. */}
       {!streamerMode&&!setup&&on&&tab==="play"&&(
-        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"nowrap"}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"nowrap",overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none",paddingBottom:2}}>
           {([
             ...(isHumanGame?[]:[
               {icon:TAB_META.analysis.icon,label:TAB_META.analysis.label,hint:"Анализ позиции",accent:TAB_META.analysis.hue, act:()=>sTab("analysis")},
@@ -8260,8 +8273,10 @@ export default function CyberChessPage(){
               />
             </div>
           </div>
-          <div style={{display:"flex",alignItems:"center",paddingLeft:23,width:bw,gap:4}}>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div>
+          {/* Телефон: палитра тем и масштаб уходят на вторую строку, а буквы a–h занимают всю ширину
+              доски — иначе на 390 сетка букв сжималась до ~70px и «ABCDEFGH» слипалось слева (тестер 20.09.2026). */}
+          <div style={{display:"flex",alignItems:"center",paddingLeft:23,width:bw,gap:4,flexWrap:vwPx<769?"wrap":"nowrap"}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:vwPx<769?"1 1 100%":1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div>
             <div style={{display:"flex",gap:3,flexShrink:0,alignItems:"center"}}>
               {BOARD_THEMES.slice(0,8).map((th,i)=><button key={i} title={`Тема: ${th.name}`} aria-label={`Тема доски: ${th.name}`} aria-pressed={boardTheme===i} onClick={()=>sBoardTheme(i)} style={{width:22,height:22,borderRadius:"50%",border:boardTheme===i?`2px solid ${CC.text}`:`2px solid ${CC.border}`,background:th.dark,cursor:"pointer",padding:0,flexShrink:0,outline:"none",transition:"transform 120ms",transform:boardTheme===i?"scale(1.18)":"scale(1)"}}/>)}
               <div style={{width:1,height:12,background:CC.border,margin:"0 2px"}}/>
@@ -8540,9 +8555,11 @@ export default function CyberChessPage(){
             {/* Premove Undo / Clear — moved to the top strip above the board (premoves row).
                 Removed from this bottom controls row to avoid duplication. */}
           </div>
-          {on&&!over&&!setup&&<div style={{display:"flex",gap:8,marginTop:SPACE[2],flexWrap:"wrap"}}>
-            <Btn size="md" variant="danger" className="cc-game-btn" onClick={()=>{if(!confirm("Сдаться?"))return;if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{const nr=новыйРейтинг(rat,lv.elo,false);sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>🏳 Сдаться</Btn>
-            <Btn size="md" variant="gold" className="cc-game-btn" onClick={()=>{if(!confirm("Предложить ничью?"))return;if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("ИИ отклонил ничью","error")}}>½ Ничья</Btn>
+          {/* Ряд «Сдаться · Ничья · Отменить · Подсказка» — только на вкладке партии: на Задачах/Коуче/Анализе
+              при паузе партии он сбивал с толку (тестер 20.09.2026, 390: «Сдаться» под доской задачи). */}
+          {on&&!over&&!setup&&tab==="play"&&<div style={{display:"flex",gap:8,marginTop:SPACE[2],flexWrap:"wrap"}}>
+            <Btn size="md" variant="danger" className="cc-game-btn" onClick={()=>{if(armed!=="resign"){sArmed("resign");return;}sArmed(null);if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{const nr=новыйРейтинг(rat,lv.elo,false);sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>{armed==="resign"?"Точно сдаться? ✓":"🏳 Сдаться"}</Btn>
+            <Btn size="md" variant="gold" className="cc-game-btn" onClick={()=>{if(armed!=="draw"){sArmed("draw");return;}sArmed(null);if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("ИИ отклонил ничью","error")}}>{armed==="draw"?"Предложить ничью? ✓":"½ Ничья"}</Btn>
             <Btn size="md" variant="secondary" className="cc-game-btn" icon={<Icon.Undo width={14} height={14}/>} onClick={()=>{
               if(hist.length<2){showToast("Ходов нет","error");return}
               if(think){showToast("ИИ думает — подожди","error");return}
@@ -12192,7 +12209,7 @@ ${question.trim()}`;
                     UI paths without shipping a public self-unlock button. Previously rendered
                     unconditionally for any visitor, letting anyone grant themselves Ultimate for
                     free via a single confirm() dialog — closed as a launch-readiness fix. */}
-                {!owned&&t.id!=="free"&&typeof window!=="undefined"&&window.localStorage.getItem("aevion_debug")==="1"&&<button onClick={()=>{
+                {!owned&&t.id!=="free"&&process.env.NODE_ENV!=="production"&&typeof window!=="undefined"&&window.localStorage.getItem("aevion_debug")==="1"&&<button onClick={()=>{
                   if(!confirm(`🧪 Тест-активация ${t.name} (без реальной оплаты)?\n\nВсе premium-фичи разблокируются. Можно отключить через localStorage clear.`))return;
                   sChessy(c=>({...c,owned:{...c.owned,[t.id]:true}}));
                   showToast(`✨ ${t.name} активирован (тест-режим)`,"success");
@@ -12463,7 +12480,8 @@ ${question.trim()}`;
         «Играть» и на нижнюю навигацию — то есть первый экран новичка вёл не
         к игре, а к предложению включить чужой стрим. Про перекрытие доски
         здесь уже думали (условие !on ниже), про мобильный первый экран — нет. */}
-    {showPipSuggest&&!on&&!anyOnboardingModal&&vwPx>=900&&<div
+    {/* !setup: на лаунчпаде подсказка стрима накрывала плитку «Онлайн-матч» и блок писем (скрин 1920, 20.09.2026) */}
+    {showPipSuggest&&!on&&!setup&&!anyOnboardingModal&&vwPx>=900&&<div
       role="alert"
       style={{
         position:"fixed",right:"calc(20px + var(--aevion-projects-w, 0px))",bottom:POLOSA_VSPLYVASHEK,zIndex:7900,

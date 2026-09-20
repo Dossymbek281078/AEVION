@@ -30,7 +30,7 @@ export interface PdfSegments {
   page?: number;
   pageSegmentCounts?: number[];
   /** `layer` — имя слоя PDF, если линия лежала внутри метки /OC … BDC. */
-  segments: Array<{ x1: number; y1: number; x2: number; y2: number; layer?: string }>;
+  segments: Array<{ x1: number; y1: number; x2: number; y2: number; layer?: string; /** контур заливки (f/B), не линия */ fill?: true; /** номер пути в потоке */ path?: number; /** толщина стены, м — когда фигура уже узнана как стена */ thicknessM?: number }>;
   warnings: string[];
   /** габарит в пунктах PDF — нужен, чтобы предложить масштаб */
   extentPt: number;
@@ -225,7 +225,7 @@ async function extractStreams(bytes: Uint8Array): Promise<{ texts: string[]; ids
 
 /** Разбирает операторы рисования в отрезки. */
 /** Линия, как она вышла из потока: с меткой слоя, если лежала внутри /OC … BDC. */
-interface СырыйОтрезок { x1: number; y1: number; x2: number; y2: number; oc?: string }
+interface СырыйОтрезок { x1: number; y1: number; x2: number; y2: number; oc?: string; /** путь закрашен (f/B): контур заливки, а не линия */ fill?: true; /** номер пути (m … S/f): отрезки одного пути — одна фигура */ path?: number }
 
 /**
  * Первый проход по потоку содержимого: отрезки и метка слоя у каждого.
@@ -253,7 +253,7 @@ function segmentsFromContent(content: string): СырыйОтрезок[] {
   };
   const add = (x1: number, y1: number, x2: number, y2: number): void => {
     const oc = слой();
-    segs.push(oc !== undefined ? { x1, y1, x2, y2, oc } : { x1, y1, x2, y2 });
+    segs.push(oc !== undefined ? { x1, y1, x2, y2, oc, path: номерПути } : { x1, y1, x2, y2, path: номерПути });
   };
   // Матрица преобразования (cm) и её стек (q/Q). Без неё координаты — это числа
   // из потока, а не точки листа: AutoCAD кладёт весь план под «0.12 0 0 0.12 … cm»
@@ -267,7 +267,12 @@ function segmentsFromContent(content: string): СырыйОтрезок[] {
   const точка = (x: number, y: number): [number, number] =>
     [ctm[0] * x + ctm[2] * y + ctm[4], ctm[1] * x + ctm[3] * y + ctm[5]];
   let curX = 0, curY = 0, startX = 0, startY = 0, has = false;
-  const re = /(\/[^\s\/\[\]<>(){}%]+)|(-?\d+(?:\.\d+)?)|([A-Za-z']+)/g;
+  // Начало текущего пути в списке отрезков: оператор закраски (f, B…) помечает все
+  // отрезки пути как контур ЗАЛИВКИ. В альбомах дизайн-проектов стены — закрашенные
+  // многоугольники (B: заливка + обводка), а размерные цепочки и штриховка — S.
+  let началоПути = 0, номерПути = 0;
+  const закрасить = (): void => { for (let k = началоПути; k < segs.length; k++) segs[k].fill = true; };
+  const re = /(\/[^\s\/\[\]<>(){}%]+)|(-?\d+(?:\.\d+)?)|([A-Za-z'*]+)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(content)) !== null) {
     if (m[1] !== undefined) {
@@ -300,6 +305,7 @@ function segmentsFromContent(content: string): СырыйОтрезок[] {
       // новая = M × текущая (порядок PDF: сначала матрица из cm, потом прежняя)
       ctm = [a * A + b * C, a * B + b * D, c * A + d * C, c * B + d * D, e * A + f * C + E, e * B + f * D + F];
     } else if (op === "m" && nums.length >= 2) {
+      if (!has) { началоПути = segs.length; номерПути++; }
       [curX, curY] = точка(nums[nums.length - 2], nums[nums.length - 1]);
       startX = curX; startY = curY; has = true;
     } else if (op === "l" && nums.length >= 2 && has) {
@@ -307,6 +313,7 @@ function segmentsFromContent(content: string): СырыйОтрезок[] {
       add(curX, curY, x, y);
       curX = x; curY = y;
     } else if (op === "re" && nums.length >= 4) {
+      if (!has) { началоПути = segs.length; номерПути++; }
       const x = nums[nums.length - 4], y = nums[nums.length - 3];
       const w = nums[nums.length - 2], h = nums[nums.length - 1];
       // углы по отдельности: под повёрнутой матрицей прямоугольник остаётся
@@ -322,6 +329,10 @@ function segmentsFromContent(content: string): СырыйОтрезок[] {
       curX = startX; curY = startY;
     } else if (op === "c" || op === "v" || op === "y") {
       if (nums.length >= 2) [curX, curY] = точка(nums[nums.length - 2], nums[nums.length - 1]);
+    } else if (op === "f" || op === "F" || op === "f*" || op === "B" || op === "B*" || op === "b" || op === "b*") {
+      закрасить(); has = false;
+    } else if (op === "S" || op === "s" || op === "n") {
+      has = false;
     }
     nums.length = 0;
     names.length = 0;
@@ -469,9 +480,10 @@ export async function readPdfSegments(bytes: Uint8Array, opts: ReadPdfOptions = 
   const слои = слоиИзФайла([весьФайл, ...texts]);
   const названные = segments.map((s0) => {
     const имя = s0.oc !== undefined ? слои.get(s0.oc) : undefined;
-    return имя !== undefined
-      ? { x1: s0.x1, y1: s0.y1, x2: s0.x2, y2: s0.y2, layer: имя }
-      : { x1: s0.x1, y1: s0.y1, x2: s0.x2, y2: s0.y2 };
+    const база: PdfSegments["segments"][number] = { x1: s0.x1, y1: s0.y1, x2: s0.x2, y2: s0.y2 };
+    if (s0.fill) база.fill = true;
+    if (s0.path !== undefined) база.path = s0.path;
+    return имя !== undefined ? { ...база, layer: имя } : база;
   });
   const сИменем = названные.filter((s0) => s0.layer !== undefined);
   const стеновые = сИменем.filter((s0) => isWallLayer(s0.layer as string));
@@ -598,6 +610,8 @@ export function planFromPdfSegments(
   источникМасштаба: "человек" | "размеры" = "человек",
   /** прямоугольник плана на листе (пт): линии вне него — рамка, легенда, таблицы */
   область?: { x0: number; y0: number; x1: number; y1: number } | null,
+  /** центры размерных чисел (пт): линия, вдоль которой они стоят, — размерная цепочка, не стена */
+  размерныеЧисла?: Array<{ x: number; y: number }> | null,
 ): PdfResult {
   const warnings = [...src.warnings];
   // Только для PDF БЕЗ слоя стен: со слоем стены точные и лишнего нет, а размерные
@@ -635,6 +649,55 @@ export function planFromPdfSegments(
 
   let list = src.segments;
   let truncated = 0;
+  // PDF без слоёв — альбом дизайн-проекта (ArchiCAD и т. п.). Замер 20.09 на листе
+  // «обмерный план»: несущие стены — закрашенные многоугольники (B), перегородки —
+  // узкие ЗАМКНУТЫЕ прямоугольники обводкой (путь из четырёх отрезков), а размерные
+  // цепочки, штриховка и выноски — незамкнутые линии (S). Узнаём фигуры по номеру
+  // пути: узкий прямоугольник → одна стена по длинной оси с толщиной по короткой;
+  // крупная заливка → её контур (дальше сведётся парами); остальное — не стены.
+  if ((src.wallLayers?.length ?? 0) === 0 && list.some((s) => s.path !== undefined)) {
+    const mpp = metersPerPt;
+    const поПути = new Map<number, PdfSegments["segments"]>();
+    for (const s of list) if (s.path !== undefined) { const g = поПути.get(s.path); if (g) g.push(s); else поПути.set(s.path, [s]); }
+    const стеныФигур: PdfSegments["segments"] = [];
+    let прямоугольников = 0, заливок = 0;
+    for (const g of поПути.values()) {
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const s of g) { x0 = Math.min(x0, s.x1, s.x2); y0 = Math.min(y0, s.y1, s.y2); x1 = Math.max(x1, s.x1, s.x2); y1 = Math.max(y1, s.y1, s.y2); }
+      const w = (x1 - x0) * mpp, h = (y1 - y0) * mpp, короткая = Math.min(w, h), длинная = Math.max(w, h);
+      const осевые = g.every((s) => Math.abs(s.x1 - s.x2) < 1e-6 || Math.abs(s.y1 - s.y2) < 1e-6);
+      const прямоугольник = (g.length === 4 || g.length === 5) && осевые && короткая >= 0.04 && короткая <= 0.6 && длинная >= 1.5 * короткая;
+      if (прямоугольник) {
+        прямоугольников++;
+        const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+        стеныФигур.push(w >= h ? { x1: x0, y1: cy, x2: x1, y2: cy, thicknessM: короткая } : { x1: cx, y1: y0, x2: cx, y2: y1, thicknessM: короткая });
+      } else if (g[0].fill && длинная >= 0.3) {
+        заливок++;
+        стеныФигур.push(...g);
+      }
+    }
+    // порог 30: на листе с 11 прямоугольниками правило оставляло 169 линий и 0 комнат (перегородки там — отдельные линии)
+    if (прямоугольников >= 30) {
+      warnings.push(`Стены узнаны по фигурам чертежа: ${прямоугольников} перегородок-прямоугольников и ${заливок} закрашенных контуров; ${list.length - стеныФигур.length} линий без фигуры (размеры, штриховка, выноски) — не стены.`);
+      list = стеныФигур;
+    }
+  }
+  // Размерные цепочки в PDF без слоёв: осевая линия, у которой в пределах 0.25 м по
+  // перпендикуляру и внутри её длины стоит размерное число, — размерная, не стена
+  // (замер 20.09: на листе «обмерный план» цепочки резали план на клетки по 1–2 м²).
+  if ((src.wallLayers?.length ?? 0) === 0 && размерныеЧисла && размерныеЧисла.length >= 6) {
+    const допуск = 0.25 / metersPerPt;
+    const размерная = (s: PdfSegments["segments"][number]): boolean => {
+      const h = Math.abs(s.y1 - s.y2) < 1e-6, v = Math.abs(s.x1 - s.x2) < 1e-6;
+      if (!h && !v) return false;
+      const lo = h ? Math.min(s.x1, s.x2) : Math.min(s.y1, s.y2), hi = h ? Math.max(s.x1, s.x2) : Math.max(s.y1, s.y2);
+      const c = h ? s.y1 : s.x1;
+      return размерныеЧисла.some((w) => (h ? Math.abs(w.y - c) : Math.abs(w.x - c)) <= допуск && (h ? w.x : w.y) >= lo - допуск && (h ? w.x : w.y) <= hi + допуск);
+    };
+    const до = list.length;
+    list = list.filter((s) => !размерная(s));
+    if (list.length < до) warnings.push(`Размерные цепочки (${до - list.length} линий с числами вдоль них) — не стены, в модель не взяты.`);
+  }
   // После отбора по слою короткие линии — настоящие грани стен, резать их нельзя.
   const поСлою = (src.wallLayers?.length ?? 0) > 0;
   // PDF без слоёв (замер 20.09 на обмерном плане Belmont, 56 тыс. линий): рамка листа
@@ -682,7 +745,7 @@ export function planFromPdfSegments(
       y1: (s.y1 - minY) * metersPerPt,
       x2: (s.x2 - minX) * metersPerPt,
       y2: (s.y2 - minY) * metersPerPt,
-      thickness: 0.15,
+      thickness: s.thicknessM ?? 0.15,
       height: WALL_HEIGHT,
     };
     if (Math.hypot(w.x2 - w.x1, w.y2 - w.y1) < 0.05) continue;

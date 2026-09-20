@@ -89,6 +89,19 @@ describe("PDF без слоёв: размерные цепочки и фигур
     // контроль: без размерных чисел правило молчит — штрихи остаются
     expect(planFromPdfSegments(src, 8).plan!.walls.length).toBe(13);
   });
+  it("выносные линии размеров (короткие, упёртые в цепочку) — не стены; план получает looseWalls", async () => {
+    // коробка, размерная линия y=40 с числами и две выносные линии от неё вверх по 30 пт (0.24 м)
+    const src = await readPdfSegments(makePdf("100 100 400 300 re S 100 40 m 500 40 l S 100 40 m 100 70 l S 500 40 m 500 70 l S"));
+    const числа = [150, 250, 350, 450, 200, 300].map((x) => ({ x, y: 44 }));
+    const r = planFromPdfSegments(src, 8, "размеры", null, числа);
+    expect(r.warnings.join(" ")).toMatch(/Выносные линии размеров \(2\)/);
+    expect(r.plan!.walls.length).toBe(4);
+    expect(r.plan!.looseWalls).toBe(true);
+    // контроль: без размерных чисел флага нет и линии остаются
+    const без = planFromPdfSegments(src, 8);
+    expect(без.plan!.looseWalls).toBeUndefined();
+    expect(без.plan!.walls.length).toBe(7);
+  });
   it("отрезки одного пути несут общий номер, контур заливки помечен fill", async () => {
     const src = await readPdfSegments(makePdf("0 0 m 100 0 l 100 50 l h B 200 0 m 300 0 l S"));
     const пути = new Set(src.segments.map((s) => s.path));

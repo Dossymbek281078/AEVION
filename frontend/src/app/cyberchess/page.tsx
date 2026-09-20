@@ -1129,8 +1129,13 @@ export default function CyberChessPage(){
   useIsoLayoutEffect(()=>{const up=()=>{sVwPx(window.innerWidth);sVhPx(window.innerHeight)};up();window.addEventListener("resize",up);return()=>window.removeEventListener("resize",up);},[]);
   // Тосты общего провайдера — над BottomNav на телефоне (тестер 20.09.2026, 390px: тост
   // «Мат в 2 · Лёгкая · Эндшпиль · 849 ×» лежал на иконках нава даже внизу прокрутки).
-  useEffect(()=>{try{document.documentElement.style.setProperty("--aevion-toast-lift",vwPx<769?"64px":"0px")}catch{}
-    return()=>{try{document.documentElement.style.removeProperty("--aevion-toast-lift")}catch{}}},[vwPx]);
+  // На телефоне тосты СВЕРХУ (под шапкой): любой низ занят рядом кнопок партии и BottomNav —
+  // тестер 20.09.2026 (390) видел тост «Эндшпиль · Лёгкая…» на «Перевернуть · Новая партия».
+  useEffect(()=>{const r=document.documentElement.style;try{
+      if(vwPx<769){r.setProperty("--aevion-toast-top","64px");r.setProperty("--aevion-toast-bottom","auto");r.setProperty("--aevion-toast-lift","0px");}
+      else{r.removeProperty("--aevion-toast-top");r.removeProperty("--aevion-toast-bottom");r.setProperty("--aevion-toast-lift","0px");}
+    }catch{}
+    return()=>{try{for(const k of ["--aevion-toast-top","--aevion-toast-bottom","--aevion-toast-lift"])r.removeProperty(k)}catch{}}},[vwPx]);
   // Layout-fill (исправлено 2026-06-14): доска квадратная, узкое место — ВЫСОТА.
   // Большой запас по высоте (vhPx-280: header+часы+координаты+нижние контролы+браузерные
   // баннеры) чтобы доска НИКОГДА не вылезала за окно и не обрезалась снизу. По ширине
@@ -7483,8 +7488,10 @@ export default function CyberChessPage(){
           В партии с ЧЕЛОВЕКОМ (P2P/hotseat) движковые «уходы» (Анализ/Коуч/Пазлы/Ещё)
           скрыты — иначе игрок подсматривал бы оценку движка против живого соперника.
           Остаются только неигровые оверлеи (Стрим/Видео), которые не уводят с доски. */}
+      {/* Телефон: чипов больше, чем ширины (390: «…Стри» обрезался, «Видео»/«Ещё» недостижимы —
+          тестер 20.09.2026). Ряд прокручивается по горизонтали, полоса прокрутки скрыта. */}
       {!streamerMode&&!setup&&on&&tab==="play"&&(
-        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"nowrap"}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"nowrap",overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none",paddingBottom:2}}>
           {([
             ...(isHumanGame?[]:[
               {icon:TAB_META.analysis.icon,label:TAB_META.analysis.label,hint:"Анализ позиции",accent:TAB_META.analysis.hue, act:()=>sTab("analysis")},

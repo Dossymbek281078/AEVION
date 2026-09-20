@@ -51,5 +51,7 @@ describe("«Вернуться к партии» — только в поток�
     expect(src).toContain('padding:vwPx<769?"10px 100px 10px 12px":"10px 12px"');
     expect(src).toContain('clip:"rect(0 0 0 0)"');
     expect(src).toContain('{vwPx>=769&&<Btn variant={muted?"danger":"secondary"}');
+    // ряд чипов режимов на телефоне прокручивается, а не обрезается
+    expect(src).toContain('gap:6,marginBottom:6,flexWrap:"nowrap",overflowX:"auto"');
   });
 });

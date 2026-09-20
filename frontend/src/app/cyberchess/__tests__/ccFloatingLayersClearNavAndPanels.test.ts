@@ -15,16 +15,16 @@ const page = readFileSync(join(__dirname, "..", "page.tsx"), "utf8");
 const card = readFileSync(join(__dirname, "..", "OpeningFlashCard.tsx"), "utf8");
 const toast = readFileSync(join(__dirname, "..", "..", "..", "components", "ToastProvider.tsx"), "utf8");
 
-describe("тосты на телефоне — над BottomNav", () => {
-  it("общий провайдер: bottom учитывает --aevion-toast-lift (по умолчанию 0)", () => {
-    expect(toast).toContain('bottom: "calc(16px + var(--aevion-toast-lift, 0px))"');
+describe("тосты на телефоне — сверху под шапкой, не на кнопках и не на наве", () => {
+  it("общий провайдер: top/bottom управляются переменными, умолчание прежнее (справа внизу)", () => {
+    expect(toast).toContain('top: "var(--aevion-toast-top, auto)"');
+    expect(toast).toContain('bottom: "var(--aevion-toast-bottom, calc(16px + var(--aevion-toast-lift, 0px)))"');
     expect(toast).not.toMatch(/right: 16,\n\s*bottom: 16,/);
   });
-  it("страница шахмат задаёт подъём ≥ 56px на <769 и снимает при размонтировании", () => {
-    const m = page.match(/setProperty\("--aevion-toast-lift",vwPx<769\?"(\d+)px":"0px"\)/);
-    expect(m, "подъём тостов не задан").toBeTruthy();
-    expect(Number(m![1])).toBeGreaterThanOrEqual(56);
-    expect(page).toContain('removeProperty("--aevion-toast-lift")');
+  it("страница шахмат на <769 ставит top и bottom:auto, на десктопе снимает, при размонтировании чистит", () => {
+    expect(page).toContain('if(vwPx<769){r.setProperty("--aevion-toast-top","64px");r.setProperty("--aevion-toast-bottom","auto")');
+    expect(page).toContain('else{r.removeProperty("--aevion-toast-top");r.removeProperty("--aevion-toast-bottom")');
+    expect(page).toContain('for(const k of ["--aevion-toast-top","--aevion-toast-bottom","--aevion-toast-lift"])r.removeProperty(k)');
   });
 });
 

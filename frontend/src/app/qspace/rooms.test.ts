@@ -85,6 +85,8 @@ describe("выделение комнат", () => {
     plan.walls.push({ x1: 4, y1: 0, x2: 4, y2: 4.05, thickness: 0.1, height: 2.7 });
     expect(findRooms({ ...plan, source: "raster" }).rooms.length).toBe(2);
     expect(findRooms({ ...plan, source: "pdf" }).rooms.length).toBe(1);
+    // PDF без слоёв после чистки по размерам помечен looseWalls — правило действует и там
+    expect(findRooms({ ...plan, source: "pdf", looseWalls: true }).rooms.length).toBe(2);
     // открытая зона шире двери (2.5 м) остаётся открытой и на картинке
     const open = boxRoom(8, 5);
     open.walls.push({ x1: 4, y1: 0, x2: 4, y2: 2.45, thickness: 0.1, height: 2.7 });

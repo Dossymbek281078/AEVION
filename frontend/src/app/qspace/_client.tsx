@@ -26,7 +26,7 @@ import { parseDxf } from "./dxf";
 import { estimateCsv, estimatePlan } from "./estimate";
 import { planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
 import { масштабПоРазмерам, надёжностьМасштаба, предупреждениеОбОсях, словаИзТекста } from "./dimensionScale";
-import { текстPdf, текстСтраниц } from "./pdfText";
+import { листПлана, текстPdf, текстСтраниц } from "./pdfText";
 import { назначенияПоПодписям, подписиИзТекста, type Подпись } from "./roomLabels";
 import { appliancesFromLabels, fixturesFromSegments } from "./fixtures";
 import type { Placement } from "./autoPlace";
@@ -1089,9 +1089,9 @@ export default function QSpaceClient() {
     // Страница розеток или потолков тоже несёт стены, но с лишними линиями.
     if (page === undefined && (src.pages ?? 1) > 1) {
       const тексты = await текстСтраниц(bytes);
-      const idx = тексты.findIndex((t, k) => /обмерн|план стен|перегород|планировоч|план помещ|план квартиры|план дома/i.test(t) && (src.pageSegmentCounts?.[k] ?? 0) >= 100);
-      if (idx >= 0 && idx + 1 !== src.page) {
-        src = await readPdfSegments(bytes, { page: idx + 1 });
+      const лист = листПлана(тексты, src.pageSegmentCounts ?? []);
+      if (лист !== null && лист !== src.page) {
+        src = await readPdfSegments(bytes, { page: лист });
         src.warnings = src.warnings.map((w) => (w.startsWith("В файле") ? w.replace(/\(на ней больше всего линий\)/, "(по подписи листа)") : w));
       }
     }

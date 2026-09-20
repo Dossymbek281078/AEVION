@@ -65,7 +65,7 @@ export const STANDALONE_APPS: StandaloneApp[] = [
   { slug: "qright", moduleId: "qright", name: "QRight", baseMonthly: 24 },
   { slug: "qsign", moduleId: "qsign", name: "QSign", baseMonthly: 24 },
   { slug: "startup_exchange", moduleId: "startup-exchange", name: "Startup Exchange", baseMonthly: 40 },
-  { slug: "qskyway", moduleId: "qskyway", name: "QSkyway", baseMonthly: 56 },
+  { slug: "qskyway", moduleId: "qskyway", name: "QSkyway", baseMonthly: 16 },
 ];
 
 /** По slug, id модуля или короткому id витрины ("bureau" → IP Bureau). */

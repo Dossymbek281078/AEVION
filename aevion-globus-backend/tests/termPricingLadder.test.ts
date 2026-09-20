@@ -74,12 +74,12 @@ describe("лестница сроков AEVION", () => {
       qright: 24,
       qsign: 24,
       startup_exchange: 40,
-      qskyway: 56,
+      qskyway: 16,
     });
     expect(TERM_TIERS.map((t) => termPricePerMonth(32, t))).toEqual([32, 28, 24, 20, 16]);
     // Девять приложений вместе — $520/мес против $400 у всей планеты: покупать
     // их по отдельности дороже, и это правильная сторона неравенства.
-    expect(STANDALONE_APPS.reduce((s, a) => s + a.baseMonthly, 0)).toBe(520);
+    expect(STANDALONE_APPS.reduce((s, a) => s + a.baseMonthly, 0)).toBe(480);
     expect(PLANET_BASE_MONTHLY).toBe(400);
   });
 

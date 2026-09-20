@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
-import { planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
+import { MAX_SEGMENTS, planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
 import { isWallLayer } from "./wallLayer";
 
 /**
@@ -110,9 +110,9 @@ describe("readPdfSegments — слой стен", () => {
 describe("planFromPdfSegments после отбора по слою", () => {
   // 600 линий на одной прямой, без перекрытий — ни сведения, ни дублей
   const линии = (): PdfSegments["segments"] =>
-    Array.from({ length: 600 }, (_, i) => ({ x1: i * 200, y1: 0, x2: i * 200 + 100, y2: 0 }));
+    Array.from({ length: MAX_SEGMENTS + 200 }, (_, i) => ({ x1: i * 200, y1: 0, x2: i * 200 + 100, y2: 0 }));
 
-  it("короткие грани стен не режутся потолком в 400 и нет ложного «не видно, что стена»", () => {
+  it("короткие грани стен не режутся потолком MAX_SEGMENTS и нет ложного «не видно, что стена»", () => {
     const src: PdfSegments = { segments: линии(), warnings: [], extentPt: 119_900, wallLayers: ["Стены"] };
     const r = planFromPdfSegments(src, 100);
     expect(r.truncated, "потолок отрезал настоящие стены").toBe(0);

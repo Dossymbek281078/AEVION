@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { языки } from "@/lib/hreflang";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getApiBase } from "@/lib/apiBase";
@@ -57,7 +58,7 @@ export const metadata: Metadata = {
   // страницей — вес входа воронки размазывается по десяти адресам.
   // Проверено на живом сайте 30.08.2026: canonical не отдавался вовсе
   // (контроль: /pricing свой отдаёт, значит проба различает).
-  alternates: { canonical: "/go" },
+  alternates: { canonical: "/go", languages: языки("/go") },
   // Своя карточка предпросмотра. Без неё ссылка, посланная в мессенджер или
   // соцсеть, приходит с общим заголовком сайта — а на эту страницу ведут ВСЕ
   // ролики, то есть именно её и пересылают. Замер 30.08.2026: в долгу по

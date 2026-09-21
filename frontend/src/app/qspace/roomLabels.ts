@@ -199,9 +199,13 @@ export function номераНаПлане(items: ЭлементТекста[], 
   const размеры = все.map((c) => c.size).sort((a, b) => a - b);
   const типичный = размеры.length ? размеры[Math.floor(размеры.length / 2)] : 0;
   for (const row of строкиТекста(items)) {
-    const таблица = row.some((c) => ИМЯ_ПОМЕЩЕНИЯ.test(c.s));
     for (const c of row) {
-      if (!/^\d{1,2}$/.test(c.s) || таблица) continue;
+      if (!/^\d{1,2}$/.test(c.s)) continue;
+      // строка таблицы — имя стоит РЯДОМ справа от номера (в пределах 12 размеров шрифта);
+      // легенда или подпись на той же базовой линии далеко слева/справа номер не отменяет
+      // (design-project: «1» на плане делил линию с текстом легенды и терялся)
+      const таблица = row.some((o) => o !== c && ИМЯ_ПОМЕЩЕНИЯ.test(o.s) && o.x > c.x && o.x - c.x <= 12 * c.size);
+      if (таблица) continue;
       if (!известные.has(Number(c.s))) continue;
       if (типичный > 0 && c.size < 0.8 * типичный) continue; // степень у «м²»
       out.push({ text: c.s, x: c.x + c.size * 0.3, y: c.y + c.size * 0.35 });

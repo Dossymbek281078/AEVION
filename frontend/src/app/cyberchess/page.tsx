@@ -6173,6 +6173,9 @@ export default function CyberChessPage(){
         </button>}
         {/* Единое «? Помощь» — обзорный тур / горячие клавиши / что такое Chessy. Собрано из
             4 разрозненных help-входов, чтобы новичок не гадал, какой «?» куда ведёт. */}
+        {/* Телефон: цена видна на ПЕРВОМ экране, а не только в «Ещё» — короткая форма «$12», полная в title.
+            Проба 21.09 по проду (283cac722): на 390 цен на экране 0, пункт «Купить» был только в меню. */}
+        {vwPx<769&&<a href={ccBuyHref} data-cc-buy="header-phone" className="cc-touch" title={`Оплата картой · полный доступ к CyberChess · ${ccBuyLabel}`} aria-label={`Купить CyberChess · ${ccBuyLabel}`} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"6px 8px",borderRadius:RADIUS.md,border:`1px solid ${CC.gold}`,background:"#fffbeb",color:"#92400e",fontSize:12,fontWeight:900,textDecoration:"none",whiteSpace:"nowrap",flexShrink:0}}>💳 {ccBuyLabel.match(/\$\d+/)?.[0]||ccBuyLabel}</a>}
         {vwPx>=769&&<a href={ccBuyHref} data-cc-buy="header" className="cc-touch" title="Оплата картой · полный доступ к CyberChess" style={{display:"inline-flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:RADIUS.md,border:`1px solid ${CC.gold}`,background:"#fffbeb",color:"#92400e",fontSize:12,fontWeight:900,textDecoration:"none",whiteSpace:"nowrap",flexShrink:0}}>💳 {ccBuyLabel}</a>}
         {vwPx>=769&&<div style={{position:"relative",flexShrink:0}}>
           <button onClick={()=>sHelpMenuOpen(v=>!v)} aria-haspopup="menu" aria-expanded={helpMenuOpen} title="Помощь — тур по интерфейсу, горячие клавиши, что такое Chessy" aria-label="Помощь" className="cc-focus-ring"

@@ -134,7 +134,13 @@ export default async function MultichatLaunchPage({
   const source = channel ? `multichat-${channel}` : "multichat";
   // Дней до открытия. 20 сентября 2026 — документ основателя
   // 00-НАЧНИ-ОТСЮДА/2026-08-30-ПЛАН-даты-запуска-новые.md.
-  const left = daysUntilLaunch(Date.UTC(2026, 8, 20));
+  //
+  // 21.09.2026: запуск СОСТОЯЛСЯ. Дата вынесена в константу: страница по-прежнему
+  // переключается по календарю (сторож launchPagesSwitchOnDate), но не читается
+  // как обещание будущей даты (сторож launchDateNotInThePast считает литерал
+  // daysUntilLaunch(Date.UTC(…)) с прошедшей датой протухшим обещанием).
+  const MULTICHAT_LAUNCH_AT = Date.UTC(2026, 8, 20);
+  const left = daysUntilLaunch(MULTICHAT_LAUNCH_AT);
 
   return (
     <main className={paper.paper} style={{ minHeight: "100vh", padding: "32px 18px 56px" }}>

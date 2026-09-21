@@ -130,6 +130,7 @@ import { qpersonaRouter } from "./routes/qpersona";
 import { qlifeRouter } from "./routes/qlife";
 import { revenueRouter } from "./routes/revenue";
 import { searchRouter } from "./routes/search";
+import { разрешённыеИсточники } from "./lib/corsOrigins";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
 // (qrightRouter already imported above)
@@ -147,10 +148,7 @@ app.set("trust proxy", 1);
 // CORS_ALLOWED_ORIGINS: comma-separated allow-list (e.g. "https://aevion.app,https://aevion.vercel.app").
 // Falls back to permissive (reflect any origin) when unset, matching prior
 // behavior for local dev / environments that haven't configured it yet.
-const corsAllowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || "")
-  .split(",")
-  .map((o) => o.trim())
-  .filter(Boolean);
+const corsAllowedOrigins = разрешённыеИсточники(process.env.CORS_ALLOWED_ORIGINS);
 app.use(
   cors(
     corsAllowedOrigins.length > 0

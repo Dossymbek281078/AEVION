@@ -279,6 +279,10 @@ function healthPayload() {
     // контейнер сам, и «поднялся 10 минут назад» бывает у образа недельной
     // давности. null — честнее выдуманного времени.
     builtAt: BUILD_INFO.builtAt,
+    // Ручка, по которой выкатку видно в панели, когда коммита нет. Появилась
+    // 21.09.2026: прод отвечал commit "unknown", и опознать сборку было нечем —
+    // выкатка встала у всех окон. Коммит она НЕ заменяет (см. buildInfo.ts).
+    deploymentId: BUILD_INFO.deploymentId,
     bootedAt: BOOT_TIME,
     uptimeSec: Math.floor((Date.now() - Date.parse(BOOT_TIME)) / 1000),
     // Аналитика пишется в файл. Если её самое старое событие всегда моложе

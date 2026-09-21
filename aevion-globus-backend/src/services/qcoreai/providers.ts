@@ -497,11 +497,78 @@ export function sanitizeMessages(raw: unknown): ChatMessage[] | null {
   return out.length ? out : null;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   Поставщик, закрытый по лимиту или кредитам, помнится и пропускается
+   ═══════════════════════════════════════════════════════════════════════
+   20.09.2026, день запуска: Anthropic ответил «You have reached your specified
+   API usage limits. You will regain access on 2026-10-01», OpenAI — «no credits
+   remaining». А resolveProvider брал ПЕРВОГО настроенного — Anthropic, — и
+   /api/qcoreai/chat отвечал chat_failed на проде при живом Gemini. «Настроен»
+   не значит «платёжеспособен»: это не сбой сети, повтор через секунду не
+   поможет, и пробовать закрытого поставщика на каждом запросе нельзя. */
+const OUTAGE_DEFAULT_MS = 30 * 60 * 1000;
+const providerOutages = new Map<string, { until: number; reason: string }>();
+
+/** Причина отключения по тексту ошибки поставщика; null — ошибка другого рода. */
+export function providerOutageReason(e: unknown): string | null {
+  const m = e instanceof Error ? e.message : String(e ?? "");
+  const l = m.toLowerCase();
+  const closed =
+    l.includes("usage limit") ||
+    l.includes("no credits") ||
+    l.includes("credit_balance") ||
+    l.includes("insufficient_quota") ||
+    l.includes("insufficient credits") ||
+    l.includes("quota exceeded") ||
+    l.includes("billing") ||
+    /\b402\b/.test(l) ||
+    l.includes("regain access");
+  return closed ? m.slice(0, 200) : null;
+}
+
+/** Срок закрытия: дата из текста поставщика («regain access on 2026-10-01 at 00:00 UTC»), иначе полчаса. */
+function outageUntil(reason: string, now: number): number {
+  const m = /regain access on (\d{4}-\d{2}-\d{2})(?: at (\d{2}:\d{2}))?/i.exec(reason);
+  if (m) {
+    const t = Date.parse(`${m[1]}T${m[2] ?? "00:00"}:00Z`);
+    if (Number.isFinite(t) && t > now) return t;
+  }
+  return now + OUTAGE_DEFAULT_MS;
+}
+
+export function noteProviderOutage(providerId: string, reason: string, now = Date.now()): void {
+  const until = outageUntil(reason, now);
+  providerOutages.set(providerId, { until, reason });
+  console.warn(`[providers] ${providerId} закрыт поставщиком до ${new Date(until).toISOString()}: ${reason.slice(0, 120)}`);
+}
+
+export function isProviderOutOfService(providerId: string, now = Date.now()): boolean {
+  const o = providerOutages.get(providerId);
+  if (!o) return false;
+  if (o.until <= now) { providerOutages.delete(providerId); return false; }
+  return true;
+}
+
+export function listProviderOutages(now = Date.now()): Array<{ id: string; until: string; reason: string }> {
+  return [...providerOutages.entries()]
+    .filter(([, o]) => o.until > now)
+    .map(([id, o]) => ({ id, until: new Date(o.until).toISOString(), reason: o.reason }));
+}
+
+export function __resetProviderOutages(): void { providerOutages.clear(); }
+
 export function resolveProvider(providerId?: string): string {
   if (providerId) {
     const p = getProviders().find((p) => p.id === providerId);
-    if (p?.configured) return p.id;
+    // Явно запрошенный, но закрытый поставщик — берём следующего живого:
+    // человек просил ответ, а не конкретный логотип.
+    if (p?.configured && !isProviderOutOfService(p.id)) return p.id;
   }
+  for (const p of getProviders()) {
+    if (p.configured && !isProviderOutOfService(p.id)) return p.id;
+  }
+  // Все настроенные закрыты — отдаём первого настроенного, чтобы отказ был
+  // честным отказом поставщика, а не заглушкой под видом ответа.
   for (const p of getProviders()) {
     if (p.configured) return p.id;
   }
@@ -521,6 +588,9 @@ export type CallResult = {
   reply: string;
   model: string;
   usage: any;
+  /** Кто ответил, если не тот, кого просили (переход по лимиту/кредитам). */
+  providerUsed?: string;
+  failedOver?: { from: string; tried: string[] };
 };
 
 /**
@@ -747,7 +817,48 @@ async function meterCall(meter: CallMeter | undefined, providerId: string, model
   }
 }
 
+/**
+ * Вызов с переходом к следующему поставщику. Отказ по лимиту/кредитам (и
+ * пустой ответ — бесплатный шлюз 20.09 отдавал «» с кодом 200) закрывает
+ * поставщика в памяти и ведёт к следующему настроенному с ЕГО моделью по
+ * умолчанию. Кто ответил на самом деле — в `providerUsed`, чтобы интерфейс и
+ * учёт не приписывали ответ логотипу, который молчал. Прочие ошибки (сеть,
+ * неверный запрос) наружу как были — их лечит не смена поставщика.
+ */
 export async function callProvider(
+  providerId: string,
+  messages: ChatMessage[],
+  model: string,
+  temperature: number,
+  images?: ChatImage[],
+  maxTokens?: number,
+  meter?: CallMeter
+): Promise<CallResult> {
+  const tried: string[] = [];
+  let current = providerId;
+  let currentModel = model;
+  for (;;) {
+    tried.push(current);
+    try {
+      const res = await callProviderOnce(current, messages, currentModel, temperature, images, maxTokens, meter);
+      if (current !== "stub" && !String(res.reply ?? "").trim()) {
+        throw new Error(`${current} answered with an empty reply`);
+      }
+      return current === providerId ? res : { ...res, providerUsed: current, failedOver: { from: providerId, tried } };
+    } catch (e) {
+      const reason = providerOutageReason(e) ?? ((e instanceof Error ? e.message : "").includes("empty reply") ? "empty reply" : null);
+      if (!reason || current === "stub") throw e;
+      noteProviderOutage(current, reason);
+      const next = getProviders().find((p) => p.configured && p.id !== "stub" && !tried.includes(p.id) && !isProviderOutOfService(p.id));
+      if (!next) throw e;
+      console.warn(`[providers] ${current} → ${next.id}: ${reason.slice(0, 100)}`);
+      current = next.id;
+      currentModel = next.defaultModel;
+    }
+  }
+}
+
+async function callProviderOnce(
   providerId: string,
   messages: ChatMessage[],
   model: string,
@@ -1103,24 +1214,51 @@ export async function* streamProviderResilient(
   model: string,
   temperature: number
 ): AsyncGenerator<StreamEvent> {
-  const candidates = fallbackCandidates(providerId, model);
-  let lastErr: unknown;
-  for (let i = 0; i < candidates.length; i++) {
-    let emitted = false;
-    try {
-      for await (const ev of streamProvider(providerId, messages, candidates[i], temperature)) {
-        if (ev.kind === "text" && ev.text) emitted = true;
-        yield ev;
-      }
-      recordOutcome(providerId, candidates[i], true);
-      return; // completed successfully
-    } catch (e) {
-      recordOutcome(providerId, candidates[i], false);
-      lastErr = e;
-      // Can't retry once text is out, or if error isn't retryable, or if this
-      // was the last candidate.
-      if (emitted || !isRetryableProviderError(e) || i === candidates.length - 1) throw e;
-    }
+  // Поставщик, закрытый по лимиту (см. providerOutages), не запускается вовсе:
+  // 20.09.2026 критик консилиума получил Anthropic и упал, хотя чат уже знал,
+  // что тот закрыт до 01.10. Роль уходит следующему настроенному с его моделью;
+  // переход возможен только пока ни одного слова не напечатано.
+  const tried = new Set<string>();
+  let currentProvider = providerId;
+  let currentModel = model;
+  if (isProviderOutOfService(currentProvider)) {
+    const alt = getProviders().find((p) => p.configured && p.id !== "stub" && !isProviderOutOfService(p.id));
+    if (alt) { currentProvider = alt.id; currentModel = alt.defaultModel; }
   }
-  if (lastErr) throw lastErr;
+  for (;;) {
+    tried.add(currentProvider);
+    const candidates = fallbackCandidates(currentProvider, currentModel);
+    let lastErr: unknown;
+    let switched = false;
+    for (let i = 0; i < candidates.length; i++) {
+      let emitted = false;
+      try {
+        for await (const ev of streamProvider(currentProvider, messages, candidates[i], temperature)) {
+          if (ev.kind === "text" && ev.text) emitted = true;
+          yield ev;
+        }
+        recordOutcome(currentProvider, candidates[i], true);
+        return; // completed successfully
+      } catch (e) {
+        recordOutcome(currentProvider, candidates[i], false);
+        lastErr = e;
+        // Can't retry once text is out.
+        if (emitted) throw e;
+        const outage = providerOutageReason(e);
+        if (outage) {
+          noteProviderOutage(currentProvider, outage);
+          const next = getProviders().find((p) => p.configured && p.id !== "stub" && !tried.has(p.id) && !isProviderOutOfService(p.id));
+          if (!next) throw e;
+          console.warn(`[providers] stream ${currentProvider} → ${next.id}: ${outage.slice(0, 100)}`);
+          currentProvider = next.id;
+          currentModel = next.defaultModel;
+          switched = true;
+          break;
+        }
+        // Not retryable, or this was the last candidate.
+        if (!isRetryableProviderError(e) || i === candidates.length - 1) throw e;
+      }
+    }
+    if (!switched) { if (lastErr) throw lastErr; return; }
+  }
 }

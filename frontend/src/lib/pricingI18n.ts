@@ -50,7 +50,6 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "tier.byRequest": "По запросу",
     "tier.free": "Бесплатно",
     "tier.detailsLink": "Подробнее о {name} →",
-    "tier.tryTrial": "Попробовать 14 дней бесплатно",
     "tier.openCalc": "Открыть калькулятор →",
 
     /* Industries */
@@ -121,6 +120,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "cases.filterIndustry": "ИНДУСТРИЯ:",
     "cases.filterTier": "ТАРИФ:",
     "cases.empty": "Нет кейсов под такие фильтры. Сбросьте фильтр или посмотрите другую индустрию.",
+    "cases.none": "Историй клиентов пока нет. Платформа открылась 20 сентября 2026 года; здесь появятся настоящие истории — с цифрами, которые можно проверить, и с согласия клиента.",
     "cases.showDetails": "Показать challenge / solution / outcome",
     "cases.hideDetails": "Свернуть",
     "cases.challenge": "Сложность",
@@ -539,7 +539,6 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "tier.byRequest": "By request",
     "tier.free": "Free",
     "tier.detailsLink": "More about {name} →",
-    "tier.tryTrial": "Try 14 days free",
     "tier.openCalc": "Open calculator →",
 
     "industries.title": "For your industry",
@@ -603,6 +602,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "cases.filterIndustry": "INDUSTRY:",
     "cases.filterTier": "TIER:",
     "cases.empty": "No cases match these filters. Try a different industry.",
+    "cases.none": "No customer stories yet. The platform opened on 20 September 2026; real stories will appear here - with numbers you can verify and with the customer’s consent.",
     "cases.showDetails": "Show challenge / solution / outcome",
     "cases.hideDetails": "Collapse",
     "cases.challenge": "Challenge",

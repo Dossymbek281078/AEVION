@@ -341,6 +341,58 @@ export const MODULES: Product[] = [
     href: appHref("cyberchess"),
     appId: "cyberchess",
   },
+  // 20.09.2026, слово основателя «везде должны быть цены». Товаров в кассе у этих
+  // четырёх пока нет: страница цен честно покажет цену и «связаться» вместо кнопки
+  // (сторож unsellableTierExplainsItself). Кнопки зажгутся сами, когда появятся
+  // варианты и переменные LEMON_SQUEEZY_VARIANT_<SLUG>_<СТУПЕНЬ>.
+  {
+    id: "qright",
+    title: "QRight",
+    format: appFormat("qright"),
+    desc: "Регистрация авторства: фиксация даты и содержания работы, выгрузка доказательств.",
+    priceUsd: appBase("qright"),
+    billing: "term",
+    kind: "module",
+    processor: "aevion",
+    href: appHref("qright"),
+    appId: "qright",
+  },
+  {
+    id: "qsign",
+    title: "QSign",
+    format: appFormat("qsign"),
+    desc: "Подпись документов и проверка целостности: канонический JSON, сверка по отпечатку.",
+    priceUsd: appBase("qsign"),
+    billing: "term",
+    kind: "module",
+    processor: "aevion",
+    href: appHref("qsign"),
+    appId: "qsign",
+  },
+  {
+    id: "startup-exchange",
+    title: "Startup Exchange",
+    format: appFormat("startup_exchange"),
+    desc: "Витрина идей, MVP и готовых продуктов: разместить, найти, договориться о сделке.",
+    priceUsd: appBase("startup_exchange"),
+    billing: "term",
+    kind: "module",
+    processor: "aevion",
+    href: appHref("startup_exchange"),
+    appId: "startup-exchange",
+  },
+  {
+    id: "qskyway",
+    title: "QSkyway",
+    format: appFormat("qskyway"),
+    desc: "Навигация воздушных коридоров города: маршруты, высоты, ограничения и ветер.",
+    priceUsd: appBase("qskyway"),
+    billing: "term",
+    kind: "module",
+    processor: "aevion",
+    href: appHref("qskyway"),
+    appId: "qskyway",
+  },
 ];
 
 // Сторож на сборке каталога: отдельно продаётся ровно то, что названо в
@@ -515,6 +567,26 @@ export function withChannel(href: string, channel: string | null, landing = "sit
   if (href.startsWith("/")) return keepChannel(href, channel);
   const sep = href.includes("?") ? "&" : "?";
   if (href.includes("lemonsqueezy.com")) {
+    // 🔴 ПОДПИСАННЫЙ адрес не дополняем НИЧЕМ. Замер 20.09.2026 с контролями:
+    // настоящий адрес кассы из `POST /api/pricing/checkout/session` отвечает
+    // 200; он же плюс `checkout[custom][channel]=youtube` — **403**; он же
+    // снова как есть — опять 200. Посторонний `foo=bar` тоже даёт 403, то есть
+    // ломается подпись, а не конкретный параметр. Отвечает сам LemonSqueezy
+    // (`x-powered-by: PHP`, в теле «signature» и «invalid»).
+    //
+    // Кого это било: `withChannel` возвращает адрес без изменений, когда
+    // канала нет, — значит без метки всё работало, а с меткой покупатель
+    // упирался в 403. Ломался ровно тот, кого мы привели по помеченной
+    // ссылке: с YouTube, из профиля, из рассылки. Наши зонды ходили без
+    // канала и поэтому дефект не всплывал ни в одной проверке.
+    //
+    // Метка в LemonSqueezy передаётся при СОЗДАНИИ сессии: фронт кладёт
+    // `channel` в тело запроса, бэкенд — в `checkout_data.custom`
+    // (checkout.ts принимает его с 31.08, lemonSqueezyProvider.ts:200).
+    //
+    // Непод­писанные ссылки на товар (`/buy/<uuid>`) параметры принимают, и для
+    // них поведение сохранено: признак — наличие `signature` в адресе.
+    if (/[?&]signature=/.test(href)) return href;
     return `${href}${sep}checkout[custom][channel]=${encodeURIComponent(channel)}`;
   }
   // UTM-тройка целиком: Gumroad заводит ссылку в отчёте по первому переходу,

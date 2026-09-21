@@ -87,11 +87,11 @@ export default function OpeningFlashCard({
       <div
         className="ofc-card"
         style={{
-          position: "fixed",
-          bottom: 24,
-          right: 24,
-          width: 280,
-          zIndex: 200,
+          // В потоке левой колонки (page.tsx, aside после «Партии»), не fixed: любой fixed-вариант
+          // на какой-то ширине ложился на панели (20.09.2026).
+          position: "relative",
+          width: "100%",
+          marginTop: 8,
           background: surface,
           border: `1.5px solid ${border}`,
           borderRadius: 12,

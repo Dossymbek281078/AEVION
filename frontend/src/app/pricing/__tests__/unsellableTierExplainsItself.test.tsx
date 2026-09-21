@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, cleanup, act } from "@testing-library/react";
 import { I18nProvider } from "@/lib/i18n";
 import { PLANET_BASE_MONTHLY, STANDALONE_APPS, termPricePerMonth, termTotal } from "@/lib/termPricing";
+import { localizeTier } from "@/lib/pricingLocalize";
 
 /**
  * Непокупаемый тариф обязан ОБЪЯСНИТЬ себя, а не просто погаснуть.
@@ -127,6 +128,47 @@ function кнопкаОплатыКалькулятора(калькулятор
 }
 
 /** Блок отдельных приложений и карточка одного приложения в нём. */
+/**
+ * Основная кнопка покупки на карточке срока.
+ *
+ * До 17.09.2026 проверки «кнопка карточки следует продаваемости» шли через кнопку
+ * пробного периода (`button[aria-label$=": pro"]`). Основатель решил, что пробный
+ * период не нужен, кнопку сняли — и тот же селектор МОЛЧА попал бы на кнопку
+ * калькулятора, у которой подпись оканчивается так же. Проверка осталась бы зелёной,
+ * проверяя не то.
+ *
+ * Поэтому ищем явно: кнопка калькулятора (у неё уникальная подпись `…: <срок>`)
+ * лежит в той же карточке, что и основная кнопка покупки; основная — другая кнопка
+ * этой карточки. Она гаснет по тому же правилу продаваемости, что и снятая.
+ */
+/**
+ * Подписи кнопки покупки на двух языках — из ТОГО ЖЕ источника, что у страницы.
+ *
+ * 🔴 20.09.2026: здесь стояло `toContain("Купить")`, и три проверки покраснели.
+ * Причина не в кнопке: в этот день появился `pricingLocalize`, а провайдер языка
+ * стартует с "en" (`useState<Lang>("en")`), поэтому в тестовой среде страница
+ * рисует «Choose Pro». Раньше подпись оставалась русской при любом языке.
+ *
+ * Держать здесь язык нельзя: это сделало бы проверку про перевод, а она про то,
+ * ТА ЛИ кнопка найдена. Поэтому спрашиваем сам механизм локализации.
+ */
+function подписиПокупки(id: string): string[] {
+  const ru = "Купить";
+  const en = localizeTier({ id, ctaLabel: ru, tagline: "", features: [] }, "en").ctaLabel;
+  return [ru, en];
+}
+
+function кнопкаПокупкиСрока(id: string): HTMLButtonElement | null {
+  const калькуляторКарточки = document.querySelector<HTMLButtonElement>(`button[aria-label$=": ${id}"]`);
+  const карточкаСрока = калькуляторКарточки?.parentElement;
+  if (!калькуляторКарточки || !карточкаСрока) return null;
+  return (
+    Array.from(карточкаСрока.querySelectorAll<HTMLButtonElement>("button")).find(
+      (b) => b !== калькуляторКарточки,
+    ) ?? null
+  );
+}
+
 function блокПриложений(): HTMLElement {
   const блок = document.getElementById("apps");
   expect(блок, "блока «Отдельные приложения» на странице нет — проверки ниже пустые").not.toBeNull();
@@ -168,7 +210,7 @@ describe("непокупаемый тариф объясняет себя", () =
     ).toBe(true);
     expect(
       document.querySelector('button[aria-label$=": pro"]'),
-      "у тарифа без товара осталась кнопка пробного периода — она ведёт в 503",
+      "у тарифа без товара осталась кнопка калькулятора — она ведёт в 503",
     ).toBeNull();
   });
 
@@ -180,9 +222,13 @@ describe("непокупаемый тариф объясняет себя", () =
     const текст = document.body.textContent ?? "";
     expect(текст.length, "страница не отрисовалась вовсе").toBeGreaterThan(0);
     expect(текст, "подписи о недоступности нет").toMatch(/онлайн|online/i);
-    const пробная = document.querySelector<HTMLButtonElement>('button[aria-label$=": pro"]');
-    expect(пробная, "кнопки пробного периода у pro не нашлось — проверка ниже пустая").not.toBeNull();
-    expect(пробная?.disabled, "пробный период при аварии кассы остался живым").toBe(true);
+    const покупка = кнопкаПокупкиСрока("pro");
+    expect(покупка, "кнопки покупки у pro не нашлось — проверка ниже пустая").not.toBeNull();
+    expect(
+      подписиПокупки("pro").some((п) => (покупка?.textContent ?? "").includes(п)),
+      `нашлась не та кнопка карточки: «${покупка?.textContent}»`,
+    ).toBe(true);
+    expect(покупка?.disabled, "при аварии кассы кнопка покупки осталась живой").toBe(true);
   });
 
   it("бесплатный тариф подпись «оформить нельзя» не получает никогда", async () => {
@@ -232,9 +278,13 @@ describe("непокупаемый тариф объясняет себя", () =
       ссылки.some((h) => h.includes("/pricing/contact") && (h.includes("tier=pro") || h.includes("app="))),
       "незнание прочитано как «купить нельзя»",
     ).toBe(false);
-    const пробная = document.querySelector<HTMLButtonElement>('button[aria-label$=": pro"]');
-    expect(пробная, "кнопки пробного периода у pro не нашлось — проверка ниже пустая").not.toBeNull();
-    expect(пробная?.disabled, "незнание погасило пробный период").toBe(false);
+    const покупка = кнопкаПокупкиСрока("pro");
+    expect(покупка, "кнопки покупки у pro не нашлось — проверка ниже пустая").not.toBeNull();
+    expect(
+      подписиПокупки("pro").some((п) => (покупка?.textContent ?? "").includes(п)),
+      `нашлась не та кнопка карточки: «${покупка?.textContent}»`,
+    ).toBe(true);
+    expect(покупка?.disabled, "незнание погасило покупку срока").toBe(false);
     const купитьПриложение = карточка("devhub").querySelector("button");
     expect(купитьПриложение, "кнопки покупки приложения нет — проверка ниже пустая").not.toBeNull();
     expect(купитьПриложение!.disabled, "незнание погасило покупку приложения").toBe(false);
@@ -252,9 +302,13 @@ describe("непокупаемый тариф объясняет себя", () =
       "подпись о недоступности показана на продаваемом тарифе или приложении",
     ).toBe(false);
 
-    const пробная = document.querySelector<HTMLButtonElement>('button[aria-label$=": pro"]');
-    expect(пробная, "кнопки пробного периода у pro не нашлось — проверка ниже пустая").not.toBeNull();
-    expect(пробная?.disabled, "пробный период погашен у продаваемого тарифа").toBe(false);
+    const покупка = кнопкаПокупкиСрока("pro");
+    expect(покупка, "кнопки покупки у pro не нашлось — проверка ниже пустая").not.toBeNull();
+    expect(
+      подписиПокупки("pro").some((п) => (покупка?.textContent ?? "").includes(п)),
+      `нашлась не та кнопка карточки: «${покупка?.textContent}»`,
+    ).toBe(true);
+    expect(покупка?.disabled, "кнопка покупки погашена у продаваемого тарифа").toBe(false);
 
     const калькулятор = await калькуляторНа("Pro");
     const оплата = кнопкаОплатыКалькулятора(калькулятор);

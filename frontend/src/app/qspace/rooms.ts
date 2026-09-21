@@ -264,7 +264,7 @@ export function findRooms(plan: Plan, opts: { minAreaM2?: number } = {}): RoomsR
   closeDoorGaps(plan.walls, (x1, y1, x2, y2, t) => {
     markWall(grid, gw, gh, ox, oy, x1, y1, x2, y2, t);
     markWall(закрытия, gw, gh, ox, oy, x1, y1, x2, y2, t);
-  }, plan.source === "raster");
+  }, plan.source === "raster" || plan.looseWalls === true);
   for (let i = 0; i < закрытия.length; i++) if (стеныДо[i] !== 0) закрытия[i] = 0;
   let закрыто = 0;
   {

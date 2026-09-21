@@ -650,3 +650,55 @@ export async function sendWeeklyDigestEmail(
   }
   return { sent, errors, degraded: degradedCount };
 }
+
+/**
+ * Уведомление основателю о новой заявке с сайта агентства (20.09.2026).
+ *
+ * Почему письмо, а не только запись в базу: заявка живёт часами — лист отправки
+ * сам требует «ответили — созвон, пока интерес горячий». Строка в таблице, которую
+ * никто не смотрит, этого не даёт.
+ *
+ * `replyTo` ставим на контакт заявителя, когда он похож на почту: ответить можно
+ * прямо из ящика, не копируя адрес руками.
+ */
+export async function sendAgencyLeadNotice(lead: {
+  contact: string;
+  message: string;
+  name?: string;
+  source?: string;
+}): Promise<boolean> {
+  const to = process.env.AGENCY_LEAD_EMAIL || "yahiin1978@gmail.com";
+  const почта = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(lead.contact);
+  const эк = (s: string) =>
+    String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  const строки = [
+    `Контакт: ${lead.contact}`,
+    lead.name ? `Имя: ${lead.name}` : "",
+    lead.source ? `Источник: ${lead.source}` : "",
+    "",
+    lead.message,
+  ].filter(Boolean);
+
+  const payload: ConstitutionEmailPayload = {
+    to: [{ email: to }],
+    subject: `Заявка с сайта агентства: ${lead.contact}`,
+    htmlContent:
+      `<div style="font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;color:#0f172a">` +
+      строки.map((s) => `<p style="margin:0 0 8px">${эк(s)}</p>`).join("") +
+      `</div>`,
+    textContent: строки.join("\n"),
+    replyTo: почта ? { email: lead.contact } : undefined,
+    tags: ["agency-lead"],
+  };
+
+  const result = await sendBrevoEmail(payload);
+  if (!result.ok) {
+    console.error("[Brevo] agency-lead notice failed:", result.error);
+    return false;
+  }
+  if (result.degraded) {
+    console.warn(`[Brevo] agency-lead notice degraded: ${result.degradedReason}`);
+  }
+  return true;
+}

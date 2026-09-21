@@ -1,4 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
+import { TERM_TIERS, STANDALONE_APPS } from "../src/data/pricing";
 import request from "supertest";
 import express from "express";
 import { checkoutRouter } from "../src/routes/checkout";
@@ -152,9 +153,14 @@ describe("две ручки состояния согласны о том, кт�
     const s2 = с.body.providers.lemonsqueezy.sellable;
     expect(s2.configured).toContain("tier_lite");
     expect(s2.missing).not.toContain("tier_lite");
-    // С 15.09.2026 продаются 30 ссылок (5 сроков планеты + 5 приложений × 5);
-    // прежние tier_*_monthly в список продаваемого не входят.
-    expect(s2.configured.length + s2.missing.length).toBe(30);
+    // 🔴 20.09.2026: было зашито 30 — размер каталога на 15.09. В этот день
+    // добавили QRight, QSign, QSkyway и Startup Exchange, стало 50, и проверка
+    // покраснела, ничего не защитив: она держала снимок размера, а не условие.
+    // Условие такое: ручка знает про ВСЕ позиции лестницы — ни одна не потеряна
+    // между каталогом и кассой. Сверяем с источником, из которого строятся ссылки.
+    // Прежние tier_*_monthly в список продаваемого по-прежнему не входят.
+    const всегоПозиций = TERM_TIERS.length * (1 + STANDALONE_APPS.length);
+    expect(s2.configured.length + s2.missing.length, "ручка знает не про все позиции каталога").toBe(всегоПозиций);
     expect([...s2.configured, ...s2.missing]).not.toContain("tier_lite_monthly");
     delete process.env.LEMON_SQUEEZY_VARIANT_LITE;
 

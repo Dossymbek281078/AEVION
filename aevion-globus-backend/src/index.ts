@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import { readBuildInfo } from "./lib/buildInfo";
 import { dilithiumStatus } from "./lib/qsignV2/dilithium";
 import { eventsStoreStatus } from "./routes/events";
+import { subsStoreStatus } from "./routes/provisioning";
 import { emailSenderStatus } from "./routes/provisioning";
 import { providerStatus } from "./lib/providerGuard";
 import { lemonSqueezyVariantStatus } from "./data/lemonSqueezyVariants";
@@ -74,6 +75,7 @@ import { constitutionProRouter } from "./routes/constitutionPro";
 import { constitutionAdminRouter, constitutionTelemetry, constitutionBanGate } from "./routes/constitutionAdmin";
 import { constitutionFunnelTrackRouter, constitutionFunnelAdminRouter } from "./routes/constitutionFunnel";
 import { constitutionWaitlistRouter, constitutionWaitlistAdminRouter } from "./routes/constitutionWaitlist";
+import { agencyLeadRouter } from "./routes/agencyLead";
 import { constitutionStatusRouter, startUptimeChecker } from "./routes/constitutionStatus";
 import { constitutionCheckoutRouter } from "./routes/constitutionCheckout";
 import { planetConstitutionSocialRouter } from "./routes/planetConstitutionSocial";
@@ -287,6 +289,9 @@ function healthPayload() {
     // только из переменных окружения; теперь видно отсюда. Счётчики и одна
     // метка времени, без единого поля самих событий.
     eventsStore: safeEventsStoreStatus(),
+    // Рядом с событиями и той же формы: «переживут ли записи о покупках выкатку».
+    // Поле, а не рассуждение о путях — см. subsStoreStatus в provisioning.ts.
+    subsStore: safeSubsStoreStatus(),
     // Какой режим подписи реально активен. Письма партнёрам утверждают
     // «post-quantum signatures (ML-DSA-65, FIPS 204)», а это включается ключом:
     // без него прод отдаёт SHA-512, который наше же описание API называет
@@ -353,6 +358,15 @@ function safeEmailSenderStatus() {
     return emailSenderStatus();
   } catch {
     return { configured: null, from: null, mode: null };
+  }
+}
+
+/** health не должен падать из-за диагностики. */
+function safeSubsStoreStatus() {
+  try {
+    return subsStoreStatus();
+  } catch {
+    return { persistedByEnv: null, onVolume: null, exists: null, count: null, oldest: null };
   }
 }
 
@@ -1291,6 +1305,9 @@ app.use("/api/admin/constitution", constitutionAdminRouter);
 app.use("/api/admin/constitution/funnel", constitutionFunnelAdminRouter);
 app.use("/api/constitution/funnel", constitutionFunnelTrackRouter);
 app.use("/api/constitution/waitlist", constitutionWaitlistRouter);
+// Приём заявок с сайта агентства (20.09.2026): до этого форма открывала почтовую
+// программу посетителя, и на телефоне заявка просто терялась.
+app.use("/api/agency", agencyLeadRouter);
 app.use("/api/admin/constitution/waitlist", constitutionWaitlistAdminRouter);
 app.use("/api/constitution/status", constitutionStatusRouter);
 app.use("/api/constitution/checkout", constitutionCheckoutRouter);

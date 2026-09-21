@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { buildPool as pool, ok, fail, requireBuildAuth, excludeTestUsers } from "../../lib/build";
+import { безПроб, просятПробы } from "../../lib/probeRows";
 
 export const statsRouter = Router();
 
@@ -219,7 +220,23 @@ statsRouter.get("/hires", async (req, res) => {
        ORDER BY a."updatedAt" DESC LIMIT $1`,
       [limit],
     );
-    return ok(res, { items: r.rows, total: r.rowCount });
+    // Наши смоук-наймы («Smoke welder 1785059381597») посетитель витрины успеха
+    // видеть не должен: 13 из 20 записей 20.09.2026 были нашими. Прячем в ручке,
+    // а не на странице — иначе следующая страница покажет их снова. Скрытое
+    // названо числом; `?includeProbes=1` возвращает всё для наших проверок.
+    const { видимые, скрыто } = безПроб(
+      (r.rows as Array<{ vacancyTitle?: string | null; workerName?: string | null }>).map((row) => ({
+        ...row,
+        title: row.vacancyTitle ?? null,
+        ref: row.workerName ?? null,
+      })),
+      просятПробы(req.query),
+    );
+    return ok(res, {
+      items: видимые.map(({ title: _t, ref: _r, ...row }) => row),
+      total: видимые.length,
+      probesHidden: скрыто,
+    });
   } catch (err: unknown) {
     return fail(res, 500, "hires_failed");
   }

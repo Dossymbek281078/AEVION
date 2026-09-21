@@ -11,7 +11,7 @@
  * model by default; Analyst and Writer use a more capable one.
  */
 
-import { getProviders, getFreeProviders, Provider } from "./providers";
+import { getProviders, getFreeProviders, isProviderOutOfService, Provider } from "./providers";
 import { healthScore } from "./providerHealth";
 
 export type AgentRole = "analyst" | "writer" | "critic";
@@ -166,7 +166,10 @@ export function resolveRoleProvider(
   // Under localOnly the candidate set is local runtimes only; a non-local pin or
   // role default (e.g. anthropic/opus) is then ignored and we fall through to a
   // configured local provider.
-  const providers = getProviders().filter((p) => !localOnly || p.local);
+  // Закрытый поставщиком по лимиту (см. providerOutages) в кандидаты не входит:
+  // иначе план обещает его логотип, а отвечает следующий. Если закрыты все —
+  // в самом конце берём любого настроенного, чтобы отказ был честным отказом.
+  const providers = getProviders().filter((p) => (!localOnly || p.local) && !isProviderOutOfService(p.id));
   const byId = (id: string) => providers.find((p) => p.id === id);
   // Prefer the discovered (actually-pulled) model list under localOnly so we
   // don't hand a local runtime a model it hasn't downloaded.
@@ -199,6 +202,10 @@ export function resolveRoleProvider(
       return { provider: p.id, model: ms[0] ?? p.defaultModel };
     }
   }
+
+  // 4. все настроенные закрыты по лимиту — любой настроенный, отказ будет честным
+  const any = getProviders().find((p) => (!localOnly || p.local) && p.configured);
+  if (any) return { provider: any.id, model: any.defaultModel };
 
   return null;
 }
@@ -634,7 +641,9 @@ export function buildSynthesizer(
     };
   }
 
-  const anthropic = getProviders().find((p) => p.id === "anthropic" && p.configured);
+  // 20.09.2026: Anthropic закрыт поставщиком по месячному лимиту до 01.10 — кресло
+  // критика ему не отдаём, иначе план обещает Anthropic, а отвечает следующий.
+  const anthropic = getProviders().find((p) => p.id === "anthropic" && p.configured && !isProviderOutOfService(p.id));
   if (anthropic) {
     // Chair model: env override → best-quality/cost default (Opus 4.8) →
     // Fable 5 → provider default. Env lets ops flip the chair without a deploy.
@@ -656,11 +665,12 @@ export function buildSynthesizer(
   }
 
   // No Anthropic — synthesise with the best non-free provider, else anything.
-  const providers = getProviders().filter((p) => p.configured);
+  const providers = getProviders().filter((p) => p.configured && !isProviderOutOfService(p.id));
   const best =
     providers.find((p) => p.tier === "premium") ||
     providers.find((p) => p.tier === "budget") ||
-    providers[0];
+    providers[0] ||
+    getProviders().find((p) => p.configured);
   if (!best) return null;
   return {
     role: "critic",

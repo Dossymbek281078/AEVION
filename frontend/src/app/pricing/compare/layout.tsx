@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Сравнение тарифов AEVION — все модули и сроки",
   description:
-    "Полная матрица: Free, сроки Lite, Medium, Pro, Full, Max и Enterprise. Любой платный срок открывает все модули AEVION — IP, AI, финтех, потребительские продукты — со статусами LIVE / BETA / SOON; пять приложений продаются и отдельно.",
+    "Полная матрица: Free, сроки Lite, Medium, Pro, Full, Max и Enterprise. Любой платный срок открывает все модули AEVION — IP, AI, финтех, потребительские продукты — со статусами LIVE / BETA / SOON; отдельные приложения можно купить и по одному.",
   openGraph: {
     title: "Сравнение тарифов AEVION — полная матрица",
     description:

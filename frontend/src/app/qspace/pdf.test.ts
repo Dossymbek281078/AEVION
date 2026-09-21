@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
+import { MAX_SEGMENTS, planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
+import { findRooms } from "./rooms";
 
 /** Собирает минимальный НЕсжатый PDF с потоком содержимого. */
 function makePdf(content: string): Uint8Array {
@@ -11,6 +12,143 @@ function makePdf(content: string): Uint8Array {
     "trailer\n<< /Root 1 0 R >>\n%%EOF\n";
   return new TextEncoder().encode(body);
 }
+
+describe("PDF без слоёв: рамка листа и линии через весь лист — не стены", () => {
+  // Замер 20.09.2026 на обмерном плане Belmont (56 тыс. линий, слоёв нет): рамка листа и
+  // штамп становились «комнатами» на 48 и 41 м², выноска через весь лист резала план.
+  it("комната 200×150 внутри рамки 1000×700 с диагональю через лист: комната одна, рамка — нет", async () => {
+    const рамка = "0 0 1000 700 re S";
+    const диагональ = "0 0 m 1000 700 l S";
+    const комната = "400 300 200 150 re S";
+    // у настоящего листа внутри рамки много линий (размеры, мебель): 60 коротких штрихов
+    const штрихи = Array.from({ length: 60 }, (_, i) => `${420 + i * 2} 250 m ${421 + i * 2} 250 l`).join(" ") + " S";
+    const src = await readPdfSegments(makePdf(`${рамка} ${диагональ} ${комната} ${штрихи}`));
+    expect(src.segments.length).toBe(69);
+    const r = planFromPdfSegments(src, 10);
+    expect(r.warnings.join(" ")).toMatch(/Рамка листа: 4/);
+    expect(r.warnings.join(" ")).toMatch(/длиннее листа/);
+    expect(r.plan!.walls.length).toBe(4); // штрихи короче 5 см отпадают позже, как и раньше
+    const rooms = findRooms(r.plan!);
+    expect(rooms.rooms.length).toBe(1);
+    expect(rooms.totalArea).toBeGreaterThan(1.8); // 2×1.5 м минус толщина стен на сетке 5 см
+    expect(rooms.totalArea).toBeLessThan(3.1);
+  });
+});
+
+/** Двухстраничный PDF: у каждой страницы свой поток содержимого. */
+function makePdf2(p1: string, p2: string): Uint8Array {
+  const NL = String.fromCharCode(10);
+  const body = [
+    "%PDF-1.4",
+    "1 0 obj", "<< /Type /Pages /Kids [2 0 R 4 0 R] /Count 2 >>", "endobj",
+    "2 0 obj", "<< /Type /Page /Parent 1 0 R /Contents 3 0 R >>", "endobj",
+    "3 0 obj", "<< /Length " + p1.length + " >>", "stream", p1, "endstream", "endobj",
+    "4 0 obj", "<< /Type /Page /Parent 1 0 R /Contents 5 0 R >>", "endobj",
+    "5 0 obj", "<< /Length " + p2.length + " >>", "stream", p2, "endstream", "endobj",
+    "trailer", "<< /Root 1 0 R >>", "%%EOF", "",
+  ].join(NL);
+  return new TextEncoder().encode(body);
+}
+
+describe("planFromPdfSegments с областью плана: линии вне прямоугольника не стены", () => {
+  it("комната внутри области остаётся, таблица снаружи выпадает, и это сказано словами", async () => {
+    const src = await readPdfSegments(makePdf("100 100 200 150 re S 600 100 100 50 re S"));
+    const r = planFromPdfSegments(src, 8, "размеры", { x0: 90, y0: 90, x1: 310, y1: 260 });
+    expect(r.plan!.walls.length).toBe(4);
+    expect(r.warnings.join(" ")).toMatch(/вне их прямоугольника 4 линий/);
+    expect(findRooms(r.plan!).rooms.length).toBe(1);
+  });
+  it("область не применяется, если внутри неё осталось меньше половины линий (числа не вокруг плана)", async () => {
+    const src = await readPdfSegments(makePdf("100 100 200 150 re S 600 100 100 50 re S 700 300 100 50 re S"));
+    const r = planFromPdfSegments(src, 8, "размеры", { x0: 90, y0: 90, x1: 310, y1: 260 });
+    expect(r.plan!.walls.length).toBe(12);
+    expect(r.warnings.join(" ")).not.toMatch(/вне их прямоугольника/);
+  });
+  it("со слоем стен область не применяется: стены точные, а цепочки не окружают весь план (LA VIE: кухня отрезалась)", async () => {
+    const src = await readPdfSegments(makePdf("100 100 200 150 re S 600 100 100 50 re S"));
+    const соСлоем: PdfSegments = { ...src, wallLayers: ["Стены"] };
+    const r = planFromPdfSegments(соСлоем, 8, "размеры", { x0: 90, y0: 90, x1: 310, y1: 260 });
+    expect(r.plan!.walls.length).toBe(8);
+    expect(r.warnings.join(" ")).not.toMatch(/вне их прямоугольника/);
+  });
+});
+
+describe("PDF без слоёв: размерные цепочки и фигуры", () => {
+  it("линия, вдоль которой стоят размерные числа, — не стена; стены без чисел остаются", async () => {
+    // коробка 400×300 и размерная линия под ней (y=40) с числами вдоль неё
+    const src = await readPdfSegments(makePdf("100 100 400 300 re S 100 40 m 500 40 l S"));
+    const числа = [150, 250, 350, 450, 200, 300].map((x) => ({ x, y: 44 }));
+    const r = planFromPdfSegments(src, 8, "размеры", null, числа);
+    expect(r.plan!.walls.length).toBe(4);
+    expect(r.warnings.join(" ")).toMatch(/Размерные цепочки \(1 линий/);
+    // контроль: без чисел линия остаётся
+    expect(planFromPdfSegments(src, 8).plan!.walls.length).toBe(5);
+  });
+  it("короткие косые штрихи (штриховка, засечки) — не стены, длинная косая стена остаётся", async () => {
+    // коробка 400×300 (8 м на 1000 пт → 100 пт = 0.8 м), косая стена 200 пт (1.6 м) и 8 штрихов по 30 пт (0.24 м)
+    const штрихи = Array.from({ length: 8 }, (_, i) => `${120 + i * 30} 120 m ${140 + i * 30} 140 l`).join(" ") + " S";
+    const src = await readPdfSegments(makePdf(`100 100 400 300 re S 100 100 m 300 300 l S ${штрихи}`));
+    const числа = [150, 250, 350, 450, 200, 300].map((x) => ({ x, y: 40 }));
+    const r = planFromPdfSegments(src, 8, "размеры", null, числа);
+    expect(r.warnings.join(" ")).toMatch(/Короткие косые штрихи \(8/);
+    expect(r.plan!.walls.length).toBe(5);
+    // контроль: без размерных чисел правило молчит — штрихи остаются
+    expect(planFromPdfSegments(src, 8).plan!.walls.length).toBe(13);
+  });
+  it("выносные линии размеров (короткие, упёртые в цепочку) — не стены; план получает looseWalls", async () => {
+    // коробка (8 м на 400 пт), размерная линия y=40 с числами и две выносные линии от неё вверх по 20 пт (0.4 м)
+    const src = await readPdfSegments(makePdf("100 100 400 300 re S 100 40 m 500 40 l S 100 40 m 100 60 l S 500 40 m 500 60 l S"));
+    const числа = [150, 250, 350, 450, 200, 300].map((x) => ({ x, y: 44 }));
+    const r = planFromPdfSegments(src, 8, "размеры", null, числа);
+    expect(r.warnings.join(" ")).toMatch(/Выносные линии размеров \(2\)/);
+    expect(r.plan!.walls.length).toBe(4);
+    expect(r.plan!.looseWalls).toBe(true);
+    // контроль: без размерных чисел флага нет и линии остаются
+    const без = planFromPdfSegments(src, 8);
+    expect(без.plan!.looseWalls).toBeUndefined();
+    expect(без.plan!.walls.length).toBe(7);
+  });
+  it("отрезки одного пути несут общий номер, контур заливки помечен fill", async () => {
+    const src = await readPdfSegments(makePdf("0 0 m 100 0 l 100 50 l h B 200 0 m 300 0 l S"));
+    const пути = new Set(src.segments.map((s) => s.path));
+    expect(пути.size).toBe(2);
+    expect(src.segments.filter((s) => s.fill).length).toBe(3);
+    expect(src.segments.filter((s) => !s.fill).length).toBe(1);
+  });
+  it("тридцать узких замкнутых прямоугольников — стены с толщиной по короткой стороне", async () => {
+    const прямоугольники = Array.from({ length: 30 }, (_, i) => `${100 + i * 30} 100 10 200 re S`).join(" ");
+    const src = await readPdfSegments(makePdf(`${прямоугольники} 50 50 m 60 50 l S`));
+    const r = planFromPdfSegments(src, 20); // 20 м на 1000 пт → 10 пт = 0.2 м
+    expect(r.warnings.join(" ")).toMatch(/30 перегородок-прямоугольников/);
+    expect(r.plan!.walls.length).toBe(30);
+    expect(r.plan!.walls.every((w) => Math.abs(w.thickness - 0.2) < 0.02)).toBe(true);
+  });
+});
+
+describe("многостраничный PDF (альбом дизайн-проекта) разбирается по страницам", () => {
+  // Замер 20.09.2026: альбомы на 15 и 45 страниц ложились друг на друга — 0 и 1 комната.
+  const стр1 = "0 0 400 300 re S";                                // коробка, 4 линии
+  const стр2 = "0 0 400 300 re S 200 0 m 200 300 l S 50 50 m 60 50 l S"; // та же коробка + перегородка + штрих: 6 линий
+  it("без указания берётся страница с наибольшим числом линий, и это сказано словами", async () => {
+    const src = await readPdfSegments(makePdf2(стр1, стр2));
+    expect(src.pages).toBe(2);
+    expect(src.page).toBe(2);
+    expect(src.pageSegmentCounts).toEqual([4, 6]);
+    expect(src.segments.length).toBe(6);
+    expect(src.warnings.join(" ")).toMatch(/В файле 2 страниц — взята страница 2/);
+  });
+  it("указанная страница берётся целиком и без чужих линий", async () => {
+    const src = await readPdfSegments(makePdf2(стр1, стр2), { page: 1 });
+    expect(src.page).toBe(1);
+    expect(src.segments.length).toBe(4);
+    expect(findRooms(planFromPdfSegments(src, 8).plan!).rooms.length).toBe(1);
+  });
+  it("одностраничный файл страниц не объявляет и предупреждения о выборе не даёт", async () => {
+    const src = await readPdfSegments(makePdf("0 0 400 300 re S"));
+    expect(src.pages ?? 1).toBe(1);
+    expect(src.warnings.join(" ")).not.toMatch(/страниц/);
+  });
+});
 
 describe("readPdfSegments — что нашлось в файле", () => {
   it("прямоугольник (re) даёт четыре отрезка и габарит в пунктах", async () => {
@@ -24,9 +162,9 @@ describe("readPdfSegments — что нашлось в файле", () => {
   it("moveto/lineto строит ломаную, замыкание h добавляет последний отрезок", async () => {
     const r = await readPdfSegments(makePdf("10 10 m 110 10 l 110 60 l h S"));
     expect(r.segments.length).toBe(3);
-    expect(r.segments[0]).toEqual({ x1: 10, y1: 10, x2: 110, y2: 10 });
+    expect(r.segments[0]).toMatchObject({ x1: 10, y1: 10, x2: 110, y2: 10 });
     // h возвращает в стартовую точку
-    expect(r.segments[2]).toEqual({ x1: 110, y1: 60, x2: 10, y2: 10 });
+    expect(r.segments[2]).toMatchObject({ x1: 110, y1: 60, x2: 10, y2: 10 });
   });
 
   it("не-PDF отвергается объяснением, а не пустым успехом", async () => {
@@ -267,13 +405,13 @@ describe("planFromPdfSegments — масштаб задаёт человек", (
 
   it("обрезка длинного чертежа называет число отброшенных", () => {
     const many: PdfSegments = {
-      segments: Array.from({ length: 450 }, (_, i) => ({ x1: 0, y1: i, x2: 400, y2: i })),
+      segments: Array.from({ length: MAX_SEGMENTS + 50 }, (_, i) => ({ x1: 0, y1: i, x2: 400, y2: i })),
       warnings: [],
-      extentPt: 450,
+      extentPt: MAX_SEGMENTS + 50,
     };
     const r = planFromPdfSegments(many, 9);
     expect(r.truncated).toBe(50);
-    expect(r.plan!.walls.length).toBe(400);
+    expect(r.plan!.walls.length).toBe(MAX_SEGMENTS);
     expect(r.warnings.join(" ")).toContain("отброшено 50");
   });
 });

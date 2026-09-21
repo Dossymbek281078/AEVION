@@ -295,6 +295,13 @@ const APP_SLUG_TO_MODULE_ID: Record<string, string> = {
   // развернул бы заплатившего за QPayNet — ровно тот же класс дефекта, ради
   // которого таблица и заведена. Охраняется тестом appSlugModuleIds.
   qpaynet: "qpaynet-embedded",
+  // Найдено 20.09.2026 тем же тестом, в тот же час, когда бирже назначили цену:
+  // слаг кассы пишется через подчёркивание (иначе имя переменной стало бы
+  // LEMON_SQUEEZY_VARIANT_STARTUP-EXCHANGE_LITE, с дефисом), а модуль в реестре
+  // зовётся через дефис. Без этой строки `moduleIdForAppSlug` возвращал сам слаг,
+  // в реестре такого модуля нет, и обратный поиск давал null — то есть заплативший
+  // за Биржу стартапов не опознавался бы там, где доступ ищут по модулю.
+  startup_exchange: "startup-exchange",
 };
 
 /**
@@ -320,7 +327,18 @@ export function allAppSlugs(): string[] {
 
 /** "ip_bureau" → "aevion-ip-bureau"; для совпадающих имён вернёт как есть. */
 export function moduleIdForAppSlug(slug: string): string {
-  return APP_SLUG_TO_MODULE_ID[slug] ?? slug;
+  const прямо = APP_SLUG_TO_MODULE_ID[slug];
+  if (прямо) return прямо;
+  // 🔴 20.09.2026: таблица выше ведётся РУКАМИ, и каталог её обогнал. В этот день
+  // добавили QRight, QSign, QSkyway и Startup Exchange; у последнего slug и
+  // moduleId различаются (`startup_exchange` против `startup-exchange`), строки в
+  // таблице нет — и обратный поиск возвращал null. Практически это «деньги взяли,
+  // выдать нечего»: гейт не находит покупку и разворачивает заплатившего.
+  //
+  // Спрашиваем сам каталог: у позиции уже есть moduleId, и он источник правды.
+  // Так следующий новый модуль не сломает сопоставление молча.
+  const из_каталога = STANDALONE_APPS.find((a) => a.slug === slug);
+  return из_каталога?.moduleId ?? slug;
 }
 
 /** Обратное: id модуля → slug подписки, если такой модуль вообще продаётся. */

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { языки } from "@/lib/hreflang";
 import { BuyLink } from "@/components/BuyLink";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 import {
@@ -33,7 +34,7 @@ export const metadata: Metadata = {
   title: "AEVION Shop — subscription, guides, apps",
   description:
     "Everything you can buy at AEVION in one place: a subscription to the whole planet for a term of 1 to 12 months, science-based longevity guides and a book as one-time purchases, five apps on their own. Wellness and education, not medicine.",
-  alternates: { canonical: "/en/shop" },
+  alternates: { canonical: "/en/shop", languages: языки("/en/shop") },
   openGraph: {
     title: "AEVION Shop — subscription, guides, apps",
     description:
@@ -126,6 +127,23 @@ export const EN_TEXTS: Record<
   cyberchess: {
     format: "app · term of 1–12 months",
     desc: "Chess platform: puzzles, an AI coach, and opponents that play like humans at your level.",
+  },
+  // Четыре приложения получили цену 20.09.2026 — переводы точные, без новых обещаний.
+  qright: {
+    format: "app · term of 1–12 months",
+    desc: "Authorship registration: the date and content of a work are recorded, and the evidence can be exported.",
+  },
+  qsign: {
+    format: "app · term of 1–12 months",
+    desc: "Document signing and integrity checks: canonical JSON, verification by fingerprint.",
+  },
+  "startup-exchange": {
+    format: "app · term of 1–12 months",
+    desc: "A showcase of ideas, MVPs and finished products: publish one, find one, agree on a deal.",
+  },
+  qskyway: {
+    format: "app · term of 1–12 months",
+    desc: "Navigation of a city’s air corridors: routes, altitudes, restrictions and wind.",
   },
 };
 

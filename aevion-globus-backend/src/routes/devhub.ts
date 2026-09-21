@@ -2002,9 +2002,14 @@ async function generateCodeWithAI(
       if (result) break;
       try {
         result = await callProvider(cand.id, messages, cand.defaultModel, 0.2, images, GEN_MAX_TOKENS);
-        учтиГенерацию(cand.id, cand.defaultModel, result.usage, moduleTag, userId);
+        // Ответ мог прийти от следующего поставщика (закрытый по лимиту пропущен
+        // в callProvider) — учёт и подпись берут того, кто ответил на самом деле.
+        const used = result.providerUsed
+          ? (chain.find((c) => c.id === result!.providerUsed) ?? getProviders().find((p) => p.id === result!.providerUsed) ?? cand)
+          : cand;
+        учтиГенерацию(used.id, result.model || used.defaultModel, result.usage, moduleTag, userId);
         учтиВЗапуск(result.usage);
-        provider = cand;
+        provider = used;
         break;
       } catch (inner) {
         attempts.push({ provider: cand.id, error: inner instanceof Error ? inner.message : String(inner) });
@@ -6556,7 +6561,7 @@ async function translateViaLlm(text: string, targetLang: string, sourceLang?: st
     try {
       const result = await callProvider(cand.id, messages, cand.model, 0, undefined, maxTokens);
       const out = String(result?.reply ?? "").trim();
-      if (out) return { text: out, provider: cand.id };
+      if (out) return { text: out, provider: result.providerUsed ?? cand.id };
       lastError = new Error(`${cand.id} answered with an empty translation`);
     } catch (e) {
       lastError = e;

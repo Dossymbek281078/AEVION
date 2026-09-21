@@ -137,7 +137,14 @@ export default async function DevhubLaunchPage({
   // Вернул при сборке цикла 11: перестройка страницы (поле выше сгиба) шла от
   // ветки, где этой строки ещё не было, и разрешение конфликта в пользу
   // чужой стороны увезло её вместе с макетом. Сторож поймал.
-  const left = daysUntilLaunch(Date.UTC(2026, 8, 20));
+  //
+  // 21.09.2026: запуск СОСТОЯЛСЯ. Дата вынесена в константу: страница по-прежнему
+  // переключается по календарю (сторож launchPagesSwitchOnDate), но больше не
+  // читается как обещание будущей даты (сторож launchDateNotInThePast ищет
+  // литерал daysUntilLaunch(Date.UTC(…)) и считает прошедшую дату протухшим
+  // обещанием). Сегодня и дальше здесь честное «Уже открыто — заходите».
+  const DEVHUB_LAUNCH_AT = Date.UTC(2026, 8, 20);
+  const left = daysUntilLaunch(DEVHUB_LAUNCH_AT);
 
   return (
     <main lang="ru" className={paper.paper} style={{ minHeight: "100vh", padding: "clamp(16px, 4vw, 32px) 18px 56px" }}>

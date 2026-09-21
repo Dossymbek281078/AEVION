@@ -34,7 +34,12 @@ import { WaitlistCapture } from "./WaitlistCapture";
 /** Помечает источник: видно в выгрузке. Схема сервера режет на 60 знаках. */
 export function footerWaitlistSource(pathname: string | null | undefined): string {
   const пусто = !pathname || pathname === "/";
-  return `footer:${пусто ? "home" : pathname}`.slice(0, 60);
+  // Разделитель — ДЕФИС, а не двоеточие: реестр писем на бэкенде сопоставляет
+  // метку как `s === prefix` или `s.startsWith(prefix + "-")`
+  // (lib/constitutionBrevo.ts). С двоеточием метка не находила бы свой модуль,
+  // и подписчик получал бы общее письмо вместо модульного — тихо.
+  const путь = (пусто ? "home" : String(pathname).replace(/^\//, "")).replace(/[^a-zA-Z0-9-]+/g, "-");
+  return `footer-${путь}`.slice(0, 60);
 }
 
 /** Есть ли на странице ЧУЖОЕ поле почты (не наше). */

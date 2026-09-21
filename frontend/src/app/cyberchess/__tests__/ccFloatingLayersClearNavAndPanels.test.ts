@@ -23,7 +23,12 @@ describe("тосты на телефоне — сверху под шапкой,
   });
   it("страница шахмат на <769 ставит top и bottom:auto, на десктопе снимает, при размонтировании чистит", () => {
     // top — по ФАКТИЧЕСКОЙ высоте шапки (со строкой «Вернуться к партии» она выше 64px): константа 64 ложилась на ⚙ ☰ (тестер 20.09)
-    expect(page).toContain('const h=(document.querySelector("[data-cc-header]")?.getBoundingClientRect().height)||56;r.setProperty("--aevion-toast-top",`${Math.round(h)+8}px`);r.setProperty("--aevion-toast-bottom","auto")');
+    // низ шапки в ОКНЕ, не высота: при scrollTop 0 шапка ниже полосы оболочки, «высота+8» ложилась на «Вернуться к партии» (390 puzzles)
+    expect(page).toContain('const rc=document.querySelector("[data-cc-header]")?.getBoundingClientRect();const h=rc?Math.max(rc.bottom,rc.height):56;r.setProperty("--aevion-toast-top",`${Math.round(Math.max(56,h))+8}px`);r.setProperty("--aevion-toast-bottom","auto")');
+    expect(page).toContain('window.addEventListener("scroll",apply,{passive:true})');
+    expect(page).toContain('window.removeEventListener("scroll",apply)');
+    // плашка языка на телефоне едет со страницей: фиксированная закрывала прокрученный ряд чипов («📡 Стрим» под «RU ▼»)
+    expect(page).toContain('@media (max-width:768px){[data-app-shell-pill]{position:absolute !important}}');
     expect(page).toContain('<div data-cc-header="1" style={{');
     expect(page).toContain('else{r.removeProperty("--aevion-toast-top");r.removeProperty("--aevion-toast-bottom")');
     expect(page).toContain('for(const k of ["--aevion-toast-top","--aevion-toast-bottom","--aevion-toast-lift"])r.removeProperty(k)');

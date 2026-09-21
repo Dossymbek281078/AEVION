@@ -842,7 +842,7 @@ export default function MultichatEnginePage() {
             Блок сам не нарисуется, если поле почты на странице появится. */}
         <div style={{ maxWidth: 560, margin: "32px 0 0" }}>
           <WaitlistIfMissing
-            source="multichat:page"
+            source="multichat-page"
             title="Платить сегодня рано? Оставьте адрес"
             description="Напишем, когда у AEVION откроются новые модули и возможности."
             buttonLabel="Сообщить мне"

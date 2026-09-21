@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
 import { getServerT } from "@/lib/i18n-server";
+import { WaitlistIfMissing } from "@/components/FooterWaitlist";
 
 export const dynamic = "force-dynamic";
 
@@ -195,6 +196,22 @@ export default async function SuccessStoriesPage() {
             </Link>
           </div>
         </div>
+      </div>
+
+      {/*
+        Приём адреса. Подвала у маршрута нет (/build в APP_PREFIXES), а витрина
+        после уборки наших проб честно пуста: настоящих наймов ноль. Сюда ведёт
+        пост очереди «QBuild: строительная биржа открыта» — человеку, который
+        пришёл смотреть истории и не нашёл их, надо дать хотя бы возможность
+        узнать о первых. Блок сам не рисуется, если поле почты появится.
+      */}
+      <div className="mx-auto mt-10 max-w-xl px-4">
+        <WaitlistIfMissing
+          source="build-success-stories"
+          title="Историй пока нет — напишем, когда появятся"
+          description="Напишем, когда на AEVION появятся новости — в том числе первые истории найма."
+          buttonLabel="Сообщить мне"
+        />
       </div>
     </main>
   );

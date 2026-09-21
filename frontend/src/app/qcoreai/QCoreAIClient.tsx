@@ -881,7 +881,7 @@ console.log(run.finalContent);`}</pre>
             нарисуется, если поле появится. */}
         <div style={{ maxWidth: 560, margin: "32px 0 0" }}>
           <WaitlistIfMissing
-            source="qcoreai:page"
+            source="qcoreai-page"
             title="Платить сегодня рано? Оставьте адрес"
             description="Напишем, когда у AEVION откроются новые модули и возможности."
             buttonLabel="Сообщить мне"

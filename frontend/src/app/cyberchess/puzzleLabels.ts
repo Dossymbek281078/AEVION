@@ -75,3 +75,23 @@ export function fazaRu(f: string | undefined | null): string {
   if (!f) return "";
   return FAZA[f] ?? f;
 }
+
+const SLOZHNOST = new Set(["Лёгкая", "Средняя", "Сложная", "Эксперт"]);
+
+/**
+ * Что из имени банковской задачи стоит ПЕЧАТАТЬ рядом с целью, значком сложности и
+ * фишкой темы. Банк отдаёт name вида «Мат в 2 · Средняя»: цель, сложность и тема уже
+ * показаны своими элементами, и без этого фильтра карточка и тост повторяли
+ * «Мат в 2 · Средняя · Мат в 2 · 1407» (тестер 20.09.2026, 1366 и 390).
+ */
+export function imyaZadachiBezPovtorov(
+  pz: { name?: string | null; goal?: string | null; mateIn?: number | null; theme?: string | null },
+): string[] {
+  const goal = pz.goal === "Mate" ? `Мат в ${pz.mateIn || 1}` : "";
+  const tema = temaZadachiRu(pz.theme);
+  const seen = new Set<string>();
+  return (pz.name || "")
+    .split("·")
+    .map((s) => s.trim())
+    .filter((s) => s && !SLOZHNOST.has(s) && s !== goal && s !== tema && !seen.has(s) && (seen.add(s), true));
+}

@@ -206,12 +206,9 @@ export default async function SuccessStoriesPage() {
         узнать о первых. Блок сам не рисуется, если поле почты появится.
       */}
       <div className="mx-auto mt-10 max-w-xl px-4">
-        <WaitlistIfMissing
-          source="build-success-stories"
-          title="Историй пока нет — напишем, когда появятся"
-          description="Напишем, когда на AEVION появятся новости — в том числе первые истории найма."
-          buttonLabel="Сообщить мне"
-        />
+        {/* Тексты по умолчанию — те же по смыслу, но живут в одном месте и не
+            уезжают в атрибут мимо переводов (сторож attrI18n). */}
+        <WaitlistIfMissing source="build-success-stories" />
       </div>
     </main>
   );

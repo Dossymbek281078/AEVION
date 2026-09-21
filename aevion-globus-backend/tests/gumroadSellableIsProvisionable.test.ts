@@ -45,11 +45,14 @@ afterAll(() => {
 const ОЖИДАЕМО = TERM_TIERS.length * (1 + STANDALONE_APPS.length);
 
 describe("что продаётся через Gumroad, то вебхук выдаёт", () => {
-  test("контроль: позиций 30 — пять сроков планеты и пять сроков у каждого из пяти приложений", () => {
-    expect(ОЖИДАЕМО).toBe(30);
+  // 20.09.2026: приложений девять — по слову основателя «везде должны быть цены»
+  // добавлены QRight, QSign, Startup Exchange, QSkyway. Значит позиций 5 × (1 + 9) = 50.
+  test("контроль: позиций 50 — пять сроков планеты и пять сроков у каждого из девяти приложений", () => {
+    expect(ОЖИДАЕМО).toBe(50);
     expect(ВСЕ.length).toBe(ОЖИДАЕМО);
     for (const t of TERM_TIERS) expect(ВСЕ).toContain(`tier_${t}`);
-    expect(ВСЕ.filter((r) => r.startsWith("app_")).length).toBe(25);
+    expect(ВСЕ.filter((r) => r.startsWith("app_")).length).toBe(45);
+    expect(ВСЕ).toContain("app_qskyway_lite");
     expect(ВСЕ).toContain("app_ip_bureau_max");
     // Прежние позиции витрины не продаются.
     expect(ВСЕ).not.toContain("tier_lite_monthly");

@@ -48,7 +48,7 @@ import { PV, ev, mm, best } from "./chessEngine";
 import { classifyDrop } from "./moveQuality";
 import PostGameCard from "./PostGameCard";
 import DeepAnalysisPanel from "./DeepAnalysisPanel";
-import { temaZadachiRu, fazaRu } from "./puzzleLabels";
+import { temaZadachiRu, fazaRu, imyaZadachiBezPovtorov } from "./puzzleLabels";
 import { tochnostSohranennoy } from "./postGameSummary";
 import { RANKS, gRank } from "./rating";
 import { pickDailyIdx } from "./dailyPick";
@@ -1127,6 +1127,26 @@ export default function CyberChessPage(){
   useIsoLayoutEffect(()=>{if(!hasCompletedOnboarding())sShowOnboarding(true)},[]);
 
   useIsoLayoutEffect(()=>{const up=()=>{sVwPx(window.innerWidth);sVhPx(window.innerHeight)};up();window.addEventListener("resize",up);return()=>window.removeEventListener("resize",up);},[]);
+  // Тосты общего провайдера — над BottomNav на телефоне (тестер 20.09.2026, 390px: тост
+  // «Мат в 2 · Лёгкая · Эндшпиль · 849 ×» лежал на иконках нава даже внизу прокрутки).
+  // На телефоне тосты СВЕРХУ (под шапкой): любой низ занят рядом кнопок партии и BottomNav —
+  // тестер 20.09.2026 (390) видел тост «Эндшпиль · Лёгкая…» на «Перевернуть · Новая партия».
+  // Отступ сверху — по ФАКТИЧЕСКОЙ высоте sticky-шапки через ResizeObserver: со строкой
+  // «Вернуться к партии» шапка выше, и константа 64px ложилась на ⚙ ☰.
+  // Берём НИЗ шапки в координатах окна, а не высоту: при scrollTop 0 шапка стоит ниже верхней
+  // полосы оболочки (~70px), и «высота+8» клала тост на «Вернуться к партии» (тестер 20.09, 390 puzzles).
+  // Плашка языка на телефоне — position:absolute (правило в <style> ниже): фиксированная закрывала
+  // прокрученный к верху ряд чипов («📡 Стрим» под «RU ▼», тестер 20.09, низ страницы).
+  useEffect(()=>{const r=document.documentElement.style;
+    const apply=()=>{try{
+      if(vwPx<769){const rc=document.querySelector("[data-cc-header]")?.getBoundingClientRect();const h=rc?Math.max(rc.bottom,rc.height):56;r.setProperty("--aevion-toast-top",`${Math.round(Math.max(56,h))+8}px`);r.setProperty("--aevion-toast-bottom","auto");r.setProperty("--aevion-toast-lift","0px");}
+      else{r.removeProperty("--aevion-toast-top");r.removeProperty("--aevion-toast-bottom");r.setProperty("--aevion-toast-lift","0px");}
+    }catch{}};
+    apply();
+    const el=document.querySelector("[data-cc-header]");
+    const ro=(el&&typeof ResizeObserver!=="undefined")?new ResizeObserver(apply):null; if(el&&ro)ro.observe(el);
+    window.addEventListener("scroll",apply,{passive:true}); // низ шапки в окне меняется прокруткой, а не только размером
+    return()=>{ro?.disconnect();window.removeEventListener("scroll",apply);try{for(const k of ["--aevion-toast-top","--aevion-toast-bottom","--aevion-toast-lift"])r.removeProperty(k)}catch{}}},[vwPx]);
   // Layout-fill (исправлено 2026-06-14): доска квадратная, узкое место — ВЫСОТА.
   // Большой запас по высоте (vhPx-280: header+часы+координаты+нижние контролы+браузерные
   // баннеры) чтобы доска НИКОГДА не вылезала за окно и не обрезалась снизу. По ширине
@@ -1218,6 +1238,11 @@ export default function CyberChessPage(){
   const[useCustom,sUseCustom]=useState(false);
   const[showCustom,sShowCustom]=useState(false);
   const[on,sOn]=useState(false);
+  // «Сдаться»/«Ничья» без системного confirm(): первый тап взводит кнопку (подпись меняется на
+  // вопрос), второй тап в течение 4 с выполняет. Системное окно браузера — чужой интерфейс
+  // поверх партии, на телефоне блокирует экран; у chess.com/lichess подтверждение встроенное (20.09.2026).
+  const[armed,sArmed]=useState<"resign"|"draw"|null>(null);
+  useEffect(()=>{if(!armed)return;const t=setTimeout(()=>sArmed(null),4000);return()=>clearTimeout(t)},[armed]);
   const[setup,sSetup]=useState(true);
   // Board editor state (Coach tab)
   const[editorMode,sEditorMode]=useState(false);
@@ -5322,7 +5347,8 @@ export default function CyberChessPage(){
     else if(pzMode==="custom")startClock(pzCustomSec);
     else if(pzMode==="rush"){/* keep running deadline */}
     else startClock(0);
-    showToast(`${pz.name} · ${temaZadachiRu(pz.theme)} · ${pz.r}`,"info");
+    // имя банковской задачи часто = её тема → «Эндшпиль · Эндшпиль»; дубль не печатаем (тестер 20.09.2026)
+    showToast([...imyaZadachiBezPovtorov(pz),temaZadachiRu(pz.theme)].filter(Boolean).concat(String(pz.r)).join(" · "),"info");
     // reset per-puzzle stopwatch
     if(pzTimerIntervalRef.current)clearInterval(pzTimerIntervalRef.current);
     pzTimerRef.current=Date.now();sPzTimer(0);paintPzTimer(0);
@@ -5993,9 +6019,11 @@ export default function CyberChessPage(){
         <button onClick={()=>sStreamerMode(false)} style={{padding:"6px 10px",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer"}}>✕</button>
       </div>}
       {/* Sticky glass header */}
-      {!streamerMode&&<div style={{
+      {!streamerMode&&<div data-cc-header="1" style={{
         position:"sticky",top:0,zIndex:Z.sticky,
-        margin:"0 -12px 12px",padding:"10px 12px",
+        // Телефон: справа 100px под плавающую языковую пилюлю «RU ▼» (AppShellLanguagePill, fixed
+        // top:12/right:12) — на 390 она ложилась на ☰/🔊 шапки (тестер 20.09.2026).
+        margin:"0 -12px 12px",padding:vwPx<769?"10px 100px 10px 12px":"10px 12px",
         background:CC.surfaceGlass,backdropFilter:"blur(14px)",WebkitBackdropFilter:"blur(14px)",
         borderBottom:`1px solid ${CC.border}`,
         display:"flex",alignItems:"center",gap:SPACE[3],flexWrap:"wrap"
@@ -6008,7 +6036,9 @@ export default function CyberChessPage(){
             display:"flex",alignItems:"center",justifyContent:"center",
             fontSize:19,color:"#fff",boxShadow:SHADOW.sm
           }}>♞</div>
-          <div style={{lineHeight:1.15}}>
+          {/* Телефон: текст логотипа скрыт ВИЗУАЛЬНО (clip), h1 остаётся в дереве доступности —
+              иначе шапка на 390 не помещается в одну строку и заворачивается. */}
+          <div style={vwPx<769?{position:"absolute",width:1,height:1,overflow:"hidden",clip:"rect(0 0 0 0)",whiteSpace:"nowrap"}:{lineHeight:1.15}}>
             {/* Заголовок первого уровня, а не крупный текст. Замер 27.08.2026:
                 на ГЛАВНОЙ странице модуля не было ни одного h1 — для экранного
                 диктора страница безымянна, а поиск не понимает, о чём она.
@@ -6120,7 +6150,7 @@ export default function CyberChessPage(){
         {/* «Все разделы» — видимый навигационный хаб. Делает обнаружимыми ВСЕ режимы и
             киллер-фичи (Турниры/Экономика/Тренинг/Реплеи/Студия/CPI), которые раньше были
             доступны только по прямому URL или через Ctrl+K. Зелёный акцент = заметность. */}
-        <button onClick={()=>sShowSections(true)} title="Все разделы — турниры, экономика, тренинг, реплеи, рейтинг…" className="cc-focus-ring"
+        {vwPx>=769&&<button onClick={()=>sShowSections(true)} title="Все разделы — турниры, экономика, тренинг, реплеи, рейтинг…" className="cc-focus-ring"
           style={{
             display:"inline-flex",alignItems:"center",gap:6,
             padding:"7px 14px",borderRadius:RADIUS.full,
@@ -6129,10 +6159,10 @@ export default function CyberChessPage(){
           }}>
           <span style={{fontSize:14}}>☰</span>
           <span>Все разделы</span>
-        </button>
+        </button>}
         {/* Единое «? Помощь» — обзорный тур / горячие клавиши / что такое Chessy. Собрано из
             4 разрозненных help-входов, чтобы новичок не гадал, какой «?» куда ведёт. */}
-        <div style={{position:"relative",flexShrink:0}}>
+        {vwPx>=769&&<div style={{position:"relative",flexShrink:0}}>
           <button onClick={()=>sHelpMenuOpen(v=>!v)} aria-haspopup="menu" aria-expanded={helpMenuOpen} title="Помощь — тур по интерфейсу, горячие клавиши, что такое Chessy" aria-label="Помощь" className="cc-focus-ring"
             style={{display:"inline-flex",alignItems:"center",gap:5,padding:"7px 13px",borderRadius:RADIUS.full,
               border:`1.5px solid ${helpMenuOpen?"#2563eb":"#3b82f6"}`,background:helpMenuOpen?"rgba(37,99,235,0.18)":"rgba(59,130,246,0.12)",color:"#2563eb",
@@ -6156,11 +6186,11 @@ export default function CyberChessPage(){
               </button>)}
             </div>
           </>}
-        </div>
+        </div>}
         {/* Аккаунт — вход в общий AEVION-аккаунт. Вошёл → рейтинг/история следуют за
             игроком между устройствами (не только этот браузер). Ссылки на общий
             /auth и /account платформы, свой UI не плодим. */}
-        {ccAuth.checked&&(ccAuth.user
+        {vwPx>=769&&ccAuth.checked&&(ccAuth.user
           ? <a href="/account" title={`Аккаунт: ${ccAuth.user.email||ccAuth.user.name||"вошёл"} — рейтинг и история синхронизируются между устройствами`} className="cc-focus-ring"
               style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 12px",borderRadius:RADIUS.full,
                 border:`1.5px solid ${CC.brand}`,background:CC.brandSoft,color:CC.brand,
@@ -6178,7 +6208,7 @@ export default function CyberChessPage(){
         )}
         {/* Bookmark counter — visible chip when any saved positions exist. Click opens the
             command palette pre-filtered to "открыть" so the bookmark list is the top result. */}
-        {bookmarks.length>0&&<button onClick={()=>sPalOpen(true)} title={`${bookmarks.length} закладок · клик откроет палитру (Ctrl+K)`} className="cc-focus-ring"
+        {vwPx>=769&&bookmarks.length>0&&<button onClick={()=>sPalOpen(true)} title={`${bookmarks.length} закладок · клик откроет палитру (Ctrl+K)`} className="cc-focus-ring"
           style={{
             display:"inline-flex",alignItems:"center",gap:5,
             padding:"5px 10px",borderRadius:RADIUS.full,
@@ -6191,7 +6221,7 @@ export default function CyberChessPage(){
         <div style={{flex:1}}/>
 
         {/* Профиль — рейтинг + Chessy (микро-лейбл убран: чистая шапка) */}
-        <div className="cc-hzone" style={{display:"flex",alignItems:"center",gap:3,flexShrink:0}}>
+        {vwPx>=769&&<div className="cc-hzone" style={{display:"flex",alignItems:"center",gap:3,flexShrink:0}}>
           <div style={{display:"inline-flex",alignItems:"center",gap:6}}>
         {/* Rating badge */}
         <div style={{
@@ -6278,12 +6308,12 @@ export default function CyberChessPage(){
           </button>
         </div>
           </div>
-        </div>
+        </div>}
 
         {/* Часто нужное — настройки, звук, мобильная панель — остаётся в шапке */}
         <div style={{display:"inline-flex",alignItems:"center",gap:4,flexShrink:0,padding:3,borderRadius:RADIUS.md,background:CC.surface2,border:`1px solid ${CC.border}`}}>
         <Btn variant="secondary" size="sm" icon={<Icon.Settings/>} onClick={()=>sShowSettings(true)} title="Настройки" ariaLabel="Настройки" style={{padding:"6px 10px",minHeight:36,minWidth:36}}/>
-        <Btn variant={muted?"danger":"secondary"} size="sm" icon={muted?<Icon.Mute/>:<Icon.Sound/>} onClick={()=>{sMuted(v=>!v);showToast(muted?"Звук включён":"Звук выключен","info")}} title={muted?"Включить звук (M)":"Выключить звук (M)"} ariaLabel={muted?"Включить звук":"Выключить звук"} style={{padding:"6px 10px",minHeight:36,minWidth:36}}/>
+        {vwPx>=769&&<Btn variant={muted?"danger":"secondary"} size="sm" icon={muted?<Icon.Mute/>:<Icon.Sound/>} onClick={()=>{sMuted(v=>!v);showToast(muted?"Звук включён":"Звук выключен","info")}} title={muted?"Включить звук (M)":"Выключить звук (M)"} ariaLabel={muted?"Включить звук":"Выключить звук"} style={{padding:"6px 10px",minHeight:36,minWidth:36}}/>}
         {/* Mobile sidebar toggle — visible only on mobile via CSS */}
         <button onClick={()=>sMobileSidebarOpen(v=>!v)} title="Открыть боковую панель" aria-label="Свернуть боковую панель" style={{padding:"6px 10px",minHeight:36,minWidth:36,border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,background:mobileSidebarOpen?CC.brandSoft:CC.surface1,color:mobileSidebarOpen?CC.brand:"inherit",cursor:"pointer",fontSize:18,fontWeight:700,display:"none",alignItems:"center",justifyContent:"center"}} className="cc-mobile-sidebar-btn">☰</button>
         </div>
@@ -6298,6 +6328,14 @@ export default function CyberChessPage(){
             <div onClick={()=>sMoreMenuOpen(false)} style={{position:"fixed",inset:0,zIndex:190}}/>
             <div role="menu" style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:200,minWidth:240,padding:10,borderRadius:RADIUS.lg,background:CC.surface1,border:`1px solid ${CC.borderStrong}`,boxShadow:SHADOW.lg,display:"flex",flexDirection:"column",gap:4}}>
               {[
+                // Телефон (<769): то, что убрано из шапки ради одной строки (20.09.2026), живёт здесь —
+                // вход/аккаунт, рейтинг и Chessy (→ дашборд «Профиль»), «Все разделы».
+                ...(vwPx<769?[
+                  ...(ccAuth.checked&&!ccAuth.user?[{ic:<span style={{fontSize:14}} aria-hidden>👤</span>,lbl:"Войти в аккаунт AEVION",act:()=>{window.location.href="/auth?next=/cyberchess"}}]:[]),
+                  ...(ccAuth.user?[{ic:<span style={{fontSize:14}} aria-hidden>👤</span>,lbl:"Мой аккаунт AEVION",act:()=>{window.location.href="/account"}}]:[]),
+                  {ic:<span style={{fontSize:14}} aria-hidden>◆</span>,lbl:`Рейтинг ${rat} · Chessy ${chessy.balance}`,act:()=>sShowStatsDashboard(true)},
+                  {ic:<span style={{fontSize:14}} aria-hidden>☰</span>,lbl:"Все разделы",act:()=>sShowSections(true)},
+                ]:[]),
                 {ic:<Icon.Help width={16} height={16}/>,lbl:"Горячие клавиши",act:()=>sShowHelp(true)},
                 {ic:<span style={{fontSize:15}} aria-hidden>🎵</span>,lbl:"Музыка",act:()=>sShowMusicPlayer(true)},
                 {ic:<span style={{fontSize:14}} aria-hidden>⛶</span>,lbl:"Полноэкранный режим",act:()=>{const el=document.documentElement;if(!document.fullscreenElement){el.requestFullscreen?.().catch(()=>{})}else{document.exitFullscreen?.().catch(()=>{})}}},
@@ -6315,8 +6353,9 @@ export default function CyberChessPage(){
             Тестер 18.09.2026 (партия кликами, 390px, Коуч): fixed-пилюля с bottom:88 лежала на
             буквах доски «c»/«d» (100% наложения), а любой другой bottom попадал на BottomNav.
             Строка шапки сдвигает контент вниз — накрывать ей нечего по построению; и отступ
-            152px под скроллером больше не нужен. Десктоп — fixed top:156 (см. ниже). */}
-        {on&&!over&&tab!=="play"&&!isHumanGame&&vwPx<769&&<button onClick={()=>sTab("play")} title="Вернуться к партии — часы на паузе, пока ты здесь" className="cc-focus-ring" style={{flex:"1 1 100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"9px 14px",borderRadius:RADIUS.full,border:"none",background:"linear-gradient(135deg,#059669,#10b981)",color:"#fff",fontSize:14,fontWeight:900,cursor:"pointer"}}>
+            152px под скроллером больше не нужен. С 19.09.2026 так на ЛЮБОЙ ширине: десктопная
+            fixed-пилюля top:156 при прокрутке «Анализа» ложилась на 8-ю горизонталь доски. */}
+        {on&&!over&&tab!=="play"&&!isHumanGame&&<button onClick={()=>sTab("play")} title="Вернуться к партии — часы на паузе, пока ты здесь" className="cc-focus-ring" style={{flex:vwPx<769?"1 1 100%":"0 0 auto",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"9px 14px",borderRadius:RADIUS.full,border:"none",background:"linear-gradient(135deg,#059669,#10b981)",color:"#fff",fontSize:14,fontWeight:900,cursor:"pointer"}}>
           <span style={{fontSize:15,lineHeight:1}}>▶</span><span>Вернуться к партии</span><span style={{fontSize:11,fontWeight:700,opacity:0.85,background:"rgba(255,255,255,0.2)",padding:"2px 8px",borderRadius:999}}>⏸ пауза</span>
         </button>}
       </div>}
@@ -7466,8 +7505,10 @@ export default function CyberChessPage(){
           В партии с ЧЕЛОВЕКОМ (P2P/hotseat) движковые «уходы» (Анализ/Коуч/Пазлы/Ещё)
           скрыты — иначе игрок подсматривал бы оценку движка против живого соперника.
           Остаются только неигровые оверлеи (Стрим/Видео), которые не уводят с доски. */}
+      {/* Телефон: чипов больше, чем ширины (390: «…Стри» обрезался, «Видео»/«Ещё» недостижимы —
+          тестер 20.09.2026). Ряд прокручивается по горизонтали, полоса прокрутки скрыта. */}
       {!streamerMode&&!setup&&on&&tab==="play"&&(
-        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"nowrap"}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"nowrap",overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none",paddingBottom:2,paddingRight:vwPx<769?96:0}}>
           {([
             ...(isHumanGame?[]:[
               {icon:TAB_META.analysis.icon,label:TAB_META.analysis.label,hint:"Анализ позиции",accent:TAB_META.analysis.hue, act:()=>sTab("analysis")},
@@ -7558,6 +7599,16 @@ export default function CyberChessPage(){
               <div style={{fontSize:13,color:CC.textDim,marginTop:3}}>Движок: <b style={{color:sfOk?CC.text:CC.gold}}>{sfOk?"Stockfish 18 · d22":"не запустился — считает запасной расчёт"}</b></div>
               <div style={{fontSize:13,color:CC.textDim,marginTop:3}}>Коуч: <b style={{color:CC.text}}>супер-GM</b></div>
             </Card>
+            {/* Теория дебюта — в потоке, после «Партии»: ничего не накрывает по построению */}
+            {currentOpening&&<OpeningFlashCard
+      open={showOpeningCard}
+      opening={currentOpening}
+      currentPly={hist.length}
+      isPlayerTurn={game.turn()===pCol}
+      onDismiss={()=>sShowOpeningCard(false)}
+      surface={CC.surface1} border={CC.border}
+      text={CC.text} textDim={CC.textDim} accent={CC.brand}
+    />}
           </aside>;
         })()}
         {/* Колонка доски: не растягиваем (flex:0 1 auto) — иначе мелкая доска центрируется
@@ -8233,8 +8284,10 @@ export default function CyberChessPage(){
               />
             </div>
           </div>
-          <div style={{display:"flex",alignItems:"center",paddingLeft:23,width:bw,gap:4}}>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div>
+          {/* Телефон: палитра тем и масштаб уходят на вторую строку, а буквы a–h занимают всю ширину
+              доски — иначе на 390 сетка букв сжималась до ~70px и «ABCDEFGH» слипалось слева (тестер 20.09.2026). */}
+          <div style={{display:"flex",alignItems:"center",paddingLeft:23,width:bw,gap:4,flexWrap:vwPx<769?"wrap":"nowrap"}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:vwPx<769?"1 1 100%":1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div>
             <div style={{display:"flex",gap:3,flexShrink:0,alignItems:"center"}}>
               {BOARD_THEMES.slice(0,8).map((th,i)=><button key={i} title={`Тема: ${th.name}`} aria-label={`Тема доски: ${th.name}`} aria-pressed={boardTheme===i} onClick={()=>sBoardTheme(i)} style={{width:22,height:22,borderRadius:"50%",border:boardTheme===i?`2px solid ${CC.text}`:`2px solid ${CC.border}`,background:th.dark,cursor:"pointer",padding:0,flexShrink:0,outline:"none",transition:"transform 120ms",transform:boardTheme===i?"scale(1.18)":"scale(1)"}}/>)}
               <div style={{width:1,height:12,background:CC.border,margin:"0 2px"}}/>
@@ -8513,9 +8566,11 @@ export default function CyberChessPage(){
             {/* Premove Undo / Clear — moved to the top strip above the board (premoves row).
                 Removed from this bottom controls row to avoid duplication. */}
           </div>
-          {on&&!over&&!setup&&<div style={{display:"flex",gap:8,marginTop:SPACE[2],flexWrap:"wrap"}}>
-            <Btn size="md" variant="danger" className="cc-game-btn" onClick={()=>{if(!confirm("Сдаться?"))return;if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{const nr=новыйРейтинг(rat,lv.elo,false);sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>🏳 Сдаться</Btn>
-            <Btn size="md" variant="gold" className="cc-game-btn" onClick={()=>{if(!confirm("Предложить ничью?"))return;if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("ИИ отклонил ничью","error")}}>½ Ничья</Btn>
+          {/* Ряд «Сдаться · Ничья · Отменить · Подсказка» — только на вкладке партии: на Задачах/Коуче/Анализе
+              при паузе партии он сбивал с толку (тестер 20.09.2026, 390: «Сдаться» под доской задачи). */}
+          {on&&!over&&!setup&&tab==="play"&&<div style={{display:"flex",gap:8,marginTop:SPACE[2],flexWrap:"wrap"}}>
+            <Btn size="md" variant="danger" className="cc-game-btn" onClick={()=>{if(armed!=="resign"){sArmed("resign");return;}sArmed(null);if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{const nr=новыйРейтинг(rat,lv.elo,false);sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>{armed==="resign"?"Точно сдаться? ✓":"🏳 Сдаться"}</Btn>
+            <Btn size="md" variant="gold" className="cc-game-btn" onClick={()=>{if(armed!=="draw"){sArmed("draw");return;}sArmed(null);if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("ИИ отклонил ничью","error")}}>{armed==="draw"?"Предложить ничью? ✓":"½ Ничья"}</Btn>
             <Btn size="md" variant="secondary" className="cc-game-btn" icon={<Icon.Undo width={14} height={14}/>} onClick={()=>{
               if(hist.length<2){showToast("Ходов нет","error");return}
               if(think){showToast("ИИ думает — подожди","error");return}
@@ -10246,7 +10301,7 @@ export default function CyberChessPage(){
               <div style={{padding:"14px 16px"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,marginBottom:10}}>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12,fontWeight:700,color:T.dim,marginBottom:2,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>{pzCurrent.name}</div>
+                    {imyaZadachiBezPovtorov(pzCurrent).length>0&&<div style={{fontSize:12,fontWeight:700,color:T.dim,marginBottom:2,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>{imyaZadachiBezPovtorov(pzCurrent).join(" · ")}</div>}
                     <div style={{fontSize:18,fontWeight:900,color:T.text,lineHeight:1.2}}>
                       {pzCurrent.side==="w"?"⚪":"⚫"} {pzCurrent.goal==="Mate"?`Мат в ${pzCurrent.mateIn}`:"Найди лучший ход"}
                     </div>
@@ -11785,7 +11840,7 @@ ${question.trim()}`;
           <div style={{marginTop:SPACE[3],fontSize:11,color:CC.textDim,textAlign:"center"}}>Клик мимо — отмена</div>
         </div>
       </div>}
-      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}@keyframes spin{to{transform:rotate(360deg)}}@keyframes diceRoll{0%{transform:rotate(0) scale(0.5);opacity:0.3}50%{transform:rotate(180deg) scale(1.15)}100%{transform:rotate(360deg) scale(1);opacity:1}}@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}@keyframes fadeInUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@keyframes pop{0%{transform:scale(0.85);opacity:0}60%{transform:scale(1.05)}100%{transform:scale(1);opacity:1}}@keyframes sf-depth-pulse{0%{opacity:0.45;transform:scale(0.96)}50%{opacity:1;transform:scale(1.04)}100%{opacity:0.85;transform:scale(1)}}@keyframes pip-suggest-pulse{0%,100%{box-shadow:0 0 0 0 rgba(168,85,247,0.6)}50%{box-shadow:0 0 0 8px rgba(168,85,247,0)}}`}</style>
+      <style>{`@media (max-width:768px){[data-app-shell-pill]{position:absolute !important}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}@keyframes spin{to{transform:rotate(360deg)}}@keyframes diceRoll{0%{transform:rotate(0) scale(0.5);opacity:0.3}50%{transform:rotate(180deg) scale(1.15)}100%{transform:rotate(360deg) scale(1);opacity:1}}@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}@keyframes fadeInUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@keyframes pop{0%{transform:scale(0.85);opacity:0}60%{transform:scale(1.05)}100%{transform:scale(1);opacity:1}}@keyframes sf-depth-pulse{0%{opacity:0.45;transform:scale(0.96)}50%{opacity:1;transform:scale(1.04)}100%{opacity:0.85;transform:scale(1)}}@keyframes pip-suggest-pulse{0%,100%{box-shadow:0 0 0 0 rgba(168,85,247,0.6)}50%{box-shadow:0 0 0 8px rgba(168,85,247,0)}}`}</style>
     {/* Games History Modal */}
     {gamesModalOpen&&(()=>{
       // Library v2 — full search/sort/filter/PGN export/delete.
@@ -12165,7 +12220,7 @@ ${question.trim()}`;
                     UI paths without shipping a public self-unlock button. Previously rendered
                     unconditionally for any visitor, letting anyone grant themselves Ultimate for
                     free via a single confirm() dialog — closed as a launch-readiness fix. */}
-                {!owned&&t.id!=="free"&&typeof window!=="undefined"&&window.localStorage.getItem("aevion_debug")==="1"&&<button onClick={()=>{
+                {!owned&&t.id!=="free"&&process.env.NODE_ENV!=="production"&&typeof window!=="undefined"&&window.localStorage.getItem("aevion_debug")==="1"&&<button onClick={()=>{
                   if(!confirm(`🧪 Тест-активация ${t.name} (без реальной оплаты)?\n\nВсе premium-фичи разблокируются. Можно отключить через localStorage clear.`))return;
                   sChessy(c=>({...c,owned:{...c.owned,[t.id]:true}}));
                   showToast(`✨ ${t.name} активирован (тест-режим)`,"success");
@@ -12436,7 +12491,8 @@ ${question.trim()}`;
         «Играть» и на нижнюю навигацию — то есть первый экран новичка вёл не
         к игре, а к предложению включить чужой стрим. Про перекрытие доски
         здесь уже думали (условие !on ниже), про мобильный первый экран — нет. */}
-    {showPipSuggest&&!on&&!anyOnboardingModal&&vwPx>=900&&<div
+    {/* !setup: на лаунчпаде подсказка стрима накрывала плитку «Онлайн-матч» и блок писем (скрин 1920, 20.09.2026) */}
+    {showPipSuggest&&!on&&!setup&&!anyOnboardingModal&&vwPx>=900&&<div
       role="alert"
       style={{
         position:"fixed",right:"calc(20px + var(--aevion-projects-w, 0px))",bottom:POLOSA_VSPLYVASHEK,zIndex:7900,
@@ -12774,63 +12830,10 @@ ${question.trim()}`;
       })()}
     </Modal>
 
-    {/* «Вернуться к партии» — плавающая пилюля, видна с ЛЮБОЙ вкладки, когда идёт живая
-        партия против компьютера, а игрок ушёл в анализ/коуч/пазлы. Часы стоят на паузе —
-        можно вернуться в любой момент (по просьбе основателя). В партии с человеком не
-        показываем: оттуда уходить нельзя, поэтому tab всегда «play». */}
-    {on&&!over&&tab!=="play"&&!isHumanGame&&vwPx>=769&&<button onClick={()=>sTab("play")}
-      title="Вернуться к партии — часы на паузе, пока ты здесь"
-      style={{
-        // bottom на телефоне поднят над BottomNav (sticky bottom:0, ~54px, порог 769 —
-        // тот же, что у BottomNav): при bottom:20 пилюля ложилась РОВНО на вкладки
-        // Анализ/Коуч и, будучи выше по z, делала их ненажимаемыми. Замер 15.09.2026
-        // на 390px: elementFromPoint над вкладкой Коуч возвращал эту пилюлю.
-        // На ДЕСКТОПЕ (≥769) — ВВЕРХУ под шапкой, по центру, а не внизу: раскладка
-        // фиксированной высоты, доска анализа доходит до низа экрана, и центральная
-        // пилюля с bottom:20 ложилась на c1–h1 И на ряд ввода ходов «Перевернуть · Новая
-        // партия · Голос · Ход текстом» (скрин основателя 15.09.2026, Коуч, ~2000px: ряда
-        // не видно вовсе). Левый нижний угол не универсален — при сдвинутой раскладке
-        // (боковая панель) ряд ввода начинается с x≈217 и попал бы под пилюлю. Вверху:
-        // контент с y≈148, тулбар «⚙ 🔊 Ещё» слева (x<260), баннер с ≈230, доска с ≈430 —
-        // центрированная пилюля на top:156 ни с чем не пересекается на любой ширине.
-        // На телефоне с 18.09.2026 fixed-пилюли НЕТ: строка в потоке внутри sticky-шапки (см. шапку).
-        position:"fixed",top:156,left:"50%",transform:"translateX(-50%)",zIndex:Z.modal,
-        display:"inline-flex",alignItems:"center",gap:9,
-        padding:"11px 20px",borderRadius:RADIUS.full,border:"none",
-        background:"linear-gradient(135deg,#059669,#10b981)",color:"#fff",
-        fontSize:14,fontWeight:900,letterSpacing:0.2,cursor:"pointer",
-        boxShadow:"0 8px 28px rgba(5,150,105,0.45)",
-        animation:"cc-evdelta-in 0.3s ease-out",
-      }}>
-      <span style={{fontSize:16,lineHeight:1}}>▶</span>
-      <span>Вернуться к партии</span>
-      <span style={{fontSize:11,fontWeight:700,opacity:0.85,background:"rgba(255,255,255,0.2)",padding:"2px 8px",borderRadius:999}}>⏸ пауза</span>
-    </button>}
+    {/* «Вернуться к партии» живёт строкой в потоке sticky-шапки (см. шапку); fixed-пилюли нет ни на одной ширине с 19.09.2026. */}
 
-    {/* Floating keyboard hint pill — bottom-right, кликабельно открывает help.
-        Только там, где есть КЛАВИАТУРА. На телефоне подсказка про горячие
-        клавиши бессмысленна и при этом перекрывала главную кнопку «Играть»:
-        замер 21.08 при ширине 390 — пилюля на y=745, кнопка на y=710..784. */}
-    {!streamerMode&&!showHelp&&vwPx>=900&&<button onClick={()=>sShowHelp(true)} title="Показать горячие клавиши"
-      style={{
-        // bottom:64 (не 16) — пилюля ИИ-коуча уже сидит в правом нижнем углу;
-        // ставим кнопку помощи НАД ней, чтобы не было наложения. (Фикс наезда справа.)
-        position:"fixed",bottom:64,right:"calc(16px + var(--aevion-projects-w, 0px))",zIndex:Z.sticky,
-        display:"inline-flex",alignItems:"center",gap:6,
-        padding:"6px 12px 6px 6px",
-        background:CC.surface1,
-        border:`1px solid ${CC.border}`,
-        borderRadius:RADIUS.full,
-        boxShadow:SHADOW.md,
-        cursor:"pointer",
-        transition:`transform ${MOTION.fast} ${MOTION.ease}, box-shadow ${MOTION.base} ${MOTION.ease}`,
-      }}
-      onMouseEnter={e=>{const el=e.currentTarget as HTMLButtonElement;el.style.transform="translateY(-1px)";el.style.boxShadow=SHADOW.lg}}
-      onMouseLeave={e=>{const el=e.currentTarget as HTMLButtonElement;el.style.transform="";el.style.boxShadow=SHADOW.md}}
-    >
-      <kbd style={{fontFamily:"ui-monospace, SFMono-Regular, monospace",fontWeight:900,fontSize:11,padding:"2px 8px",borderRadius:RADIUS.sm,background:CC.surface3,border:`1px solid ${CC.border}`,color:CC.text}}>?</kbd>
-      <span style={{fontSize:11,fontWeight:700,color:CC.textDim,letterSpacing:0.2}}>горячие клавиши</span>
-    </button>}
+    {/* Плавающей пилюли «горячие клавиши» больше нет (19.09.2026): на 1920 она накрывала кнопку «Войти» в панели
+        «Анализ варианта» правой колонки. Клавиши доступны из «Помощь», «Ещё», палитры (Ctrl+K) и по клавише «?». */}
 
     {/* AI Rival greeting */}
     <Modal open={showRivalGreet&&!!rivalProfile} onClose={()=>sShowRivalGreet(false)} size="sm"
@@ -15418,15 +15421,8 @@ ${question.trim()}`;
       />
     </div>}
     {/* Opening Flash Card — плавающая карточка дебюта */}
-    {currentOpening&&<OpeningFlashCard
-      open={showOpeningCard}
-      opening={currentOpening}
-      currentPly={hist.length}
-      isPlayerTurn={game.turn()===pCol}
-      onDismiss={()=>sShowOpeningCard(false)}
-      surface={CC.surface1} border={CC.border}
-      text={CC.text} textDim={CC.textDim} accent={CC.brand}
-    />}
+    {/* Карточка теории дебюта живёт в потоке левой колонки под «Партией» (см. aside) — fixed-вариант
+        на 1366×768 ложился на саму карточку «Партия» (тестер 20.09.2026). */}
     <PlayerStatsDashboard
       open={showStatsDashboard}
       onClose={()=>sShowStatsDashboard(false)}

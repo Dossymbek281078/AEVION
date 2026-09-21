@@ -9,6 +9,7 @@ import { apiUrl } from "@/lib/apiBase";
 import { useI18n } from "@/lib/i18n";
 import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { WaitlistIfMissing } from "@/components/FooterWaitlist";
 
 type Msg = { role: "user" | "assistant" | "system"; content: string };
 
@@ -873,6 +874,18 @@ console.log(run.finalContent);`}</pre>
           >
             Start building →
           </a>
+        </div>
+
+        {/* Приём адреса: подвала у маршрута нет (APP_PREFIXES), поля почты на
+            странице не было вовсе (замер 20.09.2026, 390 px). Блок сам не
+            нарисуется, если поле появится. */}
+        <div style={{ maxWidth: 560, margin: "32px 0 0" }}>
+          <WaitlistIfMissing
+            source="qcoreai-page"
+            title="Платить сегодня рано? Оставьте адрес"
+            description="Напишем, когда у AEVION откроются новые модули и возможности."
+            buttonLabel="Сообщить мне"
+          />
         </div>
       </ProductPageShell>
     </main>

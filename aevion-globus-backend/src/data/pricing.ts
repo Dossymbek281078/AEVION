@@ -269,6 +269,21 @@ export const STANDALONE_APPS: StandaloneApp[] = [
   { slug: "qventure", moduleId: "qventure", name: "QVenture", baseMonthly: 80 },
   { slug: "ip_bureau", moduleId: "aevion-ip-bureau", name: "IP Bureau", baseMonthly: 32 },
   { slug: "devhub", moduleId: "devhub", name: "DevHub", baseMonthly: 200 },
+  // 20.09.2026, слово основателя «везде должны быть цены». База кратна 8: коэффициенты
+  // сроков (1 / 0.875 / 0.75 / 0.625 / 0.5) обязаны давать ЦЕЛЫЙ месяц, иначе
+  // termPricePerMonth бросает. Проверено: 24/32/40/56 проходят, 19/29/49/59 — нет.
+  // Товаров в кассе у них пока нет: страница цен честно покажет цену и «связаться»
+  // вместо кнопки (сторож unsellableTierExplainsItself), кнопки зажгутся сами, когда
+  // появятся варианты и переменные LEMON_SQUEEZY_VARIANT_<SLUG>_<СТУПЕНЬ>.
+  { slug: "qright", moduleId: "qright", name: "QRight", baseMonthly: 24 },
+  { slug: "qsign", moduleId: "qsign", name: "QSign", baseMonthly: 24 },
+  { slug: "startup_exchange", moduleId: "startup-exchange", name: "Startup Exchange", baseMonthly: 40 },
+  // QSkyway: слово основателя 14.09.2026 было $19/мес. Лестница сроков (15.09)
+  // QSkyway не называла, а база обязана делиться на 8 — иначе termPricePerMonth
+  // бросает на дробном долларе. Из двух ближайших (16 и 24) взята МЕНЬШАЯ:
+  // брать с человека больше, чем назвал основатель, я не вправе. Решение
+  // вынесено ему файлом 2026-09-20-ВАША-РУКА-три-дела-на-15-минут.md.
+  { slug: "qskyway", moduleId: "qskyway", name: "QSkyway", baseMonthly: 16 },
 ];
 
 export function standaloneApp(slugOrModuleId: string): StandaloneApp | null {

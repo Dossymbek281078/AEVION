@@ -40,9 +40,17 @@ describe("лестница сроков AEVION", () => {
     expect(PLANET_BASE_MONTHLY).toBe(400);
   });
 
-  test("отдельно продаются ровно пять приложений: шахматы, мультичат, бизнес-анализатор, бюро, DevHub", () => {
+  // 20.09.2026: приложений стало девять. Четыре добавлены по прямому слову
+  // основателя «везде должны быть цены» — до того страницы qright, qsign,
+  // биржи стартапов и qskyway цену не называли вовсе, то есть купить их было
+  // нельзя ничем. Список закреплён литералом намеренно: новое приложение
+  // обязано пройти через человека, а не появиться в продаже само.
+  test("отдельно продаются ровно девять приложений", () => {
     expect(STANDALONE_APPS.map((a) => a.moduleId).sort()).toEqual(
-      ["aevion-ip-bureau", "cyberchess", "devhub", "multichat-engine", "qventure"],
+      [
+        "aevion-ip-bureau", "cyberchess", "devhub", "multichat-engine",
+        "qright", "qsign", "qskyway", "qventure", "startup-exchange",
+      ].sort(),
     );
     const standalone = new Set(STANDALONE_APPS.map((a) => a.moduleId));
     const soldAsAddon = MODULES_PRICING.filter((m) => (m.addonMonthly ?? 0) > 0).map((m) => m.id);
@@ -53,17 +61,25 @@ describe("лестница сроков AEVION", () => {
   });
 
   test("базы отдельных приложений — решение основателя (бюро $32 — слово 15.09.2026)", () => {
-    // Литералами: это решение человека. При бюро $32 пять приложений вместе стоят
-    // $376 на Lite — дешевле планеты ($400); основатель выбрал это сознательно.
+    // Литералами: это решение человека. Пять первых баз — слово основателя
+    // 15.09.2026 (бюро $32). Четыре добавлены 20.09.2026 под его же «везде
+    // должны быть цены»; числа кратны 8, иначе termPricePerMonth даёт дробный
+    // доллар на Medium и Full и бросает (reference_app_price_must_be_multiple_of_eight).
     expect(Object.fromEntries(STANDALONE_APPS.map((a) => [a.slug, a.baseMonthly]))).toEqual({
       cyberchess: 24,
       multichat: 40,
       qventure: 80,
       ip_bureau: 32,
       devhub: 200,
+      qright: 24,
+      qsign: 24,
+      startup_exchange: 40,
+      qskyway: 16,
     });
     expect(TERM_TIERS.map((t) => termPricePerMonth(32, t))).toEqual([32, 28, 24, 20, 16]);
-    expect(STANDALONE_APPS.reduce((s, a) => s + a.baseMonthly, 0)).toBe(376);
+    // Девять приложений вместе — $520/мес против $400 у всей планеты: покупать
+    // их по отдельности дороже, и это правильная сторона неравенства.
+    expect(STANDALONE_APPS.reduce((s, a) => s + a.baseMonthly, 0)).toBe(480);
     expect(PLANET_BASE_MONTHLY).toBe(400);
   });
 

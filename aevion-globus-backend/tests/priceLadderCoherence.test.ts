@@ -46,7 +46,7 @@ describe("лестница цен непротиворечива", () => {
     expect(TIERS.length).toBeGreaterThan(3);
     expect(MODULES_PRICING.length).toBeGreaterThan(10);
     expect(TERM_TIERS.length).toBe(5);
-    expect(STANDALONE_APPS.length).toBe(5);
+    expect(STANDALONE_APPS.length).toBe(9);
     expect(FULL).toBeGreaterThan(0);
   });
 

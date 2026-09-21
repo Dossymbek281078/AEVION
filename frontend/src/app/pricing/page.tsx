@@ -306,7 +306,10 @@ export default function PricingPage() {
       const r = await fetch(apiUrl("/api/pricing/checkout/session"), {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...opts, currency }),
+        // Канал уходит в ТЕЛЕ запроса, а не дописыванием к адресу кассы:
+        // подписанный адрес от LemonSqueezy любое дополнение отвергает (403).
+        // Бэкенд кладёт его в checkout_data.custom, откуда вебхук и читает.
+        body: JSON.stringify({ ...opts, currency, ...(channel ? { channel } : {}) }),
       });
       const j = await r.json();
       /*
@@ -638,7 +641,8 @@ export default function PricingPage() {
   return (
     <ProductPageShell maxWidth={1280}>
       {/* Module deep-link hero — пришли со страницы продукта (/pricing?module=<id>).
-          Пять приложений продаются и отдельно: для них заметная кнопка покупки
+          Часть приложений продаётся и отдельно (список — STANDALONE_APPS,
+          20.09.2026 их девять): для них заметная кнопка покупки
           на сроке из блока «Отдельные приложения». Остальные модули отдельно не
           продаются — честно говорим, что модуль входит в любой тариф, и ведём к
           тарифам. Валюта (вкл. KZT/PayBox) берётся из общего тумблера ниже. */}
@@ -1226,34 +1230,15 @@ export default function PricingPage() {
                 </button>
                 </>
               )}
-              {/* Пробный период и калькулятор — только у тарифа, у которого ЕСТЬ товар:
-                  у тарифа без товара обе кнопки вели бы к погашенной оплате. */}
+              {/* Калькулятор — только у тарифа, у которого ЕСТЬ товар: у тарифа без
+                  товара кнопка вела бы к погашенной оплате.
+
+                  Кнопки «Попробовать 14 дней бесплатно» здесь больше нет — решение
+                  основателя 17.09.2026: пробный период не нужен. Она обещала то, чего
+                  касса не делала никогда: 14 дней применялись только при нулевой цене,
+                  при обычной покупке списывалась полная сумма. */}
               {tier.id !== "enterprise" && tier.id !== "free" && !безТовара(tier.id) && (
                 <>
-                  <button
-                    style={{
-                      width: "100%",
-                      padding: "8px 16px",
-                      fontSize: 12,
-                      fontWeight: 800,
-                      borderRadius: 8,
-                      border: isHighlight
-                        ? "1px solid rgba(255,255,255,0.2)"
-                        : "1px solid rgba(13,148,136,0.4)",
-                      cursor: "pointer",
-                      background: "transparent",
-                      color: isHighlight ? "#5eead4" : "#0d9488",
-                      marginBottom: 6,
-                    }}
-                    aria-label={`${tp("tier.tryTrial")}: ${tier.id}`}
-                    // Пробный период идёт через ту же кассу: для непокупаемого
-                    // тарифа он кончается тем же 503. До 14.09 эта кнопка
-                    // оставалась живой, даже когда основную уже гасили.
-                    disabled={checkingOut === tier.id || !продаётся(tier.id)}
-                    onClick={() => startCheckout({ tierId: tier.id, seats: 1, trial: true })}
-                  >
-                    {tp("tier.tryTrial")}
-                  </button>
                   <button
                     style={{
                       width: "100%",
@@ -1488,10 +1473,10 @@ export default function PricingPage() {
               })}
             </div>
             {/* Утверждение печатается, только если оно ВЕРНО на выбранном сроке:
-                сумма пяти приложений и цена планеты считаются здесь же. */}
+                сумма всех приложений и цена планеты считаются здесь же. */}
             {суммаПриложений > планета && (
               <p data-testid="apps-vs-planet" style={{ margin: "16px 0 0", fontSize: 14, color: "#334155", lineHeight: 1.5 }}>
-                {t("pricing.home.apps.allFiveDearer", {
+                {t("pricing.home.apps.allAppsDearer", {
                   apps: displayPrice(суммаПриложений),
                   planet: displayPrice(планета),
                 })}
@@ -1662,7 +1647,7 @@ export default function PricingPage() {
                       {availabilityBadge(m.availability)}
                     </td>
                     <td style={{ padding: "10px 14px", textAlign: "right", fontWeight: 700 }}>
-                      {/* Отдельно продаются только пять приложений; «от» — цена
+                      {/* Отдельно продаются только приложения из STANDALONE_APPS; «от» — цена
                           месяца на самом длинном сроке (lib/termPricing.ts). */}
                       {(() => {
                         const app = standaloneApp(m.id);

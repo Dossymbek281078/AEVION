@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { getApiBase } from "@/lib/apiBase";
 import { getServerT } from "@/lib/i18n-server";
+import { WaitlistIfMissing } from "@/components/FooterWaitlist";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,32 @@ type HireRow = {
   acceptedAt: string;
 };
 
+/**
+ * Наш прогон, а не настоящий наём (20.09.2026, день запуска).
+ *
+ * Замер на проде: GET /api/build/stats/hires?limit=20 — ВСЕ 20 записей наши:
+ * vacancyTitle "smoke welder 1785059381597", projectTitle "smoke project …",
+ * recruiterName и workerName "deleted user". То есть публичная страница
+ * «Success stories» целиком состояла из выдуманных наймов.
+ *
+ * Пустая лента после фильтра — законный случай: у страницы есть честное
+ * «историй пока нет», и оно правдивее двадцати наших проб.
+ */
+export function isProbeHire(h: {
+  vacancyTitle?: string | null;
+  projectTitle?: string | null;
+  recruiterName?: string | null;
+  workerName?: string | null;
+}): boolean {
+  // Слово ЦЕЛИКОМ, а не начало строки: контроль поймал, что "Smokehouse chef" —
+  // настоящая вакансия — попадала в пробы и исчезла бы с витрины.
+  const МЕТКИ = ["smoke", "probe", "test"];
+  const слова = (s: string) => s.toLowerCase().split(/[^a-zа-яё0-9]+/i).filter(Boolean);
+  return [h.vacancyTitle, h.projectTitle, h.recruiterName, h.workerName]
+    .map((v) => v ?? "")
+    .some((v) => слова(v).some((w) => МЕТКИ.includes(w)));
+}
+
 async function fetchHires(): Promise<HireRow[]> {
   try {
     const r = await fetch(`${getApiBase()}/api/build/stats/hires?limit=20`, {
@@ -35,7 +62,8 @@ async function fetchHires(): Promise<HireRow[]> {
     });
     if (!r.ok) return [];
     const j = await r.json();
-    return j?.data?.items ?? [];
+    const items: HireRow[] = j?.data?.items ?? [];
+    return items.filter((h) => !isProbeHire(h));
   } catch {
     return [];
   }
@@ -43,80 +71,8 @@ async function fetchHires(): Promise<HireRow[]> {
 
 // ── Hardcoded case studies shown above the live feed ──────────────────────────
 
-type CaseStudy = {
-  quoteKey: string;
-  nameKey: string;
-  roleKey: string;
-  cityKey: string;
-  detailKey: string;
-  metric: string;
-  metricLabelKey: string;
-  accent: "emerald" | "sky" | "fuchsia";
-};
 
-const CASE_STUDIES: CaseStudy[] = [
-  {
-    quoteKey: "build.successStories.case1Quote",
-    nameKey: "build.successStories.case1Name",
-    roleKey: "build.successStories.case1Role",
-    cityKey: "build.successStories.case1City",
-    detailKey: "build.successStories.case1Detail",
-    metric: "4",
-    metricLabelKey: "build.successStories.case1MetricLabel",
-    accent: "emerald",
-  },
-  {
-    quoteKey: "build.successStories.case2Quote",
-    nameKey: "build.successStories.case2Name",
-    roleKey: "build.successStories.case2Role",
-    cityKey: "build.successStories.case2City",
-    detailKey: "build.successStories.case2Detail",
-    metric: "87",
-    metricLabelKey: "build.successStories.case2MetricLabel",
-    accent: "sky",
-  },
-  {
-    quoteKey: "build.successStories.case3Quote",
-    nameKey: "build.successStories.case3Name",
-    roleKey: "build.successStories.case3Role",
-    cityKey: "build.successStories.case3City",
-    detailKey: "build.successStories.case3Detail",
-    metric: "47",
-    metricLabelKey: "build.successStories.case3MetricLabel",
-    accent: "fuchsia",
-  },
-  {
-    quoteKey: "build.successStories.case4Quote",
-    nameKey: "build.successStories.case4Name",
-    roleKey: "build.successStories.case4Role",
-    cityKey: "build.successStories.case4City",
-    detailKey: "build.successStories.case4Detail",
-    metric: "3",
-    metricLabelKey: "build.successStories.case4MetricLabel",
-    accent: "emerald",
-  },
-];
 
-const ACCENT_STYLES: Record<CaseStudy["accent"], { border: string; bg: string; badge: string; metric: string }> = {
-  emerald: {
-    border: "border-emerald-500/20",
-    bg: "bg-emerald-500/5",
-    badge: "bg-emerald-500/15 text-emerald-200 border-emerald-500/25",
-    metric: "text-emerald-300",
-  },
-  sky: {
-    border: "border-sky-500/20",
-    bg: "bg-sky-500/5",
-    badge: "bg-sky-500/15 text-sky-200 border-sky-500/25",
-    metric: "text-sky-300",
-  },
-  fuchsia: {
-    border: "border-fuchsia-500/20",
-    bg: "bg-fuchsia-500/5",
-    badge: "bg-fuchsia-500/15 text-fuchsia-200 border-fuchsia-500/25",
-    metric: "text-fuchsia-300",
-  },
-};
 
 export default async function SuccessStoriesPage() {
   const { t } = await getServerT();
@@ -140,9 +96,8 @@ export default async function SuccessStoriesPage() {
         </p>
 
         {/* Stats strip */}
-        <div className="mt-6 grid grid-cols-3 gap-3">
+        <div className="mt-6 grid grid-cols-2 gap-3">
           {[
-            { value: t("build.successStories.statHoursValue"), label: t("build.successStories.statDays") },
             { value: "6%", label: t("build.successStories.statPayPerHireMin") },
             { value: "100%", label: t("build.successStories.statNoHiddenFees") },
           ].map((s) => (
@@ -158,52 +113,16 @@ export default async function SuccessStoriesPage() {
           ))}
         </div>
 
-        {/* ── Case Studies ── */}
-        <h2 className="mt-12 mb-4 text-xs font-bold uppercase tracking-wider text-slate-400">
-          {t("build.successStories.caseStudiesHeading")}
-        </h2>
-        <div className="space-y-5">
-          {CASE_STUDIES.map((cs) => {
-            const s = ACCENT_STYLES[cs.accent];
-            return (
-              <article
-                key={cs.nameKey}
-                className={`rounded-2xl border ${s.border} ${s.bg} p-6`}
-              >
-                <div className="flex items-start gap-4">
-                  {/* Metric */}
-                  <div className="shrink-0 text-center w-16">
-                    <div className={`text-3xl font-extrabold leading-none ${s.metric}`}>
-                      {cs.metric}
-                    </div>
-                    <div className="mt-0.5 text-[10px] uppercase leading-tight text-slate-500">
-                      {t(cs.metricLabelKey)}
-                    </div>
-                  </div>
-
-                  {/* Text */}
-                  <div className="flex-1 min-w-0">
-                    <blockquote className="text-sm leading-relaxed text-slate-200 italic">
-                      &ldquo;{t(cs.quoteKey)}&rdquo;
-                    </blockquote>
-                    <div className="mt-3 flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-semibold text-white">{t(cs.nameKey)}</span>
-                      <span
-                        className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${s.badge}`}
-                      >
-                        {t(cs.cityKey)}
-                      </span>
-                    </div>
-                    <div className="mt-0.5 text-xs text-slate-500">{t(cs.roleKey)}</div>
-                    <p className="mt-3 text-xs leading-relaxed text-slate-400 border-l-2 border-white/10 pl-3">
-                      {t(cs.detailKey)}
-                    </p>
-                  </div>
-                </div>
-              </article>
-            );
-          })}
-        </div>
+        {/*
+          Здесь были четыре истории с именами, компаниями и цитатами — и подпись
+          страницы «Реальные люди, реальные найм». Замер 20.09.2026: настоящих
+          наймов на платформе НОЛЬ (все 20 записей ленты оказались нашими
+          смоук-прогонами), то есть люди и компании были выдуманы. Выдуманный
+          отзыв — не «пример оформления», а ложное доказательство: по нему
+          принимают решение о деньгах. Убрано целиком; вернуть можно только
+          настоящие истории с согласия людей. Тот же класс убрали сегодня с
+          /pricing (демо-отзывы и счётчики).
+        */}
 
         {/* ── Live hires feed ── */}
         <h2 className="mt-12 mb-4 text-xs font-bold uppercase tracking-wider text-slate-400">
@@ -277,6 +196,22 @@ export default async function SuccessStoriesPage() {
             </Link>
           </div>
         </div>
+      </div>
+
+      {/*
+        Приём адреса. Подвала у маршрута нет (/build в APP_PREFIXES), а витрина
+        после уборки наших проб честно пуста: настоящих наймов ноль. Сюда ведёт
+        пост очереди «QBuild: строительная биржа открыта» — человеку, который
+        пришёл смотреть истории и не нашёл их, надо дать хотя бы возможность
+        узнать о первых. Блок сам не рисуется, если поле почты появится.
+      */}
+      <div className="mx-auto mt-10 max-w-xl px-4">
+        <WaitlistIfMissing
+          source="build-success-stories"
+          title="Историй пока нет — напишем, когда появятся"
+          description="Напишем, когда на AEVION появятся новости — в том числе первые истории найма."
+          buttonLabel="Сообщить мне"
+        />
       </div>
     </main>
   );

@@ -9,6 +9,7 @@ import { buildApi, type BuildProject, type ProjectStatus } from "@/lib/build/api
 import { formatSalary } from "@/lib/build/format";
 import { useBuildAuth } from "@/lib/build/auth";
 import { useI18n } from "@/lib/i18n";
+import { WaitlistIfMissing } from "@/components/FooterWaitlist";
 
 const STATUS_FILTERS: (ProjectStatus | "ALL")[] = ["ALL", "OPEN", "IN_PROGRESS", "DONE"];
 
@@ -198,6 +199,22 @@ export default function BuildHomePage() {
         {projects.map((p) => (
           <ProjectCard key={p.id} project={p} />
         ))}
+      </div>
+
+      {/* Приём адреса. У /build нет общего подвала (APP_PREFIXES в
+          ClientProviders), поэтому блок ставится сюда явно: на страницу ведёт
+          пост очереди «QBuild: строительная биржа открыта», а уйти человеку
+          было некуда — поля почты на ней не было вовсе (замер 20.09.2026).
+          Компонент сам не рисуется, если поле на странице появится. */}
+      <div className="mt-10 max-w-xl">
+        <WaitlistIfMissing
+          lang="en"
+          source="build-home"
+          title="Not hiring today? Leave your email"
+          description="We write when AEVION has news - new modules and openings included."
+          buttonLabel="Notify me"
+          doneText="Done — your address is saved. A confirmation is already in your inbox."
+        />
       </div>
     </BuildShell>
   );

@@ -124,7 +124,7 @@ describe("переводимые страницы: кириллица в атр�
  * сторож поймает, а починка обязана это число уменьшить.
  */
 const DOLG_FAJLOM: Record<string, number> = {
-  "app/cyberchess/page.tsx": 128,
+  "app/cyberchess/page.tsx": 127,
 };
 
   it("новых мест не появилось", () => {

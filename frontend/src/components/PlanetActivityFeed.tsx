@@ -6,6 +6,8 @@ import { catalog } from "@/lib/aevionCatalog";
 
 type ActivityKind = "submitted" | "certified" | "revoked" | "voted";
 
+import { isProbeActivity } from "@/lib/planetData";
+
 type ActivityItem = {
   kind: ActivityKind;
   id: string;
@@ -167,7 +169,11 @@ export default function PlanetActivityFeed({
         // SDK doesn't expose AbortSignal, so we guard state updates manually
         // to preserve the prior abort semantics.
         if (signal?.aborted) return;
-        setItems(Array.isArray(data?.items) ? data.items : []);
+        // Пробы наших прогонов на витрину не пускаем: замер 20.09.2026 — 24 записи
+        // из 50 в ответе прода были нашими (`smoke-music-…`). Пустой список после
+        // фильтра — законный случай, лента показывает своё «пока пусто».
+        const raw = Array.isArray(data?.items) ? data.items : [];
+        setItems(raw.filter((it) => !isProbeActivity(it)));
         setLastUpdated(Date.now());
       } catch (e: any) {
         if (signal?.aborted || e?.name === "AbortError") return;

@@ -289,24 +289,16 @@ export default function PricingMigrationsPage() {
             ))}
           </div>
 
-          {/* Outcome quote */}
-          <blockquote
-            style={{
-              margin: 0,
-              marginBottom: 24,
-              padding: "16px 20px",
-              background: "linear-gradient(135deg, rgba(13,148,136,0.04), rgba(14,165,233,0.04))",
-              borderLeft: "4px solid #0d9488",
-              borderRadius: 10,
-            }}
-          >
-            <p style={{ margin: 0, fontSize: 14, color: "#0f172a", lineHeight: 1.55, fontStyle: "italic" }}>
-              «{tp(`migrations.${m.id}.quote`)}»
-            </p>
-            <div style={{ marginTop: 8, fontSize: 12, color: "#475569", fontWeight: 700 }}>
-              — {tp(`migrations.${m.id}.quoteBy`)}
-            </div>
-          </blockquote>
+          {/*
+            Здесь была «цитата клиента» с названием компании и должностью
+            («Head of Operations, Almaty Law Group») и точными числами против
+            DocuSign/OpenAI/Stripe/Patently. Клиентов с такими результатами у
+            нас нет: оплат за всё время три, последняя 02.06.2026. Выдуманный
+            отзыв на странице сравнения с конкурентом — это ложное свидетельство
+            и прямой риск: названные компании существуют, и претензия прилетит
+            от них, а не от читателя. Убрано 20.09.2026 вместе с тремя такими же
+            местами (демо-отзывы /pricing, истории найма QBuild, кейсы клиентов).
+          */}
 
           {/* CTA row */}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>

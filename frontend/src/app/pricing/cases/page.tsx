@@ -246,7 +246,13 @@ export default function PricingCasesPage() {
             border: BORDER,
           }}
         >
-          {tp("cases.empty")}
+          {/*
+            Два разных «пусто», и путать их нельзя. «Нет под такие фильтры»
+            предлагает сбросить фильтр — но если историй нет ВООБЩЕ (20.09.2026
+            шесть вымышленных сняты с публикации, настоящих ещё нет), этот совет
+            врёт: сбрасывай не сбрасывай, показывать нечего.
+          */}
+          {(cases?.length ?? 0) === 0 ? tp("cases.none") : tp("cases.empty")}
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>

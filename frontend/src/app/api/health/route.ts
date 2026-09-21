@@ -1,4 +1,5 @@
 import { BUILD_STAMP } from "@/lib/buildStamp";
+import { PLANET_BASE_MONTHLY, STANDALONE_APPS } from "@/lib/termPricing";
 import { store } from "../payments/v1/_lib";
 import { kvBackend } from "../payments/v1/_persist";
 
@@ -93,6 +94,21 @@ export function GET() {
       runtime: typeof process !== "undefined" ? process.version : "edge",
       memory_rss_mb: memUsed,
       persistence: kvBackend(),
+      // Копия лестницы цен, ВКОМПИЛИРОВАННАЯ в этот сайт.
+      //
+      // Зачем ручке чужие числа. У платформы две половины и две отдельные
+      // выкатки: цена живёт в бэкенде (data/pricing.ts) и КОПИЕЙ на сайте
+      // (lib/termPricing.ts). Сторож termPricingMatchesBackend сверяет их в
+      // РЕПОЗИТОРИИ, но он бессилен против порядка выкаток: 20.09.2026 я
+      // выкатил бэкенд с базой QSkyway $16, а сайт ещё полчаса показывал $28 —
+      // одно число, два ответа, и снаружи это не было видно ничем.
+      //
+      // Теперь видно одним curl: сравнить это поле с /api/pricing бэкенда.
+      // Числа не секрет — они и так напечатаны на странице цен.
+      pricing: {
+        planetBaseMonthly: PLANET_BASE_MONTHLY,
+        apps: Object.fromEntries(STANDALONE_APPS.map((a) => [a.slug, a.baseMonthly])),
+      },
       surfaces,
     },
     {

@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
-import { масштабПоРазмерам, надёжностьМасштаба, предупреждениеОбОсях, словаИзТекста, type СловоНаЛисте } from "./dimensionScale";
+import { масштабПоРазмерам, надёжностьМасштаба, областьПлана, предупреждениеОбОсях, словаИзТекста, type СловоНаЛисте } from "./dimensionScale";
 import { planFromPdfSegments, readPdfSegments } from "./pdf";
 
 /** Цепочка размеров вдоль оси: надписи посередине своих отрезков, масштаб k мм/пт. */

@@ -1,4 +1,5 @@
 import { describe, test, expect, beforeEach, vi } from "vitest";
+import { TERM_TIERS, STANDALONE_APPS } from "../src/data/pricing";
 
 /**
  * «Что случится, если это купят» — вопрос, на который до 13.08.2026 нельзя было
@@ -40,7 +41,19 @@ describe("видно, какие товары реально можно выда
   test("без переменных все признаки false — и это честный ответ, а не поломка", async () => {
     const s = await statusWith({});
 
-    expect(Object.keys(s).length).toBe(30);
+    // 🔴 20.09.2026: было `toBe(30)` — число позиций каталога на 15.09. Сегодня
+    // в каталог добавили QRight, QSign, QSkyway и Startup Exchange, стало 50, и
+    // тест покраснел, ничего не защитив: он держал не условие, а снимок размера.
+    //
+    // Теперь сверяем с ТЕМ ЖЕ источником, из которого строятся ссылки. Это и
+    // строже (ловит пропущенную позицию, а не только изменение счёта), и не
+    // требует править число при каждом росте каталога — иначе его однажды
+    // поправят вслепую, и охват перестанет проверяться вовсе.
+    const ожидаемые = [
+      ...TERM_TIERS.map((t) => `tier_${t}`),
+      ...STANDALONE_APPS.flatMap((a) => TERM_TIERS.map((t) => `app_${a.slug}_${t}`)),
+    ].sort();
+    expect(Object.keys(s).sort(), "статус продаваемого разошёлся с каталогом").toEqual(ожидаемые);
     expect(Object.values(s).every((v) => v === false)).toBe(true);
   });
 

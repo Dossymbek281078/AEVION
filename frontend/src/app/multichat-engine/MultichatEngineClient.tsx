@@ -27,6 +27,7 @@ import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 import { isAuthenticated, getAuthHeaders } from "@/lib/auth";
 import { CouncilConsole } from "./CouncilConsole";
 import { T } from "./theme";
+import { WaitlistIfMissing } from "@/components/FooterWaitlist";
 
 /* ─────────────────────────────────────────────────────────────────
  * Два блока вокруг консоли. Описание правлено 12.08.2026 — прежнее обещало
@@ -833,6 +834,19 @@ export default function MultichatEnginePage() {
           >
             Role defaults
           </a>
+        </div>
+
+        {/* Приём адреса. Общего подвала у маршрута нет (APP_PREFIXES), а сюда
+            по плану соседнего окна поедет трафик ИИ-роликов YouTube — 2405
+            просмотров. Кто не готов платить сегодня, иначе уходит бесследно.
+            Блок сам не нарисуется, если поле почты на странице появится. */}
+        <div style={{ maxWidth: 560, margin: "32px 0 0" }}>
+          <WaitlistIfMissing
+            source="multichat-page"
+            title="Платить сегодня рано? Оставьте адрес"
+            description="Напишем, когда у AEVION откроются новые модули и возможности."
+            buttonLabel="Сообщить мне"
+          />
         </div>
       </ProductPageShell>
     </main>

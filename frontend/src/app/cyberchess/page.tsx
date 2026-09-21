@@ -49,6 +49,8 @@ import { classifyDrop } from "./moveQuality";
 import PostGameCard from "./PostGameCard";
 import DeepAnalysisPanel from "./DeepAnalysisPanel";
 import { temaZadachiRu, fazaRu, imyaZadachiBezPovtorov } from "./puzzleLabels";
+import { productById, keepChannel } from "@/lib/products";
+import { channelNow } from "@/lib/channelNow";
 import { tochnostSohranennoy } from "./postGameSummary";
 import { RANKS, gRank } from "./rating";
 import { pickDailyIdx } from "./dailyPick";
@@ -1155,6 +1157,15 @@ export default function CyberChessPage(){
   // 3-колоночная раскладка никогда не выходит за окно. Кап 1400 — доска заполняет
   // высоту больших окон, но не доминирует на 4K. boardScale поверх, финал зажат потолком.
   const railShown=vwPx>=1100; // должно совпадать с порогом рендера <aside> ниже
+  // Путь к настоящей кассе ($, Lemon Squeezy) — ВСЕГДА на экране, независимо от ширины и онбординга.
+  // Замер 20.09.2026: единственная цена жила в баннере проектов (только ≥1100px и только без
+  // онбординга) — на телефоне и у нового гостя цены не было никогда; магазин Chessy продаёт
+  // Pro/Ultimate за AEV через биллинг, который на проде «не настроен». Цена и адрес — из каталога
+  // products.ts (один источник правды), метка канала дописывается после отрисовки, как в ModulePricingChip.
+  const ccBuyProduct=productById("cyberchess");
+  const ccBuyLabel=(ccBuyProduct?.format||"").replace(/^приложение · /,"")||"купить";
+  const [ccBuyHref,sCcBuyHref]=useState<string>(ccBuyProduct?.href||"/pricing#apps");
+  useEffect(()=>{try{sCcBuyHref(keepChannel(ccBuyProduct?.href||"/pricing#apps",channelNow()))}catch{}},[ccBuyProduct?.href]);
   const isMobileLayout=vwPx<769; // должно совпадать с порогом BottomNav/cc-right-panel drawer ниже
   // Вертикальный резерв под обвязку колонки. На ДЕСКТОПЕ нижнего навбара нет (скрыт) —
   // резервируем меньше (≈210) => доска КРУПНЕЕ. На мобайле навбар есть => больше (≈290).
@@ -6162,6 +6173,7 @@ export default function CyberChessPage(){
         </button>}
         {/* Единое «? Помощь» — обзорный тур / горячие клавиши / что такое Chessy. Собрано из
             4 разрозненных help-входов, чтобы новичок не гадал, какой «?» куда ведёт. */}
+        {vwPx>=769&&<a href={ccBuyHref} data-cc-buy="header" className="cc-touch" title="Оплата картой · полный доступ к CyberChess" style={{display:"inline-flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:RADIUS.md,border:`1px solid ${CC.gold}`,background:"#fffbeb",color:"#92400e",fontSize:12,fontWeight:900,textDecoration:"none",whiteSpace:"nowrap",flexShrink:0}}>💳 {ccBuyLabel}</a>}
         {vwPx>=769&&<div style={{position:"relative",flexShrink:0}}>
           <button onClick={()=>sHelpMenuOpen(v=>!v)} aria-haspopup="menu" aria-expanded={helpMenuOpen} title="Помощь — тур по интерфейсу, горячие клавиши, что такое Chessy" aria-label="Помощь" className="cc-focus-ring"
             style={{display:"inline-flex",alignItems:"center",gap:5,padding:"7px 13px",borderRadius:RADIUS.full,
@@ -6331,6 +6343,7 @@ export default function CyberChessPage(){
                 // Телефон (<769): то, что убрано из шапки ради одной строки (20.09.2026), живёт здесь —
                 // вход/аккаунт, рейтинг и Chessy (→ дашборд «Профиль»), «Все разделы».
                 ...(vwPx<769?[
+                  {ic:<span style={{fontSize:14}} aria-hidden>💳</span>,lbl:`Купить CyberChess · ${ccBuyLabel}`,act:()=>{window.location.href=ccBuyHref}},
                   ...(ccAuth.checked&&!ccAuth.user?[{ic:<span style={{fontSize:14}} aria-hidden>👤</span>,lbl:"Войти в аккаунт AEVION",act:()=>{window.location.href="/auth?next=/cyberchess"}}]:[]),
                   ...(ccAuth.user?[{ic:<span style={{fontSize:14}} aria-hidden>👤</span>,lbl:"Мой аккаунт AEVION",act:()=>{window.location.href="/account"}}]:[]),
                   {ic:<span style={{fontSize:14}} aria-hidden>◆</span>,lbl:`Рейтинг ${rat} · Chessy ${chessy.balance}`,act:()=>sShowStatsDashboard(true)},
@@ -12118,6 +12131,15 @@ ${question.trim()}`;
             Chessy spend grid. Free is current default; Pro and Ultimate are gated.
             For now both paid tiers route to AEVION Bank for an entrance ticket via AEV;
             real billing wires up next session. */}
+        {/* Настоящая касса (карта, $): лестница AEV ниже зависит от биллинга QPayNet, который на проде
+            отвечает «не настроен» — без этой карточки у покупателя с картой в магазине не было пути. */}
+        <div data-cc-buy="shop" style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:SPACE[3],flexWrap:"wrap",borderRadius:RADIUS.lg,padding:`${SPACE[3]}px ${SPACE[4]}px`,marginBottom:SPACE[3],background:"#fffbeb",border:`1px solid ${CC.gold}`}}>
+          <div>
+            <div style={{fontSize:11,fontWeight:900,letterSpacing:1.5,textTransform:"uppercase" as const,color:"#92400e"}}>💳 Оплата картой</div>
+            <div style={{fontSize:14,fontWeight:800,color:CC.text}}>Полный доступ к CyberChess · {ccBuyLabel}</div>
+          </div>
+          <a href={ccBuyHref} className="cc-touch" style={{padding:"9px 16px",borderRadius:RADIUS.md,background:CC.gold,color:"#1f2937",fontWeight:900,fontSize:13,textDecoration:"none",whiteSpace:"nowrap"}}>Купить →</a>
+        </div>
         <div style={{borderRadius:RADIUS.lg,padding:`${SPACE[3]}px ${SPACE[4]}px`,marginBottom:SPACE[4],
           background:"linear-gradient(135deg,#0f172a 0%,#1e1b4b 100%)",color:"#fff",
           border:"1px solid #312e81",boxShadow:"0 6px 22px rgba(15,23,42,0.18)"}}>

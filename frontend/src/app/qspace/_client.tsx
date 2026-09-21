@@ -27,7 +27,7 @@ import { estimateCsv, estimatePlan } from "./estimate";
 import { planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
 import { масштабПоРазмерам, надёжностьМасштаба, областьПлана, предупреждениеОбОсях, словаИзТекста } from "./dimensionScale";
 import { листПлана, текстPdf, текстСтраниц } from "./pdfText";
-import { назначенияПоПодписям, подписиИзТекста, type Подпись } from "./roomLabels";
+import { назначенияПоНомерам, назначенияПоПодписям, номераНаПлане, подписиИзТекста, экспликацияИзТекста, type Подпись, type СтрокаЭкспликации } from "./roomLabels";
 import { appliancesFromLabels, fixturesFromSegments } from "./fixtures";
 import type { Placement } from "./autoPlace";
 import { FINISH_PRESETS, LAYOUTS, composeMaterialId, drawMaterial, materialById, materialsFor, parseMaterialId, variantsOf } from "./materials";
@@ -281,6 +281,8 @@ export default function QSpaceClient() {
   const [pdfPending, setPdfPending] = useState<PdfSegments | null>(null);
   /** байты открытого PDF — чтобы перечитать другую страницу альбома без повторной загрузки */
   const [pdfBytes, setPdfBytes] = useState<{ bytes: Uint8Array; name: string } | null>(null);
+  /** экспликация помещений с листа и номера на плане — имена комнат для альбомов без подписей внутри комнат */
+  const [pdfExplication, setPdfExplication] = useState<{ строки: СтрокаЭкспликации[]; номера: Подпись[] }>({ строки: [], номера: [] });
   /** подписи из текста того же PDF — нужны и при масштабе, заданном человеком */
   const [pdfLabels, setPdfLabels] = useState<Подпись[]>([]);
   /** сантехника и мебель, узнанные на чертеже: стоят сразу и первыми при любом стиле */
@@ -1034,6 +1036,7 @@ export default function QSpaceClient() {
     r: { plan: Plan; originPt?: { x: number; y: number }; metersPerPt: number },
     labels: Подпись[],
     другиеЛинии: PdfSegments["otherSegments"] = [],
+    экспликация: { строки: СтрокаЭкспликации[]; номера: Подпись[] } = { строки: [], номера: [] },
   ): string[] => {
     setRoomTypeOverride({});
     setRoomName({});
@@ -1053,6 +1056,20 @@ export default function QSpaceClient() {
         ? "Подписи комнат на чертеже есть, но ни одна не попала внутрь найденной комнаты — назначения поставлены по площади."
         : `Комнаты названы по подписям чертежа: ${n} из ${rooms.rooms.length}`
           + (unplaced.length ? `; вне найденных комнат остались: ${unplaced.join(", ")}` : "") + ".");
+    }
+    // Альбом дизайн-проекта: на обмерном листе внутри комнат стоят НОМЕРА, а имена и площади —
+    // в таблице экспликации (замер 20.09: OTDL — 6 строк, design-project — 2). Номер внутри
+    // найденной комнаты даёт ей имя, тип и площадь по чертежу — по ней видно, где модель врёт.
+    if (экспликация.строки.length >= 2 && экспликация.номера.length > 0) {
+      const { types, names, areas, unplaced } = назначенияПоНомерам(экспликация.номера, экспликация.строки, o, k, rooms.roomAt);
+      const n = Object.keys(names).length;
+      if (n > 0) {
+        setRoomTypeOverride((prev) => ({ ...prev, ...types }));
+        setRoomName((prev) => ({ ...prev, ...names }));
+        типы = { ...типы, ...types };
+        const поЧертежу = Object.entries(areas).map(([i, a]) => `${names[Number(i)]} ${a} м² (в модели ${rooms.rooms.find((x) => x.index === Number(i))?.area.toFixed(1) ?? "?"})`).join(", ");
+        строки.push(`Помещения по экспликации листа: ${n} из ${экспликация.строки.length}${unplaced.length ? `; не нашлись на плане: ${unplaced.join(", ")}` : ""}. Площади по чертежу против модели: ${поЧертежу}.`);
+      }
     }
     // Сантехника и мебель с чертежа: блоки слоёв «Мебель» → предметы каталога.
     // Ставятся сразу, чтобы человек видел на модели то, что нарисовано на плане.
@@ -1110,6 +1127,9 @@ export default function QSpaceClient() {
     const масштаб = текст.ok ? масштабПоРазмерам(словаИзТекста(текст.items)) : null;
     const подписи = текст.ok ? подписиИзТекста(текст.items) : [];
     setPdfLabels(подписи);
+    const экспл = текст.ok ? экспликацияИзТекста(текст.items) : [];
+    const экспликация = { строки: экспл, номера: текст.ok ? номераНаПлане(текст.items, экспл) : [] };
+    setPdfExplication(экспликация);
     if (масштаб && src.extentPt > 0) {
       const extentM = Math.round((src.extentPt * масштаб.mmPerPt) / 10) / 100;
       // прямоугольник плана по размерным цепочкам: рамка, легенда и таблицы листа — вне его
@@ -1126,7 +1146,7 @@ export default function QSpaceClient() {
             : "Модель построена — если большая сторона плана на самом деле другая, поправьте число ниже."),
           ...предупреждениеОбОсях(масштаб),
           ...r.warnings,
-          ...назначитьПоПодписям({ plan: r.plan, originPt: r.originPt, metersPerPt: r.metersPerPt }, подписи, src.otherSegments),
+          ...назначитьПоПодписям({ plan: r.plan, originPt: r.originPt, metersPerPt: r.metersPerPt }, подписи, src.otherSegments, экспликация),
         ]);
         поставитьЧертёж({ ...r.plan, name });
         setUnitLabel(`масштаб по размерам чертежа: ${extentM} м по большей стороне`);
@@ -1213,12 +1233,12 @@ export default function QSpaceClient() {
     const r = planFromPdfSegments(pdfPending, Number(pdfExtent));
     setWarnings(r.warnings);
     if (r.plan) {
-      setWarnings([...r.warnings, ...назначитьПоПодписям({ plan: r.plan, originPt: r.originPt, metersPerPt: r.metersPerPt }, pdfLabels, pdfPending.otherSegments)]);
+      setWarnings([...r.warnings, ...назначитьПоПодписям({ plan: r.plan, originPt: r.originPt, metersPerPt: r.metersPerPt }, pdfLabels, pdfPending.otherSegments, pdfExplication)]);
       поставитьЧертёж({ ...r.plan, name: имяФайла || r.plan.name });
       setUnitLabel(`масштаб задан вами: ${pdfExtent} м по большей стороне`);
       setPdfPending(null);
     }
-  }, [pdfPending, pdfExtent, pdfLabels, имяФайла, поставитьЧертёж, назначитьПоПодписям]);
+  }, [pdfPending, pdfExtent, pdfLabels, pdfExplication, имяФайла, поставитьЧертёж, назначитьПоПодписям]);
 
   // Экспорт модели в GLB — двоичный glTF, открывается в Blender, SketchUp,
   // 3ds Max и просмотрщике Windows. Экспортируются только ВИДИМЫЕ слои:

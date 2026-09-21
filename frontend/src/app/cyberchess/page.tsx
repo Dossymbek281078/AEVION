@@ -48,7 +48,7 @@ import { PV, ev, mm, best } from "./chessEngine";
 import { classifyDrop } from "./moveQuality";
 import PostGameCard from "./PostGameCard";
 import DeepAnalysisPanel from "./DeepAnalysisPanel";
-import { temaZadachiRu, fazaRu } from "./puzzleLabels";
+import { temaZadachiRu, fazaRu, imyaZadachiBezPovtorov } from "./puzzleLabels";
 import { tochnostSohranennoy } from "./postGameSummary";
 import { RANKS, gRank } from "./rating";
 import { pickDailyIdx } from "./dailyPick";
@@ -1131,11 +1131,22 @@ export default function CyberChessPage(){
   // «Мат в 2 · Лёгкая · Эндшпиль · 849 ×» лежал на иконках нава даже внизу прокрутки).
   // На телефоне тосты СВЕРХУ (под шапкой): любой низ занят рядом кнопок партии и BottomNav —
   // тестер 20.09.2026 (390) видел тост «Эндшпиль · Лёгкая…» на «Перевернуть · Новая партия».
-  useEffect(()=>{const r=document.documentElement.style;try{
-      if(vwPx<769){r.setProperty("--aevion-toast-top","64px");r.setProperty("--aevion-toast-bottom","auto");r.setProperty("--aevion-toast-lift","0px");}
+  // Отступ сверху — по ФАКТИЧЕСКОЙ высоте sticky-шапки через ResizeObserver: со строкой
+  // «Вернуться к партии» шапка выше, и константа 64px ложилась на ⚙ ☰.
+  // Берём НИЗ шапки в координатах окна, а не высоту: при scrollTop 0 шапка стоит ниже верхней
+  // полосы оболочки (~70px), и «высота+8» клала тост на «Вернуться к партии» (тестер 20.09, 390 puzzles).
+  // Плашка языка на телефоне — position:absolute (правило в <style> ниже): фиксированная закрывала
+  // прокрученный к верху ряд чипов («📡 Стрим» под «RU ▼», тестер 20.09, низ страницы).
+  useEffect(()=>{const r=document.documentElement.style;
+    const apply=()=>{try{
+      if(vwPx<769){const rc=document.querySelector("[data-cc-header]")?.getBoundingClientRect();const h=rc?Math.max(rc.bottom,rc.height):56;r.setProperty("--aevion-toast-top",`${Math.round(Math.max(56,h))+8}px`);r.setProperty("--aevion-toast-bottom","auto");r.setProperty("--aevion-toast-lift","0px");}
       else{r.removeProperty("--aevion-toast-top");r.removeProperty("--aevion-toast-bottom");r.setProperty("--aevion-toast-lift","0px");}
-    }catch{}
-    return()=>{try{for(const k of ["--aevion-toast-top","--aevion-toast-bottom","--aevion-toast-lift"])r.removeProperty(k)}catch{}}},[vwPx]);
+    }catch{}};
+    apply();
+    const el=document.querySelector("[data-cc-header]");
+    const ro=(el&&typeof ResizeObserver!=="undefined")?new ResizeObserver(apply):null; if(el&&ro)ro.observe(el);
+    window.addEventListener("scroll",apply,{passive:true}); // низ шапки в окне меняется прокруткой, а не только размером
+    return()=>{ro?.disconnect();window.removeEventListener("scroll",apply);try{for(const k of ["--aevion-toast-top","--aevion-toast-bottom","--aevion-toast-lift"])r.removeProperty(k)}catch{}}},[vwPx]);
   // Layout-fill (исправлено 2026-06-14): доска квадратная, узкое место — ВЫСОТА.
   // Большой запас по высоте (vhPx-280: header+часы+координаты+нижние контролы+браузерные
   // баннеры) чтобы доска НИКОГДА не вылезала за окно и не обрезалась снизу. По ширине
@@ -5337,7 +5348,7 @@ export default function CyberChessPage(){
     else if(pzMode==="rush"){/* keep running deadline */}
     else startClock(0);
     // имя банковской задачи часто = её тема → «Эндшпиль · Эндшпиль»; дубль не печатаем (тестер 20.09.2026)
-    showToast([pz.name,temaZadachiRu(pz.theme)].filter((v,i,a)=>v&&a.indexOf(v)===i).concat(String(pz.r)).join(" · "),"info");
+    showToast([...imyaZadachiBezPovtorov(pz),temaZadachiRu(pz.theme)].filter(Boolean).concat(String(pz.r)).join(" · "),"info");
     // reset per-puzzle stopwatch
     if(pzTimerIntervalRef.current)clearInterval(pzTimerIntervalRef.current);
     pzTimerRef.current=Date.now();sPzTimer(0);paintPzTimer(0);
@@ -6008,7 +6019,7 @@ export default function CyberChessPage(){
         <button onClick={()=>sStreamerMode(false)} style={{padding:"6px 10px",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer"}}>✕</button>
       </div>}
       {/* Sticky glass header */}
-      {!streamerMode&&<div style={{
+      {!streamerMode&&<div data-cc-header="1" style={{
         position:"sticky",top:0,zIndex:Z.sticky,
         // Телефон: справа 100px под плавающую языковую пилюлю «RU ▼» (AppShellLanguagePill, fixed
         // top:12/right:12) — на 390 она ложилась на ☰/🔊 шапки (тестер 20.09.2026).
@@ -7497,7 +7508,7 @@ export default function CyberChessPage(){
       {/* Телефон: чипов больше, чем ширины (390: «…Стри» обрезался, «Видео»/«Ещё» недостижимы —
           тестер 20.09.2026). Ряд прокручивается по горизонтали, полоса прокрутки скрыта. */}
       {!streamerMode&&!setup&&on&&tab==="play"&&(
-        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"nowrap",overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none",paddingBottom:2}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"nowrap",overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none",paddingBottom:2,paddingRight:vwPx<769?96:0}}>
           {([
             ...(isHumanGame?[]:[
               {icon:TAB_META.analysis.icon,label:TAB_META.analysis.label,hint:"Анализ позиции",accent:TAB_META.analysis.hue, act:()=>sTab("analysis")},
@@ -10290,7 +10301,7 @@ export default function CyberChessPage(){
               <div style={{padding:"14px 16px"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,marginBottom:10}}>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12,fontWeight:700,color:T.dim,marginBottom:2,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>{pzCurrent.name}</div>
+                    {imyaZadachiBezPovtorov(pzCurrent).length>0&&<div style={{fontSize:12,fontWeight:700,color:T.dim,marginBottom:2,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>{imyaZadachiBezPovtorov(pzCurrent).join(" · ")}</div>}
                     <div style={{fontSize:18,fontWeight:900,color:T.text,lineHeight:1.2}}>
                       {pzCurrent.side==="w"?"⚪":"⚫"} {pzCurrent.goal==="Mate"?`Мат в ${pzCurrent.mateIn}`:"Найди лучший ход"}
                     </div>
@@ -11829,7 +11840,7 @@ ${question.trim()}`;
           <div style={{marginTop:SPACE[3],fontSize:11,color:CC.textDim,textAlign:"center"}}>Клик мимо — отмена</div>
         </div>
       </div>}
-      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}@keyframes spin{to{transform:rotate(360deg)}}@keyframes diceRoll{0%{transform:rotate(0) scale(0.5);opacity:0.3}50%{transform:rotate(180deg) scale(1.15)}100%{transform:rotate(360deg) scale(1);opacity:1}}@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}@keyframes fadeInUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@keyframes pop{0%{transform:scale(0.85);opacity:0}60%{transform:scale(1.05)}100%{transform:scale(1);opacity:1}}@keyframes sf-depth-pulse{0%{opacity:0.45;transform:scale(0.96)}50%{opacity:1;transform:scale(1.04)}100%{opacity:0.85;transform:scale(1)}}@keyframes pip-suggest-pulse{0%,100%{box-shadow:0 0 0 0 rgba(168,85,247,0.6)}50%{box-shadow:0 0 0 8px rgba(168,85,247,0)}}`}</style>
+      <style>{`@media (max-width:768px){[data-app-shell-pill]{position:absolute !important}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}@keyframes spin{to{transform:rotate(360deg)}}@keyframes diceRoll{0%{transform:rotate(0) scale(0.5);opacity:0.3}50%{transform:rotate(180deg) scale(1.15)}100%{transform:rotate(360deg) scale(1);opacity:1}}@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}@keyframes fadeInUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@keyframes pop{0%{transform:scale(0.85);opacity:0}60%{transform:scale(1.05)}100%{transform:scale(1);opacity:1}}@keyframes sf-depth-pulse{0%{opacity:0.45;transform:scale(0.96)}50%{opacity:1;transform:scale(1.04)}100%{opacity:0.85;transform:scale(1)}}@keyframes pip-suggest-pulse{0%,100%{box-shadow:0 0 0 0 rgba(168,85,247,0.6)}50%{box-shadow:0 0 0 8px rgba(168,85,247,0)}}`}</style>
     {/* Games History Modal */}
     {gamesModalOpen&&(()=>{
       // Library v2 — full search/sort/filter/PGN export/delete.

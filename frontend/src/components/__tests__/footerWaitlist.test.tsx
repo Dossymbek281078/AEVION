@@ -13,9 +13,9 @@ vi.mock("next/navigation", () => ({ usePathname: () => путь }));
 
 describe("источник подписки называет страницу", () => {
   it("путь попадает в source, главная называется home", () => {
-    expect(footerWaitlistSource("/qsign")).toBe("footer:/qsign");
-    expect(footerWaitlistSource("/")).toBe("footer:home");
-    expect(footerWaitlistSource(null)).toBe("footer:home");
+    expect(footerWaitlistSource("/qsign")).toBe("footer-qsign");
+    expect(footerWaitlistSource("/")).toBe("footer-home");
+    expect(footerWaitlistSource(null)).toBe("footer-home");
   });
 
   it("длинный путь режется до 60 знаков — схема сервера длиннее не примет", () => {
@@ -23,6 +23,8 @@ describe("источник подписки называет страницу", 
     expect(footerWaitlistSource(длинный).length).toBe(60);
     // КОНТРОЛЬ: короткий путь НЕ режется, иначе проверка выше проходила бы всегда.
     expect(footerWaitlistSource("/qsign").length).toBeLessThan(60);
+    // Разделитель обязан быть дефисом: по нему реестр писем находит модуль.
+    expect(footerWaitlistSource("/build/success-stories")).toBe("footer-build-success-stories");
   });
 });
 

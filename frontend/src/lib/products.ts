@@ -567,6 +567,26 @@ export function withChannel(href: string, channel: string | null, landing = "sit
   if (href.startsWith("/")) return keepChannel(href, channel);
   const sep = href.includes("?") ? "&" : "?";
   if (href.includes("lemonsqueezy.com")) {
+    // 🔴 ПОДПИСАННЫЙ адрес не дополняем НИЧЕМ. Замер 20.09.2026 с контролями:
+    // настоящий адрес кассы из `POST /api/pricing/checkout/session` отвечает
+    // 200; он же плюс `checkout[custom][channel]=youtube` — **403**; он же
+    // снова как есть — опять 200. Посторонний `foo=bar` тоже даёт 403, то есть
+    // ломается подпись, а не конкретный параметр. Отвечает сам LemonSqueezy
+    // (`x-powered-by: PHP`, в теле «signature» и «invalid»).
+    //
+    // Кого это било: `withChannel` возвращает адрес без изменений, когда
+    // канала нет, — значит без метки всё работало, а с меткой покупатель
+    // упирался в 403. Ломался ровно тот, кого мы привели по помеченной
+    // ссылке: с YouTube, из профиля, из рассылки. Наши зонды ходили без
+    // канала и поэтому дефект не всплывал ни в одной проверке.
+    //
+    // Метка в LemonSqueezy передаётся при СОЗДАНИИ сессии: фронт кладёт
+    // `channel` в тело запроса, бэкенд — в `checkout_data.custom`
+    // (checkout.ts принимает его с 31.08, lemonSqueezyProvider.ts:200).
+    //
+    // Непод­писанные ссылки на товар (`/buy/<uuid>`) параметры принимают, и для
+    // них поведение сохранено: признак — наличие `signature` в адресе.
+    if (/[?&]signature=/.test(href)) return href;
     return `${href}${sep}checkout[custom][channel]=${encodeURIComponent(channel)}`;
   }
   // UTM-тройка целиком: Gumroad заводит ссылку в отчёте по первому переходу,

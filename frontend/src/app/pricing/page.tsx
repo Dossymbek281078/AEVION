@@ -306,7 +306,10 @@ export default function PricingPage() {
       const r = await fetch(apiUrl("/api/pricing/checkout/session"), {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...opts, currency }),
+        // Канал уходит в ТЕЛЕ запроса, а не дописыванием к адресу кассы:
+        // подписанный адрес от LemonSqueezy любое дополнение отвергает (403).
+        // Бэкенд кладёт его в checkout_data.custom, откуда вебхук и читает.
+        body: JSON.stringify({ ...opts, currency, ...(channel ? { channel } : {}) }),
       });
       const j = await r.json();
       /*

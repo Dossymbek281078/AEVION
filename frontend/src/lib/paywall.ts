@@ -15,6 +15,8 @@
  */
 
 import { apiUrl } from "./apiBase";
+import { getAuthHeaders } from "@/lib/auth";
+import { getClientApiBase } from "@/lib/apiBase";
 
 export type CanonicalTier = "free" | "lite" | "medium" | "full" | "enterprise";
 
@@ -240,7 +242,8 @@ export function installPaywallInterceptor(): void {
   const original = window.fetch.bind(window);
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const userInitiated = isUserGesture();
-    const res = await original(input, init);
+    const [вход, настройки] = сВходом(input, init);
+    const res = await original(вход, настройки);
     // Only 402s are interesting; everything else passes straight through
     // untouched (no clone → no overhead, streaming responses unaffected).
     if (res.status !== 402) return res;
@@ -252,4 +255,59 @@ export function installPaywallInterceptor(): void {
     }
     return res;
   };
+}
+
+/**
+ * Наш ли это адрес. Токен уходит ТОЛЬКО своим: и `/api-backend/...` (прокси
+ * same-origin), и прямой адрес бэкенда, если он задан переменной.
+ */
+export function нашАдрес(url: string): boolean {
+  const u = String(url);
+  if (u.startsWith("/api-backend") || u.startsWith("/api/")) return true;
+  const база = getClientApiBase();
+  if (база.startsWith("http") && u.startsWith(база)) return true;
+  return /^https?:[/][/]api[.]aevion[.]app([/]|$)/.test(u);
+}
+
+/**
+ * Подставляет вход в запрос — ЗДЕСЬ, а не в каждом вызове.
+ *
+ * Замер 14.09.2026, подтверждён заново 21.09: стена узнаёт человека только по
+ * заголовку `Authorization: Bearer` (токен лежит в localStorage, cookie нет,
+ * прокси его не несёт). А из 55 вызовов фронта к закрытым префиксам **30 шли
+ * без заголовка** — больше всего у healthai. Следствие денежное: подписчик,
+ * который УЖЕ заплатил за тариф, открывал страницу модуля, запрос уходил
+ * анонимным, стена честно отвечала 402, и человеку показывали «купите тариф».
+ *
+ * Чинить в тридцати местах — значит забыть в тридцать первом: это уже случилось
+ * (`apiFetchOrPaywall`, общая обёртка, тоже ходила без входа). Поэтому вход
+ * подставляется в перехватчике, через который и так проходит каждый запрос.
+ *
+ * Три границы, и каждая проверена тестом:
+ *   • только НАШИ адреса — чужому серверу токен не уходит;
+ *   • свой `Authorization` вызывающего НЕ трогаем (у него могут быть причины);
+ *   • нет токена — ничего не добавляем, запрос уходит как прежде.
+ */
+function сВходом(input: RequestInfo | URL, init?: RequestInit): [RequestInfo | URL, RequestInit | undefined] {
+  try {
+    const токен = getAuthHeaders().Authorization;
+    if (!токен) return [input, init];
+
+    if (typeof Request !== "undefined" && input instanceof Request) {
+      if (!нашАдрес(input.url) || input.headers.get("authorization")) return [input, init];
+      const копия = new Request(input);
+      копия.headers.set("Authorization", токен);
+      return [копия, init];
+    }
+
+    const адрес = typeof input === "string" ? input : String(input);
+    if (!нашАдрес(адрес)) return [input, init];
+    const заголовки = new Headers(init?.headers ?? undefined);
+    if (заголовки.has("authorization")) return [input, init];
+    заголовки.set("Authorization", токен);
+    return [input, { ...init, headers: заголовки }];
+  } catch {
+    // Перехватчик не имеет права ронять запрос: не смогли подставить — идём как есть.
+    return [input, init];
+  }
 }

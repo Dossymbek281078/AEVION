@@ -5,6 +5,7 @@ import { CHESS_LAUNCH_UTC } from "../launchDate";
 import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 import { ccPlural } from "../ccPlural";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
+import ModulePricingChip from "@/components/ModulePricingChip";
 import { PageTracking } from "@/components/PageTracking";
 
 // Посадочная страница запуска CyberChess — 30 сентября 2026.
@@ -177,6 +178,22 @@ export default async function CyberChessLaunchPage({
           </a>
           .
         </p>
+
+        {/*
+          Цена и путь к кассе. Замер 21.09.2026 браузером: на ВСЕЙ поверхности
+          CyberChess — приложение, эта страница, «задача дня» — цены не было ни
+          разу и ссылок в кассу ноль, при том что касса настроена полностью
+          (5 вариантов из 5, база $24). То есть единственный модуль, который
+          прямо сейчас можно купить целиком, нигде не называл, сколько стоит.
+          Контроль той же пробы: /qright показывает 2 цены и 2 ссылки.
+
+          Ставится ТОТ ЖЕ компонент, что на остальных 38 страницах модулей —
+          второго способа продавать не заводим. Страницу приложения не трогаю:
+          её правит соседнее окно, и плашка там перекрывала бы доску.
+        */}
+        <div style={{ marginTop: 14 }}>
+          <ModulePricingChip moduleId="cyberchess" theme="dark" />
+        </div>
 
         {/* ЧЕСТНАЯ ПОДПИСЬ РАННЕЙ ВЕРСИИ.
             План основателя 30.08.2026: с 10 сентября шахматы доступны как

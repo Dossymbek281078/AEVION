@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { покупкиНаГлавной } from "@/lib/homeBuyLinks";
-import { productById } from "@/lib/products";
+import { PRICING_TERMS, productById } from "@/lib/products";
 import { PLANET_BASE_MONTHLY, fromPricePerMonth } from "@/lib/termPricing";
 
 /**
@@ -55,5 +55,26 @@ describe("главная предлагает купить по ценам ка�
     // 2 покупки за всё время, $19.98. Ставить первым то, что уже покупали,
     // разумнее, чем то, что ни разу не купили.
     expect(покупкиНаГлавной(null)[0].href).toContain("orcfbo");
+  });
+  it("ссылка на подписку ведёт на ЯКОРЬ лестницы, а не на верх страницы цен", () => {
+    // Якорь `#tiers` живёт константой в каталоге. Если его там переименуют,
+    // главная молча повела бы человека на верх /pricing — мимо блока сроков,
+    // ради которого ссылка и стоит. Проверяем по константе, а не по строке.
+    const подписка = покупкиНаГлавной(null).find((п) => п.href.includes("/pricing"));
+    expect(подписка).toBeDefined();
+    expect(подписка!.href).toBe(PRICING_TERMS);
+    // ПОЛОЖИТЕЛЬНЫЙ КОНТРОЛЬ: якорь вообще не пустой — иначе проверка выше
+    // была бы зелёной при любом адресе страницы цен.
+    expect(PRICING_TERMS).toContain("#");
+  });
+
+  it("метка канала на внутренней ссылке стоит ДО якоря", () => {
+    // `/pricing#tiers?c=yt` потерял бы метку целиком: всё после `#` браузер
+    // считает якорем и серверу не отправляет. Это уже ловили на переходах
+    // /longevity → /shop, и повторять не хотим.
+    const подписка = покупкиНаГлавной("youtube").find((п) => п.href.includes("/pricing"));
+    expect(подписка).toBeDefined();
+    expect(подписка!.href).toContain("c=yt");
+    expect(подписка!.href.indexOf("c=yt")).toBeLessThan(подписка!.href.indexOf("#"));
   });
 });

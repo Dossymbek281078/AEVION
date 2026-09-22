@@ -1,4 +1,4 @@
-import { productById, withChannel } from "./products";
+import { PRICING_TERMS, productById, withChannel } from "./products";
 import { PLANET_BASE_MONTHLY, fromPricePerMonth } from "./termPricing";
 
 export type ПокупкаНаГлавной = {
@@ -49,7 +49,10 @@ export function покупкиНаГлавной(канал: string | null): П�
     вид: "подписка · вся планета",
     название: "Все модули AEVION",
     цена: "от $" + fromPricePerMonth(PLANET_BASE_MONTHLY) + "/мес",
-    href: withChannel("/pricing#tiers", канал, "home"),
+    // Адрес берём КОНСТАНТОЙ каталога, а не строкой: якорь `#tiers` живёт
+    // в products.ts, и переименуй его там — главная молча вела бы на верх
+    // страницы цен, то есть мимо лестницы сроков, ради которой ссылка и есть.
+    href: withChannel(PRICING_TERMS, канал, "home"),
   });
   return из;
 }

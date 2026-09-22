@@ -7341,6 +7341,7 @@ const kk: Record<string, string> = {
   "qskyway.wait.promise": "Модуль іске қосылған кезде бір хат келеді. Әр хаттағы бір сілтемемен жазылудан бас тартуға болады.",
   "pricing.checkoutSuccess.nextOpenAppNoName": "Каталогты ашып, төленгенін таңдаңыз",
   "pricing.checkoutSuccess.openAppNoName": "Өнімдер каталогын ашу",
+  "pricing.checkoutSuccess.nextLogin": "Қолжетімділік төлем кезінде көрсетілген поштаға байланған: сол поштамен AEVION-ға кіріңіз, сонда {app} сатып алғаныңызды ашады",
   "pricing.checkoutSuccess.subtitleActivatedNoTier": "Рақмет! Жазылымыңыз белсенді.",
   "pricing.checkoutSuccess.titleActivatedNoTier": "Төлем қабылданды!",
   "pricing.checkoutSuccess.titleNoPayment": "Төлем болды ма — тексеріп жатырмыз",

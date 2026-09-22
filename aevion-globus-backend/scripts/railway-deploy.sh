@@ -207,6 +207,11 @@ JSON
 
 # Отметка обязана быть ВИДНА git, иначе она не уедет. Проверяем до загрузки:
 # молчаливая потеря отметки — ровно та неисправность, ради которой всё это.
+# Сколько весит отметка и где лежит — печатаем ДО загрузки. 22.09.2026 прод
+# трижды ответил commit=unknown, и первый вопрос был «а файл-то вообще был?» —
+# ответить оказалось нечем. Одна строка снимает этот вопрос навсегда.
+echo "[build-info] $(wc -c < "$BACKEND_DIR/build-info.json") байт -> $BACKEND_DIR/build-info.json"
+
 if git check-ignore -q "$BACKEND_DIR/build-info.json"; then
   echo "ОСТАНОВКА: build-info.json скрыт git-исключением — отметка не уедет." >&2
   git check-ignore -v "$BACKEND_DIR/build-info.json" >&2

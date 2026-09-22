@@ -76,7 +76,18 @@ export function readBuildInfo(): {
         break;
       } catch { /* следующий уровень */ }
     }
-    if (!raw) throw new Error("build-info.json не найден ни на одном уровне");
+    if (!raw) {
+      // Молчать здесь нельзя. 22.09.2026 прод трижды подряд отвечал
+      // commit=unknown, и понять почему было НЕЧЕМ: «файла нет» — законный
+      // случай, и он уходил в запасной путь беззвучно. В логах не оставалось
+      // ни строки, а без отметки ни одно окно не может сказать, чей код на
+      // проде, — именно так в этот день чужая выкатка откатила чужую работу.
+      const где = ["..", "../..", "../../.."]
+        .map((up) => pathMod.join(__dirname, up, "build-info.json"))
+        .join(" | ");
+      console.warn("[buildInfo] отметка сборки НЕ найдена. Искал: " + где);
+      throw new Error("build-info.json не найден ни на одном уровне");
+    }
     const info = JSON.parse(raw) as { commit?: string; source?: string; branch?: string; builtAt?: string };
     return {
       commit: String(info.commit || "unknown").slice(0, 12),

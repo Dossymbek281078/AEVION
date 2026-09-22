@@ -162,7 +162,9 @@ function строкиТекста(items: ЭлементТекста[]): Array<Ar
 }
 
 // имя может нести номер («Помещение 1» в обмерных альбомах) — цифры внутри допустимы, но начало — буква
-const ИМЯ_ПОМЕЩЕНИЯ = /^[А-ЯЁа-яё][А-ЯЁа-яё0-9 \-\/]{2,30}$/;
+// имя помещения в таблице — с заглавной («Коридор», «Помещение 1»); строки легенды
+// («2 | перегородки из бетонных блоков») идут со строчной и таблицей не считаются
+const ИМЯ_ПОМЕЩЕНИЯ = /^[А-ЯЁ][А-ЯЁа-яё0-9 \-\/]{2,30}$/;
 const ПЛОЩАДЬ = /^(\d{1,4})[,.](\d{1,2})\s*м?/;
 
 /**
@@ -201,7 +203,7 @@ export function номераНаПлане(items: ЭлементТекста[], 
   const типичный = размеры.length ? размеры[Math.floor(размеры.length / 2)] : 0;
   for (const row of строкиТекста(items)) {
     for (const c of row) {
-      if (!/^\d{1,2}$/.test(c.s)) continue;
+      if (!/^[1-9]\d?$/.test(c.s)) continue; // «02» в штампе листа — номер листа, не помещения
       // строка таблицы — имя стоит РЯДОМ справа от номера (в пределах 12 размеров шрифта);
       // легенда или подпись на той же базовой линии далеко слева/справа номер не отменяет
       // (design-project: «1» на плане делил линию с текстом легенды и терялся)
@@ -222,14 +224,23 @@ export function назначенияПоНомерам(
   originPt: { x: number; y: number },
   metersPerPt: number,
   roomAt: (x: number, y: number) => number | null,
+  /** площадь комнаты по модели, м² — сверка с экспликацией: расхождение больше чем втрое
+   *  значит, что номер попал не в свою область (OTDL: «Коридор» 6,45 м² лёг в поле листа 227 м²) */
+  roomArea?: (room: number) => number | undefined,
 ): { types: Record<number, RoomType>; names: Record<number, string>; areas: Record<number, number>; unplaced: string[] } {
   const types: Record<number, RoomType> = {}, names: Record<number, string> = {}, areas: Record<number, number> = {};
   const unplaced: string[] = [];
   const поНомеру = new Map(экспл.map((e) => [e.n, e]));
   for (const l of номера) {
     const строка = поНомеру.get(Number(l.text)); if (!строка) continue;
-    const room = roomAt((l.x - originPt.x) * metersPerPt, (l.y - originPt.y) * metersPerPt);
+    const x = (l.x - originPt.x) * metersPerPt, y = (l.y - originPt.y) * metersPerPt;
+    // номер на плане стоит в кружке: кружок — замкнутый контур, и сама точка номера ни в
+    // одной комнате не лежит. Ищем ближайшую комнату по кругу до 0.6 м (радиус кружка ~0.25 м)
+    let room = roomAt(x, y);
+    for (let r = 0.15; room === null && r <= 0.6; r += 0.15) for (let a = 0; a < 360 && room === null; a += 30) room = roomAt(x + r * Math.cos((a * Math.PI) / 180), y + r * Math.sin((a * Math.PI) / 180));
     if (room === null || names[room] !== undefined) { unplaced.push(`${строка.n} ${строка.name}`); continue; }
+    const m = roomArea?.(room);
+    if (строка.area !== undefined && m !== undefined && (m > 3 * строка.area || m < строка.area / 3)) { unplaced.push(`${строка.n} ${строка.name}`); continue; }
     names[room] = строка.name;
     const t = roomTypeFromLabel(строка.name); if (t) types[room] = t;
     if (строка.area !== undefined) areas[room] = строка.area;

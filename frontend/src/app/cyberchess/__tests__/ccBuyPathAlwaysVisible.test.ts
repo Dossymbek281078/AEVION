@@ -23,6 +23,10 @@ describe("путь к кассе CyberChess всегда на экране", () 
   it("шапка ≥769: ссылка в кассу рядом с «Помощь»", () => {
     expect(page).toContain('{vwPx>=769&&<a href={ccBuyHref} data-cc-buy="header"');
   });
+  it("телефон <769: короткая цена в шапке на первом экране", () => {
+    expect(page).toContain('{vwPx<769&&<a href={ccBuyHref} data-cc-buy="header-phone"');
+    expect(page).toContain('💳 {ccBuyLabel.match(/\\$\\d+/)?.[0]||ccBuyLabel}</a>}');
+  });
   it("телефон <769: первый пункт меню «Ещё» — купить", () => {
     const i = page.indexOf("...(vwPx<769?[\n");
     expect(i).toBeGreaterThan(0);
@@ -36,7 +40,7 @@ describe("путь к кассе CyberChess всегда на экране", () 
     expect(page.slice(shop, aev)).toContain("<a href={ccBuyHref}");
   });
   it("контроль: в этих блоках нет зашитой цены в долларах", () => {
-    for (const anchor of ['data-cc-buy="header"', 'data-cc-buy="shop"', "Купить CyberChess · ${ccBuyLabel}"]) {
+    for (const anchor of ['data-cc-buy="header"', 'data-cc-buy="header-phone"', 'data-cc-buy="shop"', "Купить CyberChess · ${ccBuyLabel}"]) {
       const i = page.indexOf(anchor);
       expect(page.slice(i, i + 700)).not.toMatch(/\$\d/);
     }

@@ -880,12 +880,10 @@ console.log(run.finalContent);`}</pre>
             странице не было вовсе (замер 20.09.2026, 390 px). Блок сам не
             нарисуется, если поле появится. */}
         <div style={{ maxWidth: 560, margin: "32px 0 0" }}>
-          <WaitlistIfMissing
-            source="qcoreai-page"
-            title="Платить сегодня рано? Оставьте адрес"
-            description="Напишем, когда у AEVION откроются новые модули и возможности."
-            buttonLabel="Сообщить мне"
-          />
+          {/* Тексты берём по умолчанию из самого компонента: то же самое,
+              вписанное здесь пропом, уезжало в атрибут и проходило мимо
+              переводов (сторож attrI18n, замер 21.09.2026). */}
+          <WaitlistIfMissing source="qcoreai-page" />
         </div>
       </ProductPageShell>
     </main>

@@ -775,7 +775,9 @@ export function planFromPdfSegments(
       y1: (s.y1 - minY) * metersPerPt,
       x2: (s.x2 - minX) * metersPerPt,
       y2: (s.y2 - minY) * metersPerPt,
-      thickness: s.thicknessM ?? 0.15,
+      // одиночная линия без слоёв после чистки по размерам — грань стены, а не стена: 0.10 м,
+      // иначе каждая комната теряет по 7.5 см на сторону (замер 22.09: −19…−22 % площади к экспликации)
+      thickness: s.thicknessM ?? (стеныНеточные ? 0.1 : 0.15),
       height: WALL_HEIGHT,
     };
     if (Math.hypot(w.x2 - w.x1, w.y2 - w.y1) < 0.05) continue;

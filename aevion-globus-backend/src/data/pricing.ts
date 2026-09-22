@@ -718,7 +718,7 @@ export const MODULES_PRICING: ModulePrice[] = [
     addonMonthly: null,
     includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "beta",
-    oneLiner: "Энергия и эмоция как валюта (концепт)",
+    oneLiner: "Мягкая репутация: 7 рангов, очки не торгуются",
   },
   {
     id: "qcontract",

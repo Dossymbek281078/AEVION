@@ -216,9 +216,9 @@ export const projects: GlobusProject[] = [
   {
     id: "qlife",
     code: "QLIFE",
-    name: "QLife — Personal OS",
+    name: "QLife — долголетие и анти-эйджинг",
     description:
-      "Personal Operating System: 6-pillar live dashboard (Finance/Health/Communication/AI/Data/Identity) polling real AEVION health endpoints, cross-module AI insights, community life-prompts concept board. Launched 2026-05-18 — browser-smoke verified https://aevion.app/qlife. /api/qlife.",
+      "Longevity and anti-aging scenarios: biomarker logging, protocols, links to QPersona and HealthAI. Renamed 2026-09-22 — the catalog said Personal OS while the page says «Живи дольше, старей медленнее»; description now follows the page. https://aevion.app/qlife, /api/qlife.",
     kind: "product",
     status: "live",
     priority: 2,
@@ -408,7 +408,7 @@ export const projects: GlobusProject[] = [
   {
     id: "z-tide",
     code: "Z-TIDE",
-    name: "Z-Tide — Energy & Emotion Currency",
+    name: "Z-Tide — мягкая репутация экосистемы",
     description:
       "Adaptive social-economic coordination MVP 2026-05-15 — contribution events (10 kinds × 12 source modules), decayed tide score, 7-rank ladder (Seedling→Ocean), leaderboard, in-memory concept board. /api/ztide.",
     kind: "experiment",

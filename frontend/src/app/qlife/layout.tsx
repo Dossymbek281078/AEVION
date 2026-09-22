@@ -6,14 +6,14 @@ import { ModuleMaturity } from "@/components/ModuleMaturity";
 const SITE = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 export const metadata: Metadata = {
-  title: "QLife — Personal OS",
+  title: "QLife — долголетие и анти-эйджинг",
   description:
     "Personal Operating System: единый интерфейс для всей жизни — финансы, здоровье, расписание, отношения, цели. AI-агент держит фокус, ты управляешь.",
   alternates: { canonical: `${SITE}/qlife` },
   openGraph: {
     type: "website",
     url: `${SITE}/qlife`,
-    title: "QLife — Personal OS",
+    title: "QLife — долголетие и анти-эйджинг",
     description: "All-in-one personal OS: finance/health/schedule/relationships/goals in one agent-driven dashboard.",
     siteName: "AEVION",
     images: [{ url: `${SITE}/qlife/opengraph-image`, width: 1200, height: 630 }],

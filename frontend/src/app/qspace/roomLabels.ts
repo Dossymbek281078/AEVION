@@ -201,7 +201,7 @@ export function номераНаПлане(items: ЭлементТекста[], 
   const типичный = размеры.length ? размеры[Math.floor(размеры.length / 2)] : 0;
   for (const row of строкиТекста(items)) {
     for (const c of row) {
-      if (!/^\d{1,2}$/.test(c.s)) continue;
+      if (!/^[1-9]\d?$/.test(c.s)) continue; // «02» в штампе листа — номер листа, не помещения
       // строка таблицы — имя стоит РЯДОМ справа от номера (в пределах 12 размеров шрифта);
       // легенда или подпись на той же базовой линии далеко слева/справа номер не отменяет
       // (design-project: «1» на плане делил линию с текстом легенды и терялся)
@@ -228,7 +228,11 @@ export function назначенияПоНомерам(
   const поНомеру = new Map(экспл.map((e) => [e.n, e]));
   for (const l of номера) {
     const строка = поНомеру.get(Number(l.text)); if (!строка) continue;
-    const room = roomAt((l.x - originPt.x) * metersPerPt, (l.y - originPt.y) * metersPerPt);
+    const x = (l.x - originPt.x) * metersPerPt, y = (l.y - originPt.y) * metersPerPt;
+    // номер на плане стоит в кружке: кружок — замкнутый контур, и сама точка номера ни в
+    // одной комнате не лежит. Ищем ближайшую комнату по кругу до 0.6 м (радиус кружка ~0.25 м)
+    let room = roomAt(x, y);
+    for (let r = 0.15; room === null && r <= 0.6; r += 0.15) for (let a = 0; a < 360 && room === null; a += 30) room = roomAt(x + r * Math.cos((a * Math.PI) / 180), y + r * Math.sin((a * Math.PI) / 180));
     if (room === null || names[room] !== undefined) { unplaced.push(`${строка.n} ${строка.name}`); continue; }
     names[room] = строка.name;
     const t = roomTypeFromLabel(строка.name); if (t) types[room] = t;

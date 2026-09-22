@@ -12219,7 +12219,7 @@ ${question.trim()}`;
                     const r=await createTierPaymentRequest(tier,amountAev,jwt);
                     if(!r.ok){
                       if(r.error==="platform_wallet_not_configured"){
-                        showToast("Биллинг не настроен · используй 🧪 Тест-активацию ниже","error");
+                        showToast("Оплата в AEV пока недоступна — купите картой: кнопка «Купить →» вверху магазина","info");
                       }else if(r.error==="auth_required"){
                         showToast("Сессия истекла — войди заново","error");
                       }else{

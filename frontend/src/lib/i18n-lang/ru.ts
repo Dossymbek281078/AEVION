@@ -7341,6 +7341,7 @@ const ru: Record<string, string> = {
   "qskyway.wait.promise": "Письмо приходит на запуск модуля. Отписка — одной ссылкой в каждом письме.",
   "pricing.checkoutSuccess.nextOpenAppNoName": "Откройте каталог и выберите оплаченное",
   "pricing.checkoutSuccess.openAppNoName": "Открыть каталог продуктов",
+  "pricing.checkoutSuccess.nextLogin": "Доступ привязан к почте, указанной при оплате: войдите в AEVION с этой почтой, и {app} откроет купленное",
   "pricing.checkoutSuccess.subtitleActivatedNoTier": "Спасибо! Ваша подписка активна.",
   "pricing.checkoutSuccess.titleActivatedNoTier": "Оплата принята!",
   "pricing.checkoutSuccess.titleNoPayment": "Проверяем, была ли оплата",

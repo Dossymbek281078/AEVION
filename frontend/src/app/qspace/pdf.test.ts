@@ -107,6 +107,33 @@ describe("PDF без слоёв: размерные цепочки и фигур
     const без = planFromPdfSegments(src, 8);
     expect(без.plan!.looseWalls).toBeUndefined();
     expect(без.plan!.walls.length).toBe(7);
+    // одиночная линия после чистки — грань стены: 0.10 м; без чистки — прежние 0.15
+    expect(r.plan!.walls.every((w) => Math.abs(w.thickness - 0.1) < 1e-9)).toBe(true);
+    expect(без.plan!.walls.every((w) => Math.abs(w.thickness - 0.15) < 1e-9)).toBe(true);
+  });
+  it("одиночная короткая линия внутри комнаты (значок) — не стена; короткая, упёртая в стену, — остаётся", async () => {
+    // коробка 400×300 (8 м / 400 пт = 2 см/пт): значок радиатора 30 пт (0.6 м) посреди комнаты и
+    // простенок 30 пт, упёртый в левую стену; цепочка с числами — чтобы чистка включилась
+    const src = await readPdfSegments(makePdf("100 100 400 300 re S 250 250 m 280 250 l S 100 200 m 130 200 l S 100 40 m 500 40 l S"));
+    const числа = [150, 250, 350, 450, 200, 300].map((x) => ({ x, y: 44 }));
+    const r = planFromPdfSegments(src, 8, "размеры", null, числа);
+    expect(r.warnings.join(" ")).toMatch(/Одиночные короткие линии \(1/);
+    expect(r.plan!.walls.length).toBe(5);
+    // начало координат — по всем линиям файла (включая цепочку y=40), поэтому проверяем форму, а не y
+    expect(r.plan!.walls.some((w) => Math.abs(w.y1 - w.y2) < 1e-6 && Math.min(w.x1, w.x2) < 0.01 && Math.abs(Math.abs(w.x2 - w.x1) - 0.6) < 0.02), "простенок у стены остался").toBe(true);
+  });
+  it("несущие — предположение: закрашенный контур или толщина ≥ 0.25 м; тонкая обводка — нет", async () => {
+    // 8 м на 400 пт: закрашенный прямоугольник-стена 400×15 пт (0.3 м) сверху, тонкая перегородка обводкой
+    const src = await readPdfSegments(makePdf("100 400 m 500 400 l 500 415 l 100 415 l h B 100 100 400 300 re S 300 100 m 300 300 l S"));
+    const r = planFromPdfSegments(src, 8);
+    const несущие = r.plan!.walls.filter((w) => w.bearing);
+    expect(несущие.length).toBeGreaterThanOrEqual(1);
+    expect(r.plan!.walls.some((w) => !w.bearing && Math.abs(w.x1 - w.x2) < 1e-6), "перегородка обводкой — не несущая").toBe(true);
+    expect(r.warnings.join(" ")).toMatch(/Несущие стены — предположение/);
+    // контроль: без заливок и толстых стен — ни одной несущей и ни слова о них
+    const тонкие = planFromPdfSegments(await readPdfSegments(makePdf("100 100 400 300 re S")), 8);
+    expect(тонкие.plan!.walls.some((w) => w.bearing)).toBe(false);
+    expect(тонкие.warnings.join(" ")).not.toMatch(/Несущие/);
   });
   it("отрезки одного пути несут общий номер, контур заливки помечен fill", async () => {
     const src = await readPdfSegments(makePdf("0 0 m 100 0 l 100 50 l h B 200 0 m 300 0 l S"));

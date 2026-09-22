@@ -1673,6 +1673,25 @@ export default function CyberChessPage(){
   // (CPI/лидерборд/рейтинг, которые ключуются по userId) следуют за игроком между
   // устройствами. Переиспользуем существующий auth платформы, без новых таблиц.
   const[ccAuth,sCcAuth]=useState<{user:{id:string;email?:string;name?:string}|null;checked:boolean}>({user:null,checked:false});
+  // Куплен ли CyberChess КАРТОЙ (Lemon Squeezy → AppSubscription): три состояния, «unknown» не равно «нет».
+  // До 22.09.2026 страница знала только про AEV-лестницу магазина (chessy.owned.pro) — заплативший картой
+  // получал те же 4 уровня ИИ и платные подсказки, что и гость: «продаём открытое, закрытое не продаём».
+  const[platformApp,sPlatformApp]=useState<"unknown"|"active"|"none">("unknown");
+  useEffect(()=>{
+    if(!ccAuth.checked||!ccAuth.user){sPlatformApp(ccAuth.checked?"none":"unknown");return;}
+    let cancelled=false;
+    (async()=>{
+      let t="";try{t=getAuthToken()||""}catch{}
+      if(!t){if(!cancelled)sPlatformApp("none");return;}
+      try{
+        const r=await fetch("/api-backend/api/apps/access/check?app=cyberchess",{headers:{Authorization:`Bearer ${t}`}});
+        if(!r.ok){if(!cancelled)sPlatformApp("unknown");return;} // 401/5xx/404 — не знаем, а не «не куплено»
+        const d=await r.json() as {active?:boolean};
+        if(!cancelled)sPlatformApp(d?.active===true?"active":"none");
+      }catch{if(!cancelled)sPlatformApp("unknown")}
+    })();
+    return()=>{cancelled=true};
+  },[ccAuth.checked,ccAuth.user?.id]);
   useEffect(()=>{
     let cancelled=false;
     (async()=>{
@@ -1762,7 +1781,7 @@ export default function CyberChessPage(){
   const[chessy,sChessy]=useState<ChessyState>(()=>ldChessy());
   // Premium tier helpers — Pro and Ultimate are mutually-additive: Ultimate implies Pro,
   // so most gates check `isPro` (= pro OR ultimate). `isUltimate` is for tier-only perks.
-  const isPro=!!chessy.owned.pro||!!chessy.owned.ultimate;
+  const isPro=!!chessy.owned.pro||!!chessy.owned.ultimate||platformApp==="active"; // картой (LS) или AEV-лестницей
   const isUltimate=!!chessy.owned.ultimate;
   const[showShop,sShowShop]=useState(false);
   // QPayNet payment-request flow for Chessy Pro/Ultimate tiers (see ./billing.ts)
@@ -12141,7 +12160,9 @@ ${question.trim()}`;
             <div style={{fontSize:11,fontWeight:900,letterSpacing:1.5,textTransform:"uppercase" as const,color:"#92400e"}}>💳 Оплата картой</div>
             <div style={{fontSize:14,fontWeight:800,color:CC.text}}>Полный доступ к CyberChess · {ccBuyLabel}</div>
           </div>
-          <a href={ccBuyHref} className="cc-touch" style={{padding:"9px 16px",borderRadius:RADIUS.md,background:CC.gold,color:"#1f2937",fontWeight:900,fontSize:13,textDecoration:"none",whiteSpace:"nowrap"}}>Купить →</a>
+          {platformApp==="active"
+            ?<span data-cc-buy="shop-active" style={{padding:"9px 16px",borderRadius:RADIUS.md,background:"#d1fae5",color:"#065f46",fontWeight:900,fontSize:13,whiteSpace:"nowrap"}}>✓ Куплено картой · Pro включён</span>
+            :<a href={ccBuyHref} className="cc-touch" style={{padding:"9px 16px",borderRadius:RADIUS.md,background:CC.gold,color:"#1f2937",fontWeight:900,fontSize:13,textDecoration:"none",whiteSpace:"nowrap"}}>Купить →</a>}
         </div>
         <div style={{borderRadius:RADIUS.lg,padding:`${SPACE[3]}px ${SPACE[4]}px`,marginBottom:SPACE[4],
           background:"linear-gradient(135deg,#0f172a 0%,#1e1b4b 100%)",color:"#fff",
@@ -12219,7 +12240,7 @@ ${question.trim()}`;
                     const r=await createTierPaymentRequest(tier,amountAev,jwt);
                     if(!r.ok){
                       if(r.error==="platform_wallet_not_configured"){
-                        showToast("Биллинг не настроен · используй 🧪 Тест-активацию ниже","error");
+                        showToast("Оплата в AEV пока недоступна — купите картой: кнопка «Купить →» вверху магазина","info");
                       }else if(r.error==="auth_required"){
                         showToast("Сессия истекла — войди заново","error");
                       }else{

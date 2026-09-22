@@ -4,6 +4,8 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiUrl, getClientApiBase } from "@/lib/apiBase";
+import { покупкиНаГлавной } from "@/lib/homeBuyLinks";
+import { channelNow } from "@/lib/channelNow";
 import { fetchPlanetStats, fetchRecentArtifacts } from "@/lib/planetData";
 import dynamic from "next/dynamic";
 import Globus3DPlaceholder from "./components/Globus3DPlaceholder";
@@ -278,6 +280,10 @@ const DEMO_NOTE =
 
   const backendOrigin = getClientApiBase();
 
+  // Состав блока вынесен в `@/lib/homeBuyLinks`, чтобы его можно было
+  // проверить тестом, а не только глазами на проде.
+  const ПОКУПКИ = useMemo(() => покупкиНаГлавной(channelNow()), []);
+
   return (
     <main style={{ padding: 0 }}>
       {/* Заходы сюда не считались до 28.08.2026: страница собирает адреса, но
@@ -407,6 +413,67 @@ const DEMO_NOTE =
             >
               Investor pitch →
             </Link>
+          </div>
+
+          {/*
+            🔴 «Купить прямо сейчас» — блок заведён 22.09.2026 по прямому слову
+            основателя «доведи до оплат».
+
+            ЗАЧЕМ. Замер того дня: главная написана для ИНВЕСТОРА — «$340B
+            addressable market», «≈$28.75M modelled ARR», кнопка «Investor
+            pitch». Слово «Купить» на странице встречалось НОЛЬ раз, цен
+            товаров не было ни одной. Человек, пришедший с ролика про книгу,
+            попадал на страницу про объём рынка и уходил: за сутки на сайт
+            заходят единицы, и каждый из них уходил без единого предложения
+            купить.
+
+            ЦЕНЫ БЕРУТСЯ ИЗ КАТАЛОГА, не переписаны числами: иначе главная
+            разойдётся с кассой при первой же правке цены, и мы пообещаем одно,
+            а возьмём другое. Ссылки помечены каналом — покупка свяжется с тем,
+            откуда человек пришёл.
+          */}
+          <div style={{ marginTop: 28 }}>
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 800,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                opacity: 0.75,
+                marginBottom: 10,
+              }}
+            >
+              Купить прямо сейчас
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: 10,
+              }}
+            >
+              {ПОКУПКИ.map((п) => (
+                <a
+                  key={п.href}
+                  href={п.href}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 4,
+                    padding: "14px 16px",
+                    borderRadius: 14,
+                    border: "1px solid rgba(255,255,255,0.35)",
+                    background: "rgba(255,255,255,0.12)",
+                    color: "#fff",
+                    textDecoration: "none",
+                  }}
+                >
+                  <span style={{ fontSize: 12, opacity: 0.8 }}>{п.вид}</span>
+                  <span style={{ fontSize: 15, fontWeight: 800 }}>{п.название}</span>
+                  <span style={{ fontSize: 18, fontWeight: 900 }}>{п.цена}</span>
+                </a>
+              ))}
+            </div>
           </div>
 
           <div

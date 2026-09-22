@@ -1,7 +1,7 @@
 import { planningOgImage, planningOgSize, planningOgContentType } from "@/lib/planningOg";
 
 export const runtime = "edge";
-export const alt = "Z-Tide — Energy & Emotion Currency";
+export const alt = "Z-Tide — мягкая репутация экосистемы";
 export const size = planningOgSize;
 export const contentType = planningOgContentType;
 

@@ -75,7 +75,7 @@ export default function QLifePage() {
         <p style={styles.heroEyebrow}>Longevity & Anti-Aging</p>
         <h1 style={styles.heroTitle}>
           {"Живи дольше, "}
-          <span style={styles.heroGradient}>стареей медленнее</span>
+          <span style={styles.heroGradient}>старей медленнее</span>
         </h1>
         <p style={styles.heroSub}>
           Логируй биомаркеры, отслеживай тренды и получай персональный AI-план

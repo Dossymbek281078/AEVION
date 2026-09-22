@@ -511,19 +511,54 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
     // секрет вебхука необязателен, и выбор идёт как `lsReady ? ls : gumroad`.
     // То есть неполная проверка не просто молчала — она уводила покупателя
     // от единственного пути, который довёл бы товар.
+    // 21.09.2026: ОТДЕЛЬНЫЙ МОДУЛЬ БЕЗ СВОЕГО ТОВАРА В КАССЕ.
+    //
+    // Замер в день запуска: qright, qsign, startup_exchange и qskyway имеют
+    // назначенную цену на витрине, а касса отвечала 503 — у них нет своего
+    // варианта в LemonSqueezy (контроль: devhub тем же запросом -> 200,
+    // выдуманное приложение -> 400 invalid_app). Завести варианты пачкой
+    // нельзя: API кассы на POST /v1/products и /v1/variants отвечает 405.
+    //
+    // Поэтому продаём такой модуль ВАРИАНТОМ ТАРИФА lite, а цену передаём
+    // custom_price. Нового смысла здесь нет: это ровно тот путь, которым уже
+    // покупают "lite + один модуль на выбор" со страницы цен, и вебхук его
+    // умеет — tier lite плюс module в custom_data даёт права ровно на один
+    // модуль (lemonSqueezyWebhook.ts, ветка tierId === "lite" && customModule).
+    //
+    // ТОЛЬКО lite, и это не осторожность, а единственное безопасное место.
+    // У medium/full/max вебхук custom_data.module НЕ читает: он выдаёт набор
+    // ступени целиком. Продажа qskyway за его цену вариантом tier_max выдала
+    // бы всю платформу на год — тот самый класс, из-за которого 16.09 снимали
+    // товары с публикации (ступень full уходила за цену одного модуля).
+    const собственныйВариант = resolveLemonSqueezyVariant(reference);
+    const запасной =
+      !собственныйВариант && Boolean(app) && tier.id === "lite"
+        ? resolveLemonSqueezyVariant("tier_lite")
+        : null;
     const lsReady =
       Boolean(process.env.LEMON_SQUEEZY_API_KEY?.trim()) &&
       Boolean(process.env.LEMON_SQUEEZY_STORE_ID?.trim()) &&
       Boolean(process.env.LEMON_SQUEEZY_WEBHOOK_SECRET?.trim()) &&
-      Boolean(resolveLemonSqueezyVariant(reference));
+      Boolean(собственныйВариант || запасной);
     if (lsReady) {
       try {
         // Lite = 1 продукт на выбор: пробрасываем выбранный модуль в custom_data,
         // чтобы вебхук провижинил подписку именно на него.
-        const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
+        // Какой модуль оплачен. При запасном пути это само приложение: покупатель
+        // пришёл с его витрины, и без этого поля вебхук выдал бы тариф без
+        // ограничения по модулю.
+        const liteModule = запасной
+          ? app?.slug
+          : tier.id === "lite"
+            ? (body.modules ?? [])[0]
+            : undefined;
         предупредитьЕслиСуммаНеДоедет("lemonsqueezy");
         const intent = await lemonSqueezyPaymentProvider.createIntent({
-          reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
+          // Запасным путём касса открывается по варианту тарифа, а цену
+          // назначаем мы: иначе покупатель заплатил бы цену планеты.
+          reference: запасной ? "tier_lite" : reference,
+          amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
+          customPriceCents: запасной ? totalCents : undefined,
           customData: собратьCustomData(liteModule, channel),
           // Язык страницы оплаты. Берём его от САМОГО ПОКУПАТЕЛЯ, а не
           // подставляем свой: сперва то, что прислала витрина, иначе язык его
@@ -533,8 +568,11 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
           // Модуль для адреса возврата: страница после оплаты обязана
           // назвать то, за что заплатили. Только при ОДНОМ купленном
           // модуле — на наборе называть один было бы враньём.
-          successAppId:
-            (body.modules ?? []).length === 1 ? (body.modules ?? [])[0] : undefined,
+          successAppId: запасной
+            ? app?.slug
+            : (body.modules ?? []).length === 1
+              ? (body.modules ?? [])[0]
+              : undefined,
         });
         return res.json({ url: intent.checkoutUrl, mode: "real", provider: "lemonsqueezy", currency: "USD", intentId: intent.intentId });
       } catch (e) {

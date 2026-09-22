@@ -107,6 +107,20 @@ describe("PDF без слоёв: размерные цепочки и фигур
     const без = planFromPdfSegments(src, 8);
     expect(без.plan!.looseWalls).toBeUndefined();
     expect(без.plan!.walls.length).toBe(7);
+    // одиночная линия после чистки — грань стены: 0.10 м; без чистки — прежние 0.15
+    expect(r.plan!.walls.every((w) => Math.abs(w.thickness - 0.1) < 1e-9)).toBe(true);
+    expect(без.plan!.walls.every((w) => Math.abs(w.thickness - 0.15) < 1e-9)).toBe(true);
+  });
+  it("одиночная короткая линия внутри комнаты (значок) — не стена; короткая, упёртая в стену, — остаётся", async () => {
+    // коробка 400×300 (8 м / 400 пт = 2 см/пт): значок радиатора 30 пт (0.6 м) посреди комнаты и
+    // простенок 30 пт, упёртый в левую стену; цепочка с числами — чтобы чистка включилась
+    const src = await readPdfSegments(makePdf("100 100 400 300 re S 250 250 m 280 250 l S 100 200 m 130 200 l S 100 40 m 500 40 l S"));
+    const числа = [150, 250, 350, 450, 200, 300].map((x) => ({ x, y: 44 }));
+    const r = planFromPdfSegments(src, 8, "размеры", null, числа);
+    expect(r.warnings.join(" ")).toMatch(/Одиночные короткие линии \(1/);
+    expect(r.plan!.walls.length).toBe(5);
+    // начало координат — по всем линиям файла (включая цепочку y=40), поэтому проверяем форму, а не y
+    expect(r.plan!.walls.some((w) => Math.abs(w.y1 - w.y2) < 1e-6 && Math.min(w.x1, w.x2) < 0.01 && Math.abs(Math.abs(w.x2 - w.x1) - 0.6) < 0.02), "простенок у стены остался").toBe(true);
   });
   it("отрезки одного пути несут общий номер, контур заливки помечен fill", async () => {
     const src = await readPdfSegments(makePdf("0 0 m 100 0 l 100 50 l h B 200 0 m 300 0 l S"));

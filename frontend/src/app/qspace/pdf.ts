@@ -721,6 +721,26 @@ export function planFromPdfSegments(
       });
       if (list.length < доВыносных) warnings.push(`Выносные линии размеров (${доВыносных - list.length}) — не стены.`);
     }
+    // одиночки: короткая (< 1 м) осевая линия, ни одним концом не касающаяся другой линии
+    // (ближе 0.1 м) — значок радиатора, полотно двери, обрывок; такие «стены» режут внутри
+    // комнат островки и съедают площадь (замер 22.09: −16…−21 % к экспликации)
+    {
+      const близко = 0.1 / metersPerPt, короткая = 1.0 / metersPerPt;
+      const концы = list.flatMap((s) => [[s.x1, s.y1], [s.x2, s.y2]] as Array<[number, number]>);
+      const касается = (x: number, y: number, self: PdfSegments["segments"][number]) => list.some((o) => o !== self && (
+        Math.hypot(o.x1 - x, o.y1 - y) <= близко || Math.hypot(o.x2 - x, o.y2 - y) <= близко ||
+        // или точка лежит на теле другой осевой линии
+        (Math.abs(o.y1 - o.y2) < 1e-6 && Math.abs(y - o.y1) <= близко && x >= Math.min(o.x1, o.x2) - близко && x <= Math.max(o.x1, o.x2) + близко) ||
+        (Math.abs(o.x1 - o.x2) < 1e-6 && Math.abs(x - o.x1) <= близко && y >= Math.min(o.y1, o.y2) - близко && y <= Math.max(o.y1, o.y2) + близко)));
+      void концы;
+      const доОдиночек = list.length;
+      list = list.filter((s) => {
+        const осевая = Math.abs(s.x1 - s.x2) < 1e-6 || Math.abs(s.y1 - s.y2) < 1e-6;
+        if (!осевая || Math.hypot(s.x2 - s.x1, s.y2 - s.y1) > короткая) return true;
+        return касается(s.x1, s.y1, s) || касается(s.x2, s.y2, s);
+      });
+      if (list.length < доОдиночек) warnings.push(`Одиночные короткие линии (${доОдиночек - list.length}: значки, полотна дверей) — не стены.`);
+    }
     стеныНеточные = true;
     // короткие косые штрихи (штриховка стен, засечки размеров, значки мебели) — не стены:
     // косая стена короче 0.6 м на плане не встречается, а штрих штриховки — 0.2–0.5 м
@@ -775,7 +795,9 @@ export function planFromPdfSegments(
       y1: (s.y1 - minY) * metersPerPt,
       x2: (s.x2 - minX) * metersPerPt,
       y2: (s.y2 - minY) * metersPerPt,
-      thickness: s.thicknessM ?? 0.15,
+      // одиночная линия без слоёв после чистки по размерам — грань стены, а не стена: 0.10 м,
+      // иначе каждая комната теряет по 7.5 см на сторону (замер 22.09: −19…−22 % площади к экспликации)
+      thickness: s.thicknessM ?? (стеныНеточные ? 0.1 : 0.15),
       height: WALL_HEIGHT,
     };
     if (Math.hypot(w.x2 - w.x1, w.y2 - w.y1) < 0.05) continue;

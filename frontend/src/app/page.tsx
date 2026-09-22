@@ -5,6 +5,7 @@ import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 import { покупкиНаГлавной } from "@/lib/homeBuyLinks";
+import { BuyLink } from "@/components/BuyLink";
 import { channelNow } from "@/lib/channelNow";
 import { fetchPlanetStats, fetchRecentArtifacts } from "@/lib/planetData";
 import dynamic from "next/dynamic";
@@ -462,36 +463,67 @@ const DEMO_NOTE =
                 gap: 10,
               }}
             >
-              {ПОКУПКИ.map((п) => (
-                <a
-                  key={п.href}
-                  href={п.href}
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 4,
-                    padding: "14px 16px",
-                    borderRadius: 14,
-                    border: "1px solid rgba(255,255,255,0.35)",
-                    background: "rgba(255,255,255,0.12)",
-                    color: "#fff",
-                    textDecoration: "none",
-                  }}
-                >
-                  <span style={{ fontSize: 12, opacity: 0.8 }}>{п.вид}</span>
-                  {/*
-                    translate="no" — НАЗВАНИЕ ТОВАРА не переводим. Замер 22.09
-                    на живом сайте: AutoTranslate превратил «Gratitude ∞ Forever
-                    Young» в «Благодарность ∞ Навсегда молодой», а в кассе
-                    Gumroad товар называется по-английски. Человек видит одно
-                    имя на витрине и другое на оплате — это обрыв доверия ровно
-                    в точке платежа. Вид («book · PDF + EPUB») и цену переводить
-                    наоборот НУЖНО, поэтому метка стоит только на имени.
-                  */}
-                  <span translate="no" style={{ fontSize: 15, fontWeight: 800 }}>{п.название}</span>
-                  <span style={{ fontSize: 18, fontWeight: 900 }}>{п.цена}</span>
-                </a>
-              ))}
+              {/*
+                🔴 Внешние карточки — через BuyLink, а не через голый <a>.
+                Замер 22.09: на посадочных `/go` и `/shop` клик по кассовой
+                ссылке уходит в воронку событием checkout_start (sendBeacon),
+                а мой блок на ГЛАВНОЙ этого не делал. Покупка видна только по
+                вебхуку кассы, поэтому без события «никто не нажал» и «нажали,
+                но не купили» неразличимы — а это два разных диагноза и два
+                разных следующих шага. Второй способ слать событие заводить
+                нельзя (§0 п.3), поэтому берём тот же компонент, что витрины.
+                Внутренняя ссылка на страницу цен события не шлёт намеренно:
+                там checkout_start уйдёт при настоящем начале оплаты.
+              */}
+              {ПОКУПКИ.map((п) => {
+                const общийСтиль = {
+                  display: "flex",
+                  flexDirection: "column" as const,
+                  gap: 4,
+                  padding: "14px 16px",
+                  borderRadius: 14,
+                  border: "1px solid rgba(255,255,255,0.35)",
+                  background: "rgba(255,255,255,0.12)",
+                  color: "#fff",
+                  textDecoration: "none",
+                };
+                const нутро = (
+                  <>
+                    <span style={{ fontSize: 12, opacity: 0.8 }}>{п.вид}</span>
+                    {/*
+                      translate="no" — НАЗВАНИЕ ТОВАРА не переводим. Замер 22.09
+                      на живом сайте: AutoTranslate превратил «Gratitude ∞ Forever
+                      Young» в «Благодарность ∞ Навсегда молодой», а в кассе
+                      Gumroad товар называется по-английски. Человек видит одно
+                      имя на витрине и другое на оплате — это обрыв доверия ровно
+                      в точке платежа. Вид карточки и цену переводить наоборот
+                      НУЖНО, поэтому метка стоит только на имени.
+                    */}
+                    <span translate="no" style={{ fontSize: 15, fontWeight: 800 }}>{п.название}</span>
+                    <span style={{ fontSize: 18, fontWeight: 900 }}>{п.цена}</span>
+                  </>
+                );
+                if (п.внешняя) {
+                  return (
+                    <BuyLink
+                      key={п.href}
+                      href={п.href}
+                      source="home"
+                      productId={п.id}
+                      priceUsd={п.ценаUsd}
+                      channel={канал}
+                      style={общийСтиль}
+                    >
+                      {нутро}
+                    </BuyLink>
+                  );
+                }
+                return (
+                  <a key={п.href} href={п.href} style={общийСтиль}>
+                    {нутро}
+                  </a>
+                );
+              })}
             </div>
           </div>
 

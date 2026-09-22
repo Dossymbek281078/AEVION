@@ -211,6 +211,28 @@ function parseGumroad(html) {
   return out;
 }
 
+/**
+ * Сколько позиций лестницы РЕАЛЬНО можно купить. Публичная страница витрины на
+ * это не отвечает (лестница — варианты внутри товара), а прод отвечает: ручка
+ * отдаёт списки заданных и незаданных переменных с идентификаторами вариантов.
+ * Отказ сети — «спросить не удалось», а не ноль: неотвеченный вопрос не равен
+ * благополучию и тем более не равен беде.
+ */
+async function продаваемыхВКассе() {
+  try {
+    const r = await fetch("https://api.aevion.app/api/pricing/checkout/healthz", {
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!r.ok) return null;
+    const j = await r.json();
+    const s = j?.providers?.lemonsqueezy?.sellable;
+    if (!Array.isArray(s?.configured) || !Array.isArray(s?.missing)) return null;
+    return { задано: s.configured.length, нет: s.missing, всего: s.configured.length + s.missing.length };
+  } catch {
+    return null;
+  }
+}
+
 async function fetchGumroad() {
   if (GUMROAD_HTML) return fs.readFileSync(path.resolve(GUMROAD_HTML), "utf8");
   const r = await fetch(GUMROAD_STORE, { headers: { "user-agent": "Mozilla/5.0 (aevion-storefront-check)" } });
@@ -295,10 +317,23 @@ function parseStore(html) {
     console.log(
       `ГРАНИЦА ПРОВЕРКИ: на публичной витрине ${store.length} товаров, ни одного имени лестницы. ` +
         `Лестница (${nuzhno} позиций) заведена ВАРИАНТАМИ внутри товара, а страница показывает только товары — ` +
-        "цены и периоды лестницы отсюда НЕ проверяются. Проверить их может только вызов API Lemon Squeezy " +
-        "с ключом (LEMON_SQUEEZY_API_KEY), либо ручка /api/payment/healthz, которая отвечает, сколько " +
-        "вариантов задано в переменных. Ниже проверяется ровно то, что страница показывает."
+        "цены и периоды лестницы отсюда НЕ проверяются ни при какой разметке. Ниже проверяется ровно то, " +
+        "что страница показывает."
     );
+    // Граница, которая только указывает, бесполезна: указатель читают как
+    // отговорку. Поэтому спрашиваем прод сразу и печатаем ЧИСЛО — на главный
+    // денежный вопрос («сколько позиций лестницы можно купить прямо сейчас»)
+    // отвечает он, а не витрина.
+    const касса = await продаваемыхВКассе();
+    if (касса === null) {
+      console.log("  в кассе: спросить НЕ удалось (прод не ответил) — это не ноль и не благополучие");
+    } else {
+      const модули = [...new Set(касса.нет.map((r) => r.replace(/^app_/, "").replace(/_(lite|medium|pro|full|max)$/, "")))];
+      console.log(
+        `  в кассе задано ${касса.задано} позиций из ${касса.всего}` +
+          (касса.нет.length ? `; не заведено ${касса.нет.length}: ${модули.join(", ")}` : "")
+      );
+    }
   }
 
   const byName = new Map(store.map((i) => [i.name, i]));

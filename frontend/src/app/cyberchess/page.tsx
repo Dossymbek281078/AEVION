@@ -50,6 +50,7 @@ import PostGameCard from "./PostGameCard";
 import DeepAnalysisPanel from "./DeepAnalysisPanel";
 import { temaZadachiRu, fazaRu, imyaZadachiBezPovtorov } from "./puzzleLabels";
 import { productById, keepChannel } from "@/lib/products";
+import { normalizePuzzle, solverSide, imyaPoResheniyu, goditsyaDlyaRush } from "./puzzleNormalize";
 import { channelNow } from "@/lib/channelNow";
 import { tochnostSohranennoy } from "./postGameSummary";
 import { RANKS, gRank } from "./rating";
@@ -2815,7 +2816,7 @@ export default function CyberChessPage(){
     if(pzFilterMate>0&&p.mateIn!==pzFilterMate)return false;
     if(pzFilterPhase!=="all"&&p.phase!==pzFilterPhase)return false;
     if(pzFilterTheme!=="all"&&p.theme!==pzFilterTheme)return false;
-    if(pzFilterSide!=="all"&&p.side!==pzFilterSide)return false;
+    if(pzFilterSide!=="all"&&solverSide(p)!==pzFilterSide)return false;
     if(p.r<pzFilterRating[0]||p.r>pzFilterRating[1])return false;
     return true;
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2833,13 +2834,17 @@ export default function CyberChessPage(){
       const t=rushTargetRef.current;
       for(const w of [120,220,350,600]){const band=full.filter(p=>Math.abs(p.r-t)<=w);if(band.length>=8){list=band;break;}}
     }
+    // Rush: мат в 1–3 или выигрыш материала за 1–5 ходов (слово основателя 22.09.2026); сперва дешёвая отсечка по полям
+    if(pzMode==="rush"){const cheap=(p:Puzzle)=>p.goal==="Mate"?(p.mateIn||9)<=3:p.sol.length<=10;const easy=list.filter(cheap);if(easy.length>=4)list=easy;}
     const n=list.length;
     let idx=Math.floor(Math.random()*n),tries=0;
     while(tries<15&&list[idx]&&seen.has(list[idx].fen)){idx=(idx+1)%n;tries++;}
-    const pick=list[idx];if(!pick)return;
-    seen.add(pick.fen);
-    if(seen.size>Math.min(300,Math.floor(full.length*0.7))){seen.clear();seen.add(pick.fen);} // не заперемся, когда пул мал
-    const fIdx=list===full?idx:full.indexOf(pick); // pzI — индекс в полном fPz (подсветка списка)
+    if(pzMode==="rush"){let k=0;while(k<30&&list[idx]&&!goditsyaDlyaRush(list[idx])){idx=(idx+1)%n;k++;}} // точная проверка по ходам
+    const pick0=list[idx];if(!pick0)return;
+    const pick=normalizePuzzle(pick0);
+    seen.add(pick0.fen);
+    if(seen.size>Math.min(300,Math.floor(full.length*0.7))){seen.clear();seen.add(pick0.fen);} // не заперемся, когда пул мал
+    const fIdx=list===full?idx:full.indexOf(pick0); // pzI — индекс в полном fPz (подсветка списка)
     let g;try{g=new Chess(pick.fen)}catch{showToast("Задача повреждена, пропускаю","error");return}
     setGame(g);sBk(k=>k+1);sPzI(fIdx>=0?fIdx:0);sPzCurrent(pick);sPzAttempt("idle");
     sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pick.fen]);
@@ -2877,7 +2882,7 @@ export default function CyberChessPage(){
   // Auto-load first puzzle when category changes and we're on Puzzles tab
   useEffect(()=>{
     if(tab!=="puzzles"||fPz.length===0||PUZZLES.length===0)return;
-    const pz=fPz[0];if(!pz)return;
+    const pz0=fPz[0];if(!pz0)return;const pz=normalizePuzzle(pz0);
     let g;try{g=new Chess(pz.fen)}catch{showToast("Задача повреждена, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(0);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
   },[pzCategory]);
 
@@ -2893,7 +2898,8 @@ export default function CyberChessPage(){
         const p=d?.puzzle;
         if(!zhiv)return;
         if(p&&typeof p.fen==="string"&&Array.isArray(p.sol)){
-          sSrvDaily({day:String(d.day||""),id:String(p.id||""),fen:p.fen,sol:p.sol as string[],
+          const npd=normalizePuzzle({fen:String(p.fen),sol:(p.sol as string[])||[],name:"",r:0,theme:""});
+          sSrvDaily({day:String(d.day||""),id:String(p.id||""),fen:npd.fen,sol:npd.sol,
                      rating:Number(p.rating)||0,theme:String(p.theme||"")});
           sSrvDailyFailed(false);
         }else{sSrvDailyFailed(true)}
@@ -5375,12 +5381,12 @@ export default function CyberChessPage(){
   };
   const loadDailyPuzzle=()=>{
     if(!dailyState||PUZZLES.length===0){showToast("Задачи ещё грузятся…","info");return}
-    const pz=PUZZLES[dailyState.idx]||PUZZLES[0];
+    const pz=normalizePuzzle(PUZZLES[dailyState.idx]||PUZZLES[0]);
     sTab("puzzles");
     let g;try{g=new Chess(pz.fen)}catch{showToast("Задача повреждена, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();startClock(0);
     showToast(`☀ Задача дня · ${pz.r}`,"info");
   };
-  const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Задачи ещё грузятся…","info");return}const pz=fPz[i]||PUZZLES[0];if(!pz){showToast("Нет задач под этот фильтр","error");return}let g;try{g=new Chess(pz.fen)}catch{showToast("Задача повреждена, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(i);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
+  const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Задачи ещё грузятся…","info");return}const pz0=fPz[i]||PUZZLES[0];const pz=pz0?normalizePuzzle(pz0):pz0;if(!pz){showToast("Нет задач под этот фильтр","error");return}let g;try{g=new Chess(pz.fen)}catch{showToast("Задача повреждена, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(i);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
     // Set timer based on mode. В rush НЕ трогаем работающий дедлайн (ручной выбор пазла
     // посреди раша не должен обнулять часы).
     if(pzMode==="timed3")startClock(180);
@@ -5400,6 +5406,11 @@ export default function CyberChessPage(){
   // «Следующая» = СЛУЧАЙНЫЙ пазл из отфильтрованного списка (как lichess/chess.com — не по порядку).
   const nextPz=useCallback(()=>{const n=Math.max(1,fPz.length);let nextIdx=Math.floor(Math.random()*n);if(n>1&&nextIdx===pzI)nextIdx=(nextIdx+1)%n;ldPz(nextIdx)},[pzI,fPz.length]);
   const randomPz=useCallback(()=>{if(!fPz.length)return;ldPz(Math.floor(Math.random()*fPz.length))},[fPz.length]);
+  // Имя текущей задачи по её решению («Мат в 2», «Выигрыш фигуры за 3 хода»); считается один раз на задачу (по fen)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const pzTitle=useMemo(()=>pzCurrent?(imyaPoResheniyu(pzCurrent)||(pzCurrent.goal==="Mate"?`Мат в ${pzCurrent.mateIn}`:"Найди лучший ход")):"",[pzCurrent?.fen]);
+  // Старт Puzzle Rush — с задачи, которая годится для раша (мат ≤3 / короткий выигрыш материала)
+  const rushStartIdx=()=>{const c:number[]=[];for(let i=0;i<fPz.length&&c.length<400;i++){const p=fPz[i];if(p.goal==="Mate"?(p.mateIn||9)<=3:p.sol.length<=10)c.push(i);}for(let k=0;k<30&&c.length;k++){const i=c[Math.floor(Math.random()*c.length)];if(goditsyaDlyaRush(fPz[i]))return i;}return Math.floor(Math.random()*Math.max(1,fPz.length));};
   // Проиграть решение пазла НА ДОСКЕ (визуальный разбор, lichess-style). Сбрасывает
   // позицию к старту и анимированно прокатывает всю линию sol[] (ходы игрока +
   // ответы соперника попеременно). Помечает как "shown" — без награды (это обучение,
@@ -6870,7 +6881,7 @@ export default function CyberChessPage(){
                     fontSize:12,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
                   ◆ Решить задачу <span style={{color:CC.textMute,fontWeight:600,fontSize:11}}>{pzCountLabel}</span>
                 </button>
-                <button onClick={()=>{sTab("puzzles");sPzMode("rush" as any);if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}}
+                <button onClick={()=>{sTab("puzzles");sPzMode("rush" as any);if(fPz.length)ldPz(rushStartIdx())}}
                   className="cc-focus-ring"
                   aria-label="Запустить Puzzle Rush"
                   translate="no"
@@ -10352,7 +10363,7 @@ export default function CyberChessPage(){
                   <div style={{flex:1,minWidth:0}}>
                     {imyaZadachiBezPovtorov(pzCurrent).length>0&&<div style={{fontSize:12,fontWeight:700,color:T.dim,marginBottom:2,letterSpacing:"0.05em",textTransform:"uppercase" as const}}>{imyaZadachiBezPovtorov(pzCurrent).join(" · ")}</div>}
                     <div style={{fontSize:18,fontWeight:900,color:T.text,lineHeight:1.2}}>
-                      {pzCurrent.side==="w"?"⚪":"⚫"} {pzCurrent.goal==="Mate"?`Мат в ${pzCurrent.mateIn}`:"Найди лучший ход"}
+                      {pzCurrent.side==="w"?"⚪":"⚫"} {pzTitle}
                     </div>
                   </div>
                   <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>
@@ -10750,8 +10761,8 @@ export default function CyberChessPage(){
                   </div>:fPz.length===0?<div style={{padding:"28px",textAlign:"center",color:T.dim,fontSize:13,fontStyle:"italic"}}>Нет задач по фильтру</div>:
                 fPz.slice(0,100).map((pz,i)=>{
                   // Build readable name: "Мат в 2 · f5+ Kxf5 · Эндшпиль"
-                  const goalLabel=pz.goal==="Mate"?`Мат в ${pz.mateIn||1}`:"Лучший ход";
-                  const sideLabel=pz.side==="w"?"⚪ Белые":"⚫ Чёрные";
+                  const goalLabel=imyaPoResheniyu(pz)||(pz.goal==="Mate"?`Мат в ${pz.mateIn||1}`:"Лучший ход"); // по ходам, а не по тегу
+                  const sideLabel=solverSide(pz)==="w"?"⚪ Белые":"⚫ Чёрные";
                   const phaseLabel=pz.phase==="Opening"?"📖 Дебют":pz.phase==="Middlegame"?"⚔️ Миттельшп.":pz.phase==="Endgame"?"🏁 Эндшп.":"";
                   return(<button key={i} onClick={()=>ldPz(i)} style={{width:"100%",padding:"14px 16px",border:"none",borderBottom:i<Math.min(fPz.length,100)-1?`1px solid ${T.border}`:"none",background:pzI===i?"rgba(124,58,237,0.06)":"#fff",cursor:"pointer",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,borderLeft:pzI===i?`4px solid ${T.purple}`:"4px solid transparent"}}>
                     <div style={{minWidth:0,flex:1}}>
@@ -15566,7 +15577,7 @@ ${question.trim()}`;
 
         // ── PUZZLES ──
         {id:"pz-random",    icon:"◆", group:"Puzzles", label:"Случайная задача",  hint:`Из ${pzCountLabel} тактических`, run:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
-        {id:"pz-rush",      icon:"⚡",group:"Puzzles", label:"Puzzle Rush",        hint:"Решай как можно больше за время",           run:()=>{sTab("puzzles");sPzMode("rush");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+        {id:"pz-rush",      icon:"⚡",group:"Puzzles", label:"Puzzle Rush",        hint:"Решай как можно больше за время",           run:()=>{sTab("puzzles");sPzMode("rush");if(fPz.length)ldPz(rushStartIdx())}},
         {id:"pz-3min",      icon:"⏱", group:"Puzzles", label:"3-минутный режим",  hint:"Реши как можно больше за 3 мин · +3с за каждый верный ответ", run:()=>{sTab("puzzles");sPzMode("timed3");if(PUZZLES.length&&!pzCurrent)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
         {id:"pz-5min",      icon:"⏱", group:"Puzzles", label:"5-минутный режим",  hint:"300 секунд на одну задачу",                 run:()=>{sTab("puzzles");sPzMode("timed5");if(PUZZLES.length&&!pzCurrent)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
         {id:"pz-lichess",   icon:"🌐",group:"Puzzles", label:"Задача дня с Lichess",hint:"Задача дня с lichess.org (live)",          run:async()=>{

@@ -77,4 +77,16 @@ describe("главная предлагает купить по ценам ка�
     expect(подписка!.href).toContain("c=yt");
     expect(подписка!.href.indexOf("c=yt")).toBeLessThan(подписка!.href.indexOf("#"));
   });
+  it("ни одна цена не печатается как $undefined или $NaN", () => {
+    // Цены склеиваются строкой ("$" + p.priceUsd). Пропадёт поле у товара —
+    // на ГЛАВНОЙ появится «$undefined», и это увидит каждый посетитель.
+    // Класс дешёвый в починке и дорогой в последствии, поэтому закреплён.
+    for (const п of покупкиНаГлавной(null)) {
+      expect(п.цена).toMatch(/^(от )?\$\d[\d.,]*/);
+      expect(п.цена).not.toMatch(/undefined|NaN|\$\s*$/);
+      // Название и вид тоже видит человек: пустая карточка хуже отсутствующей.
+      expect(п.название.trim().length).toBeGreaterThan(2);
+      expect(п.вид.trim().length).toBeGreaterThan(2);
+    }
+  });
 });

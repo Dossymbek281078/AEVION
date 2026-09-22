@@ -20,6 +20,27 @@ type StatsResponse = {
   recent: StatEntry[];
 };
 
+/**
+ * Пришедшее — ДЕЙСТВИТЕЛЬНО статистика, а не тело отказа и не половина формы.
+ *
+ * Проверять поля по одному в местах использования бесполезно: их семь, и
+ * контроль в тесте нашёл ВТОРОЙ обвал (по byStrategy) ровно после того, как
+ * первый был закрыт необязательной цепочкой. Поэтому решение одно и в одном
+ * месте: либо форма целая и компонент рисует, либо stats остаётся null и
+ * показывается пустое состояние, которое у него уже есть. Частичную форму
+ * принимать нельзя — она падает не там, где пришла.
+ */
+function этоСтатистика(d: unknown): d is StatsResponse {
+  if (!d || typeof d !== "object") return false;
+  const o = d as Record<string, unknown>;
+  return (
+    typeof o.total === "number" &&
+    Array.isArray(o.byStrategy) &&
+    Array.isArray(o.topProviders) &&
+    Array.isArray(o.recent)
+  );
+}
+
 const STRATEGY_COLORS: Record<string, string> = {
   auto: "#00ff88",
   speed: "#00ccff",
@@ -56,14 +77,23 @@ export default function RequestCard({ refreshTick }: { refreshTick?: number }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Тело ОТКАЗА — это не статистика. Модуль стоит за платной стеной, и
+    // гостю все ручки отвечают 402 с телом {error:"upgrade_required",…}.
+    // Прежний код разбирал это тело как StatsResponse: stats становился
+    // непустым объектом БЕЗ поля topProviders, и строка ниже падала на
+    // undefined[0]. Падение ловила общая граница ошибок — и вместо
+    // предложения купить посетитель видел «Что-то пошло не так» на всей
+    // странице (замер 22.09.2026 на проде: 5 ответов 402 и TypeError).
+    // Предложение показывает общий <PaywallModal>, поэтому здесь достаточно
+    // не принимать отказ за данные.
     fetch("/api-backend/api/qfusionai/stats", { headers: getAuthHeaders() })
-      .then((r) => r.json())
-      .then((d) => setStats(d as StatsResponse))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setStats(этоСтатистика(d) ? d : null))
       .catch(() => void 0)
       .finally(() => setLoading(false));
   }, [refreshTick]);
 
-  const maxProviderCnt = stats?.topProviders[0]?.cnt ?? 1;
+  const maxProviderCnt = stats?.topProviders?.[0]?.cnt ?? 1;
 
   return (
     <div style={{

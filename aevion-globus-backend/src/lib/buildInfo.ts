@@ -11,7 +11,31 @@
  * Два разных ответа на один вопрос и есть источник расхождения, поэтому
  * читатель теперь один на всех.
  */
-export function readBuildInfo(): { commit: string; source: string; branch: string; builtAt: string | null } {
+export function readBuildInfo(): {
+  commit: string;
+  source: string;
+  branch: string;
+  builtAt: string | null;
+  /**
+   * Идентификатор выкатки у Railway — ЗАПАСНАЯ ПРИМЕТА, а не коммит.
+   *
+   * 21.09.2026 прод отвечал commit "unknown": активную сборку сделали не нашим
+   * скриптом, build-info.json внутрь образа не попал. Сказать, какой код
+   * работает, не мог НИКТО, и обёртка выкатки честно останавливала все окна —
+   * сравнивать было не с чем, а спросить не у кого.
+   *
+   * Эта переменная приходит от самой платформы и принадлежит ЗАПУЩЕННОЙ
+   * выкатке (в отличие от переменных сервиса, которые переживают смену образа,
+   * см. разбор 14.08 выше). Коммита она не заменяет и в поле commit НЕ
+   * подставляется: ложный коммит хуже отсутствующего. Её работа одна — дать
+   * человеку ручку, по которой выкатку видно в панели и в списке
+   * `railway deployment list`, чтобы найти автора и спросить коммит.
+   */
+  deploymentId: string | null;
+} {
+  // Примета запущенной выкатки — одинакова для всех трёх исходов ниже.
+  const deploymentId = process.env.RAILWAY_DEPLOYMENT_ID || null;
+
   // ПОРЯДОК ВАЖЕН: сначала файл, переменные — только запасной путь.
   //
   // 14.08.2026 отметку ставили переменной сервиса, и она пережила чужую
@@ -59,6 +83,7 @@ export function readBuildInfo(): { commit: string; source: string; branch: strin
       source: String(info.source || "build-info"),
       branch: String(info.branch || "unknown"),
       builtAt: info.builtAt ? String(info.builtAt) : null,
+      deploymentId,
     };
   } catch {
     /* файла нет — идём к запасному пути ниже */
@@ -78,11 +103,12 @@ export function readBuildInfo(): { commit: string; source: string; branch: strin
       // Метку времени даёт только файл; из переменных её взять неоткуда, и
       // выдумывать «сейчас» нельзя — это назвало бы старт контейнера сборкой.
       builtAt: null,
+      deploymentId,
     };
   }
 
   // Ни файла, ни переменных — это dev-запуск через ts-node-dev (dist не
   // собран). Отвечаем "unknown" явно, а не выдумываем: ложный коммит хуже
   // отсутствующего.
-  return { commit: "unknown", source: "none", branch: "unknown", builtAt: null };
+  return { commit: "unknown", source: "none", branch: "unknown", builtAt: null, deploymentId };
 }

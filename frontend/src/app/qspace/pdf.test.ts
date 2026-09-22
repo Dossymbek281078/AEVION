@@ -107,6 +107,9 @@ describe("PDF без слоёв: размерные цепочки и фигур
     const без = planFromPdfSegments(src, 8);
     expect(без.plan!.looseWalls).toBeUndefined();
     expect(без.plan!.walls.length).toBe(7);
+    // одиночная линия после чистки — грань стены: 0.10 м; без чистки — прежние 0.15
+    expect(r.plan!.walls.every((w) => Math.abs(w.thickness - 0.1) < 1e-9)).toBe(true);
+    expect(без.plan!.walls.every((w) => Math.abs(w.thickness - 0.15) < 1e-9)).toBe(true);
   });
   it("отрезки одного пути несут общий номер, контур заливки помечен fill", async () => {
     const src = await readPdfSegments(makePdf("0 0 m 100 0 l 100 50 l h B 200 0 m 300 0 l S"));

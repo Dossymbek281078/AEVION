@@ -22,7 +22,7 @@
 import { Router, type Request, type Response } from "express";
 import { rateLimit, clientIp } from "../lib/rateLimit";
 import { getPool } from "../lib/dbPool";
-import { sendAgencyLeadNotice } from "../lib/constitutionBrevo";
+import { sendAgencyLeadNotice, sendAgencyLeadReceipt } from "../lib/constitutionBrevo";
 import { makeServiceCapture } from "../lib/sentry/platform";
 
 const capture = makeServiceCapture("agencyLead");
@@ -144,7 +144,17 @@ agencyLeadRouter.post("/lead", лимитЗаявок, async (req: Request, res:
     console.error("[agencyLead] УВЕДОМЛЕНИЕ НЕ УШЛО. Заявка от " + разбор.данные.contact + " сохранена (" + куда + ")");
   }
 
-  return res.status(201).json({ ok: true, stored: куда, notified });
+  // Подтверждение ОТПРАВИТЕЛЮ — отдельно и последним: заявка уже сохранена, и
+  // её судьба не должна зависеть ни от нашего почтового провайдера, ни от того,
+  // оставил ли человек почту (на телефон писать нечем — тогда просто false).
+  let receipt = false;
+  try {
+    receipt = await sendAgencyLeadReceipt(разбор.данные);
+  } catch (e) {
+    capture(e, { where: "agencyLead.receipt" });
+  }
+
+  return res.status(201).json({ ok: true, stored: куда, notified, receipt });
 });
 
 /** Сколько заявок лежит только в памяти — для сводки и проверок. */

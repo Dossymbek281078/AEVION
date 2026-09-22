@@ -197,6 +197,15 @@ export const lemonSqueezyPaymentProvider: PaymentProvider = {
       data: {
         type: "checkouts",
         attributes: {
+          // Цена этой покупки, когда она не равна цене товара в кассе:
+          // так продаётся отдельный модуль поверх варианта тарифа (см.
+          // PaymentIntentInput.customPriceCents). Ноль и отрицательное не
+          // передаём — бесплатное идёт другой веткой checkout.ts, а здесь
+          // такое значение означало бы ошибку расчёта, и касса взяла бы
+          // цену товара молча.
+          ...(typeof input.customPriceCents === "number" && input.customPriceCents > 0
+            ? { custom_price: Math.round(input.customPriceCents) }
+            : {}),
           checkout_data: {
             email: input.email ?? undefined,
             custom: { bureauIntentId: intentId, reference: input.reference, ...(input.customData ?? {}) },

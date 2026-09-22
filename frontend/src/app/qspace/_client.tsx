@@ -1061,7 +1061,7 @@ export default function QSpaceClient() {
     // в таблице экспликации (замер 20.09: OTDL — 6 строк, design-project — 2). Номер внутри
     // найденной комнаты даёт ей имя, тип и площадь по чертежу — по ней видно, где модель врёт.
     if (экспликация.строки.length >= 2 && экспликация.номера.length > 0) {
-      const { types, names, areas, unplaced } = назначенияПоНомерам(экспликация.номера, экспликация.строки, o, k, rooms.roomAt);
+      const { types, names, areas, unplaced } = назначенияПоНомерам(экспликация.номера, экспликация.строки, o, k, rooms.roomAt, (i) => rooms.rooms.find((x) => x.index === i)?.area);
       const n = Object.keys(names).length;
       if (n > 0) {
         setRoomTypeOverride((prev) => ({ ...prev, ...types }));

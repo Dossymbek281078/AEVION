@@ -130,6 +130,7 @@ import { qpersonaRouter } from "./routes/qpersona";
 import { qlifeRouter } from "./routes/qlife";
 import { revenueRouter } from "./routes/revenue";
 import { searchRouter } from "./routes/search";
+import { разрешённыеИсточники } from "./lib/corsOrigins";
 
 // Подключаем ТОЛЬКО QRight (он реально существует)
 // (qrightRouter already imported above)
@@ -147,10 +148,7 @@ app.set("trust proxy", 1);
 // CORS_ALLOWED_ORIGINS: comma-separated allow-list (e.g. "https://aevion.app,https://aevion.vercel.app").
 // Falls back to permissive (reflect any origin) when unset, matching prior
 // behavior for local dev / environments that haven't configured it yet.
-const corsAllowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || "")
-  .split(",")
-  .map((o) => o.trim())
-  .filter(Boolean);
+const corsAllowedOrigins = разрешённыеИсточники(process.env.CORS_ALLOWED_ORIGINS);
 app.use(
   cors(
     corsAllowedOrigins.length > 0
@@ -281,6 +279,10 @@ function healthPayload() {
     // контейнер сам, и «поднялся 10 минут назад» бывает у образа недельной
     // давности. null — честнее выдуманного времени.
     builtAt: BUILD_INFO.builtAt,
+    // Ручка, по которой выкатку видно в панели, когда коммита нет. Появилась
+    // 21.09.2026: прод отвечал commit "unknown", и опознать сборку было нечем —
+    // выкатка встала у всех окон. Коммит она НЕ заменяет (см. buildInfo.ts).
+    deploymentId: BUILD_INFO.deploymentId,
     bootedAt: BOOT_TIME,
     uptimeSec: Math.floor((Date.now() - Date.parse(BOOT_TIME)) / 1000),
     // Аналитика пишется в файл. Если её самое старое событие всегда моложе

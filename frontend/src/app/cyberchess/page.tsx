@@ -1190,7 +1190,18 @@ export default function CyberChessPage(){
   // Потолок: при scale до 1.5 доска влезает по высоте (с запасом под контролы) и по ширине
   // (с учётом дока). Десктоп vhPx-250, мобайл vhPx-290. hReserve тот же, что у baseBoardPx —
   // единый источник правды вместо рассинхронизированных 400 vs 360.
-  const boardPx=Math.max(isMobileLayout?200:280,Math.min(boardPxRaw,vhPx-(vwPx>=769?250:290),vwPx-hReserve-dockReserve));
+  // Верх доски ИЗМЕРЯЕТСЯ, а не предполагается: на 1366×768 над доской 319px (шапка в две строки,
+  // быстрая панель, строка соперника), и константа 250 давала доску до 803px — восьмая горизонталь,
+  // буквы, строка «Вы» и все кнопки уходили под обрез при overflow:hidden колонки (основатель 22.09:
+  // «низ под доской вообще не виден»). Под доской нужно ~150px: буквы, строка «Вы», ряд кнопок.
+  const[boardTopPx,sBoardTopPx]=useState(0);
+  useEffect(()=>{
+    const measure=()=>{try{const el=document.querySelector("[data-cc-board]");if(!el)return;const t=Math.round(el.getBoundingClientRect().top+window.scrollY);sBoardTopPx(v=>Math.abs(v-t)>2?t:v);}catch{}};
+    measure();const id=setInterval(measure,1000);window.addEventListener("resize",measure); // раз в секунду: строки над доской появляются и исчезают (вкладка, партия), а состояние партии объявлено ниже
+    return()=>{clearInterval(id);window.removeEventListener("resize",measure)};
+  },[vwPx,vhPx]);
+  const desktopVReserve=Math.max(250,boardTopPx>0?boardTopPx+150:0);
+  const boardPx=Math.max(isMobileLayout?200:280,Math.min(boardPxRaw,vhPx-(vwPx>=769?desktopVReserve:290),vwPx-hReserve-dockReserve));
   const bw=boardPx+"px";
   // ── Ultra-wide fill: доска упирается в ВЫСОТУ (квадрат), а экраны 16:9 широкие —
   // остаётся горизонтальный простор, из-за которого группа [рейл+доска+панель] висела
@@ -7543,7 +7554,8 @@ export default function CyberChessPage(){
           Остаются только неигровые оверлеи (Стрим/Видео), которые не уводят с доски. */}
       {/* Телефон: чипов больше, чем ширины (390: «…Стри» обрезался, «Видео»/«Ещё» недостижимы —
           тестер 20.09.2026). Ряд прокручивается по горизонтали, полоса прокрутки скрыта. */}
-      {!streamerMode&&!setup&&on&&tab==="play"&&(
+      {/* На низком десктопном экране (<820px) панель не рисуется: вкладки Задачи/Анализ/Коуч уже в шапке, а 48px нужны доске */}
+      {!streamerMode&&!setup&&on&&tab==="play"&&(vwPx<769||vhPx>=820)&&(
         <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"nowrap",overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none",paddingBottom:2,paddingRight:vwPx<769?96:0}}>
           {([
             ...(isHumanGame?[]:[
@@ -7659,7 +7671,7 @@ export default function CyberChessPage(){
             видел свой верхний ряд и не мог по нему нажать.
             На планшете вылезало на 5 пикселей, на десктопе — ноль, поэтому
             глазами на большом экране дефекта не видно вовсе. */}
-        <div style={{flex:"0 1 auto",minWidth:0,minHeight:0,display:"flex",flexDirection:"column",alignItems:"center"}}>
+        <div data-cc-board-col="1" style={{flex:"0 1 auto",minWidth:0,minHeight:0,display:"flex",flexDirection:"column",alignItems:"center",overflowY:isMobileLayout?"visible":"auto"}}>
           {/* ─── Active Lesson banner — shown when user loaded a position from a Coach Lesson ─── */}
           {activeLesson&&<div style={{
             marginBottom:6,padding:"6px 12px",borderRadius:RADIUS.md,
@@ -7866,6 +7878,7 @@ export default function CyberChessPage(){
               }}
               onContextMenu={e=>{e.preventDefault();e.stopPropagation();}}
               className={`${!lm&&bk>0&&on&&browseIdx<0?"cc-board-enter":""}${chk?" cc-check-flash":""}${over&&over.includes("win")?" cc-win-glow":""}${over&&over.includes("сдался")&&!over.includes("Вы")?" cc-loss-dim":""}`}
+              data-cc-board="1"
               style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.25), 0 2px 6px rgba(0,0,0,0.12)",position:"relative",touchAction:"none",userSelect:"none",WebkitUserSelect:"none",...({WebkitUserDrag:"none",WebkitTouchCallout:"none"} as React.CSSProperties)}}>
               {/* Board Art decorative overlay — behind pieces, subtle at opacity 0.10 */}
               {boardArt!=="off"&&<BoardArtOverlay art={boardArt} opacity={0.10}/>}

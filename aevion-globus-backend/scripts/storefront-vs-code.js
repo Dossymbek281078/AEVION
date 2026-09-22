@@ -130,6 +130,51 @@ function readGumroadMapping() {
   return out;
 }
 
+/** Имена прежних товаров — из списка переменных LEGACY_VARIANT_ENV в коде кассы.
+ *  Их выдают по идентификатору варианта, а не по имени, и это НАМЕРЕННО. */
+function readLegacyVariantNames() {
+  const src = fs.readFileSync(VARIANTS_TS, "utf8");
+  const i = src.indexOf("LEGACY_VARIANT_ENV");
+  if (i < 0) return [];
+  const blok = src.slice(i, src.indexOf("};", i));
+  const out = [];
+  const куски = blok.split('"');
+  for (let k = 1; k < куски.length; k += 2) {
+    const v = куски[k];
+    if (!v.startsWith("LEMON_SQUEEZY_VARIANT_")) continue;
+    // LEMON_SQUEEZY_VARIANT_DEVHUB_STUDIO_PRO → "devhub studio pro"
+    out.push(v.replace("LEMON_SQUEEZY_VARIANT_", "").toLowerCase().split("_").join(" "));
+  }
+  return out;
+}
+
+/** Прежние ссылки тарифов: их товары СНЯТЫ с продажи намеренно, а сопоставления
+ *  оставлены ради продлений. Список ведёт сам вебхук (`ПРЕЖНИЕ_ТАРИФЫ`), чтобы
+ *  здесь не появилась вторая правда о том, что считать прежним. */
+function readLegacyReferences() {
+  const src = fs.readFileSync(WEBHOOK_TS, "utf8");
+  const i = src.indexOf("ПРЕЖНИЕ_ТАРИФЫ");
+  if (i < 0) return new Set();
+  // Разбор БЕЗ регулярок со скобками: на этой машине обратный слэш съедается на
+  // границе вызова, и шаблон молча перестаёт совпадать — так первая версия
+  // насчитала «прежних 0» и вернула прежний вечный код 2.
+  const blok = src.slice(i, i + 400);
+  const куски = blok.split('"');
+  const слова = [];
+  for (let k = 1; k < куски.length; k += 2) слова.push(куски[k]);
+  const ПЕРИОДЫ = ["monthly", "annual"];
+  const периоды = слова.filter((w) => ПЕРИОДЫ.includes(w));
+  const имена = slова(слова, ПЕРИОДЫ);
+  const out = new Set();
+  for (const n of имена) for (const p of периоды) out.add(`tier_${n}_${p}`);
+  return out;
+}
+
+/** Имена тарифов — всё, что не период: «lite», «medium», «full», «planet», «pro». */
+function slова(слова, ПЕРИОДЫ) {
+  return слова.filter((w) => !ПЕРИОДЫ.includes(w) && /^[a-z]+$/.test(w));
+}
+
 /** Товары с публичного профиля Gumroad: слаг, имя, цена, период. */
 function parseGumroad(html) {
   const plain = html.replace(/&quot;/g, '"').replace(/&amp;/g, "&");
@@ -246,10 +291,27 @@ function parseStore(html) {
       nahodki.push(`ЦЕНА: "${it.name}" на витрине $${it.priceUsd}, у нас объявлено $${zhdem}`);
   }
 
-  // 4. Живой товар, которого код не знает — не ошибка сама по себе, но выдать
-  //    его нечем: сопоставления нет, значит и тариф по нему не назначить.
+  // 4. Живой товар, которого код не знает ПО ИМЕНИ.
+  //
+  // ⚠️ Граница, уточнённая 22.09.2026. Выдача Lemon Squeezy идёт по
+  // ИДЕНТИФИКАТОРУ ВАРИАНТА (переменные LEMON_SQUEEZY_VARIANT_*), а таблица имён
+  // нужна другой кассе. Поэтому «имени нет» само по себе НЕ означает, что
+  // покупку нечем выдать: у прежних товаров (их продавали до 15.09 и продолжают
+  // продлевать) имя в таблицу не заводили НАМЕРЕННО. Замер: инструмент поднял
+  // «НЕ ОПОЗНАН: AEVION DevHub Studio Pro», а код его знает — выдаёт по варианту
+  // (`lemonSqueezyVariants.ts`, «прежний разовый товар»).
+  //
+  // Ложная тревога в денежном стороже дороже пропуска: к вечно красному привыкают.
+  // Поэтому прежние имена называем отдельной строкой, а находкой — только то,
+  // чего не знает ни таблица имён, ни список прежних переменных.
+  const прежниеИмена = readLegacyVariantNames();
   for (const it of store) {
-    if (!nameMap[it.name]) nahodki.push(`НЕ ОПОЗНАН: на витрине "${it.name}" ($${it.priceUsd}/${it.period}), в коде такого названия нет`);
+    if (nameMap[it.name]) continue;
+    if (прежниеИмена.some((n) => it.name.toLowerCase().includes(n))) {
+      console.log(`storefront-vs-code: "${it.name}" — прежний товар, выдаётся по идентификатору варианта, имени в таблице нет НАМЕРЕННО`);
+      continue;
+    }
+    nahodki.push(`НЕ ОПОЗНАН: на витрине "${it.name}" ($${it.priceUsd}/${it.period}), в коде такого названия нет`);
   }
 
   // 5. Цена в магазине против цены в каталоге САЙТА, по точному ключу —
@@ -296,16 +358,36 @@ function parseStore(html) {
     process.exitCode = 2;
     return;
   }
-  // Тот же знаменатель для второй кассы: сопоставлений в коде столько-то,
-  // товаров на витрине не может быть меньше.
-  if (gumStore.length < Object.keys(gumMap).length) {
+  // ПРАВИЛЬНЫЙ инвариант для второй кассы, найден 22.09.2026.
+  //
+  // Прежде здесь стояло «товаров на витрине не может быть меньше, чем
+  // сопоставлений в коде», и инструмент отвечал «разбор НЕПОЛОН» (код 2) при
+  // полностью исправной работе: на витрине 6 товаров при 9 сопоставлениях.
+  // Разницу мы создали сами — три товара (`xpxzam`, `pyiaz`, `wjvquw`) СНЯТЫ с
+  // продажи 15.09, а сопоставления оставлены намеренно, чтобы продления уже
+  // купивших не падали в общую ветку. Сторож денежной витрины отвечал «не знаю»
+  // навсегда, а неотвечающего перестают читать — это хуже его отсутствия.
+  //
+  // Опасен ДРУГОЙ случай: товар продаётся, а кода для него нет — тогда покупку
+  // некуда отнести, и она уходит в общую ветку (так 27 и 29 мая и 2 июня за
+  // книгу по $9.99 выдали платный ТАРИФ). Его и проверяем: у каждого товара НА
+  // витрине обязано быть сопоставление. Сопоставление без товара — след
+  // снятого с продажи, это норма, и мы его просто называем числом.
+  const безКода = gumStore.filter((it) => !gumMap[it.slug]);
+  const безТовара = Object.keys(gumMap).filter((slug) => !gumStore.some((it) => it.slug === slug));
+  if (безКода.length) {
     console.error(
-      `storefront-vs-code: Gumroad разобрано ${gumStore.length} товаров при ` +
-        `${Object.keys(gumMap).length} сопоставлениях в коде — разбор НЕПОЛОН`
+      `storefront-vs-code: Gumroad ПРОДАЁТ БЕЗ КОДА ${безКода.length}: ` +
+        безКода.map((it) => it.slug).join(", ") +
+        " — покупка по ним уйдёт в общую ветку и выдаст не то"
     );
-    process.exitCode = 2;
-    return;
+    process.exitCode = 1;
   }
+  console.log(
+    `storefront-vs-code: Gumroad товаров ${gumStore.length}, сопоставлений ${Object.keys(gumMap).length}, ` +
+      `из них без товара (снятые с продажи) ${безТовара.length}${безТовара.length ? ": " + безТовара.join(", ") : ""}`
+  );
+
   const gumKatalog = readCatalogByGumSlug();
 
   for (const it of gumStore) {
@@ -313,8 +395,22 @@ function parseStore(html) {
       nahodki.push(`GUMROAD БЕЗ СОПОСТАВЛЕНИЯ: "${it.name}" (${it.slug}, $${it.priceUsd}) — покупка уйдёт в общую ветку`);
   }
   for (const slug of Object.keys(gumMap)) {
-    if (!gumStore.some((it) => it.slug === slug))
-      nahodki.push(`GUMROAD НЕТ ТОВАРА: код знает слаг ${slug}, на витрине его нет — ссылка «купить» мертва`);
+    if (gumStore.some((it) => it.slug === slug)) continue;
+    // Слаг без товара опасен ТОЛЬКО если на него ведёт кнопка на сайте: тогда
+    // человек нажимает «купить» и попадает в никуда. Если же каталог о слаге не
+    // знает, это след снятого с продажи товара — сопоставление оставлено
+    // НАМЕРЕННО, чтобы продления уже купивших не падали в общую ветку
+    // (xpxzam, pyiaz, wjvquw сняты 15.09.2026).
+    //
+    // Прежняя редакция звала это «ссылка купить мертва» и поднимала три находки
+    // на ровном месте. Замер 22.09: ни одной ссылки на эти слаги в каталоге
+    // сайта нет. Ложная тревога в денежном стороже дороже пропуска — к вечно
+    // красному привыкают и перестают читать.
+    if (gumKatalog[slug]) {
+      nahodki.push(`GUMROAD НЕТ ТОВАРА: на сайте есть кнопка на слаг ${slug}, а на витрине товара нет — ссылка «купить» мертва`);
+    } else {
+      console.log(`storefront-vs-code: слаг ${slug} снят с продажи, кнопок на него на сайте нет — сопоставление оставлено ради продлений`);
+    }
   }
   for (const it of gumStore) {
     const k = gumKatalog[it.slug];

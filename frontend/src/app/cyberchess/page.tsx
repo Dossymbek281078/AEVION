@@ -5377,8 +5377,9 @@ export default function CyberChessPage(){
     else if(pzMode==="custom")startClock(pzCustomSec);
     else if(pzMode==="rush"){/* keep running deadline */}
     else startClock(0);
-    // имя банковской задачи часто = её тема → «Эндшпиль · Эндшпиль»; дубль не печатаем (тестер 20.09.2026)
-    showToast([...imyaZadachiBezPovtorov(pz),temaZadachiRu(pz.theme)].filter(Boolean).concat(String(pz.r)).join(" · "),"info");
+    // Тоста «тема · рейтинг» при выборе задачи больше нет: карточка справа уже показывает тему,
+    // сложность и рейтинг, а тост ложился на фишки правой колонки (1366) и на статистику внизу (1024) —
+    // тестер 20–22.09.2026. Информация без потерь, наложение исчезает.
     // reset per-puzzle stopwatch
     if(pzTimerIntervalRef.current)clearInterval(pzTimerIntervalRef.current);
     pzTimerRef.current=Date.now();sPzTimer(0);paintPzTimer(0);

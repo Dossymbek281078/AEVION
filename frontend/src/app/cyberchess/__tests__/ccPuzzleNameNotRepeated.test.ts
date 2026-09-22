@@ -22,8 +22,9 @@ describe("имя задачи без повторов", () => {
   it("контроль: незнакомая сложность НЕ вырезается (фильтр по словарю, не по позиции)", () => {
     expect(imyaZadachiBezPovtorov({ name: "Вилка · Адская", goal: "Best move", theme: "fork" })).toEqual(["Адская"]);
   });
-  it("тост выбора задачи и шапка карточки идут через фильтр", () => {
-    expect(src).toContain('showToast([...imyaZadachiBezPovtorov(pz),temaZadachiRu(pz.theme)]');
+  it("тоста «тема · рейтинг» при выборе задачи нет (ложился на фишки 1366 и статистику 1024), шапка карточки идёт через фильтр", () => {
+    expect(src).not.toContain('showToast([...imyaZadachiBezPovtorov(pz)');
+    expect(src).not.toMatch(/showToast\(\[pz\.name,temaZadachiRu/);
     expect(src).toContain('{imyaZadachiBezPovtorov(pzCurrent).length>0&&<div');
     expect(src).not.toContain('textTransform:"uppercase" as const}}>{pzCurrent.name}</div>');
   });

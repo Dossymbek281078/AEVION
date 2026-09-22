@@ -168,6 +168,26 @@ describe("Lemon Squeezy: заплатил → получил именно куп
    * Доступ здесь намеренно не выдаём (сроки считает ветка подписки), но
    * случай обязан быть громким.
    */
+  /**
+   * Экран после оплаты спрашивает выдачу по НАШЕМУ идентификатору намерения
+   * (он уходит в кассу как custom.bureauIntentId и возвращается вебхуком).
+   * Замер 22.09.2026: боевой маршрут его не читал, поэтому /checkout/status
+   * не находил выдачу никогда и человек навсегда оставался на «оплата
+   * принята» вместо «тариф активирован» — при том, что выдача прошла.
+   */
+  test("наш идентификатор намерения доезжает до записи о выдаче", async () => {
+    const res = await post({
+      meta: { event_name: "subscription_created", custom_data: { bureauIntentId: "intent-xyz-12345678" } },
+      data: { id: "sub_int", attributes: { user_email: "buyer@test.aev", variant_id: "9002" } },
+    });
+
+    expect(res.status).toBe(200);
+    const переданное = mockProvision.mock.calls.at(-1)?.[0] as Record<string, unknown> | undefined;
+    expect(переданное?.bureauIntentId).toBe("intent-xyz-12345678");
+    // Контроль: идентификатор КАССЫ при этом не подменён — по нему идёт сверка.
+    expect(переданное?.providerPaymentId).not.toBe("intent-xyz-12345678");
+  });
+
   test("разовый заказ по позиции лестницы не молчит", async () => {
     const res = await post({
       meta: { event_name: "order_created" },

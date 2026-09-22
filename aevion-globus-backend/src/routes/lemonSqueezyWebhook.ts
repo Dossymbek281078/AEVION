@@ -107,7 +107,7 @@ export const lemonSqueezyWebhookRouter = Router();
 interface LsSubscriptionPayload {
   meta?: {
     event_name?: string;
-    custom_data?: { reference?: string; email?: string; module?: string; channel?: string };
+    custom_data?: { reference?: string; email?: string; module?: string; channel?: string; bureauIntentId?: string };
     /** Покупка из тестового режима кассы — не выручка. Добавлено 20.09.2026. */
     test_mode?: boolean;
   };
@@ -503,6 +503,12 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         // между ними и есть сигнал.
         ...(paidUsd === undefined ? {} : { amountUsd: paidUsd }),
         providerPaymentId: lsSubId,
+        // Наш идентификатор намерения: уходил в кассу и терялся здесь, из-за
+        // чего страница после оплаты не могла подтвердить выдачу (см. поле
+        // bureauIntentId в provisioning.ts).
+        ...(payload.meta?.custom_data?.bureauIntentId
+          ? { bureauIntentId: String(payload.meta.custom_data.bureauIntentId) }
+          : {}),
         ...(channel ? { channel } : {}),
       });
       console.log(`[ls/webhook] ${event} → provisioned ${tierId} for ${email} (ref=${ref ?? "default"})`);

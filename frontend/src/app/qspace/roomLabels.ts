@@ -162,7 +162,9 @@ function строкиТекста(items: ЭлементТекста[]): Array<Ar
 }
 
 // имя может нести номер («Помещение 1» в обмерных альбомах) — цифры внутри допустимы, но начало — буква
-const ИМЯ_ПОМЕЩЕНИЯ = /^[А-ЯЁа-яё][А-ЯЁа-яё0-9 \-\/]{2,30}$/;
+// имя помещения в таблице — с заглавной («Коридор», «Помещение 1»); строки легенды
+// («2 | перегородки из бетонных блоков») идут со строчной и таблицей не считаются
+const ИМЯ_ПОМЕЩЕНИЯ = /^[А-ЯЁ][А-ЯЁа-яё0-9 \-\/]{2,30}$/;
 const ПЛОЩАДЬ = /^(\d{1,4})[,.](\d{1,2})\s*м?/;
 
 /**
@@ -222,6 +224,9 @@ export function назначенияПоНомерам(
   originPt: { x: number; y: number },
   metersPerPt: number,
   roomAt: (x: number, y: number) => number | null,
+  /** площадь комнаты по модели, м² — сверка с экспликацией: расхождение больше чем втрое
+   *  значит, что номер попал не в свою область (OTDL: «Коридор» 6,45 м² лёг в поле листа 227 м²) */
+  roomArea?: (room: number) => number | undefined,
 ): { types: Record<number, RoomType>; names: Record<number, string>; areas: Record<number, number>; unplaced: string[] } {
   const types: Record<number, RoomType> = {}, names: Record<number, string> = {}, areas: Record<number, number> = {};
   const unplaced: string[] = [];
@@ -234,6 +239,8 @@ export function назначенияПоНомерам(
     let room = roomAt(x, y);
     for (let r = 0.15; room === null && r <= 0.6; r += 0.15) for (let a = 0; a < 360 && room === null; a += 30) room = roomAt(x + r * Math.cos((a * Math.PI) / 180), y + r * Math.sin((a * Math.PI) / 180));
     if (room === null || names[room] !== undefined) { unplaced.push(`${строка.n} ${строка.name}`); continue; }
+    const m = roomArea?.(room);
+    if (строка.area !== undefined && m !== undefined && (m > 3 * строка.area || m < строка.area / 3)) { unplaced.push(`${строка.n} ${строка.name}`); continue; }
     names[room] = строка.name;
     const t = roomTypeFromLabel(строка.name); if (t) types[room] = t;
     if (строка.area !== undefined) areas[room] = строка.area;

@@ -11,6 +11,7 @@ import {
   type TierId, type CurrencyCode, type TermTier,
   isTermTier, standaloneApp, termTotal, monthsLabelRu,
 } from "../data/pricing";
+import { findAppSubscriptionByIntent } from "../lib/appEntitlements";
 import { provisionSubscription, countSubscriptions, findSubscriptionByPaymentId, termMonthsOf } from "./provisioning";
 import { модулиДляКассы } from "../lib/payment/customData";
 
@@ -192,8 +193,35 @@ checkoutRouter.get("/status", statusLimiter, (req, res) => {
   }
   try {
     const итог = findSubscriptionByPaymentId(intentId);
-    if (!итог.найдено) return res.json({ ready: false });
-    return res.json({ ready: true, tier: итог.подписка.tierId, termMonths: termMonthsOf(итог.подписка) });
+    if (итог.найдено) {
+      return res.json({ ready: true, tier: итог.подписка.tierId, termMonths: termMonthsOf(итог.подписка) });
+    }
+    // Покупка ОТДЕЛЬНОГО приложения платформенной подписки не создаёт: у неё
+    // своя ветка вебхука и своё хранилище. Без этого запроса подтверждение у
+    // купившего приложение не наступало никогда — экран навсегда оставался на
+    // «оплата принята», хотя доступ был выдан (замер 22.09.2026).
+    //
+    // Отвечаем ПОСЛЕ платформенного поиска и только при его промахе: обычный
+    // путь тарифа остаётся без обращения к базе.
+    void findAppSubscriptionByIntent(intentId)
+      .then((найдено) => {
+        if (найдено && найдено.status === "active") {
+          res.json({ ready: true, app: найдено.appSlug });
+        } else {
+          res.json({ ready: false });
+        }
+      })
+      .catch((e) => {
+        capture(e);
+        console.error("[checkout/status] app lookup failed", e);
+        // «Спросить не удалось» — это не «не выдано»: экран обязан повторить,
+        // а не показать отказ.
+        res.status(503).json({
+          error: "lookup_failed",
+          message: "Не удалось проверить статус. Оплата не потеряна — обновите страницу через минуту.",
+        });
+      });
+    return;
   } catch (e) {
     capture(e);
     console.error("[checkout/status] lookup failed", e);

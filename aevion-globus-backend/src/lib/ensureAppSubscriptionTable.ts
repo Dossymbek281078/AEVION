@@ -53,6 +53,20 @@ export async function ensureAppSubscriptionTable(pool: PgPoolInstance): Promise<
     CREATE INDEX IF NOT EXISTS "AppSubscription_appSlug_status_idx"
       ON "AppSubscription" ("appSlug", "status");
   `);
+  // 🔴 Колонка добавляется ОТДЕЛЬНО, а не внутри CREATE TABLE IF NOT EXISTS:
+  // у живой таблицы это выражение не делает ничего, и новое поле на проде не
+  // появилось бы (класс «колонка в DDL ≠ колонка в проде», 2026-08).
+  //
+  // Что она даёт. Наш номер намерения оплаты (custom.bureauIntentId) — то,
+  // чем экран после оплаты спрашивает «выдали ли мне купленное». Для тарифа
+  // он лежит в записи подписки; у покупки ОТДЕЛЬНОГО приложения платформенной
+  // записи нет вовсе, поэтому подтвердить её было нечем: человек навсегда
+  // оставался на «оплата принята».
+  await pool.query(`
+    ALTER TABLE "AppSubscription" ADD COLUMN IF NOT EXISTS "bureauIntentId" TEXT;
+    CREATE INDEX IF NOT EXISTS "AppSubscription_bureauIntentId_idx"
+      ON "AppSubscription" ("bureauIntentId");
+  `);
   // Отметка ставится ТОЛЬКО после успеха: иначе разовый сбой связи навсегда
   // объявил бы таблицу созданной, и следующий вызов пошёл бы в пустоту.
   ensured = true;

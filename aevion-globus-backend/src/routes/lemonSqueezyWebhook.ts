@@ -382,7 +382,13 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
     if (isAppReference(ref)) {
       const appSlug = appSlugForReference(ref)!;
       if (ACTIVATE_EVENTS.has(event)) {
-        await upsertAppSubscription(email, appSlug, "active", lsSubId);
+        await upsertAppSubscription(
+          email,
+          appSlug,
+          "active",
+          lsSubId,
+          payload.meta?.custom_data?.bureauIntentId,
+        );
         // У DevHub доступ открывает НЕ ТОЛЬКО строка AppSubscription: у него есть
         // свой тариф в DevHubTier/DevHubEmailTier, его и ставим отдельно.
         //

@@ -10,6 +10,7 @@
 // подмену «разметка есть, но пустая».
 import { describe, it, expect } from "vitest";
 import GoLayout from "../layout";
+import EnGoLayout from "../../en/go/layout";
 import { разовыеТовары } from "@/lib/shopJsonLd";
 
 function найтиРазметку(узел: unknown): string | null {
@@ -48,5 +49,14 @@ describe("/go отдаёт поисковику цены", () => {
       .filter((с) => каталог.get(с.item.sku) !== с.item.offers.price)
       .map((с) => с.item.sku);
     expect(расхождения, расхождения.join(", ")).toEqual([]);
+  });
+});
+
+describe("английский двойник /en/go отдаёт ту же разметку", () => {
+  it("несёт блок с теми же товарами, что и русская страница", () => {
+    const ru = найтиРазметку(GoLayout({ children: null }));
+    const en = найтиРазметку(EnGoLayout({ children: null }));
+    expect(en).not.toBeNull();
+    expect(en).toBe(ru);
   });
 });

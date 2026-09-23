@@ -10410,8 +10410,11 @@ export default function CyberChessPage(){
                     fontWeight:800,border:"1px solid currentColor",opacity:0.7}}>
                     ⭐ {pzCurrent.r}
                   </span>}
-                  {[fazaRu(pzCurrent.phase),temaZadachiRu(pzCurrent.theme)].filter(Boolean).map(t=><span key={t} style={{fontSize:11,padding:"3px 9px",borderRadius:10,background:"#f3f4f6",color:T.dim,fontWeight:700}}>{t}</span>)}
-                  {pzCurrent.goal==="Mate"&&pzCurrent.mateIn&&<span style={{fontSize:11,padding:"3px 9px",borderRadius:10,background:"#fef2f2",color:"#991b1b",fontWeight:800}}>Мат в {pzCurrent.mateIn}</span>}
+                  {/* Фишки без повторов и без того, что уже сказано заголовком: у банка фаза часто равна теме
+                      («Эндшпиль · Эндшпиль · Эндшпиль» на проде 23.09), а «Мат в 1» дублировал pzTitle. */}
+                  {[fazaRu(pzCurrent.phase),temaZadachiRu(pzCurrent.theme),pzCurrent.goal==="Mate"&&pzCurrent.mateIn?`Мат в ${pzCurrent.mateIn}`:""]
+                    .filter((t,i,a)=>t&&a.indexOf(t)===i&&t!==pzTitle.replace(/^[⚪⚫]\s*/,""))
+                    .map(t=><span key={t} style={{fontSize:11,padding:"3px 9px",borderRadius:10,background:"#f3f4f6",color:T.dim,fontWeight:700}}>{t}</span>)}
                 </div>
                 {/* Result banner */}
                 {pzAttempt==="correct"&&(()=>{

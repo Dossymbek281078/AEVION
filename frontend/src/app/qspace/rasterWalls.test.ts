@@ -139,5 +139,8 @@ describe.skipIf(!existsSync(PNG_LAVIE))("LA VIE как картинка (PNG 200
     expect(rooms.rooms.length, строка).toBeLessThanOrEqual(18);
     expect(rooms.totalArea, строка).toBeGreaterThanOrEqual(115);
     expect(rooms.totalArea, строка).toBeLessThanOrEqual(165);
+    // наружная стена 22 px ≈ 0.37 м на 18.72 м — несущая по толщине (предположение, как у PDF)
+    const план = planFrom(r.segments, 18.72);
+    expect(план.walls.filter((w) => !w.glass && w.thickness >= 0.25).length, "толстых стен на картинке").toBeGreaterThanOrEqual(4);
   }, 60_000);
 });

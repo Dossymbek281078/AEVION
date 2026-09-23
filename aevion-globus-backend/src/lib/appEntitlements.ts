@@ -113,11 +113,41 @@ export async function appSubscriptionState(
  * Копия в каждом вебхуке разошлась бы молча, а расхождение видно только при
  * сравнении, то есть там, куда никто не смотрит.
  */
+/**
+ * Покупка ОТДЕЛЬНОГО приложения по нашему номеру намерения оплаты.
+ *
+ * Зачем отдельная функция. Экран после оплаты спрашивает /checkout/status по
+ * номеру, который сам же получил в адресе возврата. Для тарифа ответ находится
+ * в платформенных подписках; покупка приложения туда не пишется вовсе — своя
+ * ветка вебхука, своё хранилище. Замер 22.09.2026: поэтому у купившего
+ * приложение подтверждение не наступало НИКОГДА, и он навсегда видел «оплата
+ * принята» вместо «доступ открыт», хотя доступ был выдан.
+ *
+ * null — «не нашли» (это не отказ и не ошибка). Исключение НЕ глотаем: у
+ * вызывающего должно быть право отличить «не нашли» от «спросить не удалось».
+ */
+export async function findAppSubscriptionByIntent(
+  bureauIntentId: string,
+): Promise<{ appSlug: string; status: string } | null> {
+  const id = bureauIntentId.trim();
+  if (!id) return null;
+  const pool = getPool();
+  await ensureAppSubscriptionTable(pool);
+  const r = await pool.query(
+    `SELECT "appSlug","status" FROM "AppSubscription" WHERE "bureauIntentId"=$1 LIMIT 1`,
+    [id],
+  );
+  const row = r.rows?.[0];
+  return row ? { appSlug: String(row.appSlug), status: String(row.status) } : null;
+}
+
 export async function upsertAppSubscription(
   email: string,
   appSlug: string,
   status: "active" | "cancelled",
   externalSubId?: string,
+  /** Наш номер намерения оплаты — им спрашивает экран после оплаты. */
+  bureauIntentId?: string,
 ): Promise<void> {
   const pool = getPool();
   try {
@@ -125,11 +155,12 @@ export async function upsertAppSubscription(
     // приходит вебхуком, и он вполне может быть первым, кто трогает таблицу.
     await ensureAppSubscriptionTable(pool);
     await pool.query(
-      `INSERT INTO "AppSubscription" ("id","email","appSlug","lsSubId","status","createdAt","updatedAt")
-       VALUES (gen_random_uuid(),$1,$2,$3,$4,NOW(),NOW())
+      `INSERT INTO "AppSubscription" ("id","email","appSlug","lsSubId","status","bureauIntentId","createdAt","updatedAt")
+       VALUES (gen_random_uuid(),$1,$2,$3,$4,$5,NOW(),NOW())
        ON CONFLICT ("email","appSlug") DO UPDATE
-         SET "status"=$4, "lsSubId"=COALESCE($3,"AppSubscription"."lsSubId"), "updatedAt"=NOW()`,
-      [email.trim().toLowerCase(), appSlug, externalSubId ?? null, status],
+         SET "status"=$4, "lsSubId"=COALESCE($3,"AppSubscription"."lsSubId"),
+             "bureauIntentId"=COALESCE($5,"AppSubscription"."bureauIntentId"), "updatedAt"=NOW()`,
+      [email.trim().toLowerCase(), appSlug, externalSubId ?? null, status, bureauIntentId ?? null],
     );
   } catch (err) {
     console.error("[appEntitlements] upsert failed:", err instanceof Error ? err.message : err);

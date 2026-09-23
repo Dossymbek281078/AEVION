@@ -107,7 +107,7 @@ export const lemonSqueezyWebhookRouter = Router();
 interface LsSubscriptionPayload {
   meta?: {
     event_name?: string;
-    custom_data?: { reference?: string; email?: string; module?: string; channel?: string };
+    custom_data?: { reference?: string; email?: string; module?: string; channel?: string; bureauIntentId?: string };
     /** Покупка из тестового режима кассы — не выручка. Добавлено 20.09.2026. */
     test_mode?: boolean;
   };
@@ -287,6 +287,34 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         email,
       });
     }
+    // 🔴 22.09.2026. Досюда доходит РАЗОВЫЙ заказ, который не является прежним
+    // DevHub Studio Pro. Если его вариант при этом опознаётся как позиция
+    // лестницы — значит товар в кабинете завели разовым платежом вместо
+    // подписки, и человек заплатил, а доступ ему не выдан: выдача живёт в
+    // ветке subscription_* ниже. Прежде такой случай отвечал «ignored» и не
+    // оставлял НИ СЛЕДА — снаружи это неотличимо от успеха, а искать пришлось
+    // бы по жалобе покупателя.
+    //
+    // Доступ здесь намеренно НЕ выдаём: сроки и продление считает ветка
+    // подписки, и половинчатая выдача без срока создала бы право без конца.
+    // Правильное действие — переделать товар в кабинете в подписку; наша
+    // задача сделать это ВИДИМЫМ немедленно.
+    const позиция = referenceForVariantId(variantId);
+    if (позиция && !revoke) {
+      const беда = new Error(
+        `[ls/webhook] РАЗОВЫЙ заказ по позиции лестницы ${позиция} (variant ${variantId}) — ` +
+          "доступ НЕ выдан: выдача идёт только по подписке. Товар в кабинете заведён " +
+          "разовым платежом, его надо пересоздать подпиской с интервалом, равным сроку.",
+      );
+      capture(беда);
+      console.error(беда.message, email ? `покупатель: ${email}` : "почта не пришла");
+      return res.status(200).json({
+        ok: true,
+        ignored: event,
+        warning: "one_time_order_for_term_reference",
+        reference: позиция,
+      });
+    }
     return res.json({ ok: true, ignored: event });
   }
 
@@ -354,7 +382,13 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
     if (isAppReference(ref)) {
       const appSlug = appSlugForReference(ref)!;
       if (ACTIVATE_EVENTS.has(event)) {
-        await upsertAppSubscription(email, appSlug, "active", lsSubId);
+        await upsertAppSubscription(
+          email,
+          appSlug,
+          "active",
+          lsSubId,
+          payload.meta?.custom_data?.bureauIntentId,
+        );
         // У DevHub доступ открывает НЕ ТОЛЬКО строка AppSubscription: у него есть
         // свой тариф в DevHubTier/DevHubEmailTier, его и ставим отдельно.
         //
@@ -475,6 +509,12 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         // между ними и есть сигнал.
         ...(paidUsd === undefined ? {} : { amountUsd: paidUsd }),
         providerPaymentId: lsSubId,
+        // Наш идентификатор намерения: уходил в кассу и терялся здесь, из-за
+        // чего страница после оплаты не могла подтвердить выдачу (см. поле
+        // bureauIntentId в provisioning.ts).
+        ...(payload.meta?.custom_data?.bureauIntentId
+          ? { bureauIntentId: String(payload.meta.custom_data.bureauIntentId) }
+          : {}),
         ...(channel ? { channel } : {}),
       });
       console.log(`[ls/webhook] ${event} → provisioned ${tierId} for ${email} (ref=${ref ?? "default"})`);

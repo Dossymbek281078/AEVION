@@ -23,6 +23,7 @@ const SECRET = "test-ls-secret-000";
 process.env.LEMON_SQUEEZY_WEBHOOK_SECRET = SECRET;
 process.env.LEMON_SQUEEZY_VARIANT_DEVHUB_STUDIO_PRO = "9001";
 process.env.LEMON_SQUEEZY_VARIANT_LITE_MONTHLY = "9002";
+process.env.LEMON_SQUEEZY_VARIANT_CYBERCHESS_LITE = "9003";
 
 const { mockQuery, mockProvision } = vi.hoisted(() => ({
   mockQuery: vi.fn(),
@@ -152,6 +153,53 @@ describe("Lemon Squeezy: заплатил → получил именно куп
     expect(res.status).toBe(200);
     expect(res.body.action).toBe("devhub_studio_pro_revoked");
     expect(devhubTiersWritten()).toContain("free");
+  });
+
+  /**
+   * Разовый заказ по позиции ЛЕСТНИЦЫ — это «деньги взяли, выдать нечего».
+   *
+   * Замер 22.09.2026 на живой кассе: все 30 работающих позиций заведены
+   * ПОДПИСКОЙ с интервалом, равным сроку («24,00 US$ списывается каждый
+   * месяц», «144,00 US$ раз в 12 месяцев»). Выдача живёт в ветке
+   * subscription_*. Если товар в кабинете завести разовым платежом, придёт
+   * order_created — и до этой правки он отвечал «ignored» без единого следа:
+   * снаружи неотличимо от успеха, а нашлось бы по жалобе покупателя.
+   *
+   * Доступ здесь намеренно не выдаём (сроки считает ветка подписки), но
+   * случай обязан быть громким.
+   */
+  /**
+   * Экран после оплаты спрашивает выдачу по НАШЕМУ идентификатору намерения
+   * (он уходит в кассу как custom.bureauIntentId и возвращается вебхуком).
+   * Замер 22.09.2026: боевой маршрут его не читал, поэтому /checkout/status
+   * не находил выдачу никогда и человек навсегда оставался на «оплата
+   * принята» вместо «тариф активирован» — при том, что выдача прошла.
+   */
+  test("наш идентификатор намерения доезжает до записи о выдаче", async () => {
+    const res = await post({
+      meta: { event_name: "subscription_created", custom_data: { bureauIntentId: "intent-xyz-12345678" } },
+      data: { id: "sub_int", attributes: { user_email: "buyer@test.aev", variant_id: "9002" } },
+    });
+
+    expect(res.status).toBe(200);
+    const переданное = mockProvision.mock.calls.at(-1)?.[0] as Record<string, unknown> | undefined;
+    expect(переданное?.bureauIntentId).toBe("intent-xyz-12345678");
+    // Контроль: идентификатор КАССЫ при этом не подменён — по нему идёт сверка.
+    expect(переданное?.providerPaymentId).not.toBe("intent-xyz-12345678");
+  });
+
+  test("разовый заказ по позиции лестницы не молчит", async () => {
+    const res = await post({
+      meta: { event_name: "order_created" },
+      data: { id: "ord_3", attributes: { user_email: "buyer@test.aev", variant_id: "9003" } },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.warning).toBe("one_time_order_for_term_reference");
+    expect(res.body.reference).toBe("app_cyberchess_lite");
+    // Контроль в другую сторону: доступ НЕ выдан — иначе появилось бы право
+    // без срока окончания.
+    expect(devhubTiersWritten()).not.toContain("pro");
   });
 
   test("разовая покупка по-прежнему открывает доступ", async () => {

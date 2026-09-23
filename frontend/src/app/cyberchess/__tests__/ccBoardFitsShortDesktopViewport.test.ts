@@ -11,7 +11,7 @@ const src = readFileSync(join(__dirname, "..", "page.tsx"), "utf8");
 describe("доска помещается на низком десктопном экране", () => {
   it("верх доски измеряется, бюджет высоты = верх + 150px под доской", () => {
     expect(src).toContain('const el=document.querySelector("[data-cc-board]");');
-    expect(src).toContain("const desktopVReserve=Math.max(250,boardTopPx>0?boardTopPx+150:0);");
+    expect(src).toContain("const desktopVReserve=Math.max(250,boardTopPx>0?boardTopPx+(lowDesktop?186:150):0);");
     expect(src).toContain('vhPx-(vwPx>=769?desktopVReserve:290)');
     expect(src).toContain('data-cc-board="1"');
   });
@@ -24,5 +24,17 @@ describe("доска помещается на низком десктопном
   it("контроль: измерение не зависит от размера доски (нет петли)", () => {
     const i = src.indexOf("const measure=()=>{");
     expect(src.slice(i, i + 400)).not.toContain("boardPx");
+  });
+});
+
+describe("ряды кнопок под доской на низком десктопе", () => {
+  it("оба ряда идут одной строкой с боковой прокруткой, запас 186px", () => {
+    expect(src).toContain("const lowDesktop=vwPx>=769&&vhPx<860;");
+    expect(src).toContain('?{flexWrap:"nowrap",overflowX:"auto",scrollbarWidth:"none"}');
+    expect(src).toContain("boardTopPx+(lowDesktop?186:150)");
+    expect(src.match(/\.\.\.podDoskoyRow\}\}>/g)?.length).toBe(2);
+  });
+  it("контроль: на обычном десктопе и телефоне ряды по-прежнему переносятся", () => {
+    expect(src).toContain(':{flexWrap:"wrap",overflowX:"visible"}');
   });
 });

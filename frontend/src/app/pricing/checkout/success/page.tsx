@@ -477,6 +477,12 @@ function SuccessInner() {
                   ? t("pricing.checkoutSuccess.nextOpenApp", { app: appLink.name })
                   : t("pricing.checkoutSuccess.nextOpenAppNoName"),
               },
+              // Отдельное приложение выдаётся по ПОЧТЕ из оплаты (AppSubscription): гость, купивший
+              // без входа, открывал страницу приложения и видел то же, что и любой гость, — про
+              // вход с той же почтой ему никто не говорил (22.09.2026, CyberChess Lite).
+              ...(appLink
+                ? [{ icon: "🔑", text: t("pricing.checkoutSuccess.nextLogin", { app: appLink.name }), href: `/auth?next=${encodeURIComponent(appLink.href)}` }]
+                : []),
               // Куда идти управлять подпиской, можно сказать только зная сервис.
               // Не знаем — пункт не показываем, а не отправляем наугад.
               ...(processor

@@ -213,6 +213,8 @@ export default function RasterReview({ imageUrl, onCancel, onAccept }: Props) {
         x2: (s.x2 - minX) * mPerPx,
         y2: (maxY - s.y2) * mPerPx,
         thickness: Math.max(0.08, Math.min(0.4, s.weight * mPerPx)),
+        // несущая — предположение по толщине штриха на картинке (≥ 0.25 м); в 3D тёмные торцы
+        ...(!s.glass && s.weight * mPerPx >= 0.25 ? { bearing: true } : {}),
         height: WALL_HEIGHT,
         glass: s.glass || undefined,
       };

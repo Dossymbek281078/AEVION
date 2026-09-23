@@ -307,6 +307,7 @@ export default function QSpaceClient() {
     gDecor: THREE.Group;
     gWalls: THREE.Group;
     wallMat: THREE.MeshLambertMaterial;
+    bearingMat: THREE.MeshLambertMaterial;
     floorMat: THREE.MeshLambertMaterial;
     floorMesh: THREE.Mesh | null;
     /** пол каждой комнаты своим материалом — поверх общего пола, только в чистовом слое */
@@ -384,12 +385,14 @@ export default function QSpaceClient() {
     scene.add(gRough, gFinish, gDecor, gWalls);
 
     const wallMat = new THREE.MeshLambertMaterial({ color: CONCRETE });
+    // несущие (предположение по чертежу) — тёмные торцы и верх: сверху видно, что трогать нельзя
+    const bearingMat = new THREE.MeshLambertMaterial({ color: 0x4a4a4a });
     const floorMat = new THREE.MeshLambertMaterial({ color: SCREED });
 
     three.current = {
       scene, camera, renderer, controls,
       gRough, gFinish, gDecor, gWalls,
-      wallMat, floorMat, floorMesh: null, roomFloors: new Map(), roomWallMats: new Map(),
+      wallMat, bearingMat, floorMat, floorMesh: null, roomFloors: new Map(), roomWallMats: new Map(),
       raycaster: new THREE.Raycaster(),
       dragUid: null, uidSeq: 1,
     };
@@ -606,7 +609,8 @@ export default function QSpaceClient() {
       const по = roomsBesideWall(w, from, to, roomsInfo.roomAt);
       const мат = (r: number | null): THREE.MeshLambertMaterial => (r !== null && t.roomWallMats.get(r)) || t.wallMat;
       // грани BoxGeometry: +x, -x, +y, -y, +z, -z; +z после поворота -atan2 смотрит по нормали (-dy, dx)
-      const mats = [t.wallMat, t.wallMat, t.wallMat, t.wallMat, мат(по.plus), мат(по.minus)];
+      const торец = w.bearing ? t.bearingMat : t.wallMat;
+      const mats = [торец, торец, торец, торец, мат(по.plus), мат(по.minus)];
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(len, z1 - z0, w.thickness), mats as unknown as THREE.MeshLambertMaterial);
       mesh.position.set((a.x + bb.x) / 2, (z0 + z1) / 2, (a.y + bb.y) / 2);
       mesh.rotation.y = -Math.atan2(w.y2 - w.y1, w.x2 - w.x1);

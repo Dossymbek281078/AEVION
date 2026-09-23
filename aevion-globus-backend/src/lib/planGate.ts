@@ -29,6 +29,7 @@
  */
 
 import type { Request, Response, NextFunction } from "express";
+import { appSlugForModuleId } from "../data/lemonSqueezyVariants";
 import { verifyBearerOptional } from "./authJwt";
 import { readLatestSubscription } from "../routes/provisioning";
 import { MODULES_PRICING, type TierId } from "../data/pricing";
@@ -201,7 +202,23 @@ export function isModuleEntitled(plan: ResolvedPlan, moduleId: string): boolean 
   if (plan.tier === "full" || plan.tier === "enterprise") return true;
   const included = tiersForModule(moduleId).map(normalizeTier);
   if (included.includes(plan.tier)) return true;
-  if (plan.tier === "lite" && plan.chosenModules.includes(moduleId)) return true;
+  // 🔴 Ступень lite = один выбранный модуль, и здесь сравниваются ИМЕНА —
+  // а имён у модуля два: слаг кассы и id модуля. У `startup_exchange` они
+  // различаются (`startup_exchange` против `startup-exchange`), у `multichat`
+  // тоже (`multichat` против `multichat-engine`). В запись попадает то, что
+  // пришло в `custom_data.module`, то есть СЛАГ, а гейт спрашивает по ID —
+  // строгое сравнение давало бы «заплатил и не опознан».
+  //
+  // Соседний путь (подписка на отдельное приложение) имя переводит
+  // (`appSubscriptionState` → `appSlugForModuleId`), а этот — нет. Принимаем
+  // обе формы: так чинятся и будущие записи, и уже сделанные, без миграции
+  // данных. Замер 23.09.2026: сегодня это латентно (ни один из спорных
+  // модулей не в PAYWALL_MODULES), но включение стены заперло бы купивших.
+  if (plan.tier === "lite") {
+    if (plan.chosenModules.includes(moduleId)) return true;
+    const слагКассы = appSlugForModuleId(moduleId);
+    if (слагКассы && plan.chosenModules.includes(слагКассы)) return true;
+  }
   return false;
 }
 

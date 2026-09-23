@@ -194,18 +194,33 @@ function markWall(
   const len = Math.hypot(x2 - x1, y2 - y1);
   if (len < 1e-6) return;
   const steps = Math.ceil(len / (CELL / 2));
-  const r = Math.max(1, Math.ceil(thickness / 2 / CELL));
+  // Полоса ПО ТОЛЩИНЕ стены, а не квадратная кисть. Кисть радиусом
+  // ceil(t/2/CELL) клеток в обе стороны всегда шире стены (у 0.20 м выходило
+  // 0.25 м), и лишнее съедалось из площади помещения с обеих сторон: замер
+  // 23.09 — комната 5 x 4 со стеной 0.20 давала 17.8 м² вместо 18.24, то есть
+  // смета занижала площадь на 2.3 %. Клетка считается стеной, если её ЦЕНТР
+  // лежит внутри полосы: это несмещённая оценка площади по сетке.
+  // Нижняя граница CELL * 0.6 не про красоту, а про герметичность: заливка
+  // ходит по четырём соседям, и полосы в одну клетку ей уже не перейти.
+  const halfW = Math.max(thickness / 2, CELL * 0.6);
+  const R = Math.ceil(halfW / CELL) + 1;
+  const ux = (x2 - x1) / len, uy = (y2 - y1) / len;
   for (let s = 0; s <= steps; s++) {
     const t = s / steps;
     const px = x1 + (x2 - x1) * t;
     const py = y1 + (y2 - y1) * t;
     const cx = Math.round((px - minX) / CELL);
     const cy = Math.round((py - minY) / CELL);
-    for (let dy = -r; dy <= r; dy++) {
-      for (let dx = -r; dx <= r; dx++) {
+    for (let dy = -R; dy <= R; dy++) {
+      for (let dx = -R; dx <= R; dx++) {
         const gx = cx + dx;
         const gy = cy + dy;
         if (gx < 0 || gy < 0 || gx >= w || gy >= h) continue;
+        // расстояние от центра клетки до ОТРЕЗКА (не до точки шага)
+        const wx = minX + gx * CELL, wy = minY + gy * CELL;
+        const proj = Math.min(Math.max((wx - x1) * ux + (wy - y1) * uy, 0), len);
+        const ddx = wx - (x1 + ux * proj), ddy = wy - (y1 + uy * proj);
+        if (Math.hypot(ddx, ddy) >= halfW - 1e-9) continue;
         // глухая стена старше стекла: там, где витраж примыкает к стене, периметр считается
         if (grid[gy * w + gx] !== 1) grid[gy * w + gx] = value;
       }

@@ -361,7 +361,9 @@ export function denyAudience(plan: ResolvedPlan): DenyAudience {
 
 function upgradeResponse(res: Response, moduleId: string, plan: ResolvedPlan): void {
   const requiredTiers = tiersForModule(moduleId).map(normalizeTier)
-    .filter((t) => TIER_RANK[t] > TIER_RANK.free);
+    .filter((t) => TIER_RANK[t] > TIER_RANK.free)
+    // Сроки lite…max сводятся к full: без этого 402 перечислял «full» пять раз.
+    .filter((t, i, all) => all.indexOf(t) === i);
   // Demand signal: every 402 is someone who WANTED a paid module. Aggregate-
   // only (module + tier + audience, no user id), fire-and-forget — see
   // paywallDenyLog. Аудитория добавлена 13.09.2026: без неё «спрос» считал
@@ -444,7 +446,8 @@ export function getEntitlements(req: Request): {
   const modules: ModuleEntitlement[] = MODULES_PRICING.map((m) => ({
     module: m.id,
     requiredTiers: tiersForModule(m.id).map(normalizeTier)
-      .filter((t) => TIER_RANK[t] > TIER_RANK.free),
+      .filter((t) => TIER_RANK[t] > TIER_RANK.free)
+      .filter((t, i, all) => all.indexOf(t) === i),
     entitled: isModuleEntitled(plan, m.id),
     enforced: paywallEnabledFor(m.id),
   }));

@@ -51,3 +51,11 @@ describe("сырой формат банка нормализуется", () => 
     expect(page.match(/ldPz\(rushStartIdx\(\)\)/g)?.length).toBe(2);
   });
 });
+
+describe("фишки задачи без повторов", () => {
+  it("фаза, тема и мат-фишка дедуплицируются и не повторяют заголовок", () => {
+    expect(page).toContain('.filter((t,i,a)=>t&&a.indexOf(t)===i&&t!==pzTitle.replace(/^[⚪⚫]\\s*/,""))');
+    // старый вид (две фишки без дедупа, мат отдельной строкой) не должен вернуться
+    expect(page).not.toContain('{[fazaRu(pzCurrent.phase),temaZadachiRu(pzCurrent.theme)].filter(Boolean).map(');
+  });
+});

@@ -146,13 +146,20 @@ describe("Почта: три пути, три ответа", () => {
    *
    * Эти проверки закрепляют, что общего ответа тут нет и не должно быть.
    */
-  test("Resend поднимает ТОЛЬКО вход: подписка и уведомление молчат", async () => {
+  // 23.09.2026: смысл изменился ВМЕСТЕ С КОДОМ, а не подогнан под него.
+  // Раньше уведомление основателю умело только SMTP и при его отсутствии
+  // молча выходило — на проде это значило «отклик инвестора пропал». Теперь
+  // отправка падает на второй канал (Resend), поэтому Resend поднимает и
+  // уведомление тоже. Подписка по-прежнему только Brevo — общего ответа
+  // «почта настроена» здесь не появилось.
+  test("Resend поднимает вход И уведомление, но не подписку", async () => {
     process.env.RESEND_API_KEY = "re_x";
     const r = await get();
 
     expect(r.body.mail.signup.configured).toBe(true);
     expect(r.body.mail.waitlist.configured, "подписка идёт через Brevo, не Resend").toBe(false);
-    expect(r.body.mail.founderNotify.configured, "уведомление идёт по SMTP").toBe(false);
+    expect(r.body.mail.founderNotify.configured, "без SMTP письмо уходит через Resend").toBe(true);
+    expect(r.body.mail.founderNotify.via).toBe("resend");
   });
 
   test("Brevo поднимает ТОЛЬКО подписку", async () => {

@@ -5412,6 +5412,8 @@ export default function CyberChessPage(){
   // Next puzzle helper
   // «Следующая» = СЛУЧАЙНЫЙ пазл из отфильтрованного списка (как lichess/chess.com — не по порядку).
   const nextPz=useCallback(()=>{const n=Math.max(1,fPz.length);let nextIdx=Math.floor(Math.random()*n);if(n>1&&nextIdx===pzI)nextIdx=(nextIdx+1)%n;ldPz(nextIdx)},[pzI,fPz.length]);
+  // SAN → UCI: русская нотация считается одним механизмом (hodPoRusski), движок отдаёт SAN.
+  const uciИзSan=(fen:string,san:string):string|null=>{try{const c=new Chess(fen);const m=c.move(san);return m?`${m.from}${m.to}${m.promotion||""}`:null}catch{return null}};
   const выборЗадачиRef=useRef<string>("");
   const randomPz=useCallback(()=>{if(!fPz.length)return;ldPz(Math.floor(Math.random()*fPz.length))},[fPz.length]);
   // Имя текущей задачи по её решению («Мат в 2», «Выигрыш фигуры за 3 хода»); считается один раз на задачу (по fen)
@@ -11327,10 +11329,20 @@ ${question.trim()}`;
                     const uci=await localBest();
                     if(uci){const c=new Chess(fen);const m=c.move({from:uci.slice(0,2) as Square,to:uci.slice(2,4) as Square,promotion:(uci[4] as any)||undefined});if(m)bestSan=m.san;}
                   }catch{}
-                  const base=e?.name==="AbortError"?"⏱ ИИ-тренер думал слишком долго.":"⚠ ИИ-тренер сейчас недоступен.";
+                  // Лимит провайдера — это НЕ «попробуй через минуту»: он держится до даты сброса,
+                  // и обещание скорого возврата было бы ложным (ответ провайдера 22–24.09.2026:
+                  // «You have reached your specified API usage limits… regain access on 2026-10-01»).
+                  const сообщениеОшибки=String(e?.message||"");
+                  const лимитИсчерпан=/usage limit|quota|credit balance|regain access/i.test(сообщениеОшибки);
+                  const датаВозврата=(сообщениеОшибки.match(/(\d{4}-\d{2}-\d{2})/)||[])[1];
+                  const когдаВернётся=(()=>{if(!датаВозврата)return "";const d=new Date(датаВозврата+"T00:00:00Z");if(isNaN(d.getTime()))return "";const м=["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];return ` — вернётся ${d.getUTCDate()} ${м[d.getUTCMonth()]}`})();
+                  const base=лимитИсчерпан
+                    ?`💬 Разбор словами сейчас выключен${когдаВернётся}. Партия, задачи и движок работают.`
+                    :(e?.name==="AbortError"?"⏱ ИИ-тренер думал слишком долго.":"⚠ ИИ-тренер сейчас недоступен.");
+                  const ходПоРусски=bestSan?hodPoRusski(fen,uciИзSan(fen,bestSan)||""):"";
                   const tip=bestSan
-                    ?`\n\n♟ Пока отвечаю движком (Stockfish d14): лучший ход — ${bestSan}, оценка ${evalCpStr} (с точки зрения белых). Спроси ещё раз через минуту для развёрнутого разбора.`
-                    :" Попробуй через минуту или используй кнопки 🔍 Объясни / 📋 План выше.";
+                    ?`\n\n♟ Отвечаю движком (Stockfish, глубина 14): лучший ход — ${ходПоРусски||bestSan}, оценка ${evalCpStr} (с точки зрения белых).${лимитИсчерпан?"":" Спроси ещё раз через минуту для развёрнутого разбора."}`
+                    :(лимитИсчерпан?" Нажми 🔍 Объясни или 📋 План — они считаются движком и работают.":" Попробуй через минуту или используй кнопки 🔍 Объясни / 📋 План выше.");
                   sCoachChat([...newMsgs,{role:"assistant",content:base+tip,ts:Date.now()}]);
                 }finally{
                   sCoachChatLoading(false);

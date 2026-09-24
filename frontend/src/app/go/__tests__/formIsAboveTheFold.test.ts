@@ -15,7 +15,16 @@ import path from "node:path";
 const PAGE = path.join(__dirname, "..", "page.tsx");
 const src = fs.readFileSync(PAGE, "utf8");
 
-const at = (needle: string) => src.indexOf(needle);
+// Порядок ищется по ЗАГОЛОВКУ раздела, а не по слову в тексте. 24.09 проверка
+// покраснела на исправной странице: слово «Книга» впервые встречается в
+// КОММЕНТАРИИ на 217-й строке, задолго до формы, и сторож объявил форму
+// уехавшей вниз. Текст О разделе неотличим от самого раздела, если искать
+// голое слово.
+const at = (needle: string) => {
+  const заголовок = src.indexOf(`>${needle}<`);
+  if (заголовок >= 0) return заголовок;
+  return src.indexOf(needle);
+};
 
 describe("/go — порядок воронки", () => {
   it("страница читается и содержит все опорные секции", () => {

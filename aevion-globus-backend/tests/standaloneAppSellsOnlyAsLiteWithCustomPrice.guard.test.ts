@@ -112,3 +112,38 @@ describe("отдельный модуль без своего варианта",
     expect(созданные[0].customPriceCents).toBeUndefined();
   });
 });
+
+describe("витрина и касса отвечают одно и то же", () => {
+  /**
+   * Витрина зажигает кнопку по ПОЛОЖИТЕЛЬНОМУ списку `sellable.configured`
+   * (frontend/src/app/pricing/page.tsx, `продаётсяСсылка`). Если касса умеет
+   * продать, а список молчит — кнопка останется серой с текстом «оформить
+   * онлайн пока нельзя, напишите нам». Человек уйдёт писать письмо вместо
+   * того, чтобы заплатить: почини мы только кассу, снаружи не изменилось бы
+   * ничего.
+   */
+  const прежние = { ...process.env };
+  beforeEach(() => {
+    delete process.env.LEMON_SQUEEZY_VARIANT_QSKYWAY_LITE;
+    delete process.env.LEMON_SQUEEZY_VARIANT_QSKYWAY_MAX;
+    process.env.LEMON_SQUEEZY_VARIANT_LITE = "111111";
+  });
+  afterEach(() => {
+    process.env = { ...прежние };
+  });
+
+  test("lite попадает в продаваемые, длинные сроки — нет", async () => {
+    const { lemonSqueezySellable } = await import("../src/data/lemonSqueezyVariants");
+    const { configured, missing } = lemonSqueezySellable();
+    expect(configured).toContain("app_qskyway_lite");
+    // Обратный контроль: без него утверждение прошло бы и на списке «всё продаётся».
+    expect(missing).toContain("app_qskyway_max");
+    expect(configured).not.toContain("app_qskyway_max");
+  });
+
+  test("нет тарифного варианта — нет и запасного пути (кнопка честно серая)", async () => {
+    delete process.env.LEMON_SQUEEZY_VARIANT_LITE;
+    const { lemonSqueezySellable } = await import("../src/data/lemonSqueezyVariants");
+    expect(lemonSqueezySellable().missing).toContain("app_qskyway_lite");
+  });
+});

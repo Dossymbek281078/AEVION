@@ -194,6 +194,37 @@ export function resolveLemonSqueezyVariant(reference: string): string | null {
   return id || null;
 }
 
+/**
+ * Запасной товар для отдельного приложения, у которого своего товара НЕТ.
+ *
+ * 🔴 21.09.2026. qright, qsign, startup_exchange и qskyway имеют цену на
+ * витрине, а купить их нельзя: касса отвечает 503, потому что варианта в
+ * LemonSqueezy у них нет. Завести пачкой нельзя — API кассы на создание
+ * товаров отвечает 405. Значит продаём их ВАРИАНТОМ ТАРИФА lite, а цену
+ * передаём custom_price.
+ *
+ * Нового смысла нет: этим же путём со страницы цен покупают «lite + один
+ * модуль на выбор», и вебхук его умеет — tier lite плюс module в custom_data
+ * даёт права ровно на один модуль.
+ *
+ * 🔴 ТОЛЬКО срок lite. У medium/full/max вебхук custom_data.module НЕ читает
+ * и выдаёт набор ступени целиком: qskyway за свою цену открыл бы всю планету
+ * на год. Это тот же класс, из-за которого 16.09 снимали товары с публикации.
+ *
+ * ⚠️ Предикат ОДИН на всех намеренно. Его спрашивают двое: касса (какой
+ * вариант открыть) и витрина (зажигать ли кнопку). Разойдись они — получится
+ * худший из возможных исходов: кнопка серая при работающей кассе либо живая
+ * кнопка при 503. Второй способ отвечать на тот же вопрос здесь не заводить.
+ */
+export function fallbackVariantForReference(reference: string): string | null {
+  // Свой товар есть — запасной путь не нужен и не должен подменять цену.
+  if (resolveLemonSqueezyVariant(reference)) return null;
+  const m = /^app_([a-z_]+)_lite$/.exec(reference);
+  if (!m) return null;
+  if (!STANDALONE_APPS.some((a) => a.slug === m[1])) return null;
+  return resolveLemonSqueezyVariant("tier_lite");
+}
+
 /** True when at least one tier variant id is configured (LS checkout is live). */
 export function lemonSqueezyTiersConfigured(): boolean {
   return Object.values(TIER_VARIANT_ENV).some((k) => Boolean(process.env[k]?.trim()));
@@ -374,7 +405,13 @@ export function lemonSqueezySellable(): {
   const configured: string[] = [];
   const missing: string[] = [];
   for (const [ref, env] of Object.entries(TIER_VARIANT_ENV)) {
-    (process.env[env]?.trim() ? configured : missing).push(ref);
+    // Своего товара нет — но продать всё равно можем, если есть запасной путь
+    // (см. fallbackVariantForReference). Витрина зажигает кнопку ИМЕННО по
+    // этому списку, поэтому молчать здесь значит оставить серую кнопку при
+    // исправной кассе — человек увидит «оформить онлайн пока нельзя» и уйдёт
+    // писать письмо, которого мы не просили.
+    const можно = Boolean(process.env[env]?.trim()) || Boolean(fallbackVariantForReference(ref));
+    (можно ? configured : missing).push(ref);
   }
   return { configured: configured.sort(), missing: missing.sort() };
 }

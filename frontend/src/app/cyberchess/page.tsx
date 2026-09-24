@@ -5412,6 +5412,7 @@ export default function CyberChessPage(){
   // Next puzzle helper
   // «Следующая» = СЛУЧАЙНЫЙ пазл из отфильтрованного списка (как lichess/chess.com — не по порядку).
   const nextPz=useCallback(()=>{const n=Math.max(1,fPz.length);let nextIdx=Math.floor(Math.random()*n);if(n>1&&nextIdx===pzI)nextIdx=(nextIdx+1)%n;ldPz(nextIdx)},[pzI,fPz.length]);
+  const выборЗадачиRef=useRef<string>("");
   const randomPz=useCallback(()=>{if(!fPz.length)return;ldPz(Math.floor(Math.random()*fPz.length))},[fPz.length]);
   // Имя текущей задачи по её решению («Мат в 2», «Выигрыш фигуры за 3 хода»); считается один раз на задачу (по fen)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -5670,8 +5671,15 @@ export default function CyberChessPage(){
     // СЛУЧАЙНЫЙ пазл из отфильтрованного списка (рандомное распределение). Срабатывает и
     // на смену режима (pzMode в deps) — поэтому вход в Rush/Timed сразу загружает пазл (фикс:
     // раньше Rush ставил таймер, но пазл не грузился → «Rush не работает»).
+    // Пул грузится лениво: сперва маленький слайс, через 2–3 с весь банк (500 тыс.). Рост
+    // PUZZLES.length перезагружал задачу — человек начинал думать над позицией, и она
+    // подменялась (замер 24.09.2026 на проде). Пропускаем перезагрузку, когда изменился
+    // ТОЛЬКО размер пула, а выбор человека (фильтры, режим, вкладка) прежний и задача цела.
+    const ключВыбора=[pzFilterGoal,pzFilterMate,pzFilterPhase,pzFilterTheme,pzFilterSide,tab,pzMode,rushDuration,pzCustomSec].join("|");
+    if(pzCurrent&&pzAttempt==="idle"&&выборЗадачиRef.current===ключВыбора){выборЗадачиRef.current=ключВыбора;return;}
+    выборЗадачиRef.current=ключВыбора;
     const idx=Math.floor(Math.random()*fPz.length);
-    const pz=fPz[idx];
+    const pz=normalizePuzzle(fPz[idx]); // банк отдаёт сырой lichess: ход соперника применяем сами
     let g;try{g=new Chess(pz.fen)}catch{showToast("Задача повреждена, пропускаю","error");return}
     setGame(g);sBk(k=>k+1);sPzI(idx);sPzCurrent(pz);sPzAttempt("idle");
     sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);

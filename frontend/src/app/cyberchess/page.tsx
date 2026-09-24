@@ -50,7 +50,7 @@ import PostGameCard from "./PostGameCard";
 import DeepAnalysisPanel from "./DeepAnalysisPanel";
 import { temaZadachiRu, fazaRu, imyaZadachiBezPovtorov } from "./puzzleLabels";
 import { productById, keepChannel } from "@/lib/products";
-import { normalizePuzzle, solverSide, imyaPoResheniyu, goditsyaDlyaRush } from "./puzzleNormalize";
+import { normalizePuzzle, solverSide, imyaPoResheniyu, goditsyaDlyaRush, hodPoRusski } from "./puzzleNormalize";
 import { channelNow } from "@/lib/channelNow";
 import { tochnostSohranennoy } from "./postGameSummary";
 import { RANKS, gRank } from "./rating";
@@ -10482,13 +10482,13 @@ export default function CyberChessPage(){
                   padding:"9px 14px",marginBottom:10,borderRadius:8,
                   background:"linear-gradient(135deg,#fffbeb,#fef3c7)",
                   border:"1px solid #fde68a"
-                }}>💡 Подсказка — лучший ход: <span style={{fontFamily:"monospace",background:"rgba(0,0,0,0.07)",padding:"2px 8px",borderRadius:4,fontSize:14,letterSpacing:1}}>{pzCurrent.sol[0]}</span></div>}
+                }}>💡 Подсказка — лучший ход: <span style={{fontFamily:"monospace",background:"rgba(0,0,0,0.07)",padding:"2px 8px",borderRadius:4,fontSize:14,letterSpacing:1}}>{hodPoRusski(pzCurrent.fen,pzCurrent.sol[0])}</span></div>}
                 {pzAttempt==="shown"&&<div style={{
                   fontSize:13,fontWeight:800,color:"#78350f",
                   padding:"10px 14px",marginBottom:10,borderRadius:8,
                   background:"linear-gradient(135deg,#fffbeb,#fef3c7)",
                   border:"1px solid #fde68a"
-                }}>💡 Правильный ход: <span style={{fontFamily:"monospace",background:"rgba(0,0,0,0.07)",padding:"2px 8px",borderRadius:4,fontSize:14,letterSpacing:1}}>{pzCurrent.sol[0]}</span></div>}
+                }}>💡 Правильный ход: <span style={{fontFamily:"monospace",background:"rgba(0,0,0,0.07)",padding:"2px 8px",borderRadius:4,fontSize:14,letterSpacing:1}}>{hodPoRusski(pzCurrent.fen,pzCurrent.sol[0])}</span></div>}
                 {/* Actions */}
                 <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap"}}>
                   <Btn size="md" variant="primary" onClick={nextPz} style={{flex:"1 1 auto",minWidth:120}}>▶ Следующая</Btn>

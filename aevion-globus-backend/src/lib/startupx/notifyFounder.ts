@@ -19,6 +19,10 @@
  */
 
 import { getMailTransport, MAIL_FROM, FRONTEND_BASE } from "../mailTransport";
+// Запасной канал: тот же отправитель, что у заявок Build — он умеет и SMTP,
+// и Resend. На проде SMTP не настроен, а Resend настроен, поэтому без него
+// письмо основателю молча не уходило (замер 23.09.2026, /api/health/channels).
+import { send as отправитьПисьмоЛюбымКаналом, canSendEmail } from "../build/email";
 // Формат денег в модуле один — тот же, что на карточке и в разборе. Своя копия
 // уже давала расхождение «$30K» против «$30.0K» между карточкой и заголовком.
 import { fmt } from "./valuation";
@@ -109,10 +113,29 @@ export function sendOfferNotice(notice: OfferNotice): void {
     console.error("[StartupX] адрес основателя с переводом строки — письмо не отправлено");
     return;
   }
-  const transport = getMailTransport();
-  if (!transport) return; // SMTP не настроен — молча, это нормальный режим
   const { subject, text, html } = buildOfferEmail(notice);
-  transport
-    .sendMail({ from: MAIL_FROM, to: notice.founderEmail, subject, text, html })
-    .catch((e: unknown) => console.error("[StartupX] offer notice not sent", e));
+  const transport = getMailTransport();
+  if (transport) {
+    transport
+      .sendMail({ from: MAIL_FROM, to: notice.founderEmail, subject, text, html })
+      .catch((e: unknown) => console.error("[StartupX] offer notice not sent", e));
+    return;
+  }
+  // SMTP нет. Молчать здесь нельзя: отклик инвестора — денежное действие, а не
+  // уборка. Пробуем второй канал, и только полное отсутствие обоих называем вслух.
+  if (!canSendEmail()) {
+    console.error(
+      `[StartupX] отклик инвестора НЕ доставлен: ни SMTP, ни Resend не настроены. ` +
+        `Получатель @${notice.founderEmail.split("@").pop() ?? "?"}, тема "${subject}".`,
+    );
+    return;
+  }
+  void отправитьПисьмоЛюбымКаналом(notice.founderEmail, subject, html).then((ok) => {
+    if (!ok) {
+      console.error(
+        `[StartupX] отклик инвестора НЕ доставлен запасным каналом: ` +
+          `получатель @${notice.founderEmail.split("@").pop() ?? "?"}, тема "${subject}".`,
+      );
+    }
+  });
 }

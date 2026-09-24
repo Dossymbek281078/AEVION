@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { разметкаПриложений } from "@/lib/appsJsonLd";
 
 /**
  * Метаданные страницы живут здесь, а не в page.tsx: сама страница помечена
@@ -30,6 +31,22 @@ export const metadata: Metadata = {
   },
 };
 
-export default function Layout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+/**
+ * Разметка товаров для поисковика строится в `@/lib/appsJsonLd`: она спрашивает
+ * кассу и показывает ТОЛЬКО то, что действительно можно оплатить. Объяснение и
+ * замеры — там же.
+ */
+export default async function Layout({ children }: { children: React.ReactNode }) {
+  const разметка = await разметкаПриложений();
+  return (
+    <>
+      {разметка ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(разметка) }}
+        />
+      ) : null}
+      {children}
+    </>
+  );
 }

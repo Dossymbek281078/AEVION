@@ -4,7 +4,7 @@ import { dilithiumStatus } from "./lib/qsignV2/dilithium";
 import { eventsStoreStatus } from "./routes/events";
 import { subsStoreStatus } from "./routes/provisioning";
 import { emailSenderStatus } from "./routes/provisioning";
-import { providerStatus } from "./lib/providerGuard";
+import { bureauProvidersHealth } from "./lib/providerGuard";
 import { lemonSqueezyVariantStatus } from "./data/lemonSqueezyVariants";
 dotenv.config();
 
@@ -345,10 +345,10 @@ function safeLsVariantStatus() {
  */
 function safeBureauProviders() {
   try {
-    return {
-      kyc: providerStatus("BUREAU_KYC_PROVIDER"),
-      payment: providerStatus("BUREAU_PAYMENT_PROVIDER"),
-    };
+    // Состояние считает bureauProvidersHealth(): ручка и её сторож обязаны
+    // смотреть на один код. Почему поле не может считать «настроено» как
+    // «переменная непустая» — объяснено там же.
+    return bureauProvidersHealth();
   } catch {
     return { kyc: null, payment: null };
   }

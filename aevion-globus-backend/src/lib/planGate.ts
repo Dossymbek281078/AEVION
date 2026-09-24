@@ -377,8 +377,19 @@ export function denyAudience(plan: ResolvedPlan): DenyAudience {
 }
 
 function upgradeResponse(res: Response, moduleId: string, plan: ResolvedPlan): void {
-  const requiredTiers = tiersForModule(moduleId).map(normalizeTier)
-    .filter((t) => TIER_RANK[t] > TIER_RANK.free);
+  // 🔴 Дубликаты убираем, и это не косметика. С 15.09.2026 любой платный тариф —
+  // доступ ко ВСЕЙ планете, поэтому normalizeTier схлопывает lite/medium/pro/max
+  // в «full». Список `includedIn` из шести ступеней превращался в
+  // ["full","full","full","full","full","enterprise"], и человек, упёршийся в
+  // платную стену, читал: «доступен на тарифах: full, full, full, full, full,
+  // enterprise» (замер на проде 24.09.2026, все пять закрытых модулей).
+  //
+  // Это последний текст, который видит несостоявшийся покупатель, и он выглядит
+  // поломкой. Доступа это НЕ касается: план подписчика нормализуется тем же
+  // правилом, поэтому Lite пускают — проверено отдельным тестом ниже по файлу.
+  const requiredTiers = [...new Set(
+    tiersForModule(moduleId).map(normalizeTier).filter((t) => TIER_RANK[t] > TIER_RANK.free),
+  )];
   // Demand signal: every 402 is someone who WANTED a paid module. Aggregate-
   // only (module + tier + audience, no user id), fire-and-forget — see
   // paywallDenyLog. Аудитория добавлена 13.09.2026: без неё «спрос» считал
@@ -390,7 +401,12 @@ function upgradeResponse(res: Response, moduleId: string, plan: ResolvedPlan): v
     plan: plan.tier,
     requiredTiers: requiredTiers.length ? requiredTiers : ["full"],
     upgradeUrl: `${PUBLIC_BASE}/pricing`,
-    message: `Модуль «${moduleId}» доступен на тарифах: ${requiredTiers.join(", ") || "full"}. Upgrade → ${PUBLIC_BASE}/pricing`,
+    // Человеческий текст вместо перечисления внутренних имён: после
+    // схлопывания ступеней список всегда «full[, enterprise]», и называть его
+    // тарифами неверно — платных ступеней у нас пять.
+    message:
+      `Модуль «${moduleId}» входит в любую платную подписку AEVION. ` +
+      `Оформить → ${PUBLIC_BASE}/pricing`,
   });
 }
 

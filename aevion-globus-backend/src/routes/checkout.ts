@@ -54,6 +54,31 @@ function языкПокупателя(req: { body?: unknown; headers: Record<str
 export const checkoutRouter = Router();
 
 /**
+ * Валюта запроса против валюты кассы: подмена обязана быть ВИДНА.
+ *
+ * Человек выбирает на витрине тенге, а уходит в кассу, где сумма в долларах:
+ * замер 24.09.2026 — `currency=KZT` возвращал `provider: lemonsqueezy`,
+ * `currency: USD` и ни одного слова о подмене. Молчаливая замена на денежном
+ * пути — это §16: операция «как просили» не выполнена, а ответ выглядит
+ * успехом, и узнаёт человек об этом уже на экране оплаты.
+ *
+ * Здесь не решается, ЧЕМ платить (это выбор провайдера выше), — здесь ответ
+ * перестаёт врать умолчанием: витрина получает и запрошенную валюту, и признак
+ * подмены, чтобы предупредить ДО перехода в кассу.
+ */
+function сОтметкойВалюты<T extends { currency: string }>(
+  ответ: T,
+  запрошена: string | undefined,
+): T & { requestedCurrency?: string; currencySubstituted?: boolean } {
+  if (!запрошена) return ответ;
+  return {
+    ...ответ,
+    requestedCurrency: запрошена,
+    ...(запрошена !== ответ.currency ? { currencySubstituted: true } : {}),
+  };
+}
+
+/**
  * Подписочный чекаут (Lite / Medium / Full) с каскадом процессингов:
  *   1. LemonSqueezy — основной живой процессинг (аккаунт активирован 2026-06-04).
  *      Провижининг — на POST /api/lemonsqueezy/webhook.
@@ -495,7 +520,7 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
         // к запасным, которые считают в долларах. Обещание было дано по
         // состоянию, а исход у ЭТОГО запроса может быть другим — пусть витрина
         // узнаёт правду из ответа, а не выводит её из имени провайдера.
-        return res.json({ url: intent.checkoutUrl, mode: "real", provider: "paybox", currency: "KZT", intentId: intent.intentId });
+        return res.json(сОтметкойВалюты({ url: intent.checkoutUrl, mode: "real", provider: "paybox", currency: "KZT", intentId: intent.intentId }, body.currency));
       } catch (e) {
         capture(e);
         console.error("[checkout/session] PayBox createIntent failed, falling back to LS/Gumroad/stub", e);
@@ -516,7 +541,7 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
           successAppId:
             (body.modules ?? []).length === 1 ? (body.modules ?? [])[0] : undefined,
         });
-        return res.json({ url: intent.checkoutUrl, mode: "real", provider: "paypal", currency: "USD", intentId: intent.intentId });
+        return res.json(сОтметкойВалюты({ url: intent.checkoutUrl, mode: "real", provider: "paypal", currency: "USD", intentId: intent.intentId }, body.currency));
       } catch (e) {
         capture(e);
         console.error("[checkout/session] PayPal createIntent failed, falling back to LS/Gumroad/stub", e);
@@ -602,7 +627,7 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
               ? (body.modules ?? [])[0]
               : undefined,
         });
-        return res.json({ url: intent.checkoutUrl, mode: "real", provider: "lemonsqueezy", currency: "USD", intentId: intent.intentId });
+        return res.json(сОтметкойВалюты({ url: intent.checkoutUrl, mode: "real", provider: "lemonsqueezy", currency: "USD", intentId: intent.intentId }, body.currency));
       } catch (e) {
         capture(e);
         console.error("[checkout/session] LS createIntent failed, falling back to Gumroad/stub", e);
@@ -619,7 +644,7 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
         // покупка попадёт в сводке выручки в ключ "direct".
         customData: собратьCustomData(undefined, channel),
       });
-      return res.json({ url: intent.checkoutUrl, mode: "real", provider: "gumroad", currency: "USD", intentId: intent.intentId });
+      return res.json(сОтметкойВалюты({ url: intent.checkoutUrl, mode: "real", provider: "gumroad", currency: "USD", intentId: intent.intentId }, body.currency));
     }
 
     // 3) Процессинга для этого tier:period нет.

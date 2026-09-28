@@ -788,7 +788,7 @@ export // Сбор адреса после разбора. До 28.09.2026 ст�
 // разбор сделки без входа — и не брала ничего взамен: 97 разборов в базе и НИ ОДНОГО
 // адреса. Ручка та же, что у конституции (проверена на проде: пустое тело → 400
 // validation_failed). Письма она НЕ шлёт, поэтому здесь ничего не обещаем про письмо.
-function EmailCapture({ dealName }: { dealName?: string }) {
+function EmailCapture() {
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
@@ -840,8 +840,7 @@ function EmailCapture({ dealName }: { dealName?: string }) {
         Оставьте адрес — напишем, когда добавим отрасли и обновим рубрику
       </div>
       <div style={{ fontSize: 12.5, color: "#1e40af", marginBottom: 8 }}>
-        {dealName ? `Разбор «${dealName}» останется у вас по ссылке выше.` : "Разбор останется у вас по ссылке выше."}
-        {" "}Рассылки раз в месяц, отписка в один клик.
+        Разбор останется у вас по ссылке выше. Рассылки раз в месяц, отписка в один клик.
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <input
@@ -874,7 +873,7 @@ function EmailCapture({ dealName }: { dealName?: string }) {
   );
 }
 
-function ResultView({ result, shared = false }: { result: AnalysisResult; shared?: boolean }) {
+export function ResultView({ result, shared = false }: { result: AnalysisResult; shared?: boolean }) {
   return (
     // translate="no" переехал сюда С МОДУЛЯ ЦЕЛИКОМ (06.09.2026). Причина
     // прежнего решения законна ИМЕННО ДЛЯ РЕЗУЛЬТАТА: мемо и факторы
@@ -1007,7 +1006,7 @@ function ResultView({ result, shared = false }: { result: AnalysisResult; shared
           {result.result.assumptions.map((a, i) => <li key={i} style={{ marginBottom: 3 }}>{a}</li>)}
         </ul>
       </div>
-      <EmailCapture dealName={result.result.company?.name} />
+      <EmailCapture />
 
     </div>
   );

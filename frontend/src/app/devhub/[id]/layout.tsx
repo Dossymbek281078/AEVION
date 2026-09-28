@@ -53,27 +53,16 @@ export async function generateMetadata(): Promise<Metadata> {
     // Заголовков может не быть (сборка, предпросмотр) — это не повод падать.
   }
   const т = ЗАГОЛОВКИ[язык];
-  return { ...metadata, title: т.title, description: т.description, openGraph: { locale: т.locale } };
+  return {
+    title: т.title,
+    description: т.description,
+    openGraph: { locale: т.locale },
+    // Рабочее пространство проекта не индексируем: маршрут динамический, любой
+    // путь принимается за идентификатор проекта и отдаёт 200 с полной страницей.
+    robots: { index: false, follow: false },
+  };
 }
 
-export const metadata: Metadata = {
-  title: ЗАГОЛОВКИ.en.title,
-  description: ЗАГОЛОВКИ.en.description,
-  // Без этой строки предпросмотр в мессенджерах считает страницу английской:
-  // корневой макет объявляет lang="en". Тот же приём, что в layout модуля.
-  openGraph: { locale: "ru_RU" },
-  // Рабочее пространство проекта индексировать не нужно, и это не только про SEO.
-  //
-  // Замер 02.09.2026: /devhub/nosuchpage отдаёт 200 и ПОЛНУЮ страницу редактора
-  // (30 КБ, заголовок «Project IDE»), потому что маршрут динамический и любой
-  // путь принимается за идентификатор проекта. Признака «не найдено» в ответе
-  // нет вовсе. Следствий два: поисковик индексирует бесконечный мусор, а любая
-  // проверка «200 значит страница есть» перестаёт что-либо доказывать — на этом
-  // я и поймал себя, когда отрицательный контроль ответил 200.
-  //
-  // Образец взят у /account и /acquire — там ровно та же строка.
-  robots: { index: false, follow: false },
-};
 
 export default function DevHubProjectLayout({ children }: { children: React.ReactNode }) {
   return <>{children}</>;

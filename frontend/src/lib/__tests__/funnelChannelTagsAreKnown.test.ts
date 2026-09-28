@@ -5,7 +5,7 @@
 // продажу» не было бы ни по одному каналу. Пост отрабатывает один раз, проверять после
 // публикации поздно.
 import { describe, it, expect } from "vitest";
-import { channelFrom, withChannel } from "../products";
+import { channelFrom, withChannel, channelParam } from "../products";
 
 const МЕТКИ = ["x-devhub", "x-multichat", "ads-devhub", "ads-multichat"];
 
@@ -26,5 +26,14 @@ describe("метки воронки DevHub и Multichat", () => {
   it("контроль: выдуманная метка по-прежнему null", () => {
     expect(channelFrom("x-devhub-выдуманный")).toBeNull();
     expect(channelFrom("ads-нет-такого")).toBeNull();
+  });
+
+  it("у Reddit два ключа, и короткий — первый (его кладёт набор запуска)", () => {
+    // 28.09.2026: после объединения веток в CHANNELS оказались и rd, и reddit.
+    // channelParam берёт ПЕРВЫЙ ключ с этим значением, и набор запуска должен
+    // получать rd; при этом набранное руками «reddit» обязано узнаваться.
+    expect(channelParam("reddit")).toBe("rd");
+    expect(channelFrom("reddit")).toBe("reddit");
+    expect(channelFrom("rd")).toBe("reddit");
   });
 });

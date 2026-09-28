@@ -333,6 +333,23 @@ export type LaunchPlan = {
 };
 
 /**
+ * Наша собственная проба, а не человек.
+ *
+ * Признаки намеренно узкие: слово-маркер отдельным куском в адресе или в метке,
+ * плюс наш служебный домен. Широкое «содержит test» отсекло бы живого
+ * `tester@…`, а это дороже пропущенной пробы.
+ */
+export function isOwnProbe(email: string, source: string): boolean {
+  const e = String(email || "").trim().toLowerCase();
+  const s = String(source || "").trim().toLowerCase();
+  if (!e) return true;
+  if (e.endsWith("@aevion.app") || e.endsWith("@example.com")) return true;
+  const marker = /(^|[^a-z])(probe|smoke|e2e|synthetic)([^a-z]|$)/;
+  const local = e.split("@")[0] || "";
+  return marker.test(local) || s.split(",").some((part) => marker.test(part.trim()));
+}
+
+/**
  * Сухой прогон: кто получил бы письмо и как оно выглядит. Ничего не отправляет.
  *
  * `rows` передаются снаружи — функция не читает базу сама, поэтому её можно
@@ -351,6 +368,11 @@ export function planLaunchAnnounce(
   for (const r of rows) {
     const email = String(r.email || "").trim().toLowerCase();
     if (!email || seen.has(email)) continue;
+    // Наши собственные пробы письма НЕ получают. Замер 28.09.2026: проверка приёма адреса
+    // записала `probe-chess-28sep@aevion.app` с меткой `cyberchess-app-probe`, и отбор
+    // признал её подписчиком — метка начинается с «cyberchess-». Наш домен без MX, письмо
+    // отбилось бы и испортило репутацию отправителя, а счёт получателей соврал бы.
+    if (isOwnProbe(email, r.source)) continue;
     // Получают и подписчики модуля, и общая очередь «напишите о следующем».
     if (!matchesModule(r.source, moduleSlug) && !isGeneralWaitlist(r.source)) continue;
     seen.add(email);

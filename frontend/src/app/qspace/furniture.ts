@@ -11,6 +11,7 @@
  */
 
 import * as THREE from "three";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 
 export interface CatalogItem {
   id: string;
@@ -31,15 +32,57 @@ export interface CatalogItem {
   build: () => THREE.Group;
 }
 
+/**
+ * Вид поверхности предмета. Название материала решает, как вещь ловит свет:
+ * ткань гасит блик, лак его держит, сталь отражает окно, керамика бликует
+ * узко и ярко. Пока все предметы были матовой заливкой, обстановка читалась
+ * как бумажные коробки при любом освещении (замер 28.09.2026).
+ */
+export type Вид = "ткань" | "дерево" | "лак" | "сталь" | "керамика" | "стекло" | "пластик" | "экран";
+
+const ВИДЫ: Record<Вид, { roughness: number; metalness: number }> = {
+  ткань: { roughness: 0.95, metalness: 0 },
+  дерево: { roughness: 0.6, metalness: 0 },
+  лак: { roughness: 0.25, metalness: 0 },
+  сталь: { roughness: 0.28, metalness: 0.9 },
+  керамика: { roughness: 0.12, metalness: 0 },
+  стекло: { roughness: 0.05, metalness: 0 },
+  пластик: { roughness: 0.45, metalness: 0 },
+  экран: { roughness: 0.18, metalness: 0.15 },
+};
+
+function материал(color: number, вид: Вид): THREE.MeshStandardMaterial {
+  const п = ВИДЫ[вид];
+  if (вид === "стекло") {
+    return new THREE.MeshPhysicalMaterial({
+      color, roughness: п.roughness, metalness: 0,
+      transmission: 0.9, thickness: 0.01, ior: 1.5, transparent: true, opacity: 0.35,
+    }) as unknown as THREE.MeshStandardMaterial;
+  }
+  const m = new THREE.MeshStandardMaterial({ color, roughness: п.roughness, metalness: п.metalness });
+  // Экран телевизора светится сам: тёмное стекло без подсветки выглядит
+  // провалом в стене, а не техникой.
+  if (вид === "экран") m.emissive.set(0x0a1420);
+  return m;
+}
+
 function box(
   g: THREE.Group,
   w: number, h: number, d: number,
   color: number,
   x = 0, y = 0, z = 0,
+  вид: Вид = ПО_ЦВЕТУ.get(color) ?? "дерево",
 ): THREE.Mesh {
+  // Скруглённая коробка вместо острой: в жизни у мебели нет режущих рёбер, и
+  // именно острая грань выдаёт «нарисованность» сильнее цвета. Радиус мелкий
+  // (до 2 см) и считается от самой короткой стороны, иначе тонкая столешница
+  // превратилась бы в подушку.
+  const r = Math.min(0.02, w / 6, h / 6, d / 6);
   const m = new THREE.Mesh(
-    new THREE.BoxGeometry(w, h, d),
-    new THREE.MeshLambertMaterial({ color }),
+    r > 0.002
+      ? new RoundedBoxGeometry(w, h, d, 2, r)
+      : new THREE.BoxGeometry(w, h, d),
+    материал(color, вид),
   );
   m.position.set(x, y + h / 2, z);
   g.add(m);
@@ -48,8 +91,8 @@ function box(
 
 function cyl(g: THREE.Group, r: number, h: number, color: number, x = 0, y = 0, z = 0): THREE.Mesh {
   const m = new THREE.Mesh(
-    new THREE.CylinderGeometry(r, r, h, 20),
-    new THREE.MeshLambertMaterial({ color }),
+    new THREE.CylinderGeometry(r, r, h, 24),
+    материал(color, "дерево"),
   );
   m.position.set(x, y + h / 2, z);
   g.add(m);
@@ -69,6 +112,25 @@ const WOOD_DARK = 0x6f5638;
 const FABRIC = 0x8a9bb0;
 const WHITE = 0xf2f2f0;
 const METAL = 0xcfd4d9;
+
+
+/**
+ * Вид поверхности по цвету, которым предмет уже нарисован в каталоге.
+ *
+ * Так не пришлось править сорок с лишним построек по одной: цвета в каталоге
+ * и так осмысленные — METAL стоит у техники, FABRIC у мягкого, WOOD у корпусов.
+ * Где нужно иначе, вид передаётся седьмым доводом явно.
+ */
+const ПО_ЦВЕТУ = new Map<number, Вид>([
+  [METAL, "сталь"],
+  [WHITE, "керамика"],
+  [FABRIC, "ткань"],
+  [0x7b8ca1, "ткань"],
+  [0xa98d6f, "ткань"],
+  [0x9a7e60, "ткань"],
+  [WOOD, "дерево"],
+  [WOOD_DARK, "дерево"],
+]);
 
 export const CATALOG: CatalogItem[] = [
   // ── Гостиная ──────────────────────────────────────────────────────────
@@ -103,7 +165,7 @@ export const CATALOG: CatalogItem[] = [
   { id: "tv", name: "ТВ-тумба + телевизор", group: "Гостиная", size: [1.6, 0.4, 1.2], build: () => {
     const g = new THREE.Group();
     box(g, 1.6, 0.45, 0.4, 0x5a4632);
-    box(g, 1.3, 0.75, 0.05, 0x1c1c22, 0, 0.55, 0);
+    box(g, 1.3, 0.75, 0.05, 0x1c1c22, 0, 0.55, 0, "экран");
     return g;
   }},
   { id: "shelf", name: "Стеллаж", group: "Гостиная", size: [0.9, 0.3, 1.9], build: () => {
@@ -252,12 +314,12 @@ export const CATALOG: CatalogItem[] = [
     box(g, 0.9, 0.12, 0.9, WHITE);
     const glass = new THREE.Mesh(
       new THREE.BoxGeometry(0.9, 1.9, 0.03),
-      new THREE.MeshLambertMaterial({ color: 0xcfe0e8, transparent: true, opacity: 0.4 }),
+      материал(0xcfe0e8, "стекло"),
     );
     glass.position.set(0, 1.07, 0.44); g.add(glass);
     const side = new THREE.Mesh(
       new THREE.BoxGeometry(0.03, 1.9, 0.9),
-      new THREE.MeshLambertMaterial({ color: 0xcfe0e8, transparent: true, opacity: 0.4 }),
+      материал(0xcfe0e8, "стекло"),
     );
     side.position.set(0.44, 1.07, 0); g.add(side);
     return g;
@@ -333,7 +395,7 @@ export const CATALOG: CatalogItem[] = [
     cyl(g, 0.16, 0.3, 0xa9743e);
     const crown = new THREE.Mesh(
       new THREE.SphereGeometry(0.32, 14, 12),
-      new THREE.MeshLambertMaterial({ color: 0x5a8a53 }),
+      материал(0x5a8a53, "ткань"),
     );
     crown.position.y = 0.85; g.add(crown);
     return g;
@@ -344,7 +406,7 @@ export const CATALOG: CatalogItem[] = [
     cyl(g, 0.015, 1.5, 0x555555, 0, 0.02);
     const shade = new THREE.Mesh(
       new THREE.CylinderGeometry(0.12, 0.17, 0.25, 18, 1, true),
-      new THREE.MeshLambertMaterial({ color: 0xf0e0b8, side: THREE.DoubleSide }),
+      Object.assign(материал(0xf0e0b8, "ткань"), { side: THREE.DoubleSide }),
     );
     shade.position.y = 1.55; g.add(shade);
     return g;

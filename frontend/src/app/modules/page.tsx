@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { getApiBase } from "@/lib/apiBase";
+import { PageTracking } from "@/components/PageTracking";
 import { pickLang } from "@/lib/qrightServerI18n";
 import AutoRefreshToggle from "./AutoRefreshToggle";
 
@@ -316,6 +317,10 @@ export default async function ModulesPage({ searchParams }: Props) {
 
   return (
     <main style={{ minHeight: "100vh", background: "#f7f8fa", padding: "32px 16px" }}>
+      {/* Замер посещения И запоминание канала: каталог — распространённая
+          посадочная для ссылок с метками, а метку читает только тот, кто шлёт
+          событие. Разбор цепочки — в src/app/multichat-engine/page.tsx. */}
+      <PageTracking page="modules" />
       <div style={{ maxWidth: 1100, margin: "0 auto" }}>
         <h1 style={{ fontSize: 30, fontWeight: 900, color: "#0f172a", margin: 0 }}>
           {t.title}

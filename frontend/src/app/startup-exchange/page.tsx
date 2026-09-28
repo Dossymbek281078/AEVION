@@ -6,6 +6,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
+import { PageTracking } from "@/components/PageTracking";
 import { ListingWizard } from "./components/ListingWizard";
 import { ListingCard } from "./components/ListingCard";
 import { InterestModal } from "./components/InterestModal";
@@ -171,6 +172,9 @@ export default function StartupExchangePage() {
 
   return (
     <>
+      {/* Замер посещения И запоминание канала: без него метка `?c=` на этой
+          странице не доживала до кассы (разбор — в src/app/multichat-engine/page.tsx). */}
+      <PageTracking page="startup-exchange" />
       <Wave1Nav />
       <ProductPageShell>
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>

@@ -202,33 +202,6 @@ export function currencyRate(currency: string): number {
  * (STANDALONE_APPS ниже). Документ с обоснованием:
  * Desktop/АЕВИОН/06-Витрина-цены-SEO/2026-09-15-ЦЕНОВАЯ-ПОЛИТИКА-тариф-это-срок.md
  */
-/**
- * СТАРТОВАЯ ступень DevHub — дешёвый вход между «бесплатно» и $200/мес.
- *
- * Зачем. Замер 28.09.2026: у DevHub между бесплатным и двумястами долларами
- * пусто, а это главный магнит плана на 100 000 пользователей. Человек, готовый
- * заплатить «сколько-нибудь», сейчас уходит: ему нечего купить.
- *
- * 🔴 ЦЕНУ КОД НЕ ВЫБИРАЕТ. Она ждёт слова основателя (диапазон обсуждался
- * 9–19 $) и живёт в ОДНОМ значении — переменной среды DEVHUB_STARTER_USD.
- * Пока значение не задано, ступень не существует нигде: её нет ни в витрине,
- * ни в списке продаваемого, ни в кассе. Это «ещё нет», а не поломка, и именно
- * поэтому выкатка кода ничего не меняет сама по себе.
- *
- * Включение = два действия: задать цену и завести ОДНУ строку в кабинете
- * кассы с именем из STOREFRONT_NAME_TO_REFERENCE.
- */
-export const DEVHUB_STARTER_REFERENCE = "app_devhub_starter";
-export const DEVHUB_STARTER_MONTHS = 1;
-export const DEVHUB_STARTER_NAME = "Starter";
-
-/** Цена стартовой ступени в долларах за месяц. null = не назначена. */
-export function devhubStarterUsd(): number | null {
-  const raw = process.env.DEVHUB_STARTER_USD;
-  const n = raw === undefined || raw === null || String(raw).trim() === "" ? NaN : Number(raw);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
-
 export const TERM_TIERS = ["lite", "medium", "pro", "full", "max"] as const;
 export type TermTier = (typeof TERM_TIERS)[number];
 

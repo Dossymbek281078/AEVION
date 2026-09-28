@@ -1,4 +1,5 @@
 "use client";
+import { лимитПровайдера, когдаВернётся as срокВозврата, тренерОтветил, пометкаОВыключенномРазборе, пометкаЗапаснойМодели, общаяОчередьАнонимов } from "./coachOutage";
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, startTransition } from "react";
 
@@ -11333,7 +11334,12 @@ ${question.trim()}`;
                   if(!res.ok){const e=await res.json().catch(()=>({error:`HTTP ${res.status}`}));throw new Error(e.error||`Server ${res.status}`)}
                   const data=await res.json();
                   const reply=data.content?.filter((c:any)=>c.type==="text"||c.text).map((c:any)=>c.text||"").join("")||"(нет ответа)";
-                  sCoachChat([...newMsgs,{role:"assistant",content:reply,ts:Date.now()}]);
+                  // Тренер ответил — прежняя пометка об отказе больше не верна.
+                  тренерОтветил();
+                  // Если ответила запасная модель — говорим об этом одной строкой:
+                  // витрина обещает разбор уровня супер-GM, и молчаливая подмена
+                  // качества читается как пустое обещание.
+                  sCoachChat([...newMsgs,{role:"assistant",content:reply+пометкаЗапаснойМодели(data),ts:Date.now()}]);
                 }catch(e:any){
                   // Бэкенд недоступен/таймаут — НЕ оставляем ученика без ответа.
                   // Локальный Stockfish даёт лучший ход, оценку берём из eval-бара
@@ -11355,12 +11361,16 @@ ${question.trim()}`;
                   // и обещание скорого возврата было бы ложным (ответ провайдера 22–24.09.2026:
                   // «You have reached your specified API usage limits… regain access on 2026-10-01»).
                   const сообщениеОшибки=String(e?.message||"");
-                  const лимитИсчерпан=/usage limit|quota|credit balance|regain access/i.test(сообщениеОшибки);
-                  const датаВозврата=(сообщениеОшибки.match(/(\d{4}-\d{2}-\d{2})/)||[])[1];
-                  const когдаВернётся=(()=>{if(!датаВозврата)return "";const d=new Date(датаВозврата+"T00:00:00Z");if(isNaN(d.getTime()))return "";const м=["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];return ` — вернётся ${d.getUTCDate()} ${м[d.getUTCMonth()]}`})();
+                  // Признак лимита и срок возврата считаются в одном месте на все три точки
+                  // вызова тренера — coachOutage.ts. Здесь остаётся только текст: он богаче
+                  // соседних, потому что добавляет ход, посчитанный движком.
+                  const лимитИсчерпан=лимитПровайдера(сообщениеОшибки);
+                  const когдаВернётся=срокВозврата(сообщениеОшибки);
                   const base=лимитИсчерпан
                     ?`💬 Разбор словами сейчас выключен${когдаВернётся}. Партия, задачи и движок работают.`
-                    :(e?.name==="AbortError"?"⏱ ИИ-тренер думал слишком долго.":"⚠ ИИ-тренер сейчас недоступен.");
+                    :(общаяОчередьАнонимов(сообщениеОшибки)
+                      ?"⏳ Сейчас много желающих: тренер отвечает по очереди. Войдите в аккаунт — очередь вас не коснётся."
+                      :e?.name==="AbortError"?"⏱ ИИ-тренер думал слишком долго.":"⚠ ИИ-тренер сейчас недоступен.");
                   const ходПоРусски=bestSan?hodPoRusski(fen,uciИзSan(fen,bestSan)||""):"";
                   const tip=bestSan
                     ?`\n\n♟ Отвечаю движком (Stockfish, глубина 14): лучший ход — ${ходПоРусски||bestSan}, оценка ${evalCpStr} (с точки зрения белых).${лимитИсчерпан?"":" Спроси ещё раз через минуту для развёрнутого разбора."}`
@@ -11377,6 +11387,11 @@ ${question.trim()}`;
                   {coachChat.length>0&&<span style={{fontSize:9,color:T.dim,fontWeight:600}}>{coachChat.length} сообщ.</span>}
                   {coachChat.length>0&&<button onClick={()=>sCoachChat([])} title="Очистить историю" style={{padding:"2px 8px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:10,fontWeight:700,color:T.dim,cursor:"pointer"}}>× очистить</button>}
                 </div>
+                {(()=>{const пометка=пометкаОВыключенномРазборе();return пометка?(
+                  <div style={{fontSize:10,color:"#7c2d12",padding:"5px 8px",borderRadius:6,background:"rgba(251,146,60,0.12)",border:"1px solid #fdba74",lineHeight:1.5}}>
+                    {пометка}
+                  </div>
+                ):null})()}
                 {coachChat.length>0&&coachChat[0]?.ts&&Date.now()-coachChat[0].ts>60000&&(
                   <div style={{fontSize:10,color:"#1e40af",padding:"4px 8px",borderRadius:6,background:"rgba(30,64,175,0.08)",border:"1px solid #bfdbfe"}}>
                     📂 История восстановлена из прошлой сессии

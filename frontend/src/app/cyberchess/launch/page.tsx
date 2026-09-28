@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { getApiBase } from "@/lib/apiBase";
 import { channelFrom, keepChannel } from "@/lib/products";
-import { CHESS_LAUNCH_UTC } from "../launchDate";
+import { CHESS_LAUNCH_UTC, CHESS_LAUNCH_HUMAN } from "../launchDate";
 import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 import { ccPlural } from "../ccPlural";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
@@ -26,11 +26,11 @@ import { PageTracking } from "@/components/PageTracking";
 // выкатки починки — ровно то, из-за чего страницы платформы уже теряли доверие.
 
 export const metadata: Metadata = {
-  title: "CyberChess — запуск 30 сентября",
+  title: `CyberChess — запуск ${CHESS_LAUNCH_HUMAN}`,
   description:
     "Шахматы с ИИ-коучем, полмиллиона задач и турнирами. Оставьте адрес — напишем в день запуска и пришлём условия раннего доступа.",
   openGraph: {
-    title: "CyberChess — запуск 30 сентября",
+    title: `CyberChess — запуск ${CHESS_LAUNCH_HUMAN}`,
     description:
       "ИИ-коуч, полмиллиона задач, турниры, античит. Ранний доступ по адресу почты.",
     // Контент посадочных русский, а корневой layout объявляет lang="en":
@@ -125,7 +125,7 @@ export default async function CyberChessLaunchPage({
               letterSpacing: "-0.01em",
             }}
           >
-            {left > 0 ? "Открываем 30 сентября" : "CyberChess открыт"}
+            {left > 0 ? `Открываем ${CHESS_LAUNCH_HUMAN}` : "CyberChess открыт"}
           </h1>
           <p style={{ color: MUTED, fontSize: 15.5, lineHeight: 1.6, margin: "12px 0 0" }}>
             {left > 0
@@ -155,7 +155,7 @@ export default async function CyberChessLaunchPage({
           // верен там, где даты нет, но здесь он звучал расплывчатее самого
           // обещания, и человек уходил с меньшей уверенностью, чем пришёл.
           doneText={left > 0
-            ? "Готово — адрес записан. Напишем 30 сентября, в день открытия."
+            ? `Готово — адрес записан. Напишем ${CHESS_LAUNCH_HUMAN}, в день открытия.`
             : "Готово — адрес записан. Напишем о ближайших турнирах."}
         />
 

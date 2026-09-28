@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import { отказТренера, тренерОтветил, пометкаЗапаснойМодели } from "./coachOutage";
 import { Chess, type Square } from "chess.js";
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -519,15 +520,16 @@ export default function AiCoach({
         const reply =
           data.content?.filter((c: any) => c.type === "text" || c.text)
             .map((c: any) => c.text || "").join("") || "No response";
-        sMsgs([...newMsgs, { role: "assistant", content: reply }]);
+        тренерОтветил(); // ответ пришёл — пометка об отказе снимается
+        sMsgs([...newMsgs, { role: "assistant", content: reply + пометкаЗапаснойМодели(data) }]);
       } catch (e: any) {
-        if (e?.name === "AbortError") {
-          sError("ИИ-тренер не ответил за 30 секунд. Сервер может быть перегружен — попробуй ещё раз через минуту, или используй Stockfish-анализ ниже.");
-        } else if (/fetch|network|Failed to fetch/i.test(e?.message || "")) {
-          sError("Не удалось связаться с ИИ-тренером. Проверь соединение или используй Stockfish-разбор (он работает локально).");
-        } else {
-          sError(e?.message || "Connection failed");
-        }
+        // Три ветки отказа свелись к одной: текст живёт в coachOutage.ts, чтобы
+        // три места вызова тренера (окно после партии, эта панель, «А что если»)
+        // не расходились молча. Лимит поставщика раньше проваливался в else, и
+        // человек на русской странице читал «You have reached your specified API
+        // usage limits…» — это выглядит поломкой сайта, хотя сломан счёт у
+        // поставщика модели, а партия и движок работают.
+        sError(отказТренера(e?.message || "", e?.name));
       } finally {
         sLoading(false);
         sEngineThinking(false);

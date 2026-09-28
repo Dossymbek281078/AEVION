@@ -38,9 +38,9 @@ export function exampleText(ex: DevhubExample, lang: string): DevhubExampleText 
 export const DEVHUB_EXAMPLES: DevhubExample[] = [
   {
     title: "Кофейня у моста",
-    prompt: "лендинг кофейни с меню и формой брони",
-    en: { title: "Coffee shop by the bridge", prompt: "a coffee shop landing page with a menu and a booking form" },
-    kk: { title: "Көпір жанындағы кофехана", prompt: "мәзірі мен брондау формасы бар кофехана лендингі" },
+    prompt: "лендинг кофейни с меню, часами работы и картой проезда",
+    en: { title: "Coffee shop by the bridge", prompt: "a coffee shop landing page with a menu, opening hours and a map" },
+    kk: { title: "Көпір жанындағы кофехана", prompt: "мәзірі, жұмыс уақыты және картасы бар кофехана лендингі" },
     url: "https://465693ea.aevion-project-7760cf.pages.dev",
   },
   {

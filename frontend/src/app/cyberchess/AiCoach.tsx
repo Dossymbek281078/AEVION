@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { отказТренера, тренерОтветил } from "./coachOutage";
+import { отказТренера, тренерОтветил, пометкаЗапаснойМодели } from "./coachOutage";
 import { Chess, type Square } from "chess.js";
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -521,7 +521,7 @@ export default function AiCoach({
           data.content?.filter((c: any) => c.type === "text" || c.text)
             .map((c: any) => c.text || "").join("") || "No response";
         тренерОтветил(); // ответ пришёл — пометка об отказе снимается
-        sMsgs([...newMsgs, { role: "assistant", content: reply }]);
+        sMsgs([...newMsgs, { role: "assistant", content: reply + пометкаЗапаснойМодели(data) }]);
       } catch (e: any) {
         // Три ветки отказа свелись к одной: текст живёт в coachOutage.ts, чтобы
         // три места вызова тренера (окно после партии, эта панель, «А что если»)

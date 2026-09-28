@@ -1,5 +1,5 @@
 "use client";
-import { лимитПровайдера, когдаВернётся as срокВозврата, тренерОтветил, пометкаОВыключенномРазборе } from "./coachOutage";
+import { лимитПровайдера, когдаВернётся as срокВозврата, тренерОтветил, пометкаОВыключенномРазборе, пометкаЗапаснойМодели } from "./coachOutage";
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, startTransition } from "react";
 
@@ -11330,7 +11330,10 @@ ${question.trim()}`;
                   const reply=data.content?.filter((c:any)=>c.type==="text"||c.text).map((c:any)=>c.text||"").join("")||"(нет ответа)";
                   // Тренер ответил — прежняя пометка об отказе больше не верна.
                   тренерОтветил();
-                  sCoachChat([...newMsgs,{role:"assistant",content:reply,ts:Date.now()}]);
+                  // Если ответила запасная модель — говорим об этом одной строкой:
+                  // витрина обещает разбор уровня супер-GM, и молчаливая подмена
+                  // качества читается как пустое обещание.
+                  sCoachChat([...newMsgs,{role:"assistant",content:reply+пометкаЗапаснойМодели(data),ts:Date.now()}]);
                 }catch(e:any){
                   // Бэкенд недоступен/таймаут — НЕ оставляем ученика без ответа.
                   // Локальный Stockfish даёт лучший ход, оценку берём из eval-бара

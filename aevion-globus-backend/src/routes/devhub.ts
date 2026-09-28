@@ -7485,6 +7485,42 @@ devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
     const vData = await vResp.json() as { id: string; url: string };
     const liveUrl = `https://${vData.url}`;
 
+    /*
+     * СНЯТЬ ЗАЩИТУ VERCEL С ПРОЕКТА ПОЛЬЗОВАТЕЛЯ (28.09.2026).
+     *
+     * Замер на живом проде: Next-проект выкатился, ответ был ok:true с адресом — а
+     * адрес отдавал 302 на vercel.com/sso-api, то есть приложение закрыто входом в
+     * НАШ аккаунт Vercel. Двадцать четыре проверки подряд, ни одного 200: человек
+     * своего приложения не видит. Ровно тот класс, ради которого в конвенции §10
+     * записано «deploy = uploaded + serves» — загрузка удалась, служить не служит,
+     * а снаружи выглядит успехом.
+     *
+     * Защита наследуется от настроек аккаунта, поэтому снимаем её у КАЖДОГО проекта
+     * пользователя сразу после создания выкатки, по тому slug, который сами создали.
+     * Неудачу не проглатываем: она уходит в ответ полем protectionRemoved и в Sentry,
+     * иначе «адрес просит пароль» останется загадкой и для человека, и для нас.
+     */
+    let protectionRemoved: boolean | undefined;
+    let protectionError: string | undefined;
+    try {
+      const pResp = await fetch(`https://api.vercel.com/v9/projects/${encodeURIComponent(deploySlug)}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${vercelToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ ssoProtection: null, passwordProtection: null }),
+      });
+      protectionRemoved = pResp.ok;
+      if (!pResp.ok) protectionError = `Vercel ответил ${pResp.status}`;
+    } catch (e) {
+      protectionRemoved = false;
+      protectionError = e instanceof Error ? e.message : String(e);
+    }
+    if (protectionRemoved === false) {
+      captureException(new Error(`devhub: vercel protection not removed: ${protectionError}`), {
+        route: "devhub/deploy:vercel",
+        projectId: project.id,
+      });
+    }
+
     deployment.status = "building";
     deployment.deployUrl = liveUrl;
     deployment.buildLog = `Vercel deployment ${vData.id} created`;
@@ -7514,6 +7550,8 @@ devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
     await debitQuietly(userId, "deploy");
     return res.json({
       ok: true,
+      ...(protectionRemoved !== undefined ? { protectionRemoved } : {}),
+      ...(protectionError ? { protectionError } : {}),
       deploymentId,
       vercelDeploymentId: vData.id,
       deployUrl: liveUrl,

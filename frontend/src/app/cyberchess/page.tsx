@@ -6498,7 +6498,7 @@ export default function CyberChessPage(){
         // два выкаченных варианта (64 и 152) не сдвинули низ доски ни на пиксель — 724/844
         // и 694/780. 152 = 88 (отступ пилюли) + 56 (её высота с чипом) + 8. Условие — ровно
         // то же, что у пилюли. Замеры 15.09.2026.
-        return<div style={{flex:1,minHeight:0,overflowY:"auto",marginBottom:16,display:"flex",flexDirection:"column",gap:SPACE[3],maxWidth:1180,width:"100%",marginInline:"auto"}}>
+        return<div style={{flex:1,minHeight:0,overflowY:"auto",marginBottom:16,display:"flex",flexDirection:"column",gap:lowDesktop?SPACE[1]:SPACE[3],maxWidth:1180,width:"100%",marginInline:"auto"}}>
 
           {/* ─── ДОСКА ПЕРВЫМ ДЕЛОМ ───
               Человек, открывший шахматы, доски не видел вовсе: экран начинался
@@ -6509,13 +6509,19 @@ export default function CyberChessPage(){
               Доска показывает начальную расстановку в его теме и наборе фигур,
               развёрнута по выбранному цвету, и нажатие по ней начинает партию —
               то есть она заодно самая большая и понятная кнопка на экране. */}
+          {/* Невысокий рабочий стол: доска уступает место выбору цвета и кнопке
+              «ИГРАТЬ». Замер 28.09 на 1280x768 — цвет лежал на 772, «ИГРАТЬ» на
+              820 при окне 768, оба за кромкой; страница листается всего на 50 px,
+              и колесо проносит блок мимо (с 820 сразу на -85). Прежняя починка
+              lowDesktop касалась строки под доской в ИДУЩЕЙ партии, а экран
+              настройки не трогала. Подпись на доске — там же, видимая. */}
           <SetupBoardPreview
             orientation={pCol}
             light={bT.light}
             dark={bT.dark}
             border={bT.border}
-            maxPx={isMobileLayout?340:420}
-            label="Начать партию"
+            maxPx={isMobileLayout?340:(lowDesktop?300:420)}
+            label="▶ Нажмите доску — начнём партию"
             onStart={()=>{sHotseat(false);sRivalMode(false);newG()}}
           />
 

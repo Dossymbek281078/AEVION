@@ -94,6 +94,8 @@ export default function SetupBoardPreview({
         overflow: "hidden",
         cursor: "pointer",
         background: "transparent",
+        // Точка отсчёта для видимой подписи внизу доски (см. ниже).
+        position: "relative",
         lineHeight: 0,
         boxShadow: "0 8px 28px rgba(0,0,0,0.18)",
       }}
@@ -123,6 +125,35 @@ export default function SetupBoardPreview({
           )),
         )}
       </div>
+      {/* ─── ВИДИМЫЙ ПРИЗЫВ ───
+          Доска и была кнопкой «начать партию», но знал об этом только
+          скринридер: label уходил в aria-label и title, то есть на экране
+          НИЧЕГО не подсказывало, что по доске можно щёлкнуть. Замер 28.09.2026
+          на 1280x768: доска видна целиком (206–622) и щелчок партию запускает,
+          а единственная явная кнопка «ИГРАТЬ» лежит на 820 — за кромкой окна.
+          То есть на первом экране человек видел доску, таймеры и ни одного
+          указания, что делать дальше. Для пришедшего с ролика это и есть уход.
+          Подпись сделана НАЛОЖЕНИЕМ: габариты кнопки не меняются, значит
+          прежние замеры высоты доски (и урок про «высоту 3 пикселя») в силе. */}
+      <span
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          padding: "7px 10px",
+          fontSize: 13,
+          fontWeight: 700,
+          letterSpacing: 0.2,
+          textAlign: "center",
+          color: "#fff",
+          background: "linear-gradient(to top, rgba(0,0,0,0.72), rgba(0,0,0,0))",
+          pointerEvents: "none",
+          lineHeight: 1.25,
+        }}
+      >
+        {label}
+      </span>
     </button>
   );
 }

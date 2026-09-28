@@ -18,7 +18,7 @@ import { track } from "@/lib/track";
 import { productById } from "@/lib/products";
 import { PageTracking } from "@/components/PageTracking";
 import { devhubServerError, useDevhubServerError } from "@/lib/devhubServerError";
-import { stackForIdea } from "@/lib/devhubStackChoice";
+import { stackForIdea, даннымНуженСервер } from "@/lib/devhubStackChoice";
 import { DEVHUB_EXAMPLES, exampleText } from "./examples";
 
 type Stack = "next" | "express" | "static" | "react" | "python";
@@ -527,6 +527,17 @@ export default function DevHubPage() {
               куда писать. Модуль открывается промтом, а не абзацами.
               Оговорка про Visual Edit остаётся внутри строки — её стережёт
               promptEntryStaysReachable по словарю, а не по месту в разметке. */}
+          {/* 28.09.2026. Вход создаёт static — единственный стек, который доходит до
+              живого адреса (замер: 200 за 45–88 с против 404 у react/next/express).
+              Но идее с аккаунтами, базой или оплатой статика даёт БРАУЗЕРНУЮ версию
+              на localStorage, и молчать об этом нельзя: человек ждал сервер и узнал бы
+              об отличии только на своих данных. Подпись появляется ДО генерации,
+              по тому же словарю признаков, что раньше выбирал стек. */}
+          {даннымНуженСервер(ideaPrompt) && (
+            <div style={{ fontSize: 13, color: "#fde68a", marginTop: 10, lineHeight: 1.5 }}>
+              {t("hero.needsServerNote")}
+            </div>
+          )}
           <div style={{ fontSize: 13.5, color: "#99f6e4", marginTop: 12, lineHeight: 1.5 }}>
                 {t("hero.subtitle")}
           </div>

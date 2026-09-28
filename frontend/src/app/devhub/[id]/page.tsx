@@ -10,7 +10,7 @@ import { fixDoubledScheme } from "@/lib/urls";
 import { diffLines } from "@/lib/lineDiff";
 import { shouldOfferDbHint, shouldOfferDeployHint, shouldOfferManifestHint } from "@/lib/devhubHints";
 import { buildReactPreviewSrcdoc, isClientPreviewStack } from "@/lib/reactPreview";
-import { indexCapabilities, isCapabilityBlocked, isCapabilityConfirmed, capabilityHint, type CapabilityIndex } from "@/lib/devhubCapabilities";
+import { indexCapabilities, isCapabilityBlocked, isCapabilityConfirmed, capabilityHint, каналВыкатки, type CapabilityIndex } from "@/lib/devhubCapabilities";
 import { assetSnippet, appendSnippet, type AssetKind } from "@/lib/devhubAssetSnippet";
 import { newFilePathError, renamePathError, normalizeFilePath } from "@/lib/devhubFilePaths";
 import { devhubServerError, useDevhubServerError } from "@/lib/devhubServerError";
@@ -956,7 +956,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   // Стартовые шаги — ПРИМЕР для человека, а не отладочный набор автора:
   // цельный мини-сценарий «страница + картинка к ней + приветствие голосом».
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([
-    { type: "code", prompt: "Страница кофейни: шапка с названием, меню из шести позиций с ценами, кнопка «Забронировать столик»", saveAs: "pages/index.tsx" },
+    { type: "code", prompt: "Страница кофейни: шапка с названием, меню из шести позиций с ценами, часы работы и кнопка «Позвонить»", saveAs: "pages/index.tsx" },
     { type: "image", prompt: "Уютная кофейня, тёплый свет, латте-арт, фотореалистично", saveAs: "public/hero.url.txt" },
     { type: "tts", text: "Добро пожаловать в нашу кофейню — столик уже ждёт вас", voice: "Rachel", saveAs: "public/welcome.mp3.b64" },
   ]);
@@ -2303,12 +2303,25 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     };
   }, []);
 
+  /*
+   * Главная кнопка публикует ТЕМ каналом, который работает (28.09.2026).
+   * Прежде она звала только Railway и при `not_available` выходила ДО сети —
+   * ноль запросов, состояние «черновик», никакого адреса. Выбор канала вынесен
+   * в каналВыкатки() рядом с остальными вопросами к возможностям.
+   */
   const deploy = async () => {
     if (!project) return;
-    if (isCapabilityBlocked(caps, "railway")) {
-      showToast(capabilityHint(caps, "railway", uiLang), "warning");
+    const канал = каналВыкатки(caps);
+    if (канал === "pages") return deployToPages();
+    if (канал === null) {
+      showToast(capabilityHint(caps, "pages", uiLang), "warning");
       return;
     }
+    return deployViaRailway();
+  };
+
+  const deployViaRailway = async () => {
+    if (!project) return;
     deployPollGenRef.current += 1;
     setDeploying(true);
     showToast(TL.building, "info");
@@ -3877,13 +3890,13 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           </button>
           <button
             onClick={deploy}
-            disabled={deploying}
-            title={capabilityHint(caps, "railway", uiLang)}
+            disabled={deploying || pagesDeploying}
+            title={capabilityHint(caps, каналВыкатки(caps) ?? "pages", uiLang)}
             style={{
               padding: "8px 18px", background: deploying ? "#99f6e4" : "#0d9488",
               color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
               cursor: deploying ? "not-allowed" : "pointer",
-              opacity: isCapabilityBlocked(caps, "railway") ? 0.45 : 1,
+              opacity: каналВыкатки(caps) === null ? 0.45 : 1,
             }}
           >
             {deploying ? GL.busyDeploy : "Выкатить"}

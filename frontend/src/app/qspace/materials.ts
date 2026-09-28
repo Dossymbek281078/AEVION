@@ -289,6 +289,7 @@ export function drawMaterial(m: Material, pxPerM = 256): HTMLCanvasElement {
   if (m.pattern === "solid") {
     ctx.fillStyle = m.colors[0];
     ctx.fillRect(0, 0, size, size);
+    зерно(ctx, size, 10);
     return c;
   }
 
@@ -308,6 +309,7 @@ export function drawMaterial(m: Material, pxPerM = 256): HTMLCanvasElement {
     }
     ctx.fillStyle = m.colors[0];
     ctx.fillRect(0, 0, size, size);
+    зерно(ctx, size, 6);
     ctx.strokeStyle = grout;
     ctx.lineWidth = lw;
     if (m.layout === "offset") {
@@ -346,11 +348,26 @@ export function drawMaterial(m: Material, pxPerM = 256): HTMLCanvasElement {
   for (let row = 0; row < rows; row++) {
     const off = (row % 2) * (size / 2);
     for (let i = -1; i < 3; i++) {
-      ctx.fillStyle = m.colors[(row + i + m.colors.length) % m.colors.length];
-      ctx.fillRect(i * size + off, row * rowH, size - 2, rowH - 2);
+      const база = m.colors[(row + i + m.colors.length) % m.colors.length];
+      // Доска к доске тон гуляет: в пачке ламината нет двух одинаковых, и
+      // ровный повтор одного цвета — главный признак «нарисованного» пола.
+      ctx.fillStyle = подтон(база, 0.9 + Math.random() * 0.2);
+      const x = i * size + off, y = row * rowH;
+      ctx.fillRect(x, y, size - 2, rowH - 2);
+      прожилки(ctx, x, y, size - 2, rowH - 2, m.colors[(row + 1) % m.colors.length] ?? база);
     }
   }
+  зерно(ctx, size, 8);
   return c;
+}
+
+/** Тот же цвет светлее или темнее: множитель к каналам, формат сохраняется. */
+function подтон(цвет: string, k: number): string {
+  const hex = /^#?([0-9a-f]{6})$/i.exec(цвет.trim());
+  if (!hex) return цвет;
+  const v = parseInt(hex[1], 16);
+  const ч = (сдвиг: number) => Math.max(0, Math.min(255, Math.round(((v >> сдвиг) & 255) * k)));
+  return `rgb(${ч(16)},${ч(8)},${ч(0)})`;
 }
 
 /** Ёлочка: планки 1×4 под ±45°, чередование цветов; шов — цвет затирки, если задан. */
@@ -365,4 +382,51 @@ function drawHerringbone(ctx: CanvasRenderingContext2D, size: number, colors: st
       ctx.save(); ctx.translate(x + W * Math.SQRT2, y); ctx.rotate(-Math.PI / 4); ctx.fillStyle = colors[k++ % colors.length]; ctx.fillRect(0, 0, L - 2, W - 2); ctx.restore();
     }
   }
+}
+
+/**
+ * Зерно поверхности: лёгкий шум по пикселям.
+ *
+ * Плоская заливка под любым светом читается как бумага — замер 28.09.2026,
+ * основатель назвал сцену «рисунком». Краска, бетон и керамика в жизни имеют
+ * микрорельеф, и именно он ловит свет. Сила 8–14 незаметна как «шум» и при
+ * этом убирает ощущение печати.
+ */
+export function зерно(ctx: CanvasRenderingContext2D, size: number, сила: number): void {
+  const img = ctx.getImageData(0, 0, size, size);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const n = (Math.random() - 0.5) * сила;
+    d[i] = Math.max(0, Math.min(255, d[i] + n));
+    d[i + 1] = Math.max(0, Math.min(255, d[i + 1] + n));
+    d[i + 2] = Math.max(0, Math.min(255, d[i + 2] + n));
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+/**
+ * Прожилки дерева вдоль доски. Рисуются поверх уже залитой доски, поэтому
+ * принимают её границы, а не размер всей текстуры.
+ */
+export function прожилки(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number, цвет: string,
+): void {
+  ctx.save();
+  ctx.strokeStyle = цвет;
+  ctx.globalAlpha = 0.16;
+  ctx.lineWidth = Math.max(1, h * 0.012);
+  const линий = Math.max(3, Math.round(h / 14));
+  for (let i = 0; i < линий; i++) {
+    const yy = y + 2 + Math.random() * (h - 4);
+    ctx.beginPath();
+    ctx.moveTo(x + 2, yy);
+    ctx.bezierCurveTo(
+      x + w * 0.3, yy + (Math.random() - 0.5) * h * 0.14,
+      x + w * 0.7, yy + (Math.random() - 0.5) * h * 0.14,
+      x + w - 2, yy,
+    );
+    ctx.stroke();
+  }
+  ctx.restore();
 }

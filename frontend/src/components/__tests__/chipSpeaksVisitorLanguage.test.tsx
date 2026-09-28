@@ -83,6 +83,13 @@ describe("ModulePricingChip говорит на языке посетителя"
     guest();
     const { container } = render(<ModulePricingChip moduleId="cyberchess" />);
     await waitFor(() => expect(screen.getByText("Купить")).toBeTruthy());
-    expect(visibleText(container)).toContain("от $12/мес при оплате за 12 месяцев");
+    // 28.09.2026: ожидание обновлено под коммит c46683017 («от $X» называет цену,
+    // которую МОЖНО заплатить). Этот случай мокает гостя БЕЗ ответа healthz, а по
+    // новому правилу незнание не имеет права обещать скидку: показывается цена
+    // месяца ($24), а не месячная доля годовой оплаты ($12), которой в кассе нет.
+    // Суть теста — язык посетителя — сохранена: текст обязан быть русским.
+    const текст = visibleText(container);
+    expect(текст).toContain("от $24/мес");
+    expect(текст).toMatch(/[а-яё]/i);
   });
 });

@@ -40,8 +40,13 @@ describe("сырой формат банка нормализуется", () => 
     expect(page).toContain("const pz=normalizePuzzle(PUZZLES[dailyState.idx]||PUZZLES[0]);");
     expect(page).toContain("const pz0=fPz[i]||PUZZLES[0];const pz=pz0?normalizePuzzle(pz0):pz0;");
     expect(page).toContain("const pick=normalizePuzzle(pick0);");
+    expect(page).toContain("const pz=normalizePuzzle(fPz[idx]);"); // пятый загрузчик: смена фильтра/режима (найден 24.09)
     expect(page).toContain("fen:npd.fen,sol:npd.sol,");
     expect(page).not.toMatch(/sPzCurrent\(pz\)[^\n]*\n[^\n]*const pz=fPz\[i\]\|\|PUZZLES\[0\];/);
+  });
+  it("задача не подменяется при догрузке пула", () => {
+    expect(page).toContain('if(pzCurrent&&pzAttempt==="idle"&&выборЗадачиRef.current===ключВыбора){выборЗадачиRef.current=ключВыбора;return;}');
+    expect(page).toContain('const ключВыбора=[pzFilterGoal,pzFilterMate,pzFilterPhase,pzFilterTheme,pzFilterSide,tab,pzMode,rushDuration,pzCustomSec].join("|");');
   });
   it("фильтр по стороне и подписи — по решающему и по ходам; раш — из годных задач", () => {
     expect(page).toContain('solverSide(p)!==pzFilterSide');
@@ -49,5 +54,13 @@ describe("сырой формат банка нормализуется", () => 
     expect(page).toContain("{pzCurrent.side===\"w\"?\"⚪\":\"⚫\"} {pzTitle}");
     expect(page).toContain("if(pzMode===\"rush\"){let k=0;while(k<30&&list[idx]&&!goditsyaDlyaRush(list[idx]))");
     expect(page.match(/ldPz\(rushStartIdx\(\)\)/g)?.length).toBe(2);
+  });
+});
+
+describe("фишки задачи без повторов", () => {
+  it("фаза, тема и мат-фишка дедуплицируются и не повторяют заголовок", () => {
+    expect(page).toContain('.filter((t,i,a)=>t&&a.indexOf(t)===i&&t!==pzTitle.replace(/^[⚪⚫]\\s*/,""))');
+    // старый вид (две фишки без дедупа, мат отдельной строкой) не должен вернуться
+    expect(page).not.toContain('{[fazaRu(pzCurrent.phase),temaZadachiRu(pzCurrent.theme)].filter(Boolean).map(');
   });
 });

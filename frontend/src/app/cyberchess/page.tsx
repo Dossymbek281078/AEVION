@@ -50,7 +50,8 @@ import PostGameCard from "./PostGameCard";
 import DeepAnalysisPanel from "./DeepAnalysisPanel";
 import { temaZadachiRu, fazaRu, imyaZadachiBezPovtorov } from "./puzzleLabels";
 import { productById, keepChannel } from "@/lib/products";
-import { normalizePuzzle, solverSide, imyaPoResheniyu, goditsyaDlyaRush } from "./puzzleNormalize";
+import { normalizePuzzle, solverSide, imyaPoResheniyu, goditsyaDlyaRush, hodPoRusski } from "./puzzleNormalize";
+import WaitlistCapture from "@/components/WaitlistCapture";
 import { channelNow } from "@/lib/channelNow";
 import { tochnostSohranennoy } from "./postGameSummary";
 import { RANKS, gRank } from "./rating";
@@ -1201,7 +1202,14 @@ export default function CyberChessPage(){
     measure();const id=setInterval(measure,1000);window.addEventListener("resize",measure); // раз в секунду: строки над доской появляются и исчезают (вкладка, партия), а состояние партии объявлено ниже
     return()=>{clearInterval(id);window.removeEventListener("resize",measure)};
   },[vwPx,vhPx]);
-  const desktopVReserve=Math.max(250,boardTopPx>0?boardTopPx+150:0);
+  // Под доской два ряда кнопок: «Перевернуть · Новая партия · звук» и «Сдаться · Ничья · Отменить · Подсказка».
+  // На низком десктопе (768px) они переносились в три-четыре строки и уезжали за окно — замер 23.09 на проде:
+  // «Сдаться», «Ничья», «Отменить» ВНЕ окна. Там ряды идут в одну строку с боковой прокруткой, запас 186px.
+  const lowDesktop=vwPx>=769&&vhPx<860;
+  const podDoskoyRow:React.CSSProperties=lowDesktop
+    ?{flexWrap:"nowrap",overflowX:"auto",scrollbarWidth:"none"}
+    :{flexWrap:"wrap",overflowX:"visible"};
+  const desktopVReserve=Math.max(250,boardTopPx>0?boardTopPx+(lowDesktop?186:150):0);
   const boardPx=Math.max(isMobileLayout?200:280,Math.min(boardPxRaw,vhPx-(vwPx>=769?desktopVReserve:290),vwPx-hReserve-dockReserve));
   const bw=boardPx+"px";
   // ── Ultra-wide fill: доска упирается в ВЫСОТУ (квадрат), а экраны 16:9 широкие —
@@ -1799,6 +1807,20 @@ export default function CyberChessPage(){
   // QPayNet payment-request flow for Chessy Pro/Ultimate tiers (see ./billing.ts)
   const[billingPending,sBillingPending]=useState<null|{tier:ChessyTier;tierName:string;requestId:string;token:string;payUrl:string;busy:boolean}>(null);
   const[showChessyInfo,sShowChessyInfo]=useState(false);
+  // Приём адреса на странице МОДУЛЯ (ворота запуска, п.6). До 28.09.2026 форма жила только
+  // на /cyberchess/launch: человек, который пришёл играть и не готов купить сегодня, уходил
+  // бесследно. Окно показывается ОДИН раз — после первой законченной партии, когда ценность
+  // уже получена, и всегда доступно из меню «Ещё». Метка cyberchess-app попадает в рассылку
+  // запуска: matchesModule («равна cyberchess или начинается с cyberchess-»).
+  const[showWaitlist,sShowWaitlist]=useState(false);
+  const предлагалиПодпискуRef=useRef(false);
+  useEffect(()=>{
+    if(!over||предлагалиПодпискуRef.current)return;
+    предлагалиПодпискуRef.current=true;
+    try{if(localStorage.getItem("aevion_chess_waitlist_seen")==="1")return;}catch{return;}
+    const t=setTimeout(()=>{sShowWaitlist(true);try{localStorage.setItem("aevion_chess_waitlist_seen","1")}catch{}},2200);
+    return()=>clearTimeout(t);
+  },[over]);
   const[showClockDrill,sShowClockDrill]=useState(false);
   const[showGameDna,sShowGameDna]=useState(false);
   const gameDna=useMemo<GameDNA>(()=>computeGameDNA(savedGames),[savedGames]);
@@ -5405,6 +5427,9 @@ export default function CyberChessPage(){
   // Next puzzle helper
   // «Следующая» = СЛУЧАЙНЫЙ пазл из отфильтрованного списка (как lichess/chess.com — не по порядку).
   const nextPz=useCallback(()=>{const n=Math.max(1,fPz.length);let nextIdx=Math.floor(Math.random()*n);if(n>1&&nextIdx===pzI)nextIdx=(nextIdx+1)%n;ldPz(nextIdx)},[pzI,fPz.length]);
+  // SAN → UCI: русская нотация считается одним механизмом (hodPoRusski), движок отдаёт SAN.
+  const uciИзSan=(fen:string,san:string):string|null=>{try{const c=new Chess(fen);const m=c.move(san);return m?`${m.from}${m.to}${m.promotion||""}`:null}catch{return null}};
+  const выборЗадачиRef=useRef<string>("");
   const randomPz=useCallback(()=>{if(!fPz.length)return;ldPz(Math.floor(Math.random()*fPz.length))},[fPz.length]);
   // Имя текущей задачи по её решению («Мат в 2», «Выигрыш фигуры за 3 хода»); считается один раз на задачу (по fen)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -5663,8 +5688,15 @@ export default function CyberChessPage(){
     // СЛУЧАЙНЫЙ пазл из отфильтрованного списка (рандомное распределение). Срабатывает и
     // на смену режима (pzMode в deps) — поэтому вход в Rush/Timed сразу загружает пазл (фикс:
     // раньше Rush ставил таймер, но пазл не грузился → «Rush не работает»).
+    // Пул грузится лениво: сперва маленький слайс, через 2–3 с весь банк (500 тыс.). Рост
+    // PUZZLES.length перезагружал задачу — человек начинал думать над позицией, и она
+    // подменялась (замер 24.09.2026 на проде). Пропускаем перезагрузку, когда изменился
+    // ТОЛЬКО размер пула, а выбор человека (фильтры, режим, вкладка) прежний и задача цела.
+    const ключВыбора=[pzFilterGoal,pzFilterMate,pzFilterPhase,pzFilterTheme,pzFilterSide,tab,pzMode,rushDuration,pzCustomSec].join("|");
+    if(pzCurrent&&pzAttempt==="idle"&&выборЗадачиRef.current===ключВыбора){выборЗадачиRef.current=ключВыбора;return;}
+    выборЗадачиRef.current=ключВыбора;
     const idx=Math.floor(Math.random()*fPz.length);
-    const pz=fPz[idx];
+    const pz=normalizePuzzle(fPz[idx]); // банк отдаёт сырой lichess: ход соперника применяем сами
     let g;try{g=new Chess(pz.fen)}catch{showToast("Задача повреждена, пропускаю","error");return}
     setGame(g);sBk(k=>k+1);sPzI(idx);sPzCurrent(pz);sPzAttempt("idle");
     sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);
@@ -6393,7 +6425,8 @@ export default function CyberChessPage(){
                   ...(ccAuth.user?[{ic:<span style={{fontSize:14}} aria-hidden>👤</span>,lbl:"Мой аккаунт AEVION",act:()=>{window.location.href="/account"}}]:[]),
                   {ic:<span style={{fontSize:14}} aria-hidden>◆</span>,lbl:`Рейтинг ${rat} · Chessy ${chessy.balance}`,act:()=>sShowStatsDashboard(true)},
                   {ic:<span style={{fontSize:14}} aria-hidden>☰</span>,lbl:"Все разделы",act:()=>sShowSections(true)},
-                ]:[]),
+                ] : []),
+                {ic:<span style={{fontSize:14}} aria-hidden>✉</span>,lbl:"Написать мне о запуске",act:()=>sShowWaitlist(true)},
                 {ic:<Icon.Help width={16} height={16}/>,lbl:"Горячие клавиши",act:()=>sShowHelp(true)},
                 {ic:<span style={{fontSize:15}} aria-hidden>🎵</span>,lbl:"Музыка",act:()=>sShowMusicPlayer(true)},
                 {ic:<span style={{fontSize:14}} aria-hidden>⛶</span>,lbl:"Полноэкранный режим",act:()=>{const el=document.documentElement;if(!document.fullscreenElement){el.requestFullscreen?.().catch(()=>{})}else{document.exitFullscreen?.().catch(()=>{})}}},
@@ -8433,7 +8466,7 @@ export default function CyberChessPage(){
 
           {/* Controls — under-board strip. Game-essentials only. Heatmap/Whisper/Share/History live in the
               right-sidebar Tools card to reduce visual clutter under the board. */}
-          <div style={{display:"flex",gap:8,marginTop:SPACE[2],flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:8,marginTop:SPACE[2],...podDoskoyRow}}>
             <Btn size="md" variant="secondary" icon={<Icon.Flip width={16} height={16}/>} onClick={()=>sFlip(!flip)}>Перевернуть</Btn>
             <Btn size="md" variant="primary" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>Новая партия</Btn>
             {on&&!setup&&<Btn size="md" variant={mirrorActive?"primary":"secondary"} onClick={()=>{if(mirrorActive){sMirrorActive(false);showToast("🪞 Зеркальный режим выключен","info");}else{sMirrorActive(true);showToast("🪞 Зеркальный режим — соперник играет как ты","info");}}} title="Зеркальный режим — соперник копирует твой стиль">🪞</Btn>}
@@ -8628,7 +8661,7 @@ export default function CyberChessPage(){
           </div>
           {/* Ряд «Сдаться · Ничья · Отменить · Подсказка» — только на вкладке партии: на Задачах/Коуче/Анализе
               при паузе партии он сбивал с толку (тестер 20.09.2026, 390: «Сдаться» под доской задачи). */}
-          {on&&!over&&!setup&&tab==="play"&&<div style={{display:"flex",gap:8,marginTop:SPACE[2],flexWrap:"wrap"}}>
+          {on&&!over&&!setup&&tab==="play"&&<div style={{display:"flex",gap:8,marginTop:lowDesktop?4:SPACE[2],...podDoskoyRow}}>
             <Btn size="md" variant="danger" className="cc-game-btn" onClick={()=>{if(armed!=="resign"){sArmed("resign");return;}sArmed(null);if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{const nr=новыйРейтинг(rat,lv.elo,false);sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>{armed==="resign"?"Точно сдаться? ✓":"🏳 Сдаться"}</Btn>
             <Btn size="md" variant="gold" className="cc-game-btn" onClick={()=>{if(armed!=="draw"){sArmed("draw");return;}sArmed(null);if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("ИИ отклонил ничью","error")}}>{armed==="draw"?"Предложить ничью? ✓":"½ Ничья"}</Btn>
             <Btn size="md" variant="secondary" className="cc-game-btn" icon={<Icon.Undo width={14} height={14}/>} onClick={()=>{
@@ -10410,8 +10443,11 @@ export default function CyberChessPage(){
                     fontWeight:800,border:"1px solid currentColor",opacity:0.7}}>
                     ⭐ {pzCurrent.r}
                   </span>}
-                  {[fazaRu(pzCurrent.phase),temaZadachiRu(pzCurrent.theme)].filter(Boolean).map(t=><span key={t} style={{fontSize:11,padding:"3px 9px",borderRadius:10,background:"#f3f4f6",color:T.dim,fontWeight:700}}>{t}</span>)}
-                  {pzCurrent.goal==="Mate"&&pzCurrent.mateIn&&<span style={{fontSize:11,padding:"3px 9px",borderRadius:10,background:"#fef2f2",color:"#991b1b",fontWeight:800}}>Мат в {pzCurrent.mateIn}</span>}
+                  {/* Фишки без повторов и без того, что уже сказано заголовком: у банка фаза часто равна теме
+                      («Эндшпиль · Эндшпиль · Эндшпиль» на проде 23.09), а «Мат в 1» дублировал pzTitle. */}
+                  {[fazaRu(pzCurrent.phase),temaZadachiRu(pzCurrent.theme),pzCurrent.goal==="Mate"&&pzCurrent.mateIn?`Мат в ${pzCurrent.mateIn}`:""]
+                    .filter((t,i,a)=>t&&a.indexOf(t)===i&&t!==pzTitle.replace(/^[⚪⚫]\s*/,""))
+                    .map(t=><span key={t} style={{fontSize:11,padding:"3px 9px",borderRadius:10,background:"#f3f4f6",color:T.dim,fontWeight:700}}>{t}</span>)}
                 </div>
                 {/* Result banner */}
                 {pzAttempt==="correct"&&(()=>{
@@ -10472,13 +10508,13 @@ export default function CyberChessPage(){
                   padding:"9px 14px",marginBottom:10,borderRadius:8,
                   background:"linear-gradient(135deg,#fffbeb,#fef3c7)",
                   border:"1px solid #fde68a"
-                }}>💡 Подсказка — лучший ход: <span style={{fontFamily:"monospace",background:"rgba(0,0,0,0.07)",padding:"2px 8px",borderRadius:4,fontSize:14,letterSpacing:1}}>{pzCurrent.sol[0]}</span></div>}
+                }}>💡 Подсказка — лучший ход: <span style={{fontFamily:"monospace",background:"rgba(0,0,0,0.07)",padding:"2px 8px",borderRadius:4,fontSize:14,letterSpacing:1}}>{hodPoRusski(pzCurrent.fen,pzCurrent.sol[0])}</span></div>}
                 {pzAttempt==="shown"&&<div style={{
                   fontSize:13,fontWeight:800,color:"#78350f",
                   padding:"10px 14px",marginBottom:10,borderRadius:8,
                   background:"linear-gradient(135deg,#fffbeb,#fef3c7)",
                   border:"1px solid #fde68a"
-                }}>💡 Правильный ход: <span style={{fontFamily:"monospace",background:"rgba(0,0,0,0.07)",padding:"2px 8px",borderRadius:4,fontSize:14,letterSpacing:1}}>{pzCurrent.sol[0]}</span></div>}
+                }}>💡 Правильный ход: <span style={{fontFamily:"monospace",background:"rgba(0,0,0,0.07)",padding:"2px 8px",borderRadius:4,fontSize:14,letterSpacing:1}}>{hodPoRusski(pzCurrent.fen,pzCurrent.sol[0])}</span></div>}
                 {/* Actions */}
                 <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap"}}>
                   <Btn size="md" variant="primary" onClick={nextPz} style={{flex:"1 1 auto",minWidth:120}}>▶ Следующая</Btn>
@@ -11309,10 +11345,20 @@ ${question.trim()}`;
                     const uci=await localBest();
                     if(uci){const c=new Chess(fen);const m=c.move({from:uci.slice(0,2) as Square,to:uci.slice(2,4) as Square,promotion:(uci[4] as any)||undefined});if(m)bestSan=m.san;}
                   }catch{}
-                  const base=e?.name==="AbortError"?"⏱ ИИ-тренер думал слишком долго.":"⚠ ИИ-тренер сейчас недоступен.";
+                  // Лимит провайдера — это НЕ «попробуй через минуту»: он держится до даты сброса,
+                  // и обещание скорого возврата было бы ложным (ответ провайдера 22–24.09.2026:
+                  // «You have reached your specified API usage limits… regain access on 2026-10-01»).
+                  const сообщениеОшибки=String(e?.message||"");
+                  const лимитИсчерпан=/usage limit|quota|credit balance|regain access/i.test(сообщениеОшибки);
+                  const датаВозврата=(сообщениеОшибки.match(/(\d{4}-\d{2}-\d{2})/)||[])[1];
+                  const когдаВернётся=(()=>{if(!датаВозврата)return "";const d=new Date(датаВозврата+"T00:00:00Z");if(isNaN(d.getTime()))return "";const м=["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];return ` — вернётся ${d.getUTCDate()} ${м[d.getUTCMonth()]}`})();
+                  const base=лимитИсчерпан
+                    ?`💬 Разбор словами сейчас выключен${когдаВернётся}. Партия, задачи и движок работают.`
+                    :(e?.name==="AbortError"?"⏱ ИИ-тренер думал слишком долго.":"⚠ ИИ-тренер сейчас недоступен.");
+                  const ходПоРусски=bestSan?hodPoRusski(fen,uciИзSan(fen,bestSan)||""):"";
                   const tip=bestSan
-                    ?`\n\n♟ Пока отвечаю движком (Stockfish d14): лучший ход — ${bestSan}, оценка ${evalCpStr} (с точки зрения белых). Спроси ещё раз через минуту для развёрнутого разбора.`
-                    :" Попробуй через минуту или используй кнопки 🔍 Объясни / 📋 План выше.";
+                    ?`\n\n♟ Отвечаю движком (Stockfish, глубина 14): лучший ход — ${ходПоРусски||bestSan}, оценка ${evalCpStr} (с точки зрения белых).${лимитИсчерпан?"":" Спроси ещё раз через минуту для развёрнутого разбора."}`
+                    :(лимитИсчерпан?" Нажми 🔍 Объясни или 📋 План — они считаются движком и работают.":" Попробуй через минуту или используй кнопки 🔍 Объясни / 📋 План выше.");
                   sCoachChat([...newMsgs,{role:"assistant",content:base+tip,ts:Date.now()}]);
                 }finally{
                   sCoachChatLoading(false);
@@ -13913,6 +13959,15 @@ ${question.trim()}`;
     </Modal>
 
     {/* Chessy Explainer */}
+    <Modal open={showWaitlist} onClose={()=>sShowWaitlist(false)} size="md" title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>✉ Написать вам о запуске</span>}>
+      <WaitlistCapture
+        source="cyberchess-app"
+        tone="light"
+        title="Полный запуск CyberChess — 30 сентября"
+        description="Оставьте адрес: одно письмо в день открытия и условия раннего доступа. Ничего больше."
+        buttonLabel="Написать мне"
+      />
+    </Modal>
     <Modal open={showChessyInfo} onClose={()=>sShowChessyInfo(false)} size="md" title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}><Icon.Coin width={20} height={20}/> Как работает Chessy</span>}>
       <div style={{fontSize:14,color:CC.text,lineHeight:1.55}}>
         <p style={{margin:`0 0 ${SPACE[3]}px`}}>

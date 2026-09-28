@@ -62,6 +62,7 @@ import { deployViaWrangler, warmWrangler } from "../lib/wranglerPagesDeploy";
 // переименования; правлю их, а не завожу второе имя для одного смысла.
 import { redactInfraDetails } from "../lib/safeErrorText";
 import { checkPublicUrl } from "../lib/publicUrlOnly";
+import { можноСлужитьСтатикой } from "../lib/staticServable";
 
 export const devhubRouter = Router();
 
@@ -7455,6 +7456,39 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       deployment.completedAt = now();
       try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
       return res.status(400).json({ error: "project has no files to deploy — add at least index.html" });
+    }
+
+    // 24.09.2026. Cloudflare Pages отдаёт ФАЙЛЫ КАК ЕСТЬ: проект без index.html в
+    // корне после загрузки честно существует и честно отвечает 404. Замер на проде:
+    // проект стека `next` (pages/index.jsx) опубликовался «ok: true, liveUrl: …»,
+    // а адрес отдавал 404 и через три минуты; тот же промпт на стеке `static`
+    // (index.html + style.css + script.js) ответил 200 за 20 секунд. То есть
+    // обещание «опиши — получишь живой адрес» ломалось не в генерации, а здесь,
+    // и ломалось МОЛЧА: ответ выглядел успехом (конвенция §10 «deploy = uploaded
+    // + serves» в CLAUDE.md бэкенда запрещает ровно это).
+    //
+    // Поэтому отказываем ДО загрузки и называем, что сделать: пересобрать проект
+    // статическим. Сборку Next здесь не делаем намеренно — это минуты работы
+    // контейнера на каждый запрос гостя, и решение о ней принимается отдельно.
+    const путиФайлов = files.map((f) => String((f as { path?: string }).path ?? ""));
+    if (!можноСлужитьСтатикой(путиФайлов)) {
+      deployment.status = "failed";
+      deployment.buildLog =
+        "static hosting needs index.html at the project root; " +
+        `project has ${files.length} file(s) and none of them is index.html`;
+      deployment.completedAt = now();
+      try { await dbSaveDeployment(deployment); } catch { memDeployments.set(deployment.id, deployment); }
+      return res.status(409).json({
+        error: "project is not static — nothing to serve",
+        detail:
+          "Cloudflare Pages отдаёт файлы как есть, а в корне проекта нет index.html " +
+          `(файлов: ${files.length}). Такая публикация прошла бы «успешно», но адрес отвечал бы 404.`,
+        alternative:
+          "Опишите приложение заново на стеке Static — генерация даст index.html + style.css + script.js, " +
+          "и адрес заработает сразу. Для Next нужна сборка, её мы пока не делаем на стороне AEVION.",
+        files: files.slice(0, 8).map((f) => String((f as { path?: string }).path ?? "")),
+        deploymentId: deployment.id,
+      });
     }
 
     // Stable CF Pages project name: aevion-<slug>-<id6>

@@ -173,4 +173,15 @@ describe("requireModule middleware", () => {
     const r = await run(requireModule("healthai"), { method: "GET", path: "/health", headers: {} });
     expect(r.nexted).toBe(true);
   });
+
+  // 22.09.2026: сроки lite…max сводятся к full, и 402 перечислял «full» пять раз —
+  // экран оплаты рисовал шесть плашек, текст ошибки звучал как «нужен только Full».
+  it("lists each required tier once in the 402", async () => {
+    process.env.PAYWALL_MODULES = "qlearn";
+    const r = await run(requireModule("qlearn"), { method: "GET", path: "/courses", headers: {} });
+    expect(r.status).toBe(402);
+    const tiers: string[] = r.body.requiredTiers;
+    expect(new Set(tiers).size).toBe(tiers.length);
+    expect(r.body.message).not.toMatch(/full, full/);
+  });
 });

@@ -208,7 +208,7 @@ export default function DevHubPage() {
     }
   };
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ name: "", description: "", stack: "next" as Stack });
+  const [form, setForm] = useState({ name: "", description: "", stack: "static" as Stack });
   const [error, setError] = useState<string | null>(null);
 
   const fetchProjects = useCallback(async () => {
@@ -275,7 +275,7 @@ export default function DevHubPage() {
       if (!r.ok) throw new Error(serverError(data.error, "Не удалось создать проект"));
       setProjects((ps) => [data.project, ...ps]);
       setShowModal(false);
-      setForm({ name: "", description: "", stack: "next" });
+      setForm({ name: "", description: "", stack: "static" });
     } catch (e: any) {
       setError(e.message);
     } finally {

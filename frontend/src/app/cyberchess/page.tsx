@@ -51,6 +51,7 @@ import DeepAnalysisPanel from "./DeepAnalysisPanel";
 import { temaZadachiRu, fazaRu, imyaZadachiBezPovtorov } from "./puzzleLabels";
 import { productById, keepChannel } from "@/lib/products";
 import { normalizePuzzle, solverSide, imyaPoResheniyu, goditsyaDlyaRush, hodPoRusski } from "./puzzleNormalize";
+import WaitlistCapture from "@/components/WaitlistCapture";
 import { channelNow } from "@/lib/channelNow";
 import { tochnostSohranennoy } from "./postGameSummary";
 import { RANKS, gRank } from "./rating";
@@ -1806,6 +1807,20 @@ export default function CyberChessPage(){
   // QPayNet payment-request flow for Chessy Pro/Ultimate tiers (see ./billing.ts)
   const[billingPending,sBillingPending]=useState<null|{tier:ChessyTier;tierName:string;requestId:string;token:string;payUrl:string;busy:boolean}>(null);
   const[showChessyInfo,sShowChessyInfo]=useState(false);
+  // Приём адреса на странице МОДУЛЯ (ворота запуска, п.6). До 28.09.2026 форма жила только
+  // на /cyberchess/launch: человек, который пришёл играть и не готов купить сегодня, уходил
+  // бесследно. Окно показывается ОДИН раз — после первой законченной партии, когда ценность
+  // уже получена, и всегда доступно из меню «Ещё». Метка cyberchess-app попадает в рассылку
+  // запуска: matchesModule («равна cyberchess или начинается с cyberchess-»).
+  const[showWaitlist,sShowWaitlist]=useState(false);
+  const предлагалиПодпискуRef=useRef(false);
+  useEffect(()=>{
+    if(!over||предлагалиПодпискуRef.current)return;
+    предлагалиПодпискуRef.current=true;
+    try{if(localStorage.getItem("aevion_chess_waitlist_seen")==="1")return;}catch{return;}
+    const t=setTimeout(()=>{sShowWaitlist(true);try{localStorage.setItem("aevion_chess_waitlist_seen","1")}catch{}},2200);
+    return()=>clearTimeout(t);
+  },[over]);
   const[showClockDrill,sShowClockDrill]=useState(false);
   const[showGameDna,sShowGameDna]=useState(false);
   const gameDna=useMemo<GameDNA>(()=>computeGameDNA(savedGames),[savedGames]);
@@ -6410,7 +6425,8 @@ export default function CyberChessPage(){
                   ...(ccAuth.user?[{ic:<span style={{fontSize:14}} aria-hidden>👤</span>,lbl:"Мой аккаунт AEVION",act:()=>{window.location.href="/account"}}]:[]),
                   {ic:<span style={{fontSize:14}} aria-hidden>◆</span>,lbl:`Рейтинг ${rat} · Chessy ${chessy.balance}`,act:()=>sShowStatsDashboard(true)},
                   {ic:<span style={{fontSize:14}} aria-hidden>☰</span>,lbl:"Все разделы",act:()=>sShowSections(true)},
-                ]:[]),
+                ] : []),
+                {ic:<span style={{fontSize:14}} aria-hidden>✉</span>,lbl:"Написать мне о запуске",act:()=>sShowWaitlist(true)},
                 {ic:<Icon.Help width={16} height={16}/>,lbl:"Горячие клавиши",act:()=>sShowHelp(true)},
                 {ic:<span style={{fontSize:15}} aria-hidden>🎵</span>,lbl:"Музыка",act:()=>sShowMusicPlayer(true)},
                 {ic:<span style={{fontSize:14}} aria-hidden>⛶</span>,lbl:"Полноэкранный режим",act:()=>{const el=document.documentElement;if(!document.fullscreenElement){el.requestFullscreen?.().catch(()=>{})}else{document.exitFullscreen?.().catch(()=>{})}}},
@@ -13943,6 +13959,15 @@ ${question.trim()}`;
     </Modal>
 
     {/* Chessy Explainer */}
+    <Modal open={showWaitlist} onClose={()=>sShowWaitlist(false)} size="md" title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>✉ Написать вам о запуске</span>}>
+      <WaitlistCapture
+        source="cyberchess-app"
+        tone="light"
+        title="Полный запуск CyberChess — 30 сентября"
+        description="Оставьте адрес: одно письмо в день открытия и условия раннего доступа. Ничего больше."
+        buttonLabel="Написать мне"
+      />
+    </Modal>
     <Modal open={showChessyInfo} onClose={()=>sShowChessyInfo(false)} size="md" title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}><Icon.Coin width={20} height={20}/> Как работает Chessy</span>}>
       <div style={{fontSize:14,color:CC.text,lineHeight:1.55}}>
         <p style={{margin:`0 0 ${SPACE[3]}px`}}>

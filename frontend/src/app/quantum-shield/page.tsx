@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { PipelineSteps } from "@/components/PipelineSteps";
+import { служебноеНазвание } from "@/lib/probeTitle";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { apiUrl } from "@/lib/apiBase";
@@ -207,7 +208,20 @@ export default function QuantumShieldPage() {
       const res = await fetch(apiUrl("/api/quantum-shield/records"), { headers: { ...authHeaders() } });
       if (!res.ok) throw new Error("API");
       const d = await res.json();
-      setRecords(d.items || d.records || []);
+      /*
+       * Служебные записи не показываем. Замер 28.09.2026 на моей же пробе:
+       * конвейер /api/pipeline/protect пишет сразу в несколько мест, и в
+       * Quantum Shield запись уезжает БЕЗ поля владельца — только с названием
+       * объекта. Скрытие по `ownerName = 'smoke-test'`, встроенное в витрину
+       * QRight, сюда не доходит, и проба висела на публичной витрине: 1 запись
+       * из 7. Я проверил витрину QRight, увидел ноль и счёл уборку сделанной —
+       * у одной записи столько витрин, сколько модулей её увидели.
+       *
+       * Фильтр показа, а не удаление: запись остаётся в базе и по прямой
+       * ссылке открывается.
+       */
+      const все: ShieldRecord[] = d.items || d.records || [];
+      setRecords(все.filter((r) => !служебноеНазвание(r.objectTitle)));
       setIsDemo(false);
     } catch {
       setRecords(DEMO_RECORDS);

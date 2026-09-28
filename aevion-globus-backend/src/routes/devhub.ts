@@ -64,6 +64,7 @@ import { deployViaWrangler, warmWrangler } from "../lib/wranglerPagesDeploy";
 import { redactInfraDetails } from "../lib/safeErrorText";
 import { checkPublicUrl } from "../lib/publicUrlOnly";
 import { можноСлужитьСтатикой } from "../lib/staticServable";
+import { вставитьБейдж, нуженБейдж } from "../lib/aevionBadge";
 
 export const devhubRouter = Router();
 
@@ -1071,6 +1072,19 @@ function slugify(name: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 40) || "project";
+}
+
+/**
+ * Имя проекта Cloudflare Pages. ОДНА формула на публикацию и на уборку.
+ *
+ * 28.09.2026: формула жила прямо в маршруте публикации, а уборки не было вовсе —
+ * удаление проекта оставляло опубликованный сайт жить по своему адресу навсегда.
+ * Если бы уборка завела себе вторую копию формулы, они разошлись бы молча: уборка
+ * снимала бы не тот сайт или не снимала ничего, и заметить это можно было бы
+ * только сравнив два места, то есть никогда.
+ */
+function имяPagesПроекта(project: { name: string; id: string }): string {
+  return `aevion-${slugify(project.name)}-${project.id.slice(0, 6)}`;
 }
 
 function detectLanguage(path: string): string {
@@ -2238,12 +2252,25 @@ async function planProjectWithAI(idea: string, existingFiles: Array<{ path: stri
 devhubRouter.post("/projects", dhCreateLimit(), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
-  const { name, description, stack = "next" } = req.body || {};
+  const { name, description, stack } = req.body || {};
   if (!name || typeof name !== "string") {
     return res.status(400).json({ error: "name is required" });
   }
   const validStacks = ["next", "express", "static", "react", "python"];
-  const resolvedStack = validStacks.includes(stack) ? stack : "next";
+  /*
+   * УМОЛЧАНИЕ — static, а не next (28.09.2026).
+   *
+   * Замер на живом проде в тот же день: next публиковался с ok:true и liveUrl, а
+   * адрес отдавал 404 и через 160 секунд — Cloudflare Pages отдаёт файлы как есть
+   * и ничего не собирает. То же у react (155 с) и express (163 с); static отвечал
+   * 200 за 45 с. На сайте выбор стека уже починен, а ЗДЕСЬ оставалось прежнее
+   * «next»: кто зовёт API напрямую (а это и наши собственные съёмки, и любой, кто
+   * читает документацию), по умолчанию получал стек с мёртвым адресом.
+   *
+   * Неизвестное значение тоже сводим к static, а не к next: незнание не должно
+   * приводить к публикации, которая заведомо не служится.
+   */
+  const resolvedStack = typeof stack === "string" && validStacks.includes(stack) ? stack : "static";
   const project: DevHubProject = {
     id: crypto.randomUUID(),
     userId,
@@ -2556,6 +2583,42 @@ devhubRouter.delete("/projects/:id", async (req, res) => {
     }
   }
 
+  /*
+   * Снять опубликованный сайт (28.09.2026).
+   *
+   * До сегодня удаление проекта оставляло его сайт жить на <имя>.pages.dev НАВСЕГДА:
+   * в базе проекта нет, в интерфейсе нечем управлять, а публичный адрес отвечает 200.
+   * Каждая наша проба и каждый брошенный проект гостя оставляли вечную публичную
+   * страницу — их накопилось столько, что уборку пришлось делать руками по списку.
+   *
+   * 404 от Cloudflare считаем УСПЕХОМ: цель — «сайта нет», а не «мы его удалили».
+   * Неудачу НЕ превращаем в отказ удалить проект (в отличие от сервиса Railway выше:
+   * тот стоит денег и продолжает работать). Но и не молчим: поле в ответе и запись
+   * в Sentry — иначе это был бы ровно тот молчаливый отказ, который выглядит успехом.
+   */
+  let pagesRemoved: boolean | undefined;
+  let pagesRemoveError: string | undefined;
+  if (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) {
+    const имяСайта = имяPagesПроекта(project);
+    try {
+      const r = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/pages/projects/${имяСайта}`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` } },
+      );
+      pagesRemoved = r.ok || r.status === 404;
+      if (!pagesRemoved) pagesRemoveError = `Cloudflare ответил ${r.status}`;
+    } catch (e) {
+      pagesRemoved = false;
+      pagesRemoveError = e instanceof Error ? e.message : String(e);
+    }
+    if (pagesRemoved === false) {
+      captureException(new Error(`devhub: pages project delete failed: ${pagesRemoveError}`), {
+        route: "devhub/projects:delete",
+        projectId: project.id,
+      });
+    }
+  }
+
   try {
     await dbDeleteProject(req.params.id);
   } catch (e) {
@@ -2569,6 +2632,8 @@ devhubRouter.delete("/projects/:id", async (req, res) => {
     ok: true,
     ...(databaseDropped !== undefined ? { databaseDropped } : {}),
     ...(serviceDeleted !== undefined ? { serviceDeleted } : {}),
+    ...(pagesRemoved !== undefined ? { pagesRemoved } : {}),
+    ...(pagesRemoveError ? { pagesRemoveError } : {}),
   });
 });
 
@@ -7505,8 +7570,8 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       });
     }
 
-    // Stable CF Pages project name: aevion-<slug>-<id6>
-    const pageName = `aevion-${slugify(project.name)}-${project.id.slice(0, 6)}`;
+    // Stable CF Pages project name: aevion-<slug>-<id6> — формула одна, см. имяPagesПроекта
+    const pageName = имяPagesПроекта(project);
 
     // 1. Create Pages project (ignore 8000000 = already exists)
     const createResp = await fetch(`${cfBase}/pages/projects`, {
@@ -7526,8 +7591,26 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
     // 2-3. Upload via wrangler — the only asset-upload path CF still honors.
     // The previous raw multipart flow stored the manifest but never the
     // assets: deploy reported success while every page served 500.
+    /*
+     * Бейдж «Сделано в AEVION» — петля роста (src/lib/aevionBadge.ts). Ставится
+     * ТОЛЬКО бесплатным тарифам: опубликованный сайт показывают другим людям, и
+     * без ссылки этот показ не приводит никого (замер 28.09.2026: 0 пользователей
+     * DevHub при полностью рабочей публикации). У платного бейджа нет — это ещё
+     * одна честная причина платить.
+     *
+     * Правим ТОЛЬКО копию для загрузки: файлы проекта в базе остаются как их
+     * написал человек, иначе бейдж попал бы в код, который он скачивает и правит.
+     */
+    const файлыКЗагрузке = files.map((f) => ({ path: f.path, content: f.content }));
+    if (нуженБейдж(pagesDeployCredit.tier)) {
+      for (const f of файлыКЗагрузке) {
+        const путь = String(f.path).replace(/^\.?\//, "").toLowerCase();
+        if (путь === "index.html") f.content = вставитьБейдж(String(f.content));
+      }
+    }
+
     const wranglerResult = await deployViaWrangler(
-      files.map((f) => ({ path: f.path, content: f.content })),
+      файлыКЗагрузке,
       pageName,
       { accountId, apiToken }
     );

@@ -534,6 +534,11 @@ export const CHANNELS: Record<string, string> = {
   "x-multichat": "x-multichat",
   "ads-devhub": "ads-devhub",
   "ads-multichat": "ads-multichat",
+  // Метка бейджа «Сделано в AEVION», который DevHub ставит на каждый сайт,
+  // опубликованный бесплатным тарифом (aevion-globus-backend/src/lib/aevionBadge.ts).
+  // Это петля роста: чужой показ опубликованного сайта приводит человека к нам.
+  // Без метки переход уходит в «unattributed» — и посчитать петлю нечем.
+  badge: "badge",
 };
 
 /** Нормализует ?c= в известный канал; всё неизвестное → null (метки не будет). */

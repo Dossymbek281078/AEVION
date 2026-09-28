@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
+import { учестьДействие, отказПоНорме } from "../lib/freeActionQuota";
 import { rateLimit } from "../lib/rateLimit";
 import { deliverWebhook } from "../lib/webhookDelivery";
 import { applyOgEtag, applyEtag } from "../lib/ogEtag";
@@ -1038,6 +1039,16 @@ function clampStr(v: unknown, max: number): string | null {
 }
 
 qrightRouter.post("/objects", async (req, res) => {
+  // Бесплатная норма регистраций в месяц, дальше платно. Просмотр реестра и
+  // проверка чужого объекта остаются бесплатными всегда: человек приходит
+  // убедиться, что механизм работает, и только потом регистрирует своё.
+  // Механизм спит, пока "qright_register" не назван в PAID_ACTIONS.
+  const норма = await учестьДействие(req, "qright_register");
+  if (норма.заблокировано) {
+    отказПоНорме(res, "qright", норма);
+    return;
+  }
+
   try {
     const titleIn = clampStr(req.body?.title, QRIGHT_MAX_TITLE);
     const descIn = clampStr(req.body?.description, QRIGHT_MAX_DESCRIPTION);

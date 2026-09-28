@@ -605,6 +605,107 @@ eventsRouter.get("/summary", (req, res) => {
  *
  * Ответ: { period, groupBy, windowHours, buckets: [{ bucket, total, counts: {<dim>: n} }] }
  */
+/**
+ * ПУБЛИЧНАЯ воронка по дням, без единого личного поля.
+ *
+ * ЗАЧЕМ. Задача оркестратора 28.09.2026 под цель 100 000 пользователей: ни
+ * одно окно не видит, ГДЕ отваливаются люди. Соседняя сводка /summary закрыта
+ * ADMIN_TOKEN и потому недоступна никому, кроме владельца ключа, а без ответа
+ * «сколько дошло до кассы» любое обсуждение воронки превращается в мнения.
+ *
+ * ЧТО ОТДАЁТСЯ. Только ЧИСЛА по дням: зашли -> открыли цены -> начали оплату
+ * -> заплатили. Ни адреса, ни ip, ни ua, ни идентификатора сессии в ответе нет
+ * и быть не может: они не кладутся в накопитель вовсе, а не вычищаются на
+ * выходе. Вычистка на выходе — это место, где однажды забывают поле.
+ *
+ * РОБОТЫ ИСКЛЮЧЕНЫ. Замер 20.09: 4/5 нашего трафика — не люди, и сводка,
+ * считающая их наравне, показывает воронку вчетверо шире настоящей. Отсев
+ * идёт тем же классификатором `видОтправителя`, что и в остальных ручках, —
+ * второго способа определять робота не заводим.
+ *
+ * ЧЕСТНОСТЬ ПУСТОГО. Нет файла или он не читается — отвечаем `known: false` и
+ * причиной, а не нулями: ноль читается как «людей не было», хотя настоящий
+ * ответ «мы не смотрели».
+ */
+eventsRouter.get("/funnel", (req, res) => {
+  const дней = Math.min(Math.max(queryNumber(req.query.days, 14), 1), 60);
+  const сНачала = Date.now() - дней * 24 * 60 * 60 * 1000;
+
+  if (!existsSync(EVENTS_FILE)) {
+    return res.json({ known: false, reason: "store_missing", days: дней, byDay: [] });
+  }
+  let content = "";
+  try {
+    content = readFileSync(EVENTS_FILE, "utf8");
+  } catch (e) {
+    console.error("[events/funnel] хранилище не прочитано", e);
+    return res.status(503).json({ known: false, reason: "store_unreadable", days: дней, byDay: [] });
+  }
+
+  interface Ступени { visits: number; pricing: number; checkoutStart: number; paid: number }
+  const поДням: Record<string, Ступени> = Object.create(null);
+  const людиПоДням: Record<string, Set<string>> = Object.create(null);
+  let ботов = 0;
+  let всего = 0;
+
+  for (const line of content.split(String.fromCharCode(10))) {
+    if (!line.trim()) continue;
+    let ev: AnalyticsEvent;
+    try { ev = JSON.parse(line) as AnalyticsEvent; } catch { continue; }
+    const t = Date.parse(ev.ts || "");
+    if (!Number.isFinite(t) || t < сНачала) continue;
+    всего += 1;
+    if (видОтправителя(ev.ua)) { ботов += 1; continue; }
+
+    const день = new Date(t).toISOString().slice(0, 10);
+    if (!поДням[день]) поДням[день] = { visits: 0, pricing: 0, checkoutStart: 0, paid: 0 };
+    if (!людиПоДням[день]) людиПоДням[день] = new Set<string>();
+    const ст = поДням[день];
+
+    if (ev.type === "page_view") {
+      // Уникальных людей считаем по sid, но в ОТВЕТ он не попадает: множество
+      // живёт только внутри этого запроса и наружу отдаётся его размер.
+      if (ev.sid) людиПоДням[день].add(ev.sid); else ст.visits += 1;
+      if (typeof ev.path === "string" && ev.path.includes("/pricing")) ст.pricing += 1;
+    } else if (ev.type === "checkout_start") {
+      ст.checkoutStart += 1;
+    } else if (ev.type === "checkout_success") {
+      ст.paid += 1;
+    }
+  }
+
+  const byDay = Object.keys(поДням)
+    .sort()
+    .map((д) => ({
+      day: д,
+      visits: поДням[д].visits + людиПоДням[д].size,
+      pricing: поДням[д].pricing,
+      checkoutStart: поДням[д].checkoutStart,
+      paid: поДням[д].paid,
+    }));
+
+  const итог = byDay.reduce(
+    (a, b) => ({
+      visits: a.visits + b.visits,
+      pricing: a.pricing + b.pricing,
+      checkoutStart: a.checkoutStart + b.checkoutStart,
+      paid: a.paid + b.paid,
+    }),
+    { visits: 0, pricing: 0, checkoutStart: 0, paid: 0 },
+  );
+
+  res.json({
+    known: true,
+    days: дней,
+    // Доля роботов печатается рядом: без неё «мало людей» читается как провал
+    // продукта, тогда как это может быть просто состав трафика.
+    eventsSeen: всего,
+    botsExcluded: ботов,
+    total: итог,
+    byDay,
+  });
+});
+
 eventsRouter.get("/aggregate", (req, res) => {
   const required = process.env.ADMIN_TOKEN?.trim();
   if (required) {

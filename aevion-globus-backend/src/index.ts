@@ -39,6 +39,7 @@ import { pipelineRouter } from "./routes/pipeline";
 import { bureauRouter } from "./routes/bureau";
 import { coachRouter } from "./routes/coach";
 import { pricingRouter } from "./routes/pricing";
+import { publicStatsRouter } from "./routes/publicStats";
 import { checkoutRouter } from "./routes/checkout";
 import { provisioningRouter } from "./routes/provisioning";
 import { lemonSqueezyWebhookRouter } from "./routes/lemonSqueezyWebhook";
@@ -1278,6 +1279,9 @@ app.use("/api/healthai", healthaiRouter);
 // Pricing / GTM
 // ==========================
 app.use("/api/pricing", pricingRouter);
+// Публичный счётчик зарегистрированных: цель 100 000 к 31.12.2026 измеряется
+// ИМ, а не пересказом. Личных данных не отдаёт, наши пробы считает отдельно.
+app.use("/api/stats", publicStatsRouter);
 app.use("/api/pricing/checkout", checkoutRouter);
 // Выдача доступа после оплаты. 19.08.2026 монтирование пропало при слиянии:
 // чужой index.ts взяли целиком, а этой строки в нём не было. Поймал сторож

@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import {
   demoPlan,
@@ -306,14 +307,14 @@ export default function QSpaceClient() {
     gFinish: THREE.Group;
     gDecor: THREE.Group;
     gWalls: THREE.Group;
-    wallMat: THREE.MeshLambertMaterial;
-    bearingMat: THREE.MeshLambertMaterial;
-    floorMat: THREE.MeshLambertMaterial;
+    wallMat: THREE.MeshStandardMaterial;
+    bearingMat: THREE.MeshStandardMaterial;
+    floorMat: THREE.MeshStandardMaterial;
     floorMesh: THREE.Mesh | null;
     /** пол каждой комнаты своим материалом — поверх общего пола, только в чистовом слое */
-    roomFloors: Map<number, { mesh: THREE.Mesh; mat: THREE.MeshLambertMaterial; w: number; h: number }>;
+    roomFloors: Map<number, { mesh: THREE.Mesh; mat: THREE.MeshStandardMaterial; w: number; h: number }>;
     /** материал стен, обращённых в комнату: у стены две стороны и две комнаты */
-    roomWallMats: Map<number, THREE.MeshLambertMaterial>;
+    roomWallMats: Map<number, THREE.MeshStandardMaterial>;
     raycaster: THREE.Raycaster;
     dragUid: number | null;
     uidSeq: number;
@@ -350,10 +351,28 @@ export default function QSpaceClient() {
     }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(mount.clientWidth, mount.clientHeight);
+    // Плёночная тональная компрессия и мягкие тени. Без них сцена читается как
+    // чертёж в объёме: свет линейный, пересветы белые, у предметов нет опоры.
+    // Это не украшение — человек оценивает ремонт по свету и теням, а не по
+    // геометрии, и «нарисованная» картинка не даёт решить, покупать ли отделку.
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 0.95;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     mount.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0xf5f4f1);
+
+    // Освещение СРЕДОЙ (image-based lighting): комната-студия из three даёт
+    // отражения и мягкий рассеянный свет без единого внешнего файла. Именно
+    // отражения отличают фотографию квартиры от схемы: краска, плитка и
+    // техника без них выглядят бумагой.
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    pmrem.compileEquirectangularShader();
+    const среда = pmrem.fromScene(new RoomEnvironment(), 0.04);
+    scene.environment = среда.texture;
+    scene.environmentIntensity = 0.45;
 
     const camera = new THREE.PerspectiveCamera(50, mount.clientWidth / mount.clientHeight, 0.1, 200);
     camera.position.set(10, 9, 12);
@@ -373,10 +392,27 @@ export default function QSpaceClient() {
     // он присваивает touchAction сам, и правка до него была бы затёрта.
     renderer.domElement.style.touchAction = "pan-y";
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0xd8d2c6, 0.95));
-    const sun = new THREE.DirectionalLight(0xfff4e0, 1.0);
-    sun.position.set(12, 18, 8);
+    // Небо даёт заполняющий свет, солнце — направленное с мягкой тенью.
+    // Тень настроена на масштаб квартиры (карта 2048 на коробку 40 м): без
+    // подгонки границ тень либо не попадает на план, либо рассыпается в пиксели.
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xd8d2c6, 0.25));
+    const sun = new THREE.DirectionalLight(0xfff0dd, 3.0);
+    sun.position.set(14, 20, 9);
+    sun.castShadow = true;
+    // 1024 вместо 2048: на программном рендере (у кого нет GPU) карта 2048 душит
+    // кадр до долей секунды — снимок страницы не укладывался в 30 с. Разницы в
+    // мягкой тени на квартире не видно, а слабые машины остаются в игре.
+    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.camera.near = 1;
+    sun.shadow.camera.far = 80;
+    sun.shadow.camera.left = -20;
+    sun.shadow.camera.right = 20;
+    sun.shadow.camera.top = 20;
+    sun.shadow.camera.bottom = -20;
+    sun.shadow.bias = -0.0008;
+    sun.shadow.normalBias = 0.02;
     scene.add(sun);
+    scene.add(sun.target);
 
     const gRough = new THREE.Group();
     const gFinish = new THREE.Group();
@@ -384,10 +420,10 @@ export default function QSpaceClient() {
     const gWalls = new THREE.Group();
     scene.add(gRough, gFinish, gDecor, gWalls);
 
-    const wallMat = new THREE.MeshLambertMaterial({ color: CONCRETE });
+    const wallMat = new THREE.MeshStandardMaterial({ color: CONCRETE, roughness: 0.95, metalness: 0 });
     // несущие (предположение по чертежу) — тёмные торцы и верх: сверху видно, что трогать нельзя
-    const bearingMat = new THREE.MeshLambertMaterial({ color: 0x4a4a4a });
-    const floorMat = new THREE.MeshLambertMaterial({ color: SCREED });
+    const bearingMat = new THREE.MeshStandardMaterial({ color: 0x4a4a4a, roughness: 0.9, metalness: 0 });
+    const floorMat = new THREE.MeshStandardMaterial({ color: SCREED, roughness: 0.75, metalness: 0 });
 
     three.current = {
       scene, camera, renderer, controls,
@@ -400,9 +436,25 @@ export default function QSpaceClient() {
     setСценаГотова(true);
 
     let alive = true;
+    // Тени назначаются НОВЫМ предметам, а не всей сцене каждый кадр: сцена
+    // пересобирается при каждой правке плана и при каждой постановке мебели, и
+    // ставить флаги в месте создания пришлось бы в трёх десятках мест. Обход
+    // раз в полсекунды и метка в userData — один проход на предмет за жизнь.
+    let кадр = 0;
+    const раздатьТени = () => {
+      scene.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh || m.userData.тени) return;
+        m.userData.тени = true;
+        m.castShadow = true;
+        m.receiveShadow = true;
+      });
+    };
     const loop = () => {
       if (!alive) return;
       controls.update();
+      if (кадр % 30 === 0) раздатьТени();
+      кадр++;
       renderer.render(scene, camera);
       requestAnimationFrame(loop);
     };
@@ -562,7 +614,7 @@ export default function QSpaceClient() {
       const nrm = new Float32Array(runs.length * 18);
       for (let k = 0; k < runs.length * 6; k++) nrm.set([0, 1, 0], k * 3);
       geo.setAttribute("normal", new THREE.BufferAttribute(nrm, 3));
-      const mat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+      const mat = new THREE.MeshStandardMaterial({ color: 0xffffff });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.visible = false; // включит эффект отделки, когда есть чистовой слой
       t.gWalls.add(mesh);
@@ -572,7 +624,7 @@ export default function QSpaceClient() {
     // подложка-газон вокруг, чтобы модель не висела в пустоте
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(W + 14, H + 14),
-      new THREE.MeshLambertMaterial({ color: 0xe4e1d8 }),
+      new THREE.MeshStandardMaterial({ color: 0xe4e1d8 }),
     );
     ground.rotation.x = -Math.PI / 2;
     ground.position.set(cx, -0.02, cz);
@@ -585,7 +637,7 @@ export default function QSpaceClient() {
     // стороны, отвечает разметка комнат (roomAt) по точке чуть за гранью.
     for (const m of t.roomWallMats.values()) (m as unknown as { dispose(): void }).dispose();
     t.roomWallMats.clear();
-    for (const room of roomsInfo.rooms) t.roomWallMats.set(room.index, new THREE.MeshLambertMaterial({ color: 0xffffff }));
+    for (const room of roomsInfo.rooms) t.roomWallMats.set(room.index, new THREE.MeshStandardMaterial({ color: 0xffffff }));
     const wallBox = (
       w: typeof plan.walls[number],
       from: number, to: number,
@@ -599,7 +651,7 @@ export default function QSpaceClient() {
         // витраж: прозрачная панель во всю высоту, без отделки по комнатам
         const g = new THREE.Mesh(
           new THREE.BoxGeometry(len, z1 - z0, w.thickness),
-          new THREE.MeshLambertMaterial({ color: 0xbcd8e8, transparent: true, opacity: 0.45 }),
+          new THREE.MeshPhysicalMaterial({ color: 0xdfeaf0, roughness: 0.05, metalness: 0, transmission: 0.92, thickness: 0.02, ior: 1.5, transparent: true, opacity: 0.45 }),
         );
         g.position.set((a.x + bb.x) / 2, (z0 + z1) / 2, (a.y + bb.y) / 2);
         g.rotation.y = -Math.atan2(w.y2 - w.y1, w.x2 - w.x1);
@@ -607,11 +659,11 @@ export default function QSpaceClient() {
         return;
       }
       const по = roomsBesideWall(w, from, to, roomsInfo.roomAt);
-      const мат = (r: number | null): THREE.MeshLambertMaterial => (r !== null && t.roomWallMats.get(r)) || t.wallMat;
+      const мат = (r: number | null): THREE.MeshStandardMaterial => (r !== null && t.roomWallMats.get(r)) || t.wallMat;
       // грани BoxGeometry: +x, -x, +y, -y, +z, -z; +z после поворота -atan2 смотрит по нормали (-dy, dx)
       const торец = w.bearing ? t.bearingMat : t.wallMat;
       const mats = [торец, торец, торец, торец, мат(по.plus), мат(по.minus)];
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(len, z1 - z0, w.thickness), mats as unknown as THREE.MeshLambertMaterial);
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(len, z1 - z0, w.thickness), mats as unknown as THREE.MeshStandardMaterial);
       mesh.position.set((a.x + bb.x) / 2, (z0 + z1) / 2, (a.y + bb.y) / 2);
       mesh.rotation.y = -Math.atan2(w.y2 - w.y1, w.x2 - w.x1);
       t.gWalls.add(mesh);
@@ -641,7 +693,7 @@ export default function QSpaceClient() {
       if (o.kind === "window") {
         const glass = new THREE.Mesh(
           new THREE.BoxGeometry(o.width, o.height, 0.04),
-          new THREE.MeshLambertMaterial({ color: 0xbcd8e8, transparent: true, opacity: 0.55 }),
+          new THREE.MeshPhysicalMaterial({ color: 0xdfeaf0, roughness: 0.05, metalness: 0, transmission: 0.92, thickness: 0.02, ior: 1.5, transparent: true, opacity: 0.55 }),
         );
         glass.position.set(mid.x, o.sill + o.height / 2, mid.y);
         glass.rotation.y = rotY;
@@ -649,7 +701,7 @@ export default function QSpaceClient() {
       } else {
         const door = new THREE.Mesh(
           new THREE.BoxGeometry(o.width - 0.06, o.height - 0.04, 0.05),
-          new THREE.MeshLambertMaterial({ color: 0x8b6f4e }),
+          new THREE.MeshStandardMaterial({ color: 0x8b6f4e }),
         );
         door.position.set(mid.x, (o.height - 0.04) / 2, mid.y);
         door.rotation.y = rotY + 0.5; // приоткрыта
@@ -660,7 +712,7 @@ export default function QSpaceClient() {
       const fixture = new THREE.Group();
       const base = new THREE.Mesh(
         new THREE.CylinderGeometry(0.11, 0.11, 0.05, 16),
-        new THREE.MeshLambertMaterial({ color: 0xe9e6df }),
+        new THREE.MeshStandardMaterial({ color: 0xe9e6df }),
       );
       const bulb = new THREE.Mesh(
         new THREE.SphereGeometry(0.06, 10, 10),
@@ -686,7 +738,7 @@ export default function QSpaceClient() {
       const size = p.kind === "panel" ? [0.3, 0.4, 0.12] : [0.08, 0.08, 0.05];
       const m = new THREE.Mesh(
         new THREE.BoxGeometry(size[0], size[1], size[2]),
-        new THREE.MeshLambertMaterial({ color }),
+        new THREE.MeshStandardMaterial({ color }),
       );
       m.position.set(p.x, p.z, p.y);
       t.gRough.add(m);
@@ -700,7 +752,7 @@ export default function QSpaceClient() {
         if (len < 0.01) continue;
         const m = new THREE.Mesh(
           new THREE.CylinderGeometry(r, r, len, 10),
-          new THREE.MeshLambertMaterial({ color }),
+          new THREE.MeshStandardMaterial({ color }),
         );
         m.position.copy(a.clone().add(c).multiplyScalar(0.5));
         m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), c.clone().sub(a).normalize());
@@ -808,6 +860,10 @@ export default function QSpaceClient() {
 
       const ft = textureFor(floorMatId, W, H);
       const fm = materialById(floorMatId);
+      // Блеск задаёт материал, а не глаз: керамика отражает окно, дерево даёт
+      // мягкий блик, микроцемент почти не бликует. Без этого все полы
+      // выглядят одинаковой матовой бумагой при любом свете.
+      t.floorMat.roughness = fm?.pattern === "tile" ? 0.25 : fm?.pattern === "planks" ? 0.5 : 0.85;
       if (ft && fm && fm.pattern !== "solid") {
         t.floorMat.color.set(0xffffff);
         t.floorMat.map = ft;
@@ -916,7 +972,7 @@ export default function QSpaceClient() {
       const on = g.userData.uid === selectedUid;
       g.traverse((o) => {
         const m = o as THREE.Mesh;
-        const mat = m.material as THREE.MeshLambertMaterial | undefined;
+        const mat = m.material as THREE.MeshStandardMaterial | undefined;
         if (mat && mat.emissive) mat.emissive.set(on ? 0x33502e : 0x000000);
       });
     }

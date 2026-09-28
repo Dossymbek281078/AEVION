@@ -1,12 +1,12 @@
 import { ImageResponse } from "next/og";
-import { CHESS_LAUNCH_UTC } from "../launchDate";
+import { CHESS_LAUNCH_UTC, CHESS_LAUNCH_HUMAN } from "../launchDate";
 import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
 import { fromPricePerMonth, standaloneApp } from "@/lib/termPricing";
 
 const CHESS_BASE_MONTHLY = standaloneApp("cyberchess")?.baseMonthly ?? 0;
 
 export const runtime = "edge";
-export const alt = "CyberChess — открываем 30 сентября: 500 000+ задач, Stockfish 18, ИИ-коуч";
+export const alt = `CyberChess — открываем ${CHESS_LAUNCH_HUMAN}: 500 000+ задач, Stockfish 18, ИИ-коуч`;
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -54,7 +54,7 @@ export default function CyberChessLaunchOg() {
           </div>
           <div style={{ fontSize: 78, fontWeight: 800, lineHeight: 1.05, letterSpacing: -2, display: "flex" }}>
             {daysUntilLaunch(CHESS_LAUNCH_UTC) > 0
-              ? "Открываем 30 сентября"
+              ? `Открываем ${CHESS_LAUNCH_HUMAN}`
               : "Уже открыто"}
           </div>
           <div style={{ fontSize: 30, color: MUTED, lineHeight: 1.35, maxWidth: 900, display: "flex" }}>

@@ -237,7 +237,27 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
     setPrompt((cur) => (cur.trim() ? cur : seed));
   }, [seed]);
 
-  const disabled = busy || prompt.trim().length < 5 || authed !== true;
+  // 🔴 28.09.2026: ГОСТЮ ДАЁТСЯ ДВА ЖИВЫХ ЗАПРОСА.
+  //
+  // Замер того дня живым браузером: у гостя эта кнопка была ВЫКЛЮЧЕНА, и
+  // работал только пример с записанными заранее ответами. Человек с ролика
+  // видел чужой опыт и уходил, не попробовав своего вопроса, — а цена $40 в
+  // месяц называлась раньше пользы. Теперь норму отдаёт сервер
+  // (/api/multichat-guest/allowance), считает он же по адресу и устройству;
+  // страница только СПРАШИВАЕТ и ничего не решает сама — иначе счёт можно
+  // было бы обнулить перезагрузкой.
+  const [свободно, setСвободно] = useState<number | null>(null);
+  useEffect(() => {
+    let отменено = false;
+    fetch(apiUrl("/api/multichat-guest/allowance"), { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (!отменено && j) setСвободно(Number(j.осталось ?? 0)); })
+      .catch(() => { if (!отменено) setСвободно(null); });
+    return () => { отменено = true; };
+  }, [authed]);
+
+  const гостьМожет = authed !== true && (свободно ?? 0) > 0;
+  const disabled = busy || prompt.trim().length < 5 || (authed !== true && !гостьМожет);
 
   async function ask() {
     const q = prompt.trim();
@@ -373,9 +393,11 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
         </button>
         <span style={{ fontSize: 12, color: T.textFaded }}>
           {authed === false
-            ? "Свой запрос — после входа: консилиум расходует токены. Пример открыт всем"
+            ? гостьМожет
+              ? `Бесплатно без входа: осталось ${свободно} ${свободно === 1 ? "запрос" : "запроса"}. Дальше — вход по почте.`
+              : "Бесплатные запросы на сегодня кончились — войдите по почте, и норма продолжится."
             : "3 агента · 3 вызова · ответы независимы"}
-        </span>
+          </span>
       </div>
       {error && <p style={{ fontSize: 12, color: T.bad, margin: "8px 0 0" }}>{error}</p>}
 

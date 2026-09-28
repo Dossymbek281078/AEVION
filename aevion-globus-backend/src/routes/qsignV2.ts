@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
 import rateLimit from "express-rate-limit";
 import { getPool } from "../lib/dbPool";
+import { учестьДействие, отказПоНорме } from "../lib/freeActionQuota";
 import { verifyBearerOptional, type JwtPayload } from "../lib/authJwt";
 import { ensureQSignV2Tables } from "../lib/qsignV2/ensureTables";
 import { canonicalJson, sha256Hex, CANONICALIZATION_SPEC } from "../lib/qsignV2/canonicalize";
@@ -879,6 +880,22 @@ async function findIdempotentSignature(
 qsignV2Router.post("/sign", signLimiter, async (req, res) => {
   const auth = requireAuth(req, res);
   if (!auth) return;
+
+  // Бесплатная норма подписей в месяц, дальше платно. Проверка ПЕРЕД работой:
+  // считать надо попытку подписать, а не успешную подпись, иначе норму можно
+  // обходить запросами, которые падают на разборе.
+  //
+  // Проверка чужой подписи (/verify) НАМЕРЕННО остаётся бесплатной и без
+  // счётчика: она и есть витрина доверия — человек приходит проверить чужой
+  // документ, убеждается, что это работает, и только потом подписывает свой.
+  // Закрыть её значило бы закрыть вход в воронку.
+  //
+  // Механизм спит, пока "qsign_sign" не назван в PAID_ACTIONS.
+  const норма = await учестьДействие(req, "qsign_sign");
+  if (норма.заблокировано) {
+    отказПоНорме(res, "qsign", норма);
+    return;
+  }
 
   try {
     await ensureQSignV2Tables(pool);

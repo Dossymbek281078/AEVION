@@ -664,7 +664,22 @@ router.get('/puzzle', async (_req: Request, res: Response) => {
   if (!p) return res.status(503).json({ ok: false, error: 'pool_empty' });
   return res.json({
     day,
-    poolSize: fromBank ? bankTotalCache?.total ?? null : POOL.length,
+    // 🔴 28.09.2026: ОДНО ИМЯ НА ДВЕ РАЗНЫЕ ВЕЛИЧИНЫ.
+    // Здесь под именем `poolSize` уезжал БАНК (502 584), а сосед
+    // /api/cyberchess-puzzles/meta тем же именем зовёт обслуживаемую выборку
+    // (500 000, упирается в cap). Две ручки одного продукта отвечали разными
+    // числами на одинаково названный вопрос. Читателя у поля не было ни
+    // одного (проверено по фронту, смоукам и описанию проб) — то есть это
+    // ловушка на будущее, а не живой дефект; но ровно эта путаница уже один
+    // раз довела неверное число до витрины.
+    //
+    // Теперь каждое поле называет ровно то, что измерено:
+    //   bankTotal   — сколько задач в банке (как у соседа);
+    //   poolSize    — локальный запас на случай, когда банк недоступен;
+    //   choiceTotal — из скольких выбирали СЕГОДНЯ, каким бы ни был источник.
+    bankTotal: fromBank ? bankTotalCache?.total ?? null : null,
+    poolSize: fromBank ? null : POOL.length,
+    choiceTotal: fromBank ? bankTotalCache?.total ?? null : POOL.length,
     // Источник называется ЧЕСТНО. Прежний текст отправлял читателя на
     // /api/cyberchess-puzzles/daily — ручку, которой не существует (проверено
     // 19.08: 404). Обещание, которого нет, хуже отсутствия обещания.

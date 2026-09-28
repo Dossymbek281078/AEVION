@@ -479,7 +479,17 @@ const memCheckpoints = new Map<string, DevHubCheckpoint>();
 
 // ── Credit metering ───────────────────────────────────────────────────────────
 type CapabilityKey = "video" | "image" | "tts" | "music" | "deploy" | "speech" | "translate" | "generate";
-type StudioTier = "free" | "pro" | "enterprise";
+// 28.09.2026: добавлена ступень «вошёл по почте».
+//
+// ЗАЧЕМ, замер этого дня: заявок за всё время 1, активный подписчик 1 (сам
+// основатель). Бесплатный человек пользуется студией анонимно и уходит, не
+// оставив ни следа — значит ни списка, ни второго касания, ни продажи. Ступень
+// даёт честный обмен: назови себя (вход по почте) — норма втрое больше платной
+// не становится, но перестаёт быть гостевой.
+//
+// Тариф не путать с оплатой: `registered` НЕ даёт доступа к платным
+// возможностям, он только поднимает бесплатные нормы вошедшему.
+type StudioTier = "free" | "registered" | "pro" | "enterprise";
 
 /**
  * Имя голоса → идентификатор у поставщика. ОДНА таблица на модуль.
@@ -529,6 +539,10 @@ const VOICE_IDS: Record<string, string> = {
 // speech и translate заведены 02.09.2026 вместе со своими квотами.
 const TIER_LIMITS: Record<StudioTier, Record<CapabilityKey, number>> = {
   free:       { video: 3,   image: 10,  tts: 10000,  music: 5,   deploy: 10, speech: 5,    translate: 50,   generate: 30 },
+  // Втрое к гостевой норме и НИ ОДНОЙ платной возможности сверху: это плата за
+  // знакомство, а не подарок тарифа. Числа кратны гостевым, чтобы разница
+  // читалась в интерфейсе одной фразой.
+  registered: { video: 9,   image: 30,  tts: 30000,  music: 15,  deploy: 30, speech: 15,   translate: 150,  generate: 90 },
   pro:        { video: 50,  image: 200, tts: 200000, music: 100, deploy: -1, speech: 100,  translate: 1000, generate: 1000 },
   enterprise: { video: -1,  image: -1,  tts: -1,     music: -1,  deploy: -1, speech: -1,   translate: -1,   generate: -1 },
 };
@@ -722,8 +736,24 @@ function guestIpBudgetKey(userId: string): string | null {
   const ip = requestScope.getStore()?.ip;
   return ip ? `guest-ip:${ip}` : null;
 }
+/**
+ * Ступень, по которой считается норма ЭТОГО запроса.
+ *
+ * Вошедший по почте, но не платящий, получает `registered`: нормы втрое выше
+ * гостевых и ни одной платной возможности сверху. Платные ступени не трогаем —
+ * повышать `pro` до `registered` было бы понижением.
+ *
+ * Функция экспортирована намеренно: её зовёт checkCredit, и сторож проверяет
+ * ЕЁ, а не свою копию правила. Сторож, проверяющий копию, зелен при сломанной
+ * ручке — этот класс у нас уже был.
+ */
+export function ступеньЗапроса(базовый: StudioTier, userId: string): StudioTier {
+  return базовый === "free" && !isGuestRequester(userId) ? "registered" : базовый;
+}
+
 async function checkCredit(userId: string, capability: CapabilityKey, amount = 1): Promise<CreditVerdict> {
-  const tier = await getUserTier(userId);
+  const базовый = await getUserTier(userId);
+  const tier: StudioTier = ступеньЗапроса(базовый, userId);
   const limit = TIER_LIMITS[tier][capability];
   if (limit === -1) return { allowed: true, used: 0, limit: -1, tier, usedKnown: true };
   const month = creditMonth();

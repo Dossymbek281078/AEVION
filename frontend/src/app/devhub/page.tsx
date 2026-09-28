@@ -158,7 +158,7 @@ export default function DevHubPage() {
   const serverError = useDevhubServerError();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
-  const [userTier, setUserTier] = useState<"free" | "pro" | "enterprise" | null>(null);
+  const [userTier, setUserTier] = useState<"free" | "registered" | "pro" | "enterprise" | null>(null);
   // Ручка остатка отдаёт и ЧИСЛА (`usage: {video:{used,limit}, ...}`), а витрина
   // брала из ответа только тариф. То есть модуль знал, сколько у человека
   // осталось, и не говорил — предел человек узнавал, упершись в него.

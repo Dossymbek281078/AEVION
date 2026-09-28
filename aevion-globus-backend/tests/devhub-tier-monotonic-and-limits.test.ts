@@ -28,17 +28,33 @@ describe("тарифы DevHub монотонны: платящий не полу
   const INF = Number.MAX_SAFE_INTEGER;
   const norm = (n: number) => (n === -1 ? INF : n);
 
-  test("free ≤ pro ≤ enterprise по каждой возможности", () => {
+  // 28.09.2026: между free и pro встала ступень `registered` — «вошёл по
+  // почте». Её ОБЯЗАТЕЛЬНО включать в цепочку: ступень вне проверки и есть
+  // слепая зона, ради которой этот сторож писался.
+  test("free ≤ registered ≤ pro ≤ enterprise по каждой возможности", () => {
     const free = tierRow("free");
+    const reg = tierRow("registered");
     const pro = tierRow("pro");
     const ent = tierRow("enterprise");
     expect(Object.keys(free).length, "TIER_LIMITS.free не разобрался").toBeGreaterThan(3);
+    expect(Object.keys(reg).length, "TIER_LIMITS.registered не разобрался").toBeGreaterThan(3);
     for (const cap of Object.keys(free)) {
-      expect(norm(pro[cap]), `pro.${cap} меньше free.${cap} — покупка снижает лимит`)
+      expect(norm(reg[cap]), `registered.${cap} меньше free.${cap} — вход снижает норму`)
         .toBeGreaterThanOrEqual(norm(free[cap]));
+      expect(norm(pro[cap]), `pro.${cap} меньше registered.${cap} — покупка снижает лимит`)
+        .toBeGreaterThanOrEqual(norm(reg[cap]));
       expect(norm(ent[cap]), `enterprise.${cap} меньше pro.${cap}`)
         .toBeGreaterThanOrEqual(norm(pro[cap]));
     }
+  });
+
+  // Ступень обязана ДАВАТЬ больше гостевой, иначе обмен «назови себя» пустой.
+  test("вошедшему по почте норма строго выше гостевой", () => {
+    const free = tierRow("free");
+    const reg = tierRow("registered");
+    const больше = Object.keys(free).filter((cap) => norm(reg[cap]) > norm(free[cap]));
+    expect(больше.length, "ни одна норма не выросла — обмен «войдите» ничего не даёт")
+      .toBe(Object.keys(free).length);
   });
 });
 

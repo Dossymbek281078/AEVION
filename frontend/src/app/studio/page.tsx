@@ -29,7 +29,8 @@ interface CapabilitiesData {
 // the bar has to say which it is rather than drawing a confident empty gauge.
 import type { CapUsage } from "./usageTypes";
 interface CreditsData {
-  tier: "free" | "pro" | "enterprise";
+  // 28.09.2026: ступень «вошёл по почте» отдаёт бэкенд (TIER_LIMITS.registered).
+  tier: "free" | "registered" | "pro" | "enterprise";
   month: string;
   // Было перечисление пяти ключей. Возможности заводятся в таблице тарифов
   // бэкенда, и второй их список здесь расходился бы молча — 02.09.2026 так и
@@ -303,7 +304,24 @@ export default function StudioPage() {
                 </span>
                 <span style={{ fontSize: 11, color: "#94a3b8" }}>{credits.month}</span>
               </div>
+              {/*
+                28.09.2026. Гость (tier "free") и вошедший без оплаты (tier
+                "registered") — РАЗНЫЕ люди, и звать их одним и тем же нельзя.
+                Замер того дня: заявок за всё время 1, активный подписчик 1 —
+                то есть анонимный человек уходил, не оставив даже почты.
+                Гостю предлагаем вход: норма втрое выше, денег не просим.
+                Вошедшему — покупку, потому что следующий шаг у него только он.
+              */}
               {credits.tier === "free" && (
+                <a
+                  href="/auth"
+                  onClick={() => track({ type: "cta_click", tier: "studio-signin", source: "studio/credits-badge" })}
+                  style={{ fontSize: 12, fontWeight: 700, color: "#0d9488", textDecoration: "none", padding: "4px 12px", border: "1px solid #99f6e4", borderRadius: 20 }}
+                >
+                  Войдите по почте — норма втрое выше →
+                </a>
+              )}
+              {credits.tier === "registered" && (
                 <a
                   href="#upgrade"
                   onClick={() => track({ type: "cta_click", tier: "studio-pro", source: "studio/credits-badge" })}

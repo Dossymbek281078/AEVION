@@ -52,6 +52,7 @@ import { eventsRouter } from "./routes/events";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
 import { multichatRouter, multichatPublicRouter } from "./routes/multichat";
+import { остатокГостя, засчитатьГостю, этоГость, решениеПоГостю } from "./lib/multichatGuestPass";
 import { aevRouter } from "./routes/aev";
 import { ecosystemRouter } from "./routes/ecosystem";
 import { cyberchessRouter } from "./routes/cyberchess";
@@ -516,7 +517,32 @@ app.use("/api/mcp-demo", mcpDemoRouter);
 // Public share-link route mounted BEFORE the auth-gated multichat router so
 // /api/multichat/shared/:token bypasses requireAuth.
 app.use("/api/multichat", multichatPublicRouter);
-app.use("/api/multichat", requireModule("multichat-engine"), multichatRouter);
+// 🔴 28.09.2026: ГОСТЮ — ДВА ЖИВЫХ ЗАПРОСА БЕЗ ВХОДА.
+//
+// Замер того дня живым браузером: у гостя кнопка «Спросить консилиум»
+// выключена, работает только пример с записанными заранее ответами. Человек с
+// ролика видел чужой опыт и уходил, не попробовав своего вопроса, — а продаём
+// мы $40 в месяц. Цена называлась раньше, чем показана польза.
+//
+// Пропускаем МИМО платного гейта ровно две вещи и ровно два раза в сутки:
+// создание разговора и один веер по нему. Всё остальное в мультичате
+// по-прежнему за стеной. Счёт ведётся по паре «адрес + устройство»
+// (lib/multichatGuestPass), трата засчитывается в момент пропуска.
+app.use("/api/multichat", (req, res, next) => {
+  const решение = решениеПоГостю(req);
+  if (решение.пускать) {
+    if (решение.тратить) засчитатьГостю(req);
+    return multichatRouter(req, res, next);
+  }
+  return requireModule("multichat-engine")(req, res, () => multichatRouter(req, res, next));
+});
+
+// Остаток бесплатной нормы — публично, чтобы страница знала, что показать
+// гостю: кнопку или приглашение войти. Личных данных не отдаёт.
+app.get("/api/multichat-guest/allowance", (req, res) => {
+  const о = остатокГостя(req);
+  res.json({ лимит: о.лимит, использовано: о.использовано, осталось: о.осталось, гость: этоГость(req) });
+});
 
 /** OpenAPI 3.1 spec — full schemas + examples for bank-track routes,
  *  summary-only for legacy globus / qsign. See lib/openapiSpec.ts. */

@@ -11,6 +11,7 @@ import { PipelineSteps } from "@/components/PipelineSteps";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { PageTracking } from "@/components/PageTracking";
 import { apiUrl } from "@/lib/apiBase";
 import { ldWallet, svWallet, recordPlay } from "../aev/aevToken";
 
@@ -638,6 +639,9 @@ export default function QSignPage() {
 
   return (
     <main>
+      {/* Замер посещения И запоминание канала: без него метка `?c=` на этой
+          странице не доживала до кассы (разбор — в src/app/multichat-engine/page.tsx). */}
+      <PageTracking page="qsign" />
       <ProductPageShell maxWidth={1080}>
         <Wave1Nav />
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>

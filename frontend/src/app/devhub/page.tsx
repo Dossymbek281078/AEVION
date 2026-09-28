@@ -18,7 +18,9 @@ import { track } from "@/lib/track";
 import { productById } from "@/lib/products";
 import { PageTracking } from "@/components/PageTracking";
 import { devhubServerError, useDevhubServerError } from "@/lib/devhubServerError";
-import { stackForIdea, даннымНуженСервер } from "@/lib/devhubStackChoice";
+import { stackForIdea, даннымНуженСервер, доступенРежимПриложения, стекДляРежима,
+  type РежимПостройки } from "@/lib/devhubStackChoice";
+import { indexCapabilities, isCapabilityBlocked, type CapabilityIndex } from "@/lib/devhubCapabilities";
 import { DEVHUB_EXAMPLES, exampleText } from "./examples";
 
 type Stack = "next" | "express" | "static" | "react" | "python";
@@ -166,6 +168,25 @@ export default function DevHubPage() {
   const router = useRouter();
   const [showModal, setShowModal] = useState(false);
   const [ideaPrompt, setIdeaPrompt] = useState("");
+  /*
+   * Возможности сервера нужны НА ВХОДЕ, а не только в рабочем окне: от них зависит,
+   * можно ли вообще предложить человеку «приложение с базой и входом». Пока сборки
+   * нет, выбора не показываем — обещание без механизма хуже отсутствия выбора.
+   */
+  const [индексВозможностей, setИндексВозможностей] = useState<CapabilityIndex | null>(null);
+  const [режим, setРежим] = useState<РежимПостройки>("page");
+  useEffect(() => {
+    let живо = true;
+    fetch(apiUrl("/api/devhub/studio/capabilities"))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!живо || !d) return;
+        setИндексВозможностей(indexCapabilities(d.capabilities ?? d.items ?? null));
+      })
+      .catch(() => { /* молчим: без возможностей вход просто строит страницу */ });
+    return () => { живо = false; };
+  }, []);
+  const режимПриложенияДоступен = доступенРежимПриложения((id) => !isCapabilityBlocked(индексВозможностей, id));
   const [ideaStarting, setIdeaStarting] = useState(false);
   // What actually works right now, from the server. The landing used to
   // advertise every capability unconditionally while several were dead —
@@ -187,9 +208,14 @@ export default function DevHubPage() {
       // нам это мешает метить пробы префиксом probe-. Дефис, точку и подчёркивание
       // оставляем: они безопасны и в адресе Pages (slugify всё равно приводит его).
       const name = idea.replace(/[^\p{L}\p{N} ._-]/gu, "").split(/\s+/).slice(0, 5).join(" ").slice(0, 40) || "My app";
-      // Выбор стека вынесен в lib/devhubStackChoice (там сторож): на нём
-      // держится обещание «правьте кликами» с витрины.
-      const stack = stackForIdea(idea);
+      /*
+       * Выбор человека главнее догадки по тексту: если он выбрал «приложение» и
+       * сборка доступна — строим приложение. Во всех остальных случаях остаётся
+       * прежнее поведение (static), на котором держится обещание живого адреса.
+       */
+      const stack = режим === "app" && режимПриложенияДоступен
+        ? стекДляРежима("app")
+        : stackForIdea(idea);
       const r = await fetch(apiUrl("/api/devhub/projects"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -537,6 +563,30 @@ export default function DevHubPage() {
               на localStorage, и молчать об этом нельзя: человек ждал сервер и узнал бы
               об отличии только на своих данных. Подпись появляется ДО генерации,
               по тому же словарю признаков, что раньше выбирал стек. */}
+          {/* 28.09.2026. Развилка появляется ТОЛЬКО когда сборка приложения реально
+              доступна (см. доступенРежимПриложения). Пока её нет, человеку не
+              предлагают выбор, которого у нас не существует: обещание без механизма
+              дороже отсутствия выбора. Появится токен сборки — выбор возникнет сам. */}
+          {режимПриложенияДоступен && (
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginTop: 12 }}>
+              {(["page", "app"] as const).map((вариант) => (
+                <button
+                  key={вариант}
+                  type="button"
+                  onClick={() => setРежим(вариант)}
+                  style={{
+                    padding: "6px 14px", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer",
+                    border: режим === вариант ? "1px solid #14b8a6" : "1px solid rgba(255,255,255,.25)",
+                    background: режим === вариант ? "#0d9488" : "transparent",
+                    color: режим === вариант ? "#fff" : "#99f6e4",
+                  }}
+                >
+                  {t(вариант === "page" ? "hero.mode.page" : "hero.mode.app")}
+                </button>
+              ))}
+              <span style={{ fontSize: 12.5, color: "#99f6e4", lineHeight: 1.45 }}>{t("hero.mode.hint")}</span>
+            </div>
+          )}
           {даннымНуженСервер(ideaPrompt) && (
             <div style={{ fontSize: 13, color: "#fde68a", marginTop: 10, lineHeight: 1.5 }}>
               {t("hero.needsServerNote")}

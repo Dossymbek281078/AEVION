@@ -784,7 +784,97 @@ function SignalCoverageChip({ coverage, fields }: { coverage: number; fields: nu
   );
 }
 
-export function ResultView({ result, shared = false }: { result: AnalysisResult; shared?: boolean }) {
+export // Сбор адреса после разбора. До 28.09.2026 страница отдавала главную ценность —
+// разбор сделки без входа — и не брала ничего взамен: 97 разборов в базе и НИ ОДНОГО
+// адреса. Ручка та же, что у конституции (проверена на проде: пустое тело → 400
+// validation_failed). Письма она НЕ шлёт, поэтому здесь ничего не обещаем про письмо.
+function EmailCapture({ dealName }: { dealName?: string }) {
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    const trimmed = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setError("Проверьте адрес: нужен вид имя@домен.зона");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await fetch("/api-backend/api/constitution/waitlist/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: trimmed, source: "qventure-result" }),
+      });
+      const payload = (await r.json().catch(() => null)) as { storage?: string } | null;
+      // Ручка честно называет, КУДА легла запись: postgres — сохранена насовсем,
+      // всё остальное — запасное хранилище в памяти процесса, оно не переживёт
+      // перезапуск. Успехом считаем только postgres, иначе человеку не врём.
+      if (!r.ok || payload?.storage !== "postgres") {
+        throw new Error(`HTTP ${r.status}, storage=${payload?.storage ?? "нет"}`);
+      }
+      setDone(true);
+    } catch {
+      setError("Не удалось сохранить адрес. Попробуйте ещё раз через минуту.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (done) {
+    return (
+      <div style={{ ...SECTION, background: "#ecfdf5", borderColor: "#a7f3d0" }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#065f46" }}>Адрес сохранён</div>
+        <div style={{ fontSize: 12.5, color: "#047857", marginTop: 4 }}>
+          Напишем, когда добавим отрасли и обновим рубрику оценки.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ ...SECTION, background: "#eff6ff", borderColor: "#bfdbfe" }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: "#1e3a8a", marginBottom: 4 }}>
+        Оставьте адрес — напишем, когда добавим отрасли и обновим рубрику
+      </div>
+      <div style={{ fontSize: 12.5, color: "#1e40af", marginBottom: 8 }}>
+        {dealName ? `Разбор «${dealName}» останется у вас по ссылке выше.` : "Разбор останется у вас по ссылке выше."}
+        {" "}Рассылки раз в месяц, отписка в один клик.
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !busy) void submit(); }}
+          placeholder="имя@домен.зона"
+          aria-label="Адрес электронной почты"
+          style={{
+            flex: "1 1 220px", minWidth: 0, padding: "9px 11px", fontSize: 13,
+            border: "1px solid #bfdbfe", borderRadius: 8, background: "#fff",
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => void submit()}
+          disabled={busy}
+          style={{
+            padding: "9px 16px", fontSize: 13, fontWeight: 700, borderRadius: 8,
+            border: "none", cursor: busy ? "default" : "pointer",
+            background: busy ? "#93c5fd" : "#1d4ed8", color: "#fff",
+          }}
+        >
+          {busy ? "Сохраняем…" : "Оставить адрес"}
+        </button>
+      </div>
+      {error && <div style={{ fontSize: 12, color: "#b91c1c", marginTop: 6 }}>{error}</div>}
+    </div>
+  );
+}
+
+function ResultView({ result, shared = false }: { result: AnalysisResult; shared?: boolean }) {
   return (
     // translate="no" переехал сюда С МОДУЛЯ ЦЕЛИКОМ (06.09.2026). Причина
     // прежнего решения законна ИМЕННО ДЛЯ РЕЗУЛЬТАТА: мемо и факторы
@@ -917,6 +1007,8 @@ export function ResultView({ result, shared = false }: { result: AnalysisResult;
           {result.result.assumptions.map((a, i) => <li key={i} style={{ marginBottom: 3 }}>{a}</li>)}
         </ul>
       </div>
+      <EmailCapture dealName={result.result.company?.name} />
+
     </div>
   );
 }

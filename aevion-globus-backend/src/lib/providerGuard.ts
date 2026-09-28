@@ -1,3 +1,5 @@
+import { kycProviderMode, paymentProviderMode } from "../routes/bureau";
+
 /**
  * Один общий сторож на оба выбора провайдера (KYC и платежи).
  *
@@ -35,4 +37,34 @@ export function providerStatus(envVar: string): { id: string; isStub: boolean; c
   const raw = process.env[envVar];
   const id = (raw || "stub").toLowerCase();
   return { id, isStub: id === "stub", configured: Boolean(raw) };
+}
+
+
+/**
+ * Состояние провайдеров БЮРО для health — одной функцией, чтобы ручка и её
+ * сторож смотрели на ОДИН И ТОТ ЖЕ код.
+ *
+ * 🔴 23.09.2026. Раньше health звал providerStatus() напрямую, а он считает
+ * «настроено» = «переменная непустая». На проде BUREAU_PAYMENT_PROVIDER равен
+ * "paddle" — интеграции, выведенной 22.07.2026 (маршруты удалены, вебхук
+ * отдаёт 410). Общее health отвечало configured: true, ручка бюро на те же
+ * данные — "misconfigured". Права была ручка бюро.
+ *
+ * Источник правды один — режимы из routes/bureau: там же лежат списки живых
+ * провайдеров. Копия списков здесь разошлась бы при первой правке.
+ */
+export function bureauProvidersHealth(): {
+  kyc: ReturnType<typeof providerStatus> & { mode: string; configured: boolean };
+  payment: ReturnType<typeof providerStatus> & { mode: string; configured: boolean };
+} {
+  const kyc = kycProviderMode();
+  const payment = paymentProviderMode();
+  return {
+    kyc: { ...providerStatus("BUREAU_KYC_PROVIDER"), mode: kyc, configured: kyc === "live" },
+    payment: {
+      ...providerStatus("BUREAU_PAYMENT_PROVIDER"),
+      mode: payment,
+      configured: payment === "live",
+    },
+  };
 }

@@ -477,7 +477,8 @@ export function getEntitlements(req: Request): {
   const modules: ModuleEntitlement[] = MODULES_PRICING.map((m) => ({
     module: m.id,
     requiredTiers: tiersForModule(m.id).map(normalizeTier)
-      .filter((t) => TIER_RANK[t] > TIER_RANK.free),
+      .filter((t) => TIER_RANK[t] > TIER_RANK.free)
+      .filter((t, i, all) => all.indexOf(t) === i),
     entitled: isModuleEntitled(plan, m.id),
     enforced: paywallEnabledFor(m.id),
   }));

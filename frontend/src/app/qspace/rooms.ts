@@ -194,18 +194,33 @@ function markWall(
   const len = Math.hypot(x2 - x1, y2 - y1);
   if (len < 1e-6) return;
   const steps = Math.ceil(len / (CELL / 2));
-  const r = Math.max(1, Math.ceil(thickness / 2 / CELL));
+  // Полоса ПО ТОЛЩИНЕ стены, а не квадратная кисть. Кисть радиусом
+  // ceil(t/2/CELL) клеток в обе стороны всегда шире стены (у 0.20 м выходило
+  // 0.25 м), и лишнее съедалось из площади помещения с обеих сторон: замер
+  // 23.09 — комната 5 x 4 со стеной 0.20 давала 17.8 м² вместо 18.24, то есть
+  // смета занижала площадь на 2.3 %. Клетка считается стеной, если её ЦЕНТР
+  // лежит внутри полосы: это несмещённая оценка площади по сетке.
+  // Нижняя граница CELL * 0.6 не про красоту, а про герметичность: заливка
+  // ходит по четырём соседям, и полосы в одну клетку ей уже не перейти.
+  const halfW = Math.max(thickness / 2, CELL * 0.6);
+  const R = Math.ceil(halfW / CELL) + 1;
+  const ux = (x2 - x1) / len, uy = (y2 - y1) / len;
   for (let s = 0; s <= steps; s++) {
     const t = s / steps;
     const px = x1 + (x2 - x1) * t;
     const py = y1 + (y2 - y1) * t;
     const cx = Math.round((px - minX) / CELL);
     const cy = Math.round((py - minY) / CELL);
-    for (let dy = -r; dy <= r; dy++) {
-      for (let dx = -r; dx <= r; dx++) {
+    for (let dy = -R; dy <= R; dy++) {
+      for (let dx = -R; dx <= R; dx++) {
         const gx = cx + dx;
         const gy = cy + dy;
         if (gx < 0 || gy < 0 || gx >= w || gy >= h) continue;
+        // расстояние от центра клетки до ОТРЕЗКА (не до точки шага)
+        const wx = minX + gx * CELL, wy = minY + gy * CELL;
+        const proj = Math.min(Math.max((wx - x1) * ux + (wy - y1) * uy, 0), len);
+        const ddx = wx - (x1 + ux * proj), ddy = wy - (y1 + uy * proj);
+        if (Math.hypot(ddx, ddy) >= halfW - 1e-9) continue;
         // глухая стена старше стекла: там, где витраж примыкает к стене, периметр считается
         if (grid[gy * w + gx] !== 1) grid[gy * w + gx] = value;
       }
@@ -253,6 +268,14 @@ export function findRooms(plan: Plan, opts: { minAreaM2?: number } = {}): RoomsR
   for (const w of plan.walls) {
     markWall(grid, gw, gh, ox, oy, w.x1, w.y1, w.x2, w.y2, w.thickness, w.glass ? 2 : 1);
   }
+  // Вторая сетка — ТОЛЬКО стены с ИЗМЕРЕННОЙ по чертежу толщиной. По ней видно,
+  // что отделяет линия, которой толщину назначили мы сами: настоящее помещение
+  // или шкаф. Пустая (все стены принятые) — правило ниже само не сработает.
+  const твёрдая = new Uint8Array(gw * gh);
+  for (const w of plan.walls) {
+    if (w.assumed) continue;
+    markWall(твёрдая, gw, gh, ox, oy, w.x1, w.y1, w.x2, w.y2, w.thickness, w.glass ? 2 : 1);
+  }
 
   // Двери-разрывы закрываются ТОЛЬКО в сетке: сам план не меняется.
   // Разрывы считаются по КЛЕТКАМ, а не по парам отрезков: один проём находят
@@ -283,6 +306,66 @@ export function findRooms(plan: Plan, opts: { minAreaM2?: number } = {}): RoomsR
           if (закрытия[j] === 1 && !seen[j]) { seen[j] = 1; st.push(j); }
         }
       }
+    }
+  }
+
+  // --- мебель не режет помещение ------------------------------------------
+  // В дизайн-проекте шкафы, ванны и кухонные блоки начерчены такими же тонкими
+  // линиями, как перегородки, и заливка честно делит по ним комнату на куски:
+  // замер 23.09 на альбоме — 32.39 м² по экспликации против 25.2 у самого
+  // большого куска плюс осколки 4.1, 1.9, 1.2, 1.1.
+  //
+  // Признак структурный, а не пороговый: берём область, ограниченную ТОЛЬКО
+  // измеренными по чертежу стенами, и смотрим, на что её режут линии с принятой
+  // толщиной. Если внутри ровно один крупный кусок, а остальные мелкие — это
+  // предметы внутри одного помещения, и линии убираются из сетки площадей.
+  // Если крупных кусков два и больше — это настоящая перегородка, и она
+  // остаётся. Когда измеренных стен нет вовсе, область одна на весь лист и
+  // упирается в край — правило молчит само, гадать не на чем.
+  for (let i = 0; i < закрытия.length; i++) if (закрытия[i] !== 0) твёрдая[i] = 1;
+  {
+    const КРУПНЫЙ = 5; // м²: помещение меньше пяти метров — это санузел, а не кусок
+    const меткаA = new Int32Array(gw * gh).fill(-1);
+    const площадьA: number[] = [];
+    const залить = (сетка: Uint8Array, метка: Int32Array, start: number, id: number) => {
+      const st = [start]; метка[start] = id;
+      let n = 0; let край = false; const клетки: number[] = [];
+      while (st.length) {
+        const i = st.pop() as number;
+        n++; клетки.push(i);
+        const x = i % gw, y = (i - x) / gw;
+        if (x === 0 || y === 0 || x === gw - 1 || y === gh - 1) край = true;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= gw || ny >= gh) continue;
+          const j = ny * gw + nx;
+          if (сетка[j] !== 0 || метка[j] !== -1) continue;
+          метка[j] = id; st.push(j);
+        }
+      }
+      return { n, край, клетки };
+    };
+    for (let s = 0; s < grid.length; s++) {
+      if (grid[s] !== 0 || меткаA[s] !== -1) continue;
+      const r = залить(grid, меткаA, s, площадьA.length);
+      площадьA.push(r.край ? -1 : r.n * CELL * CELL); // улица — отрицательная, в счёт не идёт
+    }
+    const меткаB = new Int32Array(gw * gh).fill(-1);
+    let idB = 0;
+    for (let s = 0; s < твёрдая.length; s++) {
+      if (твёрдая[s] !== 0 || меткаB[s] !== -1) continue;
+      const обл = залить(твёрдая, меткаB, s, idB++);
+      if (обл.край) continue; // это улица
+      const куски = new Set<number>();
+      let мягких = 0;
+      for (const i of обл.клетки) {
+        if (grid[i] === 0) { if (меткаA[i] >= 0) куски.add(меткаA[i]); } else мягких++;
+      }
+      if (мягких === 0) continue; // резать нечем — правило ни при чём
+      const площади = [...куски].map((k) => площадьA[k]);
+      if (площади.some((a) => a < 0)) continue; // кусок сообщается с улицей — не трогаем
+      if (площади.filter((a) => a >= КРУПНЫЙ).length !== 1) continue; // настоящая перегородка
+      for (const i of обл.клетки) if (grid[i] !== 0) grid[i] = 0; // предметы убраны из сетки площадей
     }
   }
 

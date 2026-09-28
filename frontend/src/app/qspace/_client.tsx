@@ -336,6 +336,8 @@ export default function QSpaceClient() {
   // каждую постановку предмета. Через ref он видит список настоящим, а не
   // таким, каким тот был при первой отрисовке.
   const placedRef = useRef<PlacedItem[]>([]);
+  /** какое помещение показывать следующим при взгляде изнутри */
+  const комнатаВзгляда = useRef(0);
 
   // ---- начальная сцена ----------------------------------------------------
   useEffect(() => {
@@ -708,6 +710,7 @@ export default function QSpaceClient() {
         t.gFinish.add(door);
       }
     }
+    const светильники: Array<{ x: number; z: number }> = [];
     for (const l of generateLights(plan, roomsInfo)) {
       const fixture = new THREE.Group();
       const base = new THREE.Mesh(
@@ -722,6 +725,24 @@ export default function QSpaceClient() {
       fixture.add(base, bulb);
       fixture.position.set(l.x, planWallHeight(plan) - 0.03, l.y);
       t.gFinish.add(fixture);
+      светильники.push({ x: l.x, z: l.y });
+    }
+    // Светильники теперь СВЕТЯТ, а не нарисованы. До этого комнаты освещало
+    // только солнце снаружи, и внутри квартиры не было ни одного источника —
+    // отсюда ощущение разреза макета, а не жилья. Тёплый свет (2700 K) и
+    // затухание по расстоянию: от лампы до пола 2.5 м, дальше стены.
+    //
+    // Число источников ограничено СОЗНАТЕЛЬНО: WebGL считает каждый источник
+    // для каждого пикселя, а в трёшке их бывает под три десятка. Берём до
+    // четырёх, равномерно по списку — комнаты освещены, кадр не проседает.
+    // Замер 28.09: на программном рендере восемь источников вместе с мягкой
+    // тенью роняли кадр так, что снимок страницы не укладывался в две минуты.
+    const шаг = Math.max(1, Math.ceil(светильники.length / 4));
+    for (let i = 0; i < светильники.length; i += шаг) {
+      const точка = светильники[i];
+      const лампа = new THREE.PointLight(0xffd9a0, 6, 7, 2);
+      лампа.position.set(точка.x, planWallHeight(plan) - 0.12, точка.z);
+      t.gFinish.add(лампа);
     }
 
     // --- черновой слой: электрика и трубы ----------------------------------
@@ -1470,6 +1491,30 @@ export default function QSpaceClient() {
     return () => clearTimeout(id);
   }, [snapshot, pendingRestore, скажи]);
 
+  /**
+   * Камера встаёт ВНУТРЬ помещения на высоте глаз (1.6 м) и смотрит в его
+   * середину. Каждое нажатие переходит к следующему помещению, от самого
+   * большого к меньшим.
+   *
+   * Отступ от центра считается от площади: в комнате 20 м² это около 2.7 м,
+   * в санузле 3 м² — около метра. Иначе в маленьком помещении камера
+   * оказывалась бы за стеной и показывала соседнюю комнату.
+   */
+  const взглядИзнутри = useCallback(() => {
+    const t = three.current;
+    const r = roomsRef.current;
+    if (!t || !r || r.rooms.length === 0) return;
+    const список = [...r.rooms].sort((a, b) => b.area - a.area);
+    const i = комнатаВзгляда.current % список.length;
+    комнатаВзгляда.current = i + 1;
+    const комната = список[i];
+    const отступ = Math.max(0.9, Math.min(3.2, Math.sqrt(комната.area) / 2));
+    t.camera.position.set(комната.cx - отступ, 1.6, комната.cy + отступ);
+    t.controls.target.set(комната.cx, 1.2, комната.cy);
+    t.controls.update();
+    скажи(`Помещение ${комната.index}, ${комната.area.toFixed(1)} м² — вид с высоты глаз. Нажмите ещё раз, чтобы перейти к следующему.`);
+  }, [скажи]);
+
   const screenshot = useCallback(() => {
     const t = three.current; if (!t) return;
     t.renderer.render(t.scene, t.camera);
@@ -1720,6 +1765,16 @@ export default function QSpaceClient() {
           title={webglOk ? undefined : "Кадр рисуется из 3D-сцены, а её у этого браузера нет"}
         >
           Скачать кадр (PNG)
+        </button>
+        {/* Взгляд изнутри — не украшение, а способ ПОНЯТЬ квартиру: сверху
+            видно планировку, а как оно выглядит, когда стоишь в комнате, не
+            видно никак. Кнопка обходит помещения по кругу, начиная с самого
+            большого. */}
+        <button
+          type="button" style={S.btn} onClick={взглядИзнутри} disabled={!webglOk}
+          title="Встать внутри помещения на высоте глаз и посмотреть по сторонам"
+        >
+          Взгляд изнутри
         </button>
         <button type="button" style={S.btn} onClick={saveProjectFile}>
           Сохранить проект (файл)

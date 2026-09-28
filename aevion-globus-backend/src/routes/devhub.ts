@@ -45,7 +45,7 @@ function dhCostlyLimit(keyPrefix: string) {
 }
 import { getPool } from "../lib/dbPool";
 import { ensureDevHubTables, isDevHubDbReady, getDevHubDbError } from "../lib/ensureDevHubTables";
-import { callProvider, streamProviderResilient, getProviders, type ChatImage, type ChatMessage } from "../services/qcoreai/providers";
+import { callProvider, streamProviderResilient, getProviders, isProviderOutOfService, type ChatImage, type ChatMessage } from "../services/qcoreai/providers";
 import { extractJsonObject, salvageCompleteArrayObjects } from "../services/qcoreai/jsonReply";
 import { smartComplete } from "../services/qcoreai/smartComplete";
 import { insertSmartRun, aggregateSmartRunsForUser } from "../lib/smartRunLog";
@@ -351,6 +351,31 @@ devhubRouter.get("/health", (_req, res) => {
     // Лечится не переименованием (его читают снаружи и в смоуке), а тем,
     // что рядом сказано, о чём именно этот ответ.
     covers: "storage",
+    /*
+     * ПРИЗНАК «МАГНИТ ЖИВ» (28.09.2026).
+     *
+     * Ручка честно ограничивала себя хранилищем, и это правильно — но DevHub
+     * держится на ГЕНЕРАЦИИ: без неё человек не получит ни кода, ни адреса, а
+     * `status: "ok"` продолжал бы отвечать зелёным. Соседнее окно поймало
+     * настоящий случай этого класса: лимит аккаунта Anthropic исчерпан до
+     * 01.10, и модуль, который звал бы его напрямую, молча перестал бы
+     * работать при зелёном health.
+     *
+     * Спрашиваем ТОТ ЖЕ реестр, которым пользуется маршрут генерации
+     * (getProviders + отметки простоя), а не свою копию правила: прибор,
+     * меряющий другой канал, — наш давний класс ошибок. Сетевых вызовов здесь
+     * нет намеренно: health зовут часто, и он не должен стоить денег.
+     */
+    generation: (() => {
+      const настроенные = getProviders().filter((p) => p.configured && p.id !== "stub");
+      const живые = настроенные.filter((p) => !isProviderOutOfService(p.id));
+      return {
+        ready: живые.length > 0,
+        providers: живые.length,
+        configured: настроенные.length,
+        next: живые[0]?.id ?? null,
+      };
+    })(),
     providersCheckedAt: "/api/devhub/providers/health",
     module: "devhub",
     db: dbReady ? "postgres" : "in-memory",

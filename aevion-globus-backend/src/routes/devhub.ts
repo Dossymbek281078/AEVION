@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { pgIntId } from "../lib/queryNumber";
+import { usageToTokens } from "../lib/usageTokens";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { resolvePlanFromPayload, isModuleEntitled } from "../lib/planGate";
@@ -1852,15 +1853,18 @@ function меткаГенерации(userId: string): string {
 function учтиГенерацию(
   providerId: string,
   model: string,
-  usage: { prompt_tokens?: number; completion_tokens?: number } | undefined,
+  // `unknown`, а не форма OpenAI: у каждого провайдера своё имя одного и того
+  // же числа, и разбирать их — работа usageToTokens, а не этой функции.
+  usage: unknown,
   moduleTag: string,
   userId: string | null,
 ): void {
   try {
+    const { tokensIn, tokensOut } = usageToTokens(usage);
     insertSmartRun({
       module: moduleTag,
       resolved: "single",
-      costUsd: costUsd(providerId, model, usage?.prompt_tokens, usage?.completion_tokens),
+      costUsd: costUsd(providerId, model, tokensIn, tokensOut),
       savedUsd: 0, userId,
     });
   } catch {
@@ -1948,9 +1952,18 @@ async function generateCodeWithAI(
   // ответ. Формы usage здесь уже нормализованы к prompt/completion.
   let токВх = 0;
   let токИсх = 0;
-  const учтиВЗапуск = (u?: { prompt_tokens?: number; completion_tokens?: number }) => {
-    токВх += Number(u?.prompt_tokens) || 0;
-    токИсх += Number(u?.completion_tokens) || 0;
+  const учтиВЗапуск = (u?: unknown) => {
+    // Читать ТОЛЬКО prompt_tokens/completion_tokens нельзя: это имена OpenAI.
+    // Наш провайдер по умолчанию — gemini, и он присылает usageMetadata с
+    // promptTokenCount/candidatesTokenCount. Замер 28.09 на живом проде:
+    // сквозная генерация гостем вернула runTokens {in:0,out:0} и
+    // runCostUsd 0 — то есть бесплатный магнит тратил деньги невидимо, и на
+    // вопрос «во что обойдётся тысяча генераций в день» ответа не было.
+    // Общий разбор живёт в lib/usageTokens (там же назван этот же класс:
+    // multichat вообще не считал токены и показывал нули).
+    const { tokensIn, tokensOut } = usageToTokens(u);
+    токВх += tokensIn;
+    токИсх += tokensOut;
   };
   let result;
   try {
@@ -2196,12 +2209,13 @@ async function planProjectWithAI(idea: string, existingFiles: Array<{ path: stri
         insertSmartRun({
           module: moduleTag,
           resolved: "single",
-          costUsd: costUsd(
-            provider.id,
-            provider.defaultModel,
-            result.usage?.prompt_tokens,
-            result.usage?.completion_tokens,
-          ),
+          // Разбор usage — только через общий дом: прямые имена OpenAI дают
+          // у gemini (наш провайдер по умолчанию) тихий ноль, см. сторож
+          // devhubCountsGeminiTokens.guard.test.ts.
+          costUsd: (() => {
+            const { tokensIn, tokensOut } = usageToTokens(result.usage);
+            return costUsd(provider.id, provider.defaultModel, tokensIn, tokensOut);
+          })(),
           savedUsd: 0,
         });
       } catch { /* учёт не должен ронять ответ, ради которого его зовут */ }

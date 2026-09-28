@@ -14,6 +14,7 @@ import cors from "cors";
 
 import { qrightRouter } from "./routes/qright";
 import { qsignRouter } from "./routes/qsign";
+import { qspacePhotorealRouter } from "./routes/qspacePhotoreal";
 import { qsignV2Router } from "./routes/qsignV2";
 import { startWebhookWorker } from "./lib/qsignV2/webhooks";
 import { startOtsUpgradeWorker } from "./lib/opentimestamps/upgradeWorker";
@@ -1262,6 +1263,7 @@ app.use("/api/puzzles", puzzlesRouter);
 // QSign — v1 (legacy) + v2 (RFC 8785, persisted, multi-algo)
 // ==========================
 app.use("/api/qsign/v2", qsignV2Router);
+app.use("/api/qspace/photoreal", qspacePhotorealRouter);
 app.use("/api/qsign", qsignRouter);
 
 // ==========================

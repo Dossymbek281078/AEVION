@@ -23,6 +23,7 @@ import {
   planWallHeight,
   type Plan,
 } from "./planModel";
+import { apiUrl } from "@/lib/apiBase";
 import { parseDxf } from "./dxf";
 import { estimateCsv, estimatePlan } from "./estimate";
 import { planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
@@ -338,6 +339,10 @@ export default function QSpaceClient() {
   const placedRef = useRef<PlacedItem[]>([]);
   /** какое помещение показывать следующим при взгляде изнутри */
   const комнатаВзгляда = useRef(0);
+  /** фотореалистичный вид: состояние, ссылка на готовый снимок и подпись */
+  const [фото, setФото] = useState<{ состояние: "нет" | "идёт" | "готово" | "отказ"; url: string | null; текст: string }>({ состояние: "нет", url: null, текст: "" });
+  /** доступен ли канал: страница спрашивает сервер, а не догадывается */
+  const [фотоДоступен, setФотоДоступен] = useState<boolean | null>(null);
 
   // ---- начальная сцена ----------------------------------------------------
   useEffect(() => {
@@ -1515,6 +1520,67 @@ export default function QSpaceClient() {
     скажи(`Помещение ${комната.index}, ${комната.area.toFixed(1)} м² — вид с высоты глаз. Нажмите ещё раз, чтобы перейти к следующему.`);
   }, [скажи]);
 
+  /**
+   * Фотореалистичный вид: кадр нашей сцены уходит на сервер, тот отдаёт его
+   * генеративному сервису и возвращает снимок готового ремонта.
+   *
+   * Ключ доступа живёт ТОЛЬКО на сервере: страница отправляет картинку и
+   * спрашивает готовность у нас же. Канал сначала спрашивается о себе
+   * (`/healthz`) — кнопка, за которой ничего нет, отпугивает сильнее, чем
+   * честная надпись «пока выключено».
+   */
+  const фотореализм = useCallback(async () => {
+    const t = three.current;
+    if (!t) return;
+    setФото({ состояние: "идёт", url: null, текст: "Готовлю кадр…" });
+    try {
+      t.renderer.render(t.scene, t.camera);
+      const dataUrl = t.renderer.domElement.toDataURL("image/png");
+      const старт = await fetch(apiUrl("/api/qspace/photoreal"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ imageBase64: dataUrl, aspectRatio: "3:2" }),
+      });
+      const начало = await старт.json().catch(() => null);
+      if (!старт.ok || !начало?.requestId) {
+        setФото({
+          состояние: "отказ",
+          url: null,
+          текст: начало?.message ?? `Не получилось начать: сервер ответил ${старт.status}.`,
+        });
+        return;
+      }
+      setФото({ состояние: "идёт", url: null, текст: "Рисую фотографию по вашей планировке…" });
+      // Опрос: сервис рисует полминуты-минуту. Предел попыток нужен, чтобы
+      // страница не опрашивала вечно, если запрос где-то потерялся.
+      for (let попытка = 0; попытка < 40; попытка++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const ответ = await fetch(apiUrl(`/api/qspace/photoreal/status/${начало.requestId}`));
+        const с = await ответ.json().catch(() => null);
+        if (с?.imageUrl) {
+          setФото({ состояние: "готово", url: String(с.imageUrl), текст: "Фотореалистичный вид готов." });
+          return;
+        }
+        if (с?.status === "failed") {
+          setФото({ состояние: "отказ", url: null, текст: "Сервис не смог нарисовать этот кадр. Поверните вид и попробуйте снова." });
+          return;
+        }
+      }
+      setФото({ состояние: "отказ", url: null, текст: "Сервис не ответил за две минуты. Попробуйте ещё раз." });
+    } catch {
+      setФото({ состояние: "отказ", url: null, текст: "Не удалось связаться с сервером." });
+    }
+  }, []);
+
+  useEffect(() => {
+    let жив = true;
+    fetch(apiUrl("/api/qspace/photoreal/healthz"))
+      .then((r) => r.json())
+      .then((j) => { if (жив) setФотоДоступен(Boolean(j?.configured)); })
+      .catch(() => { if (жив) setФотоДоступен(false); });
+    return () => { жив = false; };
+  }, []);
+
   const screenshot = useCallback(() => {
     const t = three.current; if (!t) return;
     t.renderer.render(t.scene, t.camera);
@@ -1776,6 +1842,17 @@ export default function QSpaceClient() {
         >
           Взгляд изнутри
         </button>
+        {/* Кнопка появляется, только если канал ЖИВ. Кнопка, за которой ничего
+            нет, хуже её отсутствия: человек жмёт и уходит. */}
+        {фотоДоступен === true && (
+          <button
+            type="button" style={S.btn} onClick={фотореализм}
+            disabled={!webglOk || фото.состояние === "идёт"}
+            title="Превратить текущий вид в фотографию готового ремонта с той же планировкой"
+          >
+            {фото.состояние === "идёт" ? "Рисую фотографию…" : "Фотореалистичный вид"}
+          </button>
+        )}
         <button type="button" style={S.btn} onClick={saveProjectFile}>
           Сохранить проект (файл)
         </button>
@@ -1813,6 +1890,29 @@ export default function QSpaceClient() {
       </section>
 
       {restoreNote && <p style={S.restoreNote} role="status">{restoreNote}</p>}
+
+      {/* Фотореалистичный вид. Показываем И подпись, И саму картинку: снимок
+          без объяснения читается как «это ваша квартира на самом деле», а он
+          нарисован по нашей модели и может расходиться в мелочах. */}
+      {фото.состояние !== "нет" && (
+        <div style={{ marginTop: 16 }}>
+          <p role="status" style={S.restoreNote}>{фото.текст}</p>
+          {фото.url && (
+            <>
+              <img
+                src={фото.url}
+                alt="Фотореалистичный вид помещения по вашей планировке"
+                style={{ width: "100%", maxWidth: 1100, borderRadius: 8, display: "block" }}
+              />
+              <p style={{ fontSize: 13, color: "#6f6862", marginTop: 8 }}>
+                Планировка и ракурс взяты из вашей модели, отделка и обстановка дорисованы.
+                Это визуализация замысла, а не фотография вашей квартиры.{" "}
+                <a href={фото.url} target="_blank" rel="noreferrer">Открыть в полном размере</a>
+              </p>
+            </>
+          )}
+        </div>
+      )}
       {saveNote.text && (
         <p style={saveNote.failed ? S.saveFail : S.saveNote}
            role={saveNote.failed ? "alert" : "status"}>{saveNote.text}</p>

@@ -9,9 +9,9 @@
  * Числа — из @/lib/termPricing; снятые цены на плашке появиться не должны.
  */
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import ModulePricingChip from "../ModulePricingChip";
-import { PLANET_BASE_MONTHLY, STANDALONE_APPS, fromPricePerMonth } from "@/lib/termPricing";
+import { PLANET_BASE_MONTHLY, STANDALONE_APPS, TERM_TIERS, fromPricePerMonth, termPricePerMonth } from "@/lib/termPricing";
 
 vi.mock("@/lib/apiBase", () => ({ apiUrl: (p: string) => p }));
 
@@ -24,6 +24,24 @@ function guest() {
   globalThis.fetch = vi.fn(async () => ({ ok: false, json: async () => ({}) })) as unknown as typeof fetch;
 }
 
+/**
+ * Гость, которому касса ОТВЕТИЛА списком продаваемых ссылок.
+ * Нужен потому, что «от $X» обязано называть цену, которую можно заплатить:
+ * у четырёх приложений длинные сроки в кассе не заведены (28.09.2026).
+ */
+function гостьСоСписком(ссылки: string[]) {
+  globalThis.fetch = vi.fn(async (u: unknown) => {
+    const адрес = String(u);
+    if (адрес.includes("checkout/healthz")) {
+      return {
+        ok: true,
+        json: async () => ({ providers: { lemonsqueezy: { sellable: { configured: ссылки } } } }),
+      };
+    }
+    return { ok: false, json: async () => ({}) };
+  }) as unknown as typeof fetch;
+}
+
 describe("ModulePricingChip — цены лестницы сроков", () => {
   it.each(STANDALONE_APPS.map((a) => [a.moduleId, a] as const))(
     "приложение %s: своя цена «от», имя и цена всей планеты",
@@ -31,13 +49,41 @@ describe("ModulePricingChip — цены лестницы сроков", () => {
       guest();
       const { container } = render(<ModulePricingChip moduleId={moduleId} />);
       const text = container.textContent ?? "";
-      expect(text).toContain(`$${fromPricePerMonth(app.baseMonthly)}`);
+      // Список не пришёл (guest) — называем цену МЕСЯЦА, а не самого
+      // длинного срока: незнание не имеет права обещать скидку.
+      expect(text).toContain(`$${termPricePerMonth(app.baseMonthly, "lite")}`);
       expect(text).toContain(app.name);
       expect(text).toContain(`от $${fromPricePerMonth(PLANET_BASE_MONTHLY)}/мес`);
       const buy = screen.getByText("Купить").closest("a")!;
       expect(buy.getAttribute("href")).toBe(`/pricing?app=${app.slug}#apps`);
     },
   );
+
+  it("продаётся ТОЛЬКО месяц — «от» называет цену месяца, а не длинного срока", async () => {
+    const app = STANDALONE_APPS.find((a) => a.slug === "qskyway")!;
+    гостьСоСписком([`app_${app.slug}_lite`]);
+    const { container } = render(<ModulePricingChip moduleId={app.moduleId} />);
+    const месяц = termPricePerMonth(app.baseMonthly, "lite");
+    const длинный = fromPricePerMonth(app.baseMonthly);
+    // Ждать обязательно: список приходит запросом, и без ожидания проверка
+    // видит только начальное значение — то есть проходит по случайности.
+    await waitFor(() => expect(container.textContent ?? "").toContain(`$${месяц}`));
+    expect(длинный).toBeLessThan(месяц);
+    // Главное утверждение: цены, которую заплатить НЕЛЬЗЯ, на странице нет.
+    // Замер 28.09 на живом проде: /qskyway обещал «от $8» при настоящих $16.
+    expect(container.textContent ?? "").not.toContain(`$${длинный}/мес`);
+  });
+
+  it("продаются ВСЕ сроки — «от» снова называет самый длинный (контроль в обратную сторону)", async () => {
+    const app = STANDALONE_APPS.find((a) => a.slug === "qskyway")!;
+    гостьСоСписком(TERM_TIERS.map((t) => `app_${app.slug}_${t}`));
+    const { container } = render(<ModulePricingChip moduleId={app.moduleId} />);
+    // Без этого случая проверка выше проходила бы и на коде «всегда месяц»,
+    // то есть не отличала бы починку от новой неправды в другую сторону.
+    await waitFor(() =>
+      expect(container.textContent ?? "").toContain(`$${fromPricePerMonth(app.baseMonthly)}`),
+    );
+  });
 
   it("модуль вне пяти: входит в подписку, отдельной цены нет", () => {
     guest();

@@ -19,6 +19,7 @@
 
 import {
   TERM_TIERS, TERM_NAME, TERM_MONTHS, TIERS, STANDALONE_APPS, termTotal,
+  DEVHUB_STARTER_REFERENCE, DEVHUB_STARTER_MONTHS, DEVHUB_STARTER_NAME, devhubStarterUsd,
   type TierId, type TermTier,
 } from "./pricing";
 import { tierIdForReference } from "../lib/payment/billingPeriod";
@@ -48,12 +49,22 @@ export type LegacyReference =
   | "app_smeta"
   | "app_cyberchess"
   | "app_devhub";
-export type LemonSqueezyReference = TierReference | AppTermReference | LegacyReference;
+/**
+ * Стартовая ступень DevHub. Отдельным типом, а не частью лестницы: у неё свой
+ * срок (месяц), своя цена из одного значения и своя строка в кабинете.
+ * Втаскивать её в TERM_TIERS значило бы переписать лестницу ради одной позиции.
+ */
+export type StarterReference = "app_devhub_starter";
+export type LemonSqueezyReference = TierReference | AppTermReference | LegacyReference | StarterReference;
 
 /** Всё, что продаётся сейчас: пять ступеней планеты и пять ступеней каждого приложения. */
 export const TERM_REFERENCES: LemonSqueezyReference[] = [
   ...TERM_TIERS.map((t): LemonSqueezyReference => `tier_${t}`),
   ...STANDALONE_APPS.flatMap((a) => TERM_TIERS.map((t): LemonSqueezyReference => `app_${a.slug}_${t}`)),
+  // Стартовая ступень DevHub попадает сюда ТОЛЬКО после того, как основатель
+  // назначил цену. Пока цены нет, позиции не существует нигде — и список
+  // продаваемого не показывает несуществующего товара как «не настроенный».
+  ...(devhubStarterUsd() === null ? [] : [DEVHUB_STARTER_REFERENCE as LemonSqueezyReference]),
 ];
 
 /** tier_lite → LEMON_SQUEEZY_VARIANT_LITE; app_ip_bureau_max → LEMON_SQUEEZY_VARIANT_IP_BUREAU_MAX. */
@@ -251,6 +262,10 @@ export const STOREFRONT_NAME_TO_REFERENCE: Record<string, LemonSqueezyReference>
   ...STANDALONE_APPS.flatMap((a) =>
     TERM_TIERS.map((t) => [`AEVION ${a.name} — ${TERM_NAME[t]} (${TERM_MONTHS[t]} mo)`, `app_${a.slug}_${t}`]),
   ),
+  // Имя стартовой ступени присутствует ВСЕГДА, даже пока цена не назначена:
+  // основателю нужно знать, какую строку заводить в кабинете, ещё до того как
+  // он назовёт цену. Продаваемость решает TERM_REFERENCES, а не это имя.
+  [`AEVION DevHub — ${DEVHUB_STARTER_NAME} (${DEVHUB_STARTER_MONTHS} mo)`, DEVHUB_STARTER_REFERENCE],
 ]);
 
 /**
@@ -305,7 +320,11 @@ export function isAppReference(ref: LemonSqueezyReference | null): boolean {
 /** Extract the app slug from an app reference ("app_qventure" → "qventure"). */
 export function appSlugForReference(ref: LemonSqueezyReference | null): string | null {
   if (!ref?.startsWith("app_")) return null;
-  return ref.slice(4).replace(/_(lite|medium|pro|full|max)$/, "");
+  // `starter` в списке не для красоты: без него ссылка app_devhub_starter дала
+  // бы слаг "devhub_starter", вебхук записал бы подписку на несуществующий
+  // модуль, а гейт спросил бы "devhub" — заплатил и не опознан. Тот же класс,
+  // что у startup_exchange/startup-exchange: одна вещь под двумя именами.
+  return ref.slice(4).replace(/_(lite|medium|pro|full|max|starter)$/, "");
 }
 
 /**
@@ -432,6 +451,10 @@ export function priceForReference(ref: string | null): number | null {
     const legacy = tierIdForReference(ref);
     return legacy ? TIERS.find((x) => x.id === legacy)?.priceTermTotal ?? null : null;
   }
+  // Стартовая ступень DevHub: цена живёт в одном значении конфигурации, а не
+  // выводится из лестницы. Пока она не назначена — потолка нет (null), и
+  // вебхук не поднимет ложную тревогу о переплате по несуществующей позиции.
+  if (ref === DEVHUB_STARTER_REFERENCE) return devhubStarterUsd();
   const a = /^app_([a-z_]+?)_(lite|medium|pro|full|max)$/.exec(ref);
   if (!a) return null;
   const app = STANDALONE_APPS.find((x) => x.slug === a[1]);

@@ -50,7 +50,7 @@ import PostGameCard from "./PostGameCard";
 import DeepAnalysisPanel from "./DeepAnalysisPanel";
 import { temaZadachiRu, fazaRu, imyaZadachiBezPovtorov } from "./puzzleLabels";
 import { productById, keepChannel } from "@/lib/products";
-import { normalizePuzzle, solverSide, imyaPoResheniyu, goditsyaDlyaRush } from "./puzzleNormalize";
+import { normalizePuzzle, solverSide, imyaPoResheniyu, goditsyaDlyaRush, hodPoRusski } from "./puzzleNormalize";
 import { channelNow } from "@/lib/channelNow";
 import { tochnostSohranennoy } from "./postGameSummary";
 import { RANKS, gRank } from "./rating";
@@ -5412,6 +5412,9 @@ export default function CyberChessPage(){
   // Next puzzle helper
   // «Следующая» = СЛУЧАЙНЫЙ пазл из отфильтрованного списка (как lichess/chess.com — не по порядку).
   const nextPz=useCallback(()=>{const n=Math.max(1,fPz.length);let nextIdx=Math.floor(Math.random()*n);if(n>1&&nextIdx===pzI)nextIdx=(nextIdx+1)%n;ldPz(nextIdx)},[pzI,fPz.length]);
+  // SAN → UCI: русская нотация считается одним механизмом (hodPoRusski), движок отдаёт SAN.
+  const uciИзSan=(fen:string,san:string):string|null=>{try{const c=new Chess(fen);const m=c.move(san);return m?`${m.from}${m.to}${m.promotion||""}`:null}catch{return null}};
+  const выборЗадачиRef=useRef<string>("");
   const randomPz=useCallback(()=>{if(!fPz.length)return;ldPz(Math.floor(Math.random()*fPz.length))},[fPz.length]);
   // Имя текущей задачи по её решению («Мат в 2», «Выигрыш фигуры за 3 хода»); считается один раз на задачу (по fen)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -5670,8 +5673,15 @@ export default function CyberChessPage(){
     // СЛУЧАЙНЫЙ пазл из отфильтрованного списка (рандомное распределение). Срабатывает и
     // на смену режима (pzMode в deps) — поэтому вход в Rush/Timed сразу загружает пазл (фикс:
     // раньше Rush ставил таймер, но пазл не грузился → «Rush не работает»).
+    // Пул грузится лениво: сперва маленький слайс, через 2–3 с весь банк (500 тыс.). Рост
+    // PUZZLES.length перезагружал задачу — человек начинал думать над позицией, и она
+    // подменялась (замер 24.09.2026 на проде). Пропускаем перезагрузку, когда изменился
+    // ТОЛЬКО размер пула, а выбор человека (фильтры, режим, вкладка) прежний и задача цела.
+    const ключВыбора=[pzFilterGoal,pzFilterMate,pzFilterPhase,pzFilterTheme,pzFilterSide,tab,pzMode,rushDuration,pzCustomSec].join("|");
+    if(pzCurrent&&pzAttempt==="idle"&&выборЗадачиRef.current===ключВыбора){выборЗадачиRef.current=ключВыбора;return;}
+    выборЗадачиRef.current=ключВыбора;
     const idx=Math.floor(Math.random()*fPz.length);
-    const pz=fPz[idx];
+    const pz=normalizePuzzle(fPz[idx]); // банк отдаёт сырой lichess: ход соперника применяем сами
     let g;try{g=new Chess(pz.fen)}catch{showToast("Задача повреждена, пропускаю","error");return}
     setGame(g);sBk(k=>k+1);sPzI(idx);sPzCurrent(pz);sPzAttempt("idle");
     sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);
@@ -10482,13 +10492,13 @@ export default function CyberChessPage(){
                   padding:"9px 14px",marginBottom:10,borderRadius:8,
                   background:"linear-gradient(135deg,#fffbeb,#fef3c7)",
                   border:"1px solid #fde68a"
-                }}>💡 Подсказка — лучший ход: <span style={{fontFamily:"monospace",background:"rgba(0,0,0,0.07)",padding:"2px 8px",borderRadius:4,fontSize:14,letterSpacing:1}}>{pzCurrent.sol[0]}</span></div>}
+                }}>💡 Подсказка — лучший ход: <span style={{fontFamily:"monospace",background:"rgba(0,0,0,0.07)",padding:"2px 8px",borderRadius:4,fontSize:14,letterSpacing:1}}>{hodPoRusski(pzCurrent.fen,pzCurrent.sol[0])}</span></div>}
                 {pzAttempt==="shown"&&<div style={{
                   fontSize:13,fontWeight:800,color:"#78350f",
                   padding:"10px 14px",marginBottom:10,borderRadius:8,
                   background:"linear-gradient(135deg,#fffbeb,#fef3c7)",
                   border:"1px solid #fde68a"
-                }}>💡 Правильный ход: <span style={{fontFamily:"monospace",background:"rgba(0,0,0,0.07)",padding:"2px 8px",borderRadius:4,fontSize:14,letterSpacing:1}}>{pzCurrent.sol[0]}</span></div>}
+                }}>💡 Правильный ход: <span style={{fontFamily:"monospace",background:"rgba(0,0,0,0.07)",padding:"2px 8px",borderRadius:4,fontSize:14,letterSpacing:1}}>{hodPoRusski(pzCurrent.fen,pzCurrent.sol[0])}</span></div>}
                 {/* Actions */}
                 <div style={{display:"flex",gap:SPACE[2],flexWrap:"wrap"}}>
                   <Btn size="md" variant="primary" onClick={nextPz} style={{flex:"1 1 auto",minWidth:120}}>▶ Следующая</Btn>
@@ -11319,10 +11329,20 @@ ${question.trim()}`;
                     const uci=await localBest();
                     if(uci){const c=new Chess(fen);const m=c.move({from:uci.slice(0,2) as Square,to:uci.slice(2,4) as Square,promotion:(uci[4] as any)||undefined});if(m)bestSan=m.san;}
                   }catch{}
-                  const base=e?.name==="AbortError"?"⏱ ИИ-тренер думал слишком долго.":"⚠ ИИ-тренер сейчас недоступен.";
+                  // Лимит провайдера — это НЕ «попробуй через минуту»: он держится до даты сброса,
+                  // и обещание скорого возврата было бы ложным (ответ провайдера 22–24.09.2026:
+                  // «You have reached your specified API usage limits… regain access on 2026-10-01»).
+                  const сообщениеОшибки=String(e?.message||"");
+                  const лимитИсчерпан=/usage limit|quota|credit balance|regain access/i.test(сообщениеОшибки);
+                  const датаВозврата=(сообщениеОшибки.match(/(\d{4}-\d{2}-\d{2})/)||[])[1];
+                  const когдаВернётся=(()=>{if(!датаВозврата)return "";const d=new Date(датаВозврата+"T00:00:00Z");if(isNaN(d.getTime()))return "";const м=["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];return ` — вернётся ${d.getUTCDate()} ${м[d.getUTCMonth()]}`})();
+                  const base=лимитИсчерпан
+                    ?`💬 Разбор словами сейчас выключен${когдаВернётся}. Партия, задачи и движок работают.`
+                    :(e?.name==="AbortError"?"⏱ ИИ-тренер думал слишком долго.":"⚠ ИИ-тренер сейчас недоступен.");
+                  const ходПоРусски=bestSan?hodPoRusski(fen,uciИзSan(fen,bestSan)||""):"";
                   const tip=bestSan
-                    ?`\n\n♟ Пока отвечаю движком (Stockfish d14): лучший ход — ${bestSan}, оценка ${evalCpStr} (с точки зрения белых). Спроси ещё раз через минуту для развёрнутого разбора.`
-                    :" Попробуй через минуту или используй кнопки 🔍 Объясни / 📋 План выше.";
+                    ?`\n\n♟ Отвечаю движком (Stockfish, глубина 14): лучший ход — ${ходПоРусски||bestSan}, оценка ${evalCpStr} (с точки зрения белых).${лимитИсчерпан?"":" Спроси ещё раз через минуту для развёрнутого разбора."}`
+                    :(лимитИсчерпан?" Нажми 🔍 Объясни или 📋 План — они считаются движком и работают.":" Попробуй через минуту или используй кнопки 🔍 Объясни / 📋 План выше.");
                   sCoachChat([...newMsgs,{role:"assistant",content:base+tip,ts:Date.now()}]);
                 }finally{
                   sCoachChatLoading(false);

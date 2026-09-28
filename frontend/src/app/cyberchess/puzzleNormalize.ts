@@ -95,3 +95,29 @@ export function goditsyaDlyaRush(pz: PuzzleLike): boolean {
   const r = razborZadachi(pz);
   return !!r && (r.kind === "mate" ? r.moves <= 3 : r.kind === "material");
 }
+
+const ФИГУРА: Record<string, string> = { k: "Кр", q: "Ф", r: "Л", b: "С", n: "К", p: "" };
+
+/**
+ * Ход решения по-человечески: «Фd1#», а не «d2d1».
+ * Замер 23.09.2026 на проде: подсказка и строка «Правильный ход» печатали UCI —
+ * машинный формат, который шахматист не читает («непонятные решения», слово основателя).
+ * Русские буквы фигур: так подписаны ходы в наших разборах и в школьной нотации.
+ */
+export function hodPoRusski(fen: string, uci: string): string {
+  if (!uci || uci.length < 4) return uci || "";
+  try {
+    const g = new Chess(fen);
+    const mv = g.move({ from: uci.slice(0, 2) as Square, to: uci.slice(2, 4) as Square, promotion: (uci[4] as "q" | "r" | "b" | "n" | undefined) || undefined });
+    if (!mv) return uci;
+    if (mv.san === "O-O" || mv.san === "O-O-O") return mv.san;
+    const suffix = g.isCheckmate() ? "#" : g.inCheck() ? "+" : "";
+    const promo = mv.promotion ? "=" + (ФИГУРА[mv.promotion] || mv.promotion.toUpperCase()) : "";
+    const cap = mv.captured ? "x" : "";
+    const head = ФИГУРА[mv.piece] ?? mv.piece.toUpperCase();
+    const disamb = mv.piece === "p" && mv.captured ? mv.from[0] : "";
+    return `${head}${disamb}${cap}${mv.to}${promo}${suffix}`;
+  } catch {
+    return uci;
+  }
+}

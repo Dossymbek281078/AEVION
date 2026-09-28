@@ -30,6 +30,10 @@ const APP_LINKS: Record<string, { name: string; href: string }> = {
   platform:   { name: "QRight", href: "/qright" },
   ventures: { name: "AEVION Ventures", href: "/ventures" },
   "multichat-engine": { name: "AEVION Multichat Engine", href: "/multichat-engine" },
+  // 28.09.2026: DevHub тут НЕ БЫЛО — 29 приложений были, он нет. Покупатель DevHub
+  // возвращался с оплаты без ссылки на продукт и без единственного нужного ему шага:
+  // DevHub работает БЕЗ аккаунта, и права находят человека только по почте (/devhub/link).
+  devhub: { name: "DevHub", href: "/devhub" },
   qfusionai: { name: "QFusionAI", href: "/qfusionai" },
   qright: { name: "QRight", href: "/qright" },
   qsign: { name: "QSign", href: "/qsign" },
@@ -480,7 +484,12 @@ function SuccessInner() {
               // Отдельное приложение выдаётся по ПОЧТЕ из оплаты (AppSubscription): гость, купивший
               // без входа, открывал страницу приложения и видел то же, что и любой гость, — про
               // вход с той же почтой ему никто не говорил (22.09.2026, CyberChess Lite).
-              ...(appLink
+              // У DevHub шаг ДРУГОЙ: аккаунта у него нет вовсе, вход ничего не откроет —
+              // покупку связывают с браузером по почте оплаты (/devhub/link). Отправить
+              // его на /auth значило бы послать в тупик сразу после списания денег.
+              ...(appId === "devhub"
+                ? [{ icon: "🔑", text: t("pricing.checkoutSuccess.nextDevhubLink"), href: "/devhub/link" }]
+                : appLink
                 ? [{ icon: "🔑", text: t("pricing.checkoutSuccess.nextLogin", { app: appLink.name }), href: `/auth?next=${encodeURIComponent(appLink.href)}` }]
                 : []),
               // Куда идти управлять подпиской, можно сказать только зная сервис.

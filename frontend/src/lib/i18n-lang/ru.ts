@@ -7342,6 +7342,7 @@ const ru: Record<string, string> = {
   "pricing.checkoutSuccess.nextOpenAppNoName": "Откройте каталог и выберите оплаченное",
   "pricing.checkoutSuccess.openAppNoName": "Открыть каталог продуктов",
   "pricing.checkoutSuccess.nextLogin": "Доступ привязан к почте, указанной при оплате: войдите в AEVION с этой почтой, и {app} откроет купленное",
+  "pricing.checkoutSuccess.nextDevhubLink": "DevHub работает без аккаунта, поэтому покупку находят по почте: свяжите её с этим браузером — мы пришлём ссылку подтверждения",
   "pricing.checkoutSuccess.subtitleActivatedNoTier": "Спасибо! Ваша подписка активна.",
   "pricing.checkoutSuccess.titleActivatedNoTier": "Оплата принята!",
   "pricing.checkoutSuccess.titleNoPayment": "Проверяем, была ли оплата",

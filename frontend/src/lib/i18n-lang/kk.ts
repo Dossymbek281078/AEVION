@@ -7342,6 +7342,7 @@ const kk: Record<string, string> = {
   "pricing.checkoutSuccess.nextOpenAppNoName": "Каталогты ашып, төленгенін таңдаңыз",
   "pricing.checkoutSuccess.openAppNoName": "Өнімдер каталогын ашу",
   "pricing.checkoutSuccess.nextLogin": "Қолжетімділік төлем кезінде көрсетілген поштаға байланған: сол поштамен AEVION-ға кіріңіз, сонда {app} сатып алғаныңызды ашады",
+  "pricing.checkoutSuccess.nextDevhubLink": "DevHub тіркелгісіз жұмыс істейді, сондықтан сатып алу пошта бойынша табылады: оны осы браузерге байланыстырыңыз — растау сілтемесін жібереміз",
   "pricing.checkoutSuccess.subtitleActivatedNoTier": "Рақмет! Жазылымыңыз белсенді.",
   "pricing.checkoutSuccess.titleActivatedNoTier": "Төлем қабылданды!",
   "pricing.checkoutSuccess.titleNoPayment": "Төлем болды ма — тексеріп жатырмыз",

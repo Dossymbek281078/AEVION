@@ -117,9 +117,12 @@ export const LANG_KEY_COUNT: Record<Lang, number> = {
   // честные замены (successStories.heroSubtitle переписан, добавлены
   // constitution.showcase.paraphrase и cases.none). Число взято из ПАДЕНИЯ
   // сторожа, а не посчитано на глаз: он назвал 7403 против 7429.
-  ru: 7403,
-  en: 7403,
-  kk: 7403,
+  // 24.09: +1 в ru/en/kk — ключ пришёл с чужой веткой и остался незасчитанным,
+  // из-за чего КАЖДЫЙ прогон словарных проверок был красным (и у соседей тоже).
+  // Счёт снят замером: Object.keys(translations[lang]).length = 7404.
+  ru: 7404,
+  en: 7404,
+  kk: 7404,
   de: 134,
   fr: 134,
   es: 134,

@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { разметкаТоваров } from "@/lib/shopJsonLd";
+import { разметкаПриложений } from "@/lib/appsJsonLd";
 
 export const metadata: Metadata = {
   // Двуязычный заголовок (образец /qventure, /qright, /bureau): metadata у
@@ -36,6 +38,33 @@ export const metadata: Metadata = {
   },
 };
 
-export default function PricingLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+/**
+ * 🔴 Замер 23.09.2026 по проду: `/pricing` отдаёт роботу 35 547 знаков и НИ
+ * ОДНОЙ цены — цены рисует браузер, а поисковик их не видит. Это главная
+ * продающая страница, и в выдаче она выглядит как страница без цены.
+ *
+ * Сами цены НЕ переписываем числами: берём те же два помощника, что уже стоят
+ * на `/shop`, `/go` и `/apps`. Разовые товары идут из каталога, приложения —
+ * только те, что касса реально может продать (см. `@/lib/appsJsonLd`).
+ */
+export default async function PricingLayout({ children }: { children: React.ReactNode }) {
+  const товары = разметкаТоваров();
+  const приложения = await разметкаПриложений();
+  return (
+    <>
+      {товары ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(товары) }}
+        />
+      ) : null}
+      {приложения ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(приложения) }}
+        />
+      ) : null}
+      {children}
+    </>
+  );
 }

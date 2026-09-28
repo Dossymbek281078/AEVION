@@ -317,3 +317,11 @@ declare module "three/examples/jsm/environments/RoomEnvironment.js" {
     constructor();
   }
 }
+
+// Скруглённая коробка из примеров three: у мебели нет острых рёбер.
+declare module "three/examples/jsm/geometries/RoundedBoxGeometry.js" {
+  import type { BufferGeometry } from "three";
+  export class RoundedBoxGeometry extends BufferGeometry {
+    constructor(width?: number, height?: number, depth?: number, segments?: number, radius?: number);
+  }
+}

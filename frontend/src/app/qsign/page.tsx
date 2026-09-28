@@ -745,6 +745,66 @@ export default function QSignPage() {
           </div>
         </div>
 
+        {/* ─── Первая минута гостя: проверить НАСТОЯЩУЮ подпись, без входа ───
+         *
+         * ЗАЧЕМ. Замер 28.09.2026 по четырём модулям: у QSkyway, QRight и Биржи
+         * гость за минуту делает что-то настоящее, а у QSign — ничего. Главное
+         * действие «подписать» закрыто входом (requireAuth), и человек, пришедший
+         * со страницы цен, где модуль стоит $24, уходит, не увидев продукта.
+         *
+         * Открытая дверь была всё это время: проверка подписи не требует входа
+         * (ручка v2/verify отвечает гостю), а у каждой подписи есть публичная
+         * страница `/qsign/verify/<id>` — она у гостя открывается и показывает
+         * VALID, проверено на проде. Не хватало ровно одного: с этой страницы на
+         * неё ничто не вело. Лента настоящих подписей есть ниже по странице, но
+         * до неё надо доскроллить и догадаться, что это проба.
+         *
+         * Поэтому блок берёт ПЕРВУЮ запись из уже загруженной ленты (нового
+         * запроса не делает) и даёт одну кнопку. Ничего не обещаем сверх того,
+         * что человек увидит: подпись чужая и настоящая, проверка публичная.
+         */}
+        {recent && recent.items.length > 0 ? (
+          <div
+            style={{
+              border: "1px solid #bbf7d0",
+              background: "#f0fdf4",
+              borderRadius: 14,
+              padding: "16px 18px",
+              marginBottom: 20,
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 12,
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <div style={{ minWidth: 240, flex: 1 }}>
+              <div style={{ fontWeight: 800, fontSize: 15, color: "#065f46", marginBottom: 4 }}>
+                Try it now — no account needed
+              </div>
+              <div style={{ fontSize: 13, color: "#047857", lineHeight: 1.5 }}>
+                Open a real signature from the feed below and check it yourself. Verification is
+                public and stateless: change one character of the payload and it turns INVALID.
+              </div>
+            </div>
+            <a
+              href={`/qsign/verify/${recent.items[0].id}`}
+              style={{
+                padding: "10px 18px",
+                background: "#059669",
+                color: "#fff",
+                borderRadius: 9,
+                fontWeight: 700,
+                fontSize: 13.5,
+                textDecoration: "none",
+                flexShrink: 0,
+              }}
+            >
+              Verify a real signature
+            </a>
+          </div>
+        ) : null}
+
         {/* ─── Live stats strip ─── */}
         {stats ? (
           <div

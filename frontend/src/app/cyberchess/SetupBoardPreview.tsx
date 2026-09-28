@@ -141,15 +141,20 @@ export default function SetupBoardPreview({
           left: 0,
           right: 0,
           bottom: 0,
-          padding: "7px 10px",
-          fontSize: 13,
+          // Тонко и мягко намеренно: подпись лежит ПОВЕРХ доски, а внизу стоят
+          // фигуры человека. Замер на телефоне 390x844: клетка 42 px, подпись
+          // в 28 px накрывала две трети клетки и все 8 фигур нижнего ряда.
+          // 22 px — половина клетки, фигуры сквозь градиент видны.
+          padding: "4px 8px",
+          fontSize: 12,
           fontWeight: 700,
           letterSpacing: 0.2,
           textAlign: "center",
           color: "#fff",
-          background: "linear-gradient(to top, rgba(0,0,0,0.72), rgba(0,0,0,0))",
+          textShadow: "0 1px 2px rgba(0,0,0,0.9)",
+          background: "linear-gradient(to top, rgba(0,0,0,0.58), rgba(0,0,0,0))",
           pointerEvents: "none",
-          lineHeight: 1.25,
+          lineHeight: 1.2,
         }}
       >
         {label}

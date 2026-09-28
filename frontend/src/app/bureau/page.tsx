@@ -8,6 +8,7 @@ import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { PurchaseReturnTracker } from "@/components/PurchaseReturnTracker";
 import { PageTracking } from "@/components/PageTracking";
+import ModulePricingChip from "@/components/ModulePricingChip";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
@@ -478,6 +479,26 @@ function BureauPageInner() {
       <PageTracking page="bureau" />
       <ProductPageShell maxWidth={920}>
         <Wave1Nav />
+        {/*
+         * Путь к оплате. Его здесь НЕ БЫЛО вовсе — замер 28.09.2026: на
+         * странице ни чипа цены, ни вызова кассы, ни даже ссылки на /pricing.
+         *
+         * Цена этого прямая. Бюро — главный денежный канал по слову
+         * основателя, рассылка идёт каждый день, 30 писем уже ушло и ведут они
+         * СЮДА. Касса при этом исправна: `POST /api/pricing/checkout/session`
+         * с `tierId: lite`, `appId: ip_bureau` отвечает 200 и настоящей
+         * ссылкой Lemon Squeezy, все пять сроков в продаже. То есть купить
+         * было можно — но не отсюда: человек читал письмо, приходил, брал
+         * бесплатный анонимный сертификат, и платного продукта просто не
+         * видел.
+         *
+         * Чип — тот же способ, что у остальных витрин модулей: он сам берёт
+         * цену из каталога и сам спрашивает, какие сроки реально продаются
+         * (иначе показал бы цену ступени, которая отвечает 503).
+         */}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+          <ModulePricingChip moduleId="bureau" theme="light" />
+        </div>
 
         {/* ── Hero Header ── */}
         <div style={{ borderRadius: 20, overflow: "hidden", marginBottom: 28 }}>

@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { PurchaseReturnTracker } from "@/components/PurchaseReturnTracker";
+import { PageTracking } from "@/components/PageTracking";
 import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
@@ -463,6 +464,18 @@ function BureauPageInner() {
       <Suspense fallback={null}>
         <DeepLinkParam onId={setDeepObjectId} />
       </Suspense>
+      {/* Замер посещения И запоминание канала.
+       *
+       * Бюро — главный денежный канал по прямому слову основателя 28.09.2026, и
+       * рассылка идёт каждый день. Замер того же дня: у этой страницы не было
+       * замера ВООБЩЕ (он стоял только на /bureau/launch), а 30 ушедших писем
+       * несли голый адрес без метки. То есть по самому важному каналу компании
+       * нельзя было ответить ни «сколько человек пришло», ни «из письма ли они».
+       *
+       * Дальше метку забирают касса и форма: channelNow() кладёт её в память
+       * вкладки при первом же чтении адреса. Разбор цепочки — в
+       * src/app/multichat-engine/page.tsx. */}
+      <PageTracking page="bureau" />
       <ProductPageShell maxWidth={920}>
         <Wave1Nav />
 

@@ -182,7 +182,11 @@ export default function DevHubPage() {
     if (!idea || ideaStarting) return;
     setIdeaStarting(true);
     try {
-      const name = idea.replace(/[^\p{L}\p{N} ]/gu, "").split(/\s+/).slice(0, 5).join(" ").slice(0, 40) || "My app";
+      // 28.09.2026: из имени вырезались ДЕФИСЫ — «probe-launch-check: одна страница»
+      // превращалось в «probelaunchcheck одна страница». Человек не узнаёт своё имя, а
+      // нам это мешает метить пробы префиксом probe-. Дефис, точку и подчёркивание
+      // оставляем: они безопасны и в адресе Pages (slugify всё равно приводит его).
+      const name = idea.replace(/[^\p{L}\p{N} ._-]/gu, "").split(/\s+/).slice(0, 5).join(" ").slice(0, 40) || "My app";
       // Выбор стека вынесен в lib/devhubStackChoice (там сторож): на нём
       // держится обещание «правьте кликами» с витрины.
       const stack = stackForIdea(idea);

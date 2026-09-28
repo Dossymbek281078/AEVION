@@ -46,6 +46,7 @@ declare module "three" {
     wrapS: number;
     wrapT: number;
     repeat: Vector2 & { set(x: number, y: number): void };
+    needsUpdate: boolean;
   }
 
   export class MeshPhongMaterial {
@@ -96,6 +97,9 @@ declare module "three" {
   }
 
   export class Mesh extends Object3D {
+    readonly isMesh?: boolean;
+    castShadow: boolean;
+    receiveShadow: boolean;
     material: unknown;
     geometry: BufferGeometry;
     constructor(geometry?: unknown, material?: unknown);
@@ -103,7 +107,11 @@ declare module "three" {
 
   export class Scene {
     background: Color | null;
+    /** карта окружения: отражения и рассеянный свет */
+    environment: Texture | null;
+    environmentIntensity: number;
     add(...objs: unknown[]): void;
+    traverse(fn: (o: unknown) => void): void;
   }
 
   export class PerspectiveCamera {
@@ -119,6 +127,7 @@ declare module "three" {
     outputColorSpace?: string;
     toneMapping?: number;
     toneMappingExposure?: number;
+    shadowMap: { enabled: boolean; type: number };
     constructor(params?: Record<string, unknown>);
     setSize(w: number, h: number): void;
     setPixelRatio(r: number): void;
@@ -136,6 +145,14 @@ declare module "three" {
 
   export class DirectionalLight {
     position: Vector3;
+    castShadow: boolean;
+    target: Object3D;
+    shadow: {
+      bias: number;
+      normalBias: number;
+      mapSize: { set(w: number, h: number): void };
+      camera: { near: number; far: number; left: number; right: number; top: number; bottom: number };
+    };
     constructor(color?: number, intensity?: number);
   }
 
@@ -226,6 +243,42 @@ declare module "three" {
     constructor(params?: Record<string, unknown>);
   }
 
+  /** Физический материал: шероховатость и металличность вместо плоской краски. */
+  export class MeshStandardMaterial {
+    color: Color;
+    emissive: Color;
+    map: Texture | null;
+    roughnessMap: Texture | null;
+    normalMap: Texture | null;
+    roughness: number;
+    metalness: number;
+    envMapIntensity: number;
+    needsUpdate: boolean;
+    side?: number;
+    transparent?: boolean;
+    opacity?: number;
+    constructor(params?: Record<string, unknown>);
+  }
+
+  /** Пропускание света: стекло витражей и окон, а не полупрозрачная краска. */
+  export class MeshPhysicalMaterial extends MeshStandardMaterial {
+    transmission: number;
+    thickness: number;
+    ior: number;
+    clearcoat: number;
+    clearcoatRoughness: number;
+  }
+
+  /** Освещение средой: комната-студия → карта окружения без внешних файлов. */
+  export class PMREMGenerator {
+    constructor(renderer: WebGLRenderer);
+    compileEquirectangularShader(): void;
+    fromScene(scene: object, sigma?: number, near?: number, far?: number): { texture: Texture };
+    dispose(): void;
+  }
+
+  export const PCFSoftShadowMap: number;
+
   export class CanvasTexture extends Texture {
     constructor(canvas: HTMLCanvasElement);
   }
@@ -255,5 +308,12 @@ declare module "three/examples/jsm/controls/OrbitControls.js" {
     maxPolarAngle: number;
     target: Vector3;
     update(): void;
+  }
+}
+
+// Комната-студия из примеров three: источник карты окружения без внешних файлов.
+declare module "three/examples/jsm/environments/RoomEnvironment.js" {
+  export class RoomEnvironment {
+    constructor();
   }
 }

@@ -985,11 +985,34 @@ async function handleList(req: Request, res: Response): Promise<void> {
     const offset = Number.isFinite(offsetRaw) && offsetRaw >= 0 ? offsetRaw : 0;
     const mineOnly = req.query.mine === "1" || req.query.mine === "true";
 
+    /*
+     * Служебные записи не выходят в общий список.
+     *
+     * ЗАЧЕМ. Правило §19: создающий запрос на прод помечается в названии и
+     * убирается следом. У QRight скрытие ВСТРОЕНО в выдачу витрины (запрос
+     * исключает `ownerName = 'smoke-test'`), и там проба не появляется. Но
+     * конвейер `/api/pipeline/protect` пишет сразу в несколько мест, а сюда
+     * запись уезжает БЕЗ поля владельца — только с `objectTitle`. Замер
+     * 28.09.2026: моя собственная проба «probe-28-09 …» висела в этом списке,
+     * 1 запись из 7, и её показывала публичная витрина.
+     *
+     * Фильтруем по НАЗВАНИЮ, потому что другого признака у этой таблицы нет.
+     * Признак узкий и привязан к нашим же меткам: длинное `probe-`/`smoke-` в
+     * НАЧАЛЕ названия. Чужую работу это не трогает — «Protest», «Contestant»
+     * и подобные начинаются иначе.
+     *
+     * Своего списка не заводим только при `?mine=1`: там человек смотрит СВОИ
+     * записи, включая пробные, и прятать их от владельца незачем.
+     */
+    const СЛУЖЕБНОЕ = `("objectTitle" IS NULL OR ("objectTitle" NOT ILIKE 'probe-%' AND "objectTitle" NOT ILIKE 'smoke-%'))`;
+
     let where = "";
     const params: unknown[] = [];
     if (mineOnly && auth?.sub) {
       where = `WHERE "ownerUserId" = $1`;
       params.push(auth.sub);
+    } else {
+      where = `WHERE ${СЛУЖЕБНОЕ}`;
     }
     params.push(limit, offset);
     const limitIdx = params.length - 1;

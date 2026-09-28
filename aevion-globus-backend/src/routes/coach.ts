@@ -33,17 +33,28 @@
 import { Router, type Request, type Response } from "express";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { randomUUID } from "crypto";
-import { Readable } from "stream";
 import { requireAuth } from "../lib/authJwt";
 import { generationLimit, rateLimit } from "../lib/rateLimit";
 import { checkAiInputBudget, isAnonymousRequest } from "../lib/aiInputBudget";
+import {
+  callProvider,
+  streamProvider,
+  resolveProvider,
+  getProviders,
+  isProviderOutOfService,
+  listProviderOutages,
+  providerOutageReason,
+  noteProviderOutage,
+  type ChatMessage,
+} from "../services/qcoreai/providers";
 
 const captureCoachError = makeServiceCapture("coach");
 
 export const coachRouter = Router();
 
-const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const ANTHROPIC_VERSION = "2023-06-01";
+// Адрес и версия Anthropic здесь больше не нужны: к поставщику ходит реестр
+// (services/qcoreai/providers.ts). Свой fetch отсюда и был причиной того, что
+// тренер умер вместе со счётом Anthropic, пока соседние ручки работали.
 
 // Opus 4.8 — Anthropic's flagship, strongest chess reasoning ($15 in / $75 out per M tokens).
 // Each Coach request ≈ $0.015-0.02, acceptable for premium experience. Override via env.
@@ -51,6 +62,50 @@ const DEFAULT_MODEL = process.env.COACH_MODEL || "claude-opus-4-8";
 
 // Absolute ceiling on tokens per response — chess coaching fits comfortably in 1500.
 // Client may request less (e.g. 150 for Live Coach one-liners).
+/**
+ * 🔴 28.09.2026. ТРЕНЕР ЗВАЛ ANTHROPIC СВОИМ fetch, МИМО РЕЕСТРА ПОСТАВЩИКОВ.
+ *
+ * Счёт Anthropic исчерпан до 1 октября, и тренер умер вместе с ним: замер прода
+ * 28.09 — POST /api/coach/chat отдаёт 400 «You have reached your specified API
+ * usage limits… regain access on 2026-10-01». Полный запуск шахмат 30.09, то есть
+ * витрина обещала бы «ИИ-тренер разберёт партию» при молчащем тренере.
+ *
+ * При этом у платформы УЖЕ есть живой запасной: POST /api/qcoreai/chat тем же
+ * моментом отвечает 200 от gemini-2.5-flash. Разница не в удаче, а в том, кто
+ * ходит через реестр services/qcoreai/providers.ts, а кто своим fetch: реестр
+ * отличает «поставщик закрыл счёт» от сетевого сбоя, помнит это до даты возврата
+ * и переходит к следующему настроенному.
+ *
+ * Нашло окно user-c8 замером; реестр и переход писал не я — здесь только
+ * подключение тренера к общему механизму. Второй такой механизм заводить нельзя:
+ * копии расходятся молча, и расхождение видно лишь там, куда никто не смотрит.
+ */
+
+/** Кого просить первым. Закрытого поставщика реестр пропустит сам. */
+function выбратьПоставщика(): string {
+  return resolveProvider("anthropic");
+}
+
+/** Модель для выбранного поставщика: у Anthropic — наша, у прочих — их умолчание. */
+function модельДля(поставщик: string): string {
+  if (поставщик === "anthropic") return DEFAULT_MODEL;
+  const p = getProviders().find((x) => x.id === поставщик);
+  return p?.defaultModel || DEFAULT_MODEL;
+}
+
+/** Сообщения тренера в вид реестра: системный текст — отдельной ролью. */
+function вСообщенияРеестра(
+  system: string,
+  messages: Array<{ role: "user" | "assistant"; content: string }>,
+): ChatMessage[] {
+  return [{ role: "system", content: system }, ...messages];
+}
+
+/** Хоть один поставщик настроен и не закрыт — значит ответить МОЖЕМ. */
+function можемОтветить(): boolean {
+  return getProviders().some((p) => p.configured && p.id !== "stub" && !isProviderOutOfService(p.id));
+}
+
 const MAX_TOKENS_CEILING = 1500;
 const DEFAULT_MAX_TOKENS = 800;
 
@@ -127,11 +182,10 @@ const anonCoachCeiling = rateLimit({
 
 coachRouter.post("/chat", anonCoachCeiling, generationLimit("coach_chat"), async (req: Request, res: Response) => {
   try {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({
-        error: "Server misconfigured: ANTHROPIC_API_KEY not set",
-      });
+    // Ключ именно Anthropic больше не обязателен: ответить может любой
+    // настроенный поставщик. Отказ здесь означает, что не настроен НИ ОДИН.
+    if (!getProviders().some((p) => p.configured && p.id !== "stub")) {
+      return res.status(500).json({ error: "Server misconfigured: no AI provider configured" });
     }
 
     const { system, messages, maxTokens } = (req.body || {}) as {
@@ -201,33 +255,41 @@ coachRouter.post("/chat", anonCoachCeiling, generationLimit("coach_chat"), async
       resolvedMaxTokens = Math.min(Math.floor(maxTokens), MAX_TOKENS_CEILING);
     }
 
-    // ─── Forward to Anthropic ────────────────────────────────────────────
-    const upstream = await fetch(ANTHROPIC_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": ANTHROPIC_VERSION,
-      },
-      body: JSON.stringify({
-        model: DEFAULT_MODEL,
-        max_tokens: resolvedMaxTokens,
-        system,
-        messages,
-      }),
-    });
-
-    const data = await upstream.json().catch(() => null);
-
-    if (!upstream.ok) {
-      const errMsg =
-        (data && (data.error?.message || data.message)) ||
-        `Upstream error (HTTP ${upstream.status})`;
-      console.error("[coach] Anthropic API error:", upstream.status, errMsg);
-      return res.status(upstream.status).json({ error: errMsg });
+    // ─── Через реестр поставщиков, с переходом на живого ────────────────
+    // callProvider сам переходит к следующему настроенному, если поставщик
+    // ЗАКРЫЛ счёт (лимит, кредиты, 402) — и запоминает это до даты возврата,
+    // чтобы не стучаться в закрытую дверь на каждом запросе.
+    const поставщик = выбратьПоставщика();
+    let итог;
+    try {
+      итог = await callProvider(
+        поставщик,
+        вСообщенияРеестра(system, messages),
+        модельДля(поставщик),
+        0.7,
+        undefined,
+        resolvedMaxTokens,
+        { module: "coach" },
+      );
+    } catch (e: any) {
+      const причина = providerOutageReason(e);
+      const текст = e?.message || "AI provider error";
+      console.error("[coach] ответ не получен:", String(текст).slice(0, 200));
+      // 503, а не эхо чужого кода: живого поставщика не осталось — это наша
+      // неисправность, а не отказ клиенту. Текст поставщика сохраняем: по нему
+      // фронт узнаёт лимит и называет человеку срок возврата.
+      return res.status(причина ? 503 : 502).json({ error: текст });
     }
 
-    return res.json(data);
+    // Форма ответа прежняя, anthropic-совместимая: её разбирают три места
+    // шахмат. Чинить бэкенд, ломая фронт, — не починка.
+    return res.json({
+      content: [{ type: "text", text: итог.reply }],
+      model: итог.model,
+      usage: итог.usage,
+      provider: итог.providerUsed ?? поставщик,
+      failedOver: итог.failedOver,
+    });
   } catch (err: any) {
     console.error("[coach] Unexpected error:", err);
     captureCoachError(err, { route: "coach/POST/chat" });
@@ -245,9 +307,10 @@ coachRouter.post("/chat", anonCoachCeiling, generationLimit("coach_chat"), async
 // Без thinking — быстрый первый токен для коротких подсказок.
 coachRouter.post("/chat/stream", anonCoachCeiling, generationLimit("coach_chat_stream"), async (req: Request, res: Response) => {
   try {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({ error: "Server misconfigured: ANTHROPIC_API_KEY not set" });
+    // Ключ именно Anthropic больше не обязателен: поток может выдать любой
+    // настроенный поставщик. Отказ здесь — «не настроен НИ ОДИН».
+    if (!getProviders().some((p) => p.configured && p.id !== "stub")) {
+      return res.status(500).json({ error: "Server misconfigured: no AI provider configured" });
     }
     const { system, messages, maxTokens } = (req.body || {}) as {
       system?: string;
@@ -295,32 +358,72 @@ coachRouter.post("/chat/stream", anonCoachCeiling, generationLimit("coach_chat_s
       resolvedMaxTokens = Math.min(Math.floor(maxTokens), MAX_TOKENS_CEILING);
     }
 
-    const upstream = await fetch(ANTHROPIC_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": ANTHROPIC_VERSION,
-      },
-      body: JSON.stringify({ model: DEFAULT_MODEL, max_tokens: resolvedMaxTokens, system, messages, stream: true }),
-    });
-
-    if (!upstream.ok || !upstream.body) {
-      const data = await upstream.json().catch(() => null);
-      const errMsg = (data && (data.error?.message || data.message)) || `Upstream error (HTTP ${upstream.status})`;
-      console.error("[coach] Anthropic stream error:", upstream.status, errMsg);
-      return res.status(upstream.status || 502).json({ error: errMsg });
-    }
-
-    // Проксируем SSE как есть — фронт сам разбирает content_block_delta.
+    // ─── Поток через реестр поставщиков ─────────────────────────────────
+    // ФОРМА СОБЫТИЙ ОСТАЁТСЯ ANTHROPIC-СОВМЕСТИМОЙ. Фронт шахмат разбирает
+    // content_block_delta и дописывает текст; перевести его на другой формат
+    // значило бы чинить бэкенд и ломать экран. Реестр отдаёт простые события,
+    // мы одеваем их в прежний конверт.
+    const поставщик = выбратьПоставщика();
     res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
     res.setHeader("X-Accel-Buffering", "no"); // не буферизовать в nginx
-    const nodeStream = Readable.fromWeb(upstream.body as any);
-    req.on("close", () => { try { nodeStream.destroy(); } catch { /* ignore */ } });
-    nodeStream.on("error", () => { try { res.end(); } catch { /* ignore */ } });
-    nodeStream.pipe(res);
+
+    let живо = true;
+    req.on("close", () => { живо = false; });
+
+    const кусок = (текст: string) =>
+      "data: " +
+      JSON.stringify({ type: "content_block_delta", delta: { type: "text_delta", text: текст } }) +
+      String.fromCharCode(10, 10);
+
+    // Один переход на запасного, и только ДО первой буквы: уже отданное
+    // обратно не забрать, поэтому переключаться посреди ответа нельзя.
+    let выданоЗнаков = 0;
+    const попытка = async (кого: string): Promise<void> => {
+      for await (const ev of streamProvider(
+        кого,
+        вСообщенияРеестра(system, messages),
+        модельДля(кого),
+        0.7,
+      )) {
+        if (!живо) return;
+        if (ev.kind === "text" && ev.text) {
+          выданоЗнаков += ev.text.length;
+          res.write(кусок(ev.text));
+        }
+      }
+    };
+
+    try {
+      await попытка(поставщик);
+    } catch (e: any) {
+      const причина = providerOutageReason(e);
+      if (выданоЗнаков === 0 && причина) {
+        // Поставщик закрыл счёт — запоминаем до даты возврата и берём следующего.
+        noteProviderOutage(поставщик, причина);
+        const запасной = resolveProvider();
+        if (запасной !== поставщик && запасной !== "stub") {
+          console.warn(`[coach] поток ${поставщик} → ${запасной}: ${String(причина).slice(0, 120)}`);
+          try {
+            await попытка(запасной);
+          } catch (e2: any) {
+            if (выданоЗнаков === 0) throw e2;
+          }
+        } else if (выданоЗнаков === 0) {
+          throw e;
+        }
+      } else if (выданоЗнаков === 0) {
+        throw e;
+      }
+      // Обрыв ПОСЛЕ первых букв: молчать нельзя, но и рвать ответ незачем —
+      // фронт считает частичный ответ выданным. Пишем в журнал и закрываем.
+      if (выданоЗнаков > 0) {
+        console.warn("[coach] поток оборвался после", выданоЗнаков, "знаков:", String(e?.message || e).slice(0, 160));
+      }
+    }
+    res.write("data: " + JSON.stringify({ type: "message_stop" }) + String.fromCharCode(10, 10));
+    res.end();
   } catch (err: any) {
     console.error("[coach] Unexpected stream error:", err);
     captureCoachError(err, { route: "coach/POST/chat/stream" });
@@ -519,11 +622,23 @@ coachRouter.delete("/goals/:id", requireAuth, (req: Request, res: Response) => {
 });
 
 // ─── Health check (public) ────────────────────────────────────────────────
+// 🔴 28.09.2026: раньше здесь было ok:true и apiKeyConfigured — то есть ручка
+// отвечала «ключ задан», а спрашивают её про «ответ придёт». Замер того дня:
+// health зелёный, а /chat тем же моментом 400 «usage limits». Зелёная проверка
+// при нерабочем тренере хуже отсутствия проверки: по ней перестают смотреть.
 coachRouter.get("/health", (_req: Request, res: Response) => {
+  const поставщики = getProviders().filter((p) => p.id !== "stub");
+  const закрытые = listProviderOutages();
+  const готов = можемОтветить();
   res.json({
-    ok: true,
-    model: DEFAULT_MODEL,
-    apiKeyConfigured: Boolean(process.env.ANTHROPIC_API_KEY),
+    // ok отвечает на вопрос «можем ли ответить», а не «поднят ли процесс».
+    ok: готов,
+    canAnswer: готов,
+    provider: готов ? выбратьПоставщика() : null,
+    model: готов ? модельДля(выбратьПоставщика()) : null,
+    configured: поставщики.filter((p) => p.configured).map((p) => p.id),
+    // Кто закрыт и до какого срока — значения ключей не печатаем, только имена.
+    outages: закрытые,
     defaultMaxTokens: DEFAULT_MAX_TOKENS,
     maxTokensCeiling: MAX_TOKENS_CEILING,
     sessions: sessions.size,

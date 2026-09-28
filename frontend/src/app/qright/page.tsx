@@ -189,6 +189,44 @@ export default function QRightPage() {
     } catch {}
   }, []);
 
+  /*
+   * Можно ли вообще купить «Upgrade to Verified» — спрашиваем СЕРВИС.
+   *
+   * Замер 28.09.2026 на живом проде: кнопка «⭐ Upgrade to Verified ($19)»
+   * показывалась всем и всегда, а ручка за ней отвечает
+   * `503 Paid verification is not available: the identity and payment providers
+   * are not configured yet` (stubBarriers: identity, payment). То есть человеку
+   * предлагали заплатить ровно в тот момент, когда он только что защитил свою
+   * работу, — в момент наибольшего доверия, — и упирали в отказ.
+   *
+   * Ручка состояния была всё это время: /api/bureau/health честно отвечает
+   * `kyc: stub`, `payment: misconfigured`, `notarySignature: demo`. Интерфейс её
+   * просто не спрашивал. Это и есть наше правило «доступность ≠ пригодность»:
+   * у канала, который обещает интерфейс, есть ручка состояния, и интерфейс
+   * обязан её спрашивать.
+   *
+   * ТРИ исхода, а не два: не спросили ещё (null) — кнопку не трогаем и ведём
+   * себя как раньше; ответ получен — решаем по нему; ответ не пришёл — считаем
+   * недоступным. Молчаливое «покажем на всякий случай» здесь хуже: цена ошибки
+   * в одну сторону — спрятанная работающая кнопка, в другую — обманутый
+   * покупатель.
+   */
+  const [платнаяПроверкаДоступна, установитьДоступность] = useState<boolean | null>(null);
+  useEffect(() => {
+    let живо = true;
+    fetch(apiUrl("/api/bureau/health"), { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!живо) return;
+        if (!d) return установитьДоступность(false);
+        установитьДоступность(d.kyc !== "stub" && d.payment !== "misconfigured");
+      })
+      .catch(() => живо && установитьДоступность(false));
+    return () => {
+      живо = false;
+    };
+  }, []);
+
   /* ── Outgoing webhooks (owner) ── */
   type WebhookRow = {
     id: string;
@@ -1319,13 +1357,26 @@ export default function QRightPage() {
               >
                 ✓ Verify Certificate
               </Link>
-              <Link
-                href={`/bureau/upgrade/${result.certificate.id}`}
-                style={{ padding: "12px 20px", borderRadius: 12, border: "1px solid #4f46e5", color: "#4f46e5", background: "#fff", fontWeight: 800, fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
-                title="Upgrade to Verified — adds real-name attestation by AEVION Bureau"
-              >
-                ⭐ Upgrade to Verified ($19)
-              </Link>
+              {/* Кнопку показываем, только пока не выяснилось, что платная
+                  проверка недоступна. Ответ «недоступна» заменяет её честной
+                  строкой, а не прячет молча: человек только что защитил работу
+                  и вправе знать, что этот шаг существует и когда появится. */}
+              {платнаяПроверкаДоступна === false ? (
+                <span
+                  style={{ padding: "12px 20px", borderRadius: 12, border: "1px dashed rgba(15,23,42,0.2)", color: "#64748b", background: "#f8fafc", fontWeight: 700, fontSize: 13.5, display: "inline-flex", alignItems: "center", gap: 6 }}
+                  title="Проверено на проде: ручка апгрейда отвечает 503 — поставщики личности и оплаты ещё не подключены"
+                >
+                  ⏳ Verified upgrade — not available yet
+                </span>
+              ) : (
+                <Link
+                  href={`/bureau/upgrade/${result.certificate.id}`}
+                  style={{ padding: "12px 20px", borderRadius: 12, border: "1px solid #4f46e5", color: "#4f46e5", background: "#fff", fontWeight: 800, fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
+                  title="Upgrade to Verified — adds real-name attestation by AEVION Bureau"
+                >
+                  ⭐ Upgrade to Verified ($19)
+                </Link>
+              )}
               <Link
                 href={`/qright/badge/${result.qright.id}`}
                 style={{ padding: "12px 20px", borderRadius: 12, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", color: "#0f172a", fontWeight: 800, fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}

@@ -13973,6 +13973,44 @@ ${question.trim()}`;
         description="Оставьте адрес: одно письмо в день открытия и условия раннего доступа. Ничего больше."
         buttonLabel="Написать мне"
       />
+      {/* Петля роста: позвать соперника. Задание оркестратора 28.09 под план
+          100 000 — шахматы единственное, чем делятся сами, и делятся ровно в
+          эту минуту: партия только что закончилась.
+
+          Метка ?c=chess-share доезжает до воронки сама: слой учёта
+          (lib/track.ts) подхватывает её из адреса и кладёт в каждое событие,
+          поэтому по ней будет видно, сколько людей пришло приглашениями.
+
+          Ссылка ведёт на обычный вход в игру: у позванного партия начинается
+          без регистрации — то, чем и берёт этот канал. */}
+      <div style={{marginTop:SPACE[4],paddingTop:SPACE[3],borderTop:`1px solid ${CC.textDim}33`}}>
+        <div style={{fontSize:13,color:CC.textDim,marginBottom:SPACE[2],lineHeight:1.5}}>
+          Или позовите соперника: у него партия откроется сразу, без регистрации.
+        </div>
+        <button
+          type="button"
+          onClick={()=>{
+            const ссылка=`${window.location.origin}/cyberchess?c=chess-share`;
+            // Буфер обмена отказывает буднично: без https, без разрешения, в
+            // ином окне. Молча проглотить отказ нельзя — человек нажал и
+            // ничего не произошло. Поэтому при отказе показываем саму ссылку,
+            // её можно выделить и скопировать руками.
+            const запасной=()=>showToast(`Скопируйте ссылку: ${ссылка}`,"info");
+            try{
+              if(navigator.clipboard&&window.isSecureContext){
+                navigator.clipboard.writeText(ссылка)
+                  .then(()=>showToast("⚔ Приглашение скопировано — отправьте другу","success"))
+                  .catch(запасной);
+              }else запасной();
+            }catch{запасной();}
+          }}
+          style={{width:"100%",padding:"10px 14px",borderRadius:10,cursor:"pointer",
+            border:`1px solid ${CC.textDim}55`,background:"transparent",color:CC.text,
+            fontSize:14,fontWeight:700}}
+        >
+          ⚔ Скопировать приглашение «сыграй со мной»
+        </button>
+      </div>
     </Modal>
     <Modal open={showChessyInfo} onClose={()=>sShowChessyInfo(false)} size="md" title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}><Icon.Coin width={20} height={20}/> Как работает Chessy</span>}>
       <div style={{fontSize:14,color:CC.text,lineHeight:1.55}}>

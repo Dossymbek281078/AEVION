@@ -956,7 +956,7 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   // Стартовые шаги — ПРИМЕР для человека, а не отладочный набор автора:
   // цельный мини-сценарий «страница + картинка к ней + приветствие голосом».
   const [agentSteps, setAgentSteps] = useState<AgentStep[]>([
-    { type: "code", prompt: "Страница кофейни: шапка с названием, меню из шести позиций с ценами, кнопка «Забронировать столик»", saveAs: "pages/index.tsx" },
+    { type: "code", prompt: "Страница кофейни: шапка с названием, меню из шести позиций с ценами, часы работы и кнопка «Позвонить»", saveAs: "pages/index.tsx" },
     { type: "image", prompt: "Уютная кофейня, тёплый свет, латте-арт, фотореалистично", saveAs: "public/hero.url.txt" },
     { type: "tts", text: "Добро пожаловать в нашу кофейню — столик уже ждёт вас", voice: "Rachel", saveAs: "public/welcome.mp3.b64" },
   ]);

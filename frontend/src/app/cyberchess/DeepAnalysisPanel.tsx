@@ -123,7 +123,13 @@ export default function DeepAnalysisPanel({ fen }: { fen: string }) {
           background: "rgba(117,153,0,0.06)", fontSize: 13,
         }}
       >
-        <div style={{ fontWeight: 800, color: "#5b7a00" }}>🔒 Глубокий анализ — в CyberChess Pro</div>
+        {/* 🔴 28.09.2026: раньше здесь стояло «в CyberChess Pro». С 15.09 «Pro» —
+            это СТУПЕНЬ СРОКА (6 месяцев), а не состав: любая платная ступень,
+            включая самую дешёвую месячную, открывает модуль целиком
+            (isModuleEntitled на бэкенде). То есть надпись называла человеку
+            ступень дороже нужной — потеря ровно в ту сторону, в которую её не
+            видно: покупку не сделали, а отказ никуда не записался. */}
+        <div style={{ fontWeight: 800, color: "#5b7a00" }}>🔒 Глубокий анализ — в платной подписке CyberChess</div>
         <div style={{ marginTop: 6, color: "#4a4a4a", lineHeight: 1.5 }}>
           Stockfish 17.1 с полной нейросетью — глубина анализа уровня lichess.
           Игра, 500&nbsp;000 задач, ИИ-коуч и лёгкий анализ остаются бесплатными.
@@ -139,11 +145,11 @@ export default function DeepAnalysisPanel({ fen }: { fen: string }) {
             background: "#5b7a00", color: "#fff", fontWeight: 700, textDecoration: "none",
           }}
         >
-          Открыть Pro
+          Открыть доступ
         </a>
         {access === "unknown" && (
           <div style={{ marginTop: 8, color: "#7a7a7a", fontSize: 12 }}>
-            Уже оформляли Pro? <a href="/auth?next=/cyberchess" style={{ color: "#5b7a00", fontWeight: 700 }}>Войти</a>
+            Уже оплачивали CyberChess? <a href="/auth?next=/cyberchess" style={{ color: "#5b7a00", fontWeight: 700 }}>Войти</a>
           </div>
         )}
       </div>

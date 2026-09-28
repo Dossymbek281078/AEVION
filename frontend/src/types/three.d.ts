@@ -139,6 +139,13 @@ declare module "three" {
     constructor(color?: number, intensity?: number);
   }
 
+  /** Точечный источник: лампа в комнате. distance и decay — затухание. */
+  export class PointLight {
+    position: Vector3;
+    castShadow: boolean;
+    constructor(color?: number, intensity?: number, distance?: number, decay?: number);
+  }
+
   export class HemisphereLight {
     constructor(skyColor?: number, groundColor?: number, intensity?: number);
   }

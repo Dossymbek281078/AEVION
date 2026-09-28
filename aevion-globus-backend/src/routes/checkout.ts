@@ -5,7 +5,7 @@ import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
 import { lemonSqueezyPaymentProvider } from "../lib/payment/lemonSqueezyProvider";
 import { payboxPaymentProvider, isPayboxConfigured, isPayboxWebhookSecretSet } from "../lib/payment/payboxProvider";
 import { paypalPaymentProvider, isPaypalConfigured } from "../lib/payment/paypalProvider";
-import { resolveLemonSqueezyVariant, lemonSqueezySellable } from "../data/lemonSqueezyVariants";
+import { resolveLemonSqueezyVariant, lemonSqueezySellable, fallbackVariantForReference } from "../data/lemonSqueezyVariants";
 import {
   TIERS, getTier, getModulePrice, resolvePromoCode, CURRENCY_RATES, MAX_PROMO_DISCOUNT_RATIO, buildQuote,
   type TierId, type CurrencyCode, type TermTier,
@@ -558,11 +558,10 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
     // ступени целиком. Продажа qskyway за его цену вариантом tier_max выдала
     // бы всю платформу на год — тот самый класс, из-за которого 16.09 снимали
     // товары с публикации (ступень full уходила за цену одного модуля).
+    // Предикат ОДИН на кассу и витрину — иначе кнопка и касса разойдутся
+    // (lemonSqueezyVariants.ts, fallbackVariantForReference).
     const собственныйВариант = resolveLemonSqueezyVariant(reference);
-    const запасной =
-      !собственныйВариант && Boolean(app) && tier.id === "lite"
-        ? resolveLemonSqueezyVariant("tier_lite")
-        : null;
+    const запасной = fallbackVariantForReference(reference);
     const lsReady =
       Boolean(process.env.LEMON_SQUEEZY_API_KEY?.trim()) &&
       Boolean(process.env.LEMON_SQUEEZY_STORE_ID?.trim()) &&

@@ -2,7 +2,7 @@ import { Router } from "express";
 import { queryNumber } from "../lib/queryNumber";
 import { queryDate } from "../lib/queryDate";
 import { existsSync, mkdirSync, appendFileSync, readFileSync } from "fs";
-import { join, dirname } from "path";
+import { resolve, join, dirname } from "path";
 import jwt from "jsonwebtoken";
 import { getJwtSecret } from "../lib/authJwt";
 import { createHmac, timingSafeEqual } from "crypto";
@@ -40,7 +40,68 @@ export const pricingRouter = Router();
  * module is first imported would otherwise write into the real data/ file —
  * exactly how the paywall suite polluted data/subscriptions.jsonl. */
 function leadsFile(): string {
-  return process.env.LEADS_FILE || join(process.cwd(), "data", "leads.jsonl");
+  // ПОРЯДОК: явная переменная -> том Railway -> рабочий каталог.
+  //
+  // 🔴 21.09.2026. Раньше второго шага не было, и заявка ложилась в
+  // `process.cwd()/data` — то есть её сохранность держалась на СОВПАДЕНИИ:
+  // том смонтирован в `/app/aevion-globus-backend/data`, и пока рабочий
+  // каталог ровно такой, файл попадает на том случайно. Сменится рабочий
+  // каталог (другой Dockerfile, запуск из dist, `npm --prefix`) — заявки
+  // начнут стираться КАЖДОЙ выкаткой, и заметить это нельзя: ручка отвечает
+  // 201, человек видит «спасибо», файл исчезает вместе с контейнером.
+  //
+  // Цена ошибки здесь выше обычной: на 21.09 четыре модуля запуска не
+  // покупаются, и касса отправляет покупателя именно сюда — «напишите нам».
+  // Эта заявка и есть единственный след платящего человека.
+  //
+  // Путь под томом берём так же, как события и подписки (routes/events.ts),
+  // чтобы ответ на вопрос «переживёт ли выкатку» был один на все хранилища.
+  const fromEnv = process.env.LEADS_FILE?.trim();
+  if (fromEnv) return fromEnv;
+  const mount = process.env.RAILWAY_VOLUME_MOUNT_PATH?.trim();
+  if (mount) return join(mount, "leads.jsonl");
+  return join(process.cwd(), "data", "leads.jsonl");
+}
+
+/**
+ * Состояние хранилища заявок — то же, что eventsStore/subsStore в /health.
+ *
+ * Отвечает ФАКТОМ «попадает ли путь под точку монтирования тома», а не
+ * «задана ли переменная»: именно эту подмену разбирали 14.08 в events.ts —
+ * тогда из «переменная не задана» сделали вывод «выкатка сотрёт данные», и
+ * он был неверен.
+ */
+export function leadsStoreStatus(): {
+  persistedByEnv: boolean;
+  onVolume: boolean | null;
+  exists: boolean;
+  count: number;
+  oldest: string | null;
+} {
+  const persistedByEnv = Boolean(process.env.LEADS_FILE?.trim());
+  const mount = process.env.RAILWAY_VOLUME_MOUNT_PATH?.trim() || null;
+  const file = leadsFile();
+  // Сравниваем НОРМАЛИЗОВАННЫЕ пути, а не строки: у событий это сделано
+  // заменой разделителей, но resolve честнее — он снимает "..", лишние слэши
+  // и разницу регистра диска на Windows, где идут тесты.
+  const onVolume = mount ? resolve(file).startsWith(resolve(mount)) : null;
+  if (!existsSync(file)) return { persistedByEnv, onVolume, exists: false, count: 0, oldest: null };
+  try {
+    const lines = readFileSync(file, "utf8").split("\n").filter(Boolean);
+    let oldest: string | null = null;
+    for (const line of lines) {
+      try {
+        const ts = JSON.parse(line)?.ts;
+        if (typeof ts === "string" && (oldest === null || ts < oldest)) oldest = ts;
+      } catch {
+        // Битая строка не должна ронять health — пропускаем её одну.
+      }
+    }
+    return { persistedByEnv, onVolume, exists: true, count: lines.length, oldest };
+  } catch {
+    // Прочитать не удалось — это НЕ «ноль заявок». Отдаём -1, как события.
+    return { persistedByEnv, onVolume, exists: true, count: -1, oldest: null };
+  }
 }
 
 function ensureLeadsDir() {

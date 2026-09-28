@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 import { readBuildInfo } from "./lib/buildInfo";
+import { leadsStoreStatus } from "./routes/pricing";
 import { dilithiumStatus } from "./lib/qsignV2/dilithium";
 import { eventsStoreStatus } from "./routes/events";
 import { subsStoreStatus } from "./routes/provisioning";
@@ -283,6 +284,16 @@ function healthPayload() {
     // 21.09.2026: прод отвечал commit "unknown", и опознать сборку было нечем —
     // выкатка встала у всех окон. Коммит она НЕ заменяет (см. buildInfo.ts).
     deploymentId: BUILD_INFO.deploymentId,
+    // Заявки — единственный след человека, который хотел купить, но не смог
+    // (сегодня это четыре модуля запуска: касса отвечает 503 и отправляет его
+    // на страницу «напишите нам»). Спрашиваем хранилище тем же вопросом, что
+    // события и подписки: попадает ли файл под смонтированный том.
+    leadsStore: leadsStoreStatus(),
+    // Метка проверки конвейера 24.09.2026: три выкатки подряд приезжали без
+    // последних коммитов, хотя сборка компилировала. Если этого поля нет на
+    // проде после выкатки — значит уезжает не наш снимок, и искать надо в
+    // конвейере, а не в коде.
+    pipelineProbe: "2026-09-24",
     bootedAt: BOOT_TIME,
     uptimeSec: Math.floor((Date.now() - Date.parse(BOOT_TIME)) / 1000),
     // Аналитика пишется в файл. Если её самое старое событие всегда моложе

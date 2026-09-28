@@ -11,6 +11,7 @@ import {
   PLANET_BASE_MONTHLY,
   TERM_TIERS,
   fromPricePerMonth,
+  termPricePerMonth,
   standaloneApp,
 } from "@/lib/termPricing";
 
@@ -99,11 +100,58 @@ export default function ModulePricingChip({ moduleId, theme = "light", hideBuy =
     };
   }, []);
 
+  /*
+   * 🔴 «от $X» обязано называть цену, которую МОЖНО заплатить (28.09.2026).
+   *
+   * Раньше здесь всегда стоял месяц на самом длинном сроке — «самая низкая
+   * цена, которую можно назвать честно». Это перестало быть правдой: у
+   * qright, qsign, startup_exchange и qskyway длинные сроки не продаются
+   * (в кассе нет их вариантов, ручка отвечает 503), продаётся только месяц.
+   * Замер 28.09 на живом проде: страница /qskyway обещала «от $8/мес», а
+   * заплатить можно только $16 — ровно вдвое больше. Это обещание
+   * несуществующего, и видит его человек в момент решения.
+   *
+   * Поэтому берём самый дешёвый срок ИЗ ПРОДАВАЕМЫХ. Список тот же, что у
+   * страницы цен: providers.lemonsqueezy.sellable.configured.
+   *
+   * Незнание трактуем ОСТОРОЖНО, а не в пользу красивого числа: не ответил
+   * сервер — показываем цену месяца. Она заведомо не ниже настоящей, и
+   * человек не увидит цифру, которой не существует. Это отличается от
+   * правила про КНОПКУ выше намеренно: там незнание открывает покупку,
+   * здесь незнание не имеет права обещать скидку.
+   */
+  const [продаваемые, setПродаваемые] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    let живо = true;
+    fetch(apiUrl("/api/pricing/checkout/healthz"))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!живо) return;
+        const список = d?.providers?.lemonsqueezy?.sellable?.configured;
+        setПродаваемые(Array.isArray(список) ? список : null);
+      })
+      .catch(() => {});
+    return () => {
+      живо = false;
+    };
+  }, []);
+
   const незачемПокупать = ownPlan !== null && PAID_PLANS.has(ownPlan);
 
   const app = standaloneApp(moduleId);
   const planetFrom = `$${fromPricePerMonth(PLANET_BASE_MONTHLY)}`;
-  const appFrom = app ? `$${fromPricePerMonth(app.baseMonthly)}` : null;
+  // Самый дешёвый срок из тех, что реально продаются; список не пришёл —
+  // берём месяц (см. разбор выше), а не самый длинный срок.
+  const дешевейшийПродаваемый = (): number | null => {
+    if (!app) return null;
+    if (!продаваемые) return termPricePerMonth(app.baseMonthly, "lite");
+    const доступные = TERM_TIERS.filter((t) => продаваемые.includes(`app_${app.slug}_${t}`));
+    if (!доступные.length) return null;
+    return Math.min(...доступные.map((t) => termPricePerMonth(app.baseMonthly, t)));
+  };
+  const appFromЧисло = дешевейшийПродаваемый();
+  const appFrom = appFromЧисло === null ? null : `$${appFromЧисло}`;
   const href = keepChannel(app ? PRICING_APP(app.slug) : PRICING_TERMS, channel);
 
   const palette =

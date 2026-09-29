@@ -768,6 +768,42 @@ export default function QSpaceClient() {
         glass.position.set(mid.x, o.sill + o.height / 2, mid.y);
         glass.rotation.y = rotY;
         t.gFinish.add(glass);
+
+        // РАМА И ПОДОКОННИК. Голое стекло в проёме читается как дыра: в жилье
+        // у окна всегда есть белый профиль по периметру и полка подоконника,
+        // и глаз цепляется именно за них. Рама собирается одним телом из
+        // четырёх брусков, чтобы не плодить предметы на каждое окно.
+        const рама: THREE.BufferGeometry[] = [];
+        const П = 0.06;                       // ширина профиля
+        const Г = 0.07;                       // толщина профиля поперёк стены
+        const брусок = (дл: number, выс: number, сдвигX: number, сдвигY: number) => {
+          const g = new THREE.BoxGeometry(дл, выс, Г);
+          g.applyMatrix4(new THREE.Matrix4().setPosition(сдвигX, сдвигY, 0));
+          рама.push(g);
+        };
+        брусок(o.width + П, П, 0, o.height / 2);        // верх
+        брусок(o.width + П, П, 0, -o.height / 2);       // низ
+        брусок(П, o.height, -(o.width / 2), 0);         // левая стойка
+        брусок(П, o.height, o.width / 2, 0);            // правая стойка
+        const общаяРама = mergeGeometries(рама, false);
+        for (const g of рама) g.dispose();
+        if (общаяРама) {
+          const профиль = new THREE.Mesh(
+            общаяРама,
+            new THREE.MeshStandardMaterial({ color: 0xfbfaf8, roughness: 0.35, metalness: 0 }),
+          );
+          профиль.position.set(mid.x, o.sill + o.height / 2, mid.y);
+          профиль.rotation.y = rotY;
+          t.gFinish.add(профиль);
+        }
+        // Подоконник выступает внутрь комнаты на 5 см дальше стены — как и делают.
+        const подоконник = new THREE.Mesh(
+          new THREE.BoxGeometry(o.width + 0.1, 0.03, w.thickness + 0.1),
+          new THREE.MeshStandardMaterial({ color: 0xf2efe9, roughness: 0.3, metalness: 0 }),
+        );
+        подоконник.position.set(mid.x, o.sill - 0.015, mid.y);
+        подоконник.rotation.y = rotY;
+        t.gFinish.add(подоконник);
       } else {
         const door = new THREE.Mesh(
           new THREE.BoxGeometry(o.width - 0.06, o.height - 0.04, 0.05),

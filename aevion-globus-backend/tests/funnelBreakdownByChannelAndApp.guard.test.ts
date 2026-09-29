@@ -29,8 +29,30 @@ describe("разрез воронки", () => {
       событие("checkout_start", { channel: "youtube", app: "multichat" }),
       событие("checkout_success", { channel: "youtube", app: "multichat" }),
     ]);
-    expect(r.byChannel["youtube"]).toEqual({ visits: 2, pricing: 1, checkoutStart: 1, paid: 1 });
-    expect(r.byChannel["product-hunt"]).toEqual({ visits: 1, pricing: 1, checkoutStart: 0, paid: 0 });
+    // 🔴 30.09.2026 смысл `paid` ИСПРАВЛЕН, и ожидание пришлось поправить.
+    // Раньше он считал `checkout_success` — событие загрузки страницы «спасибо».
+    // Разрез отдавал на проде «direct: paid 3» при нуле подтверждённых оплат в
+    // итоге, то есть отвечал ложью на главный вопрос. Теперь `paid` — это
+    // подтверждение КАССЫ, а открытия страницы возврата живут полем
+    // `thankYouOpened`, как и в итоге.
+    expect(r.byChannel["youtube"]).toEqual({
+      visits: 2,
+      pricing: 1,
+      checkoutStart: 1,
+      checkoutStartOurs: 0,
+      thankYouOpened: 1,
+      paid: 0,
+      paidOurs: 0,
+    });
+    expect(r.byChannel["product-hunt"]).toEqual({
+      visits: 1,
+      pricing: 1,
+      checkoutStart: 0,
+      checkoutStartOurs: 0,
+      thankYouOpened: 0,
+      paid: 0,
+      paidOurs: 0,
+    });
   });
 
   it("«без метки» и «метка неизвестна» — РАЗНЫЕ ответы", () => {
@@ -47,7 +69,11 @@ describe("разрез воронки", () => {
   it("покупка плана не пропадает: считается под ключом plan", () => {
     const r = разрезВоронки([
       событие("checkout_start", { channel: "direct" }),
-      событие("checkout_success", { channel: "direct", app: "qskyway" }),
+      // Оплата теперь приходит событием подтверждения кассы, а не загрузкой
+      // страницы. Имя приложения приносит сам вебхук (meta.app), иначе разрез
+      // сложил бы ВСЕ оплаты в «plan» и на вопрос «что покупают» отвечал бы
+      // «план», что бы ни купили.
+      событие("payment_confirmed", { channel: "direct", app: "qskyway" }),
     ]);
     expect(r.byApp["plan"]).toEqual({ checkoutStart: 1, paid: 0 });
     expect(r.byApp["qskyway"]).toEqual({ checkoutStart: 0, paid: 1 });

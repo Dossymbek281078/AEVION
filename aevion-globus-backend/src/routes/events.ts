@@ -254,28 +254,71 @@ export function записатьСобытиеОтСервера(
  * `plan`, а не пропадают: иначе сумма по приложениям не сошлась бы с общей.
  */
 export interface РазрезВоронки {
-  byChannel: Record<string, { visits: number; pricing: number; checkoutStart: number; paid: number }>;
+  byChannel: Record<
+    string,
+    {
+      visits: number;
+      pricing: number;
+      checkoutStart: number;
+      checkoutStartOurs: number;
+      thankYouOpened: number;
+      paid: number;
+      paidOurs: number;
+    }
+  >;
   byApp: Record<string, { checkoutStart: number; paid: number }>;
 }
 
 export function разрезВоронки(
-  events: Array<Pick<AnalyticsEvent, "type" | "path" | "meta">>,
+  events: Array<Pick<AnalyticsEvent, "type" | "path" | "meta" | "sid">>,
+  нашиСессии: ReadonlySet<string> = new Set(),
 ): РазрезВоронки {
   const byChannel = Object.create(null) as РазрезВоронки["byChannel"];
   const byApp = Object.create(null) as РазрезВоронки["byApp"];
+  /** Пара «канал + сессия»: чтобы визит считался один раз, как в итоге. */
+  const виденныеСессии = new Set<string>();
 
   for (const ev of events) {
     const сырой = ev.meta?.channel;
     const канал = typeof сырой === "string" && сырой.trim() ? сырой.trim() : "direct";
-    if (!byChannel[канал]) byChannel[канал] = { visits: 0, pricing: 0, checkoutStart: 0, paid: 0 };
+    if (!byChannel[канал]) {
+      byChannel[канал] = {
+        visits: 0,
+        pricing: 0,
+        checkoutStart: 0,
+        checkoutStartOurs: 0,
+        thankYouOpened: 0,
+        paid: 0,
+        paidOurs: 0,
+      };
+    }
     const к = byChannel[канал];
 
     if (ev.type === "page_view") {
-      к.visits += 1;
+      // 🔴 ВИЗИТЫ СЧИТАЕМ ТАК ЖЕ, КАК ИТОГ — по уникальным сессиям.
+      // Замер 30.09.2026: итог давал 167 визитов за 14 дней, а сумма по каналам
+      // 519, потому что здесь считался КАЖДЫЙ просмотр страницы. Два разных
+      // числа под одним словом в одном ответе: основатель увидел бы 167 или 519
+      // в зависимости от того, куда посмотрел.
+      if (ev.sid) {
+        const ключ = `${канал}|${ev.sid}`;
+        if (!виденныеСессии.has(ключ)) {
+          виденныеСессии.add(ключ);
+          к.visits += 1;
+        }
+      } else {
+        к.visits += 1;
+      }
       if (typeof ev.path === "string" && ev.path.includes("/pricing")) к.pricing += 1;
       continue;
     }
-    if (ev.type !== "checkout_start" && ev.type !== "checkout_success") continue;
+    if (
+      ev.type !== "checkout_start" &&
+      ev.type !== "checkout_success" &&
+      ev.type !== СОБЫТИЕ_ОПЛАТА_ПОДТВЕРЖДЕНА
+    ) {
+      continue;
+    }
 
     const сыройApp = ev.meta?.app;
     const приложение = typeof сыройApp === "string" && сыройApp.trim() ? сыройApp.trim() : "plan";
@@ -283,9 +326,17 @@ export function разрезВоронки(
 
     if (ev.type === "checkout_start") {
       к.checkoutStart += 1;
+      if (ev.sid && нашиСессии.has(ev.sid)) к.checkoutStartOurs += 1;
       byApp[приложение].checkoutStart += 1;
+    } else if (ev.type === "checkout_success") {
+      // 🔴 ЭТО НЕ ОПЛАТА. Здесь `paid` считался по загрузке страницы «спасибо»,
+      // и разрез отдавал «direct: paid 3» при нуле подтверждённых оплат в итоге —
+      // то есть отвечал ложью на главный вопрос. Открытия страницы возврата
+      // теперь живут своим полем, как и в итоге.
+      к.thankYouOpened += 1;
     } else {
       к.paid += 1;
+      if (ev.meta?.свой === true) к.paidOurs += 1;
       byApp[приложение].paid += 1;
     }
   }
@@ -907,7 +958,7 @@ eventsRouter.get("/funnel", (req, res) => {
       checkoutStartOurs: поДням[д].checkoutStartOurs,
     }));
 
-  const разрез = разрезВоронки(событияВоронки);
+  const разрез = разрезВоронки(событияВоронки, нашиСессии);
 
   const итог = byDay.reduce(
     (a, b) => ({

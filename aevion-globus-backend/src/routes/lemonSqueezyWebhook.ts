@@ -420,6 +420,7 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         записатьПодтверждённуюОплату({
           source: "lemonsqueezy",
           tier: appSlug,
+          app: appSlug,
           reference: ref ?? null,
           event,
           email,
@@ -513,6 +514,7 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         записатьПодтверждённуюОплату({
           source: "lemonsqueezy",
           tier: String(customModule),
+          app: String(customModule),
           reference: ref ?? null,
           event,
           email,

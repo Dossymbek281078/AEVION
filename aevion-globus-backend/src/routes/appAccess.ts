@@ -29,6 +29,8 @@ import jwt from "jsonwebtoken";
 import { getPool } from "../lib/dbPool";
 import { ensureAppSubscriptionTable } from "../lib/ensureAppSubscriptionTable";
 import { getJwtSecret } from "../lib/authJwt";
+import { resolveUserPlan, isModuleEntitled } from "../lib/planGate";
+import { moduleIdForAppSlug } from "../data/lemonSqueezyVariants";
 
 export const appAccessRouter = Router();
 
@@ -59,6 +61,12 @@ function emailFromToken(req: Request): string | null {
 }
 
 
+/**
+ * Список ПОШТУЧНЫХ покупок — и он намеренно НЕ включает модули, открытые
+ * платформенным тарифом. Это ответ на другой вопрос: «за что вы платите
+ * отдельно», а не «что вам доступно». Следующему, кто заметит расхождение с
+ * /check: оно осознанное, а не забытое.
+ */
 appAccessRouter.get("/", async (req, res) => {
   const email = emailFromToken(req);
   if (!email) return res.status(401).json({ error: "unauthorized" });
@@ -77,12 +85,47 @@ appAccessRouter.get("/", async (req, res) => {
   }
 });
 
+/**
+ * 🔴 28.09.2026. У ПРАВ ДВА ИСТОЧНИКА, А ЭТА РУЧКА СМОТРЕЛА В ОДИН.
+ *
+ * Модуль открывается либо поштучной подпиской (строка AppSubscription), либо
+ * платформенным тарифом. С 15.09 любой платный тариф даёт всю платформу. Здесь
+ * же спрашивалась только таблица поштучных покупок — значит подписчик Full,
+ * открыв «Глубокий анализ» в шахматах, получал `active:false`, замок «🔒
+ * Открыть Pro» и предложение заплатить второй раз за то, что уже оплачено.
+ *
+ * Канонический гейт `requireModule` (planGate.ts) спрашивает ОБА источника —
+ * расходились не права, а две двери в одну комнату. Порядок здесь тот же, что
+ * у него: сперва тариф (он резолвится из токена и хранилища подписок, без
+ * запроса в базу), потом база. Обычный путь платящего по тарифу базу вообще не
+ * трогает.
+ *
+ * ТРИ ИСХОДА, А НЕ ДВА. «Спросить не удалось» — это НЕ «не куплено»: показать
+ * «купите» тому, чей статус мы не выяснили, значит предложить заплатить дважды.
+ * Поэтому если один источник сломался, а второй прав не дал, отвечаем 503, и
+ * фронт (`checkAppAccess`) читает это как `unknown`, а не как отказ.
+ */
 appAccessRouter.get("/check", async (req, res) => {
   const email = emailFromToken(req);
   if (!email) return res.status(401).json({ error: "unauthorized" });
   const app = String(req.query.app ?? "").trim().toLowerCase();
   if (!app) return res.status(400).json({ error: "app required" });
 
+  // ── Источник 1: платформенный тариф ──────────────────────────────────
+  // Слаг кассы и id модуля — РАЗНЫЕ имена одной вещи (`ip_bureau` против
+  // `aevion-ip-bureau`), перевод живёт в одном месте и здесь только зовётся.
+  let тарифОтветил = true;
+  try {
+    const план = resolveUserPlan(req);
+    if (isModuleEntitled(план, moduleIdForAppSlug(app))) {
+      return res.json({ active: true, source: "plan" });
+    }
+  } catch (err) {
+    тарифОтветил = false;
+    console.error("[appAccess] тариф не прочитан:", err instanceof Error ? err.message : err);
+  }
+
+  // ── Источник 2: поштучная подписка ───────────────────────────────────
   try {
     const pool = getPool();
     await ensureAppSubscriptionTable(pool);
@@ -90,7 +133,12 @@ appAccessRouter.get("/check", async (req, res) => {
       `SELECT 1 FROM "AppSubscription" WHERE "email"=$1 AND "appSlug"=$2 AND "status"='active' LIMIT 1`,
       [email, app],
     );
-    return res.json({ active: result.rowCount! > 0 });
+    if (result.rowCount! > 0) return res.json({ active: true, source: "app" });
+    if (!тарифОтветил) {
+      // Прав не нашли, но один источник молчал — честное «не знаю».
+      return res.status(503).json({ error: "entitlement_check_failed" });
+    }
+    return res.json({ active: false });
   } catch (err) {
     console.error("[appAccess] check error:", err instanceof Error ? err.message : err);
     return res.status(500).json({ error: "db error" });

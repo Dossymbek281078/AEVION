@@ -1,5 +1,7 @@
 "use client";
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import { отказТренера, тренерОтветил, пометкаЗапаснойМодели } from "./coachOutage";
+import { главныйВыдуманныйХод, дополнитьХодомДвижка, текстВместоОтвета } from "./проверьХодыОтвета";
 import { Chess, type Square } from "chess.js";
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -446,6 +448,8 @@ export default function AiCoach({
 
       try {
         let engineBlock = "";
+        // Лучший ход из отчёта пригодится, если ответ модели придётся отклонить.
+        let лучшийХодДвижка = "";
         if (!opts?.skipEngine && newMsgs.length === 1) {
           sEngineThinking(true);
           const report = await analyzePosition(fen, 22, 3);
@@ -467,6 +471,10 @@ export default function AiCoach({
               ? ((moves.length % 2 === 1) ? "w" : "b") as "w" | "b"
               : undefined;
             engineBlock = buildEngineBlock(report, lastSan, sideMoved, evalBeforeWhitePov);
+            const перваяЛиния = report.lines[0]?.moves;
+            if (перваяЛиния?.length) {
+              лучшийХодДвижка = uciLineToSan(report.fen, перваяЛиния.slice(0, 1));
+            }
           }
         }
 
@@ -519,15 +527,31 @@ export default function AiCoach({
         const reply =
           data.content?.filter((c: any) => c.type === "text" || c.text)
             .map((c: any) => c.text || "").join("") || "No response";
-        sMsgs([...newMsgs, { role: "assistant", content: reply }]);
-      } catch (e: any) {
-        if (e?.name === "AbortError") {
-          sError("ИИ-тренер не ответил за 30 секунд. Сервер может быть перегружен — попробуй ещё раз через минуту, или используй Stockfish-анализ ниже.");
-        } else if (/fetch|network|Failed to fetch/i.test(e?.message || "")) {
-          sError("Не удалось связаться с ИИ-тренером. Проверь соединение или используй Stockfish-разбор (он работает локально).");
+        тренерОтветил(); // ответ пришёл — пометка об отказе снимается
+        // 🔴 Запрет «ходы только из отчёта» жил ТОЛЬКО в промпте, то есть на
+        // добросовестности модели. Проверяем позицией: ход, которого в ней
+        // нет, до экрана не доезжает.
+        // Судим ПЕРВЫЙ названный ход, не считая того, который модель
+        // пересказывает за соперника: ходы варианта идут последовательно, и
+        // проверка каждого по исходной позиции даёт ложные тревоги (замер
+        // соседнего окна: 47 «нарушений» на девяти верных ответах).
+        const выдуманный = главныйВыдуманныйХод(fen, reply, moves[moves.length - 1]);
+        if (выдуманный) {
+          console.warn("[coach] ответ отклонён, такого хода в позиции нет:", выдуманный);
+          sMsgs([...newMsgs, { role: "assistant", content: текстВместоОтвета(лучшийХодДвижка) }]);
         } else {
-          sError(e?.message || "Connection failed");
+          // Разбор без единого хода не прячем, а дополняем ходом движка.
+          const текст = дополнитьХодомДвижка(reply, лучшийХодДвижка);
+          sMsgs([...newMsgs, { role: "assistant", content: текст + пометкаЗапаснойМодели(data) }]);
         }
+      } catch (e: any) {
+        // Три ветки отказа свелись к одной: текст живёт в coachOutage.ts, чтобы
+        // три места вызова тренера (окно после партии, эта панель, «А что если»)
+        // не расходились молча. Лимит поставщика раньше проваливался в else, и
+        // человек на русской странице читал «You have reached your specified API
+        // usage limits…» — это выглядит поломкой сайта, хотя сломан счёт у
+        // поставщика модели, а партия и движок работают.
+        sError(отказТренера(e?.message || "", e?.name));
       } finally {
         sLoading(false);
         sEngineThinking(false);

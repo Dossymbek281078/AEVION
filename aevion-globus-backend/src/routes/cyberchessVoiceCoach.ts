@@ -36,6 +36,7 @@ import { Router, Request, Response } from 'express';
 import { createInMemoryRateLimiter } from '../lib/rateLimit/inMemoryWindow';
 import { clientIp, rateLimit } from '../lib/rateLimit';
 import { isAnonymousRequest } from '../lib/aiInputBudget';
+import { учестьДействие, отказПоНорме } from '../lib/freeActionQuota';
 import { createHash } from 'crypto';
 import { makeServiceCapture } from '../lib/sentry/platform';
 
@@ -362,6 +363,26 @@ router.post('/comment', anonVoiceAskCeiling, async (req: Request, res: Response)
 router.post('/ask', anonVoiceAskCeiling, async (req: Request, res: Response) => {
   const gate = coachLimiter.check(clientIp(req));
   if (!gate.allowed) return tooMany(res, gate.retryAfterMs);
+
+  // Бесплатная норма вопросов тренеру, дальше платно.
+  //
+  // ПОЧЕМУ ИМЕННО ТРЕНЕР, а не партия. Решение оркестратора 28.09 и здравый
+  // смысл совпадают: шахматы — бесплатный магнит, партией делятся, и она
+  // обязана идти без входа и без стены на КАЖДОМ шаге. Закрывать можно то,
+  // что премиально И стоит нам живых денег: вопрос тренеру — это вызов ИИ и
+  // озвучка, то есть наш счёт у поставщика.
+  //
+  // Потолок расхода (anonVoiceAskCeiling) и эта норма — РАЗНОЕ и не заменяют
+  // друг друга: потолок защищает нас от злоупотребления, норма превращает
+  // ценность в оплату. Порядок важен: сперва защита, потом деньги.
+  //
+  // Спит, пока "cyberchess_coach" не назван в PAID_ACTIONS.
+  const норма = await учестьДействие(req, "cyberchess_coach");
+  if (норма.заблокировано) {
+    отказПоНорме(res, "cyberchess", норма);
+    return;
+  }
+
   try {
     const body = (req.body ?? {}) as {
       question?: string;

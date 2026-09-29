@@ -1,4 +1,6 @@
 "use client";
+import { лимитПровайдера, когдаВернётся as срокВозврата, тренерОтветил, пометкаОВыключенномРазборе, пометкаЗапаснойМодели, общаяОчередьАнонимов } from "./coachOutage";
+import { главныйВыдуманныйХод, дополнитьХодомДвижка, текстВместоОтвета } from "./проверьХодыОтвета";
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, startTransition } from "react";
 
@@ -6142,7 +6144,7 @@ export default function CyberChessPage(){
               </span>}
             </h1>
             <div className="cc-header-sub" style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
-              SF18 · {pzCountLabel} {ccPlural(pzTotal??PUZZLES.length,"задача","задачи","задач")}{useSF&&sfOk?" · ⚡":""}
+              SF18 · {pzCountLabel} {ccPlural(pzTotal??PUZZLES.length,"задача","задачи","задач")} в банке{useSF&&sfOk?" · ⚡":""}
             </div>
           </div>
         </div>
@@ -6498,7 +6500,7 @@ export default function CyberChessPage(){
         // два выкаченных варианта (64 и 152) не сдвинули низ доски ни на пиксель — 724/844
         // и 694/780. 152 = 88 (отступ пилюли) + 56 (её высота с чипом) + 8. Условие — ровно
         // то же, что у пилюли. Замеры 15.09.2026.
-        return<div style={{flex:1,minHeight:0,overflowY:"auto",marginBottom:16,display:"flex",flexDirection:"column",gap:SPACE[3],maxWidth:1180,width:"100%",marginInline:"auto"}}>
+        return<div style={{flex:1,minHeight:0,overflowY:"auto",marginBottom:16,display:"flex",flexDirection:"column",gap:lowDesktop?SPACE[1]:SPACE[3],maxWidth:1180,width:"100%",marginInline:"auto"}}>
 
           {/* ─── ДОСКА ПЕРВЫМ ДЕЛОМ ───
               Человек, открывший шахматы, доски не видел вовсе: экран начинался
@@ -6509,13 +6511,19 @@ export default function CyberChessPage(){
               Доска показывает начальную расстановку в его теме и наборе фигур,
               развёрнута по выбранному цвету, и нажатие по ней начинает партию —
               то есть она заодно самая большая и понятная кнопка на экране. */}
+          {/* Невысокий рабочий стол: доска уступает место выбору цвета и кнопке
+              «ИГРАТЬ». Замер 28.09 на 1280x768 — цвет лежал на 772, «ИГРАТЬ» на
+              820 при окне 768, оба за кромкой; страница листается всего на 50 px,
+              и колесо проносит блок мимо (с 820 сразу на -85). Прежняя починка
+              lowDesktop касалась строки под доской в ИДУЩЕЙ партии, а экран
+              настройки не трогала. Подпись на доске — там же, видимая. */}
           <SetupBoardPreview
             orientation={pCol}
             light={bT.light}
             dark={bT.dark}
             border={bT.border}
-            maxPx={isMobileLayout?340:420}
-            label="Начать партию"
+            maxPx={isMobileLayout?340:(lowDesktop?300:420)}
+            label="▶ Нажмите доску — начнём партию"
             onStart={()=>{sHotseat(false);sRivalMode(false);newG()}}
           />
 
@@ -11327,7 +11335,20 @@ ${question.trim()}`;
                   if(!res.ok){const e=await res.json().catch(()=>({error:`HTTP ${res.status}`}));throw new Error(e.error||`Server ${res.status}`)}
                   const data=await res.json();
                   const reply=data.content?.filter((c:any)=>c.type==="text"||c.text).map((c:any)=>c.text||"").join("")||"(нет ответа)";
-                  sCoachChat([...newMsgs,{role:"assistant",content:reply,ts:Date.now()}]);
+                  // Тренер ответил — прежняя пометка об отказе больше не верна.
+                  тренерОтветил();
+                  // Если ответила запасная модель — говорим об этом одной строкой:
+                  // витрина обещает разбор уровня супер-GM, и молчаливая подмена
+                  // качества читается как пустое обещание.
+                  // Ход, которого в позиции нет, до экрана не доезжает: запрет на
+                  // выдуманные варианты жил только в промпте (см. проверьХодыОтвета.ts).
+                  const выдуманные=главныйВыдуманныйХод(fen,reply)?1:0;
+                  if(выдуманные){
+                    console.warn("[coach] ответ отклонён: названного хода в позиции нет");
+                    sCoachChat([...newMsgs,{role:"assistant",content:текстВместоОтвета(),ts:Date.now()}]);
+                  }else{
+                    sCoachChat([...newMsgs,{role:"assistant",content:дополнитьХодомДвижка(reply)+пометкаЗапаснойМодели(data),ts:Date.now()}]);
+                  }
                 }catch(e:any){
                   // Бэкенд недоступен/таймаут — НЕ оставляем ученика без ответа.
                   // Локальный Stockfish даёт лучший ход, оценку берём из eval-бара
@@ -11349,12 +11370,16 @@ ${question.trim()}`;
                   // и обещание скорого возврата было бы ложным (ответ провайдера 22–24.09.2026:
                   // «You have reached your specified API usage limits… regain access on 2026-10-01»).
                   const сообщениеОшибки=String(e?.message||"");
-                  const лимитИсчерпан=/usage limit|quota|credit balance|regain access/i.test(сообщениеОшибки);
-                  const датаВозврата=(сообщениеОшибки.match(/(\d{4}-\d{2}-\d{2})/)||[])[1];
-                  const когдаВернётся=(()=>{if(!датаВозврата)return "";const d=new Date(датаВозврата+"T00:00:00Z");if(isNaN(d.getTime()))return "";const м=["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];return ` — вернётся ${d.getUTCDate()} ${м[d.getUTCMonth()]}`})();
+                  // Признак лимита и срок возврата считаются в одном месте на все три точки
+                  // вызова тренера — coachOutage.ts. Здесь остаётся только текст: он богаче
+                  // соседних, потому что добавляет ход, посчитанный движком.
+                  const лимитИсчерпан=лимитПровайдера(сообщениеОшибки);
+                  const когдаВернётся=срокВозврата(сообщениеОшибки);
                   const base=лимитИсчерпан
                     ?`💬 Разбор словами сейчас выключен${когдаВернётся}. Партия, задачи и движок работают.`
-                    :(e?.name==="AbortError"?"⏱ ИИ-тренер думал слишком долго.":"⚠ ИИ-тренер сейчас недоступен.");
+                    :(общаяОчередьАнонимов(сообщениеОшибки)
+                      ?"⏳ Сейчас много желающих: тренер отвечает по очереди. Войдите в аккаунт — очередь вас не коснётся."
+                      :e?.name==="AbortError"?"⏱ ИИ-тренер думал слишком долго.":"⚠ ИИ-тренер сейчас недоступен.");
                   const ходПоРусски=bestSan?hodPoRusski(fen,uciИзSan(fen,bestSan)||""):"";
                   const tip=bestSan
                     ?`\n\n♟ Отвечаю движком (Stockfish, глубина 14): лучший ход — ${ходПоРусски||bestSan}, оценка ${evalCpStr} (с точки зрения белых).${лимитИсчерпан?"":" Спроси ещё раз через минуту для развёрнутого разбора."}`
@@ -11371,6 +11396,11 @@ ${question.trim()}`;
                   {coachChat.length>0&&<span style={{fontSize:9,color:T.dim,fontWeight:600}}>{coachChat.length} сообщ.</span>}
                   {coachChat.length>0&&<button onClick={()=>sCoachChat([])} title="Очистить историю" style={{padding:"2px 8px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:10,fontWeight:700,color:T.dim,cursor:"pointer"}}>× очистить</button>}
                 </div>
+                {(()=>{const пометка=пометкаОВыключенномРазборе();return пометка?(
+                  <div style={{fontSize:10,color:"#7c2d12",padding:"5px 8px",borderRadius:6,background:"rgba(251,146,60,0.12)",border:"1px solid #fdba74",lineHeight:1.5}}>
+                    {пометка}
+                  </div>
+                ):null})()}
                 {coachChat.length>0&&coachChat[0]?.ts&&Date.now()-coachChat[0].ts>60000&&(
                   <div style={{fontSize:10,color:"#1e40af",padding:"4px 8px",borderRadius:6,background:"rgba(30,64,175,0.08)",border:"1px solid #bfdbfe"}}>
                     📂 История восстановлена из прошлой сессии
@@ -13967,6 +13997,44 @@ ${question.trim()}`;
         description="Оставьте адрес: одно письмо в день открытия и условия раннего доступа. Ничего больше."
         buttonLabel="Написать мне"
       />
+      {/* Петля роста: позвать соперника. Задание оркестратора 28.09 под план
+          100 000 — шахматы единственное, чем делятся сами, и делятся ровно в
+          эту минуту: партия только что закончилась.
+
+          Метка ?c=chess-share доезжает до воронки сама: слой учёта
+          (lib/track.ts) подхватывает её из адреса и кладёт в каждое событие,
+          поэтому по ней будет видно, сколько людей пришло приглашениями.
+
+          Ссылка ведёт на обычный вход в игру: у позванного партия начинается
+          без регистрации — то, чем и берёт этот канал. */}
+      <div style={{marginTop:SPACE[4],paddingTop:SPACE[3],borderTop:`1px solid ${CC.textDim}33`}}>
+        <div style={{fontSize:13,color:CC.textDim,marginBottom:SPACE[2],lineHeight:1.5}}>
+          Или позовите соперника: у него партия откроется сразу, без регистрации.
+        </div>
+        <button
+          type="button"
+          onClick={()=>{
+            const ссылка=`${window.location.origin}/cyberchess?c=chess-share`;
+            // Буфер обмена отказывает буднично: без https, без разрешения, в
+            // ином окне. Молча проглотить отказ нельзя — человек нажал и
+            // ничего не произошло. Поэтому при отказе показываем саму ссылку,
+            // её можно выделить и скопировать руками.
+            const запасной=()=>showToast(`Скопируйте ссылку: ${ссылка}`,"info");
+            try{
+              if(navigator.clipboard&&window.isSecureContext){
+                navigator.clipboard.writeText(ссылка)
+                  .then(()=>showToast("⚔ Приглашение скопировано — отправьте другу","success"))
+                  .catch(запасной);
+              }else запасной();
+            }catch{запасной();}
+          }}
+          style={{width:"100%",padding:"10px 14px",borderRadius:10,cursor:"pointer",
+            border:`1px solid ${CC.textDim}55`,background:"transparent",color:CC.text,
+            fontSize:14,fontWeight:700}}
+        >
+          ⚔ Скопировать приглашение «сыграй со мной»
+        </button>
+      </div>
     </Modal>
     <Modal open={showChessyInfo} onClose={()=>sShowChessyInfo(false)} size="md" title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}><Icon.Coin width={20} height={20}/> Как работает Chessy</span>}>
       <div style={{fontSize:14,color:CC.text,lineHeight:1.55}}>

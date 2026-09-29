@@ -60,7 +60,24 @@ describe("задача дня из банка", () => {
     expect(res.status).toBe(200);
     expect(res.body.source).toMatch(/настоящий банк/);
     expect(res.body.puzzle.id).toMatch(/^bank_/);
-    expect(res.body.poolSize).toBe(500000);
+    // 🔴 28.09.2026: раньше здесь стояло `poolSize === 500000`, и проверка
+    // ЗАКРЕПЛЯЛА путаницу: под именем пула уезжал банк, а сосед
+    // /api/cyberchess-puzzles/meta тем же именем зовёт обслуживаемую выборку.
+    // Теперь каждое поле называет измеренное.
+    expect(res.body.bankTotal, "банк — под своим именем").toBe(500000);
+    expect(res.body.choiceTotal, "из скольких выбирали сегодня").toBe(500000);
+    expect(res.body.poolSize, "локального запаса тут не было — банк ответил").toBeNull();
+  });
+
+  test("имена полей не спорят с соседней ручкой", async () => {
+    // Контроль класса, а не значения: два числа под ОДНИМ именем на двух
+    // ручках одного продукта — то, из-за чего 502 584 однажды доехало до
+    // витрины вместо 500 000. Поле «сколько задач» обязано отвечать на один
+    // вопрос, каким бы ни был источник дня.
+    const res = await request(app).get("/api/cyberchess-daily/puzzle");
+    expect(typeof res.body.choiceTotal, "choiceTotal обязан быть числом всегда").toBe("number");
+    // И банк никогда не приезжает под именем пула.
+    expect(res.body.poolSize === null || res.body.poolSize < 1000).toBe(true);
   });
 
   test("тема и рейтинг приходят из записи банка, а не выдуманы", async () => {

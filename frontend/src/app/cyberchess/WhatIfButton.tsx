@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { отказТренера } from "./coachOutage";
+import { главныйВыдуманныйХод, текстВместоОтвета } from "./проверьХодыОтвета";
 import { COLOR as CC, RADIUS, MOTION, SPACE } from "./theme";
 import { Spinner } from "./ui";
 
@@ -47,14 +49,32 @@ export default function WhatIfButton({ fen, san, evalStr, rank, isBest }: Props)
           maxTokens: 150,
         }),
       });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      if (!r.ok) {
+        // Причина отказа лежит в ТЕЛЕ ответа, а не в коде: лимит поставщика
+        // приходит как 400 с текстом «…usage limits… regain access on …».
+        // Раньше тело не читали вовсе, и человек видел «Ошибка: HTTP 400».
+        const тело = await r.json().catch(() => ({} as { error?: string }));
+        throw new Error(тело?.error || `HTTP ${r.status}`);
+      }
       const data = await r.json();
       const reply: string = data.content?.filter((c: any) => c.type === "text" || c.text).map((c: any) => c.text || "").join("").trim() || "";
+      // 🔴 Ход, которого в позиции нет, до экрана не доезжает: запрет на
+      // выдуманные варианты жил только в промпте. Лучший ход подставляем
+      // лишь когда он действительно лучший — иначе не выдумываем его.
+      // Ход из самого вопроса не судим — модель его пересказывает.
+      const выдуманный = главныйВыдуманныйХод(fen, reply, san);
+      if (выдуманный) {
+        console.warn("[whatif] объяснение отклонено, такого хода в позиции нет:", выдуманный);
+        const замена = текстВместоОтвета(isBest ? san : undefined);
+        cache.set(key, замена);
+        setText(замена);
+        return;
+      }
       const final = reply || "Нет объяснения";
       cache.set(key, final);
       setText(final);
     } catch (e: any) {
-      setText(`⚠️ Ошибка: ${e?.message || "не удалось получить объяснение"}`);
+      setText(отказТренера(e?.message || "", e?.name));
     } finally {
       setLoading(false);
     }

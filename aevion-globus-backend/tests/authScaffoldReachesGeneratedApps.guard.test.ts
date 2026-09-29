@@ -1,0 +1,88 @@
+import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { нуженВход, файлыВхода, УКАЗАНИЕ_ПРО_ВХОД } from "../src/lib/devhubAuthScaffold";
+
+/**
+ * Шаблон входа обязан ДОЕЗЖАТЬ до приложения человека, а не лежать в библиотеке.
+ *
+ * Сам шаблон проверен отдельно (authScaffoldIsSafe.guard.test.ts) — там его свойства
+ * против конкретных способов взлома. Здесь другой вопрос, и он не менее важный:
+ * подключён ли он к генерации, и подключён ли ПРАВИЛЬНО — только когда идея просит
+ * вход и когда стек вообще умеет серверную часть.
+ *
+ * Класс, ради которого сторож написан: «написано, но не вызывается». Файл с идеальным
+ * кодом, который никто не зовёт, выглядит сделанной работой и не делает ничего.
+ */
+const маршрут = readFileSync(join(__dirname, "..", "src", "routes", "devhub.ts"), "utf8");
+
+describe("признак «идее нужен вход»", () => {
+  it("узнаёт просьбу о входе по-русски и по-английски", () => {
+    for (const идея of [
+      "блог с личным кабинетом",
+      "магазин, где пользователи регистрируются",
+      "сервис с логином и паролем",
+      "app with user sign-in",
+      "todo list with accounts and login",
+    ]) {
+      expect(нуженВход(идея), идея).toBe(true);
+    }
+  });
+
+  it("не срабатывает там, где вход не просили", () => {
+    for (const идея of [
+      "лендинг кофейни с меню и часами работы",
+      "страница мероприятия с программой и обратным отсчётом",
+      "портфолио фотографа с галереей",
+    ]) {
+      expect(нуженВход(идея), идея).toBe(false);
+    }
+  });
+});
+
+describe("шаблон доезжает до сгенерированного приложения", () => {
+  it("маршрут зовёт проверенные файлы, а не свою копию", () => {
+    expect(маршрут).toContain('from "../lib/devhubAuthScaffold"');
+    expect(маршрут).toContain("файлыВхода()");
+    expect(маршрут).toContain("нуженВход(prompt)");
+  });
+
+  it("ставится только когда стек умеет сервер: на статике вход невозможен", () => {
+    const i = маршрут.indexOf("стекУмеетСервер");
+    expect(i).toBeGreaterThan(0);
+    const блок = маршрут.slice(i, i + 400);
+    expect(блок).toContain('stack === "next"');
+    expect(блок).not.toContain('stack === "static"');
+    // условие И, а не ИЛИ: обещать вход на статике нельзя
+    expect(маршрут).toContain("нуженВход(prompt) && стекУмеетСервер");
+  });
+
+  it("существующий файл не затирается: правки человека дороже шаблона", () => {
+    const i = маршрут.indexOf("файлыВхода()");
+    const блок = маршрут.slice(Math.max(0, i - 600), i + 400);
+    expect(блок).toContain("занятые");
+    expect(блок).toContain("continue");
+  });
+
+  it("модели сказано не писать свой вход", () => {
+    expect(маршрут).toContain("УКАЗАНИЕ_ПРО_ВХОД");
+    expect(маршрут).toContain("проВход");
+    // указание попадает именно в сообщение модели
+    const i = маршрут.indexOf("Generate code for: ${prompt}");
+    expect(i).toBeGreaterThan(0);
+    expect(маршрут.slice(i, i + 160)).toContain("${проВход}");
+  });
+
+  it("набор файлов тот же, что проверен сторожем безопасности", () => {
+    const пути = файлыВхода().map((f) => f.path).sort();
+    expect(пути).toEqual([
+      "db/schema.sql",
+      "lib/auth.js",
+      "pages/api/auth/login.js",
+      "pages/api/auth/logout.js",
+      "pages/api/auth/me.js",
+      "pages/api/auth/register.js",
+    ]);
+    expect(УКАЗАНИЕ_ПРО_ВХОД).toContain("Do NOT write your own authentication");
+  });
+});

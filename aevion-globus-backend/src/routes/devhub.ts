@@ -65,6 +65,7 @@ import { redactInfraDetails } from "../lib/safeErrorText";
 import { checkPublicUrl } from "../lib/publicUrlOnly";
 import { можноСлужитьСтатикой } from "../lib/staticServable";
 import { вставитьБейдж, нуженБейдж } from "../lib/aevionBadge";
+import { файлыВхода, нуженВход, УКАЗАНИЕ_ПРО_ВХОД } from "../lib/devhubAuthScaffold";
 
 export const devhubRouter = Router();
 
@@ -1993,7 +1994,10 @@ async function generateCodeWithAI(
         ? `You are an expert developer. Generate complete, working code for MULTIPLE coordinated files that must work together: ${targetFiles.join(", ")}. When given a file's current content, edit it in place rather than starting over; keep the files consistent with each other (matching imports, types, endpoint paths, function names, etc). Return ONLY a JSON object: {"files": [{"path": "...", "content": "...", "language": "..."}, ...]} with exactly one entry per requested file. No explanation, just JSON.`
         : `You are an expert developer. Generate complete, working code. When given a list of existing project files, pick a path that fits the project's existing structure and match its conventions. Any file containing JSX must use a .jsx extension (.tsx for TypeScript) — the in-browser live preview keys off the extension. Return ONLY a JSON object: {"files": [{"path": "filename", "content": "...", "language": "..."}]}. No explanation, just JSON. Generate a scaffold for the ${stack} stack.`;
 
-  const userMsg = `${foldHistory(history)}Generate code for: ${prompt}. Stack: ${stack}.${images?.length ? " Recreate the attached screenshot/design as closely as practical (layout, colors, spacing, text)." : ""}${buildFileContext(existingFiles, targetFiles)}`;
+  // Когда вход нужен, модель ОБЯЗАНА пользоваться нашим шаблоном, а не писать свой:
+  // иначе рядом появится второй вход, и дырявым окажется именно он.
+  const проВход = нуженВход(prompt) ? ` ${УКАЗАНИЕ_ПРО_ВХОД}` : "";
+  const userMsg = `${foldHistory(history)}Generate code for: ${prompt}. Stack: ${stack}.${проВход}${images?.length ? " Recreate the attached screenshot/design as closely as practical (layout, colors, spacing, text)." : ""}${buildFileContext(existingFiles, targetFiles)}`;
 
   const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
     { role: "system", content: systemPrompt },
@@ -3022,6 +3026,33 @@ async function runProjectGeneration(project: DevHubProject, userId: string, prom
   // общем помощнике, покрывает все точки генерации разом: обычную, потоковую
   // и проектирование базы. Вызывающие ручки НЕ списывают сами — иначе дважды.
   await debitQuietly(userId, "generate");
+  /*
+   * ВХОД ПОЛЬЗОВАТЕЛЕЙ — готовым шаблоном, не генерацией (29.09.2026).
+   *
+   * Модель пишет вход каждый раз заново и по-разному: то пароль в открытом виде,
+   * то ответ «такого пользователя нет», по которому перебирают почты, то cookie без
+   * httpOnly. Цена ошибки здесь не «некрасиво», а «утекли чужие пароли», поэтому
+   * файлы входа кладём свои — проверенные (tests/authScaffoldIsSafe.guard.test.ts).
+   *
+   * Условий два, и оба обязательны: идея ПРОСИТ вход и стек умеет серверную часть.
+   * На статике вход невозможен — там нет сервера, и класть туда файлы значило бы
+   * обещать работающую регистрацию, которой не будет.
+   *
+   * Уже существующий файл НЕ трогаем: человек мог править свой вход, и затирать
+   * его правки хуже, чем не добавить ничего.
+   */
+  const стекУмеетСервер = stack === "next" || stack === "express" || stack === "python";
+  if (нуженВход(prompt) && стекУмеетСервер) {
+    const занятые = new Set([
+      ...existingFiles.map((f) => String((f as { path?: string }).path ?? "")),
+      ...generatedFiles.map((f) => String((f as { path?: string }).path ?? "")),
+    ]);
+    for (const ф of файлыВхода()) {
+      if (занятые.has(ф.path)) continue;
+      generatedFiles.push({ path: ф.path, content: ф.content, language: ф.language });
+    }
+  }
+
   onProgress?.("saving");
   let storage: "db" | "memory" = "db";
   const cpRes = await createCheckpoint(project.id, userId, `AI: ${prompt.slice(0, 80)}`, generatedFiles.map((f) => f.path), existingFiles);

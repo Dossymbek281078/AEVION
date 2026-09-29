@@ -49,3 +49,19 @@ export function файлыВхода(): ФайлШаблона[] {
  */
 export const УКАЗАНИЕ_ПРО_ВХОД =
   "Sign-in is ALREADY implemented in lib/auth.js and pages/api/auth/*. Do NOT write your own authentication, password hashing or session handling. Call POST /api/auth/register, POST /api/auth/login, GET /api/auth/me, POST /api/auth/logout, and read the current user from GET /api/auth/me.";
+
+/**
+ * Нужен ли приложению вход пользователей.
+ *
+ * Спрашиваем ИДЕЮ человека, а не гадаем по стеку: «блог с личным кабинетом» вход
+ * требует, «страница мероприятия» — нет. Слова берём и по-русски, и по-английски:
+ * половина наших гостей пишет промпт латиницей.
+ *
+ * Ошибаться дешевле В СТОРОНУ ВХОДА: лишние четыре файла человек удалит, а вот
+ * приложение, где вход обещан и не сделан, выглядит сломанным.
+ */
+export function нуженВход(идея: string): boolean {
+  return /вход|войти|логин|регистрац|аккаунт|кабинет|пользовател|авториз|sign[- ]?in|sign[- ]?up|log[- ]?in|auth|account|user account|registration/i.test(
+    String(идея ?? ""),
+  );
+}

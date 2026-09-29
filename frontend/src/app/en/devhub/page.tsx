@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { BuyLink } from "@/components/BuyLink";
 import { PageTracking } from "@/components/PageTracking";
-import { productById, channelFrom, withChannel, keepChannel } from "@/lib/products";
+import { productById, channelFrom, channelFromRef, withChannel, keepChannel } from "@/lib/products";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 
 // /en/devhub — англоязычная посадочная DevHub под западные каналы
@@ -49,11 +49,14 @@ const GOLD = "#a9781a";
 export default async function EnDevhubPage({
   searchParams,
 }: {
-  searchParams: Promise<{ c?: string | string[] }>;
+  searchParams: Promise<{ c?: string | string[]; ref?: string | string[] }>;
 }) {
   // Метка канала обязана доехать и до кассы, и до внутренних переходов —
   // иначе западный трафик придёт в отчёт как «источник неизвестен».
-  const channel = channelFrom((await searchParams).c);
+  // Карточка Product Hunt ведёт сюда с ?ref=producthunt — параметр ставит сама
+  // площадка. Без этой строки день запуска на PH считался бы прямыми заходами.
+  const параметры = await searchParams;
+  const channel = channelFrom(параметры.c) ?? channelFromRef(параметры.ref);
   const devhub = productById("devhub");
 
   return (

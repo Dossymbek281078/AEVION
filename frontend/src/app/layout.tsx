@@ -24,7 +24,13 @@ import { BUILD_STAMP } from "@/lib/buildStamp";
   Адрес версионирован коммитом сборки — кэш вечный, выкатка = новый адрес.
 */
 const DICT_PRELOAD_SCRIPT =
-  "try{var L=null;try{L=localStorage.getItem('aevion_lang_v1')}catch(e){}" +
+  // 29.09.2026: АДРЕС ПЕРВЫМ. До этого скрипт брал сохранённый выбор и куку, а
+  // путь /en/... не смотрел вовсе — и качал русский словарь для человека, которому
+  // прислали английскую ссылку. Он же и рисовал русское меню с первой секунды:
+  // словарь приезжал раньше, чем React успевал что-то решить.
+  "try{var L=null;try{var P=location.pathname.match(/^\\/([a-z]{2})(?:\\/|$)/i);" +
+  "if(P){var pl=P[1].toLowerCase();if(pl==='ru'||pl==='kk'||pl==='en')L=pl}}catch(e){}" +
+  "if(!L){try{L=localStorage.getItem('aevion_lang_v1')}catch(e){}}" +
   "if(!L){var c=document.cookie.split('; ');for(var i=0;i<c.length;i++){var p=c[i].split('=');" +
   "if(p[0]==='aevion_lang_v1'){L=decodeURIComponent(p[1]||'');break}}}" +
   "if(!L){var n=(navigator.language||'en').toLowerCase();" +
@@ -159,7 +165,7 @@ export default function RootLayout({
           тела, определяет язык по содержимому) не перебил ВЫБОР человека
           своей догадкой. Выбор всегда старше догадки.
         */}
-        <script dangerouslySetInnerHTML={{ __html: "try{var c=document.cookie.split('; ');for(var i=0;i<c.length;i++){var p=c[i].split('=');if(p[0]==='aevion_lang_v1'){var l=decodeURIComponent(p[1]||'');if(l==='ru'||l==='kk'||l==='en'){document.documentElement.lang=l;document.documentElement.setAttribute('data-lang-src','cookie');}break;}}}catch(e){}" }} />
+        <script dangerouslySetInnerHTML={{ __html: "try{var P=location.pathname.match(/^\\/([a-z]{2})(?:\\/|$)/i);if(P){var pl=P[1].toLowerCase();if(pl==='ru'||pl==='kk'||pl==='en'){document.documentElement.lang=pl;document.documentElement.setAttribute('data-lang-src','path');}}if(document.documentElement.getAttribute('data-lang-src')!=='path'){var c=document.cookie.split('; ');for(var i=0;i<c.length;i++){var p=c[i].split('=');if(p[0]==='aevion_lang_v1'){var l=decodeURIComponent(p[1]||'');if(l==='ru'||l==='kk'||l==='en'){document.documentElement.lang=l;document.documentElement.setAttribute('data-lang-src','cookie');}break;}}}}catch(e){}" }} />
         <script dangerouslySetInnerHTML={{ __html: DICT_PRELOAD_SCRIPT }} />
         <script
           type="application/ld+json"

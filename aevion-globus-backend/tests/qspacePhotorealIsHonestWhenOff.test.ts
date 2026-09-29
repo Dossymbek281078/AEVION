@@ -57,3 +57,38 @@ describe("фотореалистичный вид: канал говорит п�
     expect(r.body.error).toBe("not_found");
   });
 });
+
+/**
+ * Суточный предел — защита ОБЩЕГО кошелька: кредиты делятся с пайплайном
+ * DevHub, а ограничитель на минуту от слива не спасает (6 в минуту это 8640 в
+ * сутки при остатке в 1115 кадров, замер 29.09.2026).
+ */
+describe("суточный предел кадров", () => {
+  test("по умолчанию 60 кадров в сутки, и это видно в состоянии канала", async () => {
+    process.env.HIGGSFIELD_KEY_ID = "id";
+    process.env.HIGGSFIELD_KEY_SECRET = "secret";
+    delete process.env.QSPACE_PHOTOREAL_DAILY_MAX;
+    const r = await request(app).get("/api/qspace/photoreal/healthz");
+    expect(r.status).toBe(200);
+    expect(r.body.dailyMax).toBe(60);
+    expect(typeof r.body.dailyUsed).toBe("number");
+  });
+
+  test("предел задаётся переменной, а не правкой кода", async () => {
+    process.env.HIGGSFIELD_KEY_ID = "id";
+    process.env.HIGGSFIELD_KEY_SECRET = "secret";
+    process.env.QSPACE_PHOTOREAL_DAILY_MAX = "3";
+    const r = await request(app).get("/api/qspace/photoreal/healthz");
+    expect(r.body.dailyMax).toBe(3);
+  });
+
+  test("мусор в переменной не открывает предел настежь", async () => {
+    process.env.HIGGSFIELD_KEY_ID = "id";
+    process.env.HIGGSFIELD_KEY_SECRET = "secret";
+    for (const мусор of ["", "нет", "-5", "0"]) {
+      process.env.QSPACE_PHOTOREAL_DAILY_MAX = мусор;
+      const r = await request(app).get("/api/qspace/photoreal/healthz");
+      expect(r.body.dailyMax, `при значении «${мусор}»`).toBe(60);
+    }
+  });
+});

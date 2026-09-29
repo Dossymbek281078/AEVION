@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
 import { PipelineSteps } from "@/components/PipelineSteps";
-import { служебноеНазвание } from "@/lib/probeTitle";
+import { служебноеНазвание as isProbeTitle } from "@/lib/probeTitle";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { apiUrl } from "@/lib/apiBase";
@@ -220,8 +220,8 @@ export default function QuantumShieldPage() {
        * Фильтр показа, а не удаление: запись остаётся в базе и по прямой
        * ссылке открывается.
        */
-      const все: ShieldRecord[] = d.items || d.records || [];
-      setRecords(все.filter((r) => !служебноеНазвание(r.objectTitle)));
+      const incoming: ShieldRecord[] = d.items || d.records || [];
+      setRecords(incoming.filter((r) => !isProbeTitle(r.objectTitle)));
       setIsDemo(false);
     } catch {
       setRecords(DEMO_RECORDS);

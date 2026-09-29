@@ -39,7 +39,26 @@ const captureMultichatError = makeServiceCapture("multichat");
 export const multichatRouter = Router();
 
 // All multichat surfaces are user-scoped — anonymous traffic gets 401.
-multichatRouter.use(requireAuth);
+/**
+ * Вход обязателен ВСЕМ, кроме гостя, которого уже пропустил гостевой пропуск.
+ *
+ * 🔴 Замер 29.09.2026: раньше здесь стояло `multichatRouter.use(requireAuth)`
+ * без исключений, и бесплатный вход без регистрации не работал вовсе — страница
+ * обещала «осталось 2 запроса», а сервер отвечал 401. Мультичат при этом стоит
+ * первым экраном страницы цен, то есть это был отказ на самом входе воронки.
+ *
+ * Исключение узкое и НЕ расширяемое из этого файла: метку ставит только
+ * гостевой пропуск в index.ts, и только после того, как сам проверил метод,
+ * путь (создание консилиума и выдача ответа) и остаток дневной нормы. Здесь
+ * метка лишь читается — решение принимается там, где его видно целиком.
+ */
+multichatRouter.use((req, res, next) => {
+  if ((req as unknown as { гостьМультичата?: boolean }).гостьМультичата === true) {
+    next();
+    return;
+  }
+  requireAuth(req, res, next);
+});
 
 // 12 fan-outs / min per user. Each fan-out triggers up to N provider calls
 // (the qcoreai chatLimiter handles per-call ceilings); this protects the

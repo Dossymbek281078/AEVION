@@ -22,6 +22,7 @@ import { sendWaitlistConfirm, sendWeeklyDigestEmail as sendDigestEmail } from ".
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { csvFromRows } from "../lib/csv";
 import { unsubConfigured, unsubContact, verifyUnsubToken } from "../lib/waitlistUnsubToken";
+import { похожеНаПробу } from "../lib/probeRows";
 
 const capture = makeServiceCapture("constitutionWaitlist");
 
@@ -604,6 +605,28 @@ export async function sendWeeklyDigest(): Promise<{ sent: number; skipped: numbe
         );
         return { sent: 0, skipped: 0, aborted: true };
       }
+    }
+    // 🔴 НАШИ ПРОБНЫЕ АДРЕСА ИЗ РАССЫЛКИ ИСКЛЮЧАЮТСЯ.
+    //
+    // Замер 29.09.2026: в списке лежали `smoke-c2-2026-09-29@aevion.app` и
+    // `smoke-qventure-2026-09-29@aevion.app` — их завели прогоны, доказывавшие,
+    // что сбор почты доходит до базы. Дайджест уходит по ВСЕМУ списку, значит
+    // письма ушли бы и им: вреда наружу нет (адреса наши), но отчёт «отправлено
+    // N» стал бы неверным, а на отчёт смотрят как на замер.
+    //
+    // Фильтруем при отправке, а не удаляем строки: удаление на живом проде
+    // требует доступа к базе и отдельного разрешения, а защита нужна к первой же
+    // рассылке — и должна работать для БУДУЩИХ проб тоже.
+    //
+    // Признак общий (`lib/probeRows`): он требует разделителя после слова, поэтому
+    // `smoke-c2@…` и `probe-chess@…` отсекаются, а живой `test@company.com` — нет.
+    const пробныеАдреса = subscribers.filter((s) => похожеНаПробу({ ref: s.email }));
+    if (пробныеАдреса.length) {
+      subscribers = subscribers.filter((s) => !похожеНаПробу({ ref: s.email }));
+      console.warn(
+        `[waitlist] из рассылки исключены наши пробные адреса (${пробныеАдреса.length}): ` +
+          пробныеАдреса.map((s) => s.email).join(", "),
+      );
     }
     if (!subscribers.length) return { sent: 0, skipped: 0 };
 

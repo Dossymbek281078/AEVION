@@ -53,7 +53,7 @@ import { eventsRouter } from "./routes/events";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
 import { multichatRouter, multichatPublicRouter } from "./routes/multichat";
-import { остатокГостя, засчитатьГостю, этоГость, решениеПоГостю } from "./lib/multichatGuestPass";
+import { остатокГостя, засчитатьГостю, этоГость, решениеПоГостю, гостевойИдентификатор } from "./lib/multichatGuestPass";
 import { aevRouter } from "./routes/aev";
 import { ecosystemRouter } from "./routes/ecosystem";
 import { cyberchessRouter } from "./routes/cyberchess";
@@ -533,6 +533,27 @@ app.use("/api/multichat", (req, res, next) => {
   const решение = решениеПоГостю(req);
   if (решение.пускать) {
     if (решение.тратить) засчитатьГостю(req);
+    // 🔴 ГОСТЮ НУЖНЫ ДВЕ ВЕЩИ, И РАНЬШЕ НЕ ДАВАЛОСЬ НИ ОДНОЙ.
+    //
+    // Замер 29.09.2026 на живом проде: страница писала «Бесплатно без входа:
+    // осталось 2 запроса», а `POST /api/multichat/conversations` отвечал 401
+    // «auth required» — счётчик при этом не двигался, ответа агентов не было.
+    // Причина: снятия ПЛАТНОЙ стены недостаточно. Внутри роутера стоит
+    // `requireAuth` на все маршруты, а обработчик берёт владельца из
+    // `req.auth!.sub`. Гость не проходил проверку входа, а если бы прошёл —
+    // упал бы на отсутствующем владельце.
+    //
+    // Поэтому здесь: (1) метка, по которой роутер пропускает вход именно у
+    // гостевых запросов и только у них, (2) устойчивая личность, чтобы его
+    // консилиум принадлежал ему и выдача ответа нашла ту же переписку.
+    //
+    // Мой прежний сторож этого не поймал, потому что проверял модуль пропуска с
+    // выдуманными запросами, а не смонтированный путь. Новый проверяет путь.
+    (req as unknown as { гостьМультичата?: boolean }).гостьМультичата = true;
+    (req as unknown as { auth?: { sub: string; гость: boolean } }).auth = {
+      sub: гостевойИдентификатор(req),
+      гость: true,
+    };
     return multichatRouter(req, res, next);
   }
   return requireModule("multichat-engine")(req, res, () => multichatRouter(req, res, next));

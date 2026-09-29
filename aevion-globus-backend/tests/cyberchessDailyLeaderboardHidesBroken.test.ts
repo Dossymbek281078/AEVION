@@ -24,6 +24,9 @@ const { scratchDir } = vi.hoisted(() => {
     JSON.stringify([
       { userId: "broken", name: "���3", score: 100200, streak: 999, country: "🌍", updatedAt: "2026-08-19T11:01:12.385Z" },
       { userId: "fine", name: "Абдолла", score: 400, streak: 1, country: "🌍", updatedAt: "2026-08-19T11:08:30.867Z" },
+      // 🔴 Наша проба: 29.09.2026 накануне запуска шахмат такая запись стояла
+      // ПЕРВОЙ в публичной таблице (счёт 355 — выше любого живого игрока).
+      { userId: "smoke-c2-verify", name: "smoke-c2", score: 355, streak: 1, country: "🌍", updatedAt: "2026-09-29T09:00:00.000Z" },
     ]),
     "utf8",
   );
@@ -48,5 +51,22 @@ describe("таблица лидеров: нечитаемые имена", () =>
     expect(names.some((n: string) => n.includes("�")), `наружу вышло: ${names.join(" | ")}`).toBe(false);
     expect(names).toContain("Абдолла");
     expect(r.body.total, "total должен считать показанные, а не скрытые").toBe(names.length);
+  });
+});
+
+describe("таблица лидеров: наши пробы", () => {
+  test("проба не выходит наружу через ручку, живой игрок остаётся", async () => {
+    // Проверяется ОТВЕТ РУЧКИ, а не признак: признак можно оставить верным и
+    // забыть применить — так уже было («тест охранял помощника, а не вывод»).
+    const r = await request(app).get("/api/cyberchess/daily/leaderboard");
+    expect(r.status).toBe(200);
+    const записи = (r.body.leaderboard ?? []) as { userId: string; name: string }[];
+
+    expect(
+      записи.some((e) => e.userId === "smoke-c2-verify" || e.name === "smoke-c2"),
+      `наша проба видна посетителю: ${записи.map((e) => e.name).join(" | ")}`,
+    ).toBe(false);
+    expect(записи.map((e) => e.name), "живой игрок пропал вместе с пробой").toContain("Абдолла");
+    expect(r.body.total, "total считает скрытых").toBe(записи.length);
   });
 });

@@ -21,7 +21,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Chess } from "chess.js";
-import { normalizePuzzle, solverSide } from "../puzzleNormalize";
+import { normalizePuzzle, solverSide, zadachaDlyaEkrana } from "../puzzleNormalize";
 
 // Настоящая задача дня 29.09.2026, как её отдаёт прод.
 const ДЕНЬ = {
@@ -52,11 +52,18 @@ describe("задача дня: ход просят у решающего", () =>
     expect(зевок?.san).toBe("Bc3");
   });
 
-  it("страница зовёт общую нормализацию, а не свой механизм", () => {
-    expect(СТРАНИЦА).toContain("normalizePuzzle");
-    // Прежнее предположение «игрок ходит по чётным индексам» верно ТОЛЬКО
-    // после нормализации; без неё оно и было причиной дефекта.
-    expect(СТРАНИЦА).toContain("кЗадаче(");
+  it("🔴 функция экрана ПОВЕДЕНИЕМ отдаёт позицию решающего", () => {
+    // Раньше эта проверка смотрела на имя в исходнике страницы — и мутация
+    // «снять нормализацию» проходила зелёной. Поэтому функция вынесена в
+    // общий модуль и проверяется вызовом, а не грепом.
+    const э = zadachaDlyaEkrana(ДЕНЬ);
+    expect(new Chess(э.fen).turn(), "ходит решающий").toBe("b");
+    expect(э.sol[0], "первый ход — решающего").toBe("g6e5");
+    expect(э.solRaw, "сырое сохранено целиком").toEqual(ДЕНЬ.sol);
+  });
+
+  it("страница берёт именно общую функцию", () => {
+    expect(СТРАНИЦА).toContain("zadachaDlyaEkrana");
   });
 
   it("🔴 на сервер уходит СЫРОЕ решение, иначе решивший получит «wrong_solution»", () => {

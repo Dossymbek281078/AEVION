@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { themeRu } from './themes';
 import { tournamentUserId, tournamentDisplayName } from '../tournaments/playerIdentity';
 import { Chess, Square } from 'chess.js';
-import { normalizePuzzle } from "../puzzleNormalize";
+import { zadachaDlyaEkrana } from "../puzzleNormalize";
 
 type Puzzle = {
   /** Есть только у задач из банка; у встроенных его нет. */
@@ -41,8 +41,8 @@ type Puzzle = {
  * с первым молча. Но сырое решение сохраняем — его ждёт сервер (см. solRaw).
  */
 function кЗадаче(p: { id?: string; fen: string; sol: string[]; theme: string; rating: number }): Puzzle {
-  const н = normalizePuzzle({ fen: p.fen, sol: p.sol, name: "", r: 0, theme: p.theme });
-  return { ...p, fen: н.fen, sol: н.sol, solRaw: p.sol };
+  const н = zadachaDlyaEkrana({ fen: p.fen, sol: p.sol, name: "", r: 0, theme: p.theme });
+  return { ...p, fen: н.fen, sol: н.sol, solRaw: н.solRaw };
 }
 
 type LeaderEntry = {

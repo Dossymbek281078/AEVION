@@ -1,6 +1,7 @@
 "use client";
 import { лимитПровайдера, когдаВернётся as срокВозврата, тренерОтветил, пометкаОВыключенномРазборе, пометкаЗапаснойМодели, общаяОчередьАнонимов } from "./coachOutage";
 import { главныйВыдуманныйХод, дополнитьХодомДвижка, текстВместоОтвета } from "./проверьХодыОтвета";
+import { track } from "@/lib/track";
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, startTransition } from "react";
 
@@ -1167,6 +1168,22 @@ export default function CyberChessPage(){
   // Pro/Ultimate за AEV через биллинг, который на проде «не настроен». Цена и адрес — из каталога
   // products.ts (один источник правды), метка канала дописывается после отрисовки, как в ModulePricingChip.
   const ccBuyProduct=productById("cyberchess");
+
+  /**
+   * Клик по кнопке покупки — это «дошёл до цен», а НЕ «начал оплату».
+   *
+   * 🔴 29.09.2026. Сторож воронки числил страницу шахмат точкой входа в кассу
+   * и требовал события `checkout_start`. Слать его отсюда нельзя: кнопка ведёт
+   * на /pricing, касса открывается уже там, и мы завысили бы ровно то число,
+   * по которому видно провал (за 14 дней 22 дошли до цен, 0 начали оплату).
+   * Поэтому шлём `cta_click` — он и означает «нажал кнопку, ушёл к ценам», а
+   * шаг «дошёл до цен» воронка и так считает по page_view на /pricing.
+   */
+  const учестьКликПоПокупке = () => {
+    try {
+      track({ type: "cta_click", source: "cyberchess/buy", meta: { product: "cyberchess" } });
+    } catch { /* учёт не обязан ронять покупку */ }
+  };
   const ccBuyLabel=(ccBuyProduct?.format||"").replace(/^приложение · /,"")||"купить";
   const [ccBuyHref,sCcBuyHref]=useState<string>(ccBuyProduct?.href||"/pricing#apps");
   useEffect(()=>{try{sCcBuyHref(keepChannel(ccBuyProduct?.href||"/pricing#apps",channelNow()))}catch{}},[ccBuyProduct?.href]);
@@ -6251,8 +6268,8 @@ export default function CyberChessPage(){
             4 разрозненных help-входов, чтобы новичок не гадал, какой «?» куда ведёт. */}
         {/* Телефон: цена видна на ПЕРВОМ экране, а не только в «Ещё» — короткая форма «$12», полная в title.
             Проба 21.09 по проду (283cac722): на 390 цен на экране 0, пункт «Купить» был только в меню. */}
-        {vwPx<769&&<a href={ccBuyHref} data-cc-buy="header-phone" className="cc-touch" title={`Оплата картой · полный доступ к CyberChess · ${ccBuyLabel}`} aria-label={`Купить CyberChess · ${ccBuyLabel}`} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"6px 8px",borderRadius:RADIUS.md,border:`1px solid ${CC.gold}`,background:"#fffbeb",color:"#92400e",fontSize:12,fontWeight:900,textDecoration:"none",whiteSpace:"nowrap",flexShrink:0}}>💳 {ccBuyLabel.match(/\$\d+/)?.[0]||ccBuyLabel}</a>}
-        {vwPx>=769&&<a href={ccBuyHref} data-cc-buy="header" className="cc-touch" title="Оплата картой · полный доступ к CyberChess" style={{display:"inline-flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:RADIUS.md,border:`1px solid ${CC.gold}`,background:"#fffbeb",color:"#92400e",fontSize:12,fontWeight:900,textDecoration:"none",whiteSpace:"nowrap",flexShrink:0}}>💳 {ccBuyLabel}</a>}
+        {vwPx<769&&<a href={ccBuyHref} onClick={учестьКликПоПокупке} data-cc-buy="header-phone" className="cc-touch" title={`Оплата картой · полный доступ к CyberChess · ${ccBuyLabel}`} aria-label={`Купить CyberChess · ${ccBuyLabel}`} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"6px 8px",borderRadius:RADIUS.md,border:`1px solid ${CC.gold}`,background:"#fffbeb",color:"#92400e",fontSize:12,fontWeight:900,textDecoration:"none",whiteSpace:"nowrap",flexShrink:0}}>💳 {ccBuyLabel.match(/\$\d+/)?.[0]||ccBuyLabel}</a>}
+        {vwPx>=769&&<a href={ccBuyHref} onClick={учестьКликПоПокупке} data-cc-buy="header" className="cc-touch" title="Оплата картой · полный доступ к CyberChess" style={{display:"inline-flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:RADIUS.md,border:`1px solid ${CC.gold}`,background:"#fffbeb",color:"#92400e",fontSize:12,fontWeight:900,textDecoration:"none",whiteSpace:"nowrap",flexShrink:0}}>💳 {ccBuyLabel}</a>}
         {vwPx>=769&&<div style={{position:"relative",flexShrink:0}}>
           <button onClick={()=>sHelpMenuOpen(v=>!v)} aria-haspopup="menu" aria-expanded={helpMenuOpen} title="Помощь — тур по интерфейсу, горячие клавиши, что такое Chessy" aria-label="Помощь" className="cc-focus-ring"
             style={{display:"inline-flex",alignItems:"center",gap:5,padding:"7px 13px",borderRadius:RADIUS.full,
@@ -12263,7 +12280,7 @@ ${question.trim()}`;
           </div>
           {platformApp==="active"
             ?<span data-cc-buy="shop-active" style={{padding:"9px 16px",borderRadius:RADIUS.md,background:"#d1fae5",color:"#065f46",fontWeight:900,fontSize:13,whiteSpace:"nowrap"}}>✓ Куплено картой · Pro включён</span>
-            :<a href={ccBuyHref} className="cc-touch" style={{padding:"9px 16px",borderRadius:RADIUS.md,background:CC.gold,color:"#1f2937",fontWeight:900,fontSize:13,textDecoration:"none",whiteSpace:"nowrap"}}>Купить →</a>}
+            :<a href={ccBuyHref} onClick={учестьКликПоПокупке} className="cc-touch" style={{padding:"9px 16px",borderRadius:RADIUS.md,background:CC.gold,color:"#1f2937",fontWeight:900,fontSize:13,textDecoration:"none",whiteSpace:"nowrap"}}>Купить →</a>}
         </div>
         <div style={{borderRadius:RADIUS.lg,padding:`${SPACE[3]}px ${SPACE[4]}px`,marginBottom:SPACE[4],
           background:"linear-gradient(135deg,#0f172a 0%,#1e1b4b 100%)",color:"#fff",

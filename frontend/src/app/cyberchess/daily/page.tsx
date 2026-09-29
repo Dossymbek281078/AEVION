@@ -5,15 +5,45 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { themeRu } from './themes';
 import { tournamentUserId, tournamentDisplayName } from '../tournaments/playerIdentity';
 import { Chess, Square } from 'chess.js';
+import { normalizePuzzle } from "../puzzleNormalize";
 
 type Puzzle = {
   /** Есть только у задач из банка; у встроенных его нет. */
   id?: string;
+  /** Позиция ПОСЛЕ хода соперника — та, которую видит решающий. */
   fen: string;
+  /** Решение БЕЗ хода соперника: первый ход здесь делает игрок. */
   sol: string[];
+  /**
+   * Решение ровно в том виде, в каком его знает сервер, вместе с ходом
+   * соперника. Нужно при отправке: `/solve` сверяет присланное с КАНОНИЧЕСКИМ
+   * решением дня и требует полного совпадения, включая длину. Пошли мы туда
+   * сокращённый список — человек решил бы задачу и получил «wrong_solution».
+   */
+  solRaw?: string[];
   theme: string;
   rating: number;
 };
+
+/**
+ * 🔴 29.09.2026. СТРАНИЦА ПРОСИЛА ИГРОКА СЫГРАТЬ ХОД СОПЕРНИКА.
+ *
+ * Банк задач — сырой формат lichess: первый ход решения делает СОПЕРНИК, и
+ * позиция в `fen` показана ДО него. Основной раздел «Задачи» это учитывает
+ * (`normalizePuzzle`), а здешняя страница — нет: в её коде прямо записано
+ * «игрок ходит по чётным индексам», то есть игрок должен сыграть `sol[0]`.
+ *
+ * Замер на задаче дня 29.09: линия `Bc3 Ne5 dxe5 Rxc4 bxc4 Nxc3`, материал
+ * белых по ней падает с +2 до −2 — выигрывают ЧЁРНЫЕ, а `Bc3` это зевок
+ * белых. Страница предлагала сыграть именно его, и подсказка указывала туда же.
+ *
+ * Чиним ТОЙ ЖЕ функцией, что и основной раздел: второй механизм разошёлся бы
+ * с первым молча. Но сырое решение сохраняем — его ждёт сервер (см. solRaw).
+ */
+function кЗадаче(p: { id?: string; fen: string; sol: string[]; theme: string; rating: number }): Puzzle {
+  const н = normalizePuzzle({ fen: p.fen, sol: p.sol, name: "", r: 0, theme: p.theme });
+  return { ...p, fen: н.fen, sol: н.sol, solRaw: p.sol };
+}
 
 type LeaderEntry = {
   name: string;
@@ -147,7 +177,7 @@ export default function DailyPuzzlePage() {
    * заменяет её. Обратный порядок дал бы пустую доску на секунду и белый экран
    * при недоступной сети.
    */
-  const [puzzle, setPuzzle] = useState<Puzzle>(() => POOL[dayIndex() % POOL.length]);
+  const [puzzle, setPuzzle] = useState<Puzzle>(() => кЗадаче(POOL[dayIndex() % POOL.length]));
   const [fromBank, setFromBank] = useState(false);
   const [leaderboard, setLeaderboard] = useState<LeaderEntry[]>([]);
   const [lbState, setLbState] = useState<'loading' | 'ok' | 'failed'>('loading');
@@ -229,13 +259,13 @@ export default function DailyPuzzlePage() {
         // а здешняя проверка `Array.isArray` пропускала — массив-то был.
         const sol = p.sol.map((m: unknown) => String(m));
         if (!sol.every((m: string) => /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(m))) return;
-        setPuzzle({
+        setPuzzle(кЗадаче({
           id: String(p.id),
           fen: String(p.fen),
           sol,
           theme: String(p.theme ?? 'Тактика'),
           rating: Number(p.rating) || 1200,
-        });
+        }));
         // Признак берётся из ответа сервера, а не угадывается: сервер сам знает,
         // ответил ли банк.
         //
@@ -406,7 +436,11 @@ export default function DailyPuzzlePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           day: today,
-          moves: puzzle.sol,
+          // Сервер сверяет с КАНОНИЧЕСКИМ решением дня целиком, включая ход
+          // соперника. Шлём сырое, а не то, что играли на доске.
+          // Незнормализованная задача (встроенный резерв нечётной длины) хранит
+          // решение как есть — тогда sol и есть сырое, и запас верен.
+          moves: puzzle.solRaw ?? puzzle.sol,
           timeMs: totalMs,
           hintsUsed: hUsed,
           userId: tournamentUserId(),

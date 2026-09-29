@@ -1,6 +1,6 @@
 "use client";
 import { лимитПровайдера, когдаВернётся as срокВозврата, тренерОтветил, пометкаОВыключенномРазборе, пометкаЗапаснойМодели, общаяОчередьАнонимов } from "./coachOutage";
-import { нелегальныеХоды, текстВместоОтвета } from "./проверьХодыОтвета";
+import { главныйВыдуманныйХод, дополнитьХодомДвижка, текстВместоОтвета } from "./проверьХодыОтвета";
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, startTransition } from "react";
 
@@ -6144,7 +6144,7 @@ export default function CyberChessPage(){
               </span>}
             </h1>
             <div className="cc-header-sub" style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
-              SF18 · {pzCountLabel} {ccPlural(pzTotal??PUZZLES.length,"задача","задачи","задач")}{useSF&&sfOk?" · ⚡":""}
+              SF18 · {pzCountLabel} {ccPlural(pzTotal??PUZZLES.length,"задача","задачи","задач")} в банке{useSF&&sfOk?" · ⚡":""}
             </div>
           </div>
         </div>
@@ -11342,12 +11342,12 @@ ${question.trim()}`;
                   // качества читается как пустое обещание.
                   // Ход, которого в позиции нет, до экрана не доезжает: запрет на
                   // выдуманные варианты жил только в промпте (см. проверьХодыОтвета.ts).
-                  const выдуманные=нелегальныеХоды(fen,reply);
-                  if(выдуманные.length>0){
-                    console.warn("[coach] ответ отклонён, таких ходов в позиции нет:",выдуманные.join(", "));
+                  const выдуманные=главныйВыдуманныйХод(fen,reply)?1:0;
+                  if(выдуманные){
+                    console.warn("[coach] ответ отклонён: названного хода в позиции нет");
                     sCoachChat([...newMsgs,{role:"assistant",content:текстВместоОтвета(),ts:Date.now()}]);
                   }else{
-                    sCoachChat([...newMsgs,{role:"assistant",content:reply+пометкаЗапаснойМодели(data),ts:Date.now()}]);
+                    sCoachChat([...newMsgs,{role:"assistant",content:дополнитьХодомДвижка(reply)+пометкаЗапаснойМодели(data),ts:Date.now()}]);
                   }
                 }catch(e:any){
                   // Бэкенд недоступен/таймаут — НЕ оставляем ученика без ответа.

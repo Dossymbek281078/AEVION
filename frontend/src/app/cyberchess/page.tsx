@@ -1225,6 +1225,10 @@ export default function CyberChessPage(){
   // На низком десктопе (768px) они переносились в три-четыре строки и уезжали за окно — замер 23.09 на проде:
   // «Сдаться», «Ничья», «Отменить» ВНЕ окна. Там ряды идут в одну строку с боковой прокруткой, запас 186px.
   const lowDesktop=vwPx>=769&&vhPx<860;
+  // Компактный низ нужен НЕ только на низких экранах: доска упирается в высоту на любом
+  // десктопе (замер 30.09 на 1990×1015 — верх 197, низ 206, доска 612 = 1015−197−206),
+  // и два ряда крупных кнопок съедают её везде. Поэтому плотный низ — весь десктоп.
+  const plotnyNiz=vwPx>=769;
   const podDoskoyRow:React.CSSProperties=lowDesktop
     ?{flexWrap:"nowrap",overflowX:"auto",scrollbarWidth:"none"}
     :{flexWrap:"wrap",overflowX:"visible"};
@@ -8495,7 +8499,7 @@ export default function CyberChessPage(){
 
           {/* Controls — under-board strip. Game-essentials only. Heatmap/Whisper/Share/History live in the
               right-sidebar Tools card to reduce visual clutter under the board. */}
-          <div style={{display:"flex",gap:lowDesktop?6:8,marginTop:lowDesktop?4:SPACE[2],...podDoskoyRow}}>
+          <div style={{display:"flex",gap:plotnyNiz?6:8,marginTop:plotnyNiz?4:SPACE[2],...podDoskoyRow}}>
             <Btn size="md" variant="secondary" icon={<Icon.Flip width={16} height={16}/>} onClick={()=>sFlip(!flip)}>Перевернуть</Btn>
             <Btn size="md" variant="primary" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>Новая партия</Btn>
             {on&&!setup&&<Btn size="md" variant={mirrorActive?"primary":"secondary"} onClick={()=>{if(mirrorActive){sMirrorActive(false);showToast("🪞 Зеркальный режим выключен","info");}else{sMirrorActive(true);showToast("🪞 Зеркальный режим — соперник играет как ты","info");}}} title="Зеркальный режим — соперник копирует твой стиль">🪞</Btn>}
@@ -8690,7 +8694,7 @@ export default function CyberChessPage(){
           </div>
           {/* Ряд «Сдаться · Ничья · Отменить · Подсказка» — только на вкладке партии: на Задачах/Коуче/Анализе
               при паузе партии он сбивал с толку (тестер 20.09.2026, 390: «Сдаться» под доской задачи). */}
-          {on&&!over&&!setup&&tab==="play"&&<div style={{display:"flex",gap:8,marginTop:lowDesktop?4:SPACE[2],...podDoskoyRow}}>
+          {on&&!over&&!setup&&tab==="play"&&<div style={{display:"flex",gap:plotnyNiz?6:8,marginTop:plotnyNiz?4:SPACE[2],...podDoskoyRow}}>
             <Btn size="md" variant="danger" className="cc-game-btn" onClick={()=>{if(armed!=="resign"){sArmed("resign");return;}sArmed(null);if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{const nr=новыйРейтинг(rat,lv.elo,false);sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>{armed==="resign"?"Точно сдаться? ✓":"🏳 Сдаться"}</Btn>
             <Btn size="md" variant="gold" className="cc-game-btn" onClick={()=>{if(armed!=="draw"){sArmed("draw");return;}sArmed(null);if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("ИИ отклонил ничью","error")}}>{armed==="draw"?"Предложить ничью? ✓":"½ Ничья"}</Btn>
             <Btn size="md" variant="secondary" className="cc-game-btn" icon={<Icon.Undo width={14} height={14}/>} onClick={()=>{

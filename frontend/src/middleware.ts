@@ -53,10 +53,50 @@ export function isDecodablePath(pathname: string): boolean {
   }
 }
 
-export function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl;
-  if (isDecodablePath(pathname)) return NextResponse.next();
+/**
+ * Английские адреса без своей страницы: /en/pricing и подобные.
+ *
+ * Замер 29.09.2026 показал, что английского сайта почти нет: из десяти
+ * проверенных адресов живы четыре — /en/devhub, /en/devhub/launch, /en/shop и
+ * /en/go; /en, /en/pricing, /en/apps, /en/qventure, /en/bureau, /en/cyberchess,
+ * /en/about, /en/contact отвечали 404, тогда как те же страницы без /en — 200.
+ * Человек приходил с Product Hunt на английский DevHub, нажимал «Pricing» и
+ * получал «страница не найдена».
+ *
+ * Лечение дешёвое: адрес без своей английской страницы переадресуется на
+ * русский аналог и ставит язык en — страница у нас одна, отличается только
+ * словарь. Владелец языка (окно user-0c) сделал язык из АДРЕСА сильнее
+ * сохранённого выбора, поэтому вместе с переадресацией достаточно поставить
+ * куку: человек остаётся с английским.
+ *
+ * Разбор пути намеренно через split, а не регуляркой: пре-гидрационные
+ * скрипты и middleware извлекаются тестами как сырой текст, и регулярка со
+ * слэшами ломается при извлечении — предупреждение владельца, проверено им
+ * запуском.
+ */
+export const АНГЛИЙСКИЕ_СТРАНИЦЫ_СО_СВОИМ_АДРЕСОМ = [
+  "/en/devhub",
+  "/en/devhub/launch",
+  "/en/shop",
+  "/en/go",
+];
 
+export function английскийРедирект(pathname: string | null | undefined): string | null {
+  const путь = String(pathname ?? "");
+  const части = путь.split("/").filter(Boolean);
+  if (части.length === 0) return null;
+  if (части[0].toLowerCase() !== "en") return null;
+
+  // Своя английская страница — не трогаем.
+  const безХвоста = "/" + части.join("/");
+  if (АНГЛИЙСКИЕ_СТРАНИЦЫ_СО_СВОИМ_АДРЕСОМ.includes(безХвоста.toLowerCase())) return null;
+
+  // /en → главная; /en/<что-то> → тот же адрес без префикса.
+  if (части.length === 1) return "/";
+  return "/" + части.slice(1).join("/");
+}
+
+function битыйАдрес(): NextResponse {
   // Тело намеренно короткое и без разметки: это ответ роботу, а не человеку.
   // Имён внутренних систем здесь быть не должно (feedback_error_text_leaks_infrastructure).
   return new NextResponse("Bad Request: malformed percent-encoding in path\n", {
@@ -68,6 +108,28 @@ export function middleware(req: NextRequest) {
       "cache-control": "public, max-age=3600",
     },
   });
+}
+
+export function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+  if (!isDecodablePath(pathname)) {
+    return битыйАдрес();
+  }
+
+  const цель = английскийРедирект(pathname);
+  if (цель) {
+    const адрес = new URL(цель, req.url);
+    адрес.search = req.nextUrl.search;
+    const ответ = NextResponse.redirect(адрес, 308);
+    // Постоянная переадресация кэшируется, поэтому язык ставим здесь же:
+    // иначе человек приедет на русскую страницу без признака английского.
+    ответ.cookies.set("aevion_lang_v1", "en", { path: "/", maxAge: 60 * 60 * 24 * 365 });
+    return ответ;
+  }
+
+  return NextResponse.next();
+
+  return битыйАдрес();
 }
 
 /**

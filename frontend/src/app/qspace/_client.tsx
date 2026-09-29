@@ -693,6 +693,38 @@ export default function QSpaceClient() {
         g.position.set((a.x + bb.x) / 2, (z0 + z1) / 2, (a.y + bb.y) / 2);
         g.rotation.y = -Math.atan2(w.y2 - w.y1, w.x2 - w.x1);
         t.gWalls.add(g);
+
+        // ПРОФИЛЬ ВИТРАЖА: рамки сверху и снизу и импосты через каждые 1.2 м.
+        // Без них панорамное остекление выглядит дырой в стене — стекло само
+        // по себе невидимо, и глазу не за что зацепиться. У основателя (LA VIE)
+        // окна пришли ИМЕННО витражами, а не проёмами, поэтому рама окна там
+        // не видна вовсе, а эта — видна.
+        const части: THREE.BufferGeometry[] = [];
+        const Ш = 0.05;                        // ширина профиля
+        const Т = w.thickness + 0.01;          // чуть толще стекла, чтобы не мерцало
+        const высота = z1 - z0;
+        const добавить = (дл: number, выс: number, сдвигX: number, сдвигY: number) => {
+          const гео = new THREE.BoxGeometry(дл, выс, Т);
+          гео.applyMatrix4(new THREE.Matrix4().setPosition(сдвигX, сдвигY, 0));
+          части.push(гео);
+        };
+        добавить(len, Ш, 0, высота / 2 - Ш / 2);    // верхняя рамка
+        добавить(len, Ш, 0, -высота / 2 + Ш / 2);   // нижняя рамка
+        // Импосты: шаг 1.2 м — типовой для панорамного остекления. У коротких
+        // кусков их нет вовсе, иначе на обрезках получалась бы решётка.
+        const шаг = 1.2;
+        for (let x = -len / 2 + шаг; x < len / 2 - 0.05; x += шаг) добавить(Ш, высота - Ш * 2, x, 0);
+        const рамаВитража = mergeGeometries(части, false);
+        for (const гео of части) гео.dispose();
+        if (рамаВитража) {
+          const профиль = new THREE.Mesh(
+            рамаВитража,
+            new THREE.MeshStandardMaterial({ color: 0x3a3d40, roughness: 0.35, metalness: 0.65 }),
+          );
+          профиль.position.set((a.x + bb.x) / 2, (z0 + z1) / 2, (a.y + bb.y) / 2);
+          профиль.rotation.y = -Math.atan2(w.y2 - w.y1, w.x2 - w.x1);
+          t.gWalls.add(профиль);
+        }
         return;
       }
       const по = roomsBesideWall(w, from, to, roomsInfo.roomAt);

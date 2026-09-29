@@ -1,5 +1,6 @@
 "use client";
 import { лимитПровайдера, когдаВернётся as срокВозврата, тренерОтветил, пометкаОВыключенномРазборе, пометкаЗапаснойМодели, общаяОчередьАнонимов } from "./coachOutage";
+import { нелегальныеХоды, текстВместоОтвета } from "./проверьХодыОтвета";
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, startTransition } from "react";
 
@@ -11339,7 +11340,15 @@ ${question.trim()}`;
                   // Если ответила запасная модель — говорим об этом одной строкой:
                   // витрина обещает разбор уровня супер-GM, и молчаливая подмена
                   // качества читается как пустое обещание.
-                  sCoachChat([...newMsgs,{role:"assistant",content:reply+пометкаЗапаснойМодели(data),ts:Date.now()}]);
+                  // Ход, которого в позиции нет, до экрана не доезжает: запрет на
+                  // выдуманные варианты жил только в промпте (см. проверьХодыОтвета.ts).
+                  const выдуманные=нелегальныеХоды(fen,reply);
+                  if(выдуманные.length>0){
+                    console.warn("[coach] ответ отклонён, таких ходов в позиции нет:",выдуманные.join(", "));
+                    sCoachChat([...newMsgs,{role:"assistant",content:текстВместоОтвета(),ts:Date.now()}]);
+                  }else{
+                    sCoachChat([...newMsgs,{role:"assistant",content:reply+пометкаЗапаснойМодели(data),ts:Date.now()}]);
+                  }
                 }catch(e:any){
                   // Бэкенд недоступен/таймаут — НЕ оставляем ученика без ответа.
                   // Локальный Stockfish даёт лучший ход, оценку берём из eval-бара

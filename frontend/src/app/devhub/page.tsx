@@ -18,7 +18,9 @@ import { track } from "@/lib/track";
 import { productById } from "@/lib/products";
 import { PageTracking } from "@/components/PageTracking";
 import { devhubServerError, useDevhubServerError } from "@/lib/devhubServerError";
-import { stackForIdea, даннымНуженСервер } from "@/lib/devhubStackChoice";
+import { stackForIdea, даннымНуженСервер, доступенРежимПриложения, стекДляРежима,
+  type РежимПостройки } from "@/lib/devhubStackChoice";
+import { indexCapabilities, isCapabilityBlocked, type CapabilityIndex } from "@/lib/devhubCapabilities";
 import { DEVHUB_EXAMPLES, exampleText } from "./examples";
 
 type Stack = "next" | "express" | "static" | "react" | "python";
@@ -166,6 +168,54 @@ export default function DevHubPage() {
   const router = useRouter();
   const [showModal, setShowModal] = useState(false);
   const [ideaPrompt, setIdeaPrompt] = useState("");
+  /*
+   * Возможности сервера нужны НА ВХОДЕ, а не только в рабочем окне: от них зависит,
+   * можно ли вообще предложить человеку «приложение с базой и входом». Пока сборки
+   * нет, выбора не показываем — обещание без механизма хуже отсутствия выбора.
+   */
+  const [индексВозможностей, setИндексВозможностей] = useState<CapabilityIndex | null>(null);
+  const [режим, setРежим] = useState<РежимПостройки>("page");
+  /*
+   * Смета пайплайна «книга → озвучка → фильм» (29.09.2026).
+   *
+   * Ручка /pipeline/quote уже считала цену, но человек её не видел — то есть
+   * работа была сделана и не работала. Здесь она становится экраном: цена
+   * называется ДО заказа, и ни один цент не тратится, пока человек не подтвердит.
+   */
+  const [сметаЗнаков, setСметаЗнаков] = useState(20000);
+  const [сметаОзвучка, setСметаОзвучка] = useState(true);
+  const [сметаСекунд, setСметаСекунд] = useState(60);
+  const [сметаОтвет, setСметаОтвет] = useState<null | {
+    итогоДолларов: number;
+    строки: Array<{ ключ: "book" | "voice" | "film"; объём: number; доллары: number }>;
+  }>(null);
+  const [сметаИдёт, setСметаИдёт] = useState(false);
+  const спроситьЦену = async () => {
+    if (сметаИдёт) return;
+    setСметаИдёт(true);
+    try {
+      const r = await fetch(apiUrl("/api/devhub/pipeline/quote"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ знаковКниги: сметаЗнаков, озвучка: сметаОзвучка, секундВидео: сметаСекунд }),
+      });
+      const d = await r.json();
+      if (r.ok && d?.смета) setСметаОтвет(d.смета);
+    } catch { /* цену не узнали — экран просто не покажет число, врать нечем */ }
+    finally { setСметаИдёт(false); }
+  };
+  useEffect(() => {
+    let живо = true;
+    fetch(apiUrl("/api/devhub/studio/capabilities"))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!живо || !d) return;
+        setИндексВозможностей(indexCapabilities(d.capabilities ?? d.items ?? null));
+      })
+      .catch(() => { /* молчим: без возможностей вход просто строит страницу */ });
+    return () => { живо = false; };
+  }, []);
+  const режимПриложенияДоступен = доступенРежимПриложения((id) => !isCapabilityBlocked(индексВозможностей, id));
   const [ideaStarting, setIdeaStarting] = useState(false);
   // What actually works right now, from the server. The landing used to
   // advertise every capability unconditionally while several were dead —
@@ -187,9 +237,14 @@ export default function DevHubPage() {
       // нам это мешает метить пробы префиксом probe-. Дефис, точку и подчёркивание
       // оставляем: они безопасны и в адресе Pages (slugify всё равно приводит его).
       const name = idea.replace(/[^\p{L}\p{N} ._-]/gu, "").split(/\s+/).slice(0, 5).join(" ").slice(0, 40) || "My app";
-      // Выбор стека вынесен в lib/devhubStackChoice (там сторож): на нём
-      // держится обещание «правьте кликами» с витрины.
-      const stack = stackForIdea(idea);
+      /*
+       * Выбор человека главнее догадки по тексту: если он выбрал «приложение» и
+       * сборка доступна — строим приложение. Во всех остальных случаях остаётся
+       * прежнее поведение (static), на котором держится обещание живого адреса.
+       */
+      const stack = режим === "app" && режимПриложенияДоступен
+        ? стекДляРежима("app")
+        : stackForIdea(idea);
       const r = await fetch(apiUrl("/api/devhub/projects"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -537,6 +592,30 @@ export default function DevHubPage() {
               на localStorage, и молчать об этом нельзя: человек ждал сервер и узнал бы
               об отличии только на своих данных. Подпись появляется ДО генерации,
               по тому же словарю признаков, что раньше выбирал стек. */}
+          {/* 28.09.2026. Развилка появляется ТОЛЬКО когда сборка приложения реально
+              доступна (см. доступенРежимПриложения). Пока её нет, человеку не
+              предлагают выбор, которого у нас не существует: обещание без механизма
+              дороже отсутствия выбора. Появится токен сборки — выбор возникнет сам. */}
+          {режимПриложенияДоступен && (
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginTop: 12 }}>
+              {(["page", "app"] as const).map((вариант) => (
+                <button
+                  key={вариант}
+                  type="button"
+                  onClick={() => setРежим(вариант)}
+                  style={{
+                    padding: "6px 14px", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer",
+                    border: режим === вариант ? "1px solid #14b8a6" : "1px solid rgba(255,255,255,.25)",
+                    background: режим === вариант ? "#0d9488" : "transparent",
+                    color: режим === вариант ? "#fff" : "#99f6e4",
+                  }}
+                >
+                  {t(вариант === "page" ? "hero.mode.page" : "hero.mode.app")}
+                </button>
+              ))}
+              <span style={{ fontSize: 12.5, color: "#99f6e4", lineHeight: 1.45 }}>{t("hero.mode.hint")}</span>
+            </div>
+          )}
           {даннымНуженСервер(ideaPrompt) && (
             <div style={{ fontSize: 13, color: "#fde68a", marginTop: 10, lineHeight: 1.5 }}>
               {t("hero.needsServerNote")}
@@ -572,6 +651,71 @@ export default function DevHubPage() {
           </div>
         </div>
 
+        {/* Смета пайплайна: цену человек видит ДО заказа (замысел основателя 28.09). */}
+        <div style={{
+          margin: "18px 0 0", padding: "16px 18px", borderRadius: 12,
+          background: "rgba(13,148,136,.08)", border: "1px solid rgba(13,148,136,.28)",
+        }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: "#0f766e", marginBottom: 10 }}>
+            {t("quote.title")}
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
+            <label style={{ fontSize: 13, color: "#334155" }}>
+              {t("quote.chars")}<br />
+              <input
+                type="number" min={0} max={500000} value={сметаЗнаков}
+                onChange={(e) => setСметаЗнаков(Math.max(0, Number(e.target.value) || 0))}
+                style={{ width: 120, padding: "6px 8px", borderRadius: 8, border: "1px solid #cbd5e1" }}
+              />
+            </label>
+            <label style={{ fontSize: 13, color: "#334155" }}>
+              {t("quote.seconds")}<br />
+              <input
+                type="number" min={0} max={600} value={сметаСекунд}
+                onChange={(e) => setСметаСекунд(Math.max(0, Number(e.target.value) || 0))}
+                style={{ width: 100, padding: "6px 8px", borderRadius: 8, border: "1px solid #cbd5e1" }}
+              />
+            </label>
+            <label style={{ fontSize: 13, color: "#334155", display: "flex", alignItems: "center", gap: 6 }}>
+              <input type="checkbox" checked={сметаОзвучка} onChange={(e) => setСметаОзвучка(e.target.checked)} />
+              {t("quote.voice")}
+            </label>
+            <button
+              onClick={спроситьЦену}
+              disabled={сметаИдёт}
+              style={{
+                padding: "8px 18px", borderRadius: 8, border: "none", fontWeight: 700, fontSize: 14,
+                background: сметаИдёт ? "#99f6e4" : "#0d9488", color: "#fff",
+                cursor: сметаИдёт ? "wait" : "pointer",
+              }}
+            >
+              {t("quote.ask")}
+            </button>
+          </div>
+          {сметаОтвет && (
+            <div style={{ marginTop: 12, fontSize: 13.5, color: "#334155" }}>
+              <div style={{ fontWeight: 800, color: "#0f766e", fontSize: 16 }}>
+                {t("quote.total")} ${сметаОтвет.итогоДолларов.toFixed(2)}
+              </div>
+              <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
+                {сметаОтвет.строки.map((с) => (
+                  /* Название шага и единицу берём из словаря: сервер отдаёт КЛЮЧ и
+                     ЧИСЛО, иначе англоязычный посетитель читал бы русские слова. */
+                  <li key={с.ключ}>
+                    {t(`quote.step.${с.ключ}` as never)} — {с.объём}{" "}
+                    {t((с.ключ === "film" ? "quote.unit.seconds" : "quote.unit.chars") as never)}
+                    {": $"}{с.доллары.toFixed(2)}
+                  </li>
+                ))}
+              </ul>
+              {/* Обещать фильм, пока счёт поставщика пуст, нельзя: говорим прямо. */}
+              {сметаСекунд > 0 && (
+                <div style={{ marginTop: 8, color: "#92400e" }}>{t("quote.videoPaused")}</div>
+              )}
+              <div style={{ marginTop: 8, color: "#64748b", fontSize: 12.5 }}>{t("quote.note")}</div>
+            </div>
+          )}
+        </div>
         {/* Навигация волны стоит ПОД карточкой промпта, а не над заголовком.
             Замер прода 14.09.2026, 360x640, три прогона подряд: поле ввода
             начиналось на 744px (ru) и 716px (en) при сгибе 640 — выше него

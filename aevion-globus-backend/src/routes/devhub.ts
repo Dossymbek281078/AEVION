@@ -65,6 +65,9 @@ import { redactInfraDetails } from "../lib/safeErrorText";
 import { checkPublicUrl } from "../lib/publicUrlOnly";
 import { можноСлужитьСтатикой } from "../lib/staticServable";
 import { вставитьБейдж, нуженБейдж } from "../lib/aevionBadge";
+import { файлыВхода, нуженВход, УКАЗАНИЕ_ПРО_ВХОД } from "../lib/devhubAuthScaffold";
+import { сметаПродукта, РАСЦЕНКИ_ПРОДУКТА } from "../lib/pipelineQuote";
+import { ценаПоЕдиницам, тарифЕсть } from "../lib/unitPricing";
 
 export const devhubRouter = Router();
 
@@ -322,6 +325,138 @@ devhubRouter.post("/guest/link-confirm", dhLinkLimit(), async (req, res) => {
 });
 
 // GET /api/devhub/health — module health probe for aevion hub
+/*
+ * ═══ ПАЙПЛАЙН «книга → озвучка → фильм» ═══
+ *
+ * Замысел основателя 28.09: человек говорит «сделай книгу по моим мотивам, озвучь
+ * и сними короткий фильм», ЦЕНУ СЛЫШИТ СРАЗУ, и дорогие шаги идут последними —
+ * чтобы правка «не тот тон» стоила одну генерацию текста, а не минуту видео.
+ *
+ * Здесь пока ДВЕ ручки, и обе НИЧЕГО НЕ ТРАТЯТ:
+ *   quote  — смета по нашим каналам, до всякого заказа;
+ *   order  — заказ, который ждёт подтверждения человека и готовности каналов.
+ *
+ * Почему запуск шагов ещё не здесь. Видео у нас идёт через Replicate, а его счёт
+ * пуст: живой ответ прода 28.09 — «Video provider has no credit». Ручка, которая
+ * умеет запускать, но упирается в пустой счёт на середине заказа, хуже отсутствующей:
+ * человек заплатит за книгу и озвучку и не получит фильм. Поэтому заказ честно
+ * встаёт в состояние «ждёт пополнения», и это видно в ответе.
+ */
+
+/** Разбор замысла из тела запроса. Числа приводим к разумным границам, а не верим на слово. */
+function замыселИзТела(тело: unknown): { знаковКниги: number; озвучка: boolean; секундВидео: number } {
+  const т = (тело ?? {}) as Record<string, unknown>;
+  const число = (v: unknown, предел: number) => {
+    const n = Number(v);
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    return Math.min(Math.round(n), предел);
+  };
+  return {
+    // Пределы не от жадности: 500 000 знаков это том на 300 страниц, 600 секунд —
+    // десять минут видео. Больше за один заказ мы честно не тянем.
+    знаковКниги: число(т.знаковКниги ?? т.bookChars, 500000),
+    озвучка: т.озвучка === true || т.voice === true,
+    секундВидео: число(т.секундВидео ?? т.videoSeconds, 600),
+  };
+}
+
+/**
+ * Готов ли канал к платным шагам. Отвечает ТРИ исхода, а не два:
+ * да / нет / не знаю. «Не знаю» не равно «да» — это прямое правило платформы.
+ */
+function каналыГотовы(замысел: { озвучка: boolean; секундВидео: number }): {
+  готово: boolean | null;
+  причина: string | null;
+} {
+  if (замысел.секундВидео > 0 && !process.env.REPLICATE_API_TOKEN) {
+    return { готово: false, причина: "видео не настроено: нет REPLICATE_API_TOKEN" };
+  }
+  if (замысел.озвучка && !process.env.ELEVENLABS_API_KEY) {
+    return { готово: false, причина: "озвучка не настроена: нет ELEVENLABS_API_KEY" };
+  }
+  /*
+   * Ключ есть — но есть ли ДЕНЬГИ на счёте поставщика, мы отсюда не знаем: у
+   * Replicate это выясняется только попыткой, а попытка стоит денег. Врать «готово»
+   * нельзя, и пугать «не готово» тоже: поэтому честное «не знаю».
+   */
+  if (замысел.секундВидео > 0) return { готово: null, причина: "остаток счёта Replicate отсюда не виден" };
+  return { готово: true, причина: null };
+}
+
+// POST /api/devhub/pipeline/quote — цена ДО заказа. Ничего не тратит и не создаёт.
+devhubRouter.post("/pipeline/quote", (req, res) => {
+  const замысел = замыселИзТела(req.body);
+  if (замысел.знаковКниги === 0 && замысел.секундВидео === 0) {
+    return res.status(400).json({ error: "нечего считать: укажите знаковКниги и/или секундВидео" });
+  }
+  const смета = сметаПродукта(замысел);
+  const каналы = каналыГотовы(замысел);
+  return res.json({
+    ok: true,
+    замысел,
+    смета,
+    расценки: РАСЦЕНКИ_ПРОДУКТА,
+    каналы,
+  });
+});
+
+interface ЗаказПайплайна {
+  id: string;
+  userId: string;
+  замысел: { знаковКниги: number; озвучка: boolean; секундВидео: number };
+  итогоДолларов: number;
+  состояние: "ждёт подтверждения" | "подтверждён" | "ждёт пополнения";
+  созданВ: string;
+}
+const memЗаказыПайплайна = new Map<string, ЗаказПайплайна>();
+
+// POST /api/devhub/pipeline/order — заказ. Тоже НИЧЕГО не тратит: он ждёт человека.
+devhubRouter.post("/pipeline/order", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = requesterId(req, auth?.sub);
+  const замысел = замыселИзТела(req.body);
+  if (замысел.знаковКниги === 0 && замысел.секундВидео === 0) {
+    return res.status(400).json({ error: "пустой замысел" });
+  }
+  const смета = сметаПродукта(замысел);
+  const каналы = каналыГотовы(замысел);
+  /*
+   * Подтверждение — ОБЯЗАТЕЛЬНОЕ условие, а не галочка по умолчанию: человек
+   * должен увидеть цену и согласиться с ней до того, как мы потратим первый цент.
+   */
+  const подтверждено = req.body?.подтверждаю === true || req.body?.confirm === true;
+  const состояние: ЗаказПайплайна["состояние"] = !подтверждено
+    ? "ждёт подтверждения"
+    : каналы.готово === false
+      ? "ждёт пополнения"
+      : "подтверждён";
+  const заказ: ЗаказПайплайна = {
+    id: crypto.randomUUID(),
+    userId,
+    замысел,
+    итогоДолларов: смета.итогоДолларов,
+    состояние,
+    созданВ: now(),
+  };
+  memЗаказыПайплайна.set(заказ.id, заказ);
+  return res.status(201).json({
+    ok: true,
+    заказ,
+    смета,
+    каналы,
+    /*
+     * Что произойдёт дальше — говорим прямо, а не намёком. Пока видео упирается
+     * в пустой счёт Replicate, запуск шагов не начинается вовсе: заказ, брошенный
+     * на середине, хуже неначатого.
+     */
+    дальше:
+      состояние === "ждёт подтверждения"
+        ? "покажите человеку смету и пришлите подтверждаю: true"
+        : состояние === "ждёт пополнения"
+          ? "канал не настроен — заказ не начнётся; см. каналы.причина"
+          : "заказ подтверждён; шаги запускаются отдельной ручкой, когда счёт поставщика пополнен",
+  });
+});
 devhubRouter.get("/health", (_req, res) => {
   // `status` был КОНСТАНТОЙ "ok" — строкой, записанной в исходнике. Он не
   // проверял ничего, в том числе базу: при упавшем Postgres поле `db`
@@ -1888,6 +2023,31 @@ function foldHistory(history: ChatTurn[] | undefined): string {
  * Цену НЕ подставляем даже приблизительно: выдумка, поданная как замер,
  * дороже отсутствия числа.
  */
+/**
+ * Учёт прогона, у которого цена считается по ОБЪЁМУ (знаки, секунды), а не по токенам.
+ *
+ * 29.09.2026. Раньше такие прогоны уходили в журнал с пометкой «БЕЗ-ЦЕНЫ» — и это было
+ * честно, но бесполезно: обещание карточки «logs what every AI run cost» не выполнялось
+ * у 50 прогонов из 73. Там, где у поставщика есть опубликованный прайс за единицу
+ * (перевод, распознавание речи), цену теперь считаем; где прайса нет (звук, клон
+ * голоса) — по-прежнему честная пометка, а не выдуманное число.
+ */
+function учтиПоОбъёму(поверхность: string, объём: number, userId: string | null): void {
+  const цена = ценаПоЕдиницам(поверхность, объём);
+  if (цена === null) {
+    учтиБезЦены(поверхность, userId);
+    return;
+  }
+  try {
+    insertSmartRun({
+      module: `devhub-${поверхность}`,
+      resolved: "single",
+      costUsd: цена,
+      savedUsd: 0,
+      userId,
+    });
+  } catch { /* Учёт не должен ронять ответ, ради которого его зовут. */ }
+}
 function учтиБезЦены(поверхность: string, userId: string | null): void {
   try {
     insertSmartRun({
@@ -1993,7 +2153,10 @@ async function generateCodeWithAI(
         ? `You are an expert developer. Generate complete, working code for MULTIPLE coordinated files that must work together: ${targetFiles.join(", ")}. When given a file's current content, edit it in place rather than starting over; keep the files consistent with each other (matching imports, types, endpoint paths, function names, etc). Return ONLY a JSON object: {"files": [{"path": "...", "content": "...", "language": "..."}, ...]} with exactly one entry per requested file. No explanation, just JSON.`
         : `You are an expert developer. Generate complete, working code. When given a list of existing project files, pick a path that fits the project's existing structure and match its conventions. Any file containing JSX must use a .jsx extension (.tsx for TypeScript) — the in-browser live preview keys off the extension. Return ONLY a JSON object: {"files": [{"path": "filename", "content": "...", "language": "..."}]}. No explanation, just JSON. Generate a scaffold for the ${stack} stack.`;
 
-  const userMsg = `${foldHistory(history)}Generate code for: ${prompt}. Stack: ${stack}.${images?.length ? " Recreate the attached screenshot/design as closely as practical (layout, colors, spacing, text)." : ""}${buildFileContext(existingFiles, targetFiles)}`;
+  // Когда вход нужен, модель ОБЯЗАНА пользоваться нашим шаблоном, а не писать свой:
+  // иначе рядом появится второй вход, и дырявым окажется именно он.
+  const проВход = нуженВход(prompt) ? ` ${УКАЗАНИЕ_ПРО_ВХОД}` : "";
+  const userMsg = `${foldHistory(history)}Generate code for: ${prompt}. Stack: ${stack}.${проВход}${images?.length ? " Recreate the attached screenshot/design as closely as practical (layout, colors, spacing, text)." : ""}${buildFileContext(existingFiles, targetFiles)}`;
 
   const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
     { role: "system", content: systemPrompt },
@@ -3022,6 +3185,33 @@ async function runProjectGeneration(project: DevHubProject, userId: string, prom
   // общем помощнике, покрывает все точки генерации разом: обычную, потоковую
   // и проектирование базы. Вызывающие ручки НЕ списывают сами — иначе дважды.
   await debitQuietly(userId, "generate");
+  /*
+   * ВХОД ПОЛЬЗОВАТЕЛЕЙ — готовым шаблоном, не генерацией (29.09.2026).
+   *
+   * Модель пишет вход каждый раз заново и по-разному: то пароль в открытом виде,
+   * то ответ «такого пользователя нет», по которому перебирают почты, то cookie без
+   * httpOnly. Цена ошибки здесь не «некрасиво», а «утекли чужие пароли», поэтому
+   * файлы входа кладём свои — проверенные (tests/authScaffoldIsSafe.guard.test.ts).
+   *
+   * Условий два, и оба обязательны: идея ПРОСИТ вход и стек умеет серверную часть.
+   * На статике вход невозможен — там нет сервера, и класть туда файлы значило бы
+   * обещать работающую регистрацию, которой не будет.
+   *
+   * Уже существующий файл НЕ трогаем: человек мог править свой вход, и затирать
+   * его правки хуже, чем не добавить ничего.
+   */
+  const стекУмеетСервер = stack === "next" || stack === "express" || stack === "python";
+  if (нуженВход(prompt) && стекУмеетСервер) {
+    const занятые = new Set([
+      ...existingFiles.map((f) => String((f as { path?: string }).path ?? "")),
+      ...generatedFiles.map((f) => String((f as { path?: string }).path ?? "")),
+    ]);
+    for (const ф of файлыВхода()) {
+      if (занятые.has(ф.path)) continue;
+      generatedFiles.push({ path: ф.path, content: ф.content, language: ф.language });
+    }
+  }
+
   onProgress?.("saving");
   let storage: "db" | "memory" = "db";
   const cpRes = await createCheckpoint(project.id, userId, `AI: ${prompt.slice(0, 80)}`, generatedFiles.map((f) => f.path), existingFiles);
@@ -6812,7 +7002,8 @@ devhubRouter.post("/media/translate", dhCostlyLimit("dhtranslate"), async (req, 
     const out = await translateText(text, targetLang, sourceLang, formality);
     if (!out.ok) return res.status(out.status).json(out.body);
     await debitQuietly(trUserId, "translate");
-    учтиБезЦены("translate", trUserId);
+    // Объём — знаки ИСХОДНОГО текста: именно их считает DeepL.
+    учтиПоОбъёму("translate", String(text ?? "").length, trUserId);
     res.json({
       ok: true,
       ...creditNote(trCredit),
@@ -6891,7 +7082,7 @@ devhubRouter.post("/projects/:id/files/translate", dhCostlyLimit("dhtranslate"),
       else memFiles.set(out.id, out);
     }
     await debitQuietly(userId, "translate", 1);
-    учтиБезЦены("files-translate", userId);
+    учтиПоОбъёму("files-translate", String(file?.content ?? "").length, userId);
     res.json({
       ...creditNote(ftrCredit),
       ok: true,
@@ -7107,7 +7298,12 @@ devhubRouter.post("/projects/:id/files/translate-bulk", dhCostlyLimit("dhtransla
 
   const okCount = results.filter((r) => r.ok).length;
   await debitQuietly(userId, "translate", okCount);
-  учтиБезЦены("files-translate-bulk", userId);
+  // Сумма знаков по тем файлам, что действительно перевелись: платим за них.
+  учтиПоОбъёму(
+    "files-translate-bulk",
+    results.reduce((сумма, r) => сумма + (r.ok ? Number(r.bytes || 0) : 0), 0),
+    userId,
+  );
   res.json({
     ...creditNote(ftrbCredit),
     ...(storageFallback ? MEMORY_NOTE : {}),
@@ -9035,6 +9231,9 @@ devhubRouter.get("/studio/spend", async (req, res) => {
     runs: agg.runs,
     costUsd: agg.costUsd,
     unpricedRuns: agg.unpricedRuns,
+    // Какие именно поверхности теряют цену. Без этого число «сколько» не
+    // подсказывает, что чинить, и живёт годами.
+    unpricedByModule: agg.unpricedByModule,
     since: "2026-09-03",
     note: agg.unpricedRuns > 0
       ? `Из ${agg.runs} запусков у ${agg.unpricedRuns} цену посчитать нечем: у их поставщика нет тарифа в нашей таблице. Сумма по ним не учтена.`

@@ -180,6 +180,9 @@ const TOP_LEVEL_ROUTES: Array<{
   { path: "/cyberchess/launch", changeFrequency: "weekly", priority: 0.7 },
   { path: "/bureau/launch", changeFrequency: "weekly", priority: 0.7 },
   { path: "/devhub/launch", changeFrequency: "weekly", priority: 0.6 },
+  // Английский вход на ту же страницу запуска (29.09.2026): без него /en/devhub/launch
+  // отвечал 404, а посетителя с Product Hunt мы теряли без следа в учёте.
+  { path: "/en/devhub/launch", changeFrequency: "weekly", priority: 0.6 },
   { path: "/multichat-engine/launch", changeFrequency: "weekly", priority: 0.6 },
   // Constitution module
   { path: "/constitution",             changeFrequency: "daily",   priority: 0.9 },

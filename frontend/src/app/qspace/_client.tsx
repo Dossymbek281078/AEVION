@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import {
   demoPlan,
@@ -718,6 +719,39 @@ export default function QSpaceClient() {
       }
       wallBox(w, cur, L, 0, w.height);
     });
+
+    // ПЛИНТУС по низу стен. Голый стык стены с полом — первое, что выдаёт
+    // схему на взгляде изнутри: в жилье этого стыка не видно никогда.
+    //
+    // Все плинтусы сводятся в ОДНО тело: на плане LA VIE стен больше полутора
+    // тысяч, и отдельный предмет на каждую убил бы кадр на слабой машине.
+    // Слияние геометрий даёт один предмет на всю квартиру.
+    {
+      const куски: THREE.BufferGeometry[] = [];
+      const ВЫСОТА = 0.08, ВЫСТУП = 0.015;
+      for (const w of plan.walls) {
+        if (w.glass) continue; // у витража плинтуса не бывает
+        const len = Math.hypot(w.x2 - w.x1, w.y2 - w.y1);
+        if (len < 0.15) continue;
+        const g = new THREE.BoxGeometry(len, ВЫСОТА, w.thickness + ВЫСТУП * 2);
+        const m = new THREE.Matrix4()
+          .makeRotationY(-Math.atan2(w.y2 - w.y1, w.x2 - w.x1))
+          .setPosition((w.x1 + w.x2) / 2, ВЫСОТА / 2, (w.y1 + w.y2) / 2);
+        g.applyMatrix4(m);
+        куски.push(g);
+      }
+      if (куски.length > 0) {
+        const общий = mergeGeometries(куски, false);
+        for (const g of куски) g.dispose();
+        if (общий) {
+          const плинтус = new THREE.Mesh(
+            общий,
+            new THREE.MeshStandardMaterial({ color: 0xf6f4f0, roughness: 0.45, metalness: 0 }),
+          );
+          t.gFinish.add(плинтус);
+        }
+      }
+    }
 
     // --- чистовой слой: окна, двери, светильники ---------------------------
     for (const o of plan.openings) {

@@ -13,6 +13,12 @@ declare module "three" {
     constructor(params?: Record<string, unknown>);
   }
 
+  /** Матрица преобразования: поворот и перенос геометрии до слияния. */
+  export class Matrix4 {
+    makeRotationY(angle: number): Matrix4;
+    setPosition(x: number, y: number, z: number): Matrix4;
+  }
+
   export class Color {
     constructor(hex?: number | string);
     set(value: number | string): this;
@@ -74,6 +80,8 @@ declare module "three" {
   }
 
   export class BufferGeometry {
+    applyMatrix4(m: Matrix4): this;
+    dispose(): void;
     setFromPoints(points: Vector3[]): this;
     setAttribute(name: string, attr: BufferAttribute): this;
     dispose(): void;
@@ -331,4 +339,10 @@ declare module "three/examples/jsm/geometries/RoundedBoxGeometry.js" {
   export class RoundedBoxGeometry extends BufferGeometry {
     constructor(width?: number, height?: number, depth?: number, segments?: number, radius?: number);
   }
+}
+
+// Слияние геометрий из примеров three: плинтусы всей квартиры одним телом.
+declare module "three/examples/jsm/utils/BufferGeometryUtils.js" {
+  import type { BufferGeometry } from "three";
+  export function mergeGeometries(geometries: BufferGeometry[], useGroups?: boolean): BufferGeometry | null;
 }

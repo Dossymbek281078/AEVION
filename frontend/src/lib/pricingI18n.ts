@@ -64,8 +64,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     /* Testimonials */
     "testimonials.title": "Что говорят клиенты",
     "testimonials.subtitle": "Реальные команды на AEVION. Все цитаты с разрешением авторов.",
-    "logos.label": "ИСПОЛЬЗУЮТ КОМАНДЫ ИЗ 30+ СТРАН",
-
+  
     /* Modules matrix */
     "modules.title": "Все модули",
     "modules.subtitle": `${MODULE_NODES} продуктов AEVION. Все входят в любой платный тариф; пять приложений продаются и отдельно.`,
@@ -551,8 +550,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
 
     "testimonials.title": "What customers say",
     "testimonials.subtitle": "Real teams on AEVION. All quotes published with author permission.",
-    "logos.label": "TRUSTED BY TEAMS ACROSS 30+ COUNTRIES",
-
+  
     "modules.title": "All modules",
     "modules.subtitle": `${MODULE_NODES} AEVION products. All included in every paid plan; five apps are also sold separately.`,
     "modules.colModule": "Module",

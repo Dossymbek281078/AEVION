@@ -4,7 +4,6 @@ import { channelNow } from "@/lib/channelNow";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
-import { CustomerLogosRow } from "@/components/CustomerLogosRow";
 import { apiUrl } from "@/lib/apiBase";
 import { fetchAiSavings } from "@/lib/aiSavings";
 import { запомнитьНамерение } from "@/lib/checkoutIntent";
@@ -1536,9 +1535,16 @@ export default function PricingPage() {
         );
       })()}
 
-      {/* Customer logos row */}
-      <CustomerLogosRow label={tp("logos.label")} />
-
+      {/* Ряд «логотипов клиентов» снят 29.09.2026.
+          Это были ВЫДУМАННЫЕ плашки (в самом компоненте было написано:
+          «имитирующие diverse customer base»), и стояли они под заголовком
+          «используют команды из 30+ стран» — при двух продажах за всё время.
+          Ложное свидетельство на продающей странице бьёт ровно по тому, чем мы
+          торгуем: доказуемость происхождения. Свип 20.09 убрал отзывы, кейсы и
+          счётчики; этот ряд пережил его, потому что сторожа смотрели словари, а
+          он жил отдельным компонентом. Вернуть можно только с настоящими
+          клиентами и их разрешением. */
+      }
       {/* Testimonials */}
       {testimonials.length > 0 && (
         <section style={{ marginBottom: 56 }}>

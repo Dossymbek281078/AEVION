@@ -7,11 +7,11 @@ import { WaitlistIfMissing } from "@/components/FooterWaitlist";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Success Stories — AEVION QBuild",
+  title: "Истории успеха — AEVION QBuild",
   description:
     "Real construction workers hired through AEVION QBuild. Every success story is a worker who found a job and an employer who found their crew.",
   openGraph: {
-    title: "QBuild Success Stories",
+    title: "Истории успеха QBuild",
     description: "Real hires made through AEVION QBuild construction recruiting platform.",
     type: "website",
   },

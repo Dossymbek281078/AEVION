@@ -5,6 +5,7 @@ import { isPayboxConfigured } from "../lib/payment/payboxProvider";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { primaryCheckoutProvider, lemonSqueezyCanCharge, lemonSqueezyCanDeliver } from "../lib/payment/primaryProvider";
 
 const capturePaymentsError = makeServiceCapture("payments");
 
@@ -281,17 +282,14 @@ paymentsRouter.get("/kaspi/config", (_req, res) => {
 /* ═══ General ═══ */
 
 paymentsRouter.get("/health", (_req, res) => {
-  // Выражение ДОСЛОВНО то же, что в checkout.ts, включая секрет вебхука:
-  // это одно утверждение о мире, и два его написания разъезжаются молча.
-  // Без секрета вебхук LemonSqueezy — заглушка на 200 OK, то есть деньги
-  // возьмутся, а купленное не выдастся; выдача есть у Gumroad, и выбор
-  // идёт как `lsReady ? ls : gumroad`.
-  const lsReady =
-    Boolean(process.env.LEMON_SQUEEZY_API_KEY?.trim()) &&
-    Boolean(process.env.LEMON_SQUEEZY_STORE_ID?.trim());
-  // Кто ОСНОВНОЙ — решает способность выдать купленное, а не взять деньги.
-  const lsCanDeliver =
-    lsReady && Boolean(process.env.LEMON_SQUEEZY_WEBHOOK_SECRET?.trim());
+  // Выражение НЕ повторяется здесь: оно живёт в lib/payment/primaryProvider.
+  // Без секрета вебхук LemonSqueezy — заглушка на 200 OK: деньги возьмутся, а
+  // купленное не выдастся, поэтому основной она в таком состоянии не считается.
+  // Прежняя версия честно называла причину расхождения — «второй способ
+  // отвечать на тот же вопрос» — и тут же копировала выражение из checkout.ts.
+  // К 29.09.2026 копий стало три, и третья (/api/revenue/health) лгала.
+  const lsReady = lemonSqueezyCanCharge();
+  const lsCanDeliver = lemonSqueezyCanDeliver();
   res.json({
     // `primary` раньше стояло у Gumroad КОНСТАНТОЙ true. Поле выглядело
     // замером, а было литералом — и после перехода на LemonSqueezy оно

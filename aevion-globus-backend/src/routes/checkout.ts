@@ -26,6 +26,7 @@ import { модулиДляКассы } from "../lib/payment/customData";
 const ужеСообщено = new Set<string>();
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { rateLimit } from "../lib/rateLimit";
+import { primaryCheckoutProvider, lemonSqueezyCanCharge, lemonSqueezyCanDeliver } from "../lib/payment/primaryProvider";
 
 const capture = makeServiceCapture("checkout");
 
@@ -729,14 +730,13 @@ checkoutRouter.get("/healthz", (_req, res) => {
   // А вот ВЫБОР провайдера обязан идти по второму: иначе кассу назначаем
   // тому, кто возьмёт деньги и не выдаст купленное, тогда как у Gumroad
   // секрет вебхука необязателен и выдача работает.
-  const lsReady =
-    Boolean(process.env.LEMON_SQUEEZY_API_KEY?.trim()) &&
-    Boolean(process.env.LEMON_SQUEEZY_STORE_ID?.trim());
-  const lsCanDeliver =
-    lsReady && Boolean(process.env.LEMON_SQUEEZY_WEBHOOK_SECRET?.trim());
+  // Оба признака — из общего источника (lib/payment/primaryProvider). Здесь
+  // они раньше стояли выражением, и с него скопировали в две другие ручки.
+  const lsReady = lemonSqueezyCanCharge();
+  const lsCanDeliver = lemonSqueezyCanDeliver();
   res.json({
     ok: true,
-    primaryProvider: lsCanDeliver ? "lemonsqueezy" : "gumroad",
+    primaryProvider: primaryCheckoutProvider(),
     providers: {
       // `webhookConfigured` — отдельно от `configured`, и это не мелочь.
       //

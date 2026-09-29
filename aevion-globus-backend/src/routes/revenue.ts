@@ -25,6 +25,7 @@ import { REVENUE_APPS, getLiveRevenueApps, getRevenueApp } from "../data/revenue
 import { PADDLE_KEY, IS_PADDLE_SANDBOX, paddleGet } from "../lib/paddleClient";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { getPool } from "../lib/dbPool";
+import { primaryCheckoutProvider, lemonSqueezyCanCharge, lemonSqueezyCanDeliver } from "../lib/payment/primaryProvider";
 
 const capture = makeServiceCapture("revenue");
 
@@ -619,8 +620,24 @@ revenueRouter.get("/health", (_req, res) => {
   res.json({
     ok: true,
     providers: {
-      lemonsqueezy: { configured: Boolean(LS_KEY()), primary: false, note: "вторичный канал подписок (Lite/Medium/Full)" },
-      gumroad: { configured: Boolean(GUMROAD_TOKEN()), primary: true, note: "основной живой процессинг (подписки + one-time)" },
+      // `primary` здесь СТОЯЛО ЛИТЕРАЛАМИ: false у Lemon Squeezy и true у
+      // Gumroad. Константы остались с тех времён, когда живым процессингом был
+      // Gumroad, и к 29.09.2026 отчёт лгал: покупатель идёт через Lemon Squeezy,
+      // а у Gumroad не настроено ни одной из 50 позиций. Спрашиваем общий
+      // источник (lib/payment/primaryProvider), чтобы у платформы был ОДИН
+      // ответ на вопрос «кто у нас касса».
+      lemonsqueezy: {
+        configured: Boolean(LS_KEY()),
+        primary: primaryCheckoutProvider() === "lemonsqueezy",
+        note: "подписки по срокам (Lite…Max), выдача вебхуком",
+      },
+      gumroad: {
+        configured: Boolean(GUMROAD_TOKEN()),
+        primary: primaryCheckoutProvider() === "gumroad",
+        // Формулировка «основной живой процессинг» снята намеренно: она была
+        // верна в августе и перестала быть верной, а читается как замер.
+        note: "запасная касса; товары в ней не настроены (замер 29.09.2026: 0 из 50)",
+      },
       paddle: {
         configured: Boolean(PADDLE_KEY()),
         sandbox: PADDLE_SANDBOX(),

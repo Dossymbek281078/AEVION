@@ -67,6 +67,7 @@ import { можноСлужитьСтатикой } from "../lib/staticServable"
 import { вставитьБейдж, нуженБейдж } from "../lib/aevionBadge";
 import { файлыВхода, нуженВход, УКАЗАНИЕ_ПРО_ВХОД } from "../lib/devhubAuthScaffold";
 import { сметаПродукта, РАСЦЕНКИ_ПРОДУКТА } from "../lib/pipelineQuote";
+import { ценаПоЕдиницам, тарифЕсть } from "../lib/unitPricing";
 
 export const devhubRouter = Router();
 
@@ -2022,6 +2023,31 @@ function foldHistory(history: ChatTurn[] | undefined): string {
  * Цену НЕ подставляем даже приблизительно: выдумка, поданная как замер,
  * дороже отсутствия числа.
  */
+/**
+ * Учёт прогона, у которого цена считается по ОБЪЁМУ (знаки, секунды), а не по токенам.
+ *
+ * 29.09.2026. Раньше такие прогоны уходили в журнал с пометкой «БЕЗ-ЦЕНЫ» — и это было
+ * честно, но бесполезно: обещание карточки «logs what every AI run cost» не выполнялось
+ * у 50 прогонов из 73. Там, где у поставщика есть опубликованный прайс за единицу
+ * (перевод, распознавание речи), цену теперь считаем; где прайса нет (звук, клон
+ * голоса) — по-прежнему честная пометка, а не выдуманное число.
+ */
+function учтиПоОбъёму(поверхность: string, объём: number, userId: string | null): void {
+  const цена = ценаПоЕдиницам(поверхность, объём);
+  if (цена === null) {
+    учтиБезЦены(поверхность, userId);
+    return;
+  }
+  try {
+    insertSmartRun({
+      module: `devhub-${поверхность}`,
+      resolved: "single",
+      costUsd: цена,
+      savedUsd: 0,
+      userId,
+    });
+  } catch { /* Учёт не должен ронять ответ, ради которого его зовут. */ }
+}
 function учтиБезЦены(поверхность: string, userId: string | null): void {
   try {
     insertSmartRun({
@@ -6976,7 +7002,8 @@ devhubRouter.post("/media/translate", dhCostlyLimit("dhtranslate"), async (req, 
     const out = await translateText(text, targetLang, sourceLang, formality);
     if (!out.ok) return res.status(out.status).json(out.body);
     await debitQuietly(trUserId, "translate");
-    учтиБезЦены("translate", trUserId);
+    // Объём — знаки ИСХОДНОГО текста: именно их считает DeepL.
+    учтиПоОбъёму("translate", String(text ?? "").length, trUserId);
     res.json({
       ok: true,
       ...creditNote(trCredit),
@@ -7055,7 +7082,7 @@ devhubRouter.post("/projects/:id/files/translate", dhCostlyLimit("dhtranslate"),
       else memFiles.set(out.id, out);
     }
     await debitQuietly(userId, "translate", 1);
-    учтиБезЦены("files-translate", userId);
+    учтиПоОбъёму("files-translate", String(file?.content ?? "").length, userId);
     res.json({
       ...creditNote(ftrCredit),
       ok: true,
@@ -7271,7 +7298,12 @@ devhubRouter.post("/projects/:id/files/translate-bulk", dhCostlyLimit("dhtransla
 
   const okCount = results.filter((r) => r.ok).length;
   await debitQuietly(userId, "translate", okCount);
-  учтиБезЦены("files-translate-bulk", userId);
+  // Сумма знаков по тем файлам, что действительно перевелись: платим за них.
+  учтиПоОбъёму(
+    "files-translate-bulk",
+    results.reduce((сумма, r) => сумма + (r.ok ? Number(r.bytes || 0) : 0), 0),
+    userId,
+  );
   res.json({
     ...creditNote(ftrbCredit),
     ...(storageFallback ? MEMORY_NOTE : {}),
@@ -9199,6 +9231,9 @@ devhubRouter.get("/studio/spend", async (req, res) => {
     runs: agg.runs,
     costUsd: agg.costUsd,
     unpricedRuns: agg.unpricedRuns,
+    // Какие именно поверхности теряют цену. Без этого число «сколько» не
+    // подсказывает, что чинить, и живёт годами.
+    unpricedByModule: agg.unpricedByModule,
     since: "2026-09-03",
     note: agg.unpricedRuns > 0
       ? `Из ${agg.runs} запусков у ${agg.unpricedRuns} цену посчитать нечем: у их поставщика нет тарифа в нашей таблице. Сумма по ним не учтена.`

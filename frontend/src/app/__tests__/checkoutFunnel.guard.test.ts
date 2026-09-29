@@ -78,6 +78,16 @@ const EXEMPT: Array<{ rel: string; reason: string }> = [
     rel: "app/devhub/[id]/page.tsx",
     reason: "placeholder поля ввода: это ссылка на товар ПОЛЬЗОВАТЕЛЯ, не на оплату AEVION",
   },
+  {
+    rel: "app/cyberchess/page.tsx",
+    reason:
+      "кнопка ведёт на /pricing, а не в кассу: прямых признаков чекаута в файле нет " +
+      "(проверено 29.09.2026 — gumroad/lemonsqueezy/checkout-session по нулю, есть только " +
+      "productById). Шаг «дошёл до цен» воронка считает по page_view на /pricing, а сам клик " +
+      "страница шлёт как cta_click. Слать отсюда checkout_start было бы враньём: касса " +
+      "открывается на /pricing, и мы завысили бы ровно то число, по которому видно провал " +
+      "(за 14 дней 22 дошли до цен, 0 начали оплату)",
+  },
 ];
 
 function walk(dir: string, out: string[] = []): string[] {

@@ -1383,7 +1383,7 @@ export default function CyberChessPage(){
   const[tab,sTab]=useState<"play"|"puzzles"|"analysis"|"coach">("play");
   const[pzI,sPzI]=useState(0);
   const[pzF,sPzF]=useState("all");
-  const[sfOk,sSfOk]=useState(false);
+  const[sfOk,sSfOk]=useState(false);const[sfZapusk,sSfZapusk]=useState(false);
   const[rat,sRat]=useState(800);
   const[sts,sSts]=useState({w:0,l:0,d:0});
   // totalGames at component scope for daily goals tracking
@@ -3227,12 +3227,17 @@ export default function CyberChessPage(){
   // открывает Analysis/Coach. На setup screen Stockfish не нужен.
   function ensureSF(){
     if(sfR.current)return;
+    // 🔴 29.09.2026: исходов ТРИ, а подпись знала два. Пока идёт загрузка WASM,
+    // признак готовности ложен — и подпись писала «не запустился» движку,
+    // который просто ещё не поднялся. Соседнее окно приняло это за дефект
+    // узкого экрана; ширина ни при чём, дело в окне ожидания.
+    sSfZapusk(true);
     const s=new SF();
     // Подписка ДО init(): между запуском и присвоением уже мог прийти uciok.
     s.naSostoyanie=(ok:boolean)=>sSfOk(ok);
     s.init();sfR.current=s;
     const c=setInterval(()=>{if(s.ready()){sSfOk(true);clearInterval(c)}},200);
-    setTimeout(()=>clearInterval(c),15000);
+    setTimeout(()=>{clearInterval(c);sSfZapusk(false)},15000);
   }
   // Триггер: пользователь вошёл в игру или открыл анализ/коуча
   useEffect(()=>{
@@ -7713,7 +7718,7 @@ export default function CyberChessPage(){
                   а движок не выдал НИ ОДНОЙ реплики — ход считал запасной расчёт, и
                   человек ждал соперника до двадцати секунд, читая имя движка,
                   который не запустился. */}
-              <div style={{fontSize:13,color:CC.textDim,marginTop:3}}>Движок: <b style={{color:sfOk?CC.text:CC.gold}}>{sfOk?"Stockfish 18 · d22":"не запустился — считает запасной расчёт"}</b></div>
+              <div style={{fontSize:13,color:CC.textDim,marginTop:3}}>Движок: <b style={{color:sfOk?CC.text:CC.gold}}>{sfOk?"Stockfish 18 · d22":sfZapusk?"загружается…":"не запустился — считает запасной расчёт"}</b></div>
               <div style={{fontSize:13,color:CC.textDim,marginTop:3}}>Коуч: <b style={{color:CC.text}}>супер-GM</b></div>
             </Card>
             {/* Теория дебюта — в потоке, после «Партии»: ничего не накрывает по построению */}

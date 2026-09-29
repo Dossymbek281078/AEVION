@@ -18,7 +18,8 @@ const событие = (
   type: string,
   meta?: Record<string, string | number | boolean | null>,
   path?: string,
-) => ({ type, meta, path });
+  sid?: string,
+) => ({ type, meta, path, sid });
 
 describe("разрез воронки", () => {
   it("считает шаги по каналам", () => {
@@ -141,5 +142,41 @@ describe("разрез воронки", () => {
     ]);
     expect(r.byPost["instagram/obshchiy"].pricing).toBe(1);
     expect(r.byPost["youtube/obshchiy"].pricing).toBe(1);
+  });
+  it("страницы входа: считается ПЕРВАЯ страница сессии, запрос и идентификаторы убраны", () => {
+    // 🔴 Замер 30.09.2026: Instagram привёл 12 человек до цен, а на какие страницы
+    // они пришли — ответа не было (детализация только в закрытых ручках, 401).
+    // Людей приводит ПЕРВАЯ страница; остальные они смотрят уже внутри.
+    const r = разрезВоронки([
+      событие("page_view", { channel: "instagram" }, "/qskyway?c=ig-post1", "s1"),
+      событие("page_view", { channel: "instagram" }, "/pricing", "s1"),
+      событие("page_view", { channel: "instagram" }, "/pricing", "s2"),
+      событие("page_view", { channel: "youtube" }, "/devhub/9f8e7d6c5b4a3210", "s3"),
+      событие("checkout_start", { channel: "instagram" }, undefined, "s2"),
+    ]);
+
+    expect(
+      r.byEntryPage["instagram|/qskyway"],
+      "запрос не отброшен или взята не первая страница",
+    ).toEqual({ сессий: 1, доЦен: 1, началиОплату: 0 });
+    expect(r.byEntryPage["instagram|/pricing"]).toEqual({ сессий: 1, доЦен: 1, началиОплату: 1 });
+    expect(
+      r.byEntryPage["youtube|/devhub/:id"],
+      "идентификатор уехал в отчёт как есть",
+    ).toEqual({ сессий: 1, доЦен: 0, началиОплату: 0 });
+  });
+
+  it("КОНТРОЛЬ: список страниц входа ограничен, остальное в «прочие»", () => {
+    // Без ограничения десяток заходов на выдуманные адреса раздул бы ответ и стал
+    // бы способом его испортить.
+    const много = Array.from({ length: 30 }, (_v, i) =>
+      событие("page_view", { channel: "instagram" }, `/vydumka${i}`, `sid${i}`),
+    );
+    const r = разрезВоронки(много);
+    const ключи = Object.keys(r.byEntryPage);
+    expect(ключи.length, `ключей ${ключи.length} — ограничение не работает`).toBeLessThanOrEqual(13);
+    expect(ключи, "хвост не сложен в «прочие»").toContain("прочие");
+    const всего = Object.values(r.byEntryPage).reduce((а, т) => а + т.сессий, 0);
+    expect(всего, "при сворачивании хвоста потерялись сессии").toBe(30);
   });
 });

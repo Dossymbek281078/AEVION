@@ -295,10 +295,18 @@ describe("сообщения объявляются экранному дикт�
   // для того, кто не видит экрана.
   const client = readFileSync(path.join(__dirname, "_client.tsx"), "utf8");
 
+  // Срез берётся по СВОИМ границам блока, а не до соседнего {pdfPending}:
+  // 29.09.2026 журнал разбора перенесли под итог, сосед оказался выше, и
+  // срез стал отрицательным — проверка молча смотрела в пустоту. Её спас
+  // собственный контроль ниже; привязка к чужому соседу — дефект привязки.
+  const блокПредупреждений = () => {
+    const нач = client.indexOf("{warnings.length > 0 && (");
+    const кон = client.indexOf("</ul>", нач);
+    return нач < 0 || кон < 0 ? "" : client.slice(нач, кон);
+  };
+
   it("у списка предупреждений есть роль", () => {
-    const кусок = client.slice(client.indexOf("{warnings.length > 0 && ("),
-                               client.indexOf("{pdfPending && ("));
-    expect(кусок, "список предупреждений без role").toMatch(/role="status"/);
+    expect(блокПредупреждений(), "список предупреждений без role").toMatch(/role="status"/);
   });
 
   it("у плашки восстановления и у отказа сохранения роли тоже есть", () => {
@@ -307,8 +315,7 @@ describe("сообщения объявляются экранному дикт�
   });
 
   it("контроль прибора: срез действительно вырезан, а не пуст", () => {
-    const кусок = client.slice(client.indexOf("{warnings.length > 0 && ("),
-                               client.indexOf("{pdfPending && ("));
+    const кусок = блокПредупреждений();
     expect(кусок.length, "срез пуст — проверка смотрит в пустоту").toBeGreaterThan(80);
     expect(кусок).toContain("warnings.map");
   });

@@ -145,6 +145,42 @@ export const СОБЫТИЕ_ОПЛАТА_ПОДТВЕРЖДЕНА = "payment_con
  * прежние дни означает «не измерялось», а не «продаж не было». Отдаём за такие
  * дни `null`: неотвеченный вопрос не равен благополучию.
  */
+/**
+ * Метки канала, которыми помечаются НАШИ СОБСТВЕННЫЕ заходы.
+ *
+ * 🔴 Замер 30.09.2026: за 14 дней воронка показывала «начали оплату: 5» — и все
+ * пять оказались нашими. Подтвердилось с двух сторон: окно страницы цен признало
+ * пять нажатий браузером, а окно почты нашло ПЯТЬ писем кассы о брошенной корзине,
+ * все на адреса `probe-*@aevion.app`. Живых незавершённых покупок за две недели —
+ * ноль. Число «5» при этом читалось как пятеро людей у карты.
+ *
+ * Метки перечислены явно, а не выведены из слов «probe/smoke/test»: у окна цен
+ * метка `cold-visit-check`, и никакая эвристика по словам её бы не поймала.
+ * Появится новая — дописывать сюда, рядом с указанием, чья она.
+ */
+const НАШИ_МЕТКИ_КАНАЛА = [
+  "cold-visit-check", // окно страницы цен: холодные заходы на /pricing
+  "probe",            // общая метка прогонов
+  "probe-price",      // прогон покупаемости девяти приложений
+  "probe-ph",         // прогон под запуск на Product Hunt
+  "smoke",
+  "test",
+];
+
+/** Похожа ли метка канала на нашу. Точное совпадение или наше слово с разделителем. */
+function нашаМетка(значение: string | null | undefined): boolean {
+  const v = String(значение ?? "").trim().toLowerCase();
+  if (!v) return false;
+  return НАШИ_МЕТКИ_КАНАЛА.some((m) => v === m || v.startsWith(`${m}-`) || v.startsWith(`${m}_`));
+}
+
+/** Метка канала из адреса страницы: `/pricing?c=cold-visit-check` → `cold-visit-check`. */
+function меткаИзПути(path: string | null | undefined): string | null {
+  const p = String(path ?? "");
+  const m = /[?&]c=([^&#]+)/.exec(p);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 const ОПЛАТЫ_СЧИТАЕМ_С = "2026-09-29T14:59:51.000Z";
 
 /**
@@ -782,6 +818,8 @@ eventsRouter.get("/funnel", (req, res) => {
     checkoutStart: number;
     thankYouOpened: number;
     paid: number;
+    /** Из них НАШИ — заходы с нашей меткой канала (см. НАШИ_МЕТКИ_КАНАЛА). */
+    checkoutStartOurs: number;
     /** Из них НАШИ — проверки кассы своими же адресами. Не вычитаем молча: читатель
      *  должен видеть оба числа, иначе «первая продажа» опять решается перепиской. */
     paidOurs: number;
@@ -795,6 +833,24 @@ eventsRouter.get("/funnel", (req, res) => {
   let ботов = 0;
   let всего = 0;
 
+  // ПЕРВЫЙ ПРОХОД: какие сессии пришли с нашей меткой канала. Метка живёт в
+  // адресе страницы (`/pricing?c=cold-visit-check`), а событие «начали оплату»
+  // её не несёт — поэтому связываем по признаку сессии, тот же посетитель и
+  // тот же заход. (Без двоеточия после слова: соседний сторож
+  // publicFunnelHasNoPersonalData читает ИСХОДНИК и запрещает строку «sid»
+  // с двоеточием, чтобы личное поле не попало в ответ. Моё пояснение
+  // покрасило его в красный — текст о вещи неотличим от вещи.)
+  // Способ работает и ЗАДНИМ ЧИСЛОМ, для уже собранных событий, и не требует
+  // правок страницы.
+  const нашиСессии = new Set<string>();
+  for (const line of content.split(String.fromCharCode(10))) {
+    if (!line.trim()) continue;
+    let ev: AnalyticsEvent;
+    try { ev = JSON.parse(line) as AnalyticsEvent; } catch { continue; }
+    if (ev.type !== "page_view" || !ev.sid) continue;
+    if (нашаМетка(меткаИзПути(ev.path))) нашиСессии.add(ev.sid);
+  }
+
   for (const line of content.split(String.fromCharCode(10))) {
     if (!line.trim()) continue;
     let ev: AnalyticsEvent;
@@ -806,7 +862,7 @@ eventsRouter.get("/funnel", (req, res) => {
 
     событияВоронки.push(ev);
     const день = new Date(t).toISOString().slice(0, 10);
-    if (!поДням[день]) поДням[день] = { visits: 0, pricing: 0, checkoutStart: 0, thankYouOpened: 0, paid: 0, paidOurs: 0 };
+    if (!поДням[день]) поДням[день] = { visits: 0, pricing: 0, checkoutStart: 0, thankYouOpened: 0, paid: 0, paidOurs: 0, checkoutStartOurs: 0 };
     if (!людиПоДням[день]) людиПоДням[день] = new Set<string>();
     const ст = поДням[день];
 
@@ -817,6 +873,7 @@ eventsRouter.get("/funnel", (req, res) => {
       if (typeof ev.path === "string" && ev.path.includes("/pricing")) ст.pricing += 1;
     } else if (ev.type === "checkout_start") {
       ст.checkoutStart += 1;
+      if (ev.sid && нашиСессии.has(ev.sid)) ст.checkoutStartOurs += 1;
     } else if (ev.type === "checkout_success") {
       ст.thankYouOpened += 1;
     } else if (ev.type === СОБЫТИЕ_ОПЛАТА_ПОДТВЕРЖДЕНА) {
@@ -847,6 +904,7 @@ eventsRouter.get("/funnel", (req, res) => {
       thankYouOpened: поДням[д].thankYouOpened,
       paid: измерялосьЛи(д) ? поДням[д].paid : null,
       paidOurs: измерялосьЛи(д) ? поДням[д].paidOurs : null,
+      checkoutStartOurs: поДням[д].checkoutStartOurs,
     }));
 
   const разрез = разрезВоронки(событияВоронки);
@@ -857,8 +915,9 @@ eventsRouter.get("/funnel", (req, res) => {
       pricing: a.pricing + b.pricing,
       checkoutStart: a.checkoutStart + b.checkoutStart,
       thankYouOpened: a.thankYouOpened + b.thankYouOpened,
+      checkoutStartOurs: a.checkoutStartOurs + b.checkoutStartOurs,
     }),
-    { visits: 0, pricing: 0, checkoutStart: 0, thankYouOpened: 0 },
+    { visits: 0, pricing: 0, checkoutStart: 0, thankYouOpened: 0, checkoutStartOurs: 0 },
   );
 
   // Сумма по измеренным дням. Складывать вперемешку с null нельзя: null + число

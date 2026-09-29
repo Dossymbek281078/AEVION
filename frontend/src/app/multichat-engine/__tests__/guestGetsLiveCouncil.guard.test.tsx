@@ -48,4 +48,33 @@ describe("гость и живой консилиум", () => {
     render(<CouncilConsole />);
     await waitFor(() => expect(screen.getByText(/войдите по почте/i)).toBeTruthy());
   });
+  test("запросы гостя несут признак устройства — иначе норма считается по IP", async () => {
+    // 🔴 Замер 29.09.2026 (окно роликов, живой браузер): страница не посылала НИ
+    // ОДНОГО заголовка устройства, поэтому сервер считал бесплатную норму только
+    // по адресу. Мобильные операторы держат тысячи абонентов за одним адресом:
+    // двое исчерпали бы норму на всех остальных — предел превратился бы в отказ
+    // толпе. Признак устройства делает норму личной.
+    const вызовы: { url: string; headers: Record<string, string> }[] = [];
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+      вызовы.push({
+        url: String(url),
+        headers: Object.fromEntries(
+          Object.entries((init?.headers ?? {}) as Record<string, string>),
+        ),
+      });
+      if (String(url).includes("allowance")) {
+        return { ok: true, json: async () => ({ лимит: 2, использовано: 0, осталось: 2 }) } as Response;
+      }
+      return { ok: true, json: async () => ({ id: "c1" }) } as Response;
+    });
+
+    render(<CouncilConsole />);
+    await waitFor(() => expect(вызовы.some((в) => в.url.includes("allowance"))).toBe(true));
+
+    const остаток = вызовы.find((в) => в.url.includes("allowance"))!;
+    expect(
+      остаток.headers["x-aevion-device"],
+      "остаток нормы спрашивается без признака устройства — сервер ответит про чужой IP",
+    ).toMatch(/^[0-9a-z]{8,64}$/i);
+  });
 });

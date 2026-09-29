@@ -7,6 +7,7 @@
 // Демо-план загружается сразу: человек видит результат ДО того, как ему
 // понадобился собственный чертёж (prompt-first, feedback_devhub_prompt_first_ux).
 
+import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -2807,6 +2808,33 @@ export default function QSpaceClient() {
               {warnings.map((w, i) => <li key={i}>{w}</li>)}
             </ul>
           )}
+
+          {/* ПРЕДЛОЖЕНИЕ РАСЧЁТА — СРАЗУ ЗА РЕЗУЛЬТАТОМ.
+              Замер 29.09.2026, телефон 390x844: единственный путь к деньгам на
+              этой странице лежал на 14 903 px, то есть ниже всей инженерии и
+              каталога мебели. Человек получал площади на 1083 px и уходил, ни
+              разу не увидев, что расчёт можно заказать.
+              Форма НЕ продублирована: это тот же самый блок, перенесённый из
+              page.tsx вместе со всеми словами. Вторая форма разошлась бы с
+              первой по тексту обещания, а обещание здесь проверяется сторожем
+              everyWaitlistFormReachesTheMailing. */}
+          <section
+            aria-label="Расчёт отделки по вашему плану"
+            style={{ maxWidth: 760, margin: "32px auto 48px", padding: "0 16px" }}
+          >
+            <WaitlistCapture
+              source="qspace"
+              tone="light"
+              title="Хотите расчёт отделки по вашему плану?"
+              // 21.09: письма QSpace не рассылает — модуль не в списке запуска, цены нет
+              // (сторож everyWaitlistFormReachesTheMailing). Обещать письмо без механизма нельзя:
+              // говорим ровно то, что происходит — адрес записан как спрос на платный расчёт.
+              description="Оставьте почту — так мы считаем спрос на платный расчёт по чертежу и откроем его первым тем, кто спросил."
+              promise="Адрес попадёт только в счёт спроса. Рассылок нет."
+              buttonLabel="Заявить спрос"
+              doneText="Записали. Когда платный расчёт откроется, он будет первым доступен по этому адресу."
+            />
+          </section>
 
         </div>
       </div>

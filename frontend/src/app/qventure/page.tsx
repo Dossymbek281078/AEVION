@@ -6,6 +6,7 @@ import { useI18nOptional } from "@/lib/i18n";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
+import { PageTracking } from "@/components/PageTracking";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import ModuleStatusNote from "@/components/ModuleStatusNote";
 import { apiUrl } from "@/lib/apiBase";
@@ -178,6 +179,7 @@ export default function QVenturePage() {
 
   return (
     <>
+      <PageTracking page="qventure" />
       <Wave1Nav />
       <ProductPageShell>
        <div className={paper.paper} style={{ background: "transparent", minHeight: 0 }}>

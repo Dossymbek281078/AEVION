@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 import { покупкиНаГлавной } from "@/lib/homeBuyLinks";
 import { BuyLink } from "@/components/BuyLink";
+import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 import { channelNow } from "@/lib/channelNow";
 import { fetchPlanetStats, fetchRecentArtifacts } from "@/lib/planetData";
 import dynamic from "next/dynamic";
@@ -525,6 +526,21 @@ const DEMO_NOTE =
                 );
               })}
             </div>
+            {/*
+              Где можно заплатить — там же сказано, чем платить нельзя.
+
+              Блок «Buy now» появился на главной 22.09.2026 и оказался ЕДИНСТВЕННОЙ
+              продающей поверхностью без этой строки: сторож
+              everySellingPageWarnsAboutPayment покраснел на нём 29.09, и правильно.
+              Стена у покупателя одна и та же, с какой бы страницы он ни нажал:
+              касса не принимает карты ряда стран (в том числе российские), а
+              тенге и PayPal у нас не настроены. Человек, у которого нет
+              подходящей карты, иначе узнаёт об этом на последнем экране.
+
+              Компонент общий, тот же, что на /shop и /go: своя копия строки
+              разошлась бы с ним молча.
+            */}
+            <PaymentReachNotice />
           </div>
 
           <div

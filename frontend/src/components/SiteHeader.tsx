@@ -15,6 +15,30 @@ import RevenueGoalBadge from "@/components/RevenueGoalBadge";
 import AiOfflineToggle from "@/components/AiOfflineToggle";
 import SkipToContent from "@/components/SkipToContent";
 
+/**
+ * Разделы шапки — ОДИН список на полную строку и на телефонное меню.
+ * Два списка об одном разошлись бы молча: на широком экране раздел есть, на
+ * телефоне его нет, и никто этого не заметит.
+ */
+/** Три главные кнопки — тоже один список на обе раскладки. */
+const ГЛАВНЫЕ = [
+  { href: "/demo", label: "Demo", color: "#fff", bg: "linear-gradient(135deg, #0d9488, #0ea5e9)" },
+  { href: "/explore", label: "Explore", color: "#1a1205", bg: "linear-gradient(135deg, #a9761f, #e6b24a)" },
+  { href: "/shop", label: "Shop", color: "#fff", bg: "linear-gradient(135deg, #059669, #10b981)" },
+];
+
+const РАЗДЕЛЫ = [
+  { href: "/auth", label: "Auth" },
+  { href: "/qright", label: "QRight" },
+  { href: "/qsign", label: "QSign" },
+  { href: "/bureau", label: "Bureau" },
+  { href: "/planet", label: "Planet" },
+  { href: "/awards", label: "Awards" },
+  { href: "/bank", label: "Bank" },
+  { href: "/cyberchess", label: "Chess" },
+  { href: "/pricing", label: "Pricing" },
+];
+
 export function SiteHeader() {
   const origin = getBackendOrigin();
   const headerRef = useRef<HTMLElement | null>(null);
@@ -50,6 +74,31 @@ export function SiteHeader() {
   return (
     <>
     <SkipToContent />
+    {/* Стили шапки — медиазапросами, потому что раскладка обязана быть верной
+        С ПЕРВОЙ отрисовки: на телефоне меряется первый экран, а не то, что
+        получится после гидрации. Границу берём 700 px: при 390 шапка занимала
+        154 px, и ширины хватает ровно до планшета. */}
+    <style>{`
+      .aev-hdr-menu { display: none; }
+      .aev-hdr-menu > summary {
+        list-style: none; cursor: pointer; user-select: none;
+        padding: 6px 12px; border-radius: 10px; font-size: 20px; line-height: 1;
+        border: 1px solid rgba(15,23,42,0.12); background: #fff; color: #0f172a;
+      }
+      .aev-hdr-menu > summary::-webkit-details-marker { display: none; }
+      .aev-hdr-menu-panel {
+        position: absolute; right: 12px; left: 12px; margin-top: 8px;
+        display: grid; grid-template-columns: 1fr 1fr; gap: 2px;
+        padding: 8px; border-radius: 14px; background: #fff;
+        border: 1px solid rgba(15,23,42,0.12);
+        box-shadow: 0 12px 30px rgba(15,23,42,0.14); z-index: 60;
+      }
+      @media (max-width: 700px) {
+        .aev-hdr-menu { display: block; }
+        .aev-hdr-full { display: none !important; }
+        .aev-hdr-counters { display: none !important; }
+      }
+    `}</style>
     <header
       ref={headerRef}
       style={{
@@ -80,27 +129,52 @@ export function SiteHeader() {
           </span>
         </KeepChannelLink>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-          <KeepChannelLink href="/demo" style={{ padding: "5px 10px", borderRadius: 8, textDecoration: "none", fontWeight: 800, fontSize: 12, color: "#fff", background: "linear-gradient(135deg, #0d9488, #0ea5e9)" }}>
-            Demo
-          </KeepChannelLink>
-          <KeepChannelLink href="/explore" style={{ padding: "5px 10px", borderRadius: 8, textDecoration: "none", fontWeight: 800, fontSize: 12, color: "#1a1205", background: "linear-gradient(135deg, #a9761f, #e6b24a)" }}>
-            Explore
-          </KeepChannelLink>
-          <KeepChannelLink href="/shop" style={{ padding: "5px 10px", borderRadius: 8, textDecoration: "none", fontWeight: 800, fontSize: 12, color: "#fff", background: "linear-gradient(135deg, #059669, #10b981)" }}>
-            Shop
-          </KeepChannelLink>
-          {[
-            { href: "/auth", label: "Auth" },
-            { href: "/qright", label: "QRight" },
-            { href: "/qsign", label: "QSign" },
-            { href: "/bureau", label: "Bureau" },
-            { href: "/planet", label: "Planet" },
-            { href: "/awards", label: "Awards" },
-            { href: "/bank", label: "Bank" },
-            { href: "/cyberchess", label: "Chess" },
-            { href: "/pricing", label: "Pricing" },
-          ].map((x) => (
+        {/* ТЕЛЕФОННОЕ МЕНЮ (30.09.2026).
+            Замер на 390 px: шапка занимала 154 px — 18 % первого экрана, — и в
+            ней помещались 14 ссылок и два счётчика («AI saved $0.23» и
+            «$1M: 0.00%»). На страницах модулей, куда приходят по роликам, это
+            означало, что пятая часть первого экрана уходит на навигацию и на
+            два числа, которых посетитель не понимает.
+            Раскладка решается МЕДИАЗАПРОСОМ, а не замером ширины в JS: иначе
+            телефон сначала получил бы широкую шапку и перерисовал её после
+            гидрации — а меряется именно первый экран. */}
+        <details className="aev-hdr-menu">
+          <summary aria-label="Меню разделов">☰</summary>
+          <nav className="aev-hdr-menu-panel">
+            {/* Три главные кнопки идут первыми и во всю ширину: на телефоне они
+                и есть то, ради чего меню открывают. */}
+            {ГЛАВНЫЕ.map((x) => (
+              <KeepChannelLink
+                key={x.href}
+                href={x.href}
+                style={{ gridColumn: "1 / -1", padding: "11px 12px", borderRadius: 10, textDecoration: "none", fontWeight: 800, fontSize: 15, color: x.color, background: x.bg, textAlign: "center" }}
+              >
+                {x.label}
+              </KeepChannelLink>
+            ))}
+            {РАЗДЕЛЫ.map((x) => (
+              <KeepChannelLink key={x.href} href={x.href} style={{ padding: "10px 12px", textDecoration: "none", color: "#0f172a", fontSize: 15, fontWeight: 700 }}>
+                {x.label}
+              </KeepChannelLink>
+            ))}
+            <a
+              href={`${origin}/api/openapi.json`}
+              target="_blank"
+              rel="noreferrer"
+              style={{ gridColumn: "1 / -1", padding: "10px 12px", textAlign: "center", textDecoration: "none", color: "#0d9488", fontSize: 14, fontWeight: 700 }}
+            >
+              API
+            </a>
+          </nav>
+        </details>
+
+        <div className="aev-hdr-full" style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+          {ГЛАВНЫЕ.map((x) => (
+            <KeepChannelLink key={x.href} href={x.href} style={{ padding: "5px 10px", borderRadius: 8, textDecoration: "none", fontWeight: 800, fontSize: 12, color: x.color, background: x.bg }}>
+              {x.label}
+            </KeepChannelLink>
+          ))}
+          {РАЗДЕЛЫ.map((x) => (
             <KeepChannelLink key={x.href} href={x.href} style={{ padding: "5px 8px", borderRadius: 6, textDecoration: "none", color: "#334155", fontSize: 12, fontWeight: 600 }}>
               {x.label}
             </KeepChannelLink>
@@ -109,11 +183,22 @@ export function SiteHeader() {
             API
           </a>
           <AiOfflineToggle />
-          <PlatformAiSavings />
-          <RevenueGoalBadge />
-          <div style={{ marginLeft: 4 }}>
-            <LanguageSwitcher />
-          </div>
+          {/* Счётчики платформы на телефоне не показываем совсем, а не прячем
+              в меню: «AI saved $0.23» и «$1M: 0.00%» — числа для нас, а гостю
+              они говорят обратное тому, ради чего он пришёл. Решение о том,
+              показывать ли выручку публично ВООБЩЕ, за основателем; здесь
+              только мобильный экран. */}
+          <span className="aev-hdr-counters">
+            <PlatformAiSavings />
+            <RevenueGoalBadge />
+          </span>
+        </div>
+
+        {/* Переключатель языка остаётся ВИДИМЫМ на телефоне: живой трафик у нас
+            смешанный, и человек, попавший не на свой язык, должен видеть выход
+            сразу, а не искать его в меню. */}
+        <div style={{ marginLeft: 4 }}>
+          <LanguageSwitcher />
         </div>
       </div>
     </header>

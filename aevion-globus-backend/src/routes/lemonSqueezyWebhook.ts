@@ -63,6 +63,7 @@ import { getPool } from "../lib/dbPool";
 import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
 import { safeErrorText } from "../lib/safeError";
 import { upsertAppSubscription } from "../lib/appEntitlements";
+import { записатьСобытиеОтСервера, СОБЫТИЕ_ОПЛАТА_ПОДТВЕРЖДЕНА } from "./events";
 
 /**
  * Запись прав живёт в lib/appEntitlements и НЕ дублируется здесь.
@@ -398,6 +399,13 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         // комментария: по нему следующий заведёт второй такой же.
         if (appSlug === "devhub") await upgradeDevHubByEmail(email, "pro");
         console.log(`[ls/webhook] ${event} → app_sub activated: ${appSlug} for ${email}`);
+        // Деньги дошли и купленное выдано — только ТЕПЕРЬ это «оплатили» в
+        // воронке. Почту не пишем: в хранилище воронки личных данных нет.
+        записатьСобытиеОтСервера(СОБЫТИЕ_ОПЛАТА_ПОДТВЕРЖДЕНА, {
+          source: "lemonsqueezy",
+          tier: appSlug,
+          meta: { reference: ref ?? null, event },
+        });
         return res.json({ ok: true, action: "app_activated", appSlug, email });
       }
       if (DEACTIVATE_EVENTS.has(event)) {
@@ -518,6 +526,13 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         ...(channel ? { channel } : {}),
       });
       console.log(`[ls/webhook] ${event} → provisioned ${tierId} for ${email} (ref=${ref ?? "default"})`);
+      // То же, что у ветки приложений: ступень «оплатили» двигает подтверждение
+      // кассы, а не загрузка страницы «спасибо».
+      записатьСобытиеОтСервера(СОБЫТИЕ_ОПЛАТА_ПОДТВЕРЖДЕНА, {
+        source: "lemonsqueezy",
+        tier: tierId,
+        meta: { reference: ref ?? null, event },
+      });
       return res.json({ ok: true, action: "activated", tierId, subscriptionId: result.subscription.id });
     }
 

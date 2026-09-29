@@ -129,6 +129,53 @@ interface AnalyticsEvent {
   ua?: string;
 }
 
+/** Тип события, которое пишет ВЕБХУК кассы, получив подтверждение платежа. */
+export const СОБЫТИЕ_ОПЛАТА_ПОДТВЕРЖДЕНА = "payment_confirmed";
+
+/**
+ * С какого момента «оплатили» в воронке вообще МОЖНО измерить.
+ *
+ * 🔴 Зачем дата в коде. До 29.09.2026 ступень «оплатили» считалась по событию
+ * `checkout_success`, а его шлёт браузер при ЗАГРУЗКЕ страницы «спасибо» —
+ * то есть открытие адреса возврата давало «оплату» без денег. Замер 29.09:
+ * воронка показала `paid: 2` при нуле новых подписок, и ни одно из трёх окон,
+ * работавших в тот день с кассой, этих двух событий за собой не признало.
+ *
+ * Механизма «считать по вебхуку» до этой даты не существовало, поэтому ноль за
+ * прежние дни означает «не измерялось», а не «продаж не было». Отдаём за такие
+ * дни `null`: неотвеченный вопрос не равен благополучию.
+ */
+const ОПЛАТЫ_СЧИТАЕМ_С = "2026-09-29T00:00:00.000Z";
+
+/**
+ * Записать событие ОТ СЕРВЕРА (не от браузера) в то же хранилище воронки.
+ *
+ * Зачем отдельная функция, а не вызов ручки POST: ручка берёт данные из запроса
+ * покупателя и ограничена частотой на IP. Вебхук кассы — не покупатель, у него
+ * нет ни сессии, ни UA, и ограничивать его частотой значило бы терять деньги
+ * из учёта при всплеске покупок.
+ *
+ * Падать этой записи нельзя: она идёт ПОСЛЕ выдачи купленного, и провал учёта
+ * не должен превращаться в провал выдачи. Но молчать тоже нельзя — иначе учёт
+ * тихо опустеет и мы снова будем считать загрузки страниц. Поэтому отказ
+ * пишется в журнал и в Sentry, а наружу отдаётся false.
+ */
+export function записатьСобытиеОтСервера(
+  type: string,
+  поля: Pick<AnalyticsEvent, "source" | "tier" | "value" | "meta"> = {},
+): boolean {
+  const event: AnalyticsEvent = { ts: new Date().toISOString(), type, ...поля };
+  try {
+    ensureDir();
+    appendFileSync(EVENTS_FILE, JSON.stringify(event) + "\n", "utf8");
+    return true;
+  } catch (e) {
+    console.error(`[events] серверное событие "${type}" НЕ записано`, e);
+    captureEventsError(e, { route: "events/server", type });
+    return false;
+  }
+}
+
 
 /**
  * Разбивка НАЧАЛ ОПЛАТЫ по поверхности и по каналу привлечения.
@@ -642,7 +689,15 @@ eventsRouter.get("/funnel", (req, res) => {
     return res.status(503).json({ known: false, reason: "store_unreadable", days: дней, byDay: [] });
   }
 
-  interface Ступени { visits: number; pricing: number; checkoutStart: number; paid: number }
+  // 🔴 ДВЕ РАЗНЫЕ СТУПЕНИ, и путать их нельзя.
+  //   thankYouOpened — открыли страницу «спасибо». Шлёт БРАУЗЕР по загрузке
+  //     адреса возврата, поэтому это ни в каком смысле не деньги: кто угодно,
+  //     открывший такой адрес (в том числе наше окно, проверяющее путь
+  //     возврата), даёт здесь единицу. Ступень полезная — по ней видно, что
+  //     человек вообще вернулся, — но называть её оплатой нельзя.
+  //   paid — подтверждение от КАССЫ: событие пишет вебхук после того, как
+  //     выдал купленное. Это и есть деньги.
+  interface Ступени { visits: number; pricing: number; checkoutStart: number; thankYouOpened: number; paid: number }
   const поДням: Record<string, Ступени> = Object.create(null);
   const людиПоДням: Record<string, Set<string>> = Object.create(null);
   let ботов = 0;
@@ -658,7 +713,7 @@ eventsRouter.get("/funnel", (req, res) => {
     if (видОтправителя(ev.ua)) { ботов += 1; continue; }
 
     const день = new Date(t).toISOString().slice(0, 10);
-    if (!поДням[день]) поДням[день] = { visits: 0, pricing: 0, checkoutStart: 0, paid: 0 };
+    if (!поДням[день]) поДням[день] = { visits: 0, pricing: 0, checkoutStart: 0, thankYouOpened: 0, paid: 0 };
     if (!людиПоДням[день]) людиПоДням[день] = new Set<string>();
     const ст = поДням[день];
 
@@ -670,9 +725,15 @@ eventsRouter.get("/funnel", (req, res) => {
     } else if (ev.type === "checkout_start") {
       ст.checkoutStart += 1;
     } else if (ev.type === "checkout_success") {
+      ст.thankYouOpened += 1;
+    } else if (ev.type === СОБЫТИЕ_ОПЛАТА_ПОДТВЕРЖДЕНА) {
       ст.paid += 1;
     }
   }
+
+  // День раньше появления механизма: оплату измерить было нечем, и ноль здесь
+  // означал бы «продаж не было». Отдаём null — «не знаю».
+  const измерялосьЛи = (день: string) => Date.parse(`${день}T23:59:59.999Z`) >= Date.parse(ОПЛАТЫ_СЧИТАЕМ_С);
 
   const byDay = Object.keys(поДням)
     .sort()
@@ -681,7 +742,8 @@ eventsRouter.get("/funnel", (req, res) => {
       visits: поДням[д].visits + людиПоДням[д].size,
       pricing: поДням[д].pricing,
       checkoutStart: поДням[д].checkoutStart,
-      paid: поДням[д].paid,
+      thankYouOpened: поДням[д].thankYouOpened,
+      paid: измерялосьЛи(д) ? поДням[д].paid : null,
     }));
 
   const итог = byDay.reduce(
@@ -689,19 +751,39 @@ eventsRouter.get("/funnel", (req, res) => {
       visits: a.visits + b.visits,
       pricing: a.pricing + b.pricing,
       checkoutStart: a.checkoutStart + b.checkoutStart,
-      paid: a.paid + b.paid,
+      thankYouOpened: a.thankYouOpened + b.thankYouOpened,
     }),
-    { visits: 0, pricing: 0, checkoutStart: 0, paid: 0 },
+    { visits: 0, pricing: 0, checkoutStart: 0, thankYouOpened: 0 },
   );
+
+  // Сумма по измеренным дням. Складывать вперемешку с null нельзя: null + число
+  // даёт число и молча превращает неизмеренное в «продаж не было».
+  //
+  // ⚠️ Измеримость окна НЕ выводится из того, в какие дни были события. Первая
+  // версия спрашивала `byDay.every((д) => д.paid === null)` — и на пустом
+  // хранилище отвечала `null`, потому что «все дни» пустого списка подходят под
+  // любое условие. То есть честный ноль («сегодня измеряем, покупок нет»)
+  // превращался в «не знаю». Спрашиваем про ОКНО: измеримо ли оно сейчас.
+  const оплатыЗаОкно =
+    Date.now() < Date.parse(ОПЛАТЫ_СЧИТАЕМ_С)
+      ? null
+      : byDay.reduce((сумма, д) => сумма + (д.paid ?? 0), 0);
 
   res.json({
     known: true,
     days: дней,
+    // Ступень «оплатили» считается по подтверждению КАССЫ и существует только
+    // с этой даты; за более ранние дни отдаётся null, а не ноль. Открытия
+    // страницы «спасибо» живут отдельным полем thankYouOpened — они не деньги.
+    paidMeasuredSince: ОПЛАТЫ_СЧИТАЕМ_С,
+    // Тоже про ОКНО, а не про дни с событиями: окно, начавшееся раньше даты
+    // появления механизма, заведомо неполно — даже если в тех днях событий нет.
+    paidWindowPartlyUnmeasured: сНачала < Date.parse(ОПЛАТЫ_СЧИТАЕМ_С),
+    total: { ...итог, paid: оплатыЗаОкно },
     // Доля роботов печатается рядом: без неё «мало людей» читается как провал
     // продукта, тогда как это может быть просто состав трафика.
     eventsSeen: всего,
     botsExcluded: ботов,
-    total: итог,
     byDay,
   });
 });

@@ -776,7 +776,16 @@ eventsRouter.get("/funnel", (req, res) => {
   //     человек вообще вернулся, — но называть её оплатой нельзя.
   //   paid — подтверждение от КАССЫ: событие пишет вебхук после того, как
   //     выдал купленное. Это и есть деньги.
-  interface Ступени { visits: number; pricing: number; checkoutStart: number; thankYouOpened: number; paid: number }
+  interface Ступени {
+    visits: number;
+    pricing: number;
+    checkoutStart: number;
+    thankYouOpened: number;
+    paid: number;
+    /** Из них НАШИ — проверки кассы своими же адресами. Не вычитаем молча: читатель
+     *  должен видеть оба числа, иначе «первая продажа» опять решается перепиской. */
+    paidOurs: number;
+  }
   const поДням: Record<string, Ступени> = Object.create(null);
   // События, прошедшие отбор по времени и по «не робот», — их же считает разрез
   // по каналам и приложениям. Второй проход по файлу не делаем: это тот самый
@@ -797,7 +806,7 @@ eventsRouter.get("/funnel", (req, res) => {
 
     событияВоронки.push(ev);
     const день = new Date(t).toISOString().slice(0, 10);
-    if (!поДням[день]) поДням[день] = { visits: 0, pricing: 0, checkoutStart: 0, thankYouOpened: 0, paid: 0 };
+    if (!поДням[день]) поДням[день] = { visits: 0, pricing: 0, checkoutStart: 0, thankYouOpened: 0, paid: 0, paidOurs: 0 };
     if (!людиПоДням[день]) людиПоДням[день] = new Set<string>();
     const ст = поДням[день];
 
@@ -812,6 +821,11 @@ eventsRouter.get("/funnel", (req, res) => {
       ст.thankYouOpened += 1;
     } else if (ev.type === СОБЫТИЕ_ОПЛАТА_ПОДТВЕРЖДЕНА) {
       ст.paid += 1;
+      // Признак ставит вебхук по адресу плательщика (lib/payment/paymentConfirmedEvent).
+      // Замер 29.09.2026: первые две подтверждённые оплаты были покупками самого
+      // основателя, проверявшего кассу, — без этого разреза они прочитались бы
+      // как первые продажи.
+      if (ev.meta?.свой === true) ст.paidOurs += 1;
     }
   }
 
@@ -832,6 +846,7 @@ eventsRouter.get("/funnel", (req, res) => {
       checkoutStart: поДням[д].checkoutStart,
       thankYouOpened: поДням[д].thankYouOpened,
       paid: измерялосьЛи(д) ? поДням[д].paid : null,
+      paidOurs: измерялосьЛи(д) ? поДням[д].paidOurs : null,
     }));
 
   const разрез = разрезВоронки(событияВоронки);
@@ -863,6 +878,14 @@ eventsRouter.get("/funnel", (req, res) => {
     Date.now() < Date.parse(ОПЛАТЫ_СЧИТАЕМ_С)
       ? null
       : Object.values(поДням).reduce((сумма, ст) => сумма + ст.paid, 0);
+  // То же окно, тот же способ счёта — но отдельным числом. Вычитать «наши» из
+  // общего молча нельзя: читатель обязан видеть оба, иначе ноль внешних продаж
+  // снова придётся выяснять перепиской (замер 29.09.2026: первые две оплаты были
+  // проверками кассы самим основателем).
+  const нашиЗаОкно =
+    Date.now() < Date.parse(ОПЛАТЫ_СЧИТАЕМ_С)
+      ? null
+      : Object.values(поДням).reduce((сумма, ст) => сумма + ст.paidOurs, 0);
 
   res.json({
     known: true,
@@ -874,7 +897,7 @@ eventsRouter.get("/funnel", (req, res) => {
     // Тоже про ОКНО, а не про дни с событиями: окно, начавшееся раньше даты
     // появления механизма, заведомо неполно — даже если в тех днях событий нет.
     paidWindowPartlyUnmeasured: сНачала < Date.parse(ОПЛАТЫ_СЧИТАЕМ_С),
-    total: { ...итог, paid: оплатыЗаОкно },
+    total: { ...итог, paid: оплатыЗаОкно, paidOurs: нашиЗаОкно },
     // Доля роботов печатается рядом: без неё «мало людей» читается как провал
     // продукта, тогда как это может быть просто состав трафика.
     eventsSeen: всего,

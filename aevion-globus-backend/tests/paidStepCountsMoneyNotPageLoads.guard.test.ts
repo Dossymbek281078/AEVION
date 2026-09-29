@@ -70,13 +70,13 @@ function приложение() {
 
 let счётчик = 0;
 /** Настоящий подписанный вебхук о покупке CyberChess на месяц. */
-function вебхукОбОплате() {
+function вебхукОбОплате(почта?: string) {
   счётчик += 1;
   const payload = {
     meta: { event_name: "subscription_created" },
     data: {
       id: `sub_paid_${счётчик}`,
-      attributes: { user_email: `buyer${счётчик}@test.aev`, variant_id: "7003", total: 2400 },
+      attributes: { user_email: почта ?? `buyer${счётчик}@test.aev`, variant_id: "7003", total: 2400 },
     },
   };
   const raw = JSON.stringify(payload);
@@ -100,7 +100,7 @@ async function воронка() {
   const r = await request(приложение()).get("/api/pricing/events/funnel?days=14");
   expect(r.status).toBe(200);
   return r.body as {
-    total: { checkoutStart: number; thankYouOpened: number; paid: number | null };
+    total: { checkoutStart: number; thankYouOpened: number; paid: number | null; paidOurs: number | null };
     paidMeasuredSince: string;
     byDay: { day: string; thankYouOpened: number; paid: number | null }[];
   };
@@ -203,5 +203,24 @@ describe("хранилище событий", () => {
     expect(process.env.EVENTS_FILE).toBe(ФАЙЛ);
     expect(existsSync(ФАЙЛ)).toBe(true);
     expect(readFileSync(ФАЙЛ, "utf8")).not.toContain("api.aevion.app");
+  });
+  test("наши собственные оплаты видны ОТДЕЛЬНЫМ числом, а не вычтены молча", async () => {
+    // 🔴 Замер 29.09.2026: первые две подтверждённые оплаты были покупками самого
+    // основателя, проверявшего кассу ($40 и $16). Число «оплатили: 2» прочиталось
+    // бы как первые продажи, и это выяснялось перепиской между окнами.
+    //
+    // Проверяем ОБА числа: общее и «из них наши». Вычитание молча было бы хуже —
+    // тогда ноль внешних продаж нельзя отличить от отсутствия оплат вообще.
+    const своя = await вебхукОбОплате("founder@aevion.app");
+    expect(своя.status).toBe(200);
+    const чужая = await вебхукОбОплате("buyer@example.org");
+    expect(чужая.status).toBe(200);
+
+    const ф = await воронка();
+    expect(ф.total.paid, "обе оплаты обязаны попасть в общее число").toBe(2);
+    expect(
+      ф.total.paidOurs,
+      "наша оплата не отмечена — «первая продажа» опять решается перепиской",
+    ).toBe(1);
   });
 });

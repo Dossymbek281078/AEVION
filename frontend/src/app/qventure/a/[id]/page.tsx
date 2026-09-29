@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { serverFetch } from "@/lib/apiBase";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
+import { PageTracking } from "@/components/PageTracking";
 import paper from "@/styles/aevionPaper.module.css";
 import { ResultView, VERDICT_LABEL, SERIF, type AnalysisResult, type Verdict } from "../../_result";
 
@@ -100,6 +101,7 @@ export default async function SharedAnalysisPage({ params }: Props) {
 
   return (
     <>
+      <PageTracking page="qventure-share" />
       <Wave1Nav />
       <ProductPageShell>
        <div className={paper.paper} style={{ background: "transparent", minHeight: 0 }}>

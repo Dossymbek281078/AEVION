@@ -12,7 +12,14 @@ import {
   type Product,
 } from "@/lib/products";
 import { PageTracking } from "@/components/PageTracking";
-import { PLANET_BASE_MONTHLY, termPricePerMonth } from "@/lib/termPricing";
+import { PLANET_BASE_MONTHLY, termPricePerMonth, STANDALONE_APPS,
+} from "@/lib/termPricing";
+
+/** Сколько приложений продаётся отдельно — из того же списка, что и карточки.
+ *  Числом словом («пять») страница расходилась с витриной: их девять, и сумма
+ *  рядом считалась по всем девяти. */
+const ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ = STANDALONE_APPS.length;
+
 
 // /en/shop — английская витрина. Назначение координатора 07.09.2026:
 // /shop была худшей ДЕНЕЖНОЙ страницей для en-покупателя (73 % кириллицы в
@@ -33,12 +40,12 @@ import { PLANET_BASE_MONTHLY, termPricePerMonth } from "@/lib/termPricing";
 export const metadata: Metadata = {
   title: "AEVION Shop — subscription, guides, apps",
   description:
-    "Everything you can buy at AEVION in one place: a subscription to the whole planet for a term of 1 to 12 months, science-based longevity guides and a book as one-time purchases, five apps on their own. Wellness and education, not medicine.",
+    "Everything you can buy at AEVION in one place: a subscription to the whole planet for a term of 1 to 12 months, science-based longevity guides and a book as one-time purchases, 9 apps on their own. Wellness and education, not medicine.",
   alternates: { canonical: "/en/shop", languages: языки("/en/shop") },
   openGraph: {
     title: "AEVION Shop — subscription, guides, apps",
     description:
-      "A subscription for a term of 1 to 12 months, guides and a book as one-time purchases, five apps on their own. Wellness and education, not medicine.",
+      "A subscription for a term of 1 to 12 months, guides and a book as one-time purchases, 9 apps on their own. Wellness and education, not medicine.",
     type: "website",
     siteName: "AEVION",
   },
@@ -155,7 +162,7 @@ function Card({ p, channel }: { p: Product; channel: string | null }) {
   const format = en?.format ?? p.format;
   const desc = en?.desc ?? p.desc;
   const descLang = en ? undefined : "ru";
-  // Term access (subscription and the five apps, policy of 15.09.2026) leads to
+  // Term access (subscription and the 9 apps, policy of 15.09.2026) leads to
   // the pricing page, where the term is chosen and checkout_start fires — so a
   // plain same-tab link here, not a BuyLink that would count the purchase twice.
   const isTerm = p.billing === "term";
@@ -257,14 +264,14 @@ export default async function EnShopPage({
         <h1 style={styles.h1}>Everything you can buy at AEVION</h1>
         <p style={styles.lede}>
           A subscription to the whole planet for a term of 1 to 12 months,
-          guides and books as one-time purchases, five apps on their own.
+          guides and books as one-time purchases, {ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ} apps on their own.
           Guides and books are paid via Gumroad with instant delivery; the
           subscription term and the apps are chosen on the pricing page.
         </p>
 
         <Section
           title="AEVION subscription"
-          note={`The five apps bought separately — ${CURRENCY.format(
+          note={`The ${ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ} apps bought separately — ${CURRENCY.format(
             MODULES_TOTAL_USD,
           )} for one month; the whole planet — ${CURRENCY.format(
             PLANET_BASE_MONTHLY,
@@ -284,7 +291,7 @@ export default async function EnShopPage({
 
         <Section
           title="Apps on their own"
-          note="Five apps are also sold separately — when you need one tool rather than the whole planet. A term of 1 to 12 months, paid up front; the longer the term, the cheaper the month. Every other module comes only with the AEVION subscription."
+          note="9 apps are also sold separately — when you need one tool rather than the whole planet. A term of 1 to 12 months, paid up front; the longer the term, the cheaper the month. Every other module comes only with the AEVION subscription."
           items={MODULES}
           channel={channel}
         />

@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   description:
     "A plan is a term of access to the whole AEVION planet: Lite, Medium, Pro, Full "
     + "and Max, paid up front — the longer the term, the cheaper the month. Free to "
-    + "start, Enterprise on request, five apps also sold separately. "
+    + "start, Enterprise on request, 9 apps also sold separately. "
     + "Тариф AEVION — это срок доступа ко всей планете: Lite, Medium, Pro, Full и Max с оплатой за срок вперёд — чем длиннее срок, тем дешевле месяц. Free для старта, Enterprise по запросу, отдельные приложения можно купить и по одному.",
   openGraph: {
     title: "Цены AEVION — все модули в одной подписке",

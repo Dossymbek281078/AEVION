@@ -16,7 +16,14 @@ import {
   fromPricePerMonth,
   termPricePerMonth,
   termTotal,
+  STANDALONE_APPS,
 } from "@/lib/termPricing";
+
+/** Сколько приложений продаётся отдельно — из того же списка, что и карточки.
+ *  Числом словом («пять») страница расходилась с витриной: их девять, и сумма
+ *  рядом считалась по всем девяти. */
+const ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ = STANDALONE_APPS.length;
+
 
 /* ── Prices ─────────────────────────────────────────────────────────────────── */
 // ⚠️ 15.09.2026 — новая ценовая политика (слово основателя). Прежняя карточка
@@ -277,7 +284,7 @@ const CAT_COLOR: Record<string, string> = {
 
 /** Приложения, которые продаются отдельно на срок (пять по политике 15.09.2026). */
 const TERM_APPS = APPS.filter((a) => a.term && a.price > 0);
-/** Пять приложений по отдельности за 1 месяц — против всей планеты за тот же месяц. */
+/** Девять приложений по отдельности за 1 месяц — против всей планеты за тот же месяц. */
 const RACK_RATE = TERM_APPS.reduce((s, a) => s + a.price, 0);
 const PLANET_FROM = fromPricePerMonth(PLANET_BASE_MONTHLY);
 /**
@@ -340,7 +347,7 @@ export default function AppsPage() {
             Apps &amp; Pricing
           </h1>
           <p style={{ color: "#64748b", fontSize: 16, maxWidth: 500, margin: "0 auto" }}>
-            Five apps are sold on their own. The subscription opens every module for a term of 1 to 12 months.
+            {ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ} apps are sold on their own. The subscription opens every module for a term of 1 to 12 months.
           </p>
         </div>
 
@@ -383,7 +390,7 @@ export default function AppsPage() {
                 ))}
               </div>
               <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 13, marginTop: 16 }}>
-                The five apps bought separately: ${RACK_RATE} for one month. The whole planet:
+                The ${ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ} apps bought separately: ${RACK_RATE} for one month. The whole planet:
                 ${PLANET_BASE_MONTHLY} for one month, or ${PLANET_FROM}/mo on a 12-month term.
               </p>
             </div>
@@ -455,7 +462,7 @@ export default function AppsPage() {
             Individual apps
           </h2>
           <p style={{ color: "#64748b", fontSize: 14, margin: 0 }}>
-            Five apps are sold on their own, on the same term ladder. Every other module comes with the AEVION subscription.
+            {ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ} apps are sold on their own, on the same term ladder. Every other module comes with the AEVION subscription.
           </p>
         </div>
 

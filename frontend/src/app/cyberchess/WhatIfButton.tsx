@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { отказТренера } from "./coachOutage";
+import { нелегальныеХоды, текстВместоОтвета } from "./проверьХодыОтвета";
 import { COLOR as CC, RADIUS, MOTION, SPACE } from "./theme";
 import { Spinner } from "./ui";
 
@@ -57,6 +58,17 @@ export default function WhatIfButton({ fen, san, evalStr, rank, isBest }: Props)
       }
       const data = await r.json();
       const reply: string = data.content?.filter((c: any) => c.type === "text" || c.text).map((c: any) => c.text || "").join("").trim() || "";
+      // 🔴 Ход, которого в позиции нет, до экрана не доезжает: запрет на
+      // выдуманные варианты жил только в промпте. Лучший ход подставляем
+      // лишь когда он действительно лучший — иначе не выдумываем его.
+      const выдуманные = нелегальныеХоды(fen, reply);
+      if (выдуманные.length > 0) {
+        console.warn("[whatif] объяснение отклонено, таких ходов в позиции нет:", выдуманные.join(", "));
+        const замена = текстВместоОтвета(isBest ? san : undefined);
+        cache.set(key, замена);
+        setText(замена);
+        return;
+      }
       const final = reply || "Нет объяснения";
       cache.set(key, final);
       setText(final);

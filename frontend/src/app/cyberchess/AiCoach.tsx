@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { отказТренера, тренерОтветил, пометкаЗапаснойМодели } from "./coachOutage";
+import { нелегальныеХоды, текстВместоОтвета } from "./проверьХодыОтвета";
 import { Chess, type Square } from "chess.js";
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -447,6 +448,8 @@ export default function AiCoach({
 
       try {
         let engineBlock = "";
+        // Лучший ход из отчёта пригодится, если ответ модели придётся отклонить.
+        let лучшийХодДвижка = "";
         if (!opts?.skipEngine && newMsgs.length === 1) {
           sEngineThinking(true);
           const report = await analyzePosition(fen, 22, 3);
@@ -468,6 +471,10 @@ export default function AiCoach({
               ? ((moves.length % 2 === 1) ? "w" : "b") as "w" | "b"
               : undefined;
             engineBlock = buildEngineBlock(report, lastSan, sideMoved, evalBeforeWhitePov);
+            const перваяЛиния = report.lines[0]?.moves;
+            if (перваяЛиния?.length) {
+              лучшийХодДвижка = uciLineToSan(report.fen, перваяЛиния.slice(0, 1));
+            }
           }
         }
 
@@ -521,7 +528,16 @@ export default function AiCoach({
           data.content?.filter((c: any) => c.type === "text" || c.text)
             .map((c: any) => c.text || "").join("") || "No response";
         тренерОтветил(); // ответ пришёл — пометка об отказе снимается
-        sMsgs([...newMsgs, { role: "assistant", content: reply + пометкаЗапаснойМодели(data) }]);
+        // 🔴 Запрет «ходы только из отчёта» жил ТОЛЬКО в промпте, то есть на
+        // добросовестности модели. Проверяем позицией: ход, которого в ней
+        // нет, до экрана не доезжает.
+        const выдуманные = нелегальныеХоды(fen, reply);
+        if (выдуманные.length > 0) {
+          console.warn("[coach] ответ отклонён, таких ходов в позиции нет:", выдуманные.join(", "));
+          sMsgs([...newMsgs, { role: "assistant", content: текстВместоОтвета(лучшийХодДвижка) }]);
+        } else {
+          sMsgs([...newMsgs, { role: "assistant", content: reply + пометкаЗапаснойМодели(data) }]);
+        }
       } catch (e: any) {
         // Три ветки отказа свелись к одной: текст живёт в coachOutage.ts, чтобы
         // три места вызова тренера (окно после партии, эта панель, «А что если»)

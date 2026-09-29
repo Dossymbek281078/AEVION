@@ -178,6 +178,69 @@ export function записатьСобытиеОтСервера(
 
 
 /**
+ * РАЗРЕЗ ВОРОНКИ ПО КАНАЛУ И ПО ПРИЛОЖЕНИЮ.
+ *
+ * Зачем. Сводка `/funnel` складывала всех в одну кучу: четыре числа и разбивка
+ * по дням. Метка канала при этом В СОБЫТИЯХ есть (её цепляет `lib/track.ts`
+ * ко всему подряд), но наружу не выходила — и 29.09.2026 это стоило двух
+ * разборов подряд: окно роликов не могло сказать, привели ли 144 просмотра
+ * хоть один визит, а окно кассы выясняло перепиской, чьи пять начал оплаты
+ * (оказалось — мои пробы). Вопрос «чей это след» решается полем, а не письмом.
+ *
+ * Ключи НЕ закрытый список: канал приходит из адреса, который открыл
+ * посторонний. Поэтому накопители без прототипа — у обычного объекта
+ * `byChannel["constructor"]` вернул бы функцию, число ушло бы в наследство, и
+ * в отчёте его просто не стало бы, а сумма выглядела бы целой (соседнее окно
+ * замерило этот класс 04.09: подали три канала — в ответе остался один).
+ *
+ * «direct» и «unknown» — РАЗНЫЕ ответы и не сливаются: первый значит «пришёл
+ * без метки», второй — «пришёл с меткой, которой мы не знаем». Их слияние
+ * прячет целые площадки: ровно так Product Hunt весь день выглядел прямыми
+ * заходами.
+ *
+ * Для покупок плана приложения нет — такие события считаются под ключом
+ * `plan`, а не пропадают: иначе сумма по приложениям не сошлась бы с общей.
+ */
+export interface РазрезВоронки {
+  byChannel: Record<string, { visits: number; pricing: number; checkoutStart: number; paid: number }>;
+  byApp: Record<string, { checkoutStart: number; paid: number }>;
+}
+
+export function разрезВоронки(
+  events: Array<Pick<AnalyticsEvent, "type" | "path" | "meta">>,
+): РазрезВоронки {
+  const byChannel = Object.create(null) as РазрезВоронки["byChannel"];
+  const byApp = Object.create(null) as РазрезВоронки["byApp"];
+
+  for (const ev of events) {
+    const сырой = ev.meta?.channel;
+    const канал = typeof сырой === "string" && сырой.trim() ? сырой.trim() : "direct";
+    if (!byChannel[канал]) byChannel[канал] = { visits: 0, pricing: 0, checkoutStart: 0, paid: 0 };
+    const к = byChannel[канал];
+
+    if (ev.type === "page_view") {
+      к.visits += 1;
+      if (typeof ev.path === "string" && ev.path.includes("/pricing")) к.pricing += 1;
+      continue;
+    }
+    if (ev.type !== "checkout_start" && ev.type !== "checkout_success") continue;
+
+    const сыройApp = ev.meta?.app;
+    const приложение = typeof сыройApp === "string" && сыройApp.trim() ? сыройApp.trim() : "plan";
+    if (!byApp[приложение]) byApp[приложение] = { checkoutStart: 0, paid: 0 };
+
+    if (ev.type === "checkout_start") {
+      к.checkoutStart += 1;
+      byApp[приложение].checkoutStart += 1;
+    } else {
+      к.paid += 1;
+      byApp[приложение].paid += 1;
+    }
+  }
+  return { byChannel, byApp };
+}
+
+/**
  * Разбивка НАЧАЛ ОПЛАТЫ по поверхности и по каналу привлечения.
  *
  * Вынесено отдельной чистой функцией, чтобы тест проверял тот самый код,
@@ -699,6 +762,10 @@ eventsRouter.get("/funnel", (req, res) => {
   //     выдал купленное. Это и есть деньги.
   interface Ступени { visits: number; pricing: number; checkoutStart: number; thankYouOpened: number; paid: number }
   const поДням: Record<string, Ступени> = Object.create(null);
+  // События, прошедшие отбор по времени и по «не робот», — их же считает разрез
+  // по каналам и приложениям. Второй проход по файлу не делаем: это тот самый
+  // случай, когда два прохода незаметно расходятся в правилах отбора.
+  const событияВоронки: AnalyticsEvent[] = [];
   const людиПоДням: Record<string, Set<string>> = Object.create(null);
   let ботов = 0;
   let всего = 0;
@@ -712,6 +779,7 @@ eventsRouter.get("/funnel", (req, res) => {
     всего += 1;
     if (видОтправителя(ev.ua)) { ботов += 1; continue; }
 
+    событияВоронки.push(ev);
     const день = new Date(t).toISOString().slice(0, 10);
     if (!поДням[день]) поДням[день] = { visits: 0, pricing: 0, checkoutStart: 0, thankYouOpened: 0, paid: 0 };
     if (!людиПоДням[день]) людиПоДням[день] = new Set<string>();
@@ -745,6 +813,8 @@ eventsRouter.get("/funnel", (req, res) => {
       thankYouOpened: поДням[д].thankYouOpened,
       paid: измерялосьЛи(д) ? поДням[д].paid : null,
     }));
+
+  const разрез = разрезВоронки(событияВоронки);
 
   const итог = byDay.reduce(
     (a, b) => ({
@@ -785,6 +855,12 @@ eventsRouter.get("/funnel", (req, res) => {
     eventsSeen: всего,
     botsExcluded: ботов,
     byDay,
+    // Разрез по каналу и по приложению. Раньше сводка складывала всех в одну
+    // кучу, и вопрос «чей это след» решался перепиской между окнами: 29.09
+    // пять начал оплаты оказались пробами одного окна, а запуск на Product Hunt
+    // весь день выглядел прямыми заходами.
+    byChannel: разрез.byChannel,
+    byApp: разрез.byApp,
   });
 });
 

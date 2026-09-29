@@ -61,7 +61,14 @@ function metadannye(mod: string): string {
     const p = join(APP, mod, f);
     if (existsSync(p)) {
       const t = readFileSync(p, "utf8");
-      if (t.includes("export const metadata")) return t;
+      /*
+       * 29.09.2026: метаданные бывают ДВУХ форм — статическая `export const metadata`
+       * и функция `generateMetadata`, когда заголовок зависит от языка посетителя.
+       * Сторож знал только первую и ослеп ровно на починке: у /devhub заголовок
+       * перевели на язык браузера, и проверка стала говорить «метаданных нет».
+       * Это наш записанный класс: сторож по дословной строке краснеет на верной правке.
+       */
+      if (t.includes("export const metadata") || t.includes("generateMetadata")) return t;
     }
   }
   return "";

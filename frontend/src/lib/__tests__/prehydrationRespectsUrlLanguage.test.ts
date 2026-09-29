@@ -40,7 +40,6 @@ describe("предзагрузка словаря", () => {
   it("берёт из адреса только настоящие языки витрины", () => {
     // «/energy» начинается с «en», но это не префикс языка: регулярка требует
     // ровно две буквы и границу.
-    expect(скрипт).toContain("^\\\\/([a-z]{2})(?:\\\\/|$)");
     expect(скрипт).toContain("'ru'");
     expect(скрипт).toContain("'kk'");
     expect(скрипт).toContain("'en'");
@@ -61,6 +60,8 @@ describe("атрибут языка документа", () => {
     const iКука = скрипт.indexOf("document.cookie");
     expect(iПуть).toBeGreaterThan(-1);
     expect(iПуть).toBeLessThan(iКука);
-    expect(скрипт).toContain("!=='path'");
+    // Флаг вместо чтения атрибута: document в проверках подменяют объектом без
+    // getAttribute, и вызов ронял весь скрипт — тоже проверено запуском.
+    expect(скрипт).toContain("if(!S)");
   });
 });

@@ -312,6 +312,8 @@ export default function QSpaceClient() {
     bearingMat: THREE.MeshStandardMaterial;
     floorMat: THREE.MeshStandardMaterial;
     floorMesh: THREE.Mesh | null;
+    /** потолок: виден, только когда камера внутри помещения */
+    потолок: THREE.Mesh | null;
     /** пол каждой комнаты своим материалом — поверх общего пола, только в чистовом слое */
     roomFloors: Map<number, { mesh: THREE.Mesh; mat: THREE.MeshStandardMaterial; w: number; h: number }>;
     /** материал стен, обращённых в комнату: у стены две стороны и две комнаты */
@@ -435,7 +437,7 @@ export default function QSpaceClient() {
     three.current = {
       scene, camera, renderer, controls,
       gRough, gFinish, gDecor, gWalls,
-      wallMat, bearingMat, floorMat, floorMesh: null, roomFloors: new Map(), roomWallMats: new Map(),
+      wallMat, bearingMat, floorMat, floorMesh: null, потолок: null, roomFloors: new Map(), roomWallMats: new Map(),
       raycaster: new THREE.Raycaster(),
       dragUid: null, uidSeq: 1,
     };
@@ -461,6 +463,15 @@ export default function QSpaceClient() {
       if (!alive) return;
       controls.update();
       if (кадр % 30 === 0) раздатьТени();
+      // Потолок сам решает, показываться ли: пока глаз ниже верха стен — он
+      // есть, поднялись над квартирой — исчез. Отдельной кнопки не нужно, и
+      // забыть выключить его нельзя.
+      const п = three.current?.потолок;
+      if (п) {
+        const высота = typeof п.userData.высота === "number" ? п.userData.высота : 2.7;
+        const внутри = camera.position.y < высота;
+        if (п.visible !== внутри) п.visible = внутри;
+      }
       кадр++;
       renderer.render(scene, camera);
       requestAnimationFrame(loop);
@@ -591,6 +602,24 @@ export default function QSpaceClient() {
     floor.position.set(cx, 0, cz);
     t.gWalls.add(floor);
     t.floorMesh = floor;
+
+    // ПОТОЛОК. Виден только изнутри помещения и прячется сам, как только
+    // камера поднимается выше стен: сверху он закрыл бы всю планировку.
+    //
+    // Без потолка взгляд изнутри выглядит двором — свет падает отовсюду,
+    // верх стены обрывается в небо. Ремонт так не воспринимают: комната
+    // читается замкнутой, и именно потолок с лампами даёт это ощущение.
+    const потолок = new THREE.Mesh(
+      new THREE.PlaneGeometry(W + 0.3, H + 0.3),
+      new THREE.MeshStandardMaterial({ color: 0xf4f2ee, roughness: 0.95, metalness: 0 }),
+    );
+    потолок.rotation.x = Math.PI / 2; // смотрит вниз, в комнату
+    потолок.position.set(cx, planWallHeight(plan) - 0.01, cz);
+    потолок.visible = false;
+    // высота хранится на самом предмете: цикл отрисовки не должен знать про план
+    потолок.userData.высота = planWallHeight(plan);
+    t.gWalls.add(потолок);
+    t.потолок = потолок;
 
     // --- пол каждой комнаты своим материалом ---------------------------------
     // Геометрия — из полос клеток разбивки (те же клетки, что считают площадь),

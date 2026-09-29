@@ -27,6 +27,8 @@ import {
   type Subscription,
 } from "./provisioning";
 import type { TierId } from "../data/pricing";
+import { тарифПоСсылкеЗаказа } from "../lib/payment/tierFromOrderReference";
+import { купленныйМодуль, названныйМодуль } from "../lib/payment/purchasedModule";
 import { termMonthsForReference, tierIdForReference } from "../lib/payment/billingPeriod";
 import { местИзКассы, модулиИзКассы } from "../lib/payment/customData";
 import { makeServiceCapture } from "../lib/sentry/platform";
@@ -61,28 +63,10 @@ function referenceFromOrderId(orderId: string): string {
  */
 /** Экспортируется ради теста: молчаливый дефолт стоит проверять отдельно. */
 export function tierForReference(ref: string): TierId {
-  const r = ref.toLowerCase();
-  // Касса строит ссылку как `tier_<id>_<период>` (checkout.ts), а наш каталог
-  // продаёт ещё два тарифа, которых не было в списке ниже: `pro` («Universe»,
-  // $149/мес) и `enterprise`. Оба принимаются ручкой чекаута явно — и оба
-  // проваливались в дефолт `lite`, то есть человек платил за старший тариф и
-  // получал самый дешёвый. Проверено прогоном: tier_pro_monthly -> "lite" при
-  // контроле tier_medium_monthly -> "medium".
-  //
-  // Сверяем ТОЧНЫМ префиксом, а не подстрокой: `includes("pro")` поймал бы и
-  // `tier_promo_*`. Ниже по течению оба значения понятны — normalizeTier
-  // переводит "pro" в "full", "enterprise" оставляет как есть.
-  // Ссылки лестницы сроков (tier_lite … tier_max) и прежние tier_<тариф>_<период>
-  // разбирает общее правило; эвристика ниже — только для чужих ссылок.
-  const точно = tierIdForReference(r);
-  if (точно) return точно;
-  if (r.includes("medium")) return "medium";
-  if (r.includes("full") || r.includes("all-access") || r.includes("business") || r.includes("team")) return "full";
-  if (!r.includes("lite")) {
-    console.warn(`[paybox/webhook] незнакомая ссылка заказа "${ref}" — выдаём lite по умолчанию`);
-    capture(new Error(`paybox: неизвестная ссылка заказа "${ref}", выдан lite по умолчанию`));
-  }
-  return "lite";
+  // Правило живёт в lib/payment/tierFromOrderReference: у PayBox и PayPal оно
+  // было ДВУМЯ копиями, и вторая отставала на починку (шумная запись о
+  // незнакомой ссылке появилась у paypal отдельно, уже после paybox).
+  return тарифПоСсылкеЗаказа(ref, "paybox", (e, ctx) => capture(e, ctx));
 }
 
 
@@ -179,13 +163,18 @@ payboxWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
       // возвращённым. Поэтому не глотаем: внешний catch освобождает ключ
       // дедупликации, и касса повторит доставку. Понижение в файле
       // идемпотентно, повтор его не испортит.
-      if (module) {
+      // Тот же признак, что на выдаче: возврат по покупке ОДНОГО модуля должен
+      // снять право на модуль. Прежде здесь стояло `if (module)` — оно пропускало
+      // случай, когда модуль назван не полем кассы, а самой ссылкой заказа
+      // (`app_qskyway_lite`): право осталось бы активным после возврата денег.
+      const модульВозврата = названныйМодуль(reference, module);
+      if (модульВозврата) {
         try {
-          await upsertAppSubscription(email, module, "cancelled", downgrade.id);
+          await upsertAppSubscription(email, модульВозврата, "cancelled", downgrade.id);
         } catch (e) {
           const причина = e instanceof Error ? e.message : String(e);
-          console.error(`[paybox/webhook] возврат НЕ снял доступ к модулю -> ${email}/${module}: ${причина}`);
-          capture(e, { route: "paybox/webhook/refund", email, module });
+          console.error(`[paybox/webhook] возврат НЕ снял доступ к модулю -> ${email}/${модульВозврата}: ${причина}`);
+          capture(e, { route: "paybox/webhook/refund", email, module: модульВозврата });
           throw e;
         }
       }
@@ -218,6 +207,33 @@ payboxWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
       // прав. Меняется одно — заказ, который тарифом не является, тарифа
       // и не получает. Деньги при этом не теряются: платёж записан, а
       // оплата бюро узнаёт о себе сама, опрашивая провайдера.
+      // ⚠️ ПОРЯДОК ВАЖЕН: эта развилка стоит ДО проверки «похожа ли ссылка на
+      // подписку». Ссылка приложения подписочной не считается, поэтому раньше
+      // оплаченная покупка модуля через PayBox не выдавалась ВООБЩЕ — ответ
+      // `ignored: not_a_subscription_reference`, то есть деньги без доступа.
+      // Тариф ей выдавать нельзя (это была бы планета за цену модуля), а
+      // выдать надо ровно купленное.
+      // 🔴 КУПЛЕН ОДИН МОДУЛЬ — ЗНАЧИТ И ПРАВО НА ОДИН МОДУЛЬ, НЕ ТАРИФ.
+      //
+      // Тариф с 15.09.2026 означает срок доступа ко ВСЕЙ планете ($400/мес):
+      // normalizeTier превращает lite в full, а isModuleEntitled при full пускает
+      // куда угодно. Записав покупку QSkyway за $16 платформенным тарифом, мы
+      // отдали бы планету за цену модуля — замер 29.09 на Lemon Squeezy, где эта
+      // утечка и была закрыта (dc5d45658). Здесь она спала только потому, что
+      // касса выключена.
+      //
+      // Признак покупки — общий для всех касс (lib/payment/purchasedModule):
+      // переданный кассой модуль либо ссылка приложения. Платформенную подписку
+      // в этом случае НЕ создаём вовсе, иначе тариф снова откроет всё.
+      const модульПокупки = купленныйМодуль(reference, module);
+      if (модульПокупки) {
+        // Порядок как у Lemon Squeezy: сперва выдать доступ, потом учёт. Отказ
+        // записи не глотаем — иначе «заплатил, доступа нет, следов нет».
+        await upsertAppSubscription(email, модульПокупки, "active", paymentId);
+        console.log(`[paybox/webhook] paid → один модуль: ${модульПокупки} for ${email} (ref=${reference})`);
+        return res.json({ ok: true, action: "app_activated", appSlug: модульПокупки, email });
+      }
+
       if (!ссылкаПодписки(reference)) {
         console.warn(
           `[paybox/webhook] заказ "${reference}" не похож на подписку — тариф НЕ выдан`,

@@ -21,6 +21,8 @@ import {
   type Subscription,
 } from "./provisioning";
 import type { TierId } from "../data/pricing";
+import { тарифПоСсылкеЗаказа } from "../lib/payment/tierFromOrderReference";
+import { купленныйМодуль, названныйМодуль } from "../lib/payment/purchasedModule";
 import { termMonthsForReference, tierIdForReference } from "../lib/payment/billingPeriod";
 import { местИзКассы, модулиИзКассы } from "../lib/payment/customData";
 import { makeServiceCapture } from "../lib/sentry/platform";
@@ -37,39 +39,10 @@ export const paypalWebhookRouter = Router();
 /** Экспортируется ради теста: копия та же, что у PayBox, и ошибаться они
  *  обязаны одинаково — иначе сторож охраняет одну кассу из двух. */
 export function tierForReference(ref: string): TierId {
-  const r = ref.toLowerCase();
-  // Касса строит ссылку как `tier_<id>_<период>` (checkout.ts), а наш каталог
-  // продаёт ещё два тарифа, которых не было в списке ниже: `pro` («Universe»,
-  // $149/мес) и `enterprise`. Оба принимаются ручкой чекаута явно — и оба
-  // проваливались в дефолт `lite`, то есть человек платил за старший тариф и
-  // получал самый дешёвый. Проверено прогоном: tier_pro_monthly -> "lite" при
-  // контроле tier_medium_monthly -> "medium".
-  //
-  // Сверяем ТОЧНЫМ префиксом, а не подстрокой: `includes("pro")` поймал бы и
-  // `tier_promo_*`. Ниже по течению оба значения понятны — normalizeTier
-  // переводит "pro" в "full", "enterprise" оставляет как есть.
-  // Ссылки лестницы сроков (tier_lite … tier_max) и прежние tier_<тариф>_<период>
-  // разбирает общее правило; эвристика ниже — только для чужих ссылок.
-  const точно = tierIdForReference(r);
-  if (точно) return точно;
-  if (r.includes("medium")) return "medium";
-  if (r.includes("full") || r.includes("all-access") || r.includes("business") || r.includes("team")) return "full";
-  // Незнакомая ссылка НЕ должна выдавать платный тариф молча.
-  //
-  // Поведение оставлено прежним — выдаём lite: покупатель заплатил, и не
-  // выдать ему ничего хуже, чем выдать меньше обещанного. Но он мог
-  // оплатить ДРУГОЙ тариф, и тогда это наша ошибка, о которой надо знать.
-  //
-  // У соседней кассы (paybox) ровно это уже сделано и закреплено сторожем
-  // payboxUnknownReferenceIsLoud; у paypal тот же провал шёл без единого
-  // следа (замер 02.09.2026). Приводим к одной дисциплине.
-  if (!r.includes("lite")) {
-    console.warn(`[paypal/webhook] незнакомая ссылка заказа "${ref}" — выдан lite`);
-    capture(new Error(`paypal: неизвестная ссылка заказа "${ref}", выдан lite`), {
-      route: "paypal/webhook/tierForReference",
-    });
-  }
-  return "lite";
+  // Правило живёт в lib/payment/tierFromOrderReference: у PayBox и PayPal оно
+  // было ДВУМЯ копиями, и вторая отставала на починку (шумная запись о
+  // незнакомой ссылке появилась у paypal отдельно, уже после paybox).
+  return тарифПоСсылкеЗаказа(ref, "paypal", (e, ctx) => capture(e, ctx));
 }
 
 
@@ -215,9 +188,13 @@ paypalWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
       // возвращённым. Поэтому не глотаем: внешний catch освобождает ключ
       // дедупликации, и касса повторит доставку. Понижение в файле
       // идемпотентно, повтор его не испортит.
-      if (module) {
+      // Тот же признак, что на выдаче: `if (module)` пропускал случай, когда
+      // модуль назван самой ссылкой заказа (`app_qskyway_lite`), и право
+      // осталось бы активным после возврата денег.
+      const модульВозврата = названныйМодуль(reference, module);
+      if (модульВозврата) {
         try {
-          await upsertAppSubscription(email, module, "cancelled", downgrade.id);
+          await upsertAppSubscription(email, модульВозврата, "cancelled", downgrade.id);
         } catch (e) {
           const причина = e instanceof Error ? e.message : String(e);
           console.error(`[paypal/webhook] возврат НЕ снял доступ к модулю -> ${email}/${module}: ${причина}`);
@@ -235,6 +212,26 @@ paypalWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
       // нём будет, а ссылки нашего формата не будет: `parseCustomId` вернёт пустую
       // строку, разбор тарифа уйдёт в умолчание, и человек, не покупавший у нас
       // ничего, получит подписку. Тот же класс, что закрыт у PayBox 04.09.
+      // ⚠️ ПОРЯДОК ВАЖЕН: развилка стоит ДО проверки «похожа ли ссылка на
+      // подписку», как и у PayBox. Ссылка приложения подписочной не считается,
+      // поэтому оплаченная покупка модуля возвращала `ignored` — деньги без
+      // доступа. Тариф ей выдавать нельзя, выдать надо ровно купленное.
+      // 🔴 КУПЛЕН ОДИН МОДУЛЬ — ЗНАЧИТ И ПРАВО НА ОДИН МОДУЛЬ, НЕ ТАРИФ.
+      //
+      // Тариф с 15.09.2026 — это срок доступа ко ВСЕЙ планете ($400/мес):
+      // normalizeTier превращает lite в full, и isModuleEntitled при full пускает
+      // куда угодно. Покупка QSkyway за $16, записанная тарифом, отдала бы
+      // планету за цену модуля. На Lemon Squeezy закрыто 29.09 (dc5d45658), здесь
+      // утечка спала только потому, что касса выключена.
+      //
+      // Признак общий для всех касс — lib/payment/purchasedModule.
+      const модульПокупки = купленныйМодуль(reference, module);
+      if (модульПокупки) {
+        await upsertAppSubscription(email, модульПокупки, "active", paymentId);
+        console.log(`[paypal/webhook] paid → один модуль: ${модульПокупки} for ${email} (ref=${reference})`);
+        return res.json({ ok: true, action: "app_activated", appSlug: модульПокупки, email });
+      }
+
       if (!ссылкаПодписки(reference)) {
         console.warn(
           `[paypal/webhook] заказ "${reference}" не похож на подписку — тариф не выдаём`,

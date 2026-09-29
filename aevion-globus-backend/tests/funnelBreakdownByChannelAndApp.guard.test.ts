@@ -109,4 +109,37 @@ describe("разрез воронки", () => {
     expect(Object.keys(r.byChannel)).toEqual([]);
     expect(Object.keys(r.byApp)).toEqual([]);
   });
+  it("подметка поста даёт разрез по постам, не ломая канал", () => {
+    // 🔴 Замер 30.09.2026: Instagram — единственный канал, приводящий людей до
+    // цен, трафик идёт рывками (постами), а метка у всех ссылок одна — `?c=ig`.
+    // Поэтому «какой пост сработал» ответить было нечем.
+    //
+    // Проверяем ОБА требования сразу: пост появился отдельным разрезом И канал
+    // остался прежним. Если бы пост подмешался к имени канала, каждый пост стал
+    // бы «новым каналом», и сравнить Instagram с YouTube было бы нечем.
+    const r = разрезВоронки([
+      событие("page_view", { channel: "instagram", post: "kartinka3" }, "/"),
+      событие("page_view", { channel: "instagram", post: "kartinka3" }, "/pricing"),
+      событие("page_view", { channel: "instagram", post: "video7" }, "/pricing"),
+      событие("page_view", { channel: "instagram" }, "/pricing"),
+    ]);
+
+    expect(r.byChannel["instagram"].pricing, "канал обязан сложить все посты вместе").toBe(3);
+    expect(Object.keys(r.byChannel).sort(), "пост превратился в отдельный канал").toEqual(["instagram"]);
+    expect(r.byPost["instagram/kartinka3"]).toEqual({ visits: 2, pricing: 1, checkoutStart: 0, paid: 0 });
+    expect(r.byPost["instagram/video7"]).toEqual({ visits: 1, pricing: 1, checkoutStart: 0, paid: 0 });
+    expect(
+      r.byPost["instagram/undefined"],
+      "заход без подметки попал в выдуманный пост",
+    ).toBeUndefined();
+  });
+
+  it("КОНТРОЛЬ: один пост в двух каналах не складывается в одно число", () => {
+    const r = разрезВоронки([
+      событие("page_view", { channel: "instagram", post: "obshchiy" }, "/pricing"),
+      событие("page_view", { channel: "youtube", post: "obshchiy" }, "/pricing"),
+    ]);
+    expect(r.byPost["instagram/obshchiy"].pricing).toBe(1);
+    expect(r.byPost["youtube/obshchiy"].pricing).toBe(1);
+  });
 });

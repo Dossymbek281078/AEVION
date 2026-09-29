@@ -267,6 +267,19 @@ export interface РазрезВоронки {
     }
   >;
   byApp: Record<string, { checkoutStart: number; paid: number }>;
+  /**
+   * Разрез по ПОСТУ внутри канала: ключ «канал/пост».
+   *
+   * 🔴 Замер 30.09.2026: Instagram — единственный канал, приводящий людей до цен
+   * (12 из 304 заходов), и трафик идёт рывками, то есть постами. Но у всех ссылок
+   * одна метка `?c=ig`, поэтому на вопрос «какой пост сработал» ответить было
+   * нечем. Теперь подметка `?c=ig-<пост>` доезжает сюда (products.postFrom,
+   * lib/track.ts), и окно публикаций видит, что постить.
+   *
+   * Ключ составной, «канал/пост», а не просто пост: один и тот же пост может
+   * жить в двух каналах, и складывать их в одно число значило бы терять ответ.
+   */
+  byPost: Record<string, { visits: number; pricing: number; checkoutStart: number; paid: number }>;
 }
 
 export function разрезВоронки(
@@ -275,6 +288,7 @@ export function разрезВоронки(
 ): РазрезВоронки {
   const byChannel = Object.create(null) as РазрезВоронки["byChannel"];
   const byApp = Object.create(null) as РазрезВоронки["byApp"];
+  const byPost = Object.create(null) as РазрезВоронки["byPost"];
   /** Пара «канал + сессия»: чтобы визит считался один раз, как в итоге. */
   const виденныеСессии = new Set<string>();
 
@@ -294,6 +308,14 @@ export function разрезВоронки(
     }
     const к = byChannel[канал];
 
+    const сыройПост = ev.meta?.post;
+    const пост = typeof сыройПост === "string" && сыройПост.trim() ? сыройПост.trim().slice(0, 40) : null;
+    const ключПоста = пост ? `${канал}/${пост}` : null;
+    if (ключПоста && !byPost[ключПоста]) {
+      byPost[ключПоста] = { visits: 0, pricing: 0, checkoutStart: 0, paid: 0 };
+    }
+    const п = ключПоста ? byPost[ключПоста] : null;
+
     if (ev.type === "page_view") {
       // 🔴 ВИЗИТЫ СЧИТАЕМ ТАК ЖЕ, КАК ИТОГ — по уникальным сессиям.
       // Замер 30.09.2026: итог давал 167 визитов за 14 дней, а сумма по каналам
@@ -310,6 +332,10 @@ export function разрезВоронки(
         к.visits += 1;
       }
       if (typeof ev.path === "string" && ev.path.includes("/pricing")) к.pricing += 1;
+      if (п) {
+        п.visits += 1;
+        if (typeof ev.path === "string" && ev.path.includes("/pricing")) п.pricing += 1;
+      }
       continue;
     }
     if (
@@ -326,6 +352,7 @@ export function разрезВоронки(
 
     if (ev.type === "checkout_start") {
       к.checkoutStart += 1;
+      if (п) п.checkoutStart += 1;
       if (ev.sid && нашиСессии.has(ev.sid)) к.checkoutStartOurs += 1;
       byApp[приложение].checkoutStart += 1;
     } else if (ev.type === "checkout_success") {
@@ -336,11 +363,12 @@ export function разрезВоронки(
       к.thankYouOpened += 1;
     } else {
       к.paid += 1;
+      if (п) п.paid += 1;
       if (ev.meta?.свой === true) к.paidOurs += 1;
       byApp[приложение].paid += 1;
     }
   }
-  return { byChannel, byApp };
+  return { byChannel, byApp, byPost };
 }
 
 /**

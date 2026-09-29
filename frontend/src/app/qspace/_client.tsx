@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import {
   demoPlan,
@@ -312,6 +313,8 @@ export default function QSpaceClient() {
     bearingMat: THREE.MeshStandardMaterial;
     floorMat: THREE.MeshStandardMaterial;
     floorMesh: THREE.Mesh | null;
+    /** потолок: виден, только когда камера внутри помещения */
+    потолок: THREE.Mesh | null;
     /** пол каждой комнаты своим материалом — поверх общего пола, только в чистовом слое */
     roomFloors: Map<number, { mesh: THREE.Mesh; mat: THREE.MeshStandardMaterial; w: number; h: number }>;
     /** материал стен, обращённых в комнату: у стены две стороны и две комнаты */
@@ -435,7 +438,7 @@ export default function QSpaceClient() {
     three.current = {
       scene, camera, renderer, controls,
       gRough, gFinish, gDecor, gWalls,
-      wallMat, bearingMat, floorMat, floorMesh: null, roomFloors: new Map(), roomWallMats: new Map(),
+      wallMat, bearingMat, floorMat, floorMesh: null, потолок: null, roomFloors: new Map(), roomWallMats: new Map(),
       raycaster: new THREE.Raycaster(),
       dragUid: null, uidSeq: 1,
     };
@@ -461,6 +464,15 @@ export default function QSpaceClient() {
       if (!alive) return;
       controls.update();
       if (кадр % 30 === 0) раздатьТени();
+      // Потолок сам решает, показываться ли: пока глаз ниже верха стен — он
+      // есть, поднялись над квартирой — исчез. Отдельной кнопки не нужно, и
+      // забыть выключить его нельзя.
+      const п = three.current?.потолок;
+      if (п) {
+        const высота = typeof п.userData.высота === "number" ? п.userData.высота : 2.7;
+        const внутри = camera.position.y < высота;
+        if (п.visible !== внутри) п.visible = внутри;
+      }
       кадр++;
       renderer.render(scene, camera);
       requestAnimationFrame(loop);
@@ -592,6 +604,24 @@ export default function QSpaceClient() {
     t.gWalls.add(floor);
     t.floorMesh = floor;
 
+    // ПОТОЛОК. Виден только изнутри помещения и прячется сам, как только
+    // камера поднимается выше стен: сверху он закрыл бы всю планировку.
+    //
+    // Без потолка взгляд изнутри выглядит двором — свет падает отовсюду,
+    // верх стены обрывается в небо. Ремонт так не воспринимают: комната
+    // читается замкнутой, и именно потолок с лампами даёт это ощущение.
+    const потолок = new THREE.Mesh(
+      new THREE.PlaneGeometry(W + 0.3, H + 0.3),
+      new THREE.MeshStandardMaterial({ color: 0xf4f2ee, roughness: 0.95, metalness: 0 }),
+    );
+    потолок.rotation.x = Math.PI / 2; // смотрит вниз, в комнату
+    потолок.position.set(cx, planWallHeight(plan) - 0.01, cz);
+    потолок.visible = false;
+    // высота хранится на самом предмете: цикл отрисовки не должен знать про план
+    потолок.userData.высота = planWallHeight(plan);
+    t.gWalls.add(потолок);
+    t.потолок = потолок;
+
     // --- пол каждой комнаты своим материалом ---------------------------------
     // Геометрия — из полос клеток разбивки (те же клетки, что считают площадь),
     // чуть выше общего пола; материал ставит эффект отделки по roomFloor.
@@ -663,6 +693,38 @@ export default function QSpaceClient() {
         g.position.set((a.x + bb.x) / 2, (z0 + z1) / 2, (a.y + bb.y) / 2);
         g.rotation.y = -Math.atan2(w.y2 - w.y1, w.x2 - w.x1);
         t.gWalls.add(g);
+
+        // ПРОФИЛЬ ВИТРАЖА: рамки сверху и снизу и импосты через каждые 1.2 м.
+        // Без них панорамное остекление выглядит дырой в стене — стекло само
+        // по себе невидимо, и глазу не за что зацепиться. У основателя (LA VIE)
+        // окна пришли ИМЕННО витражами, а не проёмами, поэтому рама окна там
+        // не видна вовсе, а эта — видна.
+        const части: THREE.BufferGeometry[] = [];
+        const Ш = 0.05;                        // ширина профиля
+        const Т = w.thickness + 0.01;          // чуть толще стекла, чтобы не мерцало
+        const высота = z1 - z0;
+        const добавить = (дл: number, выс: number, сдвигX: number, сдвигY: number) => {
+          const гео = new THREE.BoxGeometry(дл, выс, Т);
+          гео.applyMatrix4(new THREE.Matrix4().setPosition(сдвигX, сдвигY, 0));
+          части.push(гео);
+        };
+        добавить(len, Ш, 0, высота / 2 - Ш / 2);    // верхняя рамка
+        добавить(len, Ш, 0, -высота / 2 + Ш / 2);   // нижняя рамка
+        // Импосты: шаг 1.2 м — типовой для панорамного остекления. У коротких
+        // кусков их нет вовсе, иначе на обрезках получалась бы решётка.
+        const шаг = 1.2;
+        for (let x = -len / 2 + шаг; x < len / 2 - 0.05; x += шаг) добавить(Ш, высота - Ш * 2, x, 0);
+        const рамаВитража = mergeGeometries(части, false);
+        for (const гео of части) гео.dispose();
+        if (рамаВитража) {
+          const профиль = new THREE.Mesh(
+            рамаВитража,
+            new THREE.MeshStandardMaterial({ color: 0x3a3d40, roughness: 0.35, metalness: 0.65 }),
+          );
+          профиль.position.set((a.x + bb.x) / 2, (z0 + z1) / 2, (a.y + bb.y) / 2);
+          профиль.rotation.y = -Math.atan2(w.y2 - w.y1, w.x2 - w.x1);
+          t.gWalls.add(профиль);
+        }
         return;
       }
       const по = roomsBesideWall(w, from, to, roomsInfo.roomAt);
@@ -690,6 +752,39 @@ export default function QSpaceClient() {
       wallBox(w, cur, L, 0, w.height);
     });
 
+    // ПЛИНТУС по низу стен. Голый стык стены с полом — первое, что выдаёт
+    // схему на взгляде изнутри: в жилье этого стыка не видно никогда.
+    //
+    // Все плинтусы сводятся в ОДНО тело: на плане LA VIE стен больше полутора
+    // тысяч, и отдельный предмет на каждую убил бы кадр на слабой машине.
+    // Слияние геометрий даёт один предмет на всю квартиру.
+    {
+      const куски: THREE.BufferGeometry[] = [];
+      const ВЫСОТА = 0.08, ВЫСТУП = 0.015;
+      for (const w of plan.walls) {
+        if (w.glass) continue; // у витража плинтуса не бывает
+        const len = Math.hypot(w.x2 - w.x1, w.y2 - w.y1);
+        if (len < 0.15) continue;
+        const g = new THREE.BoxGeometry(len, ВЫСОТА, w.thickness + ВЫСТУП * 2);
+        const m = new THREE.Matrix4()
+          .makeRotationY(-Math.atan2(w.y2 - w.y1, w.x2 - w.x1))
+          .setPosition((w.x1 + w.x2) / 2, ВЫСОТА / 2, (w.y1 + w.y2) / 2);
+        g.applyMatrix4(m);
+        куски.push(g);
+      }
+      if (куски.length > 0) {
+        const общий = mergeGeometries(куски, false);
+        for (const g of куски) g.dispose();
+        if (общий) {
+          const плинтус = new THREE.Mesh(
+            общий,
+            new THREE.MeshStandardMaterial({ color: 0xf6f4f0, roughness: 0.45, metalness: 0 }),
+          );
+          t.gFinish.add(плинтус);
+        }
+      }
+    }
+
     // --- чистовой слой: окна, двери, светильники ---------------------------
     for (const o of plan.openings) {
       const w = plan.walls[o.wall];
@@ -705,6 +800,42 @@ export default function QSpaceClient() {
         glass.position.set(mid.x, o.sill + o.height / 2, mid.y);
         glass.rotation.y = rotY;
         t.gFinish.add(glass);
+
+        // РАМА И ПОДОКОННИК. Голое стекло в проёме читается как дыра: в жилье
+        // у окна всегда есть белый профиль по периметру и полка подоконника,
+        // и глаз цепляется именно за них. Рама собирается одним телом из
+        // четырёх брусков, чтобы не плодить предметы на каждое окно.
+        const рама: THREE.BufferGeometry[] = [];
+        const П = 0.06;                       // ширина профиля
+        const Г = 0.07;                       // толщина профиля поперёк стены
+        const брусок = (дл: number, выс: number, сдвигX: number, сдвигY: number) => {
+          const g = new THREE.BoxGeometry(дл, выс, Г);
+          g.applyMatrix4(new THREE.Matrix4().setPosition(сдвигX, сдвигY, 0));
+          рама.push(g);
+        };
+        брусок(o.width + П, П, 0, o.height / 2);        // верх
+        брусок(o.width + П, П, 0, -o.height / 2);       // низ
+        брусок(П, o.height, -(o.width / 2), 0);         // левая стойка
+        брусок(П, o.height, o.width / 2, 0);            // правая стойка
+        const общаяРама = mergeGeometries(рама, false);
+        for (const g of рама) g.dispose();
+        if (общаяРама) {
+          const профиль = new THREE.Mesh(
+            общаяРама,
+            new THREE.MeshStandardMaterial({ color: 0xfbfaf8, roughness: 0.35, metalness: 0 }),
+          );
+          профиль.position.set(mid.x, o.sill + o.height / 2, mid.y);
+          профиль.rotation.y = rotY;
+          t.gFinish.add(профиль);
+        }
+        // Подоконник выступает внутрь комнаты на 5 см дальше стены — как и делают.
+        const подоконник = new THREE.Mesh(
+          new THREE.BoxGeometry(o.width + 0.1, 0.03, w.thickness + 0.1),
+          new THREE.MeshStandardMaterial({ color: 0xf2efe9, roughness: 0.3, metalness: 0 }),
+        );
+        подоконник.position.set(mid.x, o.sill - 0.015, mid.y);
+        подоконник.rotation.y = rotY;
+        t.gFinish.add(подоконник);
       } else {
         const door = new THREE.Mesh(
           new THREE.BoxGeometry(o.width - 0.06, o.height - 0.04, 0.05),
@@ -1767,11 +1898,8 @@ export default function QSpaceClient() {
       <header style={S.header}>
         <h1 style={S.h1}>QSpace — 3D-модельер помещений</h1>
         <p style={S.lead}>
-          Загрузите план — чертёж из AutoCAD (DXF), векторный PDF или просто картинку
-          (JPEG, PNG, скан). QSpace построит 3D-модель с тремя слоями: черновая отделка
-          с разводкой электрики и труб, чистовая отделка, декор и мебель.
-          Демо-квартира уже открыта ниже, с расставленной мебелью — покрутите её
-          мышью или пальцем и попереключайте слои.
+          Загрузите план квартиры — и получите 3D-модель, площади и смету отделки.
+          Демо-квартира уже открыта ниже, с расставленной мебелью — покрутите её пальцем или мышью.
         </p>
         {/*
           Раскрывающийся, а не абзац, и вот замер, ради которого. На 390x844
@@ -2568,7 +2696,31 @@ export default function QSpaceClient() {
           </p>
         </aside>
 
+
         <div style={S.canvasWrap} className="qspace-canvas-wrap">
+          {/* ПЕРВОЕ ДЕЙСТВИЕ — НАД МОДЕЛЬЮ.
+              Замер 29.09.2026 на проде, телефон 390x844: холст с моделью на
+              577 px, а «Загрузить план» — на 7868, то есть через девять
+              экранов прокрутки. Человек с ролика видел крутящуюся квартиру и
+              не мог сделать с ней ничего. На десктопе та же кнопка на 277 px,
+              поэтому дефект и не замечали.
+              Под моделью кнопка ложилась ровно под плавающие кнопки платформы
+              ("AI Agent" и значок слева) — они её перекрывали. Над моделью
+              перекрытия нет, а действие видно сразу.
+              Кнопка не дублирует логику: она нажимает ТОТ ЖЕ файловый ввод. */}
+          <div style={S.подХолстом}>
+            <button
+              type="button"
+              style={S.главноеДействие}
+              onClick={() => fileRef.current?.click()}
+            >
+              Загрузить свой план
+            </button>
+            <p style={S.подсказкаДействия}>
+              Чертёж из AutoCAD, векторный PDF, фотография или скан. Модель, площади
+              и смета — за минуту, без регистрации.
+            </p>
+          </div>
           {webglOk ? (
             <div
               ref={mountRef}
@@ -2590,6 +2742,8 @@ export default function QSpaceClient() {
               в GLB: и то и другое собирается из сцены.
             </p>
           )}
+
+
         </div>
       </div>
 
@@ -2646,6 +2800,21 @@ const styles: Record<string, React.CSSProperties> = {
   uploadBtn: {
     display: "inline-block", padding: "8px 14px", background: "#2f5e2a", color: "#fff",
     borderRadius: 8, cursor: "pointer", fontSize: 14,
+  },
+  // Блок первого действия прямо под моделью. Отступ сверху небольшой:
+  // кнопка должна попадать в тот же взгляд, что и сама модель.
+  подХолстом: {
+    marginTop: 12, display: "flex", flexDirection: "column" as const,
+    alignItems: "flex-start", gap: 6,
+  },
+  // Кнопка крупнее остальных намеренно: это ЕДИНСТВЕННОЕ действие, ради
+  // которого человек пришёл. Высота 44 px — минимум для пальца на телефоне.
+  главноеДействие: {
+    padding: "12px 20px", minHeight: 44, background: "#2f5e2a", color: "#fff",
+    border: "none", borderRadius: 10, cursor: "pointer", fontSize: 16, fontWeight: 600,
+  },
+  подсказкаДействия: {
+    margin: 0, fontSize: 13, lineHeight: 1.45, color: "#5f5a53", maxWidth: 520,
   },
   btn: {
     padding: "7px 12px", background: "#fff", border: "1px solid #c9c4bb",

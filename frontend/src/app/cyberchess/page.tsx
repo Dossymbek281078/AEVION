@@ -2058,6 +2058,23 @@ export default function CyberChessPage(){
     }catch{}
   },[]);
   const[srvDaily,sSrvDaily]=useState<SrvDaily|null>(null);
+  // 🔴 29.09.2026. ДВЕ ДВЕРИ В ОДНУ КОМНАТУ, И ОБЕ СЛОМАНЫ ПО-РАЗНОМУ.
+  //
+  // Замер на проде: плитка «Реши задачу дня» открывала `PUZZLES[idx]` —
+  // задачу из ЗАГРУЖЕННОЙ ПАЧКИ по локальному индексу, а не задачу дня.
+  // Сверено числами: индекс 283 дал позицию `8/8/6P1/8/8/2K3kp/7R/5b2`,
+  // тогда как сервер на тот же день отдавал `6k1/1p3pp1/2p3n1/...`. Разные
+  // задачи. А отметка «решено» ставилась по совпадению позиции с серверной —
+  // то есть не ставилась никогда.
+  //
+  // Соседняя кнопка «☀ Задача дня» брала верную, серверную, но БЕЗ
+  // нормализации (показывала позицию до хода соперника) и без решения, так
+  // что решить её было нельзя вовсе.
+  //
+  // Теперь путь ОДИН, и отметка ставится по признаку «открыта задача дня», а
+  // не по сравнению позиций: после нормализации позиция заведомо не равна
+  // серверной, и сравнение снова молчало бы.
+  const[этоЗадачаДня,sЭтоЗадачаДня]=useState(false);
   const[srvDailyFailed,sSrvDailyFailed]=useState(false);
   const[tourStep,sTourStep]=useState<number>(-1); // -1 = not showing
   const[showOnboarding,sShowOnboarding]=useState<boolean>(false);
@@ -3622,7 +3639,7 @@ export default function CyberChessPage(){
                 {const elapsed=Math.floor((Date.now()-pzTimerRef.current)/1000);const tb=elapsed<10?20:elapsed<30?10:5;addChessy(tb,`⏱ скорость ${elapsed}с`);sPzSessionChessy(c=>c+reward+tb);}
                 bumpDaily("puzzle");
                 if(pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
-                if(dailyState&&!dailyState.solved&&srvDaily?.fen===pzCurrent.fen){
+                if(dailyState&&!dailyState.solved&&этоЗадачаДня){
                   const next={...dailyState,solved:true};sDailyState(next);svDaily(next);
                   if(srvDaily)otpravitDaily(srvDaily);
                   bumpDaily("daily-puzzle");
@@ -3663,7 +3680,7 @@ export default function CyberChessPage(){
           bumpDaily("puzzle");
           if(pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
           // Daily puzzle bonus — first solve today
-          if(dailyState&&!dailyState.solved&&srvDaily?.fen===pzCurrent.fen){
+          if(dailyState&&!dailyState.solved&&этоЗадачаДня){
             const next={...dailyState,solved:true};sDailyState(next);svDaily(next);
             if(srvDaily)otpravitDaily(srvDaily);
             bumpDaily("daily-puzzle");
@@ -5448,13 +5465,15 @@ export default function CyberChessPage(){
     }catch{showToast("Не удалось загрузить эндшпиль","error")}
   };
   const loadDailyPuzzle=()=>{
-    if(!dailyState||PUZZLES.length===0){showToast("Задачи ещё грузятся…","info");return}
-    const pz=normalizePuzzle(PUZZLES[dailyState.idx]||PUZZLES[0]);
+    if(srvDailyFailed){showToast("Задача дня не загрузилась — проверьте связь","error");return}
+    if(!srvDaily){showToast("Задача дня ещё грузится…","info");return}
+    const pz=normalizePuzzle({fen:srvDaily.fen,sol:srvDaily.sol,name:srvDaily.theme,r:srvDaily.rating,theme:srvDaily.theme}) as typeof PUZZLES[number];
+    sЭтоЗадачаДня(true);
     sTab("puzzles");
     let g;try{g=new Chess(pz.fen)}catch{showToast("Задача повреждена, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();startClock(0);
     showToast(`☀ Задача дня · ${pz.r}`,"info");
   };
-  const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Задачи ещё грузятся…","info");return}const pz0=fPz[i]||PUZZLES[0];const pz=pz0?normalizePuzzle(pz0):pz0;if(!pz){showToast("Нет задач под этот фильтр","error");return}let g;try{g=new Chess(pz.fen)}catch{showToast("Задача повреждена, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(i);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
+  const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Задачи ещё грузятся…","info");return}sЭтоЗадачаДня(false);const pz0=fPz[i]||PUZZLES[0];const pz=pz0?normalizePuzzle(pz0):pz0;if(!pz){showToast("Нет задач под этот фильтр","error");return}let g;try{g=new Chess(pz.fen)}catch{showToast("Задача повреждена, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(i);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
     // Set timer based on mode. В rush НЕ трогаем работающий дедлайн (ручной выбор пазла
     // посреди раша не должен обнулять часы).
     if(pzMode==="timed3")startClock(180);
@@ -11013,11 +11032,10 @@ export default function CyberChessPage(){
                 {/* Daily puzzle */}
                 <button onClick={()=>{
                   // Только серверная задача: она общая и её знает таблица лидеров.
-                  if(srvDailyFailed){showToast("Задача дня не загрузилась — проверьте связь","error");return}
-                  if(!srvDaily){showToast("Задача дня ещё грузится…","info");return}
-                  const pz={fen:srvDaily.fen,r:srvDaily.rating,name:srvDaily.theme} as Puzzle;
-                  const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pz.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");
-                  showToast(`☀ Задача дня · ${pz.r}`,"info");
+                  // Тот же путь, что у плитки: вторая своя реализация здесь
+                  // и была причиной того, что кнопка показывала позицию до
+                  // хода соперника и не давала решить задачу.
+                  loadDailyPuzzle();
                 }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>☀ Задача дня</button>
 
                 {/* Random endgame study */}

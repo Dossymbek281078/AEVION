@@ -157,8 +157,23 @@ const DEACTIVATE_EVENTS = new Set([
 
 function modulesForReference(ref: LemonSqueezyReference | null): string[] {
   if (!ref) return [];
-  // full → [] is read as "all" by the welcome email + access is granted by tier;
-  // lite → [] (1 product of choice, selected in the cabinet after checkout).
+  // 🔴 ПУСТОЙ СПИСОК — ЭТО НЕ ПОТЕРЯ ПРАВ, и комментарий здесь пришлось
+  // переписать 29.09.2026, потому что прежний описывал мир до 15.09 и увёл
+  // меня в ложную «дыру»: он говорил «lite → [] (1 продукт на выбор,
+  // выбирается в кабинете после оплаты)». Я прочитал это как действующее
+  // правило, нашёл, что ручки выбора не существует, и собрался отказывать в
+  // покупке Lite без выбранного модуля. Такая правка отбила бы ВСЕ покупки
+  // планеты Lite: страница цен посылает `{tierId:"lite"}` без модуля.
+  //
+  // Как устроено на самом деле (planGate.ts): с 15.09.2026 тариф — это СРОК,
+  // а не набор. `normalizeTier` превращает lite/medium/pro/full/max в `full`,
+  // `resolveUserPlan` кладёт в план уже нормализованное значение, а
+  // `isModuleEntitled` первой строкой отвечает true для `full`. То есть доступ
+  // даёт ТАРИФ, и список модулей для него не читается вовсе.
+  //
+  // Список остаётся заполненным на одном пути и только там, где он осмыслен:
+  // покупка отдельного модуля запасным вариантом (`custom_data.module`,
+  // checkout.ts) — по нему видно, ЗА ЧТО заплатили, и его читает письмо.
   return [];
 }
 
@@ -460,9 +475,47 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         return res.status(500).json({ ok: false, error: "unmapped_variant", variantId: String(attrs.variant_id ?? "") });
       }
       const tierId = tierForLemonSqueezyReference(ref);
-      // Lite = 1 продукт на выбор: берём его из custom_data (передан на чекауте).
       const customModule = payload.meta?.custom_data?.module;
-      const modules = tierId === "lite" && customModule ? [customModule] : modulesForReference(ref);
+
+      // 🔴 ПОКУПКА ОДНОГО МОДУЛЯ ЧЕРЕЗ ВАРИАНТ ТАРИФА — НЕ ТАРИФ.
+      //
+      // У четырёх модулей нет своего товара в кассе, и они продаются вариантом
+      // «AEVION Planet — Lite» с подменой цены: QSkyway $16, QRight и QSign $24,
+      // Биржа $40 (checkout.ts, fallbackVariantForReference). Слаг купленного
+      // приложения приезжает в custom_data.module.
+      //
+      // Утечка, замеренная 29.09.2026: раньше такая покупка писалась
+      // ПЛАТФОРМЕННЫМ тарифом `lite`, а с 15.09 тариф — это срок, и
+      // normalizeTier превращает lite в `full`; isModuleEntitled при full
+      // отвечает true на любой модуль. То есть за $16 покупатель получал всю
+      // планету, которая стоит $400 в месяц, включая Multichat за $40 —
+      // единственный модуль, реально закрытый стеной. Ветка `plan.tier ===
+      // "lite"`, которая должна была ограничить доступ выбранным модулем, для
+      // нормализованного плана недостижима.
+      //
+      // Пишем то, что продали: право на ОДИН модуль, тем же путём, которым
+      // выдаются покупки приложений со своим товаром (upsertAppSubscription).
+      // Платформенную подписку при этом не создаём вовсе — иначе тариф снова
+      // откроет всё. Отмена приходит ниже, в DEACTIVATE, и снимает то же право.
+      if (tierId === "lite" && customModule) {
+        await upsertAppSubscription(
+          email,
+          String(customModule),
+          "active",
+          lsSubId,
+          payload.meta?.custom_data?.bureauIntentId,
+        );
+        if (String(customModule) === "devhub") await upgradeDevHubByEmail(email, "pro");
+        console.log(`[ls/webhook] ${event} → один модуль: ${String(customModule)} for ${email}`);
+        записатьСобытиеОтСервера(СОБЫТИЕ_ОПЛАТА_ПОДТВЕРЖДЕНА, {
+          source: "lemonsqueezy",
+          tier: String(customModule),
+          meta: { reference: ref ?? null, event, path: "fallback_single_module" },
+        });
+        return res.json({ ok: true, action: "app_activated", appSlug: String(customModule), email });
+      }
+
+      const modules = modulesForReference(ref);
       // Канал приходит из ссылки: withChannel() кладёт его в
       // checkout[custom][channel] для LemonSqueezy. До 19.08.2026 вебхук его
       // не читал, и метка терялась на последнем шаге: клик по «Купить» мы
@@ -537,6 +590,19 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
     }
 
     if (DEACTIVATE_EVENTS.has(event)) {
+      // Симметрия к активации выше: покупка ОДНОГО модуля через вариант тарифа
+      // платформенной подписки не создаёт, значит и гасить надо право на модуль,
+      // а не понижать тариф. Без этой ветки отмена уходила бы в понижение
+      // несуществующей подписки, а право на модуль оставалось активным навсегда
+      // — ровно тот дефект, который 12.08.2026 уже находили у DevHub Studio Pro.
+      const отменяемыйМодуль = payload.meta?.custom_data?.module;
+      if (tierForLemonSqueezyReference(ref) === "lite" && отменяемыйМодуль) {
+        // Порядок как в ветке приложений: сперва отнять доступ, потом учёт.
+        if (String(отменяемыйМодуль) === "devhub") await upgradeDevHubByEmail(email, "free");
+        await upsertAppSubscription(email, String(отменяемыйМодуль), "cancelled", lsSubId);
+        console.log(`[ls/webhook] ${event} → один модуль снят: ${String(отменяемыйМодуль)} for ${email}`);
+        return res.json({ ok: true, action: "app_cancelled", appSlug: String(отменяемыйМодуль), email });
+      }
       // Отзываем ТУ подписку, за которую пришло событие, а не любую.
       // Правило общее на все кассы — provisioning.возвратКасаетсяДействующей.
       // У Lemon Squeezy это отмена/истечение конкретной подписки: если у

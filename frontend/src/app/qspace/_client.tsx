@@ -1875,7 +1875,13 @@ export default function QSpaceClient() {
       <style>{`
         @media (max-width: 860px) {
           .qspace-canvas-wrap { order: -1; width: 100%; }
-          .qspace-canvas-wrap > div { height: 42vh !important; }
+          /* ТОЛЬКО по холсту, а не по любому прямому div.
+             Замер 29.09.2026, телефон 390x844: правило писалось для рамки
+             3D-сцены, но под «> div» попал и блок кнопки «Загрузить свой
+             план» — 88 px содержимого растянулись до 354, и модель уехала
+             вниз на четверть экрана пустоты. Класс называет ровно ту рамку,
+             ради которой правило написано. */
+          .qspace-canvas-wrap > .qspace-canvas-mount { height: 42vh !important; }
 
           /* Замерено 13.09.2026 на 390x844: до первого кадра 3D надо было
              пролистать 1223 px — 1.4 экрана. Из них заголовок 602, загрузка
@@ -2724,6 +2730,7 @@ export default function QSpaceClient() {
           {webglOk ? (
             <div
               ref={mountRef}
+              className="qspace-canvas-mount"
               style={{ ...S.canvas, position: "relative" }}
               aria-label="3D-модель помещения. Вращение — мышью или одним пальцем, приближение — колесом или двумя пальцами. Вертикальный свайп листает страницу."
               role="application"
@@ -2743,6 +2750,58 @@ export default function QSpaceClient() {
             </p>
           )}
 
+          {/* РЕЗУЛЬТАТ — СРАЗУ ПОД МОДЕЛЬЮ.
+              Замер 29.09.2026, телефон 390x844, загружен собственный план
+              «LA VIE»: модель на 1742 px, а площади на 12 388 и спецификация
+              на 13 530 — между ними пять инженерных таблиц и каталог мебели
+              на сто с лишним кнопок. Человек загружал план ради сметы и
+              пятнадцать экранов прокрутки видел инструменты настройки,
+              которых не просил. Ничего не убрано: настройки остались на своих
+              местах, а ИТОГ поднят туда, где на него смотрят. */}
+          <section style={S.итог} aria-label="Итог по загруженному плану">
+            {roomsInfo.rooms.length === 0 ? (
+              <p style={S.hint}>
+                {roomsInfo.warnings[0] ??
+                  "Помещения ещё не выделены — загрузите план, и здесь появятся площади и смета."}
+              </p>
+            ) : (
+              <>
+                <div style={S.итогЧисла}>
+                  <div style={S.итогЯчейка}>
+                    <strong style={S.итогЦифра}>{roomsInfo.rooms.length}</strong>
+                    <span style={S.итогПодпись}>помещений</span>
+                  </div>
+                  <div style={S.итогЯчейка}>
+                    <strong style={S.итогЦифра}>{perRoom.totals.area.toFixed(1)}</strong>
+                    <span style={S.итогПодпись}>м² пола</span>
+                  </div>
+                  <div style={S.итогЯчейка}>
+                    <strong style={S.итогЦифра}>{est.flooringArea.toFixed(1)}</strong>
+                    <span style={S.итогПодпись}>м² покрытия, с подрезкой</span>
+                  </div>
+                  <div style={S.итогЯчейка}>
+                    <strong style={S.итогЦифра}>{est.wallArea.toFixed(1)}</strong>
+                    <span style={S.итогПодпись}>м² стен под отделку</span>
+                  </div>
+                </div>
+                <div style={S.итогКнопки}>
+                  {/* Те же обработчики, что у кнопок в панели: второй способ
+                      делать то же самое разошёлся бы с первым молча. */}
+                  <button type="button" style={S.главноеДействие} onClick={downloadEstimateCsv}>
+                    Скачать спецификацию (CSV)
+                  </button>
+                  <button type="button" style={S.btn} onClick={downloadPlanSvg}>
+                    Чертёж для печати (SVG)
+                  </button>
+                </div>
+                <p style={S.подсказкаДействия}>
+                  Черновик по вашему плану: это количества, а не цены — цену ставит
+                  подрядчик по своим расценкам. Разбор по комнатам, отделка, мебель
+                  и инженерия — ниже на странице.
+                </p>
+              </>
+            )}
+          </section>
 
         </div>
       </div>
@@ -2813,6 +2872,17 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "12px 20px", minHeight: 44, background: "#2f5e2a", color: "#fff",
     border: "none", borderRadius: 10, cursor: "pointer", fontSize: 16, fontWeight: 600,
   },
+  // Итог под моделью: числа крупно, потому что за ними и пришли.
+  итог: {
+    marginTop: 14, padding: "14px 16px", background: "#f4f1ea",
+    border: "1px solid #e2ddd2", borderRadius: 12,
+    display: "flex", flexDirection: "column" as const, gap: 10,
+  },
+  итогЧисла: { display: "flex", flexWrap: "wrap" as const, gap: "12px 22px" },
+  итогЯчейка: { display: "flex", flexDirection: "column" as const, gap: 2 },
+  итогЦифра: { fontSize: 24, lineHeight: 1.1, fontVariantNumeric: "tabular-nums" },
+  итогПодпись: { fontSize: 12.5, color: "#6a645a" },
+  итогКнопки: { display: "flex", flexWrap: "wrap" as const, gap: 8, alignItems: "center" },
   подсказкаДействия: {
     margin: 0, fontSize: 13, lineHeight: 1.45, color: "#5f5a53", maxWidth: 520,
   },

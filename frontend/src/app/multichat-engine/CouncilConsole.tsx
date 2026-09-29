@@ -26,6 +26,7 @@ import { apiUrl } from "@/lib/apiBase";
 import { getAuthHeaders, isAuthenticated } from "@/lib/auth";
 import { T } from "./theme";
 import { agentFailure, agentTitle, retryHint } from "./failureText";
+import { заголовкиУстройства } from "@/lib/гостевоеУстройство";
 
 type AgentResult = {
   agentId: string;
@@ -249,7 +250,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
   const [свободно, setСвободно] = useState<number | null>(null);
   useEffect(() => {
     let отменено = false;
-    fetch(apiUrl("/api/multichat-guest/allowance"), { cache: "no-store" })
+    fetch(apiUrl("/api/multichat-guest/allowance"), { cache: "no-store", headers: заголовкиУстройства() })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => { if (!отменено && j) setСвободно(Number(j.осталось ?? 0)); })
       .catch(() => { if (!отменено) setСвободно(null); });
@@ -279,14 +280,14 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
     try {
       const conv = await fetch(apiUrl("/api/multichat/conversations"), {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        headers: { "Content-Type": "application/json", ...заголовкиУстройства(), ...getAuthHeaders() },
         body: JSON.stringify({ title: q.slice(0, 80) }),
       }).then((r) => r.json());
       if (!conv?.id) throw new Error(conv?.error || "не удалось создать беседу");
 
       const r = await fetch(apiUrl(`/api/multichat/conversations/${conv.id}/dispatch`), {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        headers: { "Content-Type": "application/json", ...заголовкиУстройства(), ...getAuthHeaders() },
         body: JSON.stringify({ prompt: q, agents: PANEL }),
       });
       const d = await r.json();

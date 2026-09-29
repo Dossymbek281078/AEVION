@@ -12,39 +12,41 @@ import { DevHubGuestIdentity } from "@/components/DevHubGuestIdentity";
 // Про «без аккаунта» сказано с оговоркой: работать без входа правда можно, но
 // проект тогда привязан к браузеру (см. строку на самой витрине). Обещать
 // удобство и умолчать о цене — то же, что обещать лишнее.
-export const metadata: Metadata = {
-  // 13.09.2026: absolute, потому что имя платформы уже стоит В САМОМ
-  // заголовке, а корневой шаблон добавлял второе. Замер на живом сайте:
-  // «... · AEVION» у 14 страниц из 14 в выборке. Вкладка и выдача поиска
-  // режут около шестидесяти знаков — второй бренд выталкивал оттуда
-  // нужные слова. Страницам БЕЗ имени в заголовке шаблон по-прежнему нужен,
-  // поэтому корневой файл не тронут.
-  title: { absolute: "AEVION DevHub — приложение по описанию" },
-  description:
-    "Опишите приложение словами — DevHub соберёт проект, покажет живое превью " +
-    "и опубликует. Начать можно без регистрации; проекты без входа живут в том " +
-    "браузере, где созданы.",
-  openGraph: {
-    title: "AEVION DevHub — приложение по описанию",
-    description:
-      "«Сделай мне…» вместо конструктора: код, страницы и публикация в одном окне.",
-    // Корневой layout объявляет lang="en", а содержимое здесь русское — без
-    // этой строки предпросмотр в мессенджерах и поиск считают страницу
-    // английской. Тот же приём, что на посадочной запуска.
-    locale: "ru_RU",
-    type: "website",
-  },
-  // 13.09.2026: без своего блока страница наследовала корневой twitter, и на X
-  // карточка подписывалась «AEVION — Trust OS» вместо имени модуля. Картинка
-  // при этом уже своя — расходились именно подписи. Корневой блок НЕ трогаем:
-  // для страниц без собственного описания он верен.
-  twitter: {
-    card: "summary_large_image",
-    title: "AEVION DevHub — приложение по описанию",
-    description:
-      "«Сделай мне…» вместо конструктора: код, страницы и публикация из одного описания.",
-  },
+/*
+ * 29.09.2026. Заголовок вкладки был жёстко русским, а тело страницы говорит на
+ * языке посетителя. Находка соседнего окна на английском пути: человек с Product
+ * Hunt открывает страницу, видит английский текст — и русскую надпись во вкладке,
+ * в истории браузера и в предпросмотре ссылки, то есть там, где читают раньше
+ * самой страницы. Тот же приём, что уже применён к рабочему окну проекта:
+ * метаданные строит сервер, и единственный доступный ему источник — Accept-Language.
+ */
+const ЗАГОЛОВКИ: Record<string, { title: string; description: string; locale: string }> = {
+  ru: { title: "AEVION DevHub — приложение по описанию", description: "Опишите приложение словами — DevHub напишет код и откроет живой адрес.", locale: "ru_RU" },
+  kk: { title: "AEVION DevHub — сипаттама бойынша қосымша", description: "Қосымшаны сөзбен сипаттаңыз — DevHub кодты жазып, тірі мекенжай ашады.", locale: "kk_KZ" },
+  en: { title: "AEVION DevHub — describe an app, get a live address", description: "Describe your app in plain words — DevHub writes the code and opens a live address.", locale: "en_US" },
 };
+
+export function языкИзЗаголовка(accept: string | null | undefined): "ru" | "en" | "kk" {
+  const v = String(accept ?? "").toLowerCase();
+  for (const кусок of v.split(",")) {
+    const код = кусок.trim().slice(0, 2);
+    if (код === "ru" || код === "kk") return код;
+    if (код === "en") return "en";
+  }
+  return "en";
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  const { headers } = await import("next/headers");
+  let язык: "ru" | "en" | "kk" = "en";
+  try {
+    язык = языкИзЗаголовка((await headers()).get("accept-language"));
+  } catch {
+    // Заголовков может не быть (сборка, предпросмотр) — это не повод падать.
+  }
+  const т = ЗАГОЛОВКИ[язык];
+  return { title: т.title, description: т.description, openGraph: { locale: т.locale } };
+}
 
 export default function DevHubLayout({ children }: { children: React.ReactNode }) {
   return (

@@ -1228,7 +1228,11 @@ export default function CyberChessPage(){
   const podDoskoyRow:React.CSSProperties=lowDesktop
     ?{flexWrap:"nowrap",overflowX:"auto",scrollbarWidth:"none"}
     :{flexWrap:"wrap",overflowX:"visible"};
-  const desktopVReserve=Math.max(250,boardTopPx>0?boardTopPx+(lowDesktop?186:150):0);
+  // Замер 29.09 на 1280×768: под доской 256 px (буквы+палитра, строка игрока, ДВА ряда
+  // кнопок), над доской 225 — низ съедает больше шапки, и доска зажата в 290 px при
+  // 584 у lichess на том же экране. Ряды кнопок на невысоком десктопе стали компактнее
+  // (gap 6, marginTop 4, размер sm), поэтому резерв снижен 186 → 150.
+  const desktopVReserve=Math.max(250,boardTopPx>0?boardTopPx+150:0);
   const boardPx=Math.max(isMobileLayout?200:280,Math.min(boardPxRaw,vhPx-(vwPx>=769?desktopVReserve:290),vwPx-hReserve-dockReserve));
   const bw=boardPx+"px";
   // ── Ultra-wide fill: доска упирается в ВЫСОТУ (квадрат), а экраны 16:9 широкие —
@@ -8491,7 +8495,7 @@ export default function CyberChessPage(){
 
           {/* Controls — under-board strip. Game-essentials only. Heatmap/Whisper/Share/History live in the
               right-sidebar Tools card to reduce visual clutter under the board. */}
-          <div style={{display:"flex",gap:8,marginTop:SPACE[2],...podDoskoyRow}}>
+          <div style={{display:"flex",gap:lowDesktop?6:8,marginTop:lowDesktop?4:SPACE[2],...podDoskoyRow}}>
             <Btn size="md" variant="secondary" icon={<Icon.Flip width={16} height={16}/>} onClick={()=>sFlip(!flip)}>Перевернуть</Btn>
             <Btn size="md" variant="primary" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>Новая партия</Btn>
             {on&&!setup&&<Btn size="md" variant={mirrorActive?"primary":"secondary"} onClick={()=>{if(mirrorActive){sMirrorActive(false);showToast("🪞 Зеркальный режим выключен","info");}else{sMirrorActive(true);showToast("🪞 Зеркальный режим — соперник играет как ты","info");}}} title="Зеркальный режим — соперник копирует твой стиль">🪞</Btn>}

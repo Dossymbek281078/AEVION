@@ -1400,7 +1400,7 @@ export default function PricingPage() {
               {t("pricing.home.apps.title")}
             </h2>
             <p style={{ color: "#64748b", margin: 0, marginBottom: 16 }}>
-              {t("pricing.home.apps.subtitle")}
+              {t("pricing.home.apps.subtitle", { count: String(STANDALONE_APPS.length) })}
             </p>
             <div
               role="group"
@@ -2311,7 +2311,7 @@ export default function PricingPage() {
             },
             {
               q: t("pricing.home.faq.singleModule.q"),
-              a: t("pricing.home.faq.singleModule.a", { apps: STANDALONE_APPS.map((a) => a.name).join(", ") }),
+              a: t("pricing.home.faq.singleModule.a", { apps: STANDALONE_APPS.map((a) => a.name).join(", "), count: String(STANDALONE_APPS.length) }),
             },
             {
               q: t("pricing.home.faq.bothSuites.q"),
@@ -2319,6 +2319,7 @@ export default function PricingPage() {
               a: t("pricing.home.faq.bothSuites.a", {
                 apps: displayPrice(STANDALONE_APPS.reduce((s, a) => s + termPricePerMonth(a.baseMonthly, "lite"), 0)),
                 planet: displayPrice(termPricePerMonth(PLANET_BASE_MONTHLY, "lite")),
+                count: String(STANDALONE_APPS.length),
               }),
             },
             {

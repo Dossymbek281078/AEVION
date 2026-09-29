@@ -1,4 +1,4 @@
-import { channelFrom } from "./products";
+import { channelFrom, channelFromRef } from "./products";
 
 /**
  * Канал, из которого пришёл этот человек — единый ответ для всех, кто
@@ -25,6 +25,28 @@ import { channelFrom } from "./products";
  */
 const CHANNEL_KEY = "aevion_gtm_channel";
 
+/** Короткая метка канала по значению `?ref=` — то, что кладём в память. */
+function рефВМетку(реф: string): string | undefined {
+  const имя = channelFromRef(реф);
+  if (!имя) return undefined;
+  // Ищем метку, которая даёт то же имя: так память и касса говорят одинаково.
+  const прямая = channelFrom(реф.trim().toLowerCase());
+  if (прямая === имя) return реф.trim().toLowerCase();
+  return МЕТКА_ПО_ИМЕНИ[имя];
+}
+
+/** Имя канала → его короткая метка. Только для каналов, куда ведёт ref. */
+const МЕТКА_ПО_ИМЕНИ: Record<string, string> = {
+  "product-hunt": "ph",
+  "hacker-news": "hn",
+  reddit: "rd",
+  linkedin: "li",
+  x: "x",
+  youtube: "yt",
+  telegram: "tg",
+  "indie-hackers": "ih",
+};
+
 function запомнить(метка: string): void {
   try {
     if (!sessionStorage.getItem(CHANNEL_KEY)) sessionStorage.setItem(CHANNEL_KEY, метка);
@@ -45,11 +67,25 @@ function вспомнить(): string | undefined {
 /** Разобранное имя канала или `null`. Адрес страницы старше памяти. */
 export function channelNow(): string | null {
   if (typeof window === "undefined") return null;
-  const метка = new URLSearchParams(window.location.search).get("c") ?? undefined;
+  const параметры = new URLSearchParams(window.location.search);
+  const метка = параметры.get("c") ?? undefined;
   const изАдреса = channelFrom(метка);
   if (изАдреса && метка) {
     запомнить(метка);
     return изАдреса;
+  }
+  // Запасной ключ: площадки метят исходящие ссылки своим `?ref=` и переписать
+  // его нельзя (карточка Product Hunt ведёт на /en/devhub?ref=producthunt).
+  // `c` главнее намеренно: если стоят оба, наша метка точнее — её ставили мы
+  // под конкретный пост, а ref говорит только про площадку.
+  const реф = параметры.get("ref") ?? undefined;
+  const изРефа = channelFromRef(реф);
+  if (изРефа && реф) {
+    // Запоминаем КОРОТКУЮ метку канала, а не сырой ref: в памяти и в кассе
+    // канал должен называться одним именем, иначе сводка разойдётся сама с собой.
+    const короткая = рефВМетку(реф);
+    if (короткая) запомнить(короткая);
+    return изРефа;
   }
   // Из памяти — только когда в адресе метки нет: так возврат из кассы и переход
   // без метки сохраняют источник, а обычные страницы по-прежнему верят адресу.

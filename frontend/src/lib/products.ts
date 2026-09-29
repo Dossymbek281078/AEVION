@@ -561,6 +561,56 @@ export const CHANNELS: Record<string, string> = {
   badge: "badge",
 };
 
+/**
+ * Псевдонимы, которыми площадки метят исходящие ссылки в параметре `?ref=`.
+ *
+ * Зачем. Карточка Product Hunt ведёт на /en/devhub?ref=producthunt — параметр
+ * ставит САМА площадка, и переписать его нельзя. Сайт читал только `?c=`,
+ * поэтому 29.09.2026, в день запуска на Product Hunt, все переходы оттуда
+ * ложились в отчёт как ПРЯМЫЕ заходы. То есть запуск был неизмерим ровно там,
+ * где его надо было мерить.
+ *
+ * Ключи здесь — то, что пишут площадки; значения — короткие метки из CHANNELS,
+ * чтобы канал назывался ОДНИМ именем независимо от того, пришёл он из `c` или
+ * из `ref`. Новых имён каналов эта карта не заводит: всё, что не сводится к
+ * известной метке, остаётся неизвестным и теряется честно, а не тихо.
+ */
+const REF_ALIASES: Record<string, string> = {
+  producthunt: "ph",
+  "product-hunt": "ph",
+  hackernews: "hn",
+  "hacker-news": "hn",
+  ycombinator: "hn",
+  "news.ycombinator.com": "hn",
+  reddit: "rd",
+  "reddit.com": "rd",
+  linkedin: "li",
+  twitter: "x",
+  "x.com": "x",
+  youtube: "yt",
+  telegram: "tg",
+  indiehackers: "ih",
+  "indie-hackers": "ih",
+};
+
+/**
+ * Нормализует `?ref=` в известный канал. Возвращает null для неизвестного —
+ * решение «терять или пометить» принимает вызывающий: у замера и у кассы оно
+ * разное (замеру важно отличить «пришёл без метки» от «пришёл с чужой»).
+ */
+export function channelFromRef(raw: string | string[] | undefined): string | null {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  if (!v) return null;
+  const ключ = v.trim().toLowerCase();
+  // Та же защита, что и в channelFrom: прямая индексация находит унаследованное
+  // («constructor» вернул бы функцию), и `?? null` этого не отсеивает.
+  if (Object.prototype.hasOwnProperty.call(REF_ALIASES, ключ)) {
+    return channelFrom(REF_ALIASES[ключ]);
+  }
+  // Площадка могла прислать и саму короткую метку (?ref=ph) — она законна.
+  return channelFrom(ключ);
+}
+
 /** Нормализует ?c= в известный канал; всё неизвестное → null (метки не будет). */
 export function channelFrom(raw: string | string[] | undefined): string | null {
   const v = Array.isArray(raw) ? raw[0] : raw;

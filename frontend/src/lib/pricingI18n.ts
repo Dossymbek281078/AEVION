@@ -2,6 +2,12 @@
 
 import { useI18n } from "./i18n";
 import { MODULE_NODES } from "@/data/pitchFacts";
+import { STANDALONE_APPS } from "./termPricing";
+
+/** Сколько приложений продаётся отдельно. Числом словом («пять») страница
+ *  расходилась с витриной: приложений девять, и сумма $480 в другом месте
+ *  считалась по всем девяти. Берём из того же списка, что и карточки. */
+const ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ = STANDALONE_APPS.length;
 import { migrationsDict } from "./pricingI18n/sections/migrations";
 
 /**
@@ -64,11 +70,10 @@ const baseDict: Record<Lang, Record<string, string>> = {
     /* Testimonials */
     "testimonials.title": "Что говорят клиенты",
     "testimonials.subtitle": "Реальные команды на AEVION. Все цитаты с разрешением авторов.",
-    "logos.label": "ИСПОЛЬЗУЮТ КОМАНДЫ ИЗ 30+ СТРАН",
-
+  
     /* Modules matrix */
     "modules.title": "Все модули",
-    "modules.subtitle": `${MODULE_NODES} продуктов AEVION. Все входят в любой платный тариф; пять приложений продаются и отдельно.`,
+    "modules.subtitle": `${MODULE_NODES} продуктов AEVION. Все входят в любой платный тариф; ${ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ} приложений продаются и отдельно.`,
     "modules.colModule": "Модуль",
     "modules.colDescription": "Описание",
     "modules.colStatus": "Статус",
@@ -96,7 +101,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     /* Full compare matrix */
     "compareFull.badge": "ПОЛНАЯ МАТРИЦА",
     "compareFull.title": "Сравнение тарифов и модулей",
-    "compareFull.subtitle": "Что входит в каждый тариф и что только в Enterprise. Любой платный срок открывает все модули; пять приложений продаются и отдельно.",
+    "compareFull.subtitle": `Что входит в каждый тариф и что только в Enterprise. Любой платный срок открывает все модули; ${ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ} приложений продаются и отдельно.`,
     "compareFull.filterLabel": "ФИЛЬТР:",
     "compareFull.filterAll": "Все",
     "compareFull.hideUnavailable": "Скрыть SOON / by-request",
@@ -551,10 +556,9 @@ const baseDict: Record<Lang, Record<string, string>> = {
 
     "testimonials.title": "What customers say",
     "testimonials.subtitle": "Real teams on AEVION. All quotes published with author permission.",
-    "logos.label": "TRUSTED BY TEAMS ACROSS 30+ COUNTRIES",
-
+  
     "modules.title": "All modules",
-    "modules.subtitle": `${MODULE_NODES} AEVION products. All included in every paid plan; five apps are also sold separately.`,
+    "modules.subtitle": `${MODULE_NODES} AEVION products. All included in every paid plan; ${ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ} apps are also sold separately.`,
     "modules.colModule": "Module",
     "modules.colDescription": "Description",
     "modules.colStatus": "Status",
@@ -579,7 +583,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
 
     "compareFull.badge": "FULL MATRIX",
     "compareFull.title": "Compare tiers and modules",
-    "compareFull.subtitle": "What each plan includes and what is Enterprise-only. Every paid term unlocks all modules; five apps are also sold separately.",
+    "compareFull.subtitle": `What each plan includes and what is Enterprise-only. Every paid term unlocks all modules; ${ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ} apps are also sold separately.`,
     "compareFull.filterLabel": "FILTER:",
     "compareFull.filterAll": "All",
     "compareFull.hideUnavailable": "Hide SOON / by-request",

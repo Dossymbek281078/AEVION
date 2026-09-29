@@ -4,7 +4,6 @@ import { channelNow } from "@/lib/channelNow";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
-import { CustomerLogosRow } from "@/components/CustomerLogosRow";
 import { apiUrl } from "@/lib/apiBase";
 import { fetchAiSavings } from "@/lib/aiSavings";
 import { запомнитьНамерение } from "@/lib/checkoutIntent";
@@ -688,22 +687,32 @@ export default function PricingPage() {
         // карточку с входом по умолчанию: та же цена из STANDALONE_APPS, та же
         // касса, те же переводы — второго места с ценой не заводим.
         //
-        // Почему CyberChess, а не более дешёвый QSkyway ($16): 29.09 проверено
-        // глазами, что касса QSkyway пишет «$400.00 billed every month» при
-        // сумме 16,00 $ (у него нет своего варианта в LemonSqueezy, покупка
-        // едет через вариант Planet Lite). У CyberChess вариант свой, и касса
-        // честна: «24,00 $ · $24.00 billed every month». Вести человека в
-        // противоречие дороже, чем показать цену на $8 выше. Когда касса
-        // заведёт вариант QSkyway (окно кассы), вход можно переставить.
-        // 🔴 29.09.2026, вечер: вход переставлен с CyberChess на Мультичат.
-        // Касса шахмат честна ($24 и «$24.00 billed every month»), но платить
-        // не за что: /api/cyberchess-puzzles отдаёт 200 БЕЗ входа и без оплаты,
-        // гейта у модуля нет. Контроль на том же приборе: /api/multichat/presets
-        // отвечает 402 upgrade_required. То есть первый экран продавал то, чем
-        // человек и так пользуется бесплатно.
-        // У Мультичата стена настоящая, а касса честна — «Multichat Lite —
-        // 1 месяц», 40,00 $, «$40.00 billed every month», проверено глазами.
-        // Обратно на шахматы — когда у них появится гейт (зона окна CyberChess).
+        // Вход обязан пройти ДВЕ проверки, обе замерены 29.09 руками:
+        //
+        // 1) Касса не должна врать. У qskyway, qright, qsign и startup_exchange
+        //    своего варианта в LemonSqueezy нет — они едут вариантом Planet
+        //    Lite с подменой цены, и касса пишет «$400.00 billed every month»
+        //    при сумме 16,00 $ / 24,00 $. Проверено глазами на QSkyway и QRight.
+        //
+        // 2) За деньги должно открываться что-то ощутимое. Здесь и отпал
+        //    CyberChess — но не по той причине, которую я записал сначала.
+        //
+        // 🔴 ПОПРАВКА того же вечера. Я написал «гейта у шахмат нет вовсе»,
+        // опираясь на то, что /api/cyberchess-puzzles отвечает 200 без оплаты.
+        // Прибор смотрел не туда: гейт стоит на `checkAppAccess("cyberchess")`
+        // → /api/apps/access/check и закрывает «Глубокий анализ» (Stockfish
+        // NNUE). Партия, задачи, коуч и лёгкий анализ бесплатны НАМЕРЕННО
+        // (решение основателя 07.09). Поправило окно CyberChess, проверено.
+        //
+        // Вход всё равно оставлен на Мультичате, и причина теперь точнее: у
+        // шахмат закрыта одна возможность ВНУТРИ бесплатного продукта, а у
+        // Мультичата стена настоящая — /api/multichat/presets отвечает 402
+        // upgrade_required без оплаты. Для первого шага холодного посетителя
+        // это сильнее. Касса Мультичата честна: «Multichat Lite — 1 месяц»,
+        // 40,00 $, «$40.00 billed every month», смотрел глазами.
+        //
+        // Вернуть вход на шахматы будет правильно, когда за деньгами окажется
+        // то, чего без них не сделать вовсе; это решение основателя.
         const ВХОД_ПО_УМОЛЧАНИЮ = "multichat";
         const модульВхода = heroModule || ВХОД_ПО_УМОЛЧАНИЮ;
         const m = data.modules.find((x) => x.id === модульВхода);
@@ -1396,7 +1405,7 @@ export default function PricingPage() {
               {t("pricing.home.apps.title")}
             </h2>
             <p style={{ color: "#64748b", margin: 0, marginBottom: 16 }}>
-              {t("pricing.home.apps.subtitle")}
+              {t("pricing.home.apps.subtitle", { count: String(STANDALONE_APPS.length) })}
             </p>
             <div
               role="group"
@@ -1473,6 +1482,22 @@ export default function PricingPage() {
                         <div style={{ fontSize: 13, fontWeight: 700, color: "#334155", marginTop: 2 }}>
                           {заСрок(termTotal(a.baseMonthly, appTerm), месяцев)}
                         </div>
+                        {/* Вторая граница цены (29.09.2026).
+                            Страница продукта обещает «от $12/мес» — это месяц на
+                            самом длинном сроке. Человек приходит сюда, видит
+                            $24/мес на сроке Lite и читает это как ошибку: на том
+                            же экране таблица «Все модули» даёт половинные числа.
+                            Обе цены честные, расходится не цена, а то, о каком
+                            сроке идёт речь. Показываем обе границы рядом.
+                            Из готовых кусков: цена, «/мес» и имя срока — новых
+                            ключей перевода не заводим, иначе на девяти языках
+                            пропуск молча откатится на английский. */}
+                        {appTerm !== "max" && (
+                          <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                            {TERM_NAME.max}: {displayPrice(termPricePerMonth(a.baseMonthly, "max"))}
+                            {tp("tier.perMonth")}
+                          </div>
+                        )}
                       </div>
                     )}
                     {нетТовара ? (
@@ -1545,9 +1570,16 @@ export default function PricingPage() {
         );
       })()}
 
-      {/* Customer logos row */}
-      <CustomerLogosRow label={tp("logos.label")} />
-
+      {/* Ряд «логотипов клиентов» снят 29.09.2026.
+          Это были ВЫДУМАННЫЕ плашки (в самом компоненте было написано:
+          «имитирующие diverse customer base»), и стояли они под заголовком
+          «используют команды из 30+ стран» — при двух продажах за всё время.
+          Ложное свидетельство на продающей странице бьёт ровно по тому, чем мы
+          торгуем: доказуемость происхождения. Свип 20.09 убрал отзывы, кейсы и
+          счётчики; этот ряд пережил его, потому что сторожа смотрели словари, а
+          он жил отдельным компонентом. Вернуть можно только с настоящими
+          клиентами и их разрешением. */
+      }
       {/* Testimonials */}
       {testimonials.length > 0 && (
         <section style={{ marginBottom: 56 }}>
@@ -2300,7 +2332,7 @@ export default function PricingPage() {
             },
             {
               q: t("pricing.home.faq.singleModule.q"),
-              a: t("pricing.home.faq.singleModule.a", { apps: STANDALONE_APPS.map((a) => a.name).join(", ") }),
+              a: t("pricing.home.faq.singleModule.a", { apps: STANDALONE_APPS.map((a) => a.name).join(", "), count: String(STANDALONE_APPS.length) }),
             },
             {
               q: t("pricing.home.faq.bothSuites.q"),
@@ -2308,6 +2340,7 @@ export default function PricingPage() {
               a: t("pricing.home.faq.bothSuites.a", {
                 apps: displayPrice(STANDALONE_APPS.reduce((s, a) => s + termPricePerMonth(a.baseMonthly, "lite"), 0)),
                 planet: displayPrice(termPricePerMonth(PLANET_BASE_MONTHLY, "lite")),
+                count: String(STANDALONE_APPS.length),
               }),
             },
             {

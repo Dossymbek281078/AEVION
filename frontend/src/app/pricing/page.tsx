@@ -673,9 +673,32 @@ export default function PricingPage() {
           на сроке из блока «Отдельные приложения». Остальные модули отдельно не
           продаются — честно говорим, что модуль входит в любой тариф, и ведём к
           тарифам. Валюта (вкл. KZT/PayBox) берётся из общего тумблера ниже. */}
-      {heroModule && (() => {
-        const m = data.modules.find((x) => x.id === heroModule);
-        const app = standaloneApp(heroModule);
+      {(() => {
+        // ВХОД ДЛЯ ХОЛОДНОГО ПОСЕТИТЕЛЯ (29.09.2026).
+        //
+        // Замер того дня на 390 px: пришедший на /pricing без метки не видел в
+        // первом экране НИ ОДНОЙ цены. Первое, что похоже на деньги, — виджет
+        // экономии ИИ ($1.60) на 1.1 экрана; первая цена тарифа — $400/мес на
+        // 2.4 экрана; самое дешёвое, что вообще можно купить, — на 8.9 экрана,
+        // при длине страницы 23.5 экрана. Воронка за 14 дней: до цен дошли 22
+        // человека, кнопку покупки не нажал НИ ОДИН.
+        //
+        // Карточка входа уже существовала — но только для пришедших с
+        // /cyberchess и подобных (?module=). Поэтому без метки показываем ту же
+        // карточку с входом по умолчанию: та же цена из STANDALONE_APPS, та же
+        // касса, те же переводы — второго места с ценой не заводим.
+        //
+        // Почему CyberChess, а не более дешёвый QSkyway ($16): 29.09 проверено
+        // глазами, что касса QSkyway пишет «$400.00 billed every month» при
+        // сумме 16,00 $ (у него нет своего варианта в LemonSqueezy, покупка
+        // едет через вариант Planet Lite). У CyberChess вариант свой, и касса
+        // честна: «24,00 $ · $24.00 billed every month». Вести человека в
+        // противоречие дороже, чем показать цену на $8 выше. Когда касса
+        // заведёт вариант QSkyway (окно кассы), вход можно переставить.
+        const ВХОД_ПО_УМОЛЧАНИЮ = "cyberchess";
+        const модульВхода = heroModule || ВХОД_ПО_УМОЛЧАНИЮ;
+        const m = data.modules.find((x) => x.id === модульВхода);
+        const app = standaloneApp(модульВхода);
         const имя = app?.name ?? m?.name;
         if (!имя) return null;
         const рамка: React.CSSProperties = {
@@ -708,7 +731,7 @@ export default function PricingPage() {
         };
         if (!app) {
           return (
-            <section style={рамка}>
+            <section style={рамка} data-hero-entry={heroModule ? "module" : "cold"}>
               <div>
                 <div style={значок}>{t("pricing.home.heroModule.badgeIncluded")}</div>
                 <div style={{ fontSize: 20, fontWeight: 900, color: "#0f172a", margin: "4px 0 2px" }}>
@@ -728,7 +751,7 @@ export default function PricingPage() {
         const ключ = ключПриложения(app.slug);
         const нетТовара = безТовараСсылка(ссылка);
         return (
-          <section style={рамка}>
+          <section style={рамка} data-hero-entry={heroModule ? "module" : "cold"}>
             <div>
               <div style={значок}>
                 {t("pricing.home.heroModule.badge")} · {TERM_NAME[appTerm]}

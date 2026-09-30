@@ -1161,7 +1161,13 @@ export default function CyberChessPage(){
   // ~660 (рейл 248 + панель 340 + поля), без рейла ~400 (только панель + поля) — так
   // 3-колоночная раскладка никогда не выходит за окно. Кап 1400 — доска заполняет
   // высоту больших окон, но не доминирует на 4K. boardScale поверх, финал зажат потолком.
-  const railShown=vwPx>=1100; // должно совпадать с порогом рендера <aside> ниже
+  // 🔴 Левый инфо-рейл убран 30.09.2026 по слову основателя: «левая колонка зачем такая
+  // большая и широкая… оценки ходов в партии с людьми или компами можно и не делать».
+  // Терять нечего: оценка уже есть вертикальной полосой у доски, а материал, дебют и
+  // статус партии слово в слово повторяются во вкладке «Инфо» правой панели.
+  // Освобождает 370 px ширины и убирает третью колонку, из-за которой доска
+  // и список ходов делили остаток.
+  const railShown=false;
   // Путь к настоящей кассе ($, Lemon Squeezy) — ВСЕГДА на экране, независимо от ширины и онбординга.
   // Замер 20.09.2026: единственная цена жила в баннере проектов (только ≥1100px и только без
   // онбординга) — на телефоне и у нового гостя цены не было никогда; магазин Chessy продаёт
@@ -1215,9 +1221,12 @@ export default function CyberChessPage(){
   // быстрая панель, строка соперника), и константа 250 давала доску до 803px — восьмая горизонталь,
   // буквы, строка «Вы» и все кнопки уходили под обрез при overflow:hidden колонки (основатель 22.09:
   // «низ под доской вообще не виден»). Под доской нужно ~150px: буквы, строка «Вы», ряд кнопок.
+  // 🔴 Верх доски измеряется БЕЗ window.scrollY: доска живёт в контейнере со своей
+  // прокруткой, и прибавка прокрутки страницы завышала резерв. Замер 30.09 на 1990×1015:
+  // код считал верх 253 при фактических 197 — доска теряла 56 px на ошибке измерения.
   const[boardTopPx,sBoardTopPx]=useState(0);
   useEffect(()=>{
-    const measure=()=>{try{const el=document.querySelector("[data-cc-board]");if(!el)return;const t=Math.round(el.getBoundingClientRect().top+window.scrollY);sBoardTopPx(v=>Math.abs(v-t)>2?t:v);}catch{}};
+    const measure=()=>{try{const el=document.querySelector("[data-cc-board]");if(!el)return;const t=Math.round(el.getBoundingClientRect().top);sBoardTopPx(v=>Math.abs(v-t)>2?t:v);}catch{}};
     measure();const id=setInterval(measure,1000);window.addEventListener("resize",measure); // раз в секунду: строки над доской появляются и исчезают (вкладка, партия), а состояние партии объявлено ниже
     return()=>{clearInterval(id);window.removeEventListener("resize",measure)};
   },[vwPx,vhPx]);
@@ -7684,58 +7693,10 @@ export default function CyberChessPage(){
             Порог vwPx>=1100 (синхронен с railShown выше — бюджет ширины доски резервирует
             под рейл, поэтому aside(248)+доска+панель(340)+gaps влезают без overflow на любой
             ширине ≥1100). Ниже 1100 рейл скрыт → привычная раскладка доска+правая панель. */}
-        {(on||over||tab==="analysis")&&!streamerMode&&vwPx>=1100&&(()=>{
-          const PV:Record<string,number>={"♕":9,"♛":9,"♖":5,"♜":5,"♗":3,"♝":3,"♘":3,"♞":3,"♙":1,"♟":1};
-          const sum=(a:string[])=>a.reduce((s,c)=>s+(PV[c]||0),0);
-          const adv=sum(capB)-sum(capW); // >0 = белые впереди
-          const evalStr=evalMate!==0?(evalMate>0?`+M${Math.abs(evalMate)}`:`-M${Math.abs(evalMate)}`):`${evalCp>=0?"+":""}${(evalCp/100).toFixed(1)}`;
-          const wPct=evalMate!==0?(evalMate>0?98:2):Math.max(4,Math.min(96,50+evalCp/16));
-          // Единый каркас карточек рейла через <Card> из ui.tsx (Фаза 2 — консолидация).
-          // elevation:none + padding 10/12 воспроизводят прежний инлайн-стиль 1:1 (без тени).
-          const cardProps={tone:"surface1" as const,radius:RADIUS.md,elevation:"none" as const,style:{padding:"10px 12px"}};
-          const lbl={fontSize:10,fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase" as const,color:CC.textMute,marginBottom:6} as const;
-          return <aside style={{flex:`0 0 ${railW}px`,width:railW,display:"flex",flexDirection:"column",gap:10,overflowY:"auto",alignSelf:"stretch",paddingRight:2}}>
-            <Card {...cardProps}>
-              <div style={lbl}>Оценка</div>
-              <div style={{fontSize:26,fontWeight:900,color:CC.text,fontFamily:"ui-monospace,monospace"}}>{evalStr}</div>
-              <div style={{marginTop:8,height:8,borderRadius:4,overflow:"hidden",display:"flex",background:"#0f172a"}}>
-                <div style={{width:`${wPct}%`,background:"#f8fafc"}}/>
-                <div style={{flex:1,background:"#0f172a"}}/>
-              </div>
-            </Card>
-            <Card {...cardProps}>
-              <div style={lbl}>Материал</div>
-              <div style={{fontSize:13,color:CC.text,fontWeight:800}}>{adv===0?"Равенство":(adv>0?`Белые +${adv}`:`Чёрные +${-adv}`)}</div>
-              <div style={{marginTop:6,fontSize:14,color:CC.textDim,minHeight:18,wordBreak:"break-all"}}>{capB.join("")||"—"}</div>
-              <div style={{marginTop:2,fontSize:14,color:CC.textDim,minHeight:18,wordBreak:"break-all"}}>{capW.join("")||"—"}</div>
-            </Card>
-            {currentOpening&&<Card {...cardProps}>
-              <div style={lbl}>Дебют</div>
-              <div style={{fontSize:13,fontWeight:800,color:CC.text}}>{currentOpening.eco?`${currentOpening.eco} `:""}{currentOpening.name}</div>
-            </Card>}
-            <Card {...cardProps}>
-              <div style={lbl}>Партия</div>
-              <div style={{fontSize:13,color:CC.textDim}}>Ход: <b style={{color:CC.text}}>{Math.max(1,Math.ceil(hist.length/2))}</b></div>
-              {/* Подпись говорит о том, что ПРОИСХОДИТ, а не о том, что задумано.
-                  Замер 03.09.2026 на живом сайте: здесь стояло «Stockfish 18 · d22»,
-                  а движок не выдал НИ ОДНОЙ реплики — ход считал запасной расчёт, и
-                  человек ждал соперника до двадцати секунд, читая имя движка,
-                  который не запустился. */}
-              <div style={{fontSize:13,color:CC.textDim,marginTop:3}}>Движок: <b style={{color:sfOk?CC.text:CC.gold}}>{sfOk?"Stockfish 18 · d22":"не запустился — считает запасной расчёт"}</b></div>
-              <div style={{fontSize:13,color:CC.textDim,marginTop:3}}>Коуч: <b style={{color:CC.text}}>супер-GM</b></div>
-            </Card>
-            {/* Теория дебюта — в потоке, после «Партии»: ничего не накрывает по построению */}
-            {currentOpening&&<OpeningFlashCard
-      open={showOpeningCard}
-      opening={currentOpening}
-      currentPly={hist.length}
-      isPlayerTurn={game.turn()===pCol}
-      onDismiss={()=>sShowOpeningCard(false)}
-      surface={CC.surface1} border={CC.border}
-      text={CC.text} textDim={CC.textDim} accent={CC.brand}
-    />}
-          </aside>;
-        })()}
+        {/* Левый инфо-рейл удалён 30.09.2026 по слову основателя: «левая колонка зачем такая
+            большая и широкая… оценки ходов в партии с людьми или компами можно и не делать».
+            Ничего не потеряно: оценка — вертикальной полосой у доски, материал, дебют и
+            статус партии повторяются во вкладке «Инфо» правой панели. Освободилось 370 px. */}
         {/* Колонка доски: не растягиваем (flex:0 1 auto) — иначе мелкая доска центрируется
             в широкой колонке и правый рейл уезжает далеко. Группа [доска+рейл] центрируется
             через justifyContent на cc-main-row, рейл встаёт вплотную (gap 12). */}

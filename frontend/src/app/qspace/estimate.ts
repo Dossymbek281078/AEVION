@@ -178,11 +178,30 @@ export interface MaterialCsvLine {
   rooms: number[];
 }
 
+/**
+ * Инженерия для выгрузки.
+ *
+ * 30.09.2026: тёплый пол, вентиляция и кондиционирование считались и
+ * показывались на странице (три таблицы, 5000 px), а в файл НЕ попадали —
+ * человек уносил подрядчику половину расчёта, и именно ту половину, по
+ * которой считают котёл, вытяжку и сплиты. Поля необязательные: у файла
+ * есть смысл и без инженерии, но если она посчитана — она едет с ним.
+ */
+export interface EngineeringCsv {
+  heating?: { rooms: Array<{ index: number; heatedArea: number; pipeLength: number; loops: number; power: number }>;
+              totals: { heatedArea: number; pipeLength: number; loops: number; power: number } };
+  vent?: { rooms: Array<{ index: number; kind: string; area: number; flow: number; needsFan: boolean }>; totalFlow: number };
+  cooling?: { rooms: Array<{ index: number; area: number; needWatt: number; pick: { btu: number; name: string } | null }> };
+  /** Что расставлено в сцене: имя и количество. */
+  items?: Array<{ name: string; count: number }>;
+}
+
 export function estimateCsv(
   est: Estimate,
   planName: string,
   rooms: RoomCsvLine[] = [],
   materials: MaterialCsvLine[] = [],
+  engineering: EngineeringCsv = {},
 ): string {
   const NL = String.fromCharCode(13) + String.fromCharCode(10);
   // Десятичная ЗАПЯТАЯ и разделитель «;» — пара, которую ждёт русский Excel.
@@ -255,6 +274,49 @@ export function estimateCsv(
         `${m.surface === "floor" ? "Пол" : "Стены"};"${безопасно(m.name)}";${ч(m.area)};м²;${m.rooms.join(", ")}`,
       );
     }
+  }
+
+  // ИНЖЕНЕРИЯ. Каждая таблица повторяет ту, что человек видел на странице:
+  // расходится файл со страницей — расходится и разговор с подрядчиком.
+  const { heating, vent, cooling, items } = engineering;
+
+  if (heating && heating.rooms.length > 0) {
+    out.push("");
+    out.push('"Тёплый пол — по мощности подбирают котёл или маты"');
+    out.push("Помещение;Площадь обогрева, м²;Труба, м;Контуров;Мощность, Вт");
+    for (const r of heating.rooms) {
+      out.push(`"Помещение ${r.index}";${ч(r.heatedArea)};${ч(r.pipeLength, 0)};${r.loops};${ч(r.power, 0)}`);
+    }
+    out.push(`"ИТОГО";${ч(heating.totals.heatedArea)};${ч(heating.totals.pipeLength, 0)};${heating.totals.loops};${ч(heating.totals.power, 0)}`);
+  }
+
+  if (vent && vent.rooms.length > 0) {
+    out.push("");
+    out.push('"Вентиляция — по расходу подбирают вытяжку и приток"');
+    out.push("Помещение;Назначение;Площадь, м²;Расход, м³/ч;Нужна принудительная вытяжка");
+    for (const r of vent.rooms) {
+      out.push(`"Помещение ${r.index}";"${безопасно(r.kind)}";${ч(r.area)};${ч(r.flow, 0)};${r.needsFan ? "да" : "нет"}`);
+    }
+    out.push(`"ИТОГО";;;${ч(vent.totalFlow, 0)};`);
+  }
+
+  if (cooling && cooling.rooms.length > 0) {
+    out.push("");
+    out.push('"Кондиционирование — требуемая мощность и подобранный типоразмер"');
+    out.push("Помещение;Площадь, м²;Требуется, Вт;Подобрано");
+    for (const r of cooling.rooms) {
+      // Пустой подбор называется словами, а не пустой клеткой: пустая клетка
+      // читается как «не нужно», а значит здесь «не хватает даже самого мощного».
+      const подбор = r.pick ? `${r.pick.name} (${r.pick.btu} BTU)` : "типоразмера не хватает — нужны два блока";
+      out.push(`"Помещение ${r.index}";${ч(r.area)};${ч(r.needWatt, 0)};"${безопасно(подбор)}"`);
+    }
+  }
+
+  if (items && items.length > 0) {
+    out.push("");
+    out.push('"Оборудование и мебель, расставленные в модели"');
+    out.push("Предмет;Количество;Единица");
+    for (const i of items) out.push(`"${безопасно(i.name)}";${i.count};шт`);
   }
 
   // BOM: без него Excel читает файл как cp1251 и вместо русских слов

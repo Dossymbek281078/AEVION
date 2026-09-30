@@ -28,6 +28,9 @@ import {
 import { apiUrl } from "@/lib/apiBase";
 import { parseDxf } from "./dxf";
 import { estimateCsv, estimatePlan } from "./estimate";
+import type { HeatingResult } from "./heating";
+import type { VentResult } from "./ventilation";
+import type { CoolingResult } from "./cooling";
 import { planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
 import { масштабПоРазмерам, надёжностьМасштаба, областьПлана, предупреждениеОбОсях, словаИзТекста } from "./dimensionScale";
 import { листПлана, текстPdf, текстСтраниц } from "./pdfText";
@@ -1785,8 +1788,27 @@ export default function QSpaceClient() {
     [perRoom, roomFloor, roomWall, floorMatId, wallMatId],
   );
 
+  // ИНЖЕНЕРИЯ ДЛЯ ФАЙЛА. Панели считают её у себя (там же живут шаг укладки,
+  // солнце и назначения комнат) и отдают готовое сюда. Второй раз не считаем:
+  // две копии расчёта расходятся молча, и первым это увидит подрядчик, а не мы.
+  const [тепло, setТепло] = useState<HeatingResult | null>(null);
+  const [воздух, setВоздух] = useState<VentResult | null>(null);
+  const [холод, setХолод] = useState<CoolingResult | null>(null);
+
   const downloadEstimateCsv = useCallback(() => {
-    const csv = estimateCsv(est, plan.name, perRoom.lines, shopping);
+    // Предметы сцены сводим по имени: подрядчику нужен счёт штук, а не
+    // список одинаковых строк.
+    const счёт = new Map<string, number>();
+    for (const p of placed) {
+      const it = itemById(p.catalogId);
+      if (it) счёт.set(it.name, (счёт.get(it.name) ?? 0) + 1);
+    }
+    const csv = estimateCsv(est, plan.name, perRoom.lines, shopping, {
+      heating: тепло ?? undefined,
+      vent: воздух ?? undefined,
+      cooling: холод ?? undefined,
+      items: [...счёт].map(([name, count]) => ({ name, count })),
+    });
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1795,7 +1817,7 @@ export default function QSpaceClient() {
     a.click();
     URL.revokeObjectURL(url);
     скажи("Спецификация сохранена. Колонка цен пустая — впишите свои, сумма посчитается сама.");
-  }, [est, plan.name, perRoom.lines, shopping, скажи]);
+  }, [est, plan.name, perRoom.lines, shopping, скажи, тепло, воздух, холод, placed]);
 
 
   const S = styles;
@@ -1805,6 +1827,7 @@ export default function QSpaceClient() {
   // Пересчитывается при каждом изменении сцены. Читается ПОЛОЖЕНИЕ из three,
   // а не из состояния: мебель двигают мышью, и состояние о перетаскивании не
   // знает — иначе замечания отставали бы на один шаг и вводили в заблуждение.
+
   const [issues, setIssues] = useState<Issue[]>([]);
   const recheck = useCallback(() => {
     const t = three.current;
@@ -2241,13 +2264,13 @@ export default function QSpaceClient() {
               видел вовсе. Флажок отвечает за то, что РИСУЕТСЯ в трёхмерном
               виде; считать по квартире можно и не глядя на трубы. */}
           <h2 style={S.h2}>Тёплый пол</h2>
-          <HeatingPanel rooms={roomsInfo.rooms} blockedAreaByRoom={blockedArea} />
+          <HeatingPanel rooms={roomsInfo.rooms} blockedAreaByRoom={blockedArea} onResult={setТепло} />
 
           <h2 style={S.h2}>Вентиляция и влажность</h2>
-          <VentilationPanel rooms={roomsInfo.rooms} />
+          <VentilationPanel rooms={roomsInfo.rooms} onResult={setВоздух} />
 
           <h2 style={S.h2}>Кондиционирование: какой сплит нужен</h2>
-          <CoolingPanel rooms={roomsInfo.rooms} />
+          <CoolingPanel rooms={roomsInfo.rooms} onResult={setХолод} />
 
           <h2 style={S.h2}>Готовые дизайны</h2>
           <p style={S.hint}>

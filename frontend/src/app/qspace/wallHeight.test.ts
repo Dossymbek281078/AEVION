@@ -78,7 +78,12 @@ describe("страница показывает высоту ЭТОГО план
   const client = readFileSync(path.join(__dirname, "_client.tsx"), "utf8");
 
   it("в разметке нет обращений к константе высоты", () => {
-    const строки = client.split(String.fromCharCode(10));
+    // Делим по CRLF И по LF. 30.09.2026 редактор записал файл с CRLF, строки
+    // стали кончаться на «\r», исключение `^\s*WALL_HEIGHT,$` перестало
+    // срабатывать — и сторож обвинил РАЗМЕТКУ в том, чего в ней нет. Час ушёл
+    // на поиск высоты там, где сменились концы строк. Сообщение сторожа
+    // звучало уверенно и указывало не туда.
+    const строки = client.split(/\r?\n/);
     const плохие = строки
       .map((s, i) => [i + 1, s] as const)
       .filter(([, s]) => /WALL_HEIGHT/.test(s) && !/useState|import|^\s*WALL_HEIGHT,$/.test(s));

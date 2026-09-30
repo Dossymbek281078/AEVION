@@ -8,12 +8,14 @@
  * назначение комнат в панели вентиляции.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Room } from "./rooms";
-import { coolingPlan, SUN_LABEL, totalPickedWatt, type SunLoad } from "./cooling";
+import { coolingPlan, SUN_LABEL, totalPickedWatt, type CoolingResult, type SunLoad } from "./cooling";
 
 interface Props {
   rooms: Room[];
+  /** Отдать посчитанное наверх — для выгрузки в файл (см. VentilationPanel). */
+  onResult?: (r: CoolingResult) => void;
 }
 
 const SUNS: SunLoad[] = ["shade", "normal", "sunny"];
@@ -35,11 +37,16 @@ export function peopleFrom(v: string): number {
   return Math.max(0, Math.min(10, Math.round(n)));
 }
 
-export default function CoolingPanel({ rooms }: Props) {
+export default function CoolingPanel({ rooms, onResult }: Props) {
   const [sun, setSun] = useState<Record<number, SunLoad>>({});
   const [people, setPeople] = useState<Record<number, number>>({});
 
   const res = useMemo(() => coolingPlan(rooms, { sun, people }), [rooms, sun, people]);
+  // Результат отдаётся наверх ОДНИМ источником: считает панель, файл
+  // берёт готовое. Зависимость — сам результат из useMemo, поэтому
+  // эффект срабатывает при изменении расчёта, а не на каждый рендер.
+  useEffect(() => { onResult?.(res); }, [res, onResult]);
+
   const total = totalPickedWatt(res);
 
   if (rooms.length === 0) {

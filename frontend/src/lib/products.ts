@@ -559,6 +559,12 @@ export const CHANNELS: Record<string, string> = {
   // Это петля роста: чужой показ опубликованного сайта приводит человека к нам.
   // Без метки переход уходит в «unattributed» — и посчитать петлю нечем.
   badge: "badge",
+  // 30.09.2026: каталог LaunchNest. Размещение бесплатное, в обмен на наш значок
+  // у них; обратная ссылка несёт ?c=launchnest. Без метки переход лёг бы в
+  // «unattributed», и вопрос «дал ли каталог хоть одного человека» остался бы
+  // без ответа — а он и есть причина, по которой мы туда идём: за 14 дней
+  // живых посетителей в почте не было ни одного.
+  launchnest: "launchnest",
 };
 
 /**
@@ -591,6 +597,10 @@ const REF_ALIASES: Record<string, string> = {
   telegram: "tg",
   indiehackers: "ih",
   "indie-hackers": "ih",
+  // Ссылку в каталоге правим не мы: если LaunchNest пометит её сам через ?ref=,
+  // переход должен назваться тем же каналом, что и наш ?c=launchnest.
+  launchnest: "launchnest",
+  "launch-nest": "launchnest",
 };
 
 /**

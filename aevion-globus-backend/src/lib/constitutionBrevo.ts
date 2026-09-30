@@ -188,7 +188,25 @@ export function buildWaitlistConfirmEmail(email: string, source?: string): Const
  * запуска — цель доски, и она может сдвинуться. Обещаем то, что зависит от
  * нас: написать в день запуска.
  */
-const LAUNCH_MODULES: Array<{ prefix: string; name: string; plan: string; page: string; planUtc: number }> = [
+/*
+ * 🔴 `openedAt` — день, когда модуль ФАКТИЧЕСКИ открылся, и это НЕ то же
+ * самое, что `planUtc` (день, который мы обещали). Замер 30.09.2026 показал,
+ * зачем их разделять: у восьми модулей обещанный день прошёл, и письмо всем
+ * им говорило «Обещали 20 сентября — напишем, как только откроем» — включая
+ * те, которыми человек уже пользуется. Подписавшийся на странице QVenture,
+ * где он только что бесплатно получил разбор, читал, что модуль ещё закрыт.
+ *
+ * Заполняется только там, где открытость ДОКАЗАНА исходником, а не догадкой:
+ *   devhub, multichat — их страницы запуска печатают «Уже открыто»;
+ *   qright — на странице стоит «Реестр открыт уже сейчас»;
+ *   qventure — разбор работает без входа и без оплаты (проверено на проде
+ *              30.09.2026: ручка захвата адреса отвечает 201/postgres).
+ * bureau намеренно БЕЗ отметки: его страница сама пишет «Обещали 20 сентября
+ * — напишем, как только откроем», то есть модуль действительно не открыт, и
+ * письмо обязано говорить то же.
+ * cyberchess отметки не требует — он в LIVE_ENTRIES и идёт другим письмом.
+ */
+const LAUNCH_MODULES: Array<{ prefix: string; name: string; plan: string; page: string; planUtc: number; openedAt?: number }> = [
   { prefix: "cyberchess", name: "CyberChess", plan: "30 сентября", page: "https://aevion.app/cyberchess/launch", planUtc: Date.UTC(2026, 8, 30) },
   { prefix: "bureau", name: "AEVION IP Bureau", plan: "20 сентября", page: "https://aevion.app/bureau/launch", planUtc: Date.UTC(2026, 8, 20) },
   // ⚠️ 09.09.2026: строка была скопирована с соседней (bureau) и не поправлена —
@@ -201,9 +219,9 @@ const LAUNCH_MODULES: Array<{ prefix: string; name: string; plan: string; page: 
   // (проверено 09.09: /qright 200, /qright/launch 404). Выдумывать адрес нельзя,
   // это увело бы человека из письма в 404. Тот же выбор и по той же причине
   // сделан у qskyway выше.
-  { prefix: "qright", name: "QRight", plan: "20 сентября", page: "https://aevion.app/qright", planUtc: Date.UTC(2026, 8, 20) },
-  { prefix: "devhub", name: "DevHub Studio", plan: "20 сентября", page: "https://aevion.app/devhub/launch", planUtc: Date.UTC(2026, 8, 20) },
-  { prefix: "multichat", name: "AEVION Multichat", plan: "20 сентября", page: "https://aevion.app/multichat-engine/launch", planUtc: Date.UTC(2026, 8, 20) },
+  { prefix: "qright", name: "QRight", plan: "20 сентября", page: "https://aevion.app/qright", planUtc: Date.UTC(2026, 8, 20), openedAt: Date.UTC(2026, 8, 20) },
+  { prefix: "devhub", name: "DevHub Studio", plan: "20 сентября", page: "https://aevion.app/devhub/launch", planUtc: Date.UTC(2026, 8, 20), openedAt: Date.UTC(2026, 8, 21) },
+  { prefix: "multichat", name: "AEVION Multichat", plan: "20 сентября", page: "https://aevion.app/multichat-engine/launch", planUtc: Date.UTC(2026, 8, 20), openedAt: Date.UTC(2026, 8, 21) },
   // ⚠️ Добавлено 31.08.2026. Найдено сторожем воронки при сборке: подписчик со
   // страницы QSkyway получал ОБЩЕЕ письмо «платформа выпускает модули по
   // одному» вместо письма про свой модуль — а QSkyway в списке основателя на
@@ -229,7 +247,7 @@ const LAUNCH_MODULES: Array<{ prefix: string; name: string; plan: string; page: 
   // ответ иной.
   { prefix: "qsign", name: "AEVION QSign", plan: "20 сентября", page: "https://aevion.app/qsign", planUtc: Date.UTC(2026, 8, 20) },
   { prefix: "startup", name: "Биржа стартапов", plan: "20 сентября", page: "https://aevion.app/startup-exchange", planUtc: Date.UTC(2026, 8, 20) },
-  { prefix: "qventure", name: "AEVION QVenture", plan: "20 сентября", page: "https://aevion.app/qventure", planUtc: Date.UTC(2026, 8, 20) },
+  { prefix: "qventure", name: "AEVION QVenture", plan: "20 сентября", page: "https://aevion.app/qventure", planUtc: Date.UTC(2026, 8, 20), openedAt: Date.UTC(2026, 8, 20) },
 ];
 
 /**
@@ -270,13 +288,31 @@ export function planPhrase(
   planUtc: number,
   ru: boolean,
   now: Date = new Date(),
+  openedAt?: number,
+  page?: string,
 ): string {
+  /*
+   * ТРИ состояния, а не два.
+   *
+   * Было два: «откроем по плану» и «обещали такого-то — напишем, как
+   * откроем». Второе говорилось всем, у кого обещанный день прошёл, — то
+   * есть и тем модулям, которые к этому дню уже работали. Замер 30.09.2026:
+   * так отвечали восемь источников подписки из десяти, включая QVenture,
+   * где человек ровно что получил разбор бесплатно и без входа.
+   *
+   * Третье состояние — «уже открыт, вот куда идти». Оно включается не
+   * календарём обещания, а отдельной отметкой `openedAt`: обещание и
+   * открытие это разные события, и путать их нельзя ни в какую сторону.
+   */
+  const открыт = openedAt !== undefined && isLiveNow(openedAt, now);
   const прошёл = isLiveNow(planUtc, now);
   if (ru) {
+    if (открыт) return `Модуль уже открыт — заходите${page ? `: ${page}` : ""}.`;
     return прошёл
       ? `Обещали ${plan} — напишем, как только откроем.`
       : `Открываем по плану ${plan}. Напишем вам в день запуска.`;
   }
+  if (открыт) return `It is already open — come in${page ? `: ${page}` : ""}.`;
   return прошёл
     ? `We promised ${plan} — we will write the moment it opens.`
     : `We open ${plan}. You get one email on launch day.`;
@@ -401,7 +437,7 @@ function buildPlatformWaitlistEmailEn(email: string, source?: string): Constitut
         ${live
           ? (live.nextStepEn ?? "Open it from the link below — no account needed to look around.")
           : mod
-            ? `${planPhrase(mod.plan, mod.planUtc, false)} With early-access terms.`
+            ? `${planPhrase(mod.plan, mod.planUtc, false, new Date(), mod.openedAt, mod.page)} With early-access terms.`
             : "AEVION ships one module at a time. You get one email when the next one opens."}
       </p>
       <p style="color:#9aa3c0;margin:0 0 24px">
@@ -429,7 +465,7 @@ function buildPlatformWaitlistEmailEn(email: string, source?: string): Constitut
     textContent: live
       ? `${live.nameEn ?? live.name} is already open. Open: ${live.page}`
       : mod
-        ? `You are on the early-access list for ${mod.name}. ${planPhrase(mod.plan, mod.planUtc, false)} Launch page: ${mod.page}`
+        ? `You are on the early-access list for ${mod.name}. ${planPhrase(mod.plan, mod.planUtc, false, new Date(), mod.openedAt, mod.page)} Launch page: ${mod.page}`
         : "You are on the AEVION early-access list. We ship one module at a time.",
     tags: ["waitlist-confirm", "platform", "en"],
   };
@@ -458,7 +494,7 @@ export function buildPlatformWaitlistEmail(email: string, source?: string): Cons
         ${live
           ? live.nextStep
           : mod
-            ? `${planPhrase(mod.plan, mod.planUtc, true)}`
+            ? `${planPhrase(mod.plan, mod.planUtc, true, new Date(), mod.openedAt, mod.page)}`
             : "Платформа выпускает модули по одному. Как только выйдет следующий, вы получите письмо в день запуска — с условиями раннего доступа, пока цена стартовая."}
       </p>
       <p style="color:#9aa3c0;margin:0 0 24px">
@@ -486,7 +522,7 @@ export function buildPlatformWaitlistEmail(email: string, source?: string): Cons
     textContent: live
       ? `Адрес записан — «${live.name}» уже открыт. ${live.nextStep} Открыть: ${live.page}`
       : mod
-        ? `Адрес записан — вы в списке раннего доступа к ${mod.name}. ${planPhrase(mod.plan, mod.planUtc, true)} Страница: ${mod.page}`
+        ? `Адрес записан — вы в списке раннего доступа к ${mod.name}. ${planPhrase(mod.plan, mod.planUtc, true, new Date(), mod.openedAt, mod.page)} Страница: ${mod.page}`
         : `Адрес записан — вы в списке раннего доступа AEVION. Напишем в день запуска следующего модуля. Что уже работает: aevion.app/go`,
     tags: live ? ["platform", "live-entry-confirm"] : ["platform", "waitlist-confirm"],
   };

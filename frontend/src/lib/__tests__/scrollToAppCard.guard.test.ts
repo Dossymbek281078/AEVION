@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { ждатьКарточкуПриложения } from "../scrollToAppCard";
 
 /**
@@ -23,10 +25,14 @@ beforeEach(() => {
 });
 afterEach(() => { vi.useRealTimers(); });
 
-function карточка(слаг: string) {
+function карточка(слаг: string, прокруткаРаботает = true) {
   const el = document.createElement("div");
   el.setAttribute("data-app", слаг);
-  (el as unknown as { scrollIntoView: unknown }).scrollIntoView = vi.fn();
+  // scrollIntoView в jsdom ничего не делает; подменяем его так, чтобы можно
+  // было проверить ОБА случая: когда окно сдвинулось и когда нет.
+  (el as unknown as { scrollIntoView: unknown }).scrollIntoView = vi.fn(() => {
+    if (прокруткаРаботает) Object.defineProperty(window, "scrollY", { value: 2406, configurable: true });
+  });
   return el;
 }
 
@@ -87,5 +93,55 @@ describe("ожидание карточки приложения", () => {
     await vi.advanceTimersByTimeAsync(2000);
     expect(доставлено).not.toHaveBeenCalled();
     expect(промах).not.toHaveBeenCalled();
+  });
+});
+
+describe("прокрутка обязана СДВИНУТЬ окно, а не просто быть вызванной", () => {
+  /*
+   * 🔴 Замер 30.09.2026 на живом проде, настоящая вкладка:
+   *   scrollIntoView({ block: "center" })                     → 2406 ✔
+   *   scrollIntoView({ block: "center", behavior: "smooth" }) → 0    ✘
+   * Плавная прокрутка молча не двигала окно (настройка «меньше движения»
+   * выключена, scroll-behavior не переопределён, страница прокручиваема).
+   * То есть прежний код и моя ночная починка звали действие, которое ничего
+   * не делало, и обе выглядели рабочими.
+   */
+  it("не просит плавную прокрутку", () => {
+    // Комментарии отбрасываем: в этом же файле причина описана словами, и
+    // первая версия проверки краснела на СВОЁМ ЖЕ объяснении — текст о вещи
+    // неотличим от вещи, если читать файл целиком.
+    const исходник = readFileSync(join(__dirname, "..", "scrollToAppCard.ts"), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, " ")
+      .replace(new RegExp("//[^" + String.fromCharCode(10) + "]*", "g"), " ");
+
+    expect(
+      исходник.includes('behavior: "smooth"'),
+      "вернулась плавная прокрутка — на проде она молча не двигает окно",
+    ).toBe(false);
+    // Контроль прибора: в очищенном исходнике осталось то, что там ТОЧНО есть.
+    expect(исходник, "проверка читает пустоту — очистка съела код").toContain("scrollIntoView");
+  });
+
+  it("окно не сдвинулось — довозим вручную", () => {
+    Object.defineProperty(window, "scrollY", { value: 0, configurable: true });
+    const вручную = vi.fn();
+    (window as unknown as { scrollTo: unknown }).scrollTo = вручную;
+    const el = карточка("cyberchess", false); // scrollIntoView ничего не делает
+    положитьГлубоко(el);
+    ждатьКарточкуПриложения("cyberchess", { приДоставке: vi.fn(), приПромахе: vi.fn() });
+    expect(
+      вручную,
+      "scrollIntoView ничего не сделал, а запасного пути нет — человек остался наверху",
+    ).toHaveBeenCalled();
+  });
+
+  it("КОНТРОЛЬ: окно сдвинулось — вручную не трогаем", () => {
+    Object.defineProperty(window, "scrollY", { value: 0, configurable: true });
+    const вручную = vi.fn();
+    (window as unknown as { scrollTo: unknown }).scrollTo = вручную;
+    const el = карточка("cyberchess", true);
+    положитьГлубоко(el);
+    ждатьКарточкуПриложения("cyberchess", { приДоставке: vi.fn(), приПромахе: vi.fn() });
+    expect(вручную, "дёрнули окно дважды — прокрутка прыгнет").not.toHaveBeenCalled();
   });
 });

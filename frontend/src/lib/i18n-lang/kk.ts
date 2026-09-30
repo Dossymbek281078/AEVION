@@ -5082,6 +5082,7 @@ const kk: Record<string, string> = {
   "pricing.home.notes.migrationLink": "DocuSign / OpenAI-дан көшу →",
   "pricing.home.notes.partnersLink": "Серіктестерге →",
   "pricing.home.notice.checkoutError": "Төлем қатесі. Қайта көріңіз немесе сату бөліміне хабарласыңыз.",
+  "pricing.home.notice.termNotSold": "Бұл мерзім таңдалған қолданба үшін сатылмайды. Қолжетімді, ай: {months} — оны таңдаңыз, төлем өтеді.",
   "pricing.home.notice.connectionError": "Байланыс жоқ — интернетті тексеріп, қайта көріңіз.",
   "pricing.home.price.free": "Тегін",
   "pricing.home.price.onRequest": "Сұрау бойынша",

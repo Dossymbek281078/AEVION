@@ -96,6 +96,18 @@ function открылиСтраницуСпасибо() {
     .send({ type: "checkout_success", source: "pricing", path: "/pricing/checkout/success" });
 }
 
+/** Заход окна с меткой пробы: страница, затем нажатие «Купить» в той же сессии. */
+async function заходСМеткой(метка: string, сессия: string) {
+  await request(приложение())
+    .post("/api/pricing/events")
+    .set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131")
+    .send({ type: "page_view", source: "pricing", sid: сессия, path: `/longevity?c=${метка}` });
+  return request(приложение())
+    .post("/api/pricing/events")
+    .set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131")
+    .send({ type: "checkout_start", source: "pricing", sid: сессия, path: `/longevity?c=${метка}` });
+}
+
 async function воронка() {
   const r = await request(приложение()).get("/api/pricing/events/funnel?days=14");
   expect(r.status).toBe(200);
@@ -315,5 +327,42 @@ describe("хранилище событий", () => {
       часы.some((ч) => ч.hour === текущийЧас && ч.visits > 0),
       `события нет в текущем часе ${текущийЧас}: ${JSON.stringify(часы).slice(0, 200)}`,
     ).toBe(true);
+  });
+});
+
+describe("метка probe-<окно> отделяет наш заход от живого человека", () => {
+  test("probe-63 попадает в «наши», ig — нет", async () => {
+    // 🔴 Зачем сторож. Правило «любой заход окна на прод — с меткой ?c=probe-<окно>»
+    // держится на том, что бэкенд узнаёт метку ПО ПРЕФИКСУ. Сузь это до точного
+    // совпадения со списком — и КАЖДЫЙ наш заход станет «живым человеком», то есть
+    // главное число, которое читает основатель («начали оплату 7, из них наших 6,
+    // значит живая одна»), завысится молча. Ни один тест этого не охранял.
+    //
+    // Заодно закрыт вопрос приёмки 30.09: метку якобы «отбрасывает» переадресация.
+    // Замер показал обратное — редиректа у /longevity нет вовсе, а тот, что есть в
+    // middleware, сохраняет запрос. Метка просто НЕ становится каналом, и это
+    // задумано: пробы не должны заводить свои каналы.
+    const до = await воронка();
+
+    await заходСМеткой("probe-63", "сессия-окна");
+    const после = await воронка();
+    expect(
+      после.total.checkoutStartOurs - до.total.checkoutStartOurs,
+      "заход с меткой probe-63 не признан нашим — правило метки перестало работать",
+    ).toBe(1);
+
+    // Контроль в обратную сторону: настоящий канал нашим НЕ становится, иначе
+    // сторож зеленел бы и на «считать нашими всех».
+    const доЖивого = await воронка();
+    await заходСМеткой("ig", "сессия-человека");
+    const послеЖивого = await воронка();
+    expect(
+      послеЖивого.total.checkoutStartOurs - доЖивого.total.checkoutStartOurs,
+      "заход с настоящей меткой канала записан нашим — живые люди исчезнут из числа",
+    ).toBe(0);
+    expect(
+      послеЖивого.total.checkoutStart - доЖивого.total.checkoutStart,
+      "живой заход вообще не посчитан",
+    ).toBe(1);
   });
 });

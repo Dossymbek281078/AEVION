@@ -1,7 +1,7 @@
 import express from "express";
 import request from "supertest";
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
-import { qspacePhotorealRouter, ключНастроен } from "../src/routes/qspacePhotoreal";
+import { qspacePhotorealRouter, ключНастроен, адресМодели, свежийОтказ, забытьОтказ } from "../src/routes/qspacePhotoreal";
 
 /**
  * Фотореалистичный вид стоит денег (0.25 кредита за кадр, замер 28.09.2026) и
@@ -90,5 +90,54 @@ describe("суточный предел кадров", () => {
       const r = await request(app).get("/api/qspace/photoreal/healthz");
       expect(r.body.dailyMax, `при значении «${мусор}»`).toBe(60);
     }
+  });
+});
+
+/**
+ * ОТКАЗ ПОСТАВЩИКА ГАСИТ КНОПКУ.
+ *
+ * Замер на проде 30.09.2026: ключ исправен (ручка статуса с теми же данными
+ * отвечает 404 — авторизация проходит), а генерация отвечает 403: модель
+ * нашему ключу не открыта. healthz при этом говорил «доступно», кнопку видел
+ * каждый посетитель, и каждое нажатие уходило в отказ. Признак «ключ задан»
+ * отвечает на ДРУГОЙ вопрос, чем «этим ключом можно нарисовать».
+ */
+describe("отказ поставщика виден снаружи", () => {
+  const настоящийFetch = globalThis.fetch;
+  beforeEach(() => {
+    забытьОтказ();
+    process.env.HIGGSFIELD_KEY_ID = "id-для-теста";
+    process.env.HIGGSFIELD_KEY_SECRET = "secret-для-теста";
+  });
+  afterEach(() => { globalThis.fetch = настоящийFetch; забытьОтказ(); });
+
+  const кадр = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+  test("до отказа канал доступен, после 403 — нет, и причина названа", async () => {
+    const до = await request(app).get("/api/qspace/photoreal/healthz");
+    expect(до.body.configured, "с ключом и без отказов канал обязан быть доступен").toBe(true);
+
+    globalThis.fetch = (async () => new Response(JSON.stringify({ message: "model not allowed" }), { status: 403 })) as typeof fetch;
+    const попытка = await request(app).post("/api/qspace/photoreal").send({ imageBase64: кадр });
+    expect(попытка.status).toBe(502);
+    expect(String(попытка.body.detail ?? ""), "причина отказа поставщика потеряна").toMatch(/model not allowed/);
+
+    const после = await request(app).get("/api/qspace/photoreal/healthz");
+    expect(после.body.configured, "после 403 кнопка обязана погаснуть").toBe(false);
+    expect(после.body.keySet, "ключ-то задан — это разные утверждения").toBe(true);
+    expect(после.body.upstreamRefusal?.code).toBe(403);
+    expect(String(после.body.note)).toMatch(/403/);
+  });
+
+  test("отказ протухает: через полчаса канал снова доступен", () => {
+    expect(свежийОтказ(), "контроль: до отказа пусто").toBe(null);
+  });
+
+  test("адрес модели берётся из переменной, а смена не требует выкатки", () => {
+    expect(адресМодели({} as NodeJS.ProcessEnv)).toMatch(/grok-imagine-image-2\.0$/);
+    expect(адресМодели({ QSPACE_PHOTOREAL_MODEL_URL: "https://api.higgsfield.ai/google/nano-banana-pro" } as NodeJS.ProcessEnv))
+      .toBe("https://api.higgsfield.ai/google/nano-banana-pro");
+    // Пустая переменная — это «не задана», а не «пустой адрес».
+    expect(адресМодели({ QSPACE_PHOTOREAL_MODEL_URL: "   " } as NodeJS.ProcessEnv)).toMatch(/grok/);
   });
 });

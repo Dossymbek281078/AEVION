@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { ценаСПериодом } from "../../verifiedPrice";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
@@ -292,7 +293,7 @@ export default function BureauUpgradePage() {
             <div style={{ fontSize: 14, fontWeight: 900, color: "#0f172a", marginBottom: 8 }}>What you&apos;ll do</div>
             <ol style={{ margin: 0, paddingLeft: 22, fontSize: 13, color: "#0f172a", lineHeight: 1.7 }}>
               <li>{disclosure.identityStep}</li>
-              <li><b>Pay $19</b> for the Verified-tier upgrade.</li>
+              <li><b>Pay {ценаСПериодом()}</b> for the Verified-tier upgrade.</li>
               <li><b>Certificate is upgraded</b> with your real-name attestation; the verify page now shows &ldquo;Verified Author&rdquo;.</li>
             </ol>
             <div style={{ marginTop: 14, padding: "10px 14px", borderRadius: 10, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", fontSize: 11, color: "#92400e", lineHeight: 1.55 }}>
@@ -387,13 +388,13 @@ export default function BureauUpgradePage() {
               )}
             </div>
             <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.6, marginBottom: 14 }}>
-              Last step: $19 for the Verified-tier upgrade. After payment, the
+              Last step: {ценаСПериодом()} for the Verified-tier upgrade. After payment, the
               certificate is stamped with the name you declared
               {kycMode === "stub" ? " (identity provider not connected yet)" : " as attested by our KYC provider"}.
             </div>
             {!status?.payment.intentId ? (
               <button onClick={startPayment} style={{ padding: "12px 18px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #4f46e5, #6366f1)", color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>
-                Continue to payment ($19) →
+                Continue to payment ({ценаСПериодом()}) →
               </button>
             ) : (
               <div role="status" aria-live="polite" style={{ fontSize: 12, color: "#475569" }}>

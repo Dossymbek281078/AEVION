@@ -28,6 +28,7 @@ import {
 import { apiUrl } from "@/lib/apiBase";
 import { parseDxf } from "./dxf";
 import { estimateCsv, estimatePlan } from "./estimate";
+import { точкаОбзора } from "./interiorView";
 import type { HeatingResult } from "./heating";
 import type { VentResult } from "./ventilation";
 import type { CoolingResult } from "./cooling";
@@ -37,13 +38,13 @@ import { листПлана, текстPdf, текстСтраниц } from "./p
 import { назначенияПоНомерам, назначенияПоПодписям, номераНаПлане, подписиИзТекста, экспликацияИзТекста, type Подпись, type СтрокаЭкспликации } from "./roomLabels";
 import { appliancesFromLabels, fixturesFromSegments } from "./fixtures";
 import type { Placement } from "./autoPlace";
-import { FINISH_PRESETS, LAYOUTS, composeMaterialId, drawMaterial, materialById, materialsFor, parseMaterialId, variantsOf } from "./materials";
+import { FINISH_PRESETS, LAYOUTS, composeMaterialId, drawMaterial, materialById, materialsFor, повторТекстуры, parseMaterialId, variantsOf } from "./materials";
 import { ROOM_TYPES, ROOM_TYPE_LABEL, guessRoomTypes, type RoomType } from "./roomTypes";
 import { STYLES, type Style } from "./styles";
 import { autoPlace } from "./autoPlace";
 import { roomsBesideWall } from "./wallSides";
 import { materialShopping } from "./materialTotals";
-import { CATALOG, demoPlacedSnapshots, groups, itemById, type CatalogItem } from "./furniture";
+import { CATALOG, demoPlacedSnapshots, groups, itemById, type CatalogItem, собратьПредмет } from "./furniture";
 import { checkClearance, type Issue, type Placed } from "./clearance";
 import { findRooms } from "./rooms";
 import { floorPlanSvg } from "./floorPlanSvg";
@@ -122,7 +123,11 @@ function textureFor(id: string, roomW: number, roomH: number): THREE.Texture | n
   t.wrapT = THREE.RepeatWrapping;
   // Повтор считается от РАЗМЕРА ПОМЕЩЕНИЯ и физического размера элемента:
   // иначе одна и та же плитка была бы на разных планах разной величины.
-  t.repeat.set(Math.max(1, roomW / m.unitM / 4), Math.max(1, roomH / m.unitM / 4));
+  // Повтор считает materials.ts: там знают, сколько элементов рисунка лежит
+  // в канве у каждого узора. Здесь было общее «/4» для всех, и оно делало
+  // плитку 60×60 двухметровой, а доску — пятиметровой (замер 30.09.2026).
+  const п = повторТекстуры(m, roomW, roomH);
+  t.repeat.set(п.x, п.y);
   return t;
 }
 
@@ -205,7 +210,7 @@ function вернутьМебель(
   for (const it of список) {
     const item = CATALOG.find((c) => c.id === it.catalogId);
     if (!item) continue;
-    const g = item.build();
+    const g = собратьПредмет(item);
     const uid = t.uidSeq++;
     g.userData.uid = uid;
     g.position.set(it.x, 0, it.z);
@@ -1142,7 +1147,7 @@ export default function QSpaceClient() {
   // ---- действия -----------------------------------------------------------
   const addItem = useCallback((item: CatalogItem) => {
     const t = three.current; if (!t) return;
-    const g = item.build();
+    const g = собратьПредмет(item);
     const b = planBounds(plan);
     const uid = t.uidSeq++;
     g.userData.uid = uid;
@@ -1648,9 +1653,21 @@ export default function QSpaceClient() {
     const i = комнатаВзгляда.current % список.length;
     комнатаВзгляда.current = i + 1;
     const комната = список[i];
-    const отступ = Math.max(0.9, Math.min(3.2, Math.sqrt(комната.area) / 2));
-    t.camera.position.set(комната.cx - отступ, 1.6, комната.cy + отступ);
-    t.controls.target.set(комната.cx, 1.2, комната.cy);
+    // Камера ищется ПО РАЗМЕТКЕ комнаты, а не по её центру.
+    // Замер 30.09.2026 на плане «LA VIE»: прежняя формула «центр минус отступ
+    // по диагонали» в двух кадрах из трёх упирала объектив в стену — у
+    // Г-образной комнаты центр габарита лежит вне комнаты, а смещение всегда
+    // шло в одну сторону. Это и был вид, которым модуль показывал себя.
+    const вид = точкаОбзора(r.runsOf(комната.index));
+    if (вид) {
+      t.camera.position.set(вид.x, 1.6, вид.y);
+      t.controls.target.set(вид.целевойX, 1.35, вид.целевойY);
+    } else {
+      // Разметки нет — прежнее поведение лучше, чем ничего.
+      const отступ = Math.max(0.9, Math.min(3.2, Math.sqrt(комната.area) / 2));
+      t.camera.position.set(комната.cx - отступ, 1.6, комната.cy + отступ);
+      t.controls.target.set(комната.cx, 1.2, комната.cy);
+    }
     t.controls.update();
     скажи(`Помещение ${комната.index}, ${комната.area.toFixed(1)} м² — вид с высоты глаз. Нажмите ещё раз, чтобы перейти к следующему.`);
   }, [скажи]);

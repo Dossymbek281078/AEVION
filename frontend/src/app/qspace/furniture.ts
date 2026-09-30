@@ -495,3 +495,57 @@ export function demoPlacedSnapshots(): Array<{
 }> {
   return demoFurniture().map((d) => ({ catalogId: d.catalogId, x: d.x, z: d.y, rotY: d.rotY }));
 }
+
+/**
+ * Контактная тень под предметом.
+ *
+ * Замер 30.09.2026 по кадру изнутри: предметы стояли на полу без единого
+ * затемнения в месте касания — главный признак «нарисовано», сильнее, чем
+ * материалы и свет. Точечные светильники теней не отбрасывают (их четыре и
+ * они без карт теней — это осознанная плата за скорость на телефоне), а
+ * солнце внутрь квартиры почти не достаёт. Поэтому тень рисуется пятном:
+ * одна текстура на весь каталог, по одному прозрачному квадрату на предмет.
+ */
+let тканьТени: THREE.Texture | null = null;
+function текстураТени(): THREE.Texture {
+  if (тканьТени) return тканьТени;
+  const c = document.createElement("canvas");
+  c.width = 128; c.height = 128;
+  const ctx = c.getContext("2d");
+  if (!ctx) throw new Error("нет 2d-контекста для тени");
+  const гр = ctx.createRadialGradient(64, 64, 4, 64, 64, 62);
+  гр.addColorStop(0, "rgba(0,0,0,0.60)");
+  гр.addColorStop(0.45, "rgba(0,0,0,0.34)");
+  гр.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = гр;
+  ctx.fillRect(0, 0, 128, 128);
+  тканьТени = new THREE.CanvasTexture(c);
+  return тканьТени;
+}
+
+/**
+ * Собрать предмет каталога вместе с его тенью.
+ *
+ * Зовут ВСЕ, кто ставит предмет в сцену: два места в клиенте (первая
+ * расстановка и возврат сохранённого) разошлись бы молча, а разошлись бы
+ * они именно тенью — её не видно в данных, только глазами.
+ */
+export function собратьПредмет(item: CatalogItem): THREE.Group {
+  const g = item.build();
+  const [w, , d] = item.size;
+  const пятно = new THREE.Mesh(
+    new THREE.PlaneGeometry(Math.max(0.2, w * 1.18), Math.max(0.2, d * 1.18)),
+    new THREE.MeshBasicMaterial({
+      map: текстураТени(),
+      transparent: true,
+      depthWrite: false,
+      opacity: 0.95,
+    }),
+  );
+  пятно.rotation.x = -Math.PI / 2;
+  // Чуть выше пола: на одной высоте с ним два плана мерцают (z-fighting).
+  пятно.position.y = 0.006;
+  пятно.userData.тень = true;
+  g.add(пятно);
+  return g;
+}

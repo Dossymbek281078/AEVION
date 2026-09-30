@@ -1,3 +1,4 @@
+import { подсказкаРешающего } from "../lib/dailyHint";
 import { Router, Request, Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -747,7 +748,9 @@ router.get('/puzzle', async (_req: Request, res: Response) => {
       // запуска, когда задача дня работает, — риск больше пользы. Разбор и
       // варианты вынесены основателю (01-CyberChess, готовность к 30.08).
       sol: p.sol,
-      solHint: p.sol[0],
+      // Ход РЕШАЮЩЕГО, а не соперника: у сырых lichess-задач sol[0] чужой.
+      // Разбор и живой замер — src/lib/dailyHint.ts.
+      solHint: подсказкаРешающего(p.sol),
     },
   });
 });

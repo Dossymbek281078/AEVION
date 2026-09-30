@@ -12,6 +12,7 @@ import {
   channelFrom,
   withChannel,
   type Product,
+  keepChannel,
 } from "@/lib/products";
 import { BuyLink } from "@/components/BuyLink";
 import { PageTracking } from "@/components/PageTracking";
@@ -215,7 +216,20 @@ export default async function GoPage({
   // Внутренние переходы тоже несут метку: человек с /go часто уходит сначала в
   // /shop или /longevity и покупает уже оттуда. Без проброса канал терялся бы
   // ровно на том переходе, ради которого страница и сделана.
-  const keep = (path: string) => (channel ? `${path}?c=${encodeURIComponent(String(Array.isArray(rawChannel) ? rawChannel[0] : rawChannel))}` : path);
+  /*
+   * 🔴 30.09.2026. Здесь стояла своя сборка адреса: `${path}?c=...` — метка
+   * дописывалась В КОНЕЦ слепо. Для простых путей это работало, а на моей же
+   * новой ссылке `/pricing?app=multichat#apps` дало
+   * `/pricing?app=multichat#apps?c=ig`: метка уехала во ФРАГМЕНТ, и на
+   * странице цен `URLSearchParams(location.search).get("c")` вернул null.
+   * То есть конверсия из Instagram долетала до покупки БЕЗ метки — ровно то,
+   * что эта строка и должна была измерять. Нашла приёмка поведением.
+   *
+   * Общая функция `keepChannel` умеет и фрагмент, и второй параметр — и в её
+   * комментарии описан ровно этот случай. Своей сборки здесь больше нет:
+   * вторая реализация одного правила расходится с первой молча.
+   */
+  const keep = (path: string) => keepChannel(path, channel);
   // Метка источника несёт канал, как на посадочных модулей. До 19.08.2026 здесь
   // стояло жёсткое "go": подписка с /go?c=ig помечалась просто «go», и канал
   // терялся ровно на той странице, ради которой метки и заводились.

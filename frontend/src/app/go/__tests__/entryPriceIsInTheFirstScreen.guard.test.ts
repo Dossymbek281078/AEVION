@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { STANDALONE_APPS, termPricePerMonth } from "@/lib/termPricing";
+import { keepChannel } from "@/lib/products";
 
 /**
  * НА ПОСАДОЧНОЙ СОЦСЕТЕЙ ЕСТЬ ЦЕНА ВХОДА И ССЫЛКА НА КАРТОЧКУ.
@@ -40,7 +41,38 @@ describe("посадочная /go: цена входа", () => {
     expect(цена).toBeGreaterThan(0);
   });
 
-  it("ссылка ведёт на СУЩЕСТВУЮЩИЙ слаг и несёт метку канала", () => {
+  it("метка канала читается ИЗ ИТОГОВОГО адреса, а не просто вызван помощник", () => {
+    /*
+     * 🔴 30.09.2026. Первая версия этой проверки смотрела, что `keep()`
+     * ВЫЗВАН, — и пропустила дефект: локальная сборка дописывала метку в конец,
+     * и на адресе с фрагментом получалось `/pricing?app=multichat#apps?c=ig`.
+     * Метка уезжала во фрагмент, `URLSearchParams(location.search).get("c")`
+     * возвращал null, и покупка из Instagram приходила без источника — ровно
+     * то, что строка и должна была измерять. Нашла приёмка ПОВЕДЕНИЕМ.
+     *
+     * Класс ошибки известен: «тест сторожит помощника, а не вывод». Поэтому
+     * теперь проверяется ИТОГОВЫЙ адрес.
+     */
+    const вход = STANDALONE_APPS.find((a) => a.slug === "multichat")!;
+    const адрес = keepChannel(`/pricing?app=${вход.slug}#apps`, "instagram");
+    const u = new URL(адрес, "https://aevion.app");
+    expect(u.searchParams.get("c"), `метка не читается как параметр: ${адрес}`).toBe("ig");
+    expect(u.searchParams.get("app"), "потерян выбор приложения").toBe("multichat");
+    expect(u.hash, "потерян якорь на блок приложений").toBe("#apps");
+    // Контроль в обратную сторону: без канала адрес не обрастает пустым c=.
+    const безМетки = new URL(keepChannel(`/pricing?app=${вход.slug}#apps`, null), "https://aevion.app");
+    expect(безМетки.searchParams.get("c")).toBeNull();
+    expect(безМетки.hash).toBe("#apps");
+  });
+
+  it("страница не собирает адрес вручную — зовёт общую функцию", () => {
+    expect(
+      ИСХОДНИК.includes("keepChannel(path, channel)"),
+      "вернулась своя сборка адреса: вторая реализация одного правила разойдётся молча",
+    ).toBe(true);
+  });
+
+  it("ссылка ведёт на СУЩЕСТВУЮЩИЙ слаг", () => {
     // Слаг сверяем со списком: оркестратор называл `multichat-engine`, а
     // карточка на /pricing помечена `multichat` — неверный слаг дал бы ссылку
     // в никуда, и это заметили бы только по нулям в воронке.

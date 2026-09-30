@@ -223,7 +223,19 @@ export default async function GoPage({
   // там, где человек оказался. Канал едет с собой.
   const язык = (await cookies()).get("aevion_lang_v1")?.value;
   if (язык === "en") {
-    redirect(channel ? `/en/go?c=${encodeURIComponent(channel)}` : "/en/go");
+    /*
+     * 🔴 30.09.2026. Здесь подставлялось ДЛИННОЕ имя канала: `channelFrom("ig")`
+     * возвращает "instagram", и адрес получался `/en/go?c=instagram`. А
+     * `channelFrom("instagram")` возвращает null — сайт знает короткие метки.
+     * Итог: человек из шапки Instagram, у которого cookie языка = en, приходил
+     * на английскую посадочную БЕЗ канала, и вся его дальнейшая покупка шла в
+     * «прямые заходы». Ровно эта ловушка описана в комментарии channelParam:
+     * подстановка длинного значения выглядит правильной.
+     *
+     * Теперь адрес собирает keepChannel — он сам переводит имя в метку,
+     * которую примет следующая страница. Третьей реализации не заводим.
+     */
+    redirect(keepChannel("/en/go", channel));
   }
 
   const liveModules = await fetchLiveModules();

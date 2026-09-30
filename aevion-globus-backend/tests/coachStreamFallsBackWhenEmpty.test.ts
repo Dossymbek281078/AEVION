@@ -87,16 +87,25 @@ describe("поток тренера закончился пустым", () => {
     поток.mockImplementation(() => пустойПоток());
     обычный.mockResolvedValue({ reply: "Castling hides the king and connects the rooks.", model: "m", usage: {} });
     const r = await request(app).post("/api/coach/chat/stream").send(вопрос);
-    expect(r.status).toBe(200);
+    // 🔴 ПЕРЕНАЦЕЛЕНО 30.09.2026. Раньше здесь ждали 200 с пустым потоком:
+    // ответ отбракован, человеку молча ничего. Теперь в этом случае маршрут
+    // говорит 502 своими словами — молчание было худшим из исходов, оно
+    // выглядит как исправная работа. Главное утверждение прежнее и стоит
+    // первым: чужой язык наружу НЕ уходит.
     expect(r.text).not.toContain("Castling hides");
-    expect(r.text).toContain("message_stop");
+    expect(r.status).toBe(502);
+    expect(r.text).toContain("Тренер");
   });
 
-  test("контроль: отказ обычного вызова не роняет ручку", async () => {
+  test("контроль: отказ обычного вызова не роняет ручку НЕОБЪЯСНИМО", async () => {
     поток.mockImplementation(() => пустойПоток());
     обычный.mockRejectedValue(new Error("провайдер лёг"));
     const r = await request(app).post("/api/coach/chat/stream").send(вопрос);
-    expect(r.status).toBe(200);
-    expect(r.text).toContain("message_stop");
+    // Прежде ждали 200 с пустым потоком. Это и был худший исход: снаружи
+    // неотличимо от исправной работы. Ручка по-прежнему НЕ падает с 500 и не
+    // выносит наружу текст поставщика, но теперь честно называет отказ.
+    expect(r.status).toBe(502);
+    expect(r.text).not.toContain("провайдер лёг");
+    expect(r.text).toContain("Тренер");
   });
 });

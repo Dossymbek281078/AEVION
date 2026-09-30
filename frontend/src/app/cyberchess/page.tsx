@@ -1054,6 +1054,26 @@ function buildGameReviewPrompt(args: {
 }
 
 /* ═══ Component ═══ */
+/**
+ * Показывать ли предложение оставить адрес после партии.
+ *
+ * Вынесено из компонента ради проверки: интересен именно случай, когда
+ * хранилище БРОСАЕТ (приватное окно, встроенный браузер, запрет данных
+ * сайта) — в нём прежний код молча не показывал окно никогда.
+ *
+ * Возвращает true, если предлагать УЖЕ НЕ НАДО (отметка стоит). Не смогли
+ * прочитать — false: предлагаем.
+ */
+export function уженеПредлагать(
+  хранилище: Pick<Storage, "getItem"> | undefined = typeof localStorage === "undefined" ? undefined : localStorage,
+): boolean {
+  try {
+    return хранилище?.getItem("aevion_chess_waitlist_seen") === "1";
+  } catch {
+    return false;
+  }
+}
+
 export default function CyberChessPage(){
   const{showToast}=useToast();
   // Workspace preset (Focus / Standard / Stream / Study / Coach), keys 1..5.
@@ -1852,7 +1872,16 @@ export default function CyberChessPage(){
   useEffect(()=>{
     if(!over||предлагалиПодпискуRef.current)return;
     предлагалиПодпискуRef.current=true;
-    try{if(localStorage.getItem("aevion_chess_waitlist_seen")==="1")return;}catch{return;}
+    // 🔴 30.09.2026: `catch{return;}` здесь означал «хранилище недоступно —
+    // не показывать НИКОГДА». В приватном окне и во встроенных браузерах
+    // соцсетей localStorage бросает — а именно оттуда приходит наш главный
+    // поток (Instagram, 347 визитов за 14 дней). Отказ выглядел не как
+    // поломка, а как «человек не захотел оставить адрес».
+    //
+    // Отметка нужна ровно для одного: не предлагать второй раз. Не сумели
+    // её прочитать — предлагаем; худшее последствие — предложить дважды,
+    // а не потерять адрес совсем. Падать надо в сторону работы.
+    if (уженеПредлагать()) return;
     const t=setTimeout(()=>{sShowWaitlist(true);try{localStorage.setItem("aevion_chess_waitlist_seen","1")}catch{}},2200);
     return()=>clearTimeout(t);
   },[over]);

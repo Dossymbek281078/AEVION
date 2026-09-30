@@ -288,7 +288,7 @@ export function planPhrase(
   planUtc: number,
   ru: boolean,
   now: Date = new Date(),
-  openedAt?: number,
+  открыт: boolean = false,
   page?: string,
 ): string {
   /*
@@ -304,7 +304,6 @@ export function planPhrase(
    * календарём обещания, а отдельной отметкой `openedAt`: обещание и
    * открытие это разные события, и путать их нельзя ни в какую сторону.
    */
-  const открыт = openedAt !== undefined && isLiveNow(openedAt, now);
   const прошёл = isLiveNow(planUtc, now);
   if (ru) {
     if (открыт) return `Модуль уже открыт — заходите${page ? `: ${page}` : ""}.`;
@@ -381,20 +380,77 @@ const LIVE_ENTRIES: Array<{ prefix: string; name: string; page: string; nextStep
  * Политика прежняя: нет записи с датой — модуль считается живым (дата не
  * назначена ≠ запрещён); есть — решает isLiveNow по календарю Алматы.
  */
-export function isModuleLiveNow(slug: string, now: Date = new Date()): boolean {
-  const s = slug.toLowerCase().replace(/^en-/, "");
-  const entry = LIVE_ENTRIES.find((m) => s === m.prefix || s.startsWith(`${m.prefix}-`));
-  if (!entry) return true;
-  return isLiveNow(entry.liveFrom, now);
+/**
+ * 🔴 ЕДИНСТВЕННОЕ место, где решается «открыт ли модуль».
+ *
+ * До 30.09.2026 ответ складывался в двух местах независимо: письмо смотрело,
+ * есть ли запись в `LIVE_ENTRIES`, а `planPhrase` — есть ли отметка `openedAt`.
+ * Одна вещь под двумя именами: они не обязаны расходиться, но ничто не мешало
+ * им разойтись, и один раз уже разошлись — у cyberchess отметки нет, а письмо
+ * он шлёт как открытый. Проверка, выбиравшая «неоткрытый модуль» по отметке,
+ * на этом и споткнулась.
+ *
+ * Теперь источник один, а оба прежних места — его читатели. Открыт, если:
+ *   * модуль есть в `LIVE_ENTRIES` и его `liveFrom` наступил (там живут те, что
+ *     работали всегда), ЛИБО
+ *   * у него проставлен `openedAt` и этот день наступил.
+ *
+ * Сторож `oneSourceOfModuleOpenness.guard` следит, что второго места не завелось.
+ */
+export function модульОткрыт(prefix: string, now: Date = new Date()): boolean {
+  if (liveEntryFromSource(prefix, now)) return true;
+  const мод = moduleFromSource(prefix);
+  return мод?.openedAt !== undefined && isLiveNow(мод.openedAt, now);
 }
 
-function liveEntryFromSource(source?: string) {
+/**
+ * Модули, у которых ещё НЕТ дня фактического открытия (`openedAt`).
+ *
+ * Экспортируется ради проверок, и это не formality: фикстура, выбранная ПО
+ * ИМЕНИ, протухает вместе с календарём. Замер 30.09.2026: тест письма брал
+ * `cyberchess` как пример «ещё не открытого» модуля и краснел в день его
+ * запуска — вчера он был верен, сегодня нет, и ни одной строки кода для этого
+ * менять не понадобилось.
+ *
+ * Признак не зависит от даты: «нет отметки открытия» — это утверждение о том,
+ * что мы ещё не подтвердили открытие, а не о том, какое сегодня число.
+ */
+export function модулиБезДняОткрытия(): Array<{ prefix: string; name: string; plan: string; page: string }> {
+  /*
+   * Открытость живёт в ДВУХ местах, и учесть надо оба, иначе признак соврёт.
+   * Первое — отметка `openedAt` в этой таблице. Второе — `LIVE_ENTRIES`: модуль,
+   * попавший туда и доживший до своей `liveFrom`, уходит по другой ветке письма
+   * («уже открыт»), сколько бы отметок ни стояло здесь. Именно так и вышло с
+   * cyberchess: `openedAt` у него нет, а письмо он шлёт как открытый.
+   */
+  return LAUNCH_MODULES.filter((m) => !модульОткрыт(m.prefix)).map(({ prefix, name, plan, page }) => ({
+    prefix,
+    name,
+    plan,
+    page,
+  }));
+}
+
+export function isModuleLiveNow(slug: string, now: Date = new Date()): boolean {
+  const s = slug.toLowerCase().replace(/^en-/, "");
+  const записьЕсть = LIVE_ENTRIES.some((m) => s === m.prefix || s.startsWith(`${m.prefix}-`));
+  // Политика, названная вслух: записи нет — модуль считаем живым (дата не
+  // назначена ≠ запрещён). Она старше единого источника и относится к ДРУГОМУ
+  // вопросу — «слать ли письмо запуска», — поэтому остаётся здесь.
+  if (!записьЕсть) return true;
+  // А вот сам ответ «открыт ли он» берётся из единственного места, а не
+  // вычисляется заново: до 30.09.2026 здесь стояла своя копия проверки по
+  // `liveFrom`, и это было второе мнение об одном и том же.
+  return модульОткрыт(s, now);
+}
+
+function liveEntryFromSource(source?: string, now: Date = new Date()) {
   if (!source) return null;
   // Снимаем языковую приставку: «en-longevity» — тот же модуль, что
   // «longevity», и англоязычный подписчик должен получить письмо «уже
   // открыт», а не общее «вы в списке» (поймано 29.08 собственной пробой).
   const s = source.toLowerCase().replace(/^en-/, "");
-  return LIVE_ENTRIES.find((m) => (s === m.prefix || s.startsWith(`${m.prefix}-`)) && isLiveNow(m.liveFrom)) ?? null;
+  return LIVE_ENTRIES.find((m) => (s === m.prefix || s.startsWith(`${m.prefix}-`)) && isLiveNow(m.liveFrom, now)) ?? null;
 }
 
 function moduleFromSource(source?: string) {
@@ -437,7 +493,7 @@ function buildPlatformWaitlistEmailEn(email: string, source?: string): Constitut
         ${live
           ? (live.nextStepEn ?? "Open it from the link below — no account needed to look around.")
           : mod
-            ? `${planPhrase(mod.plan, mod.planUtc, false, new Date(), mod.openedAt, mod.page)} With early-access terms.`
+            ? `${planPhrase(mod.plan, mod.planUtc, false, new Date(), модульОткрыт(mod.prefix), mod.page)} With early-access terms.`
             : "AEVION ships one module at a time. You get one email when the next one opens."}
       </p>
       <p style="color:#9aa3c0;margin:0 0 24px">
@@ -465,7 +521,7 @@ function buildPlatformWaitlistEmailEn(email: string, source?: string): Constitut
     textContent: live
       ? `${live.nameEn ?? live.name} is already open. Open: ${live.page}`
       : mod
-        ? `You are on the early-access list for ${mod.name}. ${planPhrase(mod.plan, mod.planUtc, false, new Date(), mod.openedAt, mod.page)} Launch page: ${mod.page}`
+        ? `You are on the early-access list for ${mod.name}. ${planPhrase(mod.plan, mod.planUtc, false, new Date(), модульОткрыт(mod.prefix), mod.page)} Launch page: ${mod.page}`
         : "You are on the AEVION early-access list. We ship one module at a time.",
     tags: ["waitlist-confirm", "platform", "en"],
   };
@@ -494,7 +550,7 @@ export function buildPlatformWaitlistEmail(email: string, source?: string): Cons
         ${live
           ? live.nextStep
           : mod
-            ? `${planPhrase(mod.plan, mod.planUtc, true, new Date(), mod.openedAt, mod.page)}`
+            ? `${planPhrase(mod.plan, mod.planUtc, true, new Date(), модульОткрыт(mod.prefix), mod.page)}`
             : "Платформа выпускает модули по одному. Как только выйдет следующий, вы получите письмо в день запуска — с условиями раннего доступа, пока цена стартовая."}
       </p>
       <p style="color:#9aa3c0;margin:0 0 24px">
@@ -522,7 +578,7 @@ export function buildPlatformWaitlistEmail(email: string, source?: string): Cons
     textContent: live
       ? `Адрес записан — «${live.name}» уже открыт. ${live.nextStep} Открыть: ${live.page}`
       : mod
-        ? `Адрес записан — вы в списке раннего доступа к ${mod.name}. ${planPhrase(mod.plan, mod.planUtc, true, new Date(), mod.openedAt, mod.page)} Страница: ${mod.page}`
+        ? `Адрес записан — вы в списке раннего доступа к ${mod.name}. ${planPhrase(mod.plan, mod.planUtc, true, new Date(), модульОткрыт(mod.prefix), mod.page)} Страница: ${mod.page}`
         : `Адрес записан — вы в списке раннего доступа AEVION. Напишем в день запуска следующего модуля. Что уже работает: aevion.app/go`,
     tags: live ? ["platform", "live-entry-confirm"] : ["platform", "waitlist-confirm"],
   };

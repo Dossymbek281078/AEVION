@@ -152,7 +152,7 @@ export type SmartAllTime = {
  */
 export async function aggregateSmartRunsForUser(
   userId: string,
-): Promise<{ runs: number; costUsd: number; unpricedRuns: number } | null> {
+): Promise<{ runs: number; costUsd: number; unpricedRuns: number; unpricedByModule: Record<string, number> } | null> {
   if (!(await ensureTable())) return null;
   try {
     const r = await getPool().query(
@@ -165,6 +165,22 @@ export async function aggregateSmartRunsForUser(
       [userId],
     );
     const row = r.rows[0] || {};
+    // Второй запрос намеренно отдельный: он группирует и стоит дороже, а первый
+    // обязан отвечать даже если этот не выполнится.
+    const поМодулям: Record<string, number> = {};
+    try {
+      const g = await getPool().query(
+        `SELECT "module", COUNT(*) AS n
+           FROM "smart_run_log"
+          WHERE "userId" = $1 AND "module" LIKE '%БЕЗ-ЦЕНЫ'
+          GROUP BY "module"
+          ORDER BY n DESC`,
+        [userId],
+      );
+      for (const строка of g.rows || []) поМодулям[String(строка.module)] = Number(строка.n || 0);
+    } catch (e: any) {
+      console.warn(`[smartRunLog] разбивка не прочитана: ${e?.message || e}`);
+    }
     return {
       runs: Number(row.runs || 0),
       costUsd: Number(row.cost || 0),
@@ -172,6 +188,15 @@ export async function aggregateSmartRunsForUser(
       // сумма читается как полная, а она неполна: у восьми поверхностей
       // поставщика нет в нашей таблице цен.
       unpricedRuns: Number(row.unpriced || 0),
+      /*
+       * РАЗБИВКА, а не одно число (29.09.2026).
+       *
+       * «У 50 прогонов из 73 цены нет» — верно и бесполезно: чинить нечего, пока
+       * не видно, КАКИЕ поверхности её теряют. Одно число одинаково выглядит и
+       * когда не хватает одного тарифа, и когда восемь ручек считают не в токенах.
+       * Поэтому рядом идёт счёт по модулям — он называет виноватого.
+       */
+      unpricedByModule: поМодулям,
     };
   } catch (e: any) {
     console.warn(`[smartRunLog] расход пользователя не прочитан: ${e?.message || e}`);

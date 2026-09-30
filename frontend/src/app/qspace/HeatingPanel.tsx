@@ -8,12 +8,14 @@
  * нужды. Расчёт живёт в heating.ts и здесь только показывается.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Room } from "./rooms";
-import { heatingPlan, stepHint } from "./heating";
+import { heatingPlan, stepHint, type HeatingResult } from "./heating";
 
 interface Props {
   rooms: Room[];
+  /** Отдать посчитанное наверх — для выгрузки в файл (см. VentilationPanel). */
+  onResult?: (r: HeatingResult) => void;
   /**
    * Площадь под встроенной мебелью по номеру комнаты, м².
    *
@@ -28,7 +30,7 @@ interface Props {
 
 const STEPS = [0.1, 0.15, 0.2, 0.25] as const;
 
-export default function HeatingPanel({ rooms, blockedAreaByRoom }: Props) {
+export default function HeatingPanel({ rooms, blockedAreaByRoom, onResult }: Props) {
   const [step, setStep] = useState<number>(0.15);
   /** Сколько площади уже вычтено под встроенной мебелью, м². */
   const убрано = Object.values(blockedAreaByRoom ?? {}).reduce((s, v) => s + v, 0);
@@ -36,6 +38,8 @@ export default function HeatingPanel({ rooms, blockedAreaByRoom }: Props) {
     () => heatingPlan(rooms, step, blockedAreaByRoom),
     [rooms, step, blockedAreaByRoom],
   );
+  // ВЫШЕ раннего возврата: ниже него это был бы хук под условием.
+  useEffect(() => { onResult?.(plan); }, [plan, onResult]);
 
   if (rooms.length === 0) {
     return (

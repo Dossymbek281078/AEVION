@@ -30,6 +30,12 @@ export const SUPPORTED_LOCALES: { code: CcLocale; label: string; flag: string }[
 
 const DICTIONARY: Record<CcLocale, Record<string, string>> = {
   ru: {
+    // 30.09.2026: две подписи ушли из кода в словарь — сторож attrI18n считал их
+    // русским текстом на переводимой странице, и он прав: на английском экране
+    // они оставались русскими. Дата запуска здесь НЕ пишется — её подставляет
+    // page.tsx из CHESS_LAUNCH_UTC и убирает, когда день прошёл.
+    "wl.launch.title": "Полный запуск CyberChess",
+    "buy.card.title": "Оплата картой · открывает «Глубокий анализ» (Stockfish NNUE)",
     // Категории контроля времени (первый экран выбора игры). Были хардкодом в
     // page.tsx — теперь через словарь, чтобы следовать выбранному языку.
     "tc.bullet": "Пуля", "tc.blitz": "Блиц", "tc.rapid": "Рапид", "tc.custom": "Свой",
@@ -218,6 +224,8 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "flash.show_theory":           "Покажи теорию 📚",
   },
   en: {
+    "wl.launch.title": "CyberChess full launch",
+    "buy.card.title": "Card payment · unlocks Deep analysis (Stockfish NNUE)",
     "tc.bullet": "Bullet", "tc.blitz": "Blitz", "tc.rapid": "Rapid", "tc.custom": "Custom",
     "spectator.hub.title":         "Live broadcasts",
     "spectator.hub.live":          "Live",
@@ -394,6 +402,8 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "flash.show_theory":           "Show theory 📚",
   },
   kk: {
+    "wl.launch.title": "CyberChess толық іске қосылуы",
+    "buy.card.title": "Картамен төлеу · «Терең талдауды» ашады (Stockfish NNUE)",
     "spectator.hub.title":         "Тікелей трансляциялар",
     "spectator.hub.live":          "Эфирде",
     "spectator.hub.empty":         "Қазір ешкім тарату жоқ",

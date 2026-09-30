@@ -9,21 +9,34 @@
  * посчитана, а не показывает правдоподобные нули.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Room } from "./rooms";
-import { KIND_LABEL, humidityAdvice, ventilationPlan, type RoomKind } from "./ventilation";
+import { KIND_LABEL, humidityAdvice, ventilationPlan, type RoomKind, type VentResult } from "./ventilation";
 
 interface Props {
   rooms: Room[];
+  /**
+   * Отдать посчитанное наверх — для выгрузки в файл.
+   *
+   * 30.09.2026: расчёт жил ТОЛЬКО в панели, и спецификация уезжала
+   * подрядчику без вентиляции, хотя человек её на экране видел. Второй
+   * раз считать нельзя: две копии расчёта разойдутся молча.
+   */
+  onResult?: (r: VentResult) => void;
 }
 
 const KINDS: RoomKind[] = ["living", "kitchen", "bath", "toilet", "corridor"];
 
-export default function VentilationPanel({ rooms }: Props) {
+export default function VentilationPanel({ rooms, onResult }: Props) {
   const [kinds, setKinds] = useState<Record<number, RoomKind>>({});
   const [windowless, setWindowless] = useState<number[]>([]);
 
   const plan = useMemo(() => ventilationPlan(rooms, kinds), [rooms, kinds]);
+  // Результат отдаётся наверх ОДНИМ источником: считает панель, файл
+  // берёт готовое. Зависимость — сам результат из useMemo, поэтому
+  // эффект срабатывает при изменении расчёта, а не на каждый рендер.
+  useEffect(() => { onResult?.(plan); }, [plan, onResult]);
+
   const humidity = useMemo(
     () => humidityAdvice(plan.rooms, windowless),
     [plan, windowless],

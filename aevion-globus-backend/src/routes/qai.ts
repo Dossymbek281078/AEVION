@@ -360,7 +360,15 @@ qaiRouter.post("/chat/stream", qaiAiLimit, async (req: Request, res: Response) =
   session.messages.push(userMsg);
 
   let closed = false;
-  req.on("close", () => { closed = true; });
+  // 🔴 30.09.2026: слушаем закрытие ОТВЕТА, а не запроса.
+  // `close` у запроса срабатывает и при обычном, полном его прочтении.
+  // Держалось это на случайности: между разбором тела и навешиванием
+  // слушателя здесь есть await, и событие успевало пройти раньше — то
+  // есть слушатель просто не срабатывал. Уберите этот await, и маршрут
+  // молча начнёт отдавать пустой поток: код 200, корректный конец, ноль
+  // текста. Ровно так сломался тренер (см. routes/coach.ts). Разбор и
+  // замеры — коммит 33778ce35.
+  res.on("close", () => { closed = true; });
 
   res.write(`data: ${JSON.stringify({ type: "start", sessionId: session.id })}\n\n`);
 

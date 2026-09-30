@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import QSpaceClient from "./_client";
 import { PageTracking } from "@/components/PageTracking";
-import { WaitlistCapture } from "@/components/WaitlistCapture";
 
 const TITLE = "QSpace — 3D-модельер помещений из 2D-плана";
 // Описание перечисляет ВСЕ три формата входа. Прежде здесь стоял только DXF —
@@ -45,23 +44,6 @@ export default function Page() {
     <>
       <PageTracking page="qspace" />
       <QSpaceClient />
-      <section
-        aria-label="Расчёт отделки по вашему плану"
-        style={{ maxWidth: 760, margin: "32px auto 48px", padding: "0 16px" }}
-      >
-        <WaitlistCapture
-          source="qspace"
-          tone="light"
-          title="Хотите расчёт отделки по вашему плану?"
-          // 21.09: письма QSpace не рассылает — модуль не в списке запуска, цены нет
-          // (сторож everyWaitlistFormReachesTheMailing). Обещать письмо без механизма нельзя:
-          // говорим ровно то, что происходит — адрес записан как спрос на платный расчёт.
-          description="Оставьте почту — так мы считаем спрос на платный расчёт по чертежу и откроем его первым тем, кто спросил."
-          promise="Адрес попадёт только в счёт спроса. Рассылок нет."
-          buttonLabel="Заявить спрос"
-          doneText="Записали. Когда платный расчёт откроется, он будет первым доступен по этому адресу."
-        />
-      </section>
     </>
   );
 }

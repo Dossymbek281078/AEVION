@@ -9,9 +9,30 @@ import { join } from "node:path";
  * форму листа ожидания с источником «qspace» (по нему заявки видны в выгрузке).
  */
 describe("/qspace: у страницы есть путь к деньгам или к заявке", () => {
-  const src = readFileSync(join(__dirname, "..", "page.tsx"), "utf8");
+  // Сторож смотрит на ВСЕ файлы маршрута, а не только на page.tsx. 29.09.2026
+  // форму перенесли из page.tsx в _client.tsx, чтобы она стояла сразу за
+  // результатом, а не на 14 903 px, — и сторож покраснел на правке, которая
+  // путь к деньгам не убрала, а приблизила. Вопрос у сторожа один: может ли
+  // человек на этой странице оставить заявку. Где именно написан JSX — не его
+  // дело; исчезновение формы он поймает по-прежнему.
+  const файлы = ["page.tsx", "_client.tsx"];
+  const исходники = файлы.map((имя) => readFileSync(join(__dirname, "..", имя), "utf8"));
+  const где = (образец: RegExp) => файлы.filter((_, i) => образец.test(исходники[i]));
+
   it("рендерит WaitlistCapture с источником qspace", () => {
-    expect(src).toMatch(/<WaitlistCapture[\s\S]*?source="qspace"/);
-    expect(src).toMatch(/buttonLabel="[^"]+"/);
+    expect(где(/<WaitlistCapture[\s\S]*?source="qspace"/), "формы заявки нет ни в одном файле маршрута").not.toHaveLength(0);
+    expect(где(/buttonLabel="[^"]+"/), "у формы нет подписи кнопки").not.toHaveLength(0);
+  });
+
+  it("форма ровно одна: две копии разошлись бы по тексту обещания", () => {
+    const всего = исходники.reduce((n, s) => n + (s.match(/<WaitlistCapture/g) ?? []).length, 0);
+    expect(всего, "копий формы заявки на маршруте").toBe(1);
+  });
+
+  it("контроль прибора: файлы прочитаны, а не пусты", () => {
+    for (const [i, s] of исходники.entries()) {
+      expect(s.length, `${файлы[i]} прочитан пустым`).toBeGreaterThan(200);
+    }
+    expect(где(/<WaitlistCapture[\s\S]*?source="выдуманный-источник"/), "прибор находит то, чего нет").toHaveLength(0);
   });
 });

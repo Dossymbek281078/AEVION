@@ -7,6 +7,7 @@
 // Демо-план загружается сразу: человек видит результат ДО того, как ему
 // понадобился собственный чертёж (prompt-first, feedback_devhub_prompt_first_ux).
 
+import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -27,6 +28,9 @@ import {
 import { apiUrl } from "@/lib/apiBase";
 import { parseDxf } from "./dxf";
 import { estimateCsv, estimatePlan } from "./estimate";
+import type { HeatingResult } from "./heating";
+import type { VentResult } from "./ventilation";
+import type { CoolingResult } from "./cooling";
 import { planFromPdfSegments, readPdfSegments, type PdfSegments } from "./pdf";
 import { масштабПоРазмерам, надёжностьМасштаба, областьПлана, предупреждениеОбОсях, словаИзТекста } from "./dimensionScale";
 import { листПлана, текстPdf, текстСтраниц } from "./pdfText";
@@ -1784,8 +1788,27 @@ export default function QSpaceClient() {
     [perRoom, roomFloor, roomWall, floorMatId, wallMatId],
   );
 
+  // ИНЖЕНЕРИЯ ДЛЯ ФАЙЛА. Панели считают её у себя (там же живут шаг укладки,
+  // солнце и назначения комнат) и отдают готовое сюда. Второй раз не считаем:
+  // две копии расчёта расходятся молча, и первым это увидит подрядчик, а не мы.
+  const [тепло, setТепло] = useState<HeatingResult | null>(null);
+  const [воздух, setВоздух] = useState<VentResult | null>(null);
+  const [холод, setХолод] = useState<CoolingResult | null>(null);
+
   const downloadEstimateCsv = useCallback(() => {
-    const csv = estimateCsv(est, plan.name, perRoom.lines, shopping);
+    // Предметы сцены сводим по имени: подрядчику нужен счёт штук, а не
+    // список одинаковых строк.
+    const счёт = new Map<string, number>();
+    for (const p of placed) {
+      const it = itemById(p.catalogId);
+      if (it) счёт.set(it.name, (счёт.get(it.name) ?? 0) + 1);
+    }
+    const csv = estimateCsv(est, plan.name, perRoom.lines, shopping, {
+      heating: тепло ?? undefined,
+      vent: воздух ?? undefined,
+      cooling: холод ?? undefined,
+      items: [...счёт].map(([name, count]) => ({ name, count })),
+    });
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1794,7 +1817,7 @@ export default function QSpaceClient() {
     a.click();
     URL.revokeObjectURL(url);
     скажи("Спецификация сохранена. Колонка цен пустая — впишите свои, сумма посчитается сама.");
-  }, [est, plan.name, perRoom.lines, shopping, скажи]);
+  }, [est, plan.name, perRoom.lines, shopping, скажи, тепло, воздух, холод, placed]);
 
 
   const S = styles;
@@ -1804,6 +1827,7 @@ export default function QSpaceClient() {
   // Пересчитывается при каждом изменении сцены. Читается ПОЛОЖЕНИЕ из three,
   // а не из состояния: мебель двигают мышью, и состояние о перетаскивании не
   // знает — иначе замечания отставали бы на один шаг и вводили в заблуждение.
+
   const [issues, setIssues] = useState<Issue[]>([]);
   const recheck = useCallback(() => {
     const t = three.current;
@@ -1875,7 +1899,13 @@ export default function QSpaceClient() {
       <style>{`
         @media (max-width: 860px) {
           .qspace-canvas-wrap { order: -1; width: 100%; }
-          .qspace-canvas-wrap > div { height: 42vh !important; }
+          /* ТОЛЬКО по холсту, а не по любому прямому div.
+             Замер 29.09.2026, телефон 390x844: правило писалось для рамки
+             3D-сцены, но под «> div» попал и блок кнопки «Загрузить свой
+             план» — 88 px содержимого растянулись до 354, и модель уехала
+             вниз на четверть экрана пустоты. Класс называет ровно ту рамку,
+             ради которой правило написано. */
+          .qspace-canvas-wrap > .qspace-canvas-mount { height: 42vh !important; }
 
           /* Замерено 13.09.2026 на 390x844: до первого кадра 3D надо было
              пролистать 1223 px — 1.4 экрана. Из них заголовок 602, загрузка
@@ -2044,17 +2074,6 @@ export default function QSpaceClient() {
       {saveNote.text && (
         <p style={saveNote.failed ? S.saveFail : S.saveNote}
            role={saveNote.failed ? "alert" : "status"}>{saveNote.text}</p>
-      )}
-
-      {/* role="status" обязателен: предупреждения появляются В ОТВЕТ на
-          действие (мимо стены, файл не разобрался, масштаб не задан), а
-          человек в этот момент смотрит на то место, куда нажал. Без роли
-          экранный диктор промолчит, и отказ останется невидимым для того,
-          кто не видит экрана. */}
-      {warnings.length > 0 && (
-        <ul style={S.warnings} role="status">
-          {warnings.map((w, i) => <li key={i}>{w}</li>)}
-        </ul>
       )}
 
       {pdfPending && (pdfPending.pages ?? 1) > 1 && pdfBytes && (
@@ -2245,13 +2264,13 @@ export default function QSpaceClient() {
               видел вовсе. Флажок отвечает за то, что РИСУЕТСЯ в трёхмерном
               виде; считать по квартире можно и не глядя на трубы. */}
           <h2 style={S.h2}>Тёплый пол</h2>
-          <HeatingPanel rooms={roomsInfo.rooms} blockedAreaByRoom={blockedArea} />
+          <HeatingPanel rooms={roomsInfo.rooms} blockedAreaByRoom={blockedArea} onResult={setТепло} />
 
           <h2 style={S.h2}>Вентиляция и влажность</h2>
-          <VentilationPanel rooms={roomsInfo.rooms} />
+          <VentilationPanel rooms={roomsInfo.rooms} onResult={setВоздух} />
 
           <h2 style={S.h2}>Кондиционирование: какой сплит нужен</h2>
-          <CoolingPanel rooms={roomsInfo.rooms} />
+          <CoolingPanel rooms={roomsInfo.rooms} onResult={setХолод} />
 
           <h2 style={S.h2}>Готовые дизайны</h2>
           <p style={S.hint}>
@@ -2724,6 +2743,7 @@ export default function QSpaceClient() {
           {webglOk ? (
             <div
               ref={mountRef}
+              className="qspace-canvas-mount"
               style={{ ...S.canvas, position: "relative" }}
               aria-label="3D-модель помещения. Вращение — мышью или одним пальцем, приближение — колесом или двумя пальцами. Вертикальный свайп листает страницу."
               role="application"
@@ -2743,6 +2763,101 @@ export default function QSpaceClient() {
             </p>
           )}
 
+          {/* РЕЗУЛЬТАТ — СРАЗУ ПОД МОДЕЛЬЮ.
+              Замер 29.09.2026, телефон 390x844, загружен собственный план
+              «LA VIE»: модель на 1742 px, а площади на 12 388 и спецификация
+              на 13 530 — между ними пять инженерных таблиц и каталог мебели
+              на сто с лишним кнопок. Человек загружал план ради сметы и
+              пятнадцать экранов прокрутки видел инструменты настройки,
+              которых не просил. Ничего не убрано: настройки остались на своих
+              местах, а ИТОГ поднят туда, где на него смотрят. */}
+          <section style={S.итог} aria-label="Итог по загруженному плану">
+            {roomsInfo.rooms.length === 0 ? (
+              <p style={S.hint}>
+                {roomsInfo.warnings[0] ??
+                  "Помещения ещё не выделены — загрузите план, и здесь появятся площади и смета."}
+              </p>
+            ) : (
+              <>
+                <div style={S.итогЧисла}>
+                  <div style={S.итогЯчейка}>
+                    <strong style={S.итогЦифра}>{roomsInfo.rooms.length}</strong>
+                    <span style={S.итогПодпись}>помещений</span>
+                  </div>
+                  <div style={S.итогЯчейка}>
+                    <strong style={S.итогЦифра}>{perRoom.totals.area.toFixed(1)}</strong>
+                    <span style={S.итогПодпись}>м² пола</span>
+                  </div>
+                  <div style={S.итогЯчейка}>
+                    <strong style={S.итогЦифра}>{est.flooringArea.toFixed(1)}</strong>
+                    <span style={S.итогПодпись}>м² покрытия, с подрезкой</span>
+                  </div>
+                  <div style={S.итогЯчейка}>
+                    <strong style={S.итогЦифра}>{est.wallArea.toFixed(1)}</strong>
+                    <span style={S.итогПодпись}>м² стен под отделку</span>
+                  </div>
+                </div>
+                <div style={S.итогКнопки}>
+                  {/* Те же обработчики, что у кнопок в панели: второй способ
+                      делать то же самое разошёлся бы с первым молча. */}
+                  <button type="button" style={S.главноеДействие} onClick={downloadEstimateCsv}>
+                    Скачать спецификацию (CSV)
+                  </button>
+                  <button type="button" style={S.btn} onClick={downloadPlanSvg}>
+                    Чертёж для печати (SVG)
+                  </button>
+                </div>
+                <p style={S.подсказкаДействия}>
+                  Черновик по вашему плану: это количества, а не цены — цену ставит
+                  подрядчик по своим расценкам. Разбор по комнатам, отделка, мебель
+                  и инженерия — ниже на странице.
+                </p>
+              </>
+            )}
+          </section>
+
+          {/* Журнал разбора чертежа — ПОД результатом, а не над моделью.
+              Замер 29.09.2026, телефон 390x844, план «LA VIE»: десять пунктов
+              занимали 767 px и стояли ПЕРЕД моделью, то есть человек,
+              загрузивший план ради сметы, первым делом читал, с какого слоя
+              взяты стены. Ни один пункт не убран и не свёрнут: текст важен,
+              в нём есть и предположения («несущие стены — предположение по
+              чертежу»), которые нельзя прятать. Изменён только порядок:
+              сперва модель и цифры, сразу за ними — как они получены.
+              role="status" сохранён: пункты появляются В ОТВЕТ на действие, и
+              без роли экранный диктор промолчал бы. */}
+          {warnings.length > 0 && (
+            <ul style={S.warnings} role="status">
+              {warnings.map((w, i) => <li key={i}>{w}</li>)}
+            </ul>
+          )}
+
+          {/* ПРЕДЛОЖЕНИЕ РАСЧЁТА — СРАЗУ ЗА РЕЗУЛЬТАТОМ.
+              Замер 29.09.2026, телефон 390x844: единственный путь к деньгам на
+              этой странице лежал на 14 903 px, то есть ниже всей инженерии и
+              каталога мебели. Человек получал площади на 1083 px и уходил, ни
+              разу не увидев, что расчёт можно заказать.
+              Форма НЕ продублирована: это тот же самый блок, перенесённый из
+              page.tsx вместе со всеми словами. Вторая форма разошлась бы с
+              первой по тексту обещания, а обещание здесь проверяется сторожем
+              everyWaitlistFormReachesTheMailing. */}
+          <section
+            aria-label="Расчёт отделки по вашему плану"
+            style={{ maxWidth: 760, margin: "32px auto 48px", padding: "0 16px" }}
+          >
+            <WaitlistCapture
+              source="qspace"
+              tone="light"
+              title="Хотите расчёт отделки по вашему плану?"
+              // 21.09: письма QSpace не рассылает — модуль не в списке запуска, цены нет
+              // (сторож everyWaitlistFormReachesTheMailing). Обещать письмо без механизма нельзя:
+              // говорим ровно то, что происходит — адрес записан как спрос на платный расчёт.
+              description="Оставьте почту — так мы считаем спрос на платный расчёт по чертежу и откроем его первым тем, кто спросил."
+              promise="Адрес попадёт только в счёт спроса. Рассылок нет."
+              buttonLabel="Заявить спрос"
+              doneText="Записали. Когда платный расчёт откроется, он будет первым доступен по этому адресу."
+            />
+          </section>
 
         </div>
       </div>
@@ -2813,6 +2928,17 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "12px 20px", minHeight: 44, background: "#2f5e2a", color: "#fff",
     border: "none", borderRadius: 10, cursor: "pointer", fontSize: 16, fontWeight: 600,
   },
+  // Итог под моделью: числа крупно, потому что за ними и пришли.
+  итог: {
+    marginTop: 14, padding: "14px 16px", background: "#f4f1ea",
+    border: "1px solid #e2ddd2", borderRadius: 12,
+    display: "flex", flexDirection: "column" as const, gap: 10,
+  },
+  итогЧисла: { display: "flex", flexWrap: "wrap" as const, gap: "12px 22px" },
+  итогЯчейка: { display: "flex", flexDirection: "column" as const, gap: 2 },
+  итогЦифра: { fontSize: 24, lineHeight: 1.1, fontVariantNumeric: "tabular-nums" },
+  итогПодпись: { fontSize: 12.5, color: "#6a645a" },
+  итогКнопки: { display: "flex", flexWrap: "wrap" as const, gap: 8, alignItems: "center" },
   подсказкаДействия: {
     margin: 0, fontSize: 13, lineHeight: 1.45, color: "#5f5a53", maxWidth: 520,
   },

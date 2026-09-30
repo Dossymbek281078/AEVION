@@ -208,9 +208,25 @@ export function AgentDock() {
   // ── Launcher button (collapsed) ────────────────────────────────────
   if (!open) {
     return (
+      <>
+      {/* На телефоне кнопка остаётся ЗНАЧКОМ без подписи.
+          Замер 30.09.2026 на 390 px: «✦ AI Агент» — 113×46 в правом нижнем
+          углу (20 px от низа), то есть она накрывает правый край любой нижней
+          строки, включая кнопки покупки в карточках приложений. Значок 46×46
+          перекрывает втрое меньше, а доступное имя (aria-label) остаётся тем
+          же, поэтому для скринридера ничего не меняется.
+          Прячем подпись медиазапросом, а не замером ширины в JS: кнопка живёт
+          на всех страницах, и перерисовка после гидрации была бы заметна. */}
+      <style>{`
+        @media (max-width: 700px) {
+          .aev-agent-label { display: none; }
+          .aev-agent-launcher { padding: 12px !important; gap: 0 !important; }
+        }
+      `}</style>
       <button
         onClick={() => setOpen(true)}
         ref={launcherRef}
+        className="aev-agent-launcher"
         aria-label="Открыть ИИ-помощника AEVION"
         style={{
           position: "fixed",
@@ -236,8 +252,10 @@ export function AgentDock() {
           gap: 8,
         }}
       >
-        <span style={{ fontSize: 16 }}>✦</span> AI Agent
+        <span style={{ fontSize: 16 }}>✦</span>
+        <span className="aev-agent-label">AI Agent</span>
       </button>
+      </>
     );
   }
 

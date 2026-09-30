@@ -381,6 +381,36 @@ const LIVE_ENTRIES: Array<{ prefix: string; name: string; page: string; nextStep
  * Политика прежняя: нет записи с датой — модуль считается живым (дата не
  * назначена ≠ запрещён); есть — решает isLiveNow по календарю Алматы.
  */
+/**
+ * Модули, у которых ещё НЕТ дня фактического открытия (`openedAt`).
+ *
+ * Экспортируется ради проверок, и это не formality: фикстура, выбранная ПО
+ * ИМЕНИ, протухает вместе с календарём. Замер 30.09.2026: тест письма брал
+ * `cyberchess` как пример «ещё не открытого» модуля и краснел в день его
+ * запуска — вчера он был верен, сегодня нет, и ни одной строки кода для этого
+ * менять не понадобилось.
+ *
+ * Признак не зависит от даты: «нет отметки открытия» — это утверждение о том,
+ * что мы ещё не подтвердили открытие, а не о том, какое сегодня число.
+ */
+export function модулиБезДняОткрытия(): Array<{ prefix: string; name: string; plan: string; page: string }> {
+  /*
+   * Открытость живёт в ДВУХ местах, и учесть надо оба, иначе признак соврёт.
+   * Первое — отметка `openedAt` в этой таблице. Второе — `LIVE_ENTRIES`: модуль,
+   * попавший туда и доживший до своей `liveFrom`, уходит по другой ветке письма
+   * («уже открыт»), сколько бы отметок ни стояло здесь. Именно так и вышло с
+   * cyberchess: `openedAt` у него нет, а письмо он шлёт как открытый.
+   */
+  return LAUNCH_MODULES.filter(
+    (m) => m.openedAt === undefined && !liveEntryFromSource(m.prefix),
+  ).map(({ prefix, name, plan, page }) => ({
+    prefix,
+    name,
+    plan,
+    page,
+  }));
+}
+
 export function isModuleLiveNow(slug: string, now: Date = new Date()): boolean {
   const s = slug.toLowerCase().replace(/^en-/, "");
   const entry = LIVE_ENTRIES.find((m) => s === m.prefix || s.startsWith(`${m.prefix}-`));

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isSmokeSlot, countLiveSlots } from "../src/lib/slotOrigin";
+import { isSmokeSlot, isDemoSlot, countLiveSlots } from "../src/lib/slotOrigin";
 import { просятПробы } from "../src/lib/probeRows";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -65,8 +65,11 @@ describe("рынок слотов не выдаёт наши прогоны за
 
   it("ручка фильтрует выдачу, а не только метит записи", () => {
     // Метка test: true стояла с 10.08 и не помогла — страница рисовала всё.
+    // Проверка обновлена 30.09 вместе с самим фильтром: он перестал прятать
+    // демо-бронь посетителя, и дословная строка изменилась. Держимся за ФАКТ
+    // фильтрации выдачи, а не за её написание.
     expect(
-      РУЧКА.includes("slots.filter((s) => !isSmokeSlot(s))"),
+      РУЧКА.includes("slots.filter((s) => !скрыть(s))"),
       "ручка снова отдаёт пробы посетителю — метки недостаточно",
     ).toBe(true);
   });
@@ -76,5 +79,35 @@ describe("рынок слотов не выдаёт наши прогоны за
     expect(РУЧКА).toContain("просятПробы(_req.query)");
     expect(просятПробы({ includeProbes: "1" })).toBe(true);
     expect(просятПробы({})).toBe(false);
+  });
+});
+
+describe("бронь посетителя не исчезает с доски", () => {
+  /*
+   * Кнопка «Забронировать демо-слот» шлёт holder «AEVION demo» — по признаку
+   * это проба. Если прятать её наравне с нашими прогонами, нажатие выглядит
+   * успешным и не даёт видимого следа: классический молчаливый отказ. Тем
+   * более что пустую доску мы сами подписали приглашением нажать эту кнопку.
+   */
+  const демо = { routeId: "astana-vp-3_4", holder: "AEVION demo" };
+  const прогон = { routeId: "smoke-cap-route", holder: "h0" };
+
+  it("демо-бронь человека узнаётся отдельно от нашего прогона", () => {
+    expect(isDemoSlot(демо)).toBe(true);
+    expect(isDemoSlot(прогон)).toBe(false);
+  });
+
+  it("обе остаются пробами по общему признаку — метка test не пропадает", () => {
+    // Показывать демо-бронь можно, выдавать её за рынок — нет.
+    expect(isSmokeSlot(демо)).toBe(true);
+    expect(isSmokeSlot(прогон)).toBe(true);
+    expect(countLiveSlots([демо, прогон])).toBe(0);
+  });
+
+  it("ручка прячет ТОЛЬКО наш шум", () => {
+    expect(
+      РУЧКА.includes("isSmokeSlot(s) && !isDemoSlot(s)"),
+      "выдача снова прячет бронь посетителя — нажатие не даст видимого следа",
+    ).toBe(true);
   });
 });

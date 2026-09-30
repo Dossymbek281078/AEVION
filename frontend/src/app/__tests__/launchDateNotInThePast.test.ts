@@ -37,14 +37,61 @@ function launchPages(): string[] {
 }
 
 /** Дата из daysUntilLaunch(Date.UTC(год, месяц, день)) — позиционно, без регулярки. */
-function promisedDate(src: string): { ms: number; where: string } | null {
-  const marker = "daysUntilLaunch(Date.UTC(";
-  const i = src.indexOf(marker);
-  if (i < 0) return null;
-  const inside = src.slice(i + marker.length, i + marker.length + 24).split(")")[0];
-  const nums = inside.split(",").map((s) => Number(s.trim()));
+/**
+ * 🔴 Две формы записи даты, а не одна — иначе сторож слепнет от ПОЧИНКИ.
+ *
+ * Прежняя версия знала только литерал `daysUntilLaunch(Date.UTC(…))`. Но
+ * правильное направление правки обратное: дату надо брать из общей константы,
+ * а не держать литералом. Как только страница это делает — `daysUntilLaunch(
+ * DEVHUB_LAUNCH_AT)` или `daysUntilLaunch(PLATFORM_LAUNCH_UTC)` — разбор
+ * возвращал null, тест выходил через `if (!d) return;` и страница тихо
+ * уходила из-под проверки.
+ *
+ * Замер 30.09.2026: под охватом оставалась ОДНА страница из четырёх (bureau);
+ * devhub и multichat вынесли дату в свои константы ещё 21.09 и с тех пор не
+ * проверялись вовсе. Сторож при этом был зелёный.
+ *
+ * Поэтому имя разрешаем: сперва в самом файле (`const X = Date.UTC(…)`),
+ * потом в общем модуле дат. Ниже стоит контроль, что разрешение вообще
+ * работает, — без него «дат не найдено» снова стало бы тихим зелёным.
+ */
+function разобратьUtc(текст: string): { ms: number; where: string } | null {
+  const nums = текст.split(",").map((s) => Number(s.trim()));
   if (nums.length < 3 || nums.some((n) => !Number.isFinite(n))) return null;
-  return { ms: Date.UTC(nums[0], nums[1], nums[2]), where: inside };
+  return { ms: Date.UTC(nums[0], nums[1], nums[2]), where: текст };
+}
+
+function promisedDate(src: string): { ms: number; where: string } | null {
+  const literal = "daysUntilLaunch(Date.UTC(";
+  const i = src.indexOf(literal);
+  if (i >= 0) {
+    return разобратьUtc(src.slice(i + literal.length, i + literal.length + 24).split(")")[0]);
+  }
+
+  const поИмени = src.match(/daysUntilLaunch\(\s*([A-Z_][A-Z0-9_]*)\s*\)/);
+  if (!поИмени) return null;
+  const имя = поИмени[1];
+
+  // Ищем `ИМЯ = Date.UTC(…)` по тексту, а не регуляркой из шаблонной строки:
+  // в шаблоне `\s` — это просто «s», и первая версия этой проверки искала
+  // «consts+ИМЯ». Пробелы приводим к одному, чтобы не зависеть от вёрстки.
+  const найтиУтебя = (текст: string): { ms: number; where: string } | null => {
+    const плоско = текст.replace(/\s+/g, " ");
+    const k = плоско.indexOf(имя + " = Date.UTC(");
+    if (k < 0) return null;
+    const от = k + (имя + " = Date.UTC(").length;
+    return разобратьUtc(плоско.slice(от, плоско.indexOf(")", от)));
+  };
+
+  const свой = найтиУтебя(src);
+  if (свой) return свой;
+
+  for (const путь of [join(APP, "launchDate.ts"), join(APP, "cyberchess", "launchDate.ts")]) {
+    if (!existsSync(путь)) continue;
+    const найдено = найтиУтебя(readFileSync(путь, "utf8"));
+    if (найдено) return найдено;
+  }
+  return null;
 }
 
 /**
@@ -96,6 +143,23 @@ describe("посадочные не обещают прошедших дат", (
       ).toBe(true);
     });
   }
+
+  test("КОНТРОЛЬ охвата: дата разобрана НЕ У ОДНОЙ страницы", () => {
+    /*
+     * Без этого «нарушений нет» верно и при сломанном разборе. Именно так
+     * сторож и жил после 21.09: devhub и multichat вынесли дату в свои
+     * константы, разбор их перестал видеть, тест остался зелёным.
+     *
+     * Порог не «больше нуля», а «больше одной»: одна разобранная страница —
+     * ровно то состояние, в котором он был слеп к трём остальным.
+     */
+    const сДатой = pages.filter((p) => promisedDate(readFileSync(p, "utf8")));
+    expect(
+      сДатой.length,
+      "дату удалось разобрать меньше чем у двух страниц запуска — разбор отстал от кода: " +
+        "дату стали писать иначе, и проверка тихо перестала кого-либо проверять",
+    ).toBeGreaterThan(1);
+  });
 
   test("КОНТРОЛЬ прибора: прошедшая дата БЕЗ развилки остаётся находкой", () => {
     const безРазвилки = "const left = daysUntilLaunch(Date.UTC(2020, 0, 1)); return <p>Открываем скоро</p>;";

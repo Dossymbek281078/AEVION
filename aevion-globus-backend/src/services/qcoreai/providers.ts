@@ -900,6 +900,39 @@ async function* streamStub(messages: ChatMessage[]): AsyncGenerator<StreamEvent>
    ═══════════════════════════════════════════════════════════════════════ */
 
 /** Low-level SSE line reader: yields {event?, data} blocks separated by \n\n. */
+/**
+ * Где кончается блок SSE. Три вида пустой строки, а не один.
+ *
+ * 🔴 ПОВОД 30.09.2026. Искалось только "\n\n". У потока, обрамлённого по
+ * CRLF, такой последовательности НЕТ: между переводами строк стоит возврат
+ * каретки. Границы не находились ни разу, весь ответ доезжал одним куском в
+ * хвостовой ветке, все строки data склеивались через перевод строки — и
+ * JSON.parse отвергал склейку. Разбор молча отдавал НОЛЬ событий.
+ *
+ * Снаружи это выглядело исправной работой: поток закрывался штатно, ошибок
+ * не было. Живой замер на проде: ручка тренера отдавала 31 байт, только
+ * message_stop, — при том что тот же поставщик по обычному пути отвечал
+ * полным разбором. Воспроизведено на этом же коде: с LF-обрамлением разбор
+ * даёт «Привет, мир», с CRLF — пустую строку.
+ *
+ * Спецификация SSE считает разделителем строк CR, LF и CRLF — принимать надо
+ * все три. Берётся САМАЯ РАННЯЯ граница: если искать их по очереди, поздняя
+ * «съест» несколько блоков разом.
+ */
+export function границаБлока(buffer: string): { начало: number; длина: number } | null {
+  const варианты: Array<{ начало: number; длина: number }> = [];
+  for (const р of ["\r\n\r\n", "\n\n", "\r\r"]) {
+    const i = buffer.indexOf(р);
+    if (i >= 0) варианты.push({ начало: i, длина: р.length });
+  }
+  if (!варианты.length) return null;
+  // Самая ранняя; при равном начале — самый длинный разделитель, иначе от
+  // CRLF-границы останется висеть возврат каретки и следующий блок начнётся
+  // с мусора.
+  варианты.sort((a, b) => (a.начало - b.начало) || (b.длина - a.длина));
+  return варианты[0];
+}
+
 async function* readSSEBlocks(body: ReadableStream<Uint8Array>): AsyncGenerator<{ event?: string; data: string }> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -909,10 +942,11 @@ async function* readSSEBlocks(body: ReadableStream<Uint8Array>): AsyncGenerator<
       const { value, done } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
-      let idx: number;
-      while ((idx = buffer.indexOf("\n\n")) >= 0) {
-        const block = buffer.slice(0, idx);
-        buffer = buffer.slice(idx + 2);
+      for (;;) {
+        const граница = границаБлока(buffer);
+        if (!граница) break;
+        const block = buffer.slice(0, граница.начало);
+        buffer = buffer.slice(граница.начало + граница.длина);
         const parsed = parseSSEBlock(block);
         if (parsed.data) yield parsed;
       }

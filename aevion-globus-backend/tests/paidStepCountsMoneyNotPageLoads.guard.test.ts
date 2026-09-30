@@ -254,4 +254,27 @@ describe("хранилище событий", () => {
       "наше начало оплаты не отмечено — пятеро наших кликов снова прочитаются как пятеро людей",
     ).toBe(1);
   });
+  test("ОТВЕТ РУЧКИ несёт все разрезы, а не только посчитанные внутри", async () => {
+    // 🔴 Замер 30.09.2026 на проде: `byPost` и `byEntryPage` СЧИТАЛИСЬ, тесты были
+    // зелёными, а в JSON их не было — ответ перечисляет поля поимённо, и я дописал
+    // их в возврат функции, но не в сам ответ. Классика «написано, но не
+    // вызывается», и мой сторож её не поймал, потому что проверял `разрезВоронки`,
+    // а не ответ ручки. Здесь проверяется ИМЕННО ответ.
+    await request(приложение()).post("/api/pricing/events")
+      .set("User-Agent", "Mozilla/5.0 Chrome/131")
+      .send({ type: "page_view", path: "/qskyway?c=ig-post1", sid: "s-post-1", meta: { channel: "instagram", post: "post1" } });
+
+    const r = await request(приложение()).get("/api/pricing/events/funnel?days=14");
+    expect(r.status).toBe(200);
+    for (const поле of ["byChannel", "byApp", "byPost", "byEntryPage"]) {
+      expect(
+        Object.prototype.hasOwnProperty.call(r.body, поле),
+        `ответ не содержит ${поле} — разрез считается и выбрасывается`,
+      ).toBe(true);
+    }
+    // И подпись про визиты: единственные читатели ручки — мы, и разницу «сумма по
+    // каналам минус итог» нельзя читать как ошибку.
+    expect(r.body.byChannelVisitsMayExceedTotal).toBe(true);
+    expect(String(r.body.byChannelVisitsNote)).toMatch(/в пределах канала/i);
+  });
 });

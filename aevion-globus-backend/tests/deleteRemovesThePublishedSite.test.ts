@@ -36,11 +36,18 @@ function приложение() {
 const исходныйFetch = globalThis.fetch;
 let вызовы: Array<{ url: string; method: string }> = [];
 
-function подменитьFetch(ответ: { ok: boolean; status: number }) {
+function подменитьFetch(ответ: { ok: boolean; status: number; тело?: string }) {
   вызовы = [];
   globalThis.fetch = (async (u: any, o: any) => {
     вызовы.push({ url: String(u), method: String(o?.method ?? "GET") });
-    return { ok: ответ.ok, status: ответ.status, json: async () => ({}), text: async () => "" } as any;
+    return {
+      ok: ответ.ok,
+      status: ответ.status,
+      json: async () => ({}),
+      // Тело задаётся, потому что причина отказа живёт в нём, а не в коде:
+      // 400 бывает и «имя не то», и «нет права», и «держат сборки».
+      text: async () => ответ.тело ?? "",
+    } as any;
   }) as any;
 }
 
@@ -90,6 +97,40 @@ describe("удаление проекта снимает опубликован�
     expect(String(r.body.pagesRemoveError)).toContain("500");
     const второй = await request(приложение()).get("/api/devhub/projects/" + p.id);
     expect(второй.status).toBe(404);
+  });
+
+  test("сайт остался жить — его адрес НЕ теряется вместе с проектом", async () => {
+    /*
+     * Найдено ночной пробой на живом проде 30.09.2026, на себе.
+     *
+     * Проект удалился (GET отдал 404), а сайт продолжал отдавать 200 и 4231 знак:
+     * Cloudflare ответил 400. Прежний ответ говорил только «Cloudflare ответил
+     * 400» — ни причины, ни адреса. А дальше проект исчезает из базы, и
+     * единственная ниточка к живому публичному сайту обрывается: имя выводилось
+     * из записи, которой больше нет. Ровно так и накопился мусор, про который в
+     * коде сказано «уборку пришлось делать руками по списку».
+     */
+    const p = await создать("Осиротевший сайт");
+    подменитьFetch({ ok: false, status: 400, тело: '{"errors":[{"message":"project has active deployments"}]}' });
+    const r = await request(приложение()).delete("/api/devhub/projects/" + p.id);
+
+    expect(r.status).toBe(200);
+    expect(r.body.pagesRemoved).toBe(false);
+    // Адрес назван целиком, чтобы уборка была возможна без угадывания имени.
+    expect(String(r.body.orphanSiteUrl), "адрес осиротевшего сайта потерян").toContain(p.id.slice(0, 6));
+    expect(String(r.body.orphanSiteUrl)).toContain(".pages.dev");
+    // И причина названа по существу, а не одним кодом.
+    expect(String(r.body.pagesRemoveError), "причина отказа не названа").toContain("active deployments");
+  });
+
+  test("сайт снят — адреса осиротевшего нет: пустое поле не пугает зря", async () => {
+    // Контроль в обратную сторону. Без него поле могло бы приходить ВСЕГДА, и
+    // тогда «осиротевший сайт» перестал бы что-либо значить.
+    const p = await создать("Снятый сайт");
+    подменитьFetch({ ok: true, status: 200 });
+    const r = await request(приложение()).delete("/api/devhub/projects/" + p.id);
+    expect(r.body.pagesRemoved).toBe(true);
+    expect(r.body.orphanSiteUrl, "поле пришло там, где сайт снят").toBeUndefined();
   });
 
   test("без ключей Cloudflare поля нет вовсе — не выдаём незнание за уборку", async () => {

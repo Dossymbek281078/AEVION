@@ -2816,6 +2816,7 @@ devhubRouter.delete("/projects/:id", async (req, res) => {
    */
   let pagesRemoved: boolean | undefined;
   let pagesRemoveError: string | undefined;
+  let orphanSiteUrl: string | undefined;
   if (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) {
     const имяСайта = имяPagesПроекта(project);
     try {
@@ -2824,16 +2825,52 @@ devhubRouter.delete("/projects/:id", async (req, res) => {
         { method: "DELETE", headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` } },
       );
       pagesRemoved = r.ok || r.status === 404;
-      if (!pagesRemoved) pagesRemoveError = `Cloudflare ответил ${r.status}`;
+      if (!pagesRemoved) {
+        /*
+         * ПРИЧИНУ берём из тела, а не только из кода (30.09.2026).
+         *
+         * Прежнее сообщение «Cloudflare ответил 400» не говорит, что делать:
+         * 400 бывает и когда имя не то, и когда у токена нет права, и когда
+         * проект держат незавершённые сборки. Проверено ночной пробой — я
+         * получил ровно это сообщение и не смог назвать причину, хотя имя
+         * сайта совпадало.
+         */
+        let подробно = "";
+        try {
+          const тело = await r.text();
+          подробно = тело ? ` — ${тело.slice(0, 300)}` : "";
+        } catch {
+          подробно = " — тело ответа не прочиталось";
+        }
+        pagesRemoveError = `Cloudflare ответил ${r.status}${подробно}`;
+      }
     } catch (e) {
       pagesRemoved = false;
       pagesRemoveError = e instanceof Error ? e.message : String(e);
     }
     if (pagesRemoved === false) {
+      /*
+       * НЕ ТЕРЯТЬ АДРЕС ОСИРОТЕВШЕГО САЙТА (30.09.2026).
+       *
+       * Дальше проект удаляется из базы. Если сайт снять не удалось, он остаётся
+       * отвечать 200 публично, а единственная ниточка к нему — имя, выведенное из
+       * записи, которой уже нет. Ровно так и накопился тот мусор, про который
+       * сказано выше: «уборку пришлось делать руками по списку».
+       *
+       * Поэтому адрес называется трижды: в ответе (вызывающий видит сразу), в
+       * сборщике ошибок (чтобы пришёл человек) и в журнале. Проверено ночью на
+       * себе: проект отдал 404, сайт продолжал отдавать 200 и 4231 знак.
+       */
+      orphanSiteUrl = `https://${имяСайта}.pages.dev`;
       captureException(new Error(`devhub: pages project delete failed: ${pagesRemoveError}`), {
         route: "devhub/projects:delete",
         projectId: project.id,
+        orphanSiteUrl,
+        имяСайта,
       });
+      console.warn(
+        `[devhub/delete] сайт остался жить: ${orphanSiteUrl} — снять не удалось: ${pagesRemoveError}`,
+      );
     }
   }
 
@@ -2848,6 +2885,8 @@ devhubRouter.delete("/projects/:id", async (req, res) => {
   }
   res.json({
     ok: true,
+    // Адрес сайта, который снять не удалось. Пусто — значит снят или его не было.
+    ...(orphanSiteUrl ? { orphanSiteUrl } : {}),
     ...(databaseDropped !== undefined ? { databaseDropped } : {}),
     ...(serviceDeleted !== undefined ? { serviceDeleted } : {}),
     ...(pagesRemoved !== undefined ? { pagesRemoved } : {}),

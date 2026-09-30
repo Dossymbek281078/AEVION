@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { getApiBase } from "@/lib/apiBase";
 import { daysUntilLaunch } from "@/lib/daysUntilLaunch";
-import { launchMetaTitle, PLATFORM_LAUNCH_HUMAN } from "../../launchDate";
+import { launchMetaTitle, PLATFORM_LAUNCH_HUMAN, PLATFORM_LAUNCH_UTC } from "../../launchDate";
 import { channelFrom } from "@/lib/products";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { PageTracking } from "@/components/PageTracking";
@@ -81,7 +81,11 @@ export default async function BureauLaunchPage({
     probe("/api/qsign/v2/health"),
     probe("/api/bureau/health"),
   ]);
-  const left = daysUntilLaunch(Date.UTC(2026, 8, 20)); // 20 сентября 2026
+  // Дата ОДНИМ источником: словесная уже бралась из общего модуля
+  // (PLATFORM_LAUNCH_HUMAN), а день считался литералом — два источника в одном
+  // файле. Сегодня они совпадают, но при переносе запуска страница показала бы
+  // новое число словами и старый отсчёт днями, и никто бы не заметил.
+  const left = daysUntilLaunch(PLATFORM_LAUNCH_UTC);
 
   // Метка канала — та же механика, что на посадочной шахмат: без неё после
   // запуска не ответить, какой источник привёл людей именно в бюро.

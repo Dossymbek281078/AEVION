@@ -168,6 +168,41 @@ export default async function EnDevhubPage({
           <a href={keepChannel("/pricing", channel)} style={styles.footLink}>
             All plans
           </a>
+
+          {/*
+            Значок LaunchNest — условие их бесплатного размещения.
+            Заявка подана 30.09.2026, листинг создан и ждёт проверки:
+            launchnest.io/p/aevion-devhub, статус «Pending — verify to publish».
+            Пока картинки нет на ЭТОЙ странице, размещение не публикуется.
+
+            Что они проверяют (с их же страницы badges): картинка есть на
+            странице по указанному адресу, обёрнута ссылкой на листинг, и у
+            ссылки НЕТ rel="nofollow" / "sponsored" / "ugc" — любой из них
+            отменяет обратную ссылку. Поэтому rel здесь не ставим намеренно.
+
+            Картинкой, а не их скриптом: сторонний скрипт на продающей
+            странице — это чужой код в нашем окне и лишняя точка отказа.
+            Их встраивание и так даёт чистые <a><img>, ничего не теряем.
+
+            loading="lazy" и явные размеры: значок стоит в подвале, ниже
+            первого экрана, и не должен ни задерживать отрисовку, ни дёргать
+            вёрстку, когда догрузится.
+          */}
+          <span style={styles.footDot}>·</span>
+          <a
+            href="https://launchnest.io/p/aevion-devhub"
+            target="_blank"
+            style={styles.footLink}
+          >
+            <img
+              src="https://launchnest.io/badge/aevion-devhub.svg?variant=featured"
+              alt="AEVION DevHub on LaunchNest"
+              width={220}
+              height={56}
+              loading="lazy"
+              style={{ verticalAlign: "middle", maxWidth: "100%", height: "auto" }}
+            />
+          </a>
         </footer>
       </div>
     </main>

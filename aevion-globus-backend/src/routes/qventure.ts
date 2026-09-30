@@ -29,7 +29,7 @@ import { extractPdfText, extractDeckFields } from "../lib/qventure/deckExtract";
 import { fetchComparables } from "../lib/qventure/comparables";
 import { computeBenchmark, type BenchmarkSample } from "../lib/qventure/benchmark";
 import { EXAMPLE_SEEDS, EXAMPLE_ID_PREFIX } from "../lib/qventure/examples";
-import { verifyBearerOptional } from "../lib/authJwt";
+import { verifyBearerOptional, requireAuth } from "../lib/authJwt";
 import { csvNeutralizeFormula } from "../lib/csv";
 
 const captureQVentureError = makeServiceCapture("qventure");
@@ -522,7 +522,23 @@ qventureRouter.post("/analyze", analyzeLimiter, async (req: Request, res: Respon
   }
 });
 
-qventureRouter.get("/analyses", async (req: Request, res: Response) => {
+/**
+ * 🔴 Список разборов ЗАКРЫТ входом 30.09.2026.
+ *
+ * До этого GET /analyses отдавал любому желающему 50 последних разборов — с
+ * названиями компаний, отраслью, стадией и оценкой. Это чужие сделки: человек
+ * разбирал свою заявку, а её видел кто угодно по прямому адресу. Наши пробы в
+ * той же выдаче (11 «Smoke Ledger» и 3 «Probe Co») были меньшей из бед.
+ *
+ * Поштучный GET /analyses/:id НАМЕРЕННО остаётся открытым: на нём держится
+ * страница общего доступа /qventure/a/[id] — человек делится СВОИМ разбором по
+ * ссылке, и это осознанная выдача одной записи, а не чужой ленты.
+ *
+ * Витрина при этом не пострадала: её питает GET /examples (14 отобранных
+ * примеров), список ей не нужен — проверено по коду фронта, /analyses списком
+ * не зовёт ни одна страница.
+ */
+qventureRouter.get("/analyses", requireAuth, async (req: Request, res: Response) => {
   try {
     const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? "20"), 10) || 20, 1), 50);
     const verdict = typeof req.query.verdict === "string" ? req.query.verdict : undefined;

@@ -1257,7 +1257,14 @@ export default function CyberChessPage(){
   const reserveBase=(railShown?660:400)+dockReserve;
   const wideSlack=Math.max(0,vwPx-boardPx-reserveBase-40);
   const railExtra=railShown?Math.min(130,Math.round(wideSlack*0.32)):0;
-  const panelExtra=Math.min(190,Math.round(wideSlack*0.5));
+  // 🔴 «Остаётся большое неиспользованное пространство справа» (основатель 30.09).
+  // Доска на широком экране упирается в ВЫСОТУ, лишняя ширина ей не нужна — значит
+  // простор должен забрать список ходов, а не оставаться пустым полем. Замер 30.09
+  // на 1990×1015 после уборки баннера: справа от панели пустовало 404 px.
+  // Панель ходов: 340 базовых + запас, но не шире 460 суммарно — при 672 и 720 px
+  // (замер 30.09) список ходов превращался в простыню, а доске это ничего не давало:
+  // на широком экране она упирается в высоту, а не в ширину.
+  const panelExtra=Math.min(120,Math.round(wideSlack*0.3));
   const railW=248+railExtra;               // левый инфо-рейл
   const rightPanelMax=340+panelExtra;      // правая панель (ходы/эвал/коуч)
   const[p2pMode,sP2pMode]=useState(false);
@@ -2088,6 +2095,11 @@ export default function CyberChessPage(){
   const[currentEndgame,sCurrentEndgame]=useState<Endgame|null>(null);
   const[streamerMode,sStreamerMode]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_streamer_v1")==="1"}catch{return false}});
   useEffect(()=>{try{localStorage.setItem("aevion_streamer_v1",streamerMode?"1":"0")}catch{}},[streamerMode]);
+  // 🔴 Слово основателя 30.09: «остаётся большое неиспользованное пространство справа».
+  // Баннер чужих проектов и блок подписки прятались только в партии (!on), поэтому на
+  // вкладках «Анализ» и «Коуч» занимали 244 px справа — как раз там, где он их и увидел.
+  // Рабочий экран — это партия, разбор, задача и коуч: реклама других модулей там лишняя.
+  const рабочийЭкран=on||over||pzCurrent!=null||tab==="analysis"||tab==="coach"||tab==="puzzles";
   const[showProjectsBanner,sShowProjectsBanner]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("cc_projects_banner_v1")!=="0"}catch{return true}});
   useEffect(()=>{try{localStorage.setItem("cc_projects_banner_v1",showProjectsBanner?"1":"0")}catch{}},[showProjectsBanner]);
   const streamerToolbarRef=useRef<{showYT:()=>void;showTW:()=>void;ytVisible:boolean;twVisible:boolean}|null>(null);
@@ -6177,7 +6189,7 @@ export default function CyberChessPage(){
                 {isUltimate?"✨ Ultimate":"✨ Pro"}
               </span>}
             </h1>
-            <div className="cc-header-sub" style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
+            <div className="cc-header-sub" style={{fontSize:11,color:CC.textDim,fontWeight:600,display:рабочийЭкран&&vwPx>=769?"none":undefined}}>
               SF18 · {pzCountLabel} {ccPlural(pzTotal??PUZZLES.length,"задача","задачи","задач")} в банке{useSF&&sfOk?" · ⚡":""}
             </div>
           </div>
@@ -7685,8 +7697,8 @@ export default function CyberChessPage(){
         // paddingRight = резерв под правый WorkspaceDock (dockReserve: 56 на десктопе, 0 на
         // мобайле где док скрыт) + баннер «Проекты» (244, когда показан). Инлайн (надёжнее
         // CSS-var: правый док больше не наезжает на панель ходов).
-        ["--cc-banner-reserve" as any]:(showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!anyOnboardingModal&&vwPx>=1100)?"244px":"0px",
-        paddingRight:((showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!anyOnboardingModal&&vwPx>=1100)?244:0)+dockReserve}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
+        ["--cc-banner-reserve" as any]:(showProjectsBanner&&!streamerMode&&!рабочийЭкран&&!scratchOn&&!anyOnboardingModal&&vwPx>=1100)?"244px":"0px",
+        paddingRight:((showProjectsBanner&&!streamerMode&&!рабочийЭкран&&!scratchOn&&!anyOnboardingModal&&vwPx>=1100)?244:0)+dockReserve}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
         {/* ─── Left info rail (chess.com-style) — 3-колоночная раскладка на ноутбуках+.
@@ -9164,8 +9176,12 @@ export default function CyberChessPage(){
             </div>
           </Card>}
 
-          {/* Player block (top = opponent) */}
-          {!setup&&(tab==="play"||tab==="coach")&&(()=>{
+          {/* Player block (top = opponent) — только на телефоне.
+              На десктопе имя соперника с рейтингом и часами уже стоит НАД доской, а своё —
+              под ней, поэтому те же три карточки в правой панели были дублем и съедали
+              166 px её высоты (замер 30.09: карточки 62+47+62, а списку ходов оставалось 255).
+              Слово основателя: «там где строка ходов, одни разделы перекрывают другие». */}
+          {!setup&&vwPx<769&&(tab==="play"||tab==="coach")&&(()=>{
             const isAiTurn=game.turn()===aiC&&!over&&on;
             return <div style={{
               padding:"10px 14px",borderRadius:RADIUS.lg,
@@ -9230,7 +9246,7 @@ export default function CyberChessPage(){
             <button onClick={()=>{sGhostDuelMode(false);sGhostDuelConfig(null);showToast("Дуэль завершена","info")}} style={{padding:"3px 10px",borderRadius:6,border:"1px solid #a78bfa",background:"white",color:"#6d28d9",fontSize:11,fontWeight:800,cursor:"pointer"}}>Выйти</button>
           </div>}
           {/* Status bar */}
-          {(tab==="play"||tab==="coach")&&<StatusBar over={over} chk={chk} think={think} myT={myT} useSF={useSF&&sfOk} pmsLen={pms.length} histLen={hist.length} rat={rat} rkI={rk.i}/>}
+          {vwPx<769&&(tab==="play"||tab==="coach")&&<StatusBar over={over} chk={chk} think={think} myT={myT} useSF={useSF&&sfOk} pmsLen={pms.length} histLen={hist.length} rat={rat} rkI={rk.i}/>}
           {(tab==="play"||tab==="coach")&&over&&<PostGameCard hist={hist} analysis={analysis} pCol={pCol} schitaem={hist.length>=6} />}
           {/* Variant HUD: shows variant-specific info (Diceblade die, Twin Kings royal-queen status, Asymmetric armies) */}
           {variant!=="standard"&&on&&!over&&(tab==="play"||tab==="coach")&&<div style={{
@@ -12625,7 +12641,9 @@ ${question.trim()}`;
         к игре, а к предложению включить чужой стрим. Про перекрытие доски
         здесь уже думали (условие !on ниже), про мобильный первый экран — нет. */}
     {/* !setup: на лаунчпаде подсказка стрима накрывала плитку «Онлайн-матч» и блок писем (скрин 1920, 20.09.2026) */}
-    {showPipSuggest&&!on&&!setup&&!anyOnboardingModal&&vwPx>=900&&<div
+    {/* Предложение стрима не выпрыгивает на рабочем экране: основатель видел его поверх
+        низа доски на вкладке «Коуч». Условие !on закрывало только партию. */}
+    {showPipSuggest&&!рабочийЭкран&&!setup&&!anyOnboardingModal&&vwPx>=900&&<div
       role="alert"
       style={{
         position:"fixed",right:"calc(20px + var(--aevion-projects-w, 0px))",bottom:POLOSA_VSPLYVASHEK,zIndex:7900,
@@ -15632,7 +15650,7 @@ ${question.trim()}`;
     />
     {/* Projects banner — ТОЛЬКО на лаунчпаде/между партиями. Никогда во время активной
         игры/пазла/скретча: фиксированная плашка перекрывала ходы и премувы (фидбэк юзера). */}
-    {showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!anyOnboardingModal&&vwPx>=1100&&<AevionProjectsBanner onHide={()=>sShowProjectsBanner(false)}/>}
+    {showProjectsBanner&&!streamerMode&&!рабочийЭкран&&!scratchOn&&!anyOnboardingModal&&vwPx>=1100&&<AevionProjectsBanner onHide={()=>sShowProjectsBanner(false)}/>}
     {/* Drag ghost is now an IMPERATIVE DOM node managed by useBoardInput.
         document.createElement → document.body.appendChild → direct transform on
         pointermove. Bypasses React entirely so the ghost follows the cursor with

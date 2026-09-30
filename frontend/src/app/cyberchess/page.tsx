@@ -1249,7 +1249,10 @@ export default function CyberChessPage(){
   // и «Отменить ход» ушли ЗА экран на 1280×768 (замер 30.09). Это ровно та жалоба
   // основателя, которую чинили 23.09, и отдавать доске место за счёт невидимых кнопок
   // нельзя. Кнопки теперь компактные (sm), поэтому хватает 175 вместо прежних 186.
-  const desktopVReserve=Math.max(250,boardTopPx>0?boardTopPx+(lowDesktop?175:140):0);
+  // Вариант А: под доской один ряд кнопок, поэтому резерв меньше — 130 на низком экране
+  // и 105 на высоком. Нижняя граница Math.max(250,…) снята: она сама по себе держала
+  // доску маленькой на невысоких экранах, хотя фактический низ уже укладывался.
+  const desktopVReserve=Math.max(170,boardTopPx>0?boardTopPx+(lowDesktop?130:105):0);
   const boardPx=Math.max(isMobileLayout?200:280,Math.min(boardPxRaw,vhPx-(vwPx>=769?desktopVReserve:290),vwPx-hReserve-dockReserve));
   const bw=boardPx+"px";
   // ── Ultra-wide fill: доска упирается в ВЫСОТУ (квадрат), а экраны 16:9 широкие —
@@ -6229,16 +6232,18 @@ export default function CyberChessPage(){
                 title={locked?"Заблокировано во время партии с человеком":t.label}
                 style={{
                   display:"inline-flex",alignItems:"center",gap:7,
-                  padding:"9px 18px",borderRadius:RADIUS.full,
+                  // На рабочем экране вкладки компактнее: шапка занимала 60 px из 132 верха,
+                  // а доска упирается в высоту (вариант А — доске максимум).
+                  padding:рабочийЭкран&&vwPx>=769?"5px 13px":"9px 18px",borderRadius:RADIUS.full,
                   border:active?`1px solid ${t.hue}55`:"1px solid transparent",
                   background:active?`${t.hue}1f`:"transparent",
                   color:locked?CC.textMute:active?t.hue:CC.textDim,
-                  fontSize:14,fontWeight:active?900:750,
+                  fontSize:рабочийЭкран&&vwPx>=769?13:14,fontWeight:active?900:750,
                   cursor:locked?"not-allowed":"pointer",whiteSpace:"nowrap",
                   opacity:locked?0.5:1,
                   transition:`background 120ms, color 120ms`,
                 }}>
-                <span style={{fontSize:16,lineHeight:1}} aria-hidden>{locked?"🔒":t.icon}</span>
+                <span style={{fontSize:рабочийЭкран&&vwPx>=769?14:16,lineHeight:1}} aria-hidden>{locked?"🔒":t.icon}</span>
                 <span>{t.label}</span>
               </button>;
             })}
@@ -7665,7 +7670,10 @@ export default function CyberChessPage(){
       {/* Телефон: чипов больше, чем ширины (390: «…Стри» обрезался, «Видео»/«Ещё» недостижимы —
           тестер 20.09.2026). Ряд прокручивается по горизонтали, полоса прокрутки скрыта. */}
       {/* На низком десктопном экране (<820px) панель не рисуется: вкладки Задачи/Анализ/Коуч уже в шапке, а 48px нужны доске */}
-      {!streamerMode&&!setup&&on&&tab==="play"&&(vwPx<769||vhPx>=820)&&(
+      {/* Ряд «Анализ · Коуч · Задачи · Стрим · Видео · Ещё» в партии на десктопе скрыт:
+          вкладки Анализ/Коуч/Задачи уже стоят в шапке строкой выше, а Стрим и Видео живут
+          в «⚙ Ещё». Ряд занимал 40 px высоты, которые по варианту А принадлежат доске. */}
+      {!streamerMode&&!setup&&on&&tab==="play"&&vwPx<769&&(
         <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"nowrap",overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none",paddingBottom:2,paddingRight:vwPx<769?96:0}}>
           {([
             ...(isHumanGame?[]:[
@@ -8486,7 +8494,12 @@ export default function CyberChessPage(){
 
           {/* Controls — under-board strip. Game-essentials only. Heatmap/Whisper/Share/History live in the
               right-sidebar Tools card to reduce visual clutter under the board. */}
-          <div style={{display:"flex",gap:plotnyNiz?6:8,marginTop:plotnyNiz?4:SPACE[2],...podDoskoyRow}}>
+          {/* 🔴 Вариант А (выбор основателя 30.09): под доской ОДИН ряд кнопок.
+              Во время партии здесь нужны «Сдаться · Ничья · Отменить · Подсказка» — они ниже.
+              Этот ряд («Перевернуть · Новая партия · Голос · Ход текстом») в идущей партии
+              на десктопе скрыт: его кнопки есть в «⚙ Ещё», а два ряда съедали 110 px высоты,
+              которые доска не могла забрать. */}
+          <div style={{display:(plotnyNiz&&on&&!over&&!setup&&tab==="play")?"none":"flex",gap:plotnyNiz?6:8,marginTop:plotnyNiz?4:SPACE[2],...podDoskoyRow}}>
             <Btn size={plotnyNiz?"sm":"md"} variant="secondary" icon={<Icon.Flip width={16} height={16}/>} onClick={()=>sFlip(!flip)}>Перевернуть</Btn>
             <Btn size={plotnyNiz?"sm":"md"} variant="primary" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>Новая партия</Btn>
             {on&&!setup&&<Btn size={plotnyNiz?"sm":"md"} variant={mirrorActive?"primary":"secondary"} onClick={()=>{if(mirrorActive){sMirrorActive(false);showToast("🪞 Зеркальный режим выключен","info");}else{sMirrorActive(true);showToast("🪞 Зеркальный режим — соперник играет как ты","info");}}} title="Зеркальный режим — соперник копирует твой стиль">🪞</Btn>}

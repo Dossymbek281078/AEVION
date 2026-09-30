@@ -6253,6 +6253,7 @@ const en: Record<string, string> = {
   "qskyway.route.withinCeiling": "within the regulator's ceiling",
   "qskyway.slots.capacity": "Capacity per route: {n}.",
   "qskyway.slots.empty": "No slots booked yet.",
+  "qskyway.slots.emptyCta": "Book the first route",
   "qskyway.slots.receipt": "Each booking carries a checksum of its record (receipt, SHA-256): it shows the record has not been altered — GET /api/qskyway/slots/{id}/verify. This is not an anchor in an external ledger: unlike the airspace layer, which is anchored to Bitcoin, a receipt is verifiable only against our own store.",
   "qskyway.slots.storeDurable": "Slots are stored in Postgres — they survive a restart",
   "qskyway.slots.storeMemory": "Slots live only in process memory — lost when the server restarts",

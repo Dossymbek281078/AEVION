@@ -384,7 +384,7 @@ function каналыГотовы(замысел: { озвучка: boolean; с�
 }
 
 // POST /api/devhub/pipeline/quote — цена ДО заказа. Ничего не тратит и не создаёт.
-devhubRouter.post("/pipeline/quote", (req, res) => {
+devhubRouter.post("/pipeline/quote", dhCostlyLimit("dhpipelinequote"), (req, res) => {
   const замысел = замыселИзТела(req.body);
   if (замысел.знаковКниги === 0 && замысел.секундВидео === 0) {
     return res.status(400).json({ error: "нечего считать: укажите знаковКниги и/или секундВидео" });
@@ -411,7 +411,7 @@ interface ЗаказПайплайна {
 const memЗаказыПайплайна = new Map<string, ЗаказПайплайна>();
 
 // POST /api/devhub/pipeline/order — заказ. Тоже НИЧЕГО не тратит: он ждёт человека.
-devhubRouter.post("/pipeline/order", async (req, res) => {
+devhubRouter.post("/pipeline/order", dhCostlyLimit("dhpipelineorder"), async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
   const замысел = замыселИзТела(req.body);

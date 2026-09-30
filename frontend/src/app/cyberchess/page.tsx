@@ -6749,6 +6749,23 @@ export default function CyberChessPage(){
                 {g.done?<span style={{fontWeight:900}}>✓</span>:<span style={{color:CC.textDim}}>{g.cur}/{g.max}</span>}
                 <span style={{textDecoration:g.done?"line-through":"none",opacity:g.done?0.6:1}}>{g.label}</span>
               </button>)}
+              {/* 🔴 30.09.2026: ВХОД В ЗАДАЧУ ДНЯ НА ПЕРВОМ ЭКРАНЕ.
+                  В день запуска пришло 99 человек и задачу дня решил НОЛЬ.
+                  Оба прежних входа лежали на 1046 и 1296 пикселе от верха —
+                  при окне 744 это 1,4 и 1,7 экрана вниз, то есть их просто
+                  не видели. Эта строка («Цели на сегодня») по замеру стоит
+                  на ~580 пикселе, выше линии первого экрана, поэтому вход
+                  ставится сюда. Отдельной кнопкой, а не четвёртой целью:
+                  целей ровно три, и счётчик «0/3» врать не должен. */}
+              <button onClick={()=>{track({type:"daily_open",source:"cyberchess/goals",meta:{surface:"goals-row"}});loadDailyPuzzle();}} style={{
+                display:"inline-flex",alignItems:"center",gap:5,
+                padding:"4px 10px",borderRadius:RADIUS.full,
+                border:`1px solid ${CC.brand}`,
+                background:"rgba(37,99,235,0.08)",
+                cursor:"pointer",fontSize:11,fontWeight:800,color:CC.brand,
+              }}>
+                <span>☀</span><span>Задача дня</span>
+              </button>
               {allDone&&<span style={{marginLeft:"auto",fontSize:11,fontWeight:900,color:"#15803d"}}>+30 Chessy завтра!</span>}
             </div>;
           })()}

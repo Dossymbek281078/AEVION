@@ -24,6 +24,7 @@ import { getPool } from "../lib/dbPool";
 // устройству, а не по полноте списка шаблонов.
 import { safeErrorText } from "../lib/safeError";
 import { isSmokeSlot, countLiveSlots } from "../lib/slotOrigin";
+import { просятПробы } from "../lib/probeRows";
 import { heightReviewFor, heightReviewsForCity } from "../data/qskywayHeightReview";
 import { rateLimit } from "../lib/rateLimit";
 
@@ -2672,12 +2673,41 @@ qskywayRouter.get("/slots", async (_req: Request, res: Response) => {
   // 5–6 слотов каждый прогон и за собой не убирает. Ничего не удаляем: право
   // зафиксировано по-настоящему, квитанция честная. Перестаём выдавать это за
   // рыночную активность.
+  /*
+   * ПРОБЫ НЕ ОТДАЮТСЯ ПОСЕТИТЕЛЮ, 30.09.2026.
+   *
+   * Пометки `test: true` у каждой записи (10.08) оказалось мало: страница
+   * показывала ВСЕ строки, и человек видел рынок из наших прогонов. Замер
+   * 30.09 на живом проде: 41 бронь, из них 38 — смоук (`smoke-route-persist-1`,
+   * `smoke-cap-route`, держатель `smoke-holder`). То есть 93 % «рыночной
+   * активности» сделали мы сами.
+   *
+   * Прячем там, где данные ОТДАЮТСЯ, а не на странице: иначе следующий
+   * читатель — чужой клиент, сторож витрин, наш же второй экран — покажет их
+   * снова. Это тот же порядок, что принят для Planet (lib/probeRows,
+   * 20.09): `?includeProbes=1` возвращает всё, потому что нашим проверкам
+   * засорение видеть НУЖНО, а `probesHidden` называет числом, сколько скрыто —
+   * молча пропадать записи не должны.
+   *
+   * Признак берём здешний, `isSmokeSlot`: он знает поля брони (`routeId`,
+   * `holder`) и вдобавок ловит демо-кнопку «aevion demo», чего общий
+   * `похожеНаПробу` по title/ref не умеет. Заводить рядом второе правило для
+   * тех же строк — значит получить два ответа на один вопрос; из общего дома
+   * берём протокол (`просятПробы`), а не предикат.
+   *
+   * Ничего не удаляем: право зафиксировано по-настоящему, квитанция честная.
+   * Перестаём выдавать это за рынок.
+   */
+  const показыватьПробы = просятПробы(_req.query);
+  const видимые = показыватьПробы ? slots : slots.filter((s) => !isSmokeSlot(s));
+
   res.json({
     count: slots.length,
     liveCount: countLiveSlots(slots),
+    probesHidden: slots.length - видимые.length,
     capacityPerRoute: SLOT_CAPACITY,
     store: slotsDbAvailable ? "postgres" : "memory",
-    slots: slots.map((s) => ({ ...s, test: isSmokeSlot(s) })),
+    slots: видимые.map((s) => ({ ...s, test: isSmokeSlot(s) })),
   });
 });
 

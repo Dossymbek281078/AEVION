@@ -44,6 +44,11 @@ describe("разрез воронки", () => {
       thankYouOpened: 1,
       paid: 0,
       paidOurs: 0,
+      // Сессионная единица здесь НОЛЬ, и это правильно: у событий этого случая нет
+      // `sid`, значит сессии нет, а приписывать «кто привёл» не к кому. Счёт по
+      // событию при этом 1. Случай с настоящими сессиями — отдельным тестом ниже.
+      checkoutStartSessions: 0,
+      checkoutStartSessionsOurs: 0,
     });
     expect(r.byChannel["product-hunt"]).toEqual({
       visits: 1,
@@ -53,6 +58,41 @@ describe("разрез воронки", () => {
       thankYouOpened: 0,
       paid: 0,
       paidOurs: 0,
+      checkoutStartSessions: 0,
+      checkoutStartSessionsOurs: 0,
+    });
+  });
+
+  it("метка сменилась внутри сессии: по событию instagram, по сессии direct", () => {
+    // 🔴 Ровно этот случай 30.09.2026 заставил меня объявить два разреза
+    // противоречащими и почти отправить основателю «Instagram привёл покупателя».
+    // Человек заходит БЕЗ метки, ходит по сайту, потом нажимает «Купить» по ссылке
+    // с `?c=ig`. По событию начало оплаты принадлежит instagram, по первому касанию —
+    // прямым заходам. Оба числа верны, и оба обязаны быть в ответе под своими именами.
+    const r = разрезВоронки([
+      событие("page_view", undefined, "/", "s1"),
+      событие("page_view", undefined, "/pricing", "s1"),
+      событие("checkout_start", { channel: "instagram", app: "multichat" }, "/pricing", "s1"),
+    ]);
+
+    // единица «событие»: метка на клике
+    expect(r.byChannel["instagram"].checkoutStart, "по событию должен быть instagram").toBe(1);
+    expect(r.byChannel["direct"].checkoutStart, "по событию direct не начинал").toBe(0);
+
+    // единица «сессия»: кто привёл человека
+    expect(
+      r.byChannel["direct"].checkoutStartSessions,
+      "по сессии начало оплаты должно принадлежать первому касанию (direct)",
+    ).toBe(1);
+    expect(
+      r.byChannel["instagram"].checkoutStartSessions,
+      "по сессии instagram человека не приводил",
+    ).toBe(0);
+
+    // и страница входа считается по той же сессионной единице, что и канал сессии
+    expect(r.byEntryPage["direct|/"], "страница входа должна лежать у direct").toMatchObject({
+      сессий: 1,
+      началиОплату: 1,
     });
   });
 

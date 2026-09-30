@@ -1245,7 +1245,11 @@ export default function CyberChessPage(){
   // кнопок), над доской 225 — низ съедает больше шапки, и доска зажата в 290 px при
   // 584 у lichess на том же экране. Ряды кнопок на невысоком десктопе стали компактнее
   // (gap 6, marginTop 4, размер sm), поэтому резерв снижен 186 → 150.
-  const desktopVReserve=Math.max(250,boardTopPx>0?boardTopPx+150:0);
+  // Резерв под доской: 150 не хватило — после того как доска выросла, «Сдаться», «Ничья»
+  // и «Отменить ход» ушли ЗА экран на 1280×768 (замер 30.09). Это ровно та жалоба
+  // основателя, которую чинили 23.09, и отдавать доске место за счёт невидимых кнопок
+  // нельзя. Кнопки теперь компактные (sm), поэтому хватает 175 вместо прежних 186.
+  const desktopVReserve=Math.max(250,boardTopPx>0?boardTopPx+(lowDesktop?175:140):0);
   const boardPx=Math.max(isMobileLayout?200:280,Math.min(boardPxRaw,vhPx-(vwPx>=769?desktopVReserve:290),vwPx-hReserve-dockReserve));
   const bw=boardPx+"px";
   // ── Ultra-wide fill: доска упирается в ВЫСОТУ (квадрат), а экраны 16:9 широкие —
@@ -6156,13 +6160,21 @@ export default function CyberChessPage(){
         position:"sticky",top:0,zIndex:Z.sticky,
         // Телефон: справа 100px под плавающую языковую пилюлю «RU ▼» (AppShellLanguagePill, fixed
         // top:12/right:12) — на 390 она ложилась на ☰/🔊 шапки (тестер 20.09.2026).
-        margin:"0 -12px 12px",padding:vwPx<769?"10px 100px 10px 12px":"10px 12px",
+        // 🔴 На рабочем экране (партия, разбор, задача, коуч) шапка идёт ОДНОЙ строкой:
+        // из-за flexWrap она переносилась на вторую и занимала 119 px из 213 верха, а доска
+        // упирается именно в высоту. Замер 30.09 на 1990×1015: верх 213, низ 181, доска 621 —
+        // ровно остаток. Ниже 769 (телефон) всё как было: там перенос нужен.
+        margin:`0 -12px ${рабочийЭкран&&vwPx>=769?6:12}px`,
+        padding:vwPx<769?"10px 100px 10px 12px":(рабочийЭкран?"5px 12px":"10px 12px"),
         background:CC.surfaceGlass,backdropFilter:"blur(14px)",WebkitBackdropFilter:"blur(14px)",
         borderBottom:`1px solid ${CC.border}`,
-        display:"flex",alignItems:"center",gap:SPACE[3],flexWrap:"wrap"
+        display:"flex",alignItems:"center",gap:рабочийЭкран&&vwPx>=769?SPACE[2]:SPACE[3],
+        ...(рабочийЭкран&&vwPx>=769
+          ? {flexWrap:"nowrap" as const,overflowX:"auto" as const,scrollbarWidth:"none" as const}
+          : {flexWrap:"wrap" as const})
       }}>
-        {/* Logo */}
-        <div style={{display:"flex",alignItems:"center",gap:SPACE[2],flex:"0 0 auto"}}>
+        {/* Logo — на рабочем экране скрыт: он уже есть в общей шапке AEVION строкой выше */}
+        <div style={{display:рабочийЭкран&&vwPx>=769?"none":"flex",alignItems:"center",gap:SPACE[2],flex:"0 0 auto"}}>
           <div style={{
             width:38,height:38,borderRadius:RADIUS.md,
             background:"linear-gradient(135deg,#059669 0%,#10b981 55%,#7c3aed 100%)",
@@ -8387,7 +8399,9 @@ export default function CyberChessPage(){
               доски — иначе на 390 сетка букв сжималась до ~70px и «ABCDEFGH» слипалось слева (тестер 20.09.2026). */}
           <div style={{display:"flex",alignItems:"center",paddingLeft:23,width:bw,gap:4,flexWrap:vwPx<769?"wrap":"nowrap"}}>
             <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:vwPx<769?"1 1 100%":1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div>
-            <div style={{display:"flex",gap:3,flexShrink:0,alignItems:"center"}}>
+            <div style={{display:рабочийЭкран&&vwPx>=769?"none":"flex",gap:3,flexShrink:0,alignItems:"center"}}>
+              {/* Палитра тем доски и зум спрятаны на рабочем экране: тема выбирается один раз,
+                  а место под доской отнимается постоянно. Оба остались в настройках (⚙). */}
               {BOARD_THEMES.slice(0,8).map((th,i)=><button key={i} title={`Тема: ${th.name}`} aria-label={`Тема доски: ${th.name}`} aria-pressed={boardTheme===i} onClick={()=>sBoardTheme(i)} style={{width:22,height:22,borderRadius:"50%",border:boardTheme===i?`2px solid ${CC.text}`:`2px solid ${CC.border}`,background:th.dark,cursor:"pointer",padding:0,flexShrink:0,outline:"none",transition:"transform 120ms",transform:boardTheme===i?"scale(1.18)":"scale(1)"}}/>)}
               <div style={{width:1,height:12,background:CC.border,margin:"0 2px"}}/>
               <button title="Уменьшить доску (Ctrl+-)" aria-label="Уменьшить доску" onClick={()=>sBoardScale(s=>Math.max(0.5,parseFloat((s-0.1).toFixed(1))))} style={{width:26,height:26,borderRadius:4,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,fontSize:15,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>−</button>
@@ -8473,9 +8487,9 @@ export default function CyberChessPage(){
           {/* Controls — under-board strip. Game-essentials only. Heatmap/Whisper/Share/History live in the
               right-sidebar Tools card to reduce visual clutter under the board. */}
           <div style={{display:"flex",gap:plotnyNiz?6:8,marginTop:plotnyNiz?4:SPACE[2],...podDoskoyRow}}>
-            <Btn size="md" variant="secondary" icon={<Icon.Flip width={16} height={16}/>} onClick={()=>sFlip(!flip)}>Перевернуть</Btn>
-            <Btn size="md" variant="primary" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>Новая партия</Btn>
-            {on&&!setup&&<Btn size="md" variant={mirrorActive?"primary":"secondary"} onClick={()=>{if(mirrorActive){sMirrorActive(false);showToast("🪞 Зеркальный режим выключен","info");}else{sMirrorActive(true);showToast("🪞 Зеркальный режим — соперник играет как ты","info");}}} title="Зеркальный режим — соперник копирует твой стиль">🪞</Btn>}
+            <Btn size={plotnyNiz?"sm":"md"} variant="secondary" icon={<Icon.Flip width={16} height={16}/>} onClick={()=>sFlip(!flip)}>Перевернуть</Btn>
+            <Btn size={plotnyNiz?"sm":"md"} variant="primary" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>Новая партия</Btn>
+            {on&&!setup&&<Btn size={plotnyNiz?"sm":"md"} variant={mirrorActive?"primary":"secondary"} onClick={()=>{if(mirrorActive){sMirrorActive(false);showToast("🪞 Зеркальный режим выключен","info");}else{sMirrorActive(true);showToast("🪞 Зеркальный режим — соперник играет как ты","info");}}} title="Зеркальный режим — соперник копирует твой стиль">🪞</Btn>}
             {(tab==="play"||tab==="coach"||tab==="analysis")&&btn(voiceListening?"🔴 Слушаю (нажми для паузы)":"🎤 Голос",()=>{
               const SR=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;
               if(!SR){showToast("Браузер не поддерживает голосовой ввод (нужен Chrome)","error");return}
@@ -8668,9 +8682,9 @@ export default function CyberChessPage(){
           {/* Ряд «Сдаться · Ничья · Отменить · Подсказка» — только на вкладке партии: на Задачах/Коуче/Анализе
               при паузе партии он сбивал с толку (тестер 20.09.2026, 390: «Сдаться» под доской задачи). */}
           {on&&!over&&!setup&&tab==="play"&&<div style={{display:"flex",gap:plotnyNiz?6:8,marginTop:plotnyNiz?4:SPACE[2],...podDoskoyRow}}>
-            <Btn size="md" variant="danger" className="cc-game-btn" onClick={()=>{if(armed!=="resign"){sArmed("resign");return;}sArmed(null);if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{const nr=новыйРейтинг(rat,lv.elo,false);sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>{armed==="resign"?"Точно сдаться? ✓":"🏳 Сдаться"}</Btn>
-            <Btn size="md" variant="gold" className="cc-game-btn" onClick={()=>{if(armed!=="draw"){sArmed("draw");return;}sArmed(null);if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("ИИ отклонил ничью","error")}}>{armed==="draw"?"Предложить ничью? ✓":"½ Ничья"}</Btn>
-            <Btn size="md" variant="secondary" className="cc-game-btn" icon={<Icon.Undo width={14} height={14}/>} onClick={()=>{
+            <Btn size={plotnyNiz?"sm":"md"} variant="danger" className="cc-game-btn" onClick={()=>{if(armed!=="resign"){sArmed("resign");return;}sArmed(null);if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{const nr=новыйРейтинг(rat,lv.elo,false);sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>{armed==="resign"?"Точно сдаться? ✓":"🏳 Сдаться"}</Btn>
+            <Btn size={plotnyNiz?"sm":"md"} variant="gold" className="cc-game-btn" onClick={()=>{if(armed!=="draw"){sArmed("draw");return;}sArmed(null);if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("ИИ отклонил ничью","error")}}>{armed==="draw"?"Предложить ничью? ✓":"½ Ничья"}</Btn>
+            <Btn size={plotnyNiz?"sm":"md"} variant="secondary" className="cc-game-btn" icon={<Icon.Undo width={14} height={14}/>} onClick={()=>{
               if(hist.length<2){showToast("Ходов нет","error");return}
               if(think){showToast("ИИ думает — подожди","error");return}
               if(!hotseat){
@@ -8688,7 +8702,7 @@ export default function CyberChessPage(){
               sHist(h=>h.slice(0,-2));sFenHist(h=>h.slice(0,-2));sLm(null);sSel(null);sVm(new Set());sBk(k=>k+1);
               showToast("↩ Ход отменён","success");
             }}>↩ Отменить ход</Btn>
-            {sfOk&&myT&&!hotseat&&<Btn size="md" variant="secondary" className="cc-game-btn" loading={hintLoading} onClick={()=>{
+            {sfOk&&myT&&!hotseat&&<Btn size={plotnyNiz?"sm":"md"} variant="secondary" className="cc-game-btn" loading={hintLoading} onClick={()=>{
               if(hintLoading)return;
               if(!sfR.current?.ready()){showToast("SF загружается…","error");return}
               sHintLoading(true);

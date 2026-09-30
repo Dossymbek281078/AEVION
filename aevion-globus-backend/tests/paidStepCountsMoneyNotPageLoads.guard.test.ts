@@ -266,7 +266,7 @@ describe("хранилище событий", () => {
 
     const r = await request(приложение()).get("/api/pricing/events/funnel?days=14");
     expect(r.status).toBe(200);
-    for (const поле of ["byChannel", "byApp", "byPost", "byEntryPage"]) {
+    for (const поле of ["byChannel", "byApp", "byPost", "byEntryPage", "byHour"]) {
       expect(
         Object.prototype.hasOwnProperty.call(r.body, поле),
         `ответ не содержит ${поле} — разрез считается и выбрасывается`,
@@ -276,5 +276,17 @@ describe("хранилище событий", () => {
     // каналам минус итог» нельзя читать как ошибку.
     expect(r.body.byChannelVisitsMayExceedTotal).toBe(true);
     expect(String(r.body.byChannelVisitsNote)).toMatch(/в пределах канала/i);
+
+    // Часовой разрез: он и есть ответ на «когда был этот заход». До 30.09.2026
+    // часы жили только в закрытой ручке (401), и «чей это заход» решалось
+    // догадками. Проверяем, что час ЕСТЬ в ответе и что событие в него попало.
+    expect(r.body.byHourTimezone, "часовой пояс не назван — часы прочитают как местные").toBe("UTC");
+    const часы = r.body.byHour as { hour: string; visits: number }[];
+    expect(Array.isArray(часы), "byHour не массив").toBe(true);
+    const текущийЧас = new Date().toISOString().slice(0, 13);
+    expect(
+      часы.some((ч) => ч.hour === текущийЧас && ч.visits > 0),
+      `события нет в текущем часе ${текущийЧас}: ${JSON.stringify(часы).slice(0, 200)}`,
+    ).toBe(true);
   });
 });

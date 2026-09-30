@@ -145,6 +145,42 @@ export const СОБЫТИЕ_ОПЛАТА_ПОДТВЕРЖДЕНА = "payment_con
  * прежние дни означает «не измерялось», а не «продаж не было». Отдаём за такие
  * дни `null`: неотвеченный вопрос не равен благополучию.
  */
+/**
+ * Метки канала, которыми помечаются НАШИ СОБСТВЕННЫЕ заходы.
+ *
+ * 🔴 Замер 30.09.2026: за 14 дней воронка показывала «начали оплату: 5» — и все
+ * пять оказались нашими. Подтвердилось с двух сторон: окно страницы цен признало
+ * пять нажатий браузером, а окно почты нашло ПЯТЬ писем кассы о брошенной корзине,
+ * все на адреса `probe-*@aevion.app`. Живых незавершённых покупок за две недели —
+ * ноль. Число «5» при этом читалось как пятеро людей у карты.
+ *
+ * Метки перечислены явно, а не выведены из слов «probe/smoke/test»: у окна цен
+ * метка `cold-visit-check`, и никакая эвристика по словам её бы не поймала.
+ * Появится новая — дописывать сюда, рядом с указанием, чья она.
+ */
+const НАШИ_МЕТКИ_КАНАЛА = [
+  "cold-visit-check", // окно страницы цен: холодные заходы на /pricing
+  "probe",            // общая метка прогонов
+  "probe-price",      // прогон покупаемости девяти приложений
+  "probe-ph",         // прогон под запуск на Product Hunt
+  "smoke",
+  "test",
+];
+
+/** Похожа ли метка канала на нашу. Точное совпадение или наше слово с разделителем. */
+function нашаМетка(значение: string | null | undefined): boolean {
+  const v = String(значение ?? "").trim().toLowerCase();
+  if (!v) return false;
+  return НАШИ_МЕТКИ_КАНАЛА.some((m) => v === m || v.startsWith(`${m}-`) || v.startsWith(`${m}_`));
+}
+
+/** Метка канала из адреса страницы: `/pricing?c=cold-visit-check` → `cold-visit-check`. */
+function меткаИзПути(path: string | null | undefined): string | null {
+  const p = String(path ?? "");
+  const m = /[?&]c=([^&#]+)/.exec(p);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 const ОПЛАТЫ_СЧИТАЕМ_С = "2026-09-29T14:59:51.000Z";
 
 /**
@@ -218,28 +254,126 @@ export function записатьСобытиеОтСервера(
  * `plan`, а не пропадают: иначе сумма по приложениям не сошлась бы с общей.
  */
 export interface РазрезВоронки {
-  byChannel: Record<string, { visits: number; pricing: number; checkoutStart: number; paid: number }>;
+  byChannel: Record<
+    string,
+    {
+      visits: number;
+      pricing: number;
+      checkoutStart: number;
+      checkoutStartOurs: number;
+      thankYouOpened: number;
+      paid: number;
+      paidOurs: number;
+    }
+  >;
   byApp: Record<string, { checkoutStart: number; paid: number }>;
+  /**
+   * Разрез по ПОСТУ внутри канала: ключ «канал/пост».
+   *
+   * 🔴 Замер 30.09.2026: Instagram — единственный канал, приводящий людей до цен
+   * (12 из 304 заходов), и трафик идёт рывками, то есть постами. Но у всех ссылок
+   * одна метка `?c=ig`, поэтому на вопрос «какой пост сработал» ответить было
+   * нечем. Теперь подметка `?c=ig-<пост>` доезжает сюда (products.postFrom,
+   * lib/track.ts), и окно публикаций видит, что постить.
+   *
+   * Ключ составной, «канал/пост», а не просто пост: один и тот же пост может
+   * жить в двух каналах, и складывать их в одно число значило бы терять ответ.
+   */
+  byPost: Record<string, { visits: number; pricing: number; checkoutStart: number; paid: number }>;
+  /**
+   * Куда ЗАХОДЯТ с каждого канала: «канал → страница входа».
+   *
+   * 🔴 Замер 30.09.2026: Instagram привёл 12 человек до цен, и на вопрос «на какие
+   * страницы они пришли» ответа не было — детализация жила только в закрытых
+   * ручках (401, админ-токен у окон отсутствует). Без этого окно публикаций не
+   * знает, какая посадочная работает, и правит наугад.
+   *
+   * Страница ВХОДА, а не любая посещённая: людей приводит первая, остальные они
+   * смотрят уже внутри. Поэтому считаем по первому просмотру сессии.
+   *
+   * Личных данных здесь нет и быть не может: путь обрезается до трёх участков,
+   * запрос отбрасывается целиком (в нём живут метки и что угодно ещё), а участки,
+   * похожие на идентификаторы, заменяются на `:id` — иначе адрес вида
+   * `/devhub/<длинный-ключ>` уехал бы в отчёт как есть. Список ограничен, всё
+   * сверх него складывается в «прочие»: без ограничения десяток заходов на
+   * выдуманные адреса раздул бы ответ и стал бы способом его испортить.
+   */
+  byEntryPage: Record<string, { сессий: number; доЦен: number; началиОплату: number }>;
 }
 
 export function разрезВоронки(
-  events: Array<Pick<AnalyticsEvent, "type" | "path" | "meta">>,
+  events: Array<Pick<AnalyticsEvent, "type" | "path" | "meta" | "sid">>,
+  нашиСессии: ReadonlySet<string> = new Set(),
 ): РазрезВоронки {
   const byChannel = Object.create(null) as РазрезВоронки["byChannel"];
   const byApp = Object.create(null) as РазрезВоронки["byApp"];
+  const byPost = Object.create(null) as РазрезВоронки["byPost"];
+  /** Путь без запроса, до трёх участков, идентификаторы скрыты. */
+  const чистыйПуть = (raw: string | null | undefined): string => {
+    const без = String(raw ?? "/").split("?")[0].split("#")[0];
+    const участки = без.split("/").filter(Boolean).slice(0, 3);
+    const безИд = участки.map((у) =>
+      /^[0-9a-f]{8,}$/i.test(у) || /^\d{4,}$/.test(у) || у.length > 24 ? ":id" : у.toLowerCase(),
+    );
+    return "/" + безИд.join("/");
+  };
+
+  /** Пара «канал + сессия»: чтобы визит считался один раз, как в итоге. */
+  const виденныеСессии = new Set<string>();
 
   for (const ev of events) {
     const сырой = ev.meta?.channel;
     const канал = typeof сырой === "string" && сырой.trim() ? сырой.trim() : "direct";
-    if (!byChannel[канал]) byChannel[канал] = { visits: 0, pricing: 0, checkoutStart: 0, paid: 0 };
+    if (!byChannel[канал]) {
+      byChannel[канал] = {
+        visits: 0,
+        pricing: 0,
+        checkoutStart: 0,
+        checkoutStartOurs: 0,
+        thankYouOpened: 0,
+        paid: 0,
+        paidOurs: 0,
+      };
+    }
     const к = byChannel[канал];
 
+    const сыройПост = ev.meta?.post;
+    const пост = typeof сыройПост === "string" && сыройПост.trim() ? сыройПост.trim().slice(0, 40) : null;
+    const ключПоста = пост ? `${канал}/${пост}` : null;
+    if (ключПоста && !byPost[ключПоста]) {
+      byPost[ключПоста] = { visits: 0, pricing: 0, checkoutStart: 0, paid: 0 };
+    }
+    const п = ключПоста ? byPost[ключПоста] : null;
+
     if (ev.type === "page_view") {
-      к.visits += 1;
+      // 🔴 ВИЗИТЫ СЧИТАЕМ ТАК ЖЕ, КАК ИТОГ — по уникальным сессиям.
+      // Замер 30.09.2026: итог давал 167 визитов за 14 дней, а сумма по каналам
+      // 519, потому что здесь считался КАЖДЫЙ просмотр страницы. Два разных
+      // числа под одним словом в одном ответе: основатель увидел бы 167 или 519
+      // в зависимости от того, куда посмотрел.
+      if (ev.sid) {
+        const ключ = `${канал}|${ev.sid}`;
+        if (!виденныеСессии.has(ключ)) {
+          виденныеСессии.add(ключ);
+          к.visits += 1;
+        }
+      } else {
+        к.visits += 1;
+      }
       if (typeof ev.path === "string" && ev.path.includes("/pricing")) к.pricing += 1;
+      if (п) {
+        п.visits += 1;
+        if (typeof ev.path === "string" && ev.path.includes("/pricing")) п.pricing += 1;
+      }
       continue;
     }
-    if (ev.type !== "checkout_start" && ev.type !== "checkout_success") continue;
+    if (
+      ev.type !== "checkout_start" &&
+      ev.type !== "checkout_success" &&
+      ev.type !== СОБЫТИЕ_ОПЛАТА_ПОДТВЕРЖДЕНА
+    ) {
+      continue;
+    }
 
     const сыройApp = ev.meta?.app;
     const приложение = typeof сыройApp === "string" && сыройApp.trim() ? сыройApp.trim() : "plan";
@@ -247,13 +381,71 @@ export function разрезВоронки(
 
     if (ev.type === "checkout_start") {
       к.checkoutStart += 1;
+      if (п) п.checkoutStart += 1;
+      if (ev.sid && нашиСессии.has(ev.sid)) к.checkoutStartOurs += 1;
       byApp[приложение].checkoutStart += 1;
+    } else if (ev.type === "checkout_success") {
+      // 🔴 ЭТО НЕ ОПЛАТА. Здесь `paid` считался по загрузке страницы «спасибо»,
+      // и разрез отдавал «direct: paid 3» при нуле подтверждённых оплат в итоге —
+      // то есть отвечал ложью на главный вопрос. Открытия страницы возврата
+      // теперь живут своим полем, как и в итоге.
+      к.thankYouOpened += 1;
     } else {
       к.paid += 1;
+      if (п) п.paid += 1;
+      if (ev.meta?.свой === true) к.paidOurs += 1;
       byApp[приложение].paid += 1;
     }
   }
-  return { byChannel, byApp };
+  // Страницы входа считаются по сессиям, а не по событиям: сначала собираем по
+  // каждой сессии её первую страницу и дошла ли она до цен, потом складываем.
+  interface Заход { канал: string; вход: string; доЦен: boolean; начал: boolean }
+  const заходы = new Map<string, Заход>();
+  for (const ev of events) {
+    if (!ev.sid) continue;
+    const сырой = ev.meta?.channel;
+    const канал = typeof сырой === "string" && сырой.trim() ? сырой.trim() : "direct";
+    let з = заходы.get(ev.sid);
+    if (!з) {
+      if (ev.type !== "page_view") continue; // сессия без просмотра — входа нет
+      з = { канал, вход: чистыйПуть(ev.path), доЦен: false, начал: false };
+      заходы.set(ev.sid, з);
+    }
+    if (ev.type === "page_view" && typeof ev.path === "string" && ev.path.includes("/pricing")) {
+      з.доЦен = true;
+    }
+    if (ev.type === "checkout_start") з.начал = true;
+  }
+
+  const сырыеВходы = new Map<string, { сессий: number; доЦен: number; началиОплату: number }>();
+  for (const з of заходы.values()) {
+    const ключ = `${з.канал}|${з.вход}`;
+    const т = сырыеВходы.get(ключ) ?? { сессий: 0, доЦен: 0, началиОплату: 0 };
+    т.сессий += 1;
+    if (з.доЦен) т.доЦен += 1;
+    if (з.начал) т.началиОплату += 1;
+    сырыеВходы.set(ключ, т);
+  }
+
+  // Ограничение списка: двенадцать самых частых, остальное — «прочие». Без него
+  // десяток заходов на выдуманные адреса раздул бы ответ.
+  const ПРЕДЕЛ = 12;
+  const по = [...сырыеВходы.entries()].sort((a, b) => b[1].сессий - a[1].сессий);
+  const byEntryPage = Object.create(null) as РазрезВоронки["byEntryPage"];
+  for (const [ключ, т] of по.slice(0, ПРЕДЕЛ)) byEntryPage[ключ] = т;
+  const хвост = по.slice(ПРЕДЕЛ);
+  if (хвост.length) {
+    byEntryPage["прочие"] = хвост.reduce(
+      (а, [, т]) => ({
+        сессий: а.сессий + т.сессий,
+        доЦен: а.доЦен + т.доЦен,
+        началиОплату: а.началиОплату + т.началиОплату,
+      }),
+      { сессий: 0, доЦен: 0, началиОплату: 0 },
+    );
+  }
+
+  return { byChannel, byApp, byPost, byEntryPage };
 }
 
 /**
@@ -782,7 +974,18 @@ eventsRouter.get("/funnel", (req, res) => {
   //     человек вообще вернулся, — но называть её оплатой нельзя.
   //   paid — подтверждение от КАССЫ: событие пишет вебхук после того, как
   //     выдал купленное. Это и есть деньги.
-  interface Ступени { visits: number; pricing: number; checkoutStart: number; thankYouOpened: number; paid: number }
+  interface Ступени {
+    visits: number;
+    pricing: number;
+    checkoutStart: number;
+    thankYouOpened: number;
+    paid: number;
+    /** Из них НАШИ — заходы с нашей меткой канала (см. НАШИ_МЕТКИ_КАНАЛА). */
+    checkoutStartOurs: number;
+    /** Из них НАШИ — проверки кассы своими же адресами. Не вычитаем молча: читатель
+     *  должен видеть оба числа, иначе «первая продажа» опять решается перепиской. */
+    paidOurs: number;
+  }
   const поДням: Record<string, Ступени> = Object.create(null);
   // События, прошедшие отбор по времени и по «не робот», — их же считает разрез
   // по каналам и приложениям. Второй проход по файлу не делаем: это тот самый
@@ -791,6 +994,24 @@ eventsRouter.get("/funnel", (req, res) => {
   const людиПоДням: Record<string, Set<string>> = Object.create(null);
   let ботов = 0;
   let всего = 0;
+
+  // ПЕРВЫЙ ПРОХОД: какие сессии пришли с нашей меткой канала. Метка живёт в
+  // адресе страницы (`/pricing?c=cold-visit-check`), а событие «начали оплату»
+  // её не несёт — поэтому связываем по признаку сессии, тот же посетитель и
+  // тот же заход. (Без двоеточия после слова: соседний сторож
+  // publicFunnelHasNoPersonalData читает ИСХОДНИК и запрещает строку «sid»
+  // с двоеточием, чтобы личное поле не попало в ответ. Моё пояснение
+  // покрасило его в красный — текст о вещи неотличим от вещи.)
+  // Способ работает и ЗАДНИМ ЧИСЛОМ, для уже собранных событий, и не требует
+  // правок страницы.
+  const нашиСессии = new Set<string>();
+  for (const line of content.split(String.fromCharCode(10))) {
+    if (!line.trim()) continue;
+    let ev: AnalyticsEvent;
+    try { ev = JSON.parse(line) as AnalyticsEvent; } catch { continue; }
+    if (ev.type !== "page_view" || !ev.sid) continue;
+    if (нашаМетка(меткаИзПути(ev.path))) нашиСессии.add(ev.sid);
+  }
 
   for (const line of content.split(String.fromCharCode(10))) {
     if (!line.trim()) continue;
@@ -803,7 +1024,7 @@ eventsRouter.get("/funnel", (req, res) => {
 
     событияВоронки.push(ev);
     const день = new Date(t).toISOString().slice(0, 10);
-    if (!поДням[день]) поДням[день] = { visits: 0, pricing: 0, checkoutStart: 0, thankYouOpened: 0, paid: 0 };
+    if (!поДням[день]) поДням[день] = { visits: 0, pricing: 0, checkoutStart: 0, thankYouOpened: 0, paid: 0, paidOurs: 0, checkoutStartOurs: 0 };
     if (!людиПоДням[день]) людиПоДням[день] = new Set<string>();
     const ст = поДням[день];
 
@@ -814,10 +1035,16 @@ eventsRouter.get("/funnel", (req, res) => {
       if (typeof ev.path === "string" && ev.path.includes("/pricing")) ст.pricing += 1;
     } else if (ev.type === "checkout_start") {
       ст.checkoutStart += 1;
+      if (ev.sid && нашиСессии.has(ev.sid)) ст.checkoutStartOurs += 1;
     } else if (ev.type === "checkout_success") {
       ст.thankYouOpened += 1;
     } else if (ev.type === СОБЫТИЕ_ОПЛАТА_ПОДТВЕРЖДЕНА) {
       ст.paid += 1;
+      // Признак ставит вебхук по адресу плательщика (lib/payment/paymentConfirmedEvent).
+      // Замер 29.09.2026: первые две подтверждённые оплаты были покупками самого
+      // основателя, проверявшего кассу, — без этого разреза они прочитались бы
+      // как первые продажи.
+      if (ev.meta?.свой === true) ст.paidOurs += 1;
     }
   }
 
@@ -838,9 +1065,11 @@ eventsRouter.get("/funnel", (req, res) => {
       checkoutStart: поДням[д].checkoutStart,
       thankYouOpened: поДням[д].thankYouOpened,
       paid: измерялосьЛи(д) ? поДням[д].paid : null,
+      paidOurs: измерялосьЛи(д) ? поДням[д].paidOurs : null,
+      checkoutStartOurs: поДням[д].checkoutStartOurs,
     }));
 
-  const разрез = разрезВоронки(событияВоронки);
+  const разрез = разрезВоронки(событияВоронки, нашиСессии);
 
   const итог = byDay.reduce(
     (a, b) => ({
@@ -848,8 +1077,9 @@ eventsRouter.get("/funnel", (req, res) => {
       pricing: a.pricing + b.pricing,
       checkoutStart: a.checkoutStart + b.checkoutStart,
       thankYouOpened: a.thankYouOpened + b.thankYouOpened,
+      checkoutStartOurs: a.checkoutStartOurs + b.checkoutStartOurs,
     }),
-    { visits: 0, pricing: 0, checkoutStart: 0, thankYouOpened: 0 },
+    { visits: 0, pricing: 0, checkoutStart: 0, thankYouOpened: 0, checkoutStartOurs: 0 },
   );
 
   // Сумма по измеренным дням. Складывать вперемешку с null нельзя: null + число
@@ -869,6 +1099,14 @@ eventsRouter.get("/funnel", (req, res) => {
     Date.now() < Date.parse(ОПЛАТЫ_СЧИТАЕМ_С)
       ? null
       : Object.values(поДням).reduce((сумма, ст) => сумма + ст.paid, 0);
+  // То же окно, тот же способ счёта — но отдельным числом. Вычитать «наши» из
+  // общего молча нельзя: читатель обязан видеть оба, иначе ноль внешних продаж
+  // снова придётся выяснять перепиской (замер 29.09.2026: первые две оплаты были
+  // проверками кассы самим основателем).
+  const нашиЗаОкно =
+    Date.now() < Date.parse(ОПЛАТЫ_СЧИТАЕМ_С)
+      ? null
+      : Object.values(поДням).reduce((сумма, ст) => сумма + ст.paidOurs, 0);
 
   res.json({
     known: true,
@@ -880,7 +1118,7 @@ eventsRouter.get("/funnel", (req, res) => {
     // Тоже про ОКНО, а не про дни с событиями: окно, начавшееся раньше даты
     // появления механизма, заведомо неполно — даже если в тех днях событий нет.
     paidWindowPartlyUnmeasured: сНачала < Date.parse(ОПЛАТЫ_СЧИТАЕМ_С),
-    total: { ...итог, paid: оплатыЗаОкно },
+    total: { ...итог, paid: оплатыЗаОкно, paidOurs: нашиЗаОкно },
     // Доля роботов печатается рядом: без неё «мало людей» читается как провал
     // продукта, тогда как это может быть просто состав трафика.
     eventsSeen: всего,

@@ -1,5 +1,5 @@
 import { apiUrl } from "./apiBase";
-import { channelNow } from "./channelNow";
+import { channelNow, postNow } from "./channelNow";
 
 
 /**
@@ -83,8 +83,13 @@ export function track(payload: TrackPayload): void {
   const givenChannel = payload.meta?.channel;
 
   const channel = channelNow();
+  // Пост — рядом с каналом, отдельным полем. Без него «какой пост сработал»
+  // остаётся без ответа: у канала одна метка на все ссылки (замер 30.09.2026).
+  const post = postNow();
   const meta =
-    givenChannel || !channel ? payload.meta : { ...(payload.meta ?? {}), channel };
+    givenChannel || !channel
+      ? payload.meta
+      : { ...(payload.meta ?? {}), channel, ...(post ? { post } : {}) };
 
   /*
    * Оповещаем страницу о событии — этим пользуются рекламные счётчики.

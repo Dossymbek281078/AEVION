@@ -64,6 +64,7 @@ import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webho
 import { safeErrorText } from "../lib/safeError";
 import { upsertAppSubscription } from "../lib/appEntitlements";
 import { записатьСобытиеОтСервера, СОБЫТИЕ_ОПЛАТА_ПОДТВЕРЖДЕНА } from "./events";
+import { записатьПодтверждённуюОплату } from "../lib/payment/paymentConfirmedEvent";
 
 /**
  * Запись прав живёт в lib/appEntitlements и НЕ дублируется здесь.
@@ -416,10 +417,13 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         console.log(`[ls/webhook] ${event} → app_sub activated: ${appSlug} for ${email}`);
         // Деньги дошли и купленное выдано — только ТЕПЕРЬ это «оплатили» в
         // воронке. Почту не пишем: в хранилище воронки личных данных нет.
-        записатьСобытиеОтСервера(СОБЫТИЕ_ОПЛАТА_ПОДТВЕРЖДЕНА, {
+        записатьПодтверждённуюОплату({
           source: "lemonsqueezy",
           tier: appSlug,
-          meta: { reference: ref ?? null, event },
+          app: appSlug,
+          reference: ref ?? null,
+          event,
+          email,
         });
         return res.json({ ok: true, action: "app_activated", appSlug, email });
       }
@@ -507,10 +511,14 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         );
         if (String(customModule) === "devhub") await upgradeDevHubByEmail(email, "pro");
         console.log(`[ls/webhook] ${event} → один модуль: ${String(customModule)} for ${email}`);
-        записатьСобытиеОтСервера(СОБЫТИЕ_ОПЛАТА_ПОДТВЕРЖДЕНА, {
+        записатьПодтверждённуюОплату({
           source: "lemonsqueezy",
           tier: String(customModule),
-          meta: { reference: ref ?? null, event, path: "fallback_single_module" },
+          app: String(customModule),
+          reference: ref ?? null,
+          event,
+          email,
+          path: "fallback_single_module",
         });
         return res.json({ ok: true, action: "app_activated", appSlug: String(customModule), email });
       }
@@ -581,11 +589,13 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
       console.log(`[ls/webhook] ${event} → provisioned ${tierId} for ${email} (ref=${ref ?? "default"})`);
       // То же, что у ветки приложений: ступень «оплатили» двигает подтверждение
       // кассы, а не загрузка страницы «спасибо».
-      записатьСобытиеОтСервера(СОБЫТИЕ_ОПЛАТА_ПОДТВЕРЖДЕНА, {
-        source: "lemonsqueezy",
-        tier: tierId,
-        meta: { reference: ref ?? null, event },
-      });
+      записатьПодтверждённуюОплату({
+          source: "lemonsqueezy",
+          tier: tierId,
+          reference: ref ?? null,
+          event,
+          email,
+        });
       return res.json({ ok: true, action: "activated", tierId, subscriptionId: result.subscription.id });
     }
 

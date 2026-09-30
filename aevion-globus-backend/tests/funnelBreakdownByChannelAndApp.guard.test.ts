@@ -18,7 +18,8 @@ const событие = (
   type: string,
   meta?: Record<string, string | number | boolean | null>,
   path?: string,
-) => ({ type, meta, path });
+  sid?: string,
+) => ({ type, meta, path, sid });
 
 describe("разрез воронки", () => {
   it("считает шаги по каналам", () => {
@@ -29,8 +30,30 @@ describe("разрез воронки", () => {
       событие("checkout_start", { channel: "youtube", app: "multichat" }),
       событие("checkout_success", { channel: "youtube", app: "multichat" }),
     ]);
-    expect(r.byChannel["youtube"]).toEqual({ visits: 2, pricing: 1, checkoutStart: 1, paid: 1 });
-    expect(r.byChannel["product-hunt"]).toEqual({ visits: 1, pricing: 1, checkoutStart: 0, paid: 0 });
+    // 🔴 30.09.2026 смысл `paid` ИСПРАВЛЕН, и ожидание пришлось поправить.
+    // Раньше он считал `checkout_success` — событие загрузки страницы «спасибо».
+    // Разрез отдавал на проде «direct: paid 3» при нуле подтверждённых оплат в
+    // итоге, то есть отвечал ложью на главный вопрос. Теперь `paid` — это
+    // подтверждение КАССЫ, а открытия страницы возврата живут полем
+    // `thankYouOpened`, как и в итоге.
+    expect(r.byChannel["youtube"]).toEqual({
+      visits: 2,
+      pricing: 1,
+      checkoutStart: 1,
+      checkoutStartOurs: 0,
+      thankYouOpened: 1,
+      paid: 0,
+      paidOurs: 0,
+    });
+    expect(r.byChannel["product-hunt"]).toEqual({
+      visits: 1,
+      pricing: 1,
+      checkoutStart: 0,
+      checkoutStartOurs: 0,
+      thankYouOpened: 0,
+      paid: 0,
+      paidOurs: 0,
+    });
   });
 
   it("«без метки» и «метка неизвестна» — РАЗНЫЕ ответы", () => {
@@ -47,7 +70,11 @@ describe("разрез воронки", () => {
   it("покупка плана не пропадает: считается под ключом plan", () => {
     const r = разрезВоронки([
       событие("checkout_start", { channel: "direct" }),
-      событие("checkout_success", { channel: "direct", app: "qskyway" }),
+      // Оплата теперь приходит событием подтверждения кассы, а не загрузкой
+      // страницы. Имя приложения приносит сам вебхук (meta.app), иначе разрез
+      // сложил бы ВСЕ оплаты в «plan» и на вопрос «что покупают» отвечал бы
+      // «план», что бы ни купили.
+      событие("payment_confirmed", { channel: "direct", app: "qskyway" }),
     ]);
     expect(r.byApp["plan"]).toEqual({ checkoutStart: 1, paid: 0 });
     expect(r.byApp["qskyway"]).toEqual({ checkoutStart: 0, paid: 1 });
@@ -82,5 +109,74 @@ describe("разрез воронки", () => {
     const r = разрезВоронки([]);
     expect(Object.keys(r.byChannel)).toEqual([]);
     expect(Object.keys(r.byApp)).toEqual([]);
+  });
+  it("подметка поста даёт разрез по постам, не ломая канал", () => {
+    // 🔴 Замер 30.09.2026: Instagram — единственный канал, приводящий людей до
+    // цен, трафик идёт рывками (постами), а метка у всех ссылок одна — `?c=ig`.
+    // Поэтому «какой пост сработал» ответить было нечем.
+    //
+    // Проверяем ОБА требования сразу: пост появился отдельным разрезом И канал
+    // остался прежним. Если бы пост подмешался к имени канала, каждый пост стал
+    // бы «новым каналом», и сравнить Instagram с YouTube было бы нечем.
+    const r = разрезВоронки([
+      событие("page_view", { channel: "instagram", post: "kartinka3" }, "/"),
+      событие("page_view", { channel: "instagram", post: "kartinka3" }, "/pricing"),
+      событие("page_view", { channel: "instagram", post: "video7" }, "/pricing"),
+      событие("page_view", { channel: "instagram" }, "/pricing"),
+    ]);
+
+    expect(r.byChannel["instagram"].pricing, "канал обязан сложить все посты вместе").toBe(3);
+    expect(Object.keys(r.byChannel).sort(), "пост превратился в отдельный канал").toEqual(["instagram"]);
+    expect(r.byPost["instagram/kartinka3"]).toEqual({ visits: 2, pricing: 1, checkoutStart: 0, paid: 0 });
+    expect(r.byPost["instagram/video7"]).toEqual({ visits: 1, pricing: 1, checkoutStart: 0, paid: 0 });
+    expect(
+      r.byPost["instagram/undefined"],
+      "заход без подметки попал в выдуманный пост",
+    ).toBeUndefined();
+  });
+
+  it("КОНТРОЛЬ: один пост в двух каналах не складывается в одно число", () => {
+    const r = разрезВоронки([
+      событие("page_view", { channel: "instagram", post: "obshchiy" }, "/pricing"),
+      событие("page_view", { channel: "youtube", post: "obshchiy" }, "/pricing"),
+    ]);
+    expect(r.byPost["instagram/obshchiy"].pricing).toBe(1);
+    expect(r.byPost["youtube/obshchiy"].pricing).toBe(1);
+  });
+  it("страницы входа: считается ПЕРВАЯ страница сессии, запрос и идентификаторы убраны", () => {
+    // 🔴 Замер 30.09.2026: Instagram привёл 12 человек до цен, а на какие страницы
+    // они пришли — ответа не было (детализация только в закрытых ручках, 401).
+    // Людей приводит ПЕРВАЯ страница; остальные они смотрят уже внутри.
+    const r = разрезВоронки([
+      событие("page_view", { channel: "instagram" }, "/qskyway?c=ig-post1", "s1"),
+      событие("page_view", { channel: "instagram" }, "/pricing", "s1"),
+      событие("page_view", { channel: "instagram" }, "/pricing", "s2"),
+      событие("page_view", { channel: "youtube" }, "/devhub/9f8e7d6c5b4a3210", "s3"),
+      событие("checkout_start", { channel: "instagram" }, undefined, "s2"),
+    ]);
+
+    expect(
+      r.byEntryPage["instagram|/qskyway"],
+      "запрос не отброшен или взята не первая страница",
+    ).toEqual({ сессий: 1, доЦен: 1, началиОплату: 0 });
+    expect(r.byEntryPage["instagram|/pricing"]).toEqual({ сессий: 1, доЦен: 1, началиОплату: 1 });
+    expect(
+      r.byEntryPage["youtube|/devhub/:id"],
+      "идентификатор уехал в отчёт как есть",
+    ).toEqual({ сессий: 1, доЦен: 0, началиОплату: 0 });
+  });
+
+  it("КОНТРОЛЬ: список страниц входа ограничен, остальное в «прочие»", () => {
+    // Без ограничения десяток заходов на выдуманные адреса раздул бы ответ и стал
+    // бы способом его испортить.
+    const много = Array.from({ length: 30 }, (_v, i) =>
+      событие("page_view", { channel: "instagram" }, `/vydumka${i}`, `sid${i}`),
+    );
+    const r = разрезВоронки(много);
+    const ключи = Object.keys(r.byEntryPage);
+    expect(ключи.length, `ключей ${ключи.length} — ограничение не работает`).toBeLessThanOrEqual(13);
+    expect(ключи, "хвост не сложен в «прочие»").toContain("прочие");
+    const всего = Object.values(r.byEntryPage).reduce((а, т) => а + т.сессий, 0);
+    expect(всего, "при сворачивании хвоста потерялись сессии").toBe(30);
   });
 });

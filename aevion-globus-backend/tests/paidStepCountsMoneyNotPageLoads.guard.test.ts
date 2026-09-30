@@ -70,13 +70,13 @@ function приложение() {
 
 let счётчик = 0;
 /** Настоящий подписанный вебхук о покупке CyberChess на месяц. */
-function вебхукОбОплате() {
+function вебхукОбОплате(почта?: string) {
   счётчик += 1;
   const payload = {
     meta: { event_name: "subscription_created" },
     data: {
       id: `sub_paid_${счётчик}`,
-      attributes: { user_email: `buyer${счётчик}@test.aev`, variant_id: "7003", total: 2400 },
+      attributes: { user_email: почта ?? `buyer${счётчик}@test.aev`, variant_id: "7003", total: 2400 },
     },
   };
   const raw = JSON.stringify(payload);
@@ -100,7 +100,7 @@ async function воронка() {
   const r = await request(приложение()).get("/api/pricing/events/funnel?days=14");
   expect(r.status).toBe(200);
   return r.body as {
-    total: { checkoutStart: number; thankYouOpened: number; paid: number | null };
+    total: { checkoutStart: number; checkoutStartOurs: number; thankYouOpened: number; paid: number | null; paidOurs: number | null };
     paidMeasuredSince: string;
     byDay: { day: string; thankYouOpened: number; paid: number | null }[];
   };
@@ -203,5 +203,55 @@ describe("хранилище событий", () => {
     expect(process.env.EVENTS_FILE).toBe(ФАЙЛ);
     expect(existsSync(ФАЙЛ)).toBe(true);
     expect(readFileSync(ФАЙЛ, "utf8")).not.toContain("api.aevion.app");
+  });
+  test("наши собственные оплаты видны ОТДЕЛЬНЫМ числом, а не вычтены молча", async () => {
+    // 🔴 Замер 29.09.2026: первые две подтверждённые оплаты были покупками самого
+    // основателя, проверявшего кассу ($40 и $16). Число «оплатили: 2» прочиталось
+    // бы как первые продажи, и это выяснялось перепиской между окнами.
+    //
+    // Проверяем ОБА числа: общее и «из них наши». Вычитание молча было бы хуже —
+    // тогда ноль внешних продаж нельзя отличить от отсутствия оплат вообще.
+    const своя = await вебхукОбОплате("founder@aevion.app");
+    expect(своя.status).toBe(200);
+    const чужая = await вебхукОбОплате("buyer@example.org");
+    expect(чужая.status).toBe(200);
+
+    const ф = await воронка();
+    expect(ф.total.paid, "обе оплаты обязаны попасть в общее число").toBe(2);
+    expect(
+      ф.total.paidOurs,
+      "наша оплата не отмечена — «первая продажа» опять решается перепиской",
+    ).toBe(1);
+  });
+  test("начала оплаты с НАШЕЙ меткой канала отмечены отдельно", async () => {
+    // 🔴 Замер 30.09.2026: за 14 дней «начали оплату: 5», и все пять оказались
+    // нашими — окно страницы цен признало пять нажатий браузером, а в почте
+    // нашлись ПЯТЬ писем кассы о брошенной корзине, все на probe-*@aevion.app.
+    // Живых незавершённых покупок за две недели ноль, а число «5» читалось как
+    // пятеро людей у карты.
+    //
+    // Метка живёт в адресе страницы, а событие «начали оплату» её не несёт —
+    // связь идёт по sid. Поэтому тест шлёт СНАЧАЛА просмотр с меткой, потом
+    // начало оплаты той же сессией, как это и происходит у человека.
+    const свой = "sid-наш-1";
+    const чужой = "sid-человек-1";
+    await request(приложение()).post("/api/pricing/events")
+      .set("User-Agent", "Mozilla/5.0 Chrome/131")
+      .send({ type: "page_view", path: "/pricing?c=cold-visit-check", sid: свой });
+    await request(приложение()).post("/api/pricing/events")
+      .set("User-Agent", "Mozilla/5.0 Chrome/131")
+      .send({ type: "page_view", path: "/pricing", sid: чужой });
+    for (const sid of [свой, чужой]) {
+      await request(приложение()).post("/api/pricing/events")
+        .set("User-Agent", "Mozilla/5.0 Chrome/131")
+        .send({ type: "checkout_start", source: "pricing", sid });
+    }
+
+    const ф = await воронка();
+    expect(ф.total.checkoutStart, "оба начала обязаны попасть в общее число").toBe(2);
+    expect(
+      ф.total.checkoutStartOurs,
+      "наше начало оплаты не отмечено — пятеро наших кликов снова прочитаются как пятеро людей",
+    ).toBe(1);
   });
 });

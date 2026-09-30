@@ -45,6 +45,7 @@ import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webho
 import { upsertAppSubscription } from "../lib/appEntitlements";
 import { logBureauAudit } from "./bureau";
 import { записатьСобытиеОтСервера, СОБЫТИЕ_ОПЛАТА_ПОДТВЕРЖДЕНА } from "./events";
+import { записатьПодтверждённуюОплату } from "../lib/payment/paymentConfirmedEvent";
 
 // DevHub Studio Pro: upgrade DevHubTier + DevHubEmailTier on purchase
 async function upgradeDevHubByEmail(email: string, tier: "free" | "pro"): Promise<void> {
@@ -882,11 +883,13 @@ gumroadWebhookRouter.post("/webhook", async (req: Request, res: Response) => {
       // Ступень «оплатили» в воронке двигает подтверждение кассы. Второй
       // провайдер обязан писать то же событие: иначе продажа через него дала бы
       // в отчёте ноль, и слепота выглядела бы как отсутствие продаж.
-      записатьСобытиеОтСервера(СОБЫТИЕ_ОПЛАТА_ПОДТВЕРЖДЕНА, {
+      записатьПодтверждённуюОплату({
         source: "gumroad",
         tier: tierId,
+        reference: reference ?? null,
+        event: "paid",
+        email,
         ...(paidUsd === undefined ? {} : { value: paidUsd }),
-        meta: { reference: reference ?? null, event: "paid" },
       });
 
       return res.json({

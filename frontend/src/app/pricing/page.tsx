@@ -397,6 +397,18 @@ export default function PricingPage() {
   const можноОбещатьСрок = (ссылка: string) =>
     sellableRefs !== null && sellableRefs.includes(ссылка);
 
+  /**
+   * «От» для таблицы модулей: минимум по сроками, которые касса продаёт.
+   * Список не пришёл — берём месяц (lite): он заведомо не ниже настоящей цены,
+   * и человек не увидит числа, которого не существует.
+   */
+  const ценаОтПродаваемых = (app: { slug: string; baseMonthly: number }): number | null => {
+    if (sellableRefs === null) return termPricePerMonth(app.baseMonthly, "lite");
+    const доступные = TERM_TIERS.filter((t) => sellableRefs.includes(ссылкаПриложения(app.slug, t)));
+    if (!доступные.length) return null;
+    return Math.min(...доступные.map((t) => termPricePerMonth(app.baseMonthly, t)));
+  };
+
   /** Можно ли купить этот тариф прямо сейчас. */
   const продаётся = (tierId: string) => {
     // Бесплатный тариф не покупается через кассу, и в справочнике товаров его
@@ -1798,14 +1810,25 @@ export default function PricingPage() {
                       {availabilityBadge(m.availability)}
                     </td>
                     <td style={{ padding: "10px 14px", textAlign: "right", fontWeight: 700 }}>
-                      {/* Отдельно продаются только приложения из STANDALONE_APPS; «от» — цена
-                          месяца на самом длинном сроке (lib/termPricing.ts). */}
+                      {/* «От» — самый дешёвый месяц среди сроков, которые касса
+                          ДЕЙСТВИТЕЛЬНО продаёт, а не среди всех сроков подряд.
+                          30.09.2026: в карточках приложений этот дефект уже
+                          починили, а колонка осталась и продолжала обещать
+                          половинную цену Max у QRight ($12), QSign ($12), биржи
+                          ($20) и QSkyway ($8) — им касса длинные сроки не
+                          продаёт (503). Нашли окна оркестратора и приёмки; я
+                          чинил соседнюю поверхность и эту не проверил.
+                          Незнание (список не пришёл) обещать скидку не вправе:
+                          тогда показываем цену месяца — она заведомо не ниже
+                          настоящей. */}
                       {(() => {
                         const app = standaloneApp(m.id);
-                        return app ? (
-                          displayPrice(fromPricePerMonth(app.baseMonthly))
-                        ) : (
+                        if (!app) return <span style={{ color: "#94a3b8" }}>—</span>;
+                        const дешевейший = ценаОтПродаваемых(app);
+                        return дешевейший === null ? (
                           <span style={{ color: "#94a3b8" }}>—</span>
+                        ) : (
+                          displayPrice(дешевейший)
                         );
                       })()}
                     </td>

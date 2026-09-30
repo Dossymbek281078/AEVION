@@ -140,7 +140,14 @@ export default function TournamentsHubPage() {
   const [eloMin, setEloMin] = useState<number>(0);
   const [eloMax, setEloMax] = useState<number>(3000);
 
-  const [tournaments, setTournaments] = useState<Tournament[]>(MOCK_FALLBACK);
+  // 🔴 30.09.2026: начальное состояние — ПУСТО, а не MOCK_FALLBACK.
+  // Пока здесь стояли фикстуры, человек видел выдуманные турниры в двух
+  // случаях: первые мгновения до ответа сервера и — что хуже — при любой
+  // ошибке загрузки, потому что состояние так и оставалось на них, рядом
+  // с сообщением об ошибке. Пустой список честнее выдуманного: он ничего
+  // не обещает. Сама константа оставлена: на её пометку «демо» есть
+  // отдельный тест соседа, но в показ она больше не попадает.
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState<boolean>(false);
@@ -421,7 +428,9 @@ export default function TournamentsHubPage() {
               borderRadius: 12,
             }}
           >
-            Турниры под текущие фильтры не найдены.
+            {tournaments.length === 0
+              ? "Турниров пока нет — создайте первый."
+              : "Турниры под текущие фильтры не найдены."}
           </div>
         )}
         {filtered.map((t) => (

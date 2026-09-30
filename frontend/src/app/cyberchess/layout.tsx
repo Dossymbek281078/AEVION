@@ -24,6 +24,9 @@ export const metadata: Metadata = {
     description:
       "ИИ-коуч Алексей · Composite Performance Index (11 факторов) · Stockfish multiPV · Chessy currency · стрим-в-приложении. AEVION CyberChess.",
     type: "website",
+    // Содержимое страницы русское, а корневой layout объявляет lang="en".
+    // Без locale превью в мессенджерах и соцсетях достаётся английская метка.
+    locale: "ru_RU",
     siteName: "AEVION CyberChess",
     url: "/cyberchess",
   },

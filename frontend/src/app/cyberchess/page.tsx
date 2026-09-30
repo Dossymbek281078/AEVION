@@ -1,4 +1,5 @@
 "use client";
+import { стримГоден } from "./ответНеГоден";
 import { лимитПровайдера, когдаВернётся as срокВозврата, тренерОтветил, пометкаОВыключенномРазборе, пометкаЗапаснойМодели, общаяОчередьАнонимов } from "./coachOutage";
 import { главныйВыдуманныйХод, дополнитьХодомДвижка, текстВместоОтвета } from "./проверьХодыОтвета";
 import { track } from "@/lib/track";
@@ -1383,7 +1384,7 @@ export default function CyberChessPage(){
   const[tab,sTab]=useState<"play"|"puzzles"|"analysis"|"coach">("play");
   const[pzI,sPzI]=useState(0);
   const[pzF,sPzF]=useState("all");
-  const[sfOk,sSfOk]=useState(false);
+  const[sfOk,sSfOk]=useState(false);const[sfZapusk,sSfZapusk]=useState(false);
   const[rat,sRat]=useState(800);
   const[sts,sSts]=useState({w:0,l:0,d:0});
   // totalGames at component scope for daily goals tracking
@@ -1530,10 +1531,25 @@ export default function CyberChessPage(){
   const resetPzStreak=()=>sPzStreak(s=>{if(chessy.owned.streak_shield&&s.cur>=3){sChessy(c=>({...c,owned:{...c.owned,streak_shield:false}}));showToast("🛡 Щит серии спас: ошибка не прервала её","success");return s;}const ns={cur:0,best:s.best};savePzStreak(ns);return ns});
   // Daily goals tracking — stored by todayKey() in localStorage
   const DG_KEY="aevion_daily_goals_v1";
-  const[dailyGoals,sDailyGoals]=useState<{coachOpened:boolean;gamesGoal:number;puzzleGoal:number;date:string}>(()=>{
+  // 🔴 29.09.2026. «ЦЕЛИ НА СЕГОДНЯ» СЧИТАЛИ НЕ СЕГОДНЯ.
+  //
+  // Проверено руками на проде: `gamesToday` был равен `totalGames` — числу
+  // партий ЗА ВСЁ ВРЕМЯ, — а `puzzlesToday` равен `pzSolvedCount`, счётчику
+  // ТЕКУЩЕЙ СЕССИИ, который обнуляется перезагрузкой и режимами на время.
+  //
+  // Следствия разные, и оба бьют по возврату на второй день. Сыгравший вчера
+  // пять партий видит «Сыграй 5» выполненной без единого хода — механизм,
+  // который должен звать обратно, молчит именно для тех, кого зовёт. А задачи
+  // наоборот: решил три, обновил страницу — снова ноль.
+  //
+  // Считаем по-честному: партии за день = всего минус БАЗА на начало дня
+  // (база снимается один раз, когда статистика уже загружена — до этого она
+  // {0,0,0}, и снимок дал бы ноль, то есть прежнюю ошибку); задачи копим
+  // своим счётчиком в той же записи, она и так живёт по дате.
+  const[dailyGoals,sDailyGoals]=useState<{coachOpened:boolean;gamesGoal:number;puzzleGoal:number;date:string;gamesBase?:number|null;puzzlesDone?:number}>(()=>{
     const today=todayKey();
     try{const raw=localStorage.getItem(DG_KEY);if(raw){const d=JSON.parse(raw);if(d?.date===today)return d;}}catch{}
-    return{coachOpened:false,gamesGoal:5,puzzleGoal:5,date:today};
+    return{coachOpened:false,gamesGoal:5,puzzleGoal:5,date:today,gamesBase:null,puzzlesDone:0};
   });
   useEffect(()=>{try{localStorage.setItem(DG_KEY,JSON.stringify(dailyGoals))}catch{}},[dailyGoals]);
   // Puzzle Rush state
@@ -2043,6 +2059,23 @@ export default function CyberChessPage(){
     }catch{}
   },[]);
   const[srvDaily,sSrvDaily]=useState<SrvDaily|null>(null);
+  // 🔴 29.09.2026. ДВЕ ДВЕРИ В ОДНУ КОМНАТУ, И ОБЕ СЛОМАНЫ ПО-РАЗНОМУ.
+  //
+  // Замер на проде: плитка «Реши задачу дня» открывала `PUZZLES[idx]` —
+  // задачу из ЗАГРУЖЕННОЙ ПАЧКИ по локальному индексу, а не задачу дня.
+  // Сверено числами: индекс 283 дал позицию `8/8/6P1/8/8/2K3kp/7R/5b2`,
+  // тогда как сервер на тот же день отдавал `6k1/1p3pp1/2p3n1/...`. Разные
+  // задачи. А отметка «решено» ставилась по совпадению позиции с серверной —
+  // то есть не ставилась никогда.
+  //
+  // Соседняя кнопка «☀ Задача дня» брала верную, серверную, но БЕЗ
+  // нормализации (показывала позицию до хода соперника) и без решения, так
+  // что решить её было нельзя вовсе.
+  //
+  // Теперь путь ОДИН, и отметка ставится по признаку «открыта задача дня», а
+  // не по сравнению позиций: после нормализации позиция заведомо не равна
+  // серверной, и сравнение снова молчало бы.
+  const[этоЗадачаДня,sЭтоЗадачаДня]=useState(false);
   const[srvDailyFailed,sSrvDailyFailed]=useState(false);
   const[tourStep,sTourStep]=useState<number>(-1); // -1 = not showing
   const[showOnboarding,sShowOnboarding]=useState<boolean>(false);
@@ -3114,7 +3147,12 @@ export default function CyberChessPage(){
     return()=>window.removeEventListener("keydown",h);
   },[]);
 
-  useEffect(()=>{sRat(ldR());sSts(ldS());sSavedGames(loadGames());
+  useEffect(()=>{sRat(ldR());const загруженнаяСтатистика=ldS();sSts(загруженнаяСтатистика);sSavedGames(loadGames());
+    // База целей дня снимается ЗДЕСЬ, а не в инициализаторе состояния: там
+    // статистика ещё {0,0,0}, и база вышла бы нулевой — то есть «за сегодня»
+    // снова означало бы «за всё время».
+    {const всегоНаНачалоДня=загруженнаяСтатистика.w+загруженнаяСтатистика.l+загруженнаяСтатистика.d;
+     sDailyGoals(g=>g.gamesBase==null?{...g,gamesBase:всегоНаНачалоДня}:g);}
     const rs=loadResume();if(rs&&rs.hist.length>0)sResumeOffer(rs);
     // Chessy welcome + daily bonus + first-time tour
     const c=ldChessy();const tk=todayKey();
@@ -3227,12 +3265,17 @@ export default function CyberChessPage(){
   // открывает Analysis/Coach. На setup screen Stockfish не нужен.
   function ensureSF(){
     if(sfR.current)return;
+    // 🔴 29.09.2026: исходов ТРИ, а подпись знала два. Пока идёт загрузка WASM,
+    // признак готовности ложен — и подпись писала «не запустился» движку,
+    // который просто ещё не поднялся. Соседнее окно приняло это за дефект
+    // узкого экрана; ширина ни при чём, дело в окне ожидания.
+    sSfZapusk(true);
     const s=new SF();
     // Подписка ДО init(): между запуском и присвоением уже мог прийти uciok.
     s.naSostoyanie=(ok:boolean)=>sSfOk(ok);
     s.init();sfR.current=s;
     const c=setInterval(()=>{if(s.ready()){sSfOk(true);clearInterval(c)}},200);
-    setTimeout(()=>clearInterval(c),15000);
+    setTimeout(()=>{clearInterval(c);sSfZapusk(false)},15000);
   }
   // Триггер: пользователь вошёл в игру или открыл анализ/коуча
   useEffect(()=>{
@@ -3569,7 +3612,7 @@ export default function CyberChessPage(){
                 sPzCurrent(pc=>pc?{...pc,sol:pc.sol.slice(2)}:pc);
                 showToast("Продолжай решение...","info");
               }else{
-                sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");incPzStreak();
+                sPzAttempt("correct");sPzSolvedCount(c=>c+1);sDailyGoals(g=>({...g,puzzlesDone:(g.puzzlesDone??0)+1}));snd("check");incPzStreak();
                 if(pzCurrent.theme)addThemeResult(pzCurrent.theme,true);
                 // Rush: +1..+3 sec по сложности, streak, score, Chessy
                 if(pzMode==="rush"){
@@ -3597,7 +3640,7 @@ export default function CyberChessPage(){
                 {const elapsed=Math.floor((Date.now()-pzTimerRef.current)/1000);const tb=elapsed<10?20:elapsed<30?10:5;addChessy(tb,`⏱ скорость ${elapsed}с`);sPzSessionChessy(c=>c+reward+tb);}
                 bumpDaily("puzzle");
                 if(pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
-                if(dailyState&&!dailyState.solved&&srvDaily?.fen===pzCurrent.fen){
+                if(dailyState&&!dailyState.solved&&этоЗадачаДня){
                   const next={...dailyState,solved:true};sDailyState(next);svDaily(next);
                   if(srvDaily)otpravitDaily(srvDaily);
                   bumpDaily("daily-puzzle");
@@ -3608,7 +3651,7 @@ export default function CyberChessPage(){
           },280); // ждём пока закончится slide-animation хода юзера (160ms) + ~100ms на восприятие
         }else{
           // Single-move puzzle — solved
-          sPzAttempt("correct");sPzSolvedCount(c=>c+1);snd("check");incPzStreak();
+          sPzAttempt("correct");sPzSolvedCount(c=>c+1);sDailyGoals(g=>({...g,puzzlesDone:(g.puzzlesDone??0)+1}));snd("check");incPzStreak();
           if(pzCurrent.theme)addThemeResult(pzCurrent.theme,true);
           if(pzMode==="rush"){
             const bonus=pzCurrent.r<900?1:pzCurrent.r<1500?2:3;
@@ -3638,7 +3681,7 @@ export default function CyberChessPage(){
           bumpDaily("puzzle");
           if(pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
           // Daily puzzle bonus — first solve today
-          if(dailyState&&!dailyState.solved&&srvDaily?.fen===pzCurrent.fen){
+          if(dailyState&&!dailyState.solved&&этоЗадачаДня){
             const next={...dailyState,solved:true};sDailyState(next);svDaily(next);
             if(srvDaily)otpravitDaily(srvDaily);
             bumpDaily("daily-puzzle");
@@ -4267,8 +4310,10 @@ export default function CyberChessPage(){
   const dailyGoalsBonusFiredRef=useRef(false);
   useEffect(()=>{
     if(dailyGoalsBonusFiredRef.current)return;
-    const g1done=totalGames>=dailyGoals.gamesGoal;
-    const g2done=pzSolvedCount>=dailyGoals.puzzleGoal;
+    // Бонус обязан считаться ПО ТЕМ ЖЕ числам, что видит человек. Прежде он
+    // брал всего и сессию, то есть у вернувшегося срабатывал при заходе.
+    const g1done=Math.max(0,totalGames-(dailyGoals.gamesBase??totalGames))>=dailyGoals.gamesGoal;
+    const g2done=(dailyGoals.puzzlesDone??0)>=dailyGoals.puzzleGoal;
     const g3done=dailyGoals.coachOpened;
     if(g1done&&g2done&&g3done){
       dailyGoalsBonusFiredRef.current=true;
@@ -5421,13 +5466,15 @@ export default function CyberChessPage(){
     }catch{showToast("Не удалось загрузить эндшпиль","error")}
   };
   const loadDailyPuzzle=()=>{
-    if(!dailyState||PUZZLES.length===0){showToast("Задачи ещё грузятся…","info");return}
-    const pz=normalizePuzzle(PUZZLES[dailyState.idx]||PUZZLES[0]);
+    if(srvDailyFailed){showToast("Задача дня не загрузилась — проверьте связь","error");return}
+    if(!srvDaily){showToast("Задача дня ещё грузится…","info");return}
+    const pz=normalizePuzzle({fen:srvDaily.fen,sol:srvDaily.sol,name:srvDaily.theme,r:srvDaily.rating,theme:srvDaily.theme}) as typeof PUZZLES[number];
+    sЭтоЗадачаДня(true);
     sTab("puzzles");
     let g;try{g=new Chess(pz.fen)}catch{showToast("Задача повреждена, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();startClock(0);
     showToast(`☀ Задача дня · ${pz.r}`,"info");
   };
-  const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Задачи ещё грузятся…","info");return}const pz0=fPz[i]||PUZZLES[0];const pz=pz0?normalizePuzzle(pz0):pz0;if(!pz){showToast("Нет задач под этот фильтр","error");return}let g;try{g=new Chess(pz.fen)}catch{showToast("Задача повреждена, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(i);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
+  const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Задачи ещё грузятся…","info");return}sЭтоЗадачаДня(false);const pz0=fPz[i]||PUZZLES[0];const pz=pz0?normalizePuzzle(pz0):pz0;if(!pz){showToast("Нет задач под этот фильтр","error");return}let g;try{g=new Chess(pz.fen)}catch{showToast("Задача повреждена, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(i);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
     // Set timer based on mode. В rush НЕ трогаем работающий дедлайн (ручной выбор пазла
     // посреди раша не должен обнулять часы).
     if(pzMode==="timed3")startClock(180);
@@ -6660,7 +6707,7 @@ export default function CyberChessPage(){
 
           {/* ─── Daily Goals mini-card ─── */}
           {(()=>{
-            const gamesToday=totalGames;const puzzlesToday=pzSolvedCount;
+            const gamesToday=Math.max(0,totalGames-(dailyGoals.gamesBase??totalGames));const puzzlesToday=dailyGoals.puzzlesDone??0;
             const g1=Math.min(gamesToday,dailyGoals.gamesGoal);const g2=Math.min(puzzlesToday,dailyGoals.puzzleGoal);
             const g1done=gamesToday>=dailyGoals.gamesGoal;const g2done=puzzlesToday>=dailyGoals.puzzleGoal;
             const g3done=dailyGoals.coachOpened;
@@ -7713,7 +7760,7 @@ export default function CyberChessPage(){
                   а движок не выдал НИ ОДНОЙ реплики — ход считал запасной расчёт, и
                   человек ждал соперника до двадцати секунд, читая имя движка,
                   который не запустился. */}
-              <div style={{fontSize:13,color:CC.textDim,marginTop:3}}>Движок: <b style={{color:sfOk?CC.text:CC.gold}}>{sfOk?"Stockfish 18 · d22":"не запустился — считает запасной расчёт"}</b></div>
+              <div style={{fontSize:13,color:CC.textDim,marginTop:3}}>Движок: <b style={{color:sfOk?CC.text:CC.gold}}>{sfOk?"Stockfish 18 · d22":sfZapusk?"загружается…":"не запустился — считает запасной расчёт"}</b></div>
               <div style={{fontSize:13,color:CC.textDim,marginTop:3}}>Коуч: <b style={{color:CC.text}}>супер-GM</b></div>
             </Card>
             {/* Теория дебюта — в потоке, после «Партии»: ничего не накрывает по построению */}
@@ -10986,11 +11033,10 @@ export default function CyberChessPage(){
                 {/* Daily puzzle */}
                 <button onClick={()=>{
                   // Только серверная задача: она общая и её знает таблица лидеров.
-                  if(srvDailyFailed){showToast("Задача дня не загрузилась — проверьте связь","error");return}
-                  if(!srvDaily){showToast("Задача дня ещё грузится…","info");return}
-                  const pz={fen:srvDaily.fen,r:srvDaily.rating,name:srvDaily.theme} as Puzzle;
-                  const g=new Chess(pz.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pz.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sAnalysis([]);sShowAnal(false);sBrowseIdx(-1);sPCol(g.turn());sFlip(g.turn()==="b");
-                  showToast(`☀ Задача дня · ${pz.r}`,"info");
+                  // Тот же путь, что у плитки: вторая своя реализация здесь
+                  // и была причиной того, что кнопка показывала позицию до
+                  // хода соперника и не давала решить задачу.
+                  loadDailyPuzzle();
                 }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>☀ Задача дня</button>
 
                 {/* Random endgame study */}
@@ -11338,7 +11384,14 @@ ${question.trim()}`;
                           }
                         }
                       }catch{/* обрыв стрима */}
-                      if(acc.trim())streamed=true; // даже частичный ответ считаем выданным (не дублируем через /chat)
+                      // 🔴 30.09: здесь стоял безусловный зачёт любого непустого
+                      //    обрывка. Приёмка так получила «The Hindi phrase \» с кодом
+                      //    200: стрим идёт мимо защиты языка и обрыва, которая живёт
+                      //    в обычном /chat. Повторить стрим нельзя — токены уже на
+                      //    экране; значит судим накопленное и при браке НЕ засчитываем,
+                      //    а падаем на /chat, где повтор и честный отказ уже работают.
+                      if(acc.trim()&&стримГоден(contextBlock,acc))streamed=true;
+                      else if(acc.trim()&&placeholderAdded)sCoachChat(newMsgs); // убрать брак с экрана
                     }
                   }catch{/* стрим недоступен — фоллбэк ниже */}
                   if(streamed){clearTimeout(tId);return;}

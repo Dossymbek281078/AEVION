@@ -26,6 +26,20 @@ describe("состояние задачи дня ключуется днём с�
     expect(block).toMatch(/\},\[PUZZLES\.length,srvDaily\?\.day,srvDailyFailed\]\);/);
   });
   it("якорь: награда и отправка по-прежнему требуют !dailyState.solved и совпадение fen с серверной задачей", () => {
-    expect(src).toContain("if(dailyState&&!dailyState.solved&&srvDaily?.fen===pzCurrent.fen){");
+    // 🔴 ПЕРЕНАЦЕЛЕНО 30.09.2026, с замером. Якорь требовал условия
+    //    `srvDaily?.fen===pzCurrent.fen`, а оно ЛОЖНО для каждой сырой
+    //    lichess-задачи: нормализация сдвигает позицию на ход соперника,
+    //    и FEN перестаёт совпадать с серверным. Замер на живой задаче:
+    //      до     r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w …
+    //      после  r1bqkb1r/pppp1ppp/2n2n2/4N3/2B1P3/8/PPPP1PPP/RNBQK2R b …
+    //    То есть награда и отправка не срабатывали НИ У КОГО — ровно тот
+    //    дефект, из-за которого серия не считалась. Сравнение FEN заменено
+    //    явным признаком «сейчас открыта задача дня», который ставит
+    //    loadDailyPuzzle и снимает любой другой выбор задачи (ldPz).
+    expect(src).toContain("if(dailyState&&!dailyState.solved&&этоЗадачаДня){");
+    expect(src).toContain("sЭтоЗадачаДня(true);");   // ставится загрузчиком дня
+    expect(src).toContain("sЭтоЗадачаДня(false)");   // снимается обычным выбором
+    // прежнее ложное сравнение не должно вернуться
+    expect(src).not.toContain("srvDaily?.fen===pzCurrent.fen");
   });
 });

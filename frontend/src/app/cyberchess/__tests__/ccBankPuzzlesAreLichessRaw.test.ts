@@ -37,7 +37,16 @@ describe("сырой формат банка нормализуется", () => 
   });
   it("страница нормализует во ВСЕХ четырёх загрузчиках и задачу дня с сервера", () => {
     expect(page).toContain("const pz0=fPz[0];if(!pz0)return;const pz=normalizePuzzle(pz0);");
-    expect(page).toContain("const pz=normalizePuzzle(PUZZLES[dailyState.idx]||PUZZLES[0]);");
+    // 🔴 ПЕРЕНАЦЕЛЕНО 30.09.2026. Здесь стояла дословная строка старого
+    //    загрузчика: задача дня бралась из ЛОКАЛЬНОГО банка по индексу
+    //    (PUZZLES[dailyState.idx]). Это и был дефект — у всех разные банки,
+    //    и «задача дня» у каждого своя. Теперь она приходит с сервера
+    //    (srvDaily) одним загрузчиком loadDailyPuzzle. Стережём то же
+    //    СВОЙСТВО — что задачу дня тоже нормализуют, — но по новому месту.
+    expect(page).toContain("const loadDailyPuzzle=()=>{");
+    expect(page).toMatch(/loadDailyPuzzle=\(\)=>\{[\s\S]{0,400}?normalizePuzzle\(\{fen:srvDaily\.fen/);
+    // и старого локального источника задачи дня больше нет
+    expect(page).not.toContain("normalizePuzzle(PUZZLES[dailyState.idx]");
     expect(page).toContain("const pz0=fPz[i]||PUZZLES[0];const pz=pz0?normalizePuzzle(pz0):pz0;");
     expect(page).toContain("const pick=normalizePuzzle(pick0);");
     expect(page).toContain("const pz=normalizePuzzle(fPz[idx]);"); // пятый загрузчик: смена фильтра/режима (найден 24.09)

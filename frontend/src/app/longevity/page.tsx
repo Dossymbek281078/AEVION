@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { fetchOrPaywall } from "@/lib/paywall";
 import { PaywallScreen } from "@/components/PaywallScreen";
-import { channelFrom } from "@/lib/products";
+import { channelFrom, keepChannel } from "@/lib/products";
 import LongevityClient from "./_client";
 import { PageTracking } from "@/components/PageTracking";
 
@@ -77,7 +77,19 @@ export default async function Page({
   // покупка с английской страницы пришла бы «источник неизвестен».
   const язык = (await cookies()).get("aevion_lang_v1")?.value;
   if (язык === "en") {
-    redirect(channel ? `/en/longevity?c=${encodeURIComponent(channel)}` : "/en/longevity");
+    /*
+     * 🔴 30.09.2026. Здесь подставлялось ДЛИННОЕ имя канала: channelFrom("ig")
+     * возвращает "instagram", а сайт знает короткие метки — и на английской
+     * странице канал обнулялся. Для ЭТОЙ страницы цена ошибки выше всех
+     * остальных: обе наши продажи за всё время пришли с книги отсюда, а
+     * трафик сюда идёт из Instagram. Проверено браузером: /longevity?c=ig под
+     * английской cookie заканчивалась на /en/longevity вообще без метки.
+     *
+     * Адрес собирает keepChannel — он переводит имя в метку, которую примет
+     * следующая страница. Тот же дефект был на /go, чинили его там же сегодня;
+     * это второй и третий случай одного класса.
+     */
+    redirect(keepChannel("/en/longevity", channel));
   }
 
   const r = await fetchOrPaywall("/api/longevity/health");

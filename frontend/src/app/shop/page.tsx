@@ -12,6 +12,7 @@ import {
   channelFrom,
   withChannel,
   type Product,
+  keepChannel,
 } from "@/lib/products";
 import { PLANET_BASE_MONTHLY, termPricePerMonth, STANDALONE_APPS,
 } from "@/lib/termPricing";
@@ -187,7 +188,19 @@ export default async function ShopPage({
   // на той витрине, которую человек видит. Метка канала едет с собой.
   const язык = (await cookies()).get("aevion_lang_v1")?.value;
   if (язык === "en") {
-    redirect(channel ? `/en/shop?c=${encodeURIComponent(channel)}` : "/en/shop");
+    /*
+     * 🔴 30.09.2026. Здесь подставлялось ДЛИННОЕ имя канала: channelFrom("ig")
+     * возвращает "instagram", а сайт знает короткие метки — и на английской
+     * странице канал обнулялся. Для ЭТОЙ страницы цена ошибки выше всех
+     * остальных: обе наши продажи за всё время пришли с книги отсюда, а
+     * трафик сюда идёт из Instagram. Проверено браузером: /longevity?c=ig под
+     * английской cookie заканчивалась на /en/longevity вообще без метки.
+     *
+     * Адрес собирает keepChannel — он переводит имя в метку, которую примет
+     * следующая страница. Тот же дефект был на /go, чинили его там же сегодня;
+     * это второй и третий случай одного класса.
+     */
+    redirect(keepChannel("/en/shop", channel));
   }
 
   // Язык объявляется на самом блоке: в корневом макете стоит lang="en",

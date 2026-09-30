@@ -695,6 +695,23 @@ export function channelFrom(raw: string | string[] | undefined): string | null {
   const поЗначению = Object.entries(CHANNELS).find(([, имя]) => имя === ключ);
   if (поЗначению) return поЗначению[1];
 
+  /*
+   * НАПИСАНИЕ ПЛОЩАДКИ в `?c=` — тот же класс потери, другая графа.
+   *
+   * Правило выше узнаёт наши ИМЕНА каналов (`instagram`, `youtube`). Но площадки
+   * пишут себя иначе, и мы это уже знаем: список REF_ALIASES собран как раз по
+   * тому, что они ставят в `?ref=` (`producthunt`, `x.com`, `news.ycombinator.com`).
+   * Пересланная ссылка приходит с `?c=`, а не с `?ref=`, и до этой строки
+   * `?c=producthunt` возвращал null — то есть переход терял канал ровно там, где
+   * его труднее всего восстановить: в чужой пересылке.
+   *
+   * Берём готовый список, а не второй: два списка написаний одного и того же
+   * расходятся молча, и на вопрос «знаем ли мы producthunt» ответов стало бы два.
+   */
+  if (Object.prototype.hasOwnProperty.call(REF_ALIASES, ключ)) {
+    return channelFrom(REF_ALIASES[ключ]);
+  }
+
   return null;
 }
 

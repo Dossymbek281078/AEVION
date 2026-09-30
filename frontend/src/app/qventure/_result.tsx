@@ -842,6 +842,15 @@ function EmailCapture() {
       <div style={{ fontSize: 12.5, color: "#1e40af", marginBottom: 8 }}>
         Разбор останется у вас по ссылке выше. Рассылки раз в месяц, отписка в один клик.
       </div>
+      <div style={{ fontSize: 12.5, color: "#1e40af", marginBottom: 8 }}>
+        {/* Гостю «Save to watchlist» пишет только в localStorage этого браузера: на другом
+            устройстве разбора не будет. Серверный список есть, но требует входа (ручка
+            /api/qventure/watchlist отвечает 401 гостю). Говорим это прямо, без обещаний
+            про платное: подписка QVenture на 29.09.2026 не открывает в модуле ничего —
+            разбор доступен без входа и без оплаты. */}
+        <a href="/auth?next=/qventure" style={{ color: "#1d4ed8", fontWeight: 700 }}>Войдите</a>
+        {" "}— и разбор сохранится в вашем аккаунте, а не только в этом браузере.
+      </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <input
           type="email"

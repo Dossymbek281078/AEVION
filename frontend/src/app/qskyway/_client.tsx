@@ -1578,7 +1578,17 @@ export default function QSkywayClient() {
                   )}
                 </div>
                 {slots.list.length === 0 ? (
-                  <div style={{ padding: "12px 14px", fontSize: 12, color: "#5f7086" }}>{t("qskyway.slots.empty")}</div>
+                  <div style={{ padding: "12px 14px", fontSize: 12, color: "#5f7086" }}>
+                    {t("qskyway.slots.empty")}{" "}
+                    <button
+                      type="button"
+                      onClick={bookSlot}
+                      disabled={!loaded}
+                      style={{ background: "none", border: "none", padding: 0, color: "#4ea1ff", fontSize: 12, fontWeight: 700, cursor: loaded ? "pointer" : "default", textDecoration: "underline" }}
+                    >
+                      {t("qskyway.slots.emptyCta")}
+                    </button>
+                  </div>
                 ) : (
                   <div style={{ maxHeight: 220, overflowY: "auto" }}>
                     {[...slots.list].reverse().slice(0, 20).map((s) => (

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { planPhrase, buildPlatformWaitlistEmail } from "../src/lib/constitutionBrevo";
+import { planPhrase, buildPlatformWaitlistEmail, модульОткрыт } from "../src/lib/constitutionBrevo";
 
 /**
  * Письмо подписчику не имеет права говорить «напишем, как только откроем»
@@ -26,7 +26,7 @@ function тело(источник: string): string {
 
 describe("письмо не закрывает открытые модули", () => {
   it("модуль с отметкой открытия зовёт внутрь, а не ждать", () => {
-    const ф = planPhrase("20 сентября", Date.UTC(2026, 8, 20), true, ПОСЛЕ, Date.UTC(2026, 8, 20), "https://aevion.app/qventure");
+    const ф = planPhrase("20 сентября", Date.UTC(2026, 8, 20), true, ПОСЛЕ, true, "https://aevion.app/qventure");
     expect(ф, "открытый модуль по-прежнему обещает написать позже").not.toContain("напишем");
     expect(ф).toContain("уже открыт");
     expect(ф, "не названо, куда идти").toContain("https://aevion.app/qventure");
@@ -38,9 +38,16 @@ describe("письмо не закрывает открытые модули", (
     expect(ф).toContain("напишем");
   });
 
-  it("КОНТРОЛЬ: до дня открытия — прежнее обещание, а не «уже открыт»", () => {
-    const ф = planPhrase("20 сентября", Date.UTC(2026, 8, 20), true, ДО, Date.UTC(2026, 8, 20));
-    expect(ф, "модуль объявлен открытым РАНЬШЕ своего дня").not.toContain("уже открыт");
+  it("КОНТРОЛЬ: до дня открытия модуль ещё НЕ открыт", () => {
+    /*
+     * Контроль переехал вслед за логикой. Раньше день открытия проверял сам
+     * `planPhrase`, и сюда передавалась дата. С 30.09.2026 решение живёт в
+     * одном месте — `модульОткрыт`, — а `planPhrase` только печатает готовый
+     * ответ. Спрашивать «не рано ли открыт» надо у того, кто отвечает.
+     */
+    expect(модульОткрыт("devhub", ДО), "модуль объявлен открытым РАНЬШЕ своего дня").toBe(false);
+    expect(модульОткрыт("devhub", ПОСЛЕ), "после дня открытия модуль обязан считаться открытым").toBe(true);
+    const ф = planPhrase("20 сентября", Date.UTC(2026, 8, 20), true, ДО, модульОткрыт("devhub", ДО));
     expect(ф).toContain("Открываем по плану");
   });
 

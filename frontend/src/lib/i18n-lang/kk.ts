@@ -6253,6 +6253,7 @@ const kk: Record<string, string> = {
   "qskyway.route.withinCeiling": "реттеушінің шекті биіктігі шегінде",
   "qskyway.slots.capacity": "Бір маршрутқа сыйымдылық: {n}.",
   "qskyway.slots.empty": "Әзірге слоттар брондалмаған.",
+  "qskyway.slots.emptyCta": "Бірінші бағытты брондаңыз",
   "qskyway.slots.receipt": "Әр брондаудың жазба бақылау сомасы бар (receipt, SHA-256): ол жазбаның өзгермегенін көрсетеді — GET /api/qskyway/slots/{id}/verify. Бұл сыртқы тізілімдегі зәкір емес: Bitcoin-ға бекітілген әуе кеңістігі қабатынан айырмашылығы, түбіртек тек біздің қоймамызға қарсы тексеріледі.",
   "qskyway.slots.storeDurable": "Слоттар Postgres-те сақталады — қайта қосуға төтеп береді",
   "qskyway.slots.storeMemory": "Слоттар тек процесс жадында — сервер қайта қосылғанда жоғалады",

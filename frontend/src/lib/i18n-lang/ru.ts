@@ -6253,6 +6253,7 @@ const ru: Record<string, string> = {
   "qskyway.route.withinCeiling": "в пределах потолка регулятора",
   "qskyway.slots.capacity": "Ёмкость на маршрут: {n}.",
   "qskyway.slots.empty": "Слотов пока не забронировано.",
+  "qskyway.slots.emptyCta": "Забронируйте первый маршрут",
   "qskyway.slots.receipt": "У брони есть контрольная сумма записи (receipt, SHA-256): по ней видно, что запись не изменена — GET /api/qskyway/slots/{id}/verify. Это не якорь во внешнем реестре: в отличие от слоя ограничений, привязанного к Bitcoin, квитанция проверяется только против нашего хранилища.",
   "qskyway.slots.storeDurable": "Слоты сохраняются в Postgres — переживут рестарт",
   "qskyway.slots.storeMemory": "Слоты только в памяти процесса — теряются при перезапуске сервера",

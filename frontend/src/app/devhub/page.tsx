@@ -11,6 +11,7 @@ import { useDevhubT, type DevhubKey } from "./i18n";
 import { COMPARISON_ROWS, capabilityIsKnownOff, comparisonTotalUsd } from "./capabilityRows";
 import { howtoTranscript } from "./howtoTranscript";
 import { getDevhubGuestId } from "@/lib/devhubGuest";
+import { fromPricePerMonth } from "@/lib/termPricing";
 import { useI18n } from "@/lib/i18n";
 import { catalog } from "@/lib/aevionCatalog";
 import { fixDoubledScheme } from "@/lib/urls";
@@ -156,6 +157,8 @@ function capabilityOffReason(
 
 export default function DevHubPage() {
   const t = useDevhubT();
+  // Цена и ссылка на кассу — из одного источника с бэкендом, см. блок ниже.
+  const devhubProduct = productById("devhub");
   const { lang } = useI18n();
   const serverError = useDevhubServerError();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -624,6 +627,33 @@ export default function DevHubPage() {
           <div style={{ fontSize: 13.5, color: "#99f6e4", marginTop: 12, lineHeight: 1.5 }}>
                 {t("hero.subtitle")}
           </div>
+          {/*
+            ЦЕНА В ПЕРВОМ ЭКРАНЕ (01.10.2026).
+            Повод денежный: с Product Hunt и LaunchNest пришло 16 сессий на
+            /devhub и /en/devhub, до страницы цен не дошёл НИ ОДИН. Ссылки на
+            /pricing были, но ниже сгиба — человек их просто не видел.
+
+            Бесплатный вход и поле «опиши — сделаю» остаются главными по весу:
+            сюда поставлен только факт цены и прямой путь в кассу.
+
+            Числа НЕ вписаны руками: {b} это priceUsd из STANDALONE_APPS,
+            {a} — fromPricePerMonth от той же базы (цена за 12 месяцев). Оба
+            конца сверяются с бэкендом тестом termPricingMatchesBackend, иначе
+            страница обещала бы цену, которой касса не знает.
+          */}
+          {devhubProduct ? (
+            <div style={{ fontSize: 13.5, color: "#e2e8f0", marginTop: 10, lineHeight: 1.5 }}>
+              {t("hero.price")
+                .replace("{a}", `$${fromPricePerMonth(devhubProduct.priceUsd)}`)
+                .replace("{b}", `$${devhubProduct.priceUsd}`)}{" "}
+              <Link
+                href={devhubProduct.href}
+                style={{ color: "#5eead4", fontWeight: 700, whiteSpace: "nowrap" }}
+              >
+                {t("hero.priceCta")} →
+              </Link>
+            </div>
+          ) : null}
           {/* An empty box is the hardest thing to answer. These are not
               decoration: each one exercises a different part of the pipeline
               (plain UI, a real database, media), so the first thing a person

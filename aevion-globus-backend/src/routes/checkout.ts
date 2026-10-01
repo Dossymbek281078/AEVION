@@ -6,6 +6,7 @@ import { lemonSqueezyPaymentProvider } from "../lib/payment/lemonSqueezyProvider
 import { payboxPaymentProvider, isPayboxConfigured, isPayboxWebhookSecretSet } from "../lib/payment/payboxProvider";
 import { paypalPaymentProvider, isPaypalConfigured } from "../lib/payment/paypalProvider";
 import { resolveLemonSqueezyVariant, lemonSqueezySellable, fallbackVariantForReference } from "../data/lemonSqueezyVariants";
+import { продаётсяОтдельно } from "../data/moduleAccess";
 import {
   TIERS, getTier, getModulePrice, resolvePromoCode, CURRENCY_RATES, MAX_PROMO_DISCOUNT_RATIO, buildQuote,
   type TierId, type CurrencyCode, type TermTier,
@@ -282,7 +283,25 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
     // Всё остальное продаётся только в составе планеты: чужое имя — отказ, а не
     // тихая покупка тарифа вместо приложения.
     const app = body.app ? standaloneApp(String(body.app)) : null;
-    if (body.app && (!app || !isTermTier(tier.id))) {
+    /*
+     * 🔴 01.10.2026: «есть цена» БОЛЬШЕ НЕ ЗНАЧИТ «продаётся».
+     *
+     * Четыре модуля (qright, qsign, qskyway, startup_exchange) сняты с продажи
+     * решением основателя: своего товара в кассе у них нет, покупка шла
+     * вариантом планеты, и страница оплаты обещала «$400.00 billed every month»
+     * при цене модуля $16–$40. Цены в прайсе остались — они верны и нужны,
+     * как только появятся свои варианты, — поэтому `standaloneApp()` их
+     * по-прежнему находит, и спрашивать надо ЕДИНЫЙ ИСТОЧНИК.
+     *
+     * Отказ именно 400 `invalid_app`, а не 503: 503 означает «у нас сломалось,
+     * зайдите позже» и поднимает людей зря, а здесь положение дел постоянное и
+     * текст уже точен — «отдельно не продаётся, входит в подписку». Замер
+     * показал, что без этой ветки снятое отвечало 503 неотличимо от
+     * ненастроенной кассы, то есть и сторож, и покупатель получали неверный
+     * повод.
+     */
+    const снятСПродажи = Boolean(app && !продаётсяОтдельно(app.moduleId));
+    if (body.app && (!app || снятСПродажи || !isTermTier(tier.id))) {
       return res.status(400).json({
         error: "invalid_app",
         message: "Это приложение отдельно не продаётся — оно входит в подписку AEVION. Выберите срок подписки на странице цен.",

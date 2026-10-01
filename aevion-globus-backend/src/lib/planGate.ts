@@ -33,6 +33,7 @@ import { appSlugForModuleId } from "../data/lemonSqueezyVariants";
 import { verifyBearerOptional } from "./authJwt";
 import { readLatestSubscription } from "../routes/provisioning";
 import { MODULES_PRICING, type TierId } from "../data/pricing";
+import { модулиСоСтенойПоДанным } from "../data/moduleAccess";
 import { recordDeny, type DenyAudience } from "./paywallDenyLog";
 import { appSubscriptionState } from "./appEntitlements";
 
@@ -290,7 +291,33 @@ function niOdinTarifNeDaet(id: string): boolean {
 
 function enforcedModuleSet(): Set<string> | "all" | null {
   if (process.env.PAYWALL_DISABLED === "1") return null;
-  const raw = (process.env.PAYWALL_MODULES || "").trim();
+  /*
+   * ИСТОЧНИК СТЕНЫ: переменная сервиса, и только при явном PAYWALL_SOURCE=data —
+   * таблица data/moduleAccess.ts.
+   *
+   * 🔴 Почему НЕ наоборот, хотя данные и задумывались источником правды.
+   * Я сперва сделал данные значением по умолчанию («переменная не задана →
+   * берём таблицу») и это молча перевернуло защитное свойство, записанное в
+   * шапке файла: «dormant by default». Замер 01.10.2026 на этой же ветке, при
+   * удалённой переменной:
+   *     paywallEnabledFor("qnews")  было false → стало TRUE
+   *     paywallEnabledFor("qcoreai") false → false (он в UNSAFE_TO_GATE)
+   * То есть любое окружение без переменной (локальная разработка, новый
+   * сервис, случайно очищенная настройка) начинало ОТКАЗЫВАТЬ людям вместо
+   * того, чтобы пропускать. Ровно этим свойством 16.07 за минуты погасили
+   * ошибочно включённый qcoreai: «забыл настроить» обязано означать «открыто».
+   *
+   * ⚠️ И ловушка рядом: существующий тест «is off when env unset» проверяет
+   * qcoreai — модуль из UNSAFE_TO_GATE, который не закрывается НИКОГДА. Он
+   * остался зелёным при перевёрнутом умолчании. Проверять это свойство нужно
+   * ЗАКРЫВАЕМЫМ модулем (см. tests/planGate.test.ts, правка 01.10).
+   *
+   * Переключатель назван отдельно и НЕ ЗАДАН нигде: пока основатель не решит,
+   * поведение прода и разработки совпадает с тем, что было до этой ветки.
+   */
+  const изПеременной = (process.env.PAYWALL_MODULES || "").trim();
+  const раз_решеноБратьИзДанных = process.env.PAYWALL_SOURCE === "data";
+  const raw = изПеременной || (раз_решеноБратьИзДанных ? модулиСоСтенойПоДанным().join(",") : "");
   if (!raw) return null;
   if (raw === "*") return "all";
   const set = new Set(raw.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean));

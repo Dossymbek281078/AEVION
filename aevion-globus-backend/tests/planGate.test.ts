@@ -78,20 +78,53 @@ describe("paywallEnabledFor (env-driven, dormant by default)", () => {
   const saved = {
     mods: process.env.PAYWALL_MODULES,
     off: process.env.PAYWALL_DISABLED,
+    // Переключатель источника тоже сохраняем и чистим: тест, который оставил
+    // его после себя, закрыл бы стеной соседние наборы, и выглядело бы это
+    // как их собственная поломка.
+    src: process.env.PAYWALL_SOURCE,
   };
   beforeEach(() => {
     delete process.env.PAYWALL_MODULES;
     delete process.env.PAYWALL_DISABLED;
+    delete process.env.PAYWALL_SOURCE;
   });
   afterEach(() => {
     if (saved.mods === undefined) delete process.env.PAYWALL_MODULES;
     else process.env.PAYWALL_MODULES = saved.mods;
     if (saved.off === undefined) delete process.env.PAYWALL_DISABLED;
     else process.env.PAYWALL_DISABLED = saved.off;
+    if (saved.src === undefined) delete process.env.PAYWALL_SOURCE;
+    else process.env.PAYWALL_SOURCE = saved.src;
   });
 
   it("is off when env unset", () => {
+    /*
+     * 🔴 Этот тест был ЗЕЛЁНЫМ при потерянном свойстве. Он проверял только
+     * `qcoreai` — модуль из UNSAFE_TO_GATE, который не закрывается НИКОГДА и
+     * ни при каких настройках. То есть утверждение «при незаданной переменной
+     * стена спит» подтверждалось случаем, который ничего о ней не говорит.
+     *
+     * Замер 01.10.2026: правка, подставлявшая таблицу data/moduleAccess.ts
+     * вместо незаданной переменной, перевернула умолчание
+     * (paywallEnabledFor("qnews") false → true), а этот тест остался зелёным.
+     * Теперь проверяется ЗАКРЫВАЕМЫЙ модуль, и рядом назван контроль.
+     */
+    expect(paywallEnabledFor("qnews"), "стена должна спать без переменной").toBe(false);
+    expect(paywallEnabledFor("multichat-engine"), "стена должна спать без переменной").toBe(false);
+    // Контроль прибора: qcoreai отвечает false по ДРУГОЙ причине (UNSAFE_TO_GATE),
+    // поэтому он годится только как напоминание, а не как доказательство.
     expect(paywallEnabledFor("qcoreai")).toBe(false);
+  });
+
+  it("таблица доступа включается только явным PAYWALL_SOURCE=data", () => {
+    // Без переключателя таблица не действует — иначе «забыл настроить»
+    // означало бы «отказать людям», и аварийный рычаг 16.07 перестал бы
+    // работать как рычаг.
+    expect(paywallEnabledFor("qnews")).toBe(false);
+    process.env.PAYWALL_SOURCE = "data";
+    expect(paywallEnabledFor("qnews"), "переключатель задан, а таблица не действует").toBe(true);
+    delete process.env.PAYWALL_SOURCE;
+    expect(paywallEnabledFor("qnews"), "переключатель снят, а стена осталась").toBe(false);
   });
   it("enables only listed modules", () => {
     process.env.PAYWALL_MODULES = "multichat-engine, healthai";

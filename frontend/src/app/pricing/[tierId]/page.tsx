@@ -7,6 +7,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
 import { useI18n } from "@/lib/i18n";
+import { localizeModuleOneLiner } from "@/lib/pricingLocalize";
 import { termUnitKey } from "@/lib/pricingI18n";
 import { isTermTier, termSavingPercent } from "@/lib/termPricing";
 
@@ -172,7 +173,7 @@ function fmtLimit(n: number | null, suffix: string, unlimitedLabel: string): str
 }
 
 export default function TierDetailPage() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const router = useRouter();
   const params = useParams<{ tierId: string }>();
   const tierId = params?.tierId as TierId;
@@ -599,7 +600,9 @@ export default function TierDetailPage() {
                   <strong style={{ fontSize: 13 }}>{m.name}</strong>
                   <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 700 }}>{m.code}</span>
                 </div>
-                <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.4 }}>{m.oneLiner}</div>
+                <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.4 }}>
+                  {localizeModuleOneLiner(m.id, m.oneLiner, lang)}
+                </div>
               </div>
             ))}
           </div>

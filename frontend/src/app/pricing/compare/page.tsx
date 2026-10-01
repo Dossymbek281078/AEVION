@@ -7,6 +7,7 @@ import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
 import { useI18n } from "@/lib/i18n";
+import { localizeModuleOneLiner } from "@/lib/pricingLocalize";
 import { STANDALONE_APPS, fromPricePerMonth, standaloneApp } from "@/lib/termPricing";
 
 type TierId = "free" | "lite" | "medium" | "pro" | "full" | "max" | "enterprise";
@@ -57,7 +58,7 @@ const KIND_ORDER: ModuleKind[] = ["core", "product", "service", "experiment"];
 
 export default function PricingComparePage() {
   const tp = usePricingT();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [data, setData] = useState<PricingPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filterKind, setFilterKind] = useState<ModuleKind | null>(null);
@@ -435,7 +436,7 @@ export default function PricingComparePage() {
                         lineHeight: 1.4,
                       }}
                     >
-                      {m.oneLiner}
+                      {localizeModuleOneLiner(m.id, m.oneLiner, lang)}
                     </div>
                     <div
                       style={{

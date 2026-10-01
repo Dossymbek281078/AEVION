@@ -7,6 +7,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
 import { useI18n } from "@/lib/i18n";
+import { localizeModuleOneLiner } from "@/lib/pricingLocalize";
 
 type IndustryId = "banks" | "startups" | "government" | "creators" | "law-firms";
 
@@ -199,7 +200,7 @@ interface PricingPayload {
 }
 
 export default function IndustryLandingPage() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const params = useParams<{ industry: string }>();
   // Обращаться к словарю ключом из адреса можно только через hasOwnProperty:
   // INDUSTRIES["constructor"] вернёт функцию из прототипа — она истинна, ветка
@@ -428,7 +429,9 @@ export default function IndustryLandingPage() {
                 <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, marginBottom: 6 }}>
                   {m.code}
                 </div>
-                <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.4 }}>{m.oneLiner}</div>
+                <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.4 }}>
+                  {localizeModuleOneLiner(m.id, m.oneLiner, lang)}
+                </div>
               </div>
             ))}
           </div>

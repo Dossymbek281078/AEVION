@@ -326,7 +326,7 @@ describe("время ответа в текстах совпадает с тар
     const block = src.slice(src.indexOf("export const TIERS"));
     const out: Record<string, number | null> = {};
     // Литеральные тарифы — free и enterprise.
-    for (const m of block.matchAll(/id:\s*"(\w+)"[\s\S]{0,1400}?supportSlaHours:\s*(\d+|null)/g)) {
+    for (const m of block.matchAll(/id:\s*"(\w+)"[\s\S]{0,2600}?supportSlaHours:\s*(\d+|null)/g)) {
       out[m[1]] = m[2] === "null" ? null : Number(m[2]);
     }
     // Пять сроков: SLA общий, из PLANET_LIMITS.

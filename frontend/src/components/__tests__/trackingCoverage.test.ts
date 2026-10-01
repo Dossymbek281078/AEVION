@@ -71,6 +71,7 @@ const VIEW_MARKERS = [/<PageTracking\b/, /track\(\s*"page_view"/, /type:\s*"page
  */
 const NOT_A_SALES_PAGE: Record<string, string> = {
   "legal/privacy/page.tsx": "юридический текст, ссылка упомянута как обработчик платежей",
+  "pricing/layout.tsx": "общая обёртка всех страниц /pricing: серверный блок цен для роботов (01.10) несёт ссылки ?app=, но посещение считает pricing/page.tsx (type page_view); второй счётчик в обёртке дал бы дубль на каждой подстранице",
   "revenue/page.tsx": "внутренний дашборд выручки, не для покупателя",
   "qmelanin/_client.tsx": "часть страницы qmelanin — замер стоит в её page.tsx, второй считал бы то же посещение дважды",
   "longevity/_client.tsx": "часть страницы longevity — замер стоит в её page.tsx, второй считал бы то же посещение дважды",

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { приложенияДляВитрины } from "../data/moduleAccess";
 import { queryNumber } from "../lib/queryNumber";
 import { queryDate } from "../lib/queryDate";
 import { existsSync, mkdirSync, appendFileSync, readFileSync } from "fs";
@@ -177,7 +178,20 @@ pricingRouter.get("/", (_req, res) => {
     currency: "USD",
     // Лестница сроков вместо годовой скидки (15.09.2026): тариф — это срок.
     termLadder: TERM_TIERS.map((t) => ({ tierId: t, months: TERM_MONTHS[t], factor: TERM_FACTOR[t] })),
-    standaloneApps: STANDALONE_APPS.map((a) => ({
+    /*
+     * «Продаётся отдельно» берётся из единого источника data/moduleAccess.ts —
+     * из того же места, откуда шлюз берёт «закрыто стеной». До 01.10.2026 это
+     * были два несверенных списка, и расхождение было ровно таким: 8 модулей
+     * продаются, не будучи закрыты, 5 закрыты, не продаваясь.
+     *
+     * Наружу идёт только «продаётся»: сообщать посетителю, что модуль всё
+     * равно открыт, значит своими руками снимать причину платить.
+     *
+     * На 01.10 у всех девяти строк прайса флаг `продаётся` = true, поэтому
+     * выдача этой ручки не меняется — проверено сторожем
+     * moduleAccessIsOneSource (прайс и источник совпадают в обе стороны).
+     */
+    standaloneApps: приложенияДляВитрины().map((a) => ({
       ...a,
       terms: TERM_TIERS.map((t) => ({
         tierId: t,

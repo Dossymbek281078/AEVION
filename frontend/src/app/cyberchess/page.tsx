@@ -1208,7 +1208,26 @@ export default function CyberChessPage(){
   const ccBuyLabel=(ccBuyProduct?.format||"").replace(/^приложение · /,"")||"купить";
   const [ccBuyHref,sCcBuyHref]=useState<string>(ccBuyProduct?.href||"/pricing#apps");
   useEffect(()=>{try{sCcBuyHref(keepChannel(ccBuyProduct?.href||"/pricing#apps",channelNow()))}catch{}},[ccBuyProduct?.href]);
-  const isMobileLayout=vwPx<769; // должно совпадать с порогом BottomNav/cc-right-panel drawer ниже
+  const isMobileLayout=vwPx<769;
+  // 🔴 01.10.2026: НА ТЕЛЕФОНЕ РАЗДЕЛ «КОУЧ» ОБЯЗАН ОТКРЫВАТЬ ШТОРКУ.
+  //
+  // Замер на проде, гость, 390×844: нажатие «ИИ-коуч» переключало вкладку
+  // ВНУТРИ закрытой шторки — поле тренера оставалось на x = 401 при ширине
+  // окна 390, то есть за краем. Снаружи это выглядело мёртвой кнопкой:
+  // человек жмёт раздел с понятным именем, и не происходит ничего видимого.
+  // Та же картина на 540 (x = 551 при окне 540). После нажатия кнопки шторки
+  // поле встаёт на x = 70 и x = 191 соответственно — то есть путь существовал,
+  // но был спрятан за безымянным значком, нажать который никто не догадается.
+  //
+  // Открываем ТОЛЬКО для разделов, которые и правда живут в правой панели.
+  // Сейчас это «коуч» (его содержимое рендерится внутри .cc-right-panel).
+  // «Анализ» и «задачи» рисуются в главной колонке — им шторка не нужна, и
+  // открывать её там значило бы закрыть доску без причины.
+  const РАЗДЕЛЫ_В_ШТОРКЕ = new Set(["coach"]);
+  const открытьРаздел = (раздел: string) => {
+    sTab(раздел as never);
+    if (isMobileLayout && РАЗДЕЛЫ_В_ШТОРКЕ.has(раздел)) sMobileSidebarOpen(true);
+  }; // должно совпадать с порогом BottomNav/cc-right-panel drawer ниже
   // Вертикальный резерв под обвязку колонки. На ДЕСКТОПЕ нижнего навбара нет (скрыт) —
   // резервируем меньше (≈210) => доска КРУПНЕЕ. На мобайле навбар есть => больше (≈290).
   const vReserve=vwPx>=769?264:300; // десктоп без навбара (хедер+строки игроков+контролы) / мобайл +навбар
@@ -6499,7 +6518,7 @@ export default function CyberChessPage(){
         <Btn variant="secondary" size="sm" icon={<Icon.Settings/>} onClick={()=>sShowSettings(true)} title="Настройки" ariaLabel="Настройки" style={{padding:"6px 10px",minHeight:36,minWidth:36}}/>
         {vwPx>=769&&<Btn variant={muted?"danger":"secondary"} size="sm" icon={muted?<Icon.Mute/>:<Icon.Sound/>} onClick={()=>{sMuted(v=>!v);showToast(muted?"Звук включён":"Звук выключен","info")}} title={muted?"Включить звук (M)":"Выключить звук (M)"} ariaLabel={muted?"Включить звук":"Выключить звук"} style={{padding:"6px 10px",minHeight:36,minWidth:36}}/>}
         {/* Mobile sidebar toggle — visible only on mobile via CSS */}
-        <button onClick={()=>sMobileSidebarOpen(v=>!v)} title="Открыть боковую панель" aria-label="Свернуть боковую панель" style={{padding:"6px 10px",minHeight:36,minWidth:36,border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,background:mobileSidebarOpen?CC.brandSoft:CC.surface1,color:mobileSidebarOpen?CC.brand:"inherit",cursor:"pointer",fontSize:18,fontWeight:700,display:"none",alignItems:"center",justifyContent:"center"}} className="cc-mobile-sidebar-btn">☰</button>
+        <button onClick={()=>sMobileSidebarOpen(v=>!v)} title="Открыть боковую панель" aria-label="Свернуть боковую панель" style={{padding:"6px 10px",minHeight:36,minWidth:36,border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,background:mobileSidebarOpen?CC.brandSoft:CC.surface1,color:mobileSidebarOpen?CC.brand:"inherit",cursor:"pointer",fontSize:18,fontWeight:700,display:"none",alignItems:"center",justifyContent:"center"}} className="cc-mobile-sidebar-btn">☰<span style={{fontSize:11,fontWeight:800,marginLeft:6}}>Тренер</span></button>
         </div>
 
         {/* ⚙ Ещё — overflow-меню. Свернули «Инструменты» (клавиши/музыка/стрим/фулскрин/
@@ -7722,7 +7741,7 @@ export default function CyberChessPage(){
           {([
             ...(isHumanGame?[]:[
               {icon:TAB_META.analysis.icon,label:TAB_META.analysis.label,hint:"Анализ позиции",accent:TAB_META.analysis.hue, act:()=>sTab("analysis")},
-              {icon:TAB_META.coach.icon,   label:TAB_META.coach.label,   hint:"ИИ-коуч",       accent:TAB_META.coach.hue,    act:()=>sTab("coach")},
+              {icon:TAB_META.coach.icon,   label:TAB_META.coach.label,   hint:"ИИ-коуч",       accent:TAB_META.coach.hue,    act:()=>открытьРаздел("coach")},
               {icon:TAB_META.puzzles.icon, label:TAB_META.puzzles.label, hint:"Случайная задача", accent:TAB_META.puzzles.hue,  act:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
             ]),
             {icon:spectatorPublish?"📡":"📡",label:spectatorPublish?"Live●":"Стрим",hint:spectatorPublish?"Стрим идёт":"Стрим для зрителей",accent:"#ef4444",act:()=>{if(!spectatorPublish)sObsStreamed(n=>n+1);sSpectatorPublish(v=>!v);}},
@@ -13042,7 +13061,7 @@ ${question.trim()}`;
             {e:"🌐",t:"Онлайн-матч",d:"Матчмейкинг с реальными игроками",to:"/cyberchess/matchmaking"},
           ]},
           {title:"Учиться",cat:"learn",items:[
-            {e:"🎓",t:"ИИ-тренер",d:"Разбор уровня супер-GM",act:()=>sTab("coach"),hot:true},
+            {e:"🎓",t:"ИИ-тренер",d:"Разбор уровня супер-GM",act:()=>открытьРаздел("coach"),hot:true},
             {e:"🧩",t:"Задачи",d:"Тактика · Rush · разбор решения на доске",act:()=>sTab("puzzles")},
             {e:"📊",t:"Анализ",d:"Движок · стрелки · WhatIf-объяснения",act:()=>sTab("analysis")},
             {e:"📚",t:"Репертуар",d:"Тренажёр дебютов + Lichess Masters",to:"/cyberchess/repertoire"},
@@ -15269,7 +15288,7 @@ ${question.trim()}`;
       onPlay={()=>{ if(on&&!over){ sTab("play"); sSetup(false); } else sShowQuickSetupModal(true); }}
       onPuzzles={()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length));sSetup(false)}}
       onAnalysis={()=>{sTab("analysis");sSetup(false)}}
-      onCoach={()=>{sTab("coach");sSetup(false)}}
+      onCoach={()=>{открытьРаздел("coach");sSetup(false)}}
       onProfile={()=>sShowStatsDashboard(true)}
       brand={CC.brand} textMute={CC.textMute} surface1={CC.surface1} border={CC.border}
     />}

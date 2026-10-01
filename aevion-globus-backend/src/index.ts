@@ -1,5 +1,7 @@
 import dotenv from "dotenv";
 import { readBuildInfo } from "./lib/buildInfo";
+import { зарегистрироватьЗавершение } from "./lib/gracefulShutdown";
+import { закрытьПулЕслиОткрыт } from "./lib/dbPool";
 import { leadsStoreStatus } from "./routes/pricing";
 import { dilithiumStatus } from "./lib/qsignV2/dilithium";
 import { eventsStoreStatus } from "./routes/events";
@@ -1528,6 +1530,16 @@ process.on("unhandledRejection", (reason) => {
   try {
     captureException(reason instanceof Error ? reason : new Error(String(reason)), { where: "unhandledRejection" });
   } catch { /* never throw from the backstop */ }
+});
+
+// Завершение по сигналу замены — кодом 0. Без этого Railway присылал
+// «Deploy Crashed!» на КАЖДУЮ выкатку (пять писем за 30.09–01.10): гаснет СТАРЫЙ
+// экземпляр, у процесса не было обработчика SIGTERM, и платформа читала штатную
+// замену как аварию. Разбор и жёсткий предел — в lib/gracefulShutdown.ts.
+зарегистрироватьЗавершение(process, {
+  сервер: httpServer,
+  закрытьПул: закрытьПулЕслиОткрыт,
+  выход: (код) => process.exit(код),
 });
 
 // QCoreAI duplex transport — same orchestrator as POST /multi-agent (SSE)

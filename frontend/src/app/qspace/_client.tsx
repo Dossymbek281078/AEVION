@@ -1658,7 +1658,19 @@ export default function QSpaceClient() {
     // по диагонали» в двух кадрах из трёх упирала объектив в стену — у
     // Г-образной комнаты центр габарита лежит вне комнаты, а смещение всегда
     // шло в одну сторону. Это и был вид, которым модуль показывал себя.
-    const вид = точкаОбзора(r.runsOf(комната.index));
+    // Предметы комнаты — тоже препятствия для взгляда. Замер 30.09.2026:
+    // камера находила самое открытое место ПО СТЕНАМ и утыкалась в
+    // холодильник ровно по центру кадра. Радиус берём по габариту предмета:
+    // ошибка в большую сторону здесь дешевле, чем кадр в стенку шкафа.
+    const препятствия: Array<{ x: number; y: number; r: number }> = [];
+    for (const g of t.gDecor.children) {
+      const rec = placed.find((x) => x.uid === g.userData.uid);
+      const item = rec ? itemById(rec.catalogId) : undefined;
+      if (!item) continue;
+      const [w, , d] = item.size;
+      препятствия.push({ x: g.position.x, y: g.position.z, r: Math.max(0.25, Math.hypot(w, d) / 2) });
+    }
+    const вид = точкаОбзора(r.runsOf(комната.index), 0.25, препятствия);
     if (вид) {
       t.camera.position.set(вид.x, 1.6, вид.y);
       t.controls.target.set(вид.целевойX, 1.35, вид.целевойY);
@@ -1670,7 +1682,7 @@ export default function QSpaceClient() {
     }
     t.controls.update();
     скажи(`Помещение ${комната.index}, ${комната.area.toFixed(1)} м² — вид с высоты глаз. Нажмите ещё раз, чтобы перейти к следующему.`);
-  }, [скажи]);
+  }, [скажи, placed]);
 
   /**
    * Фотореалистичный вид: кадр нашей сцены уходит на сервер, тот отдаёт его

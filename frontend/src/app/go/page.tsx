@@ -13,6 +13,7 @@ import {
   withChannel,
   type Product,
   keepChannel,
+  keepChannelOrProbe,
 } from "@/lib/products";
 import { BuyLink } from "@/components/BuyLink";
 import { PageTracking } from "@/components/PageTracking";
@@ -235,7 +236,7 @@ export default async function GoPage({
      * Теперь адрес собирает keepChannel — он сам переводит имя в метку,
      * которую примет следующая страница. Третьей реализации не заводим.
      */
-    redirect(keepChannel("/en/go", channel));
+    redirect(keepChannelOrProbe("/en/go", rawChannel, channel));
   }
 
   const liveModules = await fetchLiveModules();

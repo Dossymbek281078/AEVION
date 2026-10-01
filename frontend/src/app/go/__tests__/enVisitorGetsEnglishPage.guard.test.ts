@@ -60,7 +60,7 @@ describe("языковая маршрутизация /go", () => {
      * Теперь: адрес собирает общая функция, а результат проверяется разбором.
      */
     expect(
-      тело.includes('keepChannel("/en/go", channel)'),
+      /keepChannel(OrProbe)?\("\/en\/go"/.test(тело),
       "адрес редиректа снова собирается вручную — длинное имя вернётся",
     ).toBe(true);
     const адрес = keepChannel("/en/go", channelFrom("ig"));

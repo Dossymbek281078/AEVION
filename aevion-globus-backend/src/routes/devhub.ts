@@ -2073,10 +2073,18 @@ function foldHistory(history: ChatTurn[] | undefined): string {
  * (перевод, распознавание речи), цену теперь считаем; где прайса нет (звук, клон
  * голоса) — по-прежнему честная пометка, а не выдуманное число.
  */
-function учтиПоОбъёму(поверхность: string, объём: number, userId: string | null): void {
-  const цена = ценаПоЕдиницам(поверхность, объём);
+function учтиПоОбъёму(
+  поверхность: string,
+  объём: number,
+  userId: string | null,
+  фактическийПоставщик?: string | null,
+): void {
+  const цена = ценаПоЕдиницам(поверхность, объём, фактическийПоставщик);
   if (цена === null) {
-    учтиБезЦены(поверхность, userId);
+    // Сюда попадаем в двух случаях: тарифа нет вовсе ИЛИ работу выполнил не тот
+    // поставщик, по чьему прайсу тариф посчитан. Второй случай и есть находка
+    // 01.10: DeepL исчерпан, перевод ушёл на LLM, а цена считалась прежняя.
+    учтиБезЦены(поверхность, userId, фактическийПоставщик);
     return;
   }
   try {
@@ -2089,10 +2097,12 @@ function учтиПоОбъёму(поверхность: string, объём: nu
     });
   } catch { /* Учёт не должен ронять ответ, ради которого его зовут. */ }
 }
-function учтиБезЦены(поверхность: string, userId: string | null): void {
+function учтиБезЦены(поверхность: string, userId: string | null, кто?: string | null): void {
   try {
     insertSmartRun({
-      module: `devhub-${поверхность}-БЕЗ-ЦЕНЫ`,
+      // Имя поставщика в модуле — чтобы «цена неизвестна» было РЕШАЕМЫМ: видно,
+      // чей прайс искать. Без него строка говорит только «мы не знаем».
+      module: `devhub-${поверхность}-БЕЗ-ЦЕНЫ${кто ? `-${кто}` : ""}`,
       resolved: "single",
       costUsd: 0,
       savedUsd: 0,
@@ -7097,8 +7107,10 @@ devhubRouter.post("/media/translate", dhCostlyLimit("dhtranslate"), async (req, 
     const out = await translateText(text, targetLang, sourceLang, formality);
     if (!out.ok) return res.status(out.status).json(out.body);
     await debitQuietly(trUserId, "translate");
-    // Объём — знаки ИСХОДНОГО текста: именно их считает DeepL.
-    учтиПоОбъёму("translate", String(text ?? "").length, trUserId);
+    // Объём — знаки ИСХОДНОГО текста: именно их считает DeepL. И передаём, КТО
+    // на самом деле перевёл: при исчерпании квоты DeepL работу делает LLM, и
+    // тариф DeepL к ней не относится.
+    учтиПоОбъёму("translate", String(text ?? "").length, trUserId, out.provider);
     res.json({
       ok: true,
       ...creditNote(trCredit),

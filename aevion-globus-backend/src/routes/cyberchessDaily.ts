@@ -161,6 +161,9 @@ export function публичныеЗаписи<T extends { userId?: string; name
  */
 let leaderboardReadable = true;
 
+/** Статистика, прочитанная из файла до того, как создана карта игроков. */
+let статистикаИзФайла: UserStats[] = [];
+
 function loadLeaderboard(): LeaderEntry[] {
   try {
     ensureDataDir();
@@ -180,6 +183,19 @@ function loadLeaderboard(): LeaderEntry[] {
         if (!Array.isArray(parsed) && parsed.savedAt) {
           const t = new Date(parsed.savedAt).getTime();
           if (Number.isFinite(t)) dailySavedAtMs = t;
+        }
+        // Статистика из того же файла — КЛАДЁТСЯ В ПРОМЕЖУТОЧНЫЙ СПИСОК.
+        //
+        // Напрямую в userStats писать отсюда нельзя: загрузчик вызывается на
+        // строке инициализации LEADERBOARD, а сама Map объявлена НИЖЕ — к
+        // этому моменту она в мёртвой зоне, обращение бросает, и try/catch
+        // вокруг молча это проглатывает. Поймано тестом перезапуска: файл
+        // статистику содержал, а после подъёма модуля игрока «не знали».
+        // Классический молчаливый отказ: выглядит как успех.
+        if (!Array.isArray(parsed) && Array.isArray(parsed.stats)) {
+          статистикаИзФайла = (parsed.stats as UserStats[]).filter(
+            (st) => st && typeof st.userId === 'string',
+          );
         }
         return публичныеЗаписи(list);
       }
@@ -219,7 +235,23 @@ function saveLeaderboard(entries: LeaderEntry[]): void {
     dailySavedAtMs = Date.now();
     fs.writeFileSync(
       LB_FILE,
-      JSON.stringify({ savedAt: new Date(dailySavedAtMs).toISOString(), leaderboard: entries }, null, 2),
+      // 🔴 01.10.2026: В ФАЙЛ ПИШЕТСЯ И ЛИЧНАЯ СТАТИСТИКА.
+      //
+      // До этого файл хранил только таблицу, а статистика жила лишь в базе.
+      // И она НЕ ВОССТАНАВЛИВАЛАСЬ: при старте условие «взять из базы, только
+      // если база свежее файла» (fromDb.savedAtMs <= dailySavedAtMs) почти
+      // всегда ложно — обе записи делаются одним и тем же вызовом с ОДНОЙ
+      // меткой времени, значит база никогда не «свежее». Ранний выход
+      // пропускал восстановление статистики целиком.
+      //
+      // Следствие на проде: _persistence отдавал leaderboard: 4, players: 0 —
+      // таблица пережила перезапуск, серии обнулились. А серия у задачи дня
+      // и есть повод вернуться завтра; выкатываем мы по нескольку раз в день.
+      JSON.stringify({
+        savedAt: new Date(dailySavedAtMs).toISOString(),
+        leaderboard: entries,
+        stats: [...userStats.values()],
+      }, null, 2),
       'utf-8',
     );
     // Зеркало в базе — вместе с личной статистикой: она жила только в памяти и
@@ -248,6 +280,9 @@ type UserStats = {
   history: Array<{ day: string; timeMs: number; hintsUsed: number; streak: number; score: number }>;
 };
 const userStats = new Map<string, UserStats>();
+// Перенос прочитанного из файла: теперь карта существует.
+for (const st of статистикаИзФайла) userStats.set(st.userId, st);
+статистикаИзФайла = [];
 
 // Per-day record (one solve per user per day, deduped)
 type SolveRecord = { day: string; streak: number; userId: string; timeMs: number; hintsUsed: number; score: number };
@@ -513,7 +548,20 @@ const dailyReady: Promise<void> = (async () => {
     return;
   }
   if (!fromDb) return; // базы нет или в ней пусто — живём на файле, как раньше
-  if (fromDb.savedAtMs <= dailySavedAtMs) return; // файл свежее или ровесник
+  if (fromDb.savedAtMs <= dailySavedAtMs) {
+    // Файл свежее или ровесник — таблицу из базы не берём. Но если в файле
+    // статистики НЕТ (старый формат), а в базе она есть — берём её: иначе
+    // серии теряются молча, ровно как это и происходило до 01.10.2026.
+    if (userStats.size === 0 && fromDb.state.stats.length > 0) {
+      for (const st of fromDb.state.stats) {
+        if (st && typeof st.userId === 'string') userStats.set(st.userId, st);
+      }
+      console.log(
+        `[cyberchess-daily] статистика догружена из базы (${userStats.size} игроков), таблица оставлена файловой`,
+      );
+    }
+    return;
+  }
   LEADERBOARD = fromDb.state.leaderboard.filter((e) => !isSeededEntry(e));
   userStats.clear();
   for (const st of fromDb.state.stats) {

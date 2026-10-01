@@ -19,7 +19,17 @@ interface IndustryConfig {
   recommendedTier: "free" | "lite" | "medium" | "full" | "enterprise";
   recommendedModules: string[];
   caseStudy: { titleKey: string; resultKey: string };
-  metrics: { labelKey: string; value: string; valueKey?: string }[];
+  /*
+   * 🔴 ИСТОЧНИК ОБЯЗАТЕЛЕН У ЧИСЛА (01.10.2026). На продающей странице число
+   * без замера — это обещание. Здесь стояли «−68 % time-to-deploy», «−40 %
+   * compliance-затрат», «SLA отклика 1h», «27 open-source модулей», «70 %
+   * сокращение бумажного оборота» и ещё одиннадцать; ни одно не было ничем
+   * подтверждено, а «1h» мы в тот же день убрали из тарифа как неисполнимое.
+   * Проверку «27 открытых модулей» провалил сам предмет: публичной организации
+   * на GitHub нет (ответ 404), списка открытых модулей в коде тоже нет.
+   * Сторож unprovenIndustryNumbers требует `source` у любого значения с цифрой.
+   */
+  metrics: { labelKey: string; value: string; valueKey?: string; source?: string }[];
   primaryColor: string;
   accentColor: string;
 }
@@ -51,9 +61,6 @@ const INDUSTRIES: Record<IndustryId, IndustryConfig> = {
       resultKey: "pricing.forIndustry.banks.caseResult",
     },
     metrics: [
-      { labelKey: "pricing.forIndustry.banks.metric1Label", value: "−68%" },
-      { labelKey: "pricing.forIndustry.banks.metric2Label", value: "−40%" },
-      { labelKey: "pricing.forIndustry.banks.metric3Label", value: "1h" },
     ],
     primaryColor: "#1e3a8a",
     accentColor: "#3b82f6",
@@ -77,10 +84,6 @@ const INDUSTRIES: Record<IndustryId, IndustryConfig> = {
       resultKey: "pricing.forIndustry.startups.caseResult",
     },
     metrics: [
-      { labelKey: "pricing.forIndustry.startups.metric1Label", value: "30s" },
-      { labelKey: "pricing.forIndustry.startups.metric2Label", value: "84%" },
-      { labelKey: "pricing.forIndustry.startups.metric3Label", value: "≈3" },
-      { labelKey: "pricing.forIndustry.startups.metric4Label", value: "50" },
     ],
     primaryColor: "#7c3aed",
     accentColor: "#a78bfa",
@@ -112,9 +115,6 @@ const INDUSTRIES: Record<IndustryId, IndustryConfig> = {
       resultKey: "pricing.forIndustry.government.caseResult",
     },
     metrics: [
-      { labelKey: "pricing.forIndustry.government.metric2Label", value: "27" },
-      { labelKey: "pricing.forIndustry.government.metric3Label", value: "70%" },
-      { labelKey: "pricing.forIndustry.government.metric4Label", value: "3" },
     ],
     primaryColor: "#065f46",
     accentColor: "#10b981",
@@ -138,10 +138,15 @@ const INDUSTRIES: Record<IndustryId, IndustryConfig> = {
       resultKey: "pricing.forIndustry.creators.caseResult",
     },
     metrics: [
-      { labelKey: "pricing.forIndustry.creators.metric1Label", value: "$0" },
+      // Единственное число, которое мы можем показать: выдача сертификата в
+      // бюро действительно бесплатна — ручки сертификата отвечают 200 без
+      // оплаты и без входа (замер прода 01.10.2026).
+      {
+        labelKey: "pricing.forIndustry.creators.metric1Label",
+        value: "$0",
+        source: "замер прода 01.10.2026: ручки сертификата бюро отвечают 200 без оплаты и без входа",
+      },
       { labelKey: "pricing.forIndustry.creators.metric2Label", value: "Crypto-grade" },
-      { labelKey: "pricing.forIndustry.creators.metric3Label", value: "5+" },
-      { labelKey: "pricing.forIndustry.creators.metric4Label", value: "0%" },
     ],
     primaryColor: "#be185d",
     accentColor: "#ec4899",
@@ -173,18 +178,6 @@ const INDUSTRIES: Record<IndustryId, IndustryConfig> = {
       resultKey: "pricing.forIndustry.lawFirms.caseResult",
     },
     metrics: [
-      {
-        labelKey: "pricing.forIndustry.lawFirms.metric1Label",
-        value: "$480/мес",
-        valueKey: "pricing.forIndustry.lawFirms.metric1Value",
-      },
-      { labelKey: "pricing.forIndustry.lawFirms.metric2Label", value: "12" },
-      {
-        labelKey: "pricing.forIndustry.lawFirms.metric3Label",
-        value: "1 клик",
-        valueKey: "pricing.forIndustry.lawFirms.metric3Value",
-      },
-      { labelKey: "pricing.forIndustry.lawFirms.metric4Label", value: "4→1" },
     ],
     primaryColor: "#92400e",
     accentColor: "#f59e0b",

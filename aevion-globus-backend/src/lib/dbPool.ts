@@ -70,6 +70,20 @@ export function getPool(): PgPoolInstance {
  * Pool stats for /health and runbook diagnostics.
  * Returns null if pool was never initialised (no queries yet).
  */
+/**
+ * Закрыть пул, ЕСЛИ он был открыт. Нужна при завершении по сигналу замены:
+ * `getPool()` там звать нельзя — он СОЗДАСТ пул ради того, чтобы его закрыть,
+ * и процесс, который уже уходит, успеет открыть соединения к базе.
+ *
+ * Молчит, когда пула не было: это не отказ, а честный ноль.
+ */
+export async function закрытьПулЕслиОткрыт(): Promise<void> {
+  if (!pool) return;
+  const открытый = pool;
+  pool = null;
+  await открытый.end();
+}
+
 export function getPoolStats(): { total: number; idle: number; waiting: number } | null {
   if (!pool) return null;
   return {

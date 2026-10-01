@@ -264,9 +264,38 @@ export interface РазрезВоронки {
       thankYouOpened: number;
       paid: number;
       paidOurs: number;
+      /**
+       * Те же начала оплаты, но приписанные каналу ПО СЕССИИ (первое касание),
+       * а не по метке на самом событии. Разные единицы и потому разные имена:
+       * `checkoutStart` отвечает «какая метка была на клике», а это поле —
+       * «кто привёл человека». Владельца интересует второе.
+       *
+       * 🔴 Зачем отдельно. 30.09.2026 я сравнил `byChannel` и `byEntryPage` и
+       * объявил их противоречащими: у instagram начало оплаты 1, а среди его
+       * страниц входа — ноль. Противоречия не было (то начало оказалось нашим,
+       * `checkoutStartOurs: 1`), но единицы у разрезов ДЕЙСТВИТЕЛЬНО разные, и
+       * они разойдутся на первом же живом человеке, который зашёл без метки и
+       * нажал «Купить» по ссылке с `?c=ig`: по событию он instagram, по сессии
+       * direct. Теперь в ответе лежат оба числа под своими именами.
+       */
+      checkoutStartSessions: number;
+      /** Из них наши окна — по той же сессионной единице. */
+      checkoutStartSessionsOurs: number;
     }
   >;
-  byApp: Record<string, { checkoutStart: number; paid: number }>;
+  /**
+   * По приложениям — с тем же разделением «всего / из них наши», что у каналов.
+   *
+   * 🔴 Замер 30.09.2026 соседнего окна: `byChannel` разделение получил, а `byApp`
+   * нет — и это прятало самое дорогое число платформы. По каналам за 14 дней
+   * 7 начатых оплат, из них 6 наших, то есть живая ровно ОДНА: единственный
+   * человек за две недели, дошедший до кассы сам. А по приложениям те же 7
+   * разложены на пять модулей, и понять, ЗА КАКОЙ модуль он платил, было нельзя.
+   */
+  byApp: Record<
+    string,
+    { checkoutStart: number; checkoutStartOurs: number; paid: number; paidOurs: number }
+  >;
   /**
    * Разрез по ПОСТУ внутри канала: ключ «канал/пост».
    *
@@ -333,6 +362,8 @@ export function разрезВоронки(
         thankYouOpened: 0,
         paid: 0,
         paidOurs: 0,
+        checkoutStartSessions: 0,
+        checkoutStartSessionsOurs: 0,
       };
     }
     const к = byChannel[канал];
@@ -377,13 +408,16 @@ export function разрезВоронки(
 
     const сыройApp = ev.meta?.app;
     const приложение = typeof сыройApp === "string" && сыройApp.trim() ? сыройApp.trim() : "plan";
-    if (!byApp[приложение]) byApp[приложение] = { checkoutStart: 0, paid: 0 };
+    if (!byApp[приложение]) {
+      byApp[приложение] = { checkoutStart: 0, checkoutStartOurs: 0, paid: 0, paidOurs: 0 };
+    }
 
     if (ev.type === "checkout_start") {
       к.checkoutStart += 1;
       if (п) п.checkoutStart += 1;
       if (ev.sid && нашиСессии.has(ev.sid)) к.checkoutStartOurs += 1;
       byApp[приложение].checkoutStart += 1;
+      if (ev.sid && нашиСессии.has(ev.sid)) byApp[приложение].checkoutStartOurs += 1;
     } else if (ev.type === "checkout_success") {
       // 🔴 ЭТО НЕ ОПЛАТА. Здесь `paid` считался по загрузке страницы «спасибо»,
       // и разрез отдавал «direct: paid 3» при нуле подтверждённых оплат в итоге —
@@ -393,13 +427,16 @@ export function разрезВоронки(
     } else {
       к.paid += 1;
       if (п) п.paid += 1;
-      if (ev.meta?.свой === true) к.paidOurs += 1;
+      if (ev.meta?.свой === true) {
+        к.paidOurs += 1;
+        byApp[приложение].paidOurs += 1;
+      }
       byApp[приложение].paid += 1;
     }
   }
   // Страницы входа считаются по сессиям, а не по событиям: сначала собираем по
   // каждой сессии её первую страницу и дошла ли она до цен, потом складываем.
-  interface Заход { канал: string; вход: string; доЦен: boolean; начал: boolean }
+  interface Заход { канал: string; вход: string; доЦен: boolean; начал: boolean; наш: boolean }
   const заходы = new Map<string, Заход>();
   for (const ev of events) {
     if (!ev.sid) continue;
@@ -408,13 +445,32 @@ export function разрезВоронки(
     let з = заходы.get(ev.sid);
     if (!з) {
       if (ev.type !== "page_view") continue; // сессия без просмотра — входа нет
-      з = { канал, вход: чистыйПуть(ev.path), доЦен: false, начал: false };
+      // Канал и признак «наше» берутся у ПЕРВОГО просмотра сессии и больше не
+      // меняются: именно первое касание отвечает на вопрос «кто привёл».
+      з = {
+        канал,
+        вход: чистыйПуть(ev.path),
+        доЦен: false,
+        начал: false,
+        наш: нашиСессии.has(ev.sid),
+      };
       заходы.set(ev.sid, з);
     }
     if (ev.type === "page_view" && typeof ev.path === "string" && ev.path.includes("/pricing")) {
       з.доЦен = true;
     }
     if (ev.type === "checkout_start") з.начал = true;
+  }
+
+  // Денежная ступень по СЕССИОННОЙ единице: сессия, начавшая оплату, засчитывается
+  // каналу своего ПЕРВОГО касания. Канал, которого нет в byChannel, здесь появиться
+  // не может: у каждой сессии есть события, а byChannel строится по всем событиям.
+  for (const з of заходы.values()) {
+    if (!з.начал) continue;
+    const к = byChannel[з.канал];
+    if (!к) continue;
+    к.checkoutStartSessions += 1;
+    if (з.наш) к.checkoutStartSessionsOurs += 1;
   }
 
   const сырыеВходы = new Map<string, { сессий: number; доЦен: number; началиОплату: number }>();
@@ -1010,6 +1066,16 @@ eventsRouter.get("/funnel", (req, res) => {
     paidOurs: number;
   }
   const поДням: Record<string, Ступени> = Object.create(null);
+  /**
+   * То же по ЧАСАМ. Зачем: разбирая «чей это заход», окна упирались в вопрос
+   * «когда он был», а часовой разрез жил только в закрытой ручке
+   * (`/events/aggregate`, 401 — админ-токен прода, у окон его нет). 30.09.2026
+   * из-за этого нельзя было отличить наше нажатие «Купить» от живого человека.
+   * Отдаём ТОЛЬКО числа: ни адресов, ни признаков личности здесь нет и быть не
+   * может — ключ это час, значение это счётчики.
+   */
+  const поЧасам: Record<string, Ступени> = Object.create(null);
+  const людиПоЧасам: Record<string, Set<string>> = Object.create(null);
   // События, прошедшие отбор по времени и по «не робот», — их же считает разрез
   // по каналам и приложениям. Второй проход по файлу не делаем: это тот самый
   // случай, когда два прохода незаметно расходятся в правилах отбора.
@@ -1047,7 +1113,11 @@ eventsRouter.get("/funnel", (req, res) => {
 
     событияВоронки.push(ev);
     const день = new Date(t).toISOString().slice(0, 10);
+    const час = new Date(t).toISOString().slice(0, 13); // «2026-09-30T14», UTC
     if (!поДням[день]) поДням[день] = { visits: 0, pricing: 0, checkoutStart: 0, thankYouOpened: 0, paid: 0, paidOurs: 0, checkoutStartOurs: 0 };
+    if (!поЧасам[час]) поЧасам[час] = { visits: 0, pricing: 0, checkoutStart: 0, thankYouOpened: 0, paid: 0, paidOurs: 0, checkoutStartOurs: 0 };
+    if (!людиПоЧасам[час]) людиПоЧасам[час] = new Set<string>();
+    const чс = поЧасам[час];
     if (!людиПоДням[день]) людиПоДням[день] = new Set<string>();
     const ст = поДням[день];
 
@@ -1055,19 +1125,32 @@ eventsRouter.get("/funnel", (req, res) => {
       // Уникальных людей считаем по sid, но в ОТВЕТ он не попадает: множество
       // живёт только внутри этого запроса и наружу отдаётся его размер.
       if (ev.sid) людиПоДням[день].add(ev.sid); else ст.visits += 1;
-      if (typeof ev.path === "string" && ev.path.includes("/pricing")) ст.pricing += 1;
+      if (ev.sid) людиПоЧасам[час].add(ev.sid); else чс.visits += 1;
+      if (typeof ev.path === "string" && ev.path.includes("/pricing")) {
+        ст.pricing += 1;
+        чс.pricing += 1;
+      }
     } else if (ev.type === "checkout_start") {
       ст.checkoutStart += 1;
-      if (ev.sid && нашиСессии.has(ev.sid)) ст.checkoutStartOurs += 1;
+      чс.checkoutStart += 1;
+      if (ev.sid && нашиСессии.has(ev.sid)) {
+        ст.checkoutStartOurs += 1;
+        чс.checkoutStartOurs += 1;
+      }
     } else if (ev.type === "checkout_success") {
       ст.thankYouOpened += 1;
+      чс.thankYouOpened += 1;
     } else if (ev.type === СОБЫТИЕ_ОПЛАТА_ПОДТВЕРЖДЕНА) {
       ст.paid += 1;
+      чс.paid += 1;
       // Признак ставит вебхук по адресу плательщика (lib/payment/paymentConfirmedEvent).
       // Замер 29.09.2026: первые две подтверждённые оплаты были покупками самого
       // основателя, проверявшего кассу, — без этого разреза они прочитались бы
       // как первые продажи.
-      if (ev.meta?.свой === true) ст.paidOurs += 1;
+      if (ev.meta?.свой === true) {
+        ст.paidOurs += 1;
+        чс.paidOurs += 1;
+      }
     }
   }
 
@@ -1078,6 +1161,25 @@ eventsRouter.get("/funnel", (req, res) => {
   // измеренным целиком, хотя механизм заработал в его середине: в отчёте
   // получился ноль за день, в котором были две настоящие оплаты.
   const измерялосьЛи = (день: string) => Date.parse(`${день}T00:00:00.000Z`) >= Date.parse(ОПЛАТЫ_СЧИТАЕМ_С);
+
+  // ЧАСЫ: только непустые и только последние 72 — иначе окно в 90 дней дало бы
+  // две с лишним тысячи ключей, и ответ перестал бы читаться. Семидесяти двух
+  // хватает на трое суток: именно столько живёт вопрос «чей это был заход».
+  const ПРЕДЕЛ_ЧАСОВ = 72;
+  const byHour = Object.keys(поЧасам)
+    .sort()
+    .map((ч) => ({
+      hour: ч,
+      visits: поЧасам[ч].visits + (людиПоЧасам[ч]?.size ?? 0),
+      pricing: поЧасам[ч].pricing,
+      checkoutStart: поЧасам[ч].checkoutStart,
+      checkoutStartOurs: поЧасам[ч].checkoutStartOurs,
+      thankYouOpened: поЧасам[ч].thankYouOpened,
+      paid: измерялосьЛи(ч.slice(0, 10)) ? поЧасам[ч].paid : null,
+      paidOurs: измерялосьЛи(ч.slice(0, 10)) ? поЧасам[ч].paidOurs : null,
+    }))
+    .filter((ч) => ч.visits || ч.pricing || ч.checkoutStart || ч.thankYouOpened || ч.paid)
+    .slice(-ПРЕДЕЛ_ЧАСОВ);
 
   const byDay = Object.keys(поДням)
     .sort()
@@ -1160,6 +1262,20 @@ eventsRouter.get("/funnel", (req, res) => {
     // `разрезВоронки`, а не ОТВЕТ РУЧКИ — тот же класс, из-за которого гостевой
     // вход не работал месяц. Теперь рядом стоит сторож на ответ.
     byPost: разрез.byPost,
+    // Часы в UTC (у основателя местное = UTC+5). Только непустые, последние 72.
+    // Нужны, чтобы отвечать «чей это был заход» без админ-токена: до 30.09.2026
+    // часовой разрез жил лишь в закрытой ручке, и вопрос решался догадками.
+    byHour,
+    byHourTimezone: "UTC",
+    // Та же оговорка, что у каналов, и по той же причине: визит уникален В
+    // ПРЕДЕЛАХ часа. Сессия, начавшаяся в 23:50 и продолжившаяся после
+    // полуночи, попадёт в два часа, поэтому сумма по часам ≥ total.visits.
+    // Подписываем прямо в ответе: читатели ручки — мы, когда пишем сводки
+    // основателю, и сложенные часы легко уходят в число как «визиты за день».
+    byHourVisitsMayExceedTotal: true,
+    byHourVisitsNote:
+      "визиты по часам уникальны В ПРЕДЕЛАХ часа: сессия через полночь попадёт в два часа, " +
+      "поэтому сумма по часам ≥ total.visits и складывать часы как «визиты за день» нельзя",
     byEntryPage: разрез.byEntryPage,
     // Сумма визитов ПО КАНАЛАМ больше итога — и это честно, а не дефект.
     // Замер 30.09: за 14 дней итог 231, сумма по каналам 236 (+5), за 90 дней
@@ -1170,6 +1286,12 @@ eventsRouter.get("/funnel", (req, res) => {
     // единственные читатели ручки — мы, когда пишем сводки основателю, и
     // вычитание «сумма минус итог» тут ничего не значит.
     byChannelVisitsMayExceedTotal: true,
+    // Две единицы приписки живут рядом, и читатель обязан видеть, что это НЕ
+    // опечатка: `checkoutStart` считает метку на событии, `checkoutStartSessions` —
+    // канал первого касания сессии. Числа законно расходятся.
+    byChannelUnitsNote:
+      "checkoutStart считает метку НА СОБЫТИИ, checkoutStartSessions — канал ПЕРВОГО КАСАНИЯ сессии; " +
+      "на вопрос «кто привёл человека» отвечает второе, расхождение между ними нормально",
     byChannelVisitsNote:
       "визиты по каналам уникальны В ПРЕДЕЛАХ канала: один человек с двумя метками попадёт в оба, " +
       "поэтому сумма по каналам ≥ total.visits и разницу нельзя читать как ошибку",

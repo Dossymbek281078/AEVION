@@ -96,6 +96,18 @@ function открылиСтраницуСпасибо() {
     .send({ type: "checkout_success", source: "pricing", path: "/pricing/checkout/success" });
 }
 
+/** Заход окна с меткой пробы: страница, затем нажатие «Купить» в той же сессии. */
+async function заходСМеткой(метка: string, сессия: string) {
+  await request(приложение())
+    .post("/api/pricing/events")
+    .set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131")
+    .send({ type: "page_view", source: "pricing", sid: сессия, path: `/longevity?c=${метка}` });
+  return request(приложение())
+    .post("/api/pricing/events")
+    .set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131")
+    .send({ type: "checkout_start", source: "pricing", sid: сессия, path: `/longevity?c=${метка}` });
+}
+
 async function воронка() {
   const r = await request(приложение()).get("/api/pricing/events/funnel?days=14");
   expect(r.status).toBe(200);
@@ -266,7 +278,7 @@ describe("хранилище событий", () => {
 
     const r = await request(приложение()).get("/api/pricing/events/funnel?days=14");
     expect(r.status).toBe(200);
-    for (const поле of ["byChannel", "byApp", "byPost", "byEntryPage"]) {
+    for (const поле of ["byChannel", "byApp", "byPost", "byEntryPage", "byHour"]) {
       expect(
         Object.prototype.hasOwnProperty.call(r.body, поле),
         `ответ не содержит ${поле} — разрез считается и выбрасывается`,
@@ -276,5 +288,81 @@ describe("хранилище событий", () => {
     // каналам минус итог» нельзя читать как ошибку.
     expect(r.body.byChannelVisitsMayExceedTotal).toBe(true);
     expect(String(r.body.byChannelVisitsNote)).toMatch(/в пределах канала/i);
+
+    // Часовой разрез: он и есть ответ на «когда был этот заход». До 30.09.2026
+    // часы жили только в закрытой ручке (401), и «чей это заход» решалось
+    // догадками. Проверяем, что час ЕСТЬ в ответе и что событие в него попало.
+    expect(r.body.byHourTimezone, "часовой пояс не назван — часы прочитают как местные").toBe("UTC");
+    const часы = r.body.byHour as { hour: string; visits: number }[];
+    // Оговорка про сумму часов обязана быть В ОТВЕТЕ, а не в чьей-то памяти:
+    // сессия через полночь попадает в два часа, и сложенные часы читаются как
+    // «визиты за день» с завышением. У каналов такая подпись уже есть — здесь
+    // проверяем симметрию, иначе один разрез честен, а соседний молчит.
+    // Две единицы приписки канала обязаны БЫТЬ В ОТВЕТЕ и быть названными.
+    // Без подписи расхождение между ними читается как дефект — я сам так его и
+    // прочитал 30.09 и поднял ложную тревогу.
+    for (const канал of Object.values(r.body.byChannel as Record<string, Record<string, unknown>>)) {
+      expect(канал, "у канала нет сессионной единицы начала оплаты").toHaveProperty(
+        "checkoutStartSessions",
+      );
+      expect(канал, "у канала нет «из них наши» по сессионной единице").toHaveProperty(
+        "checkoutStartSessionsOurs",
+      );
+    }
+    expect(String(r.body.byChannelUnitsNote ?? ""), "две единицы не подписаны").toMatch(
+      /ПЕРВОГО КАСАНИЯ/,
+    );
+
+    expect(
+      r.body.byHourVisitsMayExceedTotal,
+      "нет признака, что сумма по часам больше итога",
+    ).toBe(true);
+    expect(
+      String(r.body.byHourVisitsNote ?? ""),
+      "оговорка про часы не названа словами",
+    ).toMatch(/В ПРЕДЕЛАХ часа/);
+    expect(Array.isArray(часы), "byHour не массив").toBe(true);
+    const текущийЧас = new Date().toISOString().slice(0, 13);
+    expect(
+      часы.some((ч) => ч.hour === текущийЧас && ч.visits > 0),
+      `события нет в текущем часе ${текущийЧас}: ${JSON.stringify(часы).slice(0, 200)}`,
+    ).toBe(true);
+  });
+});
+
+describe("метка probe-<окно> отделяет наш заход от живого человека", () => {
+  test("probe-63 попадает в «наши», ig — нет", async () => {
+    // 🔴 Зачем сторож. Правило «любой заход окна на прод — с меткой ?c=probe-<окно>»
+    // держится на том, что бэкенд узнаёт метку ПО ПРЕФИКСУ. Сузь это до точного
+    // совпадения со списком — и КАЖДЫЙ наш заход станет «живым человеком», то есть
+    // главное число, которое читает основатель («начали оплату 7, из них наших 6,
+    // значит живая одна»), завысится молча. Ни один тест этого не охранял.
+    //
+    // Заодно закрыт вопрос приёмки 30.09: метку якобы «отбрасывает» переадресация.
+    // Замер показал обратное — редиректа у /longevity нет вовсе, а тот, что есть в
+    // middleware, сохраняет запрос. Метка просто НЕ становится каналом, и это
+    // задумано: пробы не должны заводить свои каналы.
+    const до = await воронка();
+
+    await заходСМеткой("probe-63", "сессия-окна");
+    const после = await воронка();
+    expect(
+      после.total.checkoutStartOurs - до.total.checkoutStartOurs,
+      "заход с меткой probe-63 не признан нашим — правило метки перестало работать",
+    ).toBe(1);
+
+    // Контроль в обратную сторону: настоящий канал нашим НЕ становится, иначе
+    // сторож зеленел бы и на «считать нашими всех».
+    const доЖивого = await воронка();
+    await заходСМеткой("ig", "сессия-человека");
+    const послеЖивого = await воронка();
+    expect(
+      послеЖивого.total.checkoutStartOurs - доЖивого.total.checkoutStartOurs,
+      "заход с настоящей меткой канала записан нашим — живые люди исчезнут из числа",
+    ).toBe(0);
+    expect(
+      послеЖивого.total.checkoutStart - доЖивого.total.checkoutStart,
+      "живой заход вообще не посчитан",
+    ).toBe(1);
   });
 });

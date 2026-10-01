@@ -44,6 +44,11 @@ describe("разрез воронки", () => {
       thankYouOpened: 1,
       paid: 0,
       paidOurs: 0,
+      // Сессионная единица здесь НОЛЬ, и это правильно: у событий этого случая нет
+      // `sid`, значит сессии нет, а приписывать «кто привёл» не к кому. Счёт по
+      // событию при этом 1. Случай с настоящими сессиями — отдельным тестом ниже.
+      checkoutStartSessions: 0,
+      checkoutStartSessionsOurs: 0,
     });
     expect(r.byChannel["product-hunt"]).toEqual({
       visits: 1,
@@ -53,7 +58,81 @@ describe("разрез воронки", () => {
       thankYouOpened: 0,
       paid: 0,
       paidOurs: 0,
+      checkoutStartSessions: 0,
+      checkoutStartSessionsOurs: 0,
     });
+  });
+
+  it("метка сменилась внутри сессии: по событию instagram, по сессии direct", () => {
+    // 🔴 Ровно этот случай 30.09.2026 заставил меня объявить два разреза
+    // противоречащими и почти отправить основателю «Instagram привёл покупателя».
+    // Человек заходит БЕЗ метки, ходит по сайту, потом нажимает «Купить» по ссылке
+    // с `?c=ig`. По событию начало оплаты принадлежит instagram, по первому касанию —
+    // прямым заходам. Оба числа верны, и оба обязаны быть в ответе под своими именами.
+    const r = разрезВоронки([
+      событие("page_view", undefined, "/", "s1"),
+      событие("page_view", undefined, "/pricing", "s1"),
+      событие("checkout_start", { channel: "instagram", app: "multichat" }, "/pricing", "s1"),
+      // Вторая сессия ОБЯЗАТЕЛЬНА, и вот почему. Сперва я оставил только `s1`, и
+      // мутация «считать все сессии, а не только начавшие оплату» прошла незаметно:
+      // единственная сессия оплату начинала, поэтому ветвь `если не начал — пропусти`
+      // ничего не решала. Сессия, дошедшая до цен и УШЕДШАЯ, — единственное, что
+      // различает эти две ветви. Мутация теперь ловится.
+      событие("page_view", { channel: "instagram" }, "/go", "s2"),
+      событие("page_view", { channel: "instagram" }, "/pricing", "s2"),
+    ]);
+
+    // единица «событие»: метка на клике
+    expect(r.byChannel["instagram"].checkoutStart, "по событию должен быть instagram").toBe(1);
+    expect(r.byChannel["direct"].checkoutStart, "по событию direct не начинал").toBe(0);
+
+    // единица «сессия»: кто привёл человека
+    expect(
+      r.byChannel["direct"].checkoutStartSessions,
+      "по сессии начало оплаты должно принадлежать первому касанию (direct)",
+    ).toBe(1);
+    expect(
+      r.byChannel["instagram"].checkoutStartSessions,
+      "instagram привёл сессию, но она до кассы не дошла — сессионный счёт обязан быть 0",
+    ).toBe(0);
+    // Контроль, что сессия instagram вообще существует: иначе ноль выше означал бы
+    // «данных нет», а не «не дошла», и проверка была бы пустой.
+    expect(r.byEntryPage["instagram|/go"], "сессии instagram нет в страницах входа").toMatchObject({
+      сессий: 1,
+      доЦен: 1,
+      началиОплату: 0,
+    });
+
+    // и страница входа считается по той же сессионной единице, что и канал сессии
+    expect(r.byEntryPage["direct|/"], "страница входа должна лежать у direct").toMatchObject({
+      сессий: 1,
+      началиОплату: 1,
+    });
+  });
+
+  it("сессионный счёт отделяет НАШИ окна от живых людей", () => {
+    // Без этого случая ветвь «из них наши» не охранялась ничем: мутация «считать
+    // нашими все сессии» проходила незаметно (проверено 30.09.2026, код 1). А это
+    // ровно то число, из-за которого читается вся воронка: семь начатых оплат,
+    // из них шесть наших, значит живая одна.
+    const r = разрезВоронки(
+      [
+        событие("page_view", undefined, "/pricing", "живой"),
+        событие("checkout_start", { app: "multichat" }, "/pricing", "живой"),
+        событие("page_view", undefined, "/pricing", "окно"),
+        событие("checkout_start", { app: "multichat" }, "/pricing", "окно"),
+      ],
+      new Set(["окно"]),
+    );
+
+    expect(
+      r.byChannel["direct"].checkoutStartSessions,
+      "обе сессии начали оплату — сессионный счёт должен быть 2",
+    ).toBe(2);
+    expect(
+      r.byChannel["direct"].checkoutStartSessionsOurs,
+      "нашей была ровно одна сессия из двух",
+    ).toBe(1);
   });
 
   it("«без метки» и «метка неизвестна» — РАЗНЫЕ ответы", () => {
@@ -76,8 +155,8 @@ describe("разрез воронки", () => {
       // «план», что бы ни купили.
       событие("payment_confirmed", { channel: "direct", app: "qskyway" }),
     ]);
-    expect(r.byApp["plan"]).toEqual({ checkoutStart: 1, paid: 0 });
-    expect(r.byApp["qskyway"]).toEqual({ checkoutStart: 0, paid: 1 });
+    expect(r.byApp["plan"]).toEqual({ checkoutStart: 1, checkoutStartOurs: 0, paid: 0, paidOurs: 0 });
+    expect(r.byApp["qskyway"]).toEqual({ checkoutStart: 0, checkoutStartOurs: 0, paid: 1, paidOurs: 0 });
   });
 
   it("сумма по каналам сходится с суммой по приложениям", () => {
@@ -197,5 +276,30 @@ describe("разрез воронки", () => {
       .filter(([k]) => k.startsWith("instagram|"))
       .reduce((а, [, т]) => а + т.сессий, 0);
     expect(игСессий, "при сворачивании хвоста потерялись сессии канала").toBe(20);
+  });
+  it("по приложениям видно, какая попытка НАША, а какая живого человека", () => {
+    // 🔴 Замер 30.09.2026: `byChannel` разделение имел, `byApp` — нет, и это
+    // прятало самое дорогое число платформы. По каналам за 14 дней было 7 начатых
+    // оплат, из них 6 наших — то есть живая ровно ОДНА, единственный человек за
+    // две недели, дошедший до кассы сам. А по приложениям те же 7 разложены на
+    // пять модулей, и понять, ЗА КАКОЙ модуль платил он, было нельзя.
+    const r = разрезВоронки(
+      [
+        событие("page_view", { channel: "direct" }, "/pricing?c=probe-okno", "s-nash"),
+        событие("checkout_start", { channel: "direct", app: "cyberchess" }, undefined, "s-nash"),
+        событие("page_view", { channel: "direct" }, "/pricing", "s-chelovek"),
+        событие("checkout_start", { channel: "direct", app: "qskyway" }, undefined, "s-chelovek"),
+      ],
+      new Set(["s-nash"]),
+    );
+
+    expect(r.byApp["cyberchess"], "наша попытка не отмечена — модуль выглядит живым интересом")
+      .toEqual({ checkoutStart: 1, checkoutStartOurs: 1, paid: 0, paidOurs: 0 });
+    expect(r.byApp["qskyway"], "живая попытка помечена нашей — единственный человек пропал")
+      .toEqual({ checkoutStart: 1, checkoutStartOurs: 0, paid: 0, paidOurs: 0 });
+
+    // Контроль: по каналу суммы те же, разрезы не расходятся между собой.
+    expect(r.byChannel["direct"].checkoutStart).toBe(2);
+    expect(r.byChannel["direct"].checkoutStartOurs).toBe(1);
   });
 });

@@ -61,6 +61,11 @@ const EN = {
   "hero.ex2": "event page with a programme and a countdown",
   "hero.ex3": "photographer portfolio with a gallery and a dark theme",
   "hero.title": "Describe it — and get a working app",
+  // Цена в первом экране (01.10.2026): с Product Hunt и LaunchNest пришло
+  // 16 сессий, до страницы цен не дошёл НИ ОДИН — ссылки были ниже сгиба.
+  // Числа подставляются из STANDALONE_APPS, в тексте только {a} и {b}.
+  "hero.price": "Full studio from {a}/mo on the 12-month term, {b}/mo billed monthly.",
+  "hero.priceCta": "See plans and buy",
   "hero.subtitle": "AI creates the project, writes the code and shows a live preview. Then: changes in chat, images and sound, deploy in one click. Visual Edit — after deploy (right away on static).",
   "hero.needsServerNote": "This looks like it needs accounts, a database or payments. We will build the browser version: data is kept in the browser and the live address works right away — the server side we add later, in the project chat.",
   "quote.title": "Book, voice-over and a short film — see the price first",
@@ -223,6 +228,8 @@ const RU: Record<Key, string> = {
   "hero.ex2": "страница мероприятия с программой и обратным отсчётом",
   "hero.ex3": "портфолио фотографа с галереей и тёмной темой",
   "hero.title": "Опиши — и получи работающее приложение",
+  "hero.price": "Полная студия — от {a}/мес при оплате за 12 месяцев, {b}/мес помесячно.",
+  "hero.priceCta": "Цены и покупка",
   "hero.subtitle": "ИИ создаст проект, напишет код и покажет живое превью. Дальше — правки в чате, картинки и звук, публикация в один клик. Правка кликами — после деплоя (на статике сразу).",
   "hero.needsServerNote": "Похоже, задуманному нужны аккаунты, база или оплата. Соберём браузерную версию: данные хранятся в браузере, а живой адрес заработает сразу — серверную часть добавим в чате проекта.",
   "quote.title": "Книга, озвучка и короткий фильм — сначала цена",
@@ -385,6 +392,8 @@ const KK: Record<Key, string> = {
   "hero.ex2": "бағдарламасы және кері санағы бар іс-шара беті",
   "hero.ex3": "галереясы және қараңғы тақырыбы бар фотограф портфолиосы",
   "hero.title": "Сипаттаңыз — жұмыс істейтін қосымша алыңыз",
+  "hero.price": "Толық студия — 12 айға төлегенде айына {a}, ай сайын төлегенде айына {b}.",
+  "hero.priceCta": "Бағалар және сатып алу",
   "hero.subtitle": "ЖИ жобаны жасайды, кодты жазады және тірі алдын ала қарауды көрсетеді. Әрі қарай — чатта өзгерістер, сурет пен дыбыс, бір басумен жариялау. Visual Edit — жарияланғаннан кейін (статикада бірден).",
   "hero.needsServerNote": "Бұл идеяға тіркелгі, дерекқор немесе төлем қажет сияқты. Браузер нұсқасын жинаймыз: деректер браузерде сақталады, тірі мекенжай бірден жұмыс істейді — сервер бөлігін жоба чатында қосамыз.",
   "quote.title": "Кітап, дыбыстау және қысқа фильм — алдымен бағасы",

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { BuyLink } from "@/components/BuyLink";
 import { PageTracking } from "@/components/PageTracking";
 import { productById, channelFrom, channelFromRef, withChannel, keepChannel } from "@/lib/products";
+import { fromPricePerMonth } from "@/lib/termPricing";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 
 // /en/devhub — англоязычная посадочная DevHub под западные каналы
@@ -71,6 +72,32 @@ export default async function EnDevhubPage({
             generation, live preview, deployment and a per-run ledger of what
             every AI call cost you — one loop, one place.
           </p>
+
+          {/*
+            ЦЕНА В ПЕРВОМ ЭКРАНЕ (01.10.2026).
+            Повод денежный: с Product Hunt и LaunchNest пришло 16 сессий на
+            /en/devhub и /devhub, до страницы цен не дошёл НИ ОДИН. Ссылки на
+            /pricing были, но ниже сгиба — человек их не видел.
+
+            Бесплатный вход ниже остаётся первым по весу: так устроена воронка,
+            и менять это не требовалось. Здесь — только факт цены и прямой путь
+            в кассу, одной строкой.
+
+            Числа НЕ вписаны руками: $200 это devhub.priceUsd (из STANDALONE_APPS),
+            $100 — fromPricePerMonth от той же базы, то есть цена за 12 месяцев.
+            Оба конца сверяются с бэкендом тестом termPricingMatchesBackend —
+            иначе страница обещала бы цену, которой касса не знает.
+          */}
+          {devhub ? (
+            <p style={styles.heroPrice}>
+              Full studio{" "}
+              <strong>from ${fromPricePerMonth(devhub.priceUsd)}/mo</strong>{" "}
+              on the 12-month term, ${devhub.priceUsd}/mo billed monthly.{" "}
+              <a href={withChannel(devhub.href, channel)} style={styles.heroPriceLink}>
+                See plans and buy →
+              </a>
+            </p>
+          ) : null}
         </header>
 
         {/* Бесплатное — ПЕРВЫМ, до всякой цены: так устроена работающая
@@ -242,6 +269,15 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "8px 14px",
   },
   note: { fontSize: 15, lineHeight: 1.6, color: MUTED, margin: 0 },
+  // Цена в первом экране: заметна, но тише h1 — она факт, а не призыв.
+  heroPrice: {
+    marginTop: 14,
+    marginBottom: 0,
+    fontSize: 15.5,
+    lineHeight: 1.5,
+    color: INK,
+  },
+  heroPriceLink: { color: INK, fontWeight: 700, whiteSpace: "nowrap" as const },
   foot: { marginTop: 44, paddingTop: 16, borderTop: `1px solid ${LINE}`, fontSize: 14 },
   footLink: { color: MUTED, textDecoration: "none" },
   footDot: { margin: "0 8px", color: MUTED },

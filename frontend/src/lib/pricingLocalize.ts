@@ -191,7 +191,12 @@ export const MODULE_ONE_LINER_EN: Record<string, string> = {
   deepsan: "Anti-chaos productivity app",
   mapreality: "Map of communities' real needs",
   qevents: "Events, calendar and registrations",
-  "z-tide": "Energy and emotion as currency (concept)",
+  // 01.10.2026: английский отстал от смены СУТИ продукта. Z-Tide перестал быть
+  // «энергией как валютой» и стал мягкой репутацией; русский однострочник
+  // обновили, английский остался описывать прежний замысел — то есть другой
+  // продукт. Вскрылось свежим снимком цен: sameDigits не сходился (в русском
+  // «7 рангов», в английском цифр не было вовсе).
+  "z-tide": "Soft reputation: 7 ranks, points are not tradable",
   qcontract: "Self-destructing smart documents",
   shadownet: "Alternative private network (R&D)",
   lifebox: "Digital safe for the future",

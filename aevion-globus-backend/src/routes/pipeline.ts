@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { этоНашаПроба } from "../lib/publicRegistryProbes";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { verifyBearerOptional, getJwtSecret } from "../lib/authJwt";
@@ -1748,8 +1749,13 @@ pipelineRouter.get("/certificates", async (_req, res) => {
        FROM "IPCertificate" WHERE "status" = 'active' ORDER BY "protectedAt" DESC LIMIT 100`,
     );
 
+    // 🔴 01.10.2026: наши прогоны из ПУБЛИЧНОГО списка не показываем. Это
+    // витрина бесплатного сертификата, и посетитель видел на ней «smoke test».
+    // Фильтр применяет наше же соглашение об именовании проб (§19), строки в
+    // базе остаются — удалять данные на проде необратимо.
     res.json({
-      certificates: rows.map((r: Record<string, unknown>) => ({
+      certificates: rows
+        .map((r: Record<string, unknown>) => ({
         id: r.id,
         title: r.title,
         kind: r.kind,
@@ -1769,7 +1775,8 @@ pipelineRouter.get("/certificates", async (_req, res) => {
         // на один вопрос, и однажды они разойдутся.
         bitcoinAnchor: anchorSummary(r),
         verifyUrl: `https://aevion.app/verify/${r.id}`,
-      })),
+      }))
+        .filter((c: { id: unknown; title: unknown; author: unknown }) => !этоНашаПроба(c)),
       total: rows.length,
     });
   } catch (err: unknown) {

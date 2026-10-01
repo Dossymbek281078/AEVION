@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { englishVersionFor } from "@/lib/englishPages";
+import { englishUrlWithChannel } from "@/lib/englishPages";
 import { redirect } from "next/navigation";
 import { fetchOrPaywall } from "@/lib/paywall";
 import { PaywallScreen } from "@/components/PaywallScreen";
@@ -8,7 +8,7 @@ import SmetaTrainerPage from "./_client";
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ app?: string | string[] }>;
+  searchParams: Promise<{ app?: string | string[]; c?: string | string[] }>;
 }) {
   // Языковая маршрутизация — четвёртый случай приёма (образцы /longevity,
   // /go, /shop; мутации у сторожей пойманы там). Замер EN-свипа 06.09.2026:
@@ -22,11 +22,12 @@ export default async function Page({
   // (прод: cookie en → 307 /en/smeta-trainer). Сторож — enModuleLandings.guard.
   const язык = (await cookies()).get("aevion_lang_v1")?.value;
   const входВПриложение = (await searchParams).app !== undefined;
+
   // 🔴 01.10.2026: уводим ТОЛЬКО если английская страница есть. Замер прода:
   // с кукой aevion_lang_v1=en было 6 шагов и снова 307 — бесконечный круг,
   // потому что /en/smeta-trainer своей страницы не имеет и middleware возвращал
   // гостя сюда. Список английских страниц один на всех: lib/englishPages.
-  const enUrl = englishVersionFor("/smeta-trainer");
+  const enUrl = englishUrlWithChannel("/smeta-trainer", (await searchParams).c);
   if (язык === "en" && !входВПриложение && enUrl) {
     redirect(enUrl);
   }

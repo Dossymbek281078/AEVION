@@ -55,7 +55,11 @@ describe("языковая маршрутизация модульных стр�
        * что список эту страницу знает.
        */
       const путьБезПрефикса = p.target.replace("/en", "");
-      expect(тело).toContain(`englishVersionFor("${путьБезПрефикса}")`);
+      // Два честных способа: прямой englishVersionFor + keepChannel, либо общий
+      // помощник englishUrlWithChannel, который метку сохраняет внутри.
+      const прямо = тело.includes(`englishVersionFor("${путьБезПрефикса}")`);
+      const помощник = тело.includes(`englishUrlWithChannel("${путьБезПрефикса}"`);
+      expect(прямо || помощник, "адрес берётся не из общего списка").toBe(true);
       expect(englishVersionFor(путьБезПрефикса), "список не знает эту страницу").toBe(p.target);
       const iRedirect = тело.indexOf("redirect(");
       const iMark = тело.indexOf(p.beforeMark);

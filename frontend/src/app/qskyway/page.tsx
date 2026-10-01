@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { fetchOrPaywall } from "@/lib/paywall";
-import { englishVersionFor } from "@/lib/englishPages";
+import { englishUrlWithChannel } from "@/lib/englishPages";
 import { PaywallScreen } from "@/components/PaywallScreen";
 import QSkywayClient from "./_client";
 import { PageTracking } from "@/components/PageTracking";
@@ -57,7 +57,7 @@ export const metadata: Metadata = {
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ app?: string | string[] }>;
+  searchParams: Promise<{ app?: string | string[]; c?: string | string[] }>;
 }) {
   // Языковая маршрутизация — 6-й случай приёма (образцы /longevity, /go,
   // /shop, /smeta-trainer, /qrenew; мутации у сторожей пойманы там).
@@ -70,13 +70,14 @@ export default async function Page({
   // не доходил никогда (прод 14.09.2026: 307 -> /en/qskyway, без cookie 200).
   const lang = (await cookies()).get("aevion_lang_v1")?.value;
   const openApp = (await searchParams)?.app != null;
+
   // 🔴 01.10.2026: уводим ТОЛЬКО если английская страница существует.
   // Комментарий выше описывает круг, который пытались разорвать 14.09, — но
   // починка сама его и замкнула: /en/qskyway своей страницы не имеет, поэтому
   // middleware возвращал гостя сюда, а эта строка снова уводила его туда.
   // Замер прода: шесть шагов и опять 307. Список английских страниц теперь один
   // на всех (lib/englishPages.ts), и разойтись им негде.
-  const enUrl = englishVersionFor("/qskyway");
+  const enUrl = englishUrlWithChannel("/qskyway", (await searchParams).c);
   if (lang === "en" && !openApp && enUrl) {
     redirect(enUrl);
   }

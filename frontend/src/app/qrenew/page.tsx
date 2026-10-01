@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { englishVersionFor } from "@/lib/englishPages";
+import { englishUrlWithChannel } from "@/lib/englishPages";
 
 // 19.08.2026: платный продукт с общим заголовком сайта не находился по своей
 // теме вовсе. Формулировки без обещаний результата — тематика здоровья.
@@ -26,7 +26,7 @@ import { PageTracking } from "@/components/PageTracking";
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ app?: string | string[] }>;
+  searchParams: Promise<{ app?: string | string[]; c?: string | string[] }>;
 }) {
   // Языковая маршрутизация — тот же приём, что у /longevity, /go и /shop
   // (мутации у сторожей пойманы там). Замер EN-свипа 06.09.2026: под cookie
@@ -38,11 +38,12 @@ export default async function Page({
   // 307 /en/qrenew). Сторож — enModuleLandings.guard.
   const язык = (await cookies()).get("aevion_lang_v1")?.value;
   const входВПриложение = (await searchParams).app !== undefined;
+
   // 🔴 01.10.2026: уводим ТОЛЬКО если английская страница есть. Замер прода:
   // с кукой aevion_lang_v1=en было 6 шагов и снова 307 — бесконечный круг,
   // потому что /en/qrenew своей страницы не имеет и middleware возвращал
   // гостя сюда. Список английских страниц один на всех: lib/englishPages.
-  const enUrl = englishVersionFor("/qrenew");
+  const enUrl = englishUrlWithChannel("/qrenew", (await searchParams).c);
   if (язык === "en" && !входВПриложение && enUrl) {
     redirect(enUrl);
   }

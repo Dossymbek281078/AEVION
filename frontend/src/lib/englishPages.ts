@@ -18,6 +18,8 @@
  * перед тем, как уводить, middleware — перед тем, как возвращать. Разойтись им
  * больше негде.
  */
+import { channelFrom, keepChannelOrProbe } from "./products";
+
 export const АНГЛИЙСКИЕ_СТРАНИЦЫ_СО_СВОИМ_АДРЕСОМ = [
   "/en/devhub",
   "/en/devhub/launch",
@@ -67,3 +69,27 @@ export function englishVersionFor(путь: string | null | undefined): string |
   const кандидат = "/en" + (п === "/" ? "" : п);
   return hasOwnEnglishPage(кандидат) ? кандидат : null;
 }
+
+/**
+ * Адрес английской версии ВМЕСТЕ с сохранённой меткой канала — или null, если
+ * уводить некуда.
+ *
+ * 🔴 Повод 01.10.2026. После хотфикса-2 оркестратор заметил на проде: /longevity
+ * уводил с хвостом `?c=`, а /qskyway, /qrenew и /smeta-trainer — без него. Там
+ * стоял голый redirect(enUrl), и англоязычный посетитель с меткой терял канал.
+ *
+ * Почему отдельной функцией, а не channelFrom в каждой странице: эти три
+ * страницы канал не УЧИТЫВАЮТ, они его только ПЕРЕДАЮТ. Сторож внутренних
+ * ссылок отличает одно от другого по наличию channelFrom в файле, и упоминание
+ * его в пересылке сделало бы «целями» страницы, которым метка не нужна, — 38
+ * ссылок покраснели бы впустую. Здесь это одна строка на всех.
+ */
+export function englishUrlWithChannel(
+  путь: string,
+  raw: string | string[] | undefined,
+): string | null {
+  const цель = englishVersionFor(путь);
+  if (!цель) return null;
+  return keepChannelOrProbe(цель, raw, channelFrom(raw));
+}
+

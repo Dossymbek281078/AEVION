@@ -20,6 +20,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { channelFrom, keepChannel, keepChannelOrProbe, нашаМетка } from "../products";
+import { englishUrlWithChannel } from "../englishPages";
 
 const СЕРВЕР = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -53,6 +54,23 @@ describe("наши пробы переживают языковой редире
   it("якорь не ломается — всё после # серверу не отправляется", () => {
     expect(keepChannelOrProbe("/pricing#apps", "probe-phone", null)).toBe("/pricing?c=probe-phone#apps");
     expect(keepChannel("/pricing#apps", "instagram")).toBe("/pricing?c=ig#apps");
+  });
+
+  it("помощник переадресации САМ сохраняет метку — иначе страницы её теряют", () => {
+    /*
+     * Дыра, найденная мутацией 01.10.2026. Сторож проверял, что страница зовёт
+     * помощник, но не проверял, что помощник что-то сохраняет: подмена его тела
+     * на `return цель` прошла незамеченной, а это ровно та потеря атрибуции,
+     * ради которой он и заведён (замер оркестратора: три страницы уводили без
+     * хвоста ?c=).
+     */
+    expect(englishUrlWithChannel("/qskyway", "ig")).toBe("/en/qskyway?c=ig");
+    expect(englishUrlWithChannel("/qrenew", "instagram"), "длинное имя приводится к короткому").toBe("/en/qrenew?c=ig");
+    expect(englishUrlWithChannel("/smeta-trainer", "probe-40"), "наша проба тоже переживает").toBe("/en/smeta-trainer?c=probe-40");
+    // Контроли: выдуманная метка исчезает, а у страницы без версии уводить некуда.
+    expect(englishUrlWithChannel("/qskyway", "myspace")).toBe("/en/qskyway");
+    expect(englishUrlWithChannel("/qskyway", undefined)).toBe("/en/qskyway");
+    expect(englishUrlWithChannel("/pricing", "ig")).toBeNull();
   });
 
   it("список наших меток совпадает с серверным — иначе половины разойдутся", () => {

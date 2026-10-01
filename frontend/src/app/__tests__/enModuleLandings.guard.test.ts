@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { englishVersionFor } from "@/lib/englishPages";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -46,7 +47,16 @@ describe("языковая маршрутизация модульных стр�
 
     it(`${p.ru}: читает cookie и уводит на ${p.target} до платной стены`, () => {
       expect(тело).toContain('aevion_lang_v1');
-      expect(тело).toContain(`"${p.target}"`);
+      /*
+       * 01.10.2026: дословного адреса в странице больше нет и быть не должно —
+       * он приходит из ОДНОГО списка английских страниц (lib/englishPages).
+       * Разошедшиеся наборы и дали утром бесконечную переадресацию на четырёх
+       * адресах. Поэтому требуем не строку, а обращение к списку, и отдельно —
+       * что список эту страницу знает.
+       */
+      const путьБезПрефикса = p.target.replace("/en", "");
+      expect(тело).toContain(`englishVersionFor("${путьБезПрефикса}")`);
+      expect(englishVersionFor(путьБезПрефикса), "список не знает эту страницу").toBe(p.target);
       const iRedirect = тело.indexOf("redirect(");
       const iMark = тело.indexOf(p.beforeMark);
       expect(iRedirect).toBeGreaterThan(-1);
@@ -76,10 +86,13 @@ describe("языковая маршрутизация модульных стр�
       for (const href of ссылки) {
         expect(href, "без ?app редирект вернёт на посадочную").toMatch(/[?&]app=1\b/);
       }
+      // 01.10.2026: разрешено ДОПОЛНИТЕЛЬНОЕ условие в той же проверке — у страниц
+      // появилось «&& enUrl»: уводим только туда, где английская страница есть.
+      // Связь «флаг ?app стоит в том же условии, что и язык» при этом сохранена.
       // Имена переменных у страниц разные (язык/lang) — закрепляем связь, а не имя:
       // флаг из ?app обязан стоять в том же условии, что и cookie en.
       expect(тело, "редирект обязан пропускать вход с ?app").toMatch(
-        /const (\S+) = \(await searchParams\)\??\.app !==? (?:null|undefined);[\s\S]*?if \(\S+ === "en" && !\1\)/,
+        /const (\S+) = \(await searchParams\)\??\.app !==? (?:null|undefined);[\s\S]*?if \(\S+ === "en" && !\1(?: && [^)]+)?\)/,
       );
     });
   }

@@ -5,6 +5,11 @@ import { getServerT } from "@/lib/i18n-server";
 const CARD = "0 4px 20px rgba(15,23,42,0.06)";
 const BORDER = "1px solid rgba(15,23,42,0.08)";
 
+/*
+ * 🔴 01.10.2026: галочка снята со всех карточек. «✓» читается как «пройдено»,
+ * а статусы ниже говорят другое: у SOC 2 аудит не пройден, локализации в РФ нет,
+ * независимого аудита GDPR нет. Значок обещал больше, чем текст под ним.
+ */
 const CERTIFICATIONS = [
   {
     name: "SOC 2 Type II",
@@ -12,7 +17,7 @@ const CERTIFICATIONS = [
     statusKey: "pricing.security.cert.soc2.status",
     color: "#0d9488",
     bg: "#ecfdf5",
-    icon: "✓",
+    icon: "•",
   },
   {
     name: "GDPR",
@@ -20,7 +25,7 @@ const CERTIFICATIONS = [
     statusKey: "pricing.security.cert.gdpr.status",
     color: "#0ea5e9",
     bg: "#e0f2fe",
-    icon: "✓",
+    icon: "•",
   },
   {
     name: "152-ФЗ",
@@ -28,7 +33,7 @@ const CERTIFICATIONS = [
     statusKey: "pricing.security.cert.fz152.status",
     color: "#7c3aed",
     bg: "#f5f3ff",
-    icon: "✓",
+    icon: "•",
   },
   {
     name: "PCI DSS",
@@ -36,7 +41,7 @@ const CERTIFICATIONS = [
     statusKey: "pricing.security.cert.pcidss.status",
     color: "#d97706",
     bg: "#fefce8",
-    icon: "✓",
+    icon: "•",
   },
 ];
 

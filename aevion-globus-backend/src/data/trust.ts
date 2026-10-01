@@ -111,9 +111,15 @@ export interface TrustBadge {
 }
 
 export const TRUST_BADGES: TrustBadge[] = [
-  { id: "soc2", label: "SOC2 Type II", status: "in progress (Q3 2026)", category: "compliance" },
-  { id: "iso27001", label: "ISO 27001", status: "in progress (Q4 2026)", category: "compliance" },
-  { id: "gdpr", label: "GDPR-ready", status: "live", category: "compliance" },
+  // 🔴 01.10.2026: статусы приведены к проверяемому. «in progress (Q3 2026)» —
+  // это обещание даты, которую никто не держит; «GDPR-ready: live» — заявление о
+  // состоянии, которого никто не подтверждал. Пишем то, что можно показать:
+  // аудита нет, политика опубликована, удаление по запросу работает (ручка
+  // DELETE /api/auth/account — проверена на проде, гостю 401, контроль выдуманного
+  // пути 404; код обезличивает запись и пишет в журнал аудита).
+  { id: "soc2", label: "SOC2 Type II", status: "аудит не пройден", category: "compliance" },
+  { id: "iso27001", label: "ISO 27001", status: "аудит не пройден", category: "compliance" },
+  { id: "gdpr", label: "GDPR", status: "политика опубликована, удаление по запросу работает; аудита нет", category: "compliance" },
   { id: "kz-152", label: "KZ data localization", status: "live", category: "compliance" },
   { id: "openapi", label: "Open API + OpenAPI 3.1", status: "live", category: "technology" },
   { id: "openssl", label: "Crypto-grade signatures", status: "live", category: "technology" },

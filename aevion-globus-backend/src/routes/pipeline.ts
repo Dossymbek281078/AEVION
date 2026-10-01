@@ -440,6 +440,31 @@ async function resolveUser(
  * malformed fileHash). Kept distinct from QRightError/CosignError so
  * /protect and /protect-batch can each map it to the right response shape.
  */
+  /*
+   * 🔴 ПОРЧЕННЫЙ ТЕКСТ НЕ ПРИНИМАЕМ (01.10.2026).
+   *
+   * В публичном реестре лежит сертификат от 27.08 с названием из 17 символов, и
+   * ВСЕ они — U+FFFD, символ замены. Рисунок однозначный: по одному символу
+   * замены на каждый исходный знак, то есть отправитель прислал однобайтовую
+   * кодировку (CP1251), а разборщик тела прочитал её как UTF-8.
+   *
+   * Где именно теряется: в `express.json()`. Он декодирует тело как UTF-8 и
+   * заменяет негодные байты ДО того, как обработчик их увидит; исходные байты
+   * остаются только в `req.rawBody`. Значит починить запись после приёма уже
+   * нельзя — можно только не принимать её.
+   *
+   * Поэтому отбиваем на входе: текст, в котором уже есть символ замены, не
+   * станет читаемым никогда, а в публичной витрине он живёт вечно. Отправителю
+   * честно говорим, что прислать надо UTF-8.
+   */
+export function проверитьКодировку(input: Record<string, unknown> | undefined): void {
+  for (const [поле, значение] of [["title", input?.title], ["description", input?.description], ["authorName", input?.authorName]] as const) {
+    if (typeof значение === "string" && значение.includes("\uFFFD")) {
+      throw new ProtectInputError(`${поле}: текст пришёл не в UTF-8 — отправьте тело в UTF-8`);
+    }
+  }
+}
+
 class ProtectInputError extends Error {
   status: number;
   constructor(message: string, status = 400) {
@@ -892,6 +917,10 @@ pipelineRouter.post("/protect", async (req, res) => {
       res.setHeader("Retry-After", String(Math.ceil((rl.retryAfterMs ?? 60_000) / 1000)));
       return res.status(429).json({ error: "rate limit exceeded — try again shortly" });
     }
+
+    // Кодировку проверяем ДО любой работы: негодный текст не должен стоить нам
+    // ни запроса к базе, ни разбора пользователя.
+    проверитьКодировку(req.body as Record<string, unknown> | undefined);
 
     const user = await resolveUser(req);
     const result = await protectOne(req.body || {}, user);

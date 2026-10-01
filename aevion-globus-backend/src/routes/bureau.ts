@@ -589,6 +589,34 @@ async function resolveUser(
  */
 bureauRouter.post("/verify/start", bureauAnonWriteRateLimit, async (req, res) => {
   try {
+    const { declaredName: имяИзТела } = req.body || {};
+    /*
+     * 🔴 ПУСТОЕ ТЕЛО БОЛЬШЕ НЕ СОЗДАЁТ ЗАПИСЬ (01.10.2026).
+     *
+     * Замер на проде: POST сюда без единого заголовка и с ПУСТЫМ телом отвечал
+     * 201 и вставлял строку — у анонима userId и email остаются null. К 01.10 в
+     * "BureauVerification" накопилось 126 проверок в состоянии pending, и
+     * разделить среди них наши прогоны, ботов и живых людей уже нельзя: у
+     * строки нет ни имени, ни адреса, ни владельца.
+     *
+     * Проверять нечего, когда не названо ЧТО проверять: отметка Verified
+     * связывает сертификат с ЗАЯВЛЕННЫМ именем автора. Поэтому имя обязательно,
+     * и это ровно то поле, которое шлёт наша же страница (bureau/upgrade).
+     * Ограничитель записи остаётся: он про темп, а это про смысл.
+     *
+     * Ответ 400, а не 401: вход здесь по-прежнему не требуется — аноним вправе
+     * начать проверку, назвав имя. Требовать вход значило бы менять замысел, а
+     * не чинить дыру.
+     */
+    const имя = typeof имяИзТела === "string" ? имяИзТела.trim() : "";
+    if (!имя) {
+      return res.status(400).json({
+        error: "declared_name_required",
+        message: "Укажите имя автора, которое должно попасть в сертификат.",
+      });
+    }
+
+
     await ensureBureauTables();
     const user = await resolveUser(req);
     const { declaredName, declaredCountry } = req.body || {};
@@ -597,7 +625,7 @@ bureauRouter.post("/verify/start", bureauAnonWriteRateLimit, async (req, res) =>
     const session = await kyc.startSession({
       email: user.email,
       userId: user.userId,
-      declaredName: typeof declaredName === "string" ? declaredName : null,
+      declaredName: имя,
       declaredCountry:
         typeof declaredCountry === "string" ? declaredCountry : null,
     });

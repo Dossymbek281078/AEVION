@@ -53,6 +53,41 @@ export function товарПриложения(app: StandaloneApp) {
   };
 }
 
+/**
+ * Приложения, которые касса РЕАЛЬНО может продать — один источник и для
+ * структурированной разметки, и для видимого блока цен на странице.
+ *
+ * Выделено 01.10.2026: блок с ценами в layout обязан перечислять ровно те же
+ * приложения, что и разметка. Две выборки «тех же самых» данных разъезжаются
+ * молча — сегодня мы это уже чинили на витрине дважды.
+ */
+export async function оплачиваемыеПриложения(): Promise<StandaloneApp[]> {
+  let настроено: string[];
+  try {
+    const r = await fetch(apiUrl("/api/pricing/checkout/healthz"), {
+      next: { revalidate: 3600 },
+    });
+    if (!r.ok) {
+      console.warn(`[apps/список] касса ответила ${r.status} — списка не будет`);
+      return [];
+    }
+    const j = (await r.json()) as {
+      providers?: { lemonsqueezy?: { sellable?: { configured?: unknown } } };
+    };
+    const список = j?.providers?.lemonsqueezy?.sellable?.configured;
+    if (!Array.isArray(список)) {
+      console.warn("[apps/список] в ответе кассы нет перечня настроенного — списка не будет");
+      return [];
+    }
+    настроено = список.filter((x): x is string => typeof x === "string");
+  } catch (e) {
+    console.warn(`[apps/список] кассу спросить не удалось (${e instanceof Error ? e.message : String(e)}) — списка не будет`);
+    return [];
+  }
+  const готовые = slugиИзКассы(настроено);
+  return STANDALONE_APPS.filter((a) => готовые.has(a.slug));
+}
+
 export async function разметкаПриложений(): Promise<Record<string, unknown> | null> {
   let настроено: string[];
   try {

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import { fromPricePerMonth } from "@/lib/termPricing";
+
 import { разметкаТоваров } from "@/lib/shopJsonLd";
-import { разметкаПриложений } from "@/lib/appsJsonLd";
+import { разметкаПриложений, оплачиваемыеПриложения } from "@/lib/appsJsonLd";
 
 export const metadata: Metadata = {
   // Двуязычный заголовок (образец /qventure, /qright, /bureau): metadata у
@@ -50,6 +52,7 @@ export const metadata: Metadata = {
 export default async function PricingLayout({ children }: { children: React.ReactNode }) {
   const товары = разметкаТоваров();
   const приложения = await разметкаПриложений();
+  const приложения_список = await оплачиваемыеПриложения();
   return (
     <>
       {товары ? (
@@ -65,6 +68,50 @@ export default async function PricingLayout({ children }: { children: React.Reac
         />
       ) : null}
       {children}
+      <ЦеныДляРобота приложения={приложения_список} />
     </>
+  );
+}
+
+/*
+ * 🔴 ВИДИМЫЙ блок цен, отрисованный СЕРВЕРОМ (01.10.2026).
+ *
+ * Замер по проду в тот день: ответ /pricing — 55 733 знака, и в видимом тексте
+ * НИ ОДНОЙ цены, а названий «DevHub» и «Multichat» нет вовсе (они лежат только
+ * внутри скриптов). Цены рисует браузер; поисковик и превью ссылки в мессенджере
+ * браузера не запускают. Это главная продающая страница, и снаружи она выглядит
+ * страницей без цен и без продуктов.
+ *
+ * Структурированная разметка (JSON-LD выше) этого не закрывает: её читают
+ * поисковые роботы, но не читает превью в чате и не видит человек с медленной
+ * сетью, у которого скрипт ещё не выполнился.
+ *
+ * Блок НЕ скрытый и не для роботов отдельно: прятать текст от человека и
+ * показывать роботу — это клоакинг, и мы так не делаем. Это обычная короткая
+ * таблица внизу страницы, полезная и человеку.
+ *
+ * Источник ОДИН с разметкой — `оплачиваемыеПриложения()`: перечисляются ровно
+ * те приложения, которые касса может продать. Цены берутся из каталога тем же
+ * помощником, что и везде, и здесь НЕ переписываются числами.
+ */
+export function ЦеныДляРобота({ приложения }: { приложения: Awaited<ReturnType<typeof оплачиваемыеПриложения>> }) {
+  if (!приложения.length) return null;
+  return (
+    <section
+      aria-label="Цены приложений AEVION"
+      style={{ padding: "24px 16px", borderTop: "1px solid rgba(15,23,42,0.08)", fontSize: 13, lineHeight: 1.6 }}
+    >
+      <h2 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 10px" }}>Приложения и цены</h2>
+      <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 4 }}>
+        {приложения.map((app) => (
+          <li key={app.slug}>
+            <a href={`/pricing?app=${encodeURIComponent(app.slug)}#apps`} style={{ color: "#0d9488", textDecoration: "none" }}>
+              {app.name}
+            </a>{" "}
+            — от ${fromPricePerMonth(app.baseMonthly).toFixed(2)} до ${app.baseMonthly.toFixed(2)} в месяц
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

@@ -5082,6 +5082,7 @@ const en: Record<string, string> = {
   "pricing.home.notes.migrationLink": "Migrate from DocuSign / OpenAI →",
   "pricing.home.notes.partnersLink": "For partners →",
   "pricing.home.notice.checkoutError": "Payment error. Please try again or contact sales.",
+  "pricing.home.notice.termNotSold": "This term is not sold for the selected app. Available, in months: {months} — pick it and checkout will work.",
   "pricing.home.notice.connectionError": "No connection — check your internet and try again.",
   "pricing.home.price.free": "Free",
   "pricing.home.price.onRequest": "On request",

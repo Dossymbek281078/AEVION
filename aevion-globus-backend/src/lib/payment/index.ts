@@ -33,12 +33,25 @@ export function getPaymentProvider(): PaymentProvider {
   }
 }
 
-/** Default amount for the Verified tier upgrade. Override with env BUREAU_VERIFIED_PRICE_CENTS. */
+/**
+ * Цена отметки Verified — ЕДИНСТВЕННЫЙ источник числа на всей платформе.
+ *
+ * 🔴 $29 В МЕСЯЦ — решение основателя: цена названа 14.09.2026, период
+ * подтверждён 15.09 («оплата ежемесячная»). До 30.09 здесь стояло 1900, а на
+ * витрине — «$19», и это расхождение было не косметикой: товар в кассе
+ * (подписка AEVION IP Bureau) стоит $29, то есть сайт обещал одну цену, а
+ * списали бы другую. Числа в разметке не зашиваем: витрина берёт цену из
+ * ответа `/api/bureau/health`, а сторож сверяет её с этим числом.
+ *
+ * Переменной `BUREAU_VERIFIED_PRICE_CENTS` можно переназначить, но умолчание
+ * обязано совпадать с товаром в кассе: у запасного пути цену назначаем мы, а у
+ * товара `app_ip_bureau` цену назначает КАССА, и разойтись им нельзя.
+ */
 export function getVerifiedTierPriceCents(): number {
   const raw = process.env.BUREAU_VERIFIED_PRICE_CENTS;
-  if (!raw) return 1900; // $19.00
+  if (!raw) return 2900; // $29.00 в месяц
   const n = Number.parseInt(raw, 10);
-  if (!Number.isFinite(n) || n < 0) return 1900;
+  if (!Number.isFinite(n) || n < 0) return 2900;
   return n;
 }
 

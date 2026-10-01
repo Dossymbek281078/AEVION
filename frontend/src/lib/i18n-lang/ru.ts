@@ -5082,6 +5082,7 @@ const ru: Record<string, string> = {
   "pricing.home.notes.migrationLink": "Миграция с DocuSign / OpenAI →",
   "pricing.home.notes.partnersLink": "Партнёрам →",
   "pricing.home.notice.checkoutError": "Ошибка оплаты. Попробуйте ещё раз или свяжитесь с продажами.",
+  "pricing.home.notice.termNotSold": "Этот срок для выбранного приложения не продаётся. Доступно, месяцев: {months} — выберите его, и оплата пройдёт.",
   "pricing.home.notice.connectionError": "Нет соединения — проверьте интернет и попробуйте ещё раз.",
   "pricing.home.price.free": "Бесплатно",
   "pricing.home.price.onRequest": "По запросу",

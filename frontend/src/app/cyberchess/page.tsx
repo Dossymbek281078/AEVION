@@ -8406,7 +8406,7 @@ export default function CyberChessPage(){
           {/* Телефон: палитра тем и масштаб уходят на вторую строку, а буквы a–h занимают всю ширину
               доски — иначе на 390 сетка букв сжималась до ~70px и «ABCDEFGH» слипалось слева (тестер 20.09.2026). */}
           <div style={{display:"flex",alignItems:"center",paddingLeft:23,width:bw,gap:4,flexWrap:vwPx<769?"wrap":"nowrap"}}>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:vwPx<769?"1 1 100%":1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div>
+            <div style={{display:рабочийЭкран&&vwPx>=769?"none":"grid",gridTemplateColumns:"repeat(8,1fr)",flex:vwPx<769?"1 1 100%":1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div>
             <div style={{display:рабочийЭкран&&vwPx>=769?"none":"flex",gap:3,flexShrink:0,alignItems:"center"}}>
               {/* Палитра тем доски и зум спрятаны на рабочем экране: тема выбирается один раз,
                   а место под доской отнимается постоянно. Оба остались в настройках (⚙). */}

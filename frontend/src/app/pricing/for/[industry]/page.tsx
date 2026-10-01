@@ -34,6 +34,41 @@ interface IndustryConfig {
   accentColor: string;
 }
 
+/*
+ * ПРОВЕРЯЕМЫЕ ФАКТЫ ПЛАТФОРМЫ — то, чем заполнены блоки метрик вместо снятых
+ * шестнадцати неподтверждённых чисел (01.10.2026).
+ *
+ * Все четыре взяты из одностраничника для организаций, который собран по
+ * замерам на РАБОТАЮЩЕЙ системе 29–30.09.2026, и у каждого стоит источник —
+ * по тому же правилу, которое мы применили к процентам: число живёт на
+ * продающей странице только вместе с тем, откуда оно взято.
+ *
+ * Факты одни на все отрасли намеренно: это свойства платформы, а не обещания
+ * конкретному рынку. Разные цифры на разных страницах и были той болезнью.
+ */
+const ПРОВЕРЯЕМЫЕ_ФАКТЫ = [
+  {
+    labelKey: "pricing.forIndustry.fact.certLabel",
+    value: "1.2s",
+    source: "замер на работающей системе 29–30.09.2026: выдача без регистрации и без оплаты",
+  },
+  {
+    labelKey: "pricing.forIndustry.fact.signLabel",
+    value: "RFC 8785 + Ed25519",
+    source: "канонизация JSON по RFC 8785, подпись Ed25519 — публичная страница подписи показывает оба",
+  },
+  {
+    labelKey: "pricing.forIndustry.fact.verifyLabel",
+    value: "SHA-256",
+    source: "посторонний пересчитывает хеш и проверяет подпись по опубликованному открытому ключу",
+  },
+  {
+    labelKey: "pricing.forIndustry.fact.apiLabel",
+    value: "OpenAPI",
+    source: "замер 29–30.09.2026: открытый API отвечает описанием OpenAPI",
+  },
+];
+
 const INDUSTRIES: Record<IndustryId, IndustryConfig> = {
   banks: {
     id: "banks",
@@ -60,8 +95,7 @@ const INDUSTRIES: Record<IndustryId, IndustryConfig> = {
       titleKey: "pricing.forIndustry.banks.caseTitle",
       resultKey: "pricing.forIndustry.banks.caseResult",
     },
-    metrics: [
-    ],
+    metrics: ПРОВЕРЯЕМЫЕ_ФАКТЫ,
     primaryColor: "#1e3a8a",
     accentColor: "#3b82f6",
   },
@@ -83,8 +117,7 @@ const INDUSTRIES: Record<IndustryId, IndustryConfig> = {
       titleKey: "pricing.forIndustry.startups.caseTitle",
       resultKey: "pricing.forIndustry.startups.caseResult",
     },
-    metrics: [
-    ],
+    metrics: ПРОВЕРЯЕМЫЕ_ФАКТЫ,
     primaryColor: "#7c3aed",
     accentColor: "#a78bfa",
   },
@@ -114,8 +147,7 @@ const INDUSTRIES: Record<IndustryId, IndustryConfig> = {
       titleKey: "pricing.forIndustry.government.caseTitle",
       resultKey: "pricing.forIndustry.government.caseResult",
     },
-    metrics: [
-    ],
+    metrics: ПРОВЕРЯЕМЫЕ_ФАКТЫ,
     primaryColor: "#065f46",
     accentColor: "#10b981",
   },
@@ -177,8 +209,7 @@ const INDUSTRIES: Record<IndustryId, IndustryConfig> = {
       titleKey: "pricing.forIndustry.lawFirms.caseTitle",
       resultKey: "pricing.forIndustry.lawFirms.caseResult",
     },
-    metrics: [
-    ],
+    metrics: ПРОВЕРЯЕМЫЕ_ФАКТЫ,
     primaryColor: "#92400e",
     accentColor: "#f59e0b",
   },
@@ -305,7 +336,11 @@ export default function IndustryLandingPage() {
         </p>
       </section>
 
-      {/* Metrics */}
+      {/* Metrics. Пустой блок НЕ рисуем: после снятия неподтверждённых чисел
+          (01.10.2026) у отрасли может не остаться ни одной метрики, и сетка
+          оставляла бы на странице заметную дыру. Нечего показать — показываем
+          ничего, а не пустую рамку. */}
+      {industry.metrics.length > 0 && (
       <section
         style={{
           display: "grid",
@@ -341,6 +376,7 @@ export default function IndustryLandingPage() {
           </div>
         ))}
       </section>
+      )}
 
       {/* Why AEVION */}
       <section style={{ marginBottom: 40 }}>

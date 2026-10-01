@@ -120,7 +120,10 @@ export const TRUST_BADGES: TrustBadge[] = [
   { id: "soc2", label: "SOC2 Type II", status: "аудит не пройден", category: "compliance" },
   { id: "iso27001", label: "ISO 27001", status: "аудит не пройден", category: "compliance" },
   { id: "gdpr", label: "GDPR", status: "политика опубликована, удаление по запросу работает; аудита нет", category: "compliance" },
-  { id: "kz-152", label: "KZ data localization", status: "live", category: "compliance" },
+  // 01.10.2026: доказательств хранения в РК нет — бэкенд и база на Railway,
+  // сайт на Vercel, региона Казахстан нет ни у одного из них. Не доказано —
+  // не заявляем.
+  { id: "kz-152", label: "Хранение в РК", status: "локализацию данных в РК не предоставляем", category: "compliance" },
   { id: "openapi", label: "Open API + OpenAPI 3.1", status: "live", category: "technology" },
   { id: "openssl", label: "Crypto-grade signatures", status: "live", category: "technology" },
 ];

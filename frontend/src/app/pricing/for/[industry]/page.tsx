@@ -54,7 +54,6 @@ const INDUSTRIES: Record<IndustryId, IndustryConfig> = {
       { labelKey: "pricing.forIndustry.banks.metric1Label", value: "−68%" },
       { labelKey: "pricing.forIndustry.banks.metric2Label", value: "−40%" },
       { labelKey: "pricing.forIndustry.banks.metric3Label", value: "1h" },
-      { labelKey: "pricing.forIndustry.banks.metric4Label", value: "3" },
     ],
     primaryColor: "#1e3a8a",
     accentColor: "#3b82f6",
@@ -113,7 +112,6 @@ const INDUSTRIES: Record<IndustryId, IndustryConfig> = {
       resultKey: "pricing.forIndustry.government.caseResult",
     },
     metrics: [
-      { labelKey: "pricing.forIndustry.government.metric1Label", value: "100%" },
       { labelKey: "pricing.forIndustry.government.metric2Label", value: "27" },
       { labelKey: "pricing.forIndustry.government.metric3Label", value: "70%" },
       { labelKey: "pricing.forIndustry.government.metric4Label", value: "3" },

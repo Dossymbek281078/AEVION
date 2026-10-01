@@ -26,11 +26,22 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 // мутацией при создании этого файла.
 const src = stripComments(readFileSync(join(HERE, "..", "page.tsx"), "utf8"));
 
+import { englishVersionFor } from "@/lib/englishPages";
+
 describe("языковая маршрутизация /longevity", () => {
   it("читает cookie языка и уводит en-посетителя на /en/longevity", () => {
     expect(src).toContain('aevion_lang_v1');
     expect(src).toContain('redirect(');
-    expect(src).toContain('/en/longevity');
+    // 🔴 01.10.2026 УТВЕРЖДЕНИЕ ПЕРЕВЁРНУТО. Этот сторож требовал, чтобы страница
+    // уводила гостя на /en/longevity, — и ровно это давало бесконечный круг:
+    // английской страницы нет, middleware возвращал гостя назад, страница снова
+    // уводила. Замер прода: 6 шагов и опять 307, без куки 200. На /longevity
+    // пришли ОБА платежа за всё время, то есть круг стоял на денежной странице.
+    // Теперь страница спрашивает общий список и не уводит никуда.
+    expect(src).toContain('englishVersionFor("/longevity")');
+    expect(englishVersionFor("/longevity"), "английской страницы нет — уводить некуда").toBeNull();
+    // Контроль: там, где английская версия ЕСТЬ, список её называет.
+    expect(englishVersionFor("/go")).toBe("/en/go");
   });
 
   it("редирект стоит ДО платной стены и ДО учёта просмотра", () => {
@@ -65,7 +76,7 @@ describe("языковая маршрутизация /longevity", () => {
     expect(адреса.length, "редирект должен быть").toBeGreaterThan(0);
     for (const а of адреса) {
       expect(а, "адрес собирает общая функция — иначе метка теряется").toMatch(/keepChannel(OrProbe)?\(/);
-      expect(а, "редирект ведёт на английскую версию").toContain('"/en/longevity"');
+      expect(а, "редирект собирается из общего списка").toContain("enUrl");
     }
   });
 });

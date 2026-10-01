@@ -4,6 +4,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripComments } from "../../__tests__/helpers/sourceCode";
 import { channelFrom, keepChannel } from "@/lib/products";
+import { englishVersionFor } from "@/lib/englishPages";
 
 /**
  * Посетитель с выбранным английским получает английскую страницу.
@@ -34,7 +35,7 @@ describe("языковая маршрутизация /go", () => {
   it("читает cookie языка и уводит en-посетителя на /en/go", () => {
     expect(тело).toContain('aevion_lang_v1');
     expect(тело).toContain('redirect(');
-    expect(тело).toContain('/en/go');
+    expect(тело).toContain('englishVersionFor("/go")');
   });
 
   it("редирект стоит ДО похода в API и ДО учёта просмотра", () => {
@@ -60,7 +61,7 @@ describe("языковая маршрутизация /go", () => {
      * Теперь: адрес собирает общая функция, а результат проверяется разбором.
      */
     expect(
-      /keepChannel(OrProbe)?\("\/en\/go"/.test(тело),
+      /keepChannelOrProbe\(enUrl/.test(тело),
       "адрес редиректа снова собирается вручную — длинное имя вернётся",
     ).toBe(true);
     const адрес = keepChannel("/en/go", channelFrom("ig"));
@@ -74,8 +75,11 @@ describe("языковая маршрутизация /go", () => {
     // мимо проверок выше (поймано мутацией у сторожа /longevity). После
     // перехода на keepChannel обе ветки собирает ОДНА строка, поэтому считаем
     // адреса и в ней, и в запасной.
-    const вхождений = (тело.match(/\/en\/go/g) || []).length;
-    expect(вхождений, "адрес редиректа должен вести на /en/go").toBeGreaterThanOrEqual(1);
+    // 01.10.2026: дословного «/en/go» в исходнике больше нет и не должно быть —
+    // адрес приходит из ОДНОГО списка английских страниц (lib/englishPages), и
+    // ровно расхождение двух списков дало бесконечную переадресацию на четырёх
+    // страницах. Поэтому проверяем не строку в файле, а ответ самой функции.
+    expect(englishVersionFor("/go"), "у /go английская версия обязана быть").toBe("/en/go");
     const безКанала = new URL(keepChannel("/en/go", null), "https://aevion.app");
     expect(безКанала.pathname, "ветка без канала ведёт не туда").toBe("/en/go");
   });

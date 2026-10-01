@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { englishVersionFor } from "@/lib/englishPages";
 import { redirect } from "next/navigation";
 import { fetchOrPaywall } from "@/lib/paywall";
 import { PaywallScreen } from "@/components/PaywallScreen";
@@ -21,8 +22,13 @@ export default async function Page({
   // (прод: cookie en → 307 /en/smeta-trainer). Сторож — enModuleLandings.guard.
   const язык = (await cookies()).get("aevion_lang_v1")?.value;
   const входВПриложение = (await searchParams).app !== undefined;
-  if (язык === "en" && !входВПриложение) {
-    redirect("/en/smeta-trainer");
+  // 🔴 01.10.2026: уводим ТОЛЬКО если английская страница есть. Замер прода:
+  // с кукой aevion_lang_v1=en было 6 шагов и снова 307 — бесконечный круг,
+  // потому что /en/smeta-trainer своей страницы не имеет и middleware возвращал
+  // гостя сюда. Список английских страниц один на всех: lib/englishPages.
+  const enUrl = englishVersionFor("/smeta-trainer");
+  if (язык === "en" && !входВПриложение && enUrl) {
+    redirect(enUrl);
   }
 
   const r = await fetchOrPaywall("/api/smeta-trainer/health");

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { englishVersionFor } from "@/lib/englishPages";
 
 // 19.08.2026: платный продукт с общим заголовком сайта не находился по своей
 // теме вовсе. Формулировки без обещаний результата — тематика здоровья.
@@ -37,8 +38,13 @@ export default async function Page({
   // 307 /en/qrenew). Сторож — enModuleLandings.guard.
   const язык = (await cookies()).get("aevion_lang_v1")?.value;
   const входВПриложение = (await searchParams).app !== undefined;
-  if (язык === "en" && !входВПриложение) {
-    redirect("/en/qrenew");
+  // 🔴 01.10.2026: уводим ТОЛЬКО если английская страница есть. Замер прода:
+  // с кукой aevion_lang_v1=en было 6 шагов и снова 307 — бесконечный круг,
+  // потому что /en/qrenew своей страницы не имеет и middleware возвращал
+  // гостя сюда. Список английских страниц один на всех: lib/englishPages.
+  const enUrl = englishVersionFor("/qrenew");
+  if (язык === "en" && !входВПриложение && enUrl) {
+    redirect(enUrl);
   }
 
   const r = await fetchOrPaywall("/api/qrenew/health");

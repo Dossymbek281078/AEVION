@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { englishVersionFor } from "@/lib/englishPages";
 import { языки } from "@/lib/hreflang";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -236,7 +237,8 @@ export default async function GoPage({
      * Теперь адрес собирает keepChannel — он сам переводит имя в метку,
      * которую примет следующая страница. Третьей реализации не заводим.
      */
-    redirect(keepChannelOrProbe("/en/go", rawChannel, channel));
+    const enUrl = englishVersionFor("/go");
+    if (enUrl) redirect(keepChannelOrProbe(enUrl, rawChannel, channel));
   }
 
   const liveModules = await fetchLiveModules();

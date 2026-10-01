@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { hasOwnEnglishPage } from "@/lib/englishPages";
 import type { NextRequest } from "next/server";
 
 /**
@@ -74,12 +75,10 @@ export function isDecodablePath(pathname: string): boolean {
  * слэшами ломается при извлечении — предупреждение владельца, проверено им
  * запуском.
  */
-export const АНГЛИЙСКИЕ_СТРАНИЦЫ_СО_СВОИМ_АДРЕСОМ = [
-  "/en/devhub",
-  "/en/devhub/launch",
-  "/en/shop",
-  "/en/go",
-];
+// Список переехал в lib/englishPages.ts: им пользуются И middleware, И сами
+// страницы. Два набора разошлись 01.10.2026 и дали бесконечную переадресацию на
+// /longevity и /qskyway. Имя экспорта сохранено — его читают прежние тесты.
+export { АНГЛИЙСКИЕ_СТРАНИЦЫ_СО_СВОИМ_АДРЕСОМ } from "@/lib/englishPages";
 
 export function английскийРедирект(pathname: string | null | undefined): string | null {
   const путь = String(pathname ?? "");
@@ -89,7 +88,7 @@ export function английскийРедирект(pathname: string | null | u
 
   // Своя английская страница — не трогаем.
   const безХвоста = "/" + части.join("/");
-  if (АНГЛИЙСКИЕ_СТРАНИЦЫ_СО_СВОИМ_АДРЕСОМ.includes(безХвоста.toLowerCase())) return null;
+  if (hasOwnEnglishPage(безХвоста)) return null;
 
   // /en → главная; /en/<что-то> → тот же адрес без префикса.
   if (части.length === 1) return "/";

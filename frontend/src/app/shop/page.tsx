@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { englishVersionFor } from "@/lib/englishPages";
 import { языки } from "@/lib/hreflang";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -205,7 +206,8 @@ export default async function ShopPage({
      * следующая страница. Тот же дефект был на /go, чинили его там же сегодня;
      * это второй и третий случай одного класса.
      */
-    redirect(keepChannelOrProbe("/en/shop", rawChannel, channel));
+    const enUrl = englishVersionFor("/shop");
+    if (enUrl) redirect(keepChannelOrProbe(enUrl, rawChannel, channel));
   }
 
   // Язык объявляется на самом блоке: в корневом макете стоит lang="en",

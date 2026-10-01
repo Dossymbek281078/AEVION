@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { englishVersionFor } from "@/lib/englishPages";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { fetchOrPaywall } from "@/lib/paywall";
@@ -93,7 +94,11 @@ export default async function Page({
      * следующая страница. Тот же дефект был на /go, чинили его там же сегодня;
      * это второй и третий случай одного класса.
      */
-    redirect(keepChannelOrProbe("/en/longevity", rawChannel, channel));
+    // Уводим ТОЛЬКО если английская страница существует. Без этой проверки
+    // получалась петля: страница вела на /en/longevity, а middleware возвращал
+    // обратно, и гость с английской кукой не попадал сюда никогда.
+    const enUrl = englishVersionFor("/longevity");
+    if (enUrl) redirect(keepChannelOrProbe(enUrl, rawChannel, channel));
   }
 
   const r = await fetchOrPaywall("/api/longevity/health");

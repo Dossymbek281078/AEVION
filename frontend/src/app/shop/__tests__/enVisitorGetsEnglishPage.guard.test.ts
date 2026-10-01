@@ -26,7 +26,7 @@ describe("языковая маршрутизация /shop", () => {
   it("читает cookie языка и уводит en-посетителя на /en/shop", () => {
     expect(тело).toContain('aevion_lang_v1');
     expect(тело).toContain('redirect(');
-    expect(тело).toContain('/en/shop');
+    expect(тело).toContain('englishVersionFor("/shop")');
   });
 
   it("редирект стоит ДО учёта просмотра", () => {
@@ -59,7 +59,7 @@ describe("языковая маршрутизация /shop", () => {
     expect(адреса.length, "редирект должен быть").toBeGreaterThan(0);
     for (const а of адреса) {
       expect(а, "адрес собирает общая функция — иначе метка теряется").toMatch(/keepChannel(OrProbe)?\(/);
-      expect(а, "редирект ведёт на английскую версию").toContain('"/en/shop"');
+      expect(а, "редирект собирается из общего списка").toContain("enUrl");
     }
   });
 });

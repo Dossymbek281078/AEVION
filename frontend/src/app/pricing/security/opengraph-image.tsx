@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "AEVION Security & Compliance — SOC 2, GDPR, 152-ФЗ, PCI DSS";
+export const alt = "AEVION — безопасность и статус соответствия DSS";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -66,7 +66,7 @@ export default async function Image() {
               marginBottom: 12,
             }}
           >
-            SOC 2 TYPE II · GDPR · 152-ФЗ · PCI DSS
+            ШИФРОВАНИЕ · ДОСТУП · ЖУРНАЛ · СТАТУС СООТВЕТСТВИЯ
           </div>
           <h1
             style={{

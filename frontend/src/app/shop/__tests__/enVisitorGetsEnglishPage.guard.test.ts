@@ -58,7 +58,7 @@ describe("языковая маршрутизация /shop", () => {
     const адреса = [...src.matchAll(/redirect\(([^;]*)\)/g)].map((m) => m[1]);
     expect(адреса.length, "редирект должен быть").toBeGreaterThan(0);
     for (const а of адреса) {
-      expect(а, "адрес собирает keepChannel — иначе метка теряется").toContain("keepChannel(");
+      expect(а, "адрес собирает общая функция — иначе метка теряется").toMatch(/keepChannel(OrProbe)?\(/);
       expect(а, "редирект ведёт на английскую версию").toContain('"/en/shop"');
     }
   });

@@ -37,7 +37,7 @@ describe("языковое перенаправление /go → /en/go", () =>
 
   it("страница не собирает адрес перенаправления руками", () => {
     expect(
-      ИСХОДНИК.includes('redirect(keepChannel("/en/go", channel))'),
+      /redirect\(keepChannel(OrProbe)?\("\/en\/go"/.test(ИСХОДНИК),
       "перенаправление снова собирается вручную — длинное имя вернётся",
     ).toBe(true);
     expect(

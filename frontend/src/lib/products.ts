@@ -817,14 +817,68 @@ export function channelParam(channel: string | null): string | null {
 /** Внутренний переход, сохраняющий метку канала в том виде, в каком её примет
  *  следующая страница. Для ВНЕШНИХ кассовых ссылок — withChannel: там нужна
  *  UTM-тройка, здесь она только мусорила бы адрес. */
-export function keepChannel(path: string, channel: string | null): string {
-  const c = channelParam(channel);
-  if (!c) return path;
+/** Дописывает `?c=<метка>` к адресу, не ломая якорь. Одно место на все метки. */
+function добавитьМетку(path: string, метка: string): string {
   // Хеш остаётся в конце: `/pricing#tiers?c=yt` потерял бы метку (всё после `#`
   // браузер считает якорем и серверу не отправляет).
   const hashAt = path.indexOf("#");
   const base = hashAt >= 0 ? path.slice(0, hashAt) : path;
   const hash = hashAt >= 0 ? path.slice(hashAt) : "";
   const sep = base.includes("?") ? "&" : "?";
-  return `${base}${sep}c=${encodeURIComponent(c)}${hash}`;
+  return `${base}${sep}c=${encodeURIComponent(метка)}${hash}`;
+}
+
+export function keepChannel(path: string, channel: string | null): string {
+  const c = channelParam(channel);
+  if (!c) return path;
+  return добавитьМетку(path, c);
+}
+
+/*
+ * 🔴 НАШИ СОБСТВЕННЫЕ МЕТКИ — чтобы проверка окна не считалась покупателем.
+ *
+ * Повод, замеренный 01.10.2026. Правило платформы велит каждому окну заходить на
+ * прод с меткой `?c=probe-<окно>`; сервер такие метки узнаёт и исключает из
+ * воронки (`нашаМетка` в routes/events.ts). Но до сервера они не доезжали с
+ * ТРЁХ страниц: `/go`, `/longevity`, `/shop` уводят гостя с английской cookie на
+ * свою английскую версию, адрес собирает `keepChannel`, а он знает только
+ * ЗАКРЫТЫЙ список каналов. Замер: `/go?c=probe-phone` → `/en/go` вовсе без метки,
+ * `/go?c=ig` → `/en/go?c=ig`. То есть наша же проверка теряла признак «наша» и
+ * записывалась как живой ПРЯМОЙ заход.
+ *
+ * Чем это уже стоило: 30.09 воронка показывала «начали оплату: 5», и все пять
+ * оказались нашими окнами; в разрезе по страницам они и сейчас стоят в
+ * `direct|/pricing`. Числа воронки — единица измерения всей работы, и завышать
+ * их собственными заходами нельзя.
+ *
+ * Список ОБЯЗАН совпадать с серверным (`НАШИ_МЕТКИ_КАНАЛА`), иначе одна половина
+ * платформы будет считать метку нашей, а другая — живым человеком. Сторож
+ * `ourProbeMarksMatchTheServer.guard.test.ts` читает серверный файл и краснеет
+ * при расхождении.
+ */
+const НАШИ_МЕТКИ = ["cold-visit-check", "probe", "smoke", "test"];
+
+/** Метка, по которой сервер узнаёт НАШ заход, или null. Сравнение как на сервере. */
+export function нашаМетка(raw: string | string[] | undefined): string | null {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  const ключ = String(v ?? "").trim().toLowerCase();
+  if (!ключ) return null;
+  const наша = НАШИ_МЕТКИ.some((m) => ключ === m || ключ.startsWith(`${m}-`) || ключ.startsWith(`${m}_`));
+  return наша ? ключ : null;
+}
+
+/**
+ * Адрес для перенаправления: канал — короткой меткой, наша проба — как есть.
+ *
+ * Выдуманная метка по-прежнему исчезает: иначе в воронке появился бы канал из
+ * адресной строки, а переоценка канала хуже недооценки.
+ */
+export function keepChannelOrProbe(
+  path: string,
+  raw: string | string[] | undefined,
+  channel: string | null,
+): string {
+  if (channel) return keepChannel(path, channel);
+  const наша = нашаМетка(raw);
+  return наша ? добавитьМетку(path, наша) : path;
 }

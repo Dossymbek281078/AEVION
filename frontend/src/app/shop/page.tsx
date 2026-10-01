@@ -13,6 +13,7 @@ import {
   withChannel,
   type Product,
   keepChannel,
+  keepChannelOrProbe,
 } from "@/lib/products";
 import { PLANET_BASE_MONTHLY, termPricePerMonth, STANDALONE_APPS,
 } from "@/lib/termPricing";
@@ -178,7 +179,11 @@ export default async function ShopPage({
   // Метка канала приезжает с /go (?c=ig и т.д.) — витрина обязана донести её до
   // чекаута, иначе переход «страница профиля → магазин → покупка» теряет источник
   // ровно там, где человек и решает платить.
-  const channel = channelFrom((await searchParams).c);
+  // Сырую метку держим отдельно: наши собственные пробы (?c=probe-<окно>)
+  // каналом не являются, но обязаны пережить редирект — иначе проверка окна
+  // запишется как живой прямой заход и завысит воронку.
+  const rawChannel = (await searchParams).c;
+  const channel = channelFrom(rawChannel);
 
   // Языковая маршрутизация — третий случай проверенного приёма (образцы:
   // /longevity и /go, ветки feat/lang-aware-*, мутации у сторожей пойманы).
@@ -200,7 +205,7 @@ export default async function ShopPage({
      * следующая страница. Тот же дефект был на /go, чинили его там же сегодня;
      * это второй и третий случай одного класса.
      */
-    redirect(keepChannel("/en/shop", channel));
+    redirect(keepChannelOrProbe("/en/shop", rawChannel, channel));
   }
 
   // Язык объявляется на самом блоке: в корневом макете стоит lang="en",

@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { fetchOrPaywall } from "@/lib/paywall";
 import { PaywallScreen } from "@/components/PaywallScreen";
-import { channelFrom, keepChannel } from "@/lib/products";
+import { channelFrom, keepChannel, keepChannelOrProbe } from "@/lib/products";
 import LongevityClient from "./_client";
 import { PageTracking } from "@/components/PageTracking";
 
@@ -64,7 +64,11 @@ export default async function Page({
   // Метка канала (?c=fb, ?c=ig …). Страница — вторая посадочная после /go: на
   // неё ведут ролики про долголетие напрямую, и без проброса метки покупка
   // отсюда приходила бы в отчёт как «источник неизвестен».
-  const channel = channelFrom((await searchParams).c);
+  // Сырую метку держим отдельно: наши собственные пробы (?c=probe-<окно>)
+  // каналом не являются, но обязаны пережить редирект — иначе проверка окна
+  // запишется как живой прямой заход и завысит воронку.
+  const rawChannel = (await searchParams).c;
+  const channel = channelFrom(rawChannel);
 
   // Языковая маршрутизация: у страницы ЕСТЬ английская версия (/en/longevity),
   // но посетитель с выбранным английским всё равно попадал сюда и читал
@@ -89,7 +93,7 @@ export default async function Page({
      * следующая страница. Тот же дефект был на /go, чинили его там же сегодня;
      * это второй и третий случай одного класса.
      */
-    redirect(keepChannel("/en/longevity", channel));
+    redirect(keepChannelOrProbe("/en/longevity", rawChannel, channel));
   }
 
   const r = await fetchOrPaywall("/api/longevity/health");

@@ -320,7 +320,7 @@ export default function InvestorPage() {
                   // верно и то и другое. Notarized имеет поток заявки без цены в
                   // коде, Gold и Platinum не существуют нигде — отсюда «planned»,
                   // а не вид товара, который можно купить сегодня.
-                  { tier: "Verified", price: "$19", desc: "SHA-256 + Ed25519 signature + cert" },
+                  { tier: "Verified", price: "$29", desc: "SHA-256 + Ed25519 signature + cert" },
                   { tier: "Notarized (planned)", price: "$49", desc: "+ notary registry + Shamir backup" },
                   { tier: "Gold (planned)", price: "$199", desc: "+ legal review + int'l databases" },
                   { tier: "Platinum (planned)", price: "$999", desc: "+ multi-jurisdiction protection" },

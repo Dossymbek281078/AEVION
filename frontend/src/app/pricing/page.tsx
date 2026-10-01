@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
-import { fetchAiSavings } from "@/lib/aiSavings";
+import { fetchAiSavings, счётчикГоденДляПоказа } from "@/lib/aiSavings";
 import { запомнитьНамерение } from "@/lib/checkoutIntent";
 import { channelFrom, withChannel } from "@/lib/products";
 import { track } from "@/lib/track";
@@ -203,6 +203,7 @@ export default function PricingPage() {
   const [trust, setTrust] = useState<TrustPayload | null>(null);
   const [aiSavings, setAiSavings] = useState<{
     runs: number; totalCostUsd: number; estAlwaysCouncilUsd: number; savedUsd: number; savedPct: number;
+    runsCompared?: number;
   } | null>(null);
   const [newsletterEmail, setNewsletterEmail] = useState("");
   const [newsletterStatus, setNewsletterStatus] = useState<"idle" | "submitting" | "ok" | "error">("idle");
@@ -558,7 +559,15 @@ export default function PricingPage() {
     // общий загрузчик оба получают одно значение за один запрос — issue #1016.
     fetchAiSavings()
       .then((j) => {
-        if (!cancelled && j && j.runs > 0) setAiSavings(j);
+        /*
+         * Тот же порог охвата, что у значка в шапке, и по той же причине.
+         * Блок стоит на 0.93 экрана телефона как ДОВОД в нашу пользу (замер
+         * 01.10.2026), а при охвате 3 из 145 вызовов он сообщал «сэкономлено
+         * $0.23» и зачёркнутую цену $11.17 — то есть предъявлял покупателю
+         * двадцать три цента на странице, где мы просим $400 в месяц.
+         * Порог назван в lib/aiSavings.ts, здесь только применяется.
+         */
+        if (!cancelled && j && j.runs > 0 && счётчикГоденДляПоказа(j)) setAiSavings(j);
       })
       .catch(() => {});
     return () => {

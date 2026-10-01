@@ -132,6 +132,21 @@ export type SmartAllTime = {
   estAlwaysCouncilUsd: number;
   savedUsd: number;
   savedPct: number;
+  /**
+   * Сколько вызовов РЕАЛЬНО участвовали в сравнении «совет против одного» —
+   * то есть по скольким из `runs` экономия вообще считалась.
+   *
+   * 🔴 Поле появилось 01.10.2026 потому, что без него доля считалась по двум
+   * РАЗНЫМ совокупностям: знаменатель брал ВСЕ вызовы, а числитель — только
+   * те, где экономия записана. Замер прода в тот день: runs 145, экономия
+   * записана у 3; показывали «сэкономлено $0.23 = 2.05 %», а собственные поля
+   * того же ответа давали $9.56 = 85.7 % — расхождение в 41.7 раза. Такое
+   * число не отвечает ни на один вопрос, а стояло в шапке КАЖДОЙ страницы.
+   *
+   * Читатель обязан видеть охват рядом с долей: доля по трём вызовам — шум,
+   * и выдавать её за свойство платформы нельзя ни в ту, ни в другую сторону.
+   */
+  runsCompared: number;
   perModule: SmartModuleAgg[];
   /** Записей расхода потеряно с запуска процесса. Больше нуля = сводка НЕПОЛНА. */
   droppedRuns: number;
@@ -207,7 +222,7 @@ export async function aggregateSmartRunsForUser(
 export async function aggregateSmartRuns(): Promise<SmartAllTime | null> {
   if (!(await ensureTable())) return null;
   try {
-    type Row = { module: string; runs: string; facts: string; light: string; deep: string; cost: string; saved: string };
+    type Row = { module: string; runs: string; facts: string; light: string; deep: string; cost: string; saved: string; compared: string };
     const result = await getPool().query(`
       SELECT
         "module",
@@ -216,7 +231,10 @@ export async function aggregateSmartRuns(): Promise<SmartAllTime | null> {
         COUNT(*) FILTER (WHERE "resolved" = 'council' AND "depth" = 'light') AS light,
         COUNT(*) FILTER (WHERE "resolved" = 'council' AND "depth" = 'deep')  AS deep,
         COALESCE(SUM("costUsd"), 0)                          AS cost,
-        COALESCE(SUM("savedUsd"), 0)                         AS saved
+        COALESCE(SUM("savedUsd"), 0)                         AS saved,
+        -- Вызовы, по которым экономия ВООБЩЕ считалась. Без этого числа доля
+        -- делила числитель одной совокупности на знаменатель другой.
+        COUNT(*) FILTER (WHERE "savedUsd" > 0)               AS compared
       FROM "smart_run_log"
       GROUP BY "module"
       ORDER BY runs DESC
@@ -231,6 +249,7 @@ export async function aggregateSmartRuns(): Promise<SmartAllTime | null> {
       totalCostUsd: Number(r.cost),
       savedUsd: Number(r.saved),
     }));
+    const runsCompared = rows.reduce((s, r) => s + Number(r.compared), 0);
     const total = perModule.reduce(
       (a, m) => {
         a.runs += m.runs; a.facts += m.facts; a.light += m.light; a.deep += m.deep;
@@ -239,11 +258,23 @@ export async function aggregateSmartRuns(): Promise<SmartAllTime | null> {
       },
       { runs: 0, facts: 0, light: 0, deep: 0, totalCostUsd: 0, savedUsd: 0 }
     );
-    const estAlwaysCouncilUsd = total.runs * EST_COUNCIL_COST_USD;
+    /*
+     * 🔴 Доля считается по ОДНОЙ совокупности — по тем вызовам, где экономия
+     * действительно считалась. Прежде знаменатель умножался на ВСЕ вызовы
+     * (`total.runs`), а числитель приходил с трёх: замер прода 01.10.2026 дал
+     * «$0.23 = 2.05 %» при собственных полях «$9.56 = 85.7 %», расхождение
+     * 41.7 раза. Вызовы, у которых альтернативы «совет» не было вовсе
+     * (devhub-generate-anon — 80 из 145), в сравнение не входят, и считать их
+     * так, будто они могли стоить дороже, значит придумывать себе заслугу.
+     *
+     * `estAlwaysCouncilUsd` теперь отвечает на вопрос «сколько стоили бы
+     * СРАВНИВАЕМЫЕ вызовы, если всегда звать совет» — и только на него.
+     */
+    const estAlwaysCouncilUsd = runsCompared * EST_COUNCIL_COST_USD;
     const savedPct = estAlwaysCouncilUsd > 0 ? (100 * total.savedUsd) / estAlwaysCouncilUsd : 0;
     // droppedRuns едет ВМЕСТЕ со сводкой: читатель узнаёт о её неполноте из
     // самой сводки, а не из журнала сервера, куда никто не смотрит.
-    return { ...total, estAlwaysCouncilUsd, savedPct, perModule, droppedRuns };
+    return { ...total, estAlwaysCouncilUsd, savedPct, runsCompared, perModule, droppedRuns };
   } catch {
     return null;
   }

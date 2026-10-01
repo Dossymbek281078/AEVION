@@ -89,7 +89,7 @@ export default async function EnDevhubPage({
             иначе страница обещала бы цену, которой касса не знает.
           */}
           {devhub ? (
-            <p style={styles.heroPrice}>
+            <p data-devhub-price="1" style={styles.heroPrice}>
               Full studio{" "}
               <strong>from ${fromPricePerMonth(devhub.priceUsd)}/mo</strong>{" "}
               on the 12-month term, ${devhub.priceUsd}/mo billed monthly.{" "}

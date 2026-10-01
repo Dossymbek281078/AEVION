@@ -1,3 +1,14 @@
+/*
+ * `?includeProbes=1` добавлен 30.09.2026 вместе с фильтром проб в ручке.
+ *
+ * Тест НАМЕРЕННО заводит бронь с держателем «AEVION demo» — а это по нашему же
+ * признаку проба (демо-кнопка). С 30.09 ручка такие записи посетителю не
+ * отдаёт, и тест честно покраснел: предмета проверки в выдаче не стало.
+ *
+ * Это не ослабление: флаг существует ровно для наших проверок — им засорение
+ * видеть НУЖНО. Ослаблением было бы убрать проверку «в хранилище есть слот»
+ * или завести бронь под видом настоящей.
+ */
 import { describe, test, expect, beforeAll } from "vitest";
 import request from "supertest";
 import express from "express";
@@ -36,7 +47,7 @@ describe("квитанция брони пересчитывается снар�
   });
 
   test("хэш от payload из ответа даёт ровно ту квитанцию", async () => {
-    const list = await request(app()).get("/api/qskyway/slots");
+    const list = await request(app()).get("/api/qskyway/slots?includeProbes=1");
     expect(list.status).toBe(200);
     const slot = (list.body.slots ?? [])[0];
     // ⚠️ НЕ выходим молча при пустом хранилище: тест, который «проходит»,
@@ -54,7 +65,7 @@ describe("квитанция брони пересчитывается снар�
   });
 
   test("рецепт называет ГРАНИЦУ: секрета в квитанции нет", async () => {
-    const list = await request(app()).get("/api/qskyway/slots");
+    const list = await request(app()).get("/api/qskyway/slots?includeProbes=1");
     const slot = (list.body.slots ?? [])[0];
     expect(slot, "в хранилище нет слотов").toBeTruthy();
     const res = await request(app()).get("/api/qskyway/slots/" + slot.id + "/verify");

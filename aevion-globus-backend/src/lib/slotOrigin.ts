@@ -54,6 +54,23 @@ export function isSmokeSlot(slot: SlotOriginLike): boolean {
   return SMOKE_HOLDERS.has(holder) || DEMO_HOLDERS.has(holder);
 }
 
+/**
+ * Бронь, сделанная ЧЕЛОВЕКОМ через демо-кнопку на странице.
+ *
+ * Отличать её от смоука понадобилось 30.09.2026, когда выдача перестала
+ * отдавать пробы. Кнопка «Забронировать демо-слот» шлёт `holder: "AEVION demo"`,
+ * то есть по признаку пробы — и бронь посетителя молча исчезала бы с доски
+ * сразу после нажатия. Это молчаливый отказ: действие выглядит успешным и не
+ * даёт видимого следа.
+ *
+ * Разница по смыслу, а не по вкусу: `smoke-*` и держатели прогонов — НАШ шум,
+ * его никто не просил; «AEVION demo» — то, что посетитель только что сделал
+ * сам, и он вправе это увидеть (с пометкой, что бронь демонстрационная).
+ */
+export function isDemoSlot(slot: SlotOriginLike): boolean {
+  return DEMO_HOLDERS.has((slot.holder ?? "").toLowerCase());
+}
+
 /** Сколько записей в списке оставлено не смоком и не демо-кнопкой. */
 export function countLiveSlots(slots: readonly SlotOriginLike[]): number {
   return slots.reduce((n, s) => n + (isSmokeSlot(s) ? 0 : 1), 0);

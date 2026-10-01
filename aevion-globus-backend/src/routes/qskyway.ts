@@ -23,7 +23,8 @@ import { getPool } from "../lib/dbPool";
 // пропускает наружу ТОЛЬКО помеченное публичным. Утечка у него невозможна по
 // устройству, а не по полноте списка шаблонов.
 import { safeErrorText } from "../lib/safeError";
-import { isSmokeSlot, countLiveSlots } from "../lib/slotOrigin";
+import { isSmokeSlot, isDemoSlot, countLiveSlots } from "../lib/slotOrigin";
+import { просятПробы } from "../lib/probeRows";
 import { heightReviewFor, heightReviewsForCity } from "../data/qskywayHeightReview";
 import { rateLimit } from "../lib/rateLimit";
 
@@ -2672,12 +2673,25 @@ qskywayRouter.get("/slots", async (_req: Request, res: Response) => {
   // 5–6 слотов каждый прогон и за собой не убирает. Ничего не удаляем: право
   // зафиксировано по-настоящему, квитанция честная. Перестаём выдавать это за
   // рыночную активность.
+  // Пробы не отдаём посетителю: 30.09 на проде 41 бронь и все наши.
+  // Прячем в РУЧКЕ, как у Planet (lib/probeRows): ?includeProbes=1 вернёт
+  // всё, probesHidden назовёт число. Разбор — в lib/slotOrigin.ts.
+  const показыватьПробы = просятПробы(_req.query);
+  // Прячем НАШ шум, но не бронь посетителя. Демо-кнопка на странице шлёт
+  // holder «AEVION demo» — по признаку это проба, однако нажал её человек, и
+  // его бронь обязана появиться на доске: иначе действие выглядит успешным и
+  // не даёт видимого следа (молчаливый отказ). Она остаётся с пометкой
+  // `test: true`, так что за рынок её никто не примет.
+  const скрыть = (s: Slot) => isSmokeSlot(s) && !isDemoSlot(s);
+  const видимые = показыватьПробы ? slots : slots.filter((s) => !скрыть(s));
+
   res.json({
     count: slots.length,
     liveCount: countLiveSlots(slots),
+    probesHidden: slots.length - видимые.length,
     capacityPerRoute: SLOT_CAPACITY,
     store: slotsDbAvailable ? "postgres" : "memory",
-    slots: slots.map((s) => ({ ...s, test: isSmokeSlot(s) })),
+    slots: видимые.map((s) => ({ ...s, test: isSmokeSlot(s) })),
   });
 });
 

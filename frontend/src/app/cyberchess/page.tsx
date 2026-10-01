@@ -1182,7 +1182,13 @@ export default function CyberChessPage(){
   // ~660 (рейл 248 + панель 340 + поля), без рейла ~400 (только панель + поля) — так
   // 3-колоночная раскладка никогда не выходит за окно. Кап 1400 — доска заполняет
   // высоту больших окон, но не доминирует на 4K. boardScale поверх, финал зажат потолком.
-  const railShown=vwPx>=1100; // должно совпадать с порогом рендера <aside> ниже
+  // 🔴 Левый инфо-рейл убран 30.09.2026 по слову основателя: «левая колонка зачем такая
+  // большая и широкая… оценки ходов в партии с людьми или компами можно и не делать».
+  // Терять нечего: оценка уже есть вертикальной полосой у доски, а материал, дебют и
+  // статус партии слово в слово повторяются во вкладке «Инфо» правой панели.
+  // Освобождает 370 px ширины и убирает третью колонку, из-за которой доска
+  // и список ходов делили остаток.
+  const railShown=false;
   // Путь к настоящей кассе ($, Lemon Squeezy) — ВСЕГДА на экране, независимо от ширины и онбординга.
   // Замер 20.09.2026: единственная цена жила в баннере проектов (только ≥1100px и только без
   // онбординга) — на телефоне и у нового гостя цены не было никогда; магазин Chessy продаёт
@@ -1236,9 +1242,12 @@ export default function CyberChessPage(){
   // быстрая панель, строка соперника), и константа 250 давала доску до 803px — восьмая горизонталь,
   // буквы, строка «Вы» и все кнопки уходили под обрез при overflow:hidden колонки (основатель 22.09:
   // «низ под доской вообще не виден»). Под доской нужно ~150px: буквы, строка «Вы», ряд кнопок.
+  // 🔴 Верх доски измеряется БЕЗ window.scrollY: доска живёт в контейнере со своей
+  // прокруткой, и прибавка прокрутки страницы завышала резерв. Замер 30.09 на 1990×1015:
+  // код считал верх 253 при фактических 197 — доска теряла 56 px на ошибке измерения.
   const[boardTopPx,sBoardTopPx]=useState(0);
   useEffect(()=>{
-    const measure=()=>{try{const el=document.querySelector("[data-cc-board]");if(!el)return;const t=Math.round(el.getBoundingClientRect().top+window.scrollY);sBoardTopPx(v=>Math.abs(v-t)>2?t:v);}catch{}};
+    const measure=()=>{try{const el=document.querySelector("[data-cc-board]");if(!el)return;const t=Math.round(el.getBoundingClientRect().top);sBoardTopPx(v=>Math.abs(v-t)>2?t:v);}catch{}};
     measure();const id=setInterval(measure,1000);window.addEventListener("resize",measure); // раз в секунду: строки над доской появляются и исчезают (вкладка, партия), а состояние партии объявлено ниже
     return()=>{clearInterval(id);window.removeEventListener("resize",measure)};
   },[vwPx,vhPx]);
@@ -1246,10 +1255,25 @@ export default function CyberChessPage(){
   // На низком десктопе (768px) они переносились в три-четыре строки и уезжали за окно — замер 23.09 на проде:
   // «Сдаться», «Ничья», «Отменить» ВНЕ окна. Там ряды идут в одну строку с боковой прокруткой, запас 186px.
   const lowDesktop=vwPx>=769&&vhPx<860;
+  // Компактный низ нужен НЕ только на низких экранах: доска упирается в высоту на любом
+  // десктопе (замер 30.09 на 1990×1015 — верх 197, низ 206, доска 612 = 1015−197−206),
+  // и два ряда крупных кнопок съедают её везде. Поэтому плотный низ — весь десктоп.
+  const plotnyNiz=vwPx>=769;
   const podDoskoyRow:React.CSSProperties=lowDesktop
     ?{flexWrap:"nowrap",overflowX:"auto",scrollbarWidth:"none"}
     :{flexWrap:"wrap",overflowX:"visible"};
-  const desktopVReserve=Math.max(250,boardTopPx>0?boardTopPx+(lowDesktop?186:150):0);
+  // Замер 29.09 на 1280×768: под доской 256 px (буквы+палитра, строка игрока, ДВА ряда
+  // кнопок), над доской 225 — низ съедает больше шапки, и доска зажата в 290 px при
+  // 584 у lichess на том же экране. Ряды кнопок на невысоком десктопе стали компактнее
+  // (gap 6, marginTop 4, размер sm), поэтому резерв снижен 186 → 150.
+  // Резерв под доской: 150 не хватило — после того как доска выросла, «Сдаться», «Ничья»
+  // и «Отменить ход» ушли ЗА экран на 1280×768 (замер 30.09). Это ровно та жалоба
+  // основателя, которую чинили 23.09, и отдавать доске место за счёт невидимых кнопок
+  // нельзя. Кнопки теперь компактные (sm), поэтому хватает 175 вместо прежних 186.
+  // Вариант А: под доской один ряд кнопок, поэтому резерв меньше — 130 на низком экране
+  // и 105 на высоком. Нижняя граница Math.max(250,…) снята: она сама по себе держала
+  // доску маленькой на невысоких экранах, хотя фактический низ уже укладывался.
+  const desktopVReserve=Math.max(170,boardTopPx>0?boardTopPx+(lowDesktop?130:105):0);
   const boardPx=Math.max(isMobileLayout?200:280,Math.min(boardPxRaw,vhPx-(vwPx>=769?desktopVReserve:290),vwPx-hReserve-dockReserve));
   const bw=boardPx+"px";
   // ── Ultra-wide fill: доска упирается в ВЫСОТУ (квадрат), а экраны 16:9 широкие —
@@ -1261,7 +1285,14 @@ export default function CyberChessPage(){
   const reserveBase=(railShown?660:400)+dockReserve;
   const wideSlack=Math.max(0,vwPx-boardPx-reserveBase-40);
   const railExtra=railShown?Math.min(130,Math.round(wideSlack*0.32)):0;
-  const panelExtra=Math.min(190,Math.round(wideSlack*0.5));
+  // 🔴 «Остаётся большое неиспользованное пространство справа» (основатель 30.09).
+  // Доска на широком экране упирается в ВЫСОТУ, лишняя ширина ей не нужна — значит
+  // простор должен забрать список ходов, а не оставаться пустым полем. Замер 30.09
+  // на 1990×1015 после уборки баннера: справа от панели пустовало 404 px.
+  // Панель ходов: 340 базовых + запас, но не шире 460 суммарно — при 672 и 720 px
+  // (замер 30.09) список ходов превращался в простыню, а доске это ничего не давало:
+  // на широком экране она упирается в высоту, а не в ширину.
+  const panelExtra=Math.min(120,Math.round(wideSlack*0.3));
   const railW=248+railExtra;               // левый инфо-рейл
   const rightPanelMax=340+panelExtra;      // правая панель (ходы/эвал/коуч)
   const[p2pMode,sP2pMode]=useState(false);
@@ -2133,6 +2164,11 @@ export default function CyberChessPage(){
   const[currentEndgame,sCurrentEndgame]=useState<Endgame|null>(null);
   const[streamerMode,sStreamerMode]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("aevion_streamer_v1")==="1"}catch{return false}});
   useEffect(()=>{try{localStorage.setItem("aevion_streamer_v1",streamerMode?"1":"0")}catch{}},[streamerMode]);
+  // 🔴 Слово основателя 30.09: «остаётся большое неиспользованное пространство справа».
+  // Баннер чужих проектов и блок подписки прятались только в партии (!on), поэтому на
+  // вкладках «Анализ» и «Коуч» занимали 244 px справа — как раз там, где он их и увидел.
+  // Рабочий экран — это партия, разбор, задача и коуч: реклама других модулей там лишняя.
+  const рабочийЭкран=on||over||pzCurrent!=null||tab==="analysis"||tab==="coach"||tab==="puzzles";
   const[showProjectsBanner,sShowProjectsBanner]=useState(()=>{try{return typeof window!=="undefined"&&localStorage.getItem("cc_projects_banner_v1")!=="0"}catch{return true}});
   useEffect(()=>{try{localStorage.setItem("cc_projects_banner_v1",showProjectsBanner?"1":"0")}catch{}},[showProjectsBanner]);
   const streamerToolbarRef=useRef<{showYT:()=>void;showTW:()=>void;ytVisible:boolean;twVisible:boolean}|null>(null);
@@ -6203,13 +6239,21 @@ export default function CyberChessPage(){
         position:"sticky",top:0,zIndex:Z.sticky,
         // Телефон: справа 100px под плавающую языковую пилюлю «RU ▼» (AppShellLanguagePill, fixed
         // top:12/right:12) — на 390 она ложилась на ☰/🔊 шапки (тестер 20.09.2026).
-        margin:"0 -12px 12px",padding:vwPx<769?"10px 100px 10px 12px":"10px 12px",
+        // 🔴 На рабочем экране (партия, разбор, задача, коуч) шапка идёт ОДНОЙ строкой:
+        // из-за flexWrap она переносилась на вторую и занимала 119 px из 213 верха, а доска
+        // упирается именно в высоту. Замер 30.09 на 1990×1015: верх 213, низ 181, доска 621 —
+        // ровно остаток. Ниже 769 (телефон) всё как было: там перенос нужен.
+        margin:`0 -12px ${рабочийЭкран&&vwPx>=769?6:12}px`,
+        padding:vwPx<769?"10px 100px 10px 12px":(рабочийЭкран?"5px 12px":"10px 12px"),
         background:CC.surfaceGlass,backdropFilter:"blur(14px)",WebkitBackdropFilter:"blur(14px)",
         borderBottom:`1px solid ${CC.border}`,
-        display:"flex",alignItems:"center",gap:SPACE[3],flexWrap:"wrap"
+        display:"flex",alignItems:"center",gap:рабочийЭкран&&vwPx>=769?SPACE[2]:SPACE[3],
+        ...(рабочийЭкран&&vwPx>=769
+          ? {flexWrap:"nowrap" as const,overflowX:"auto" as const,scrollbarWidth:"none" as const}
+          : {flexWrap:"wrap" as const})
       }}>
-        {/* Logo */}
-        <div style={{display:"flex",alignItems:"center",gap:SPACE[2],flex:"0 0 auto"}}>
+        {/* Logo — на рабочем экране скрыт: он уже есть в общей шапке AEVION строкой выше */}
+        <div style={{display:рабочийЭкран&&vwPx>=769?"none":"flex",alignItems:"center",gap:SPACE[2],flex:"0 0 auto"}}>
           <div style={{
             width:38,height:38,borderRadius:RADIUS.md,
             background:"linear-gradient(135deg,#059669 0%,#10b981 55%,#7c3aed 100%)",
@@ -6236,7 +6280,7 @@ export default function CyberChessPage(){
                 {isUltimate?"✨ Ultimate":"✨ Pro"}
               </span>}
             </h1>
-            <div className="cc-header-sub" style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
+            <div className="cc-header-sub" style={{fontSize:11,color:CC.textDim,fontWeight:600,display:рабочийЭкран&&vwPx>=769?"none":undefined}}>
               SF18 · {pzCountLabel} {ccPlural(pzTotal??PUZZLES.length,"задача","задачи","задач")} в банке{useSF&&sfOk?" · ⚡":""}
             </div>
           </div>
@@ -6264,16 +6308,18 @@ export default function CyberChessPage(){
                 title={locked?"Заблокировано во время партии с человеком":t.label}
                 style={{
                   display:"inline-flex",alignItems:"center",gap:7,
-                  padding:"9px 18px",borderRadius:RADIUS.full,
+                  // На рабочем экране вкладки компактнее: шапка занимала 60 px из 132 верха,
+                  // а доска упирается в высоту (вариант А — доске максимум).
+                  padding:рабочийЭкран&&vwPx>=769?"5px 13px":"9px 18px",borderRadius:RADIUS.full,
                   border:active?`1px solid ${t.hue}55`:"1px solid transparent",
                   background:active?`${t.hue}1f`:"transparent",
                   color:locked?CC.textMute:active?t.hue:CC.textDim,
-                  fontSize:14,fontWeight:active?900:750,
+                  fontSize:рабочийЭкран&&vwPx>=769?13:14,fontWeight:active?900:750,
                   cursor:locked?"not-allowed":"pointer",whiteSpace:"nowrap",
                   opacity:locked?0.5:1,
                   transition:`background 120ms, color 120ms`,
                 }}>
-                <span style={{fontSize:16,lineHeight:1}} aria-hidden>{locked?"🔒":t.icon}</span>
+                <span style={{fontSize:рабочийЭкран&&vwPx>=769?14:16,lineHeight:1}} aria-hidden>{locked?"🔒":t.icon}</span>
                 <span>{t.label}</span>
               </button>;
             })}
@@ -7700,7 +7746,10 @@ export default function CyberChessPage(){
       {/* Телефон: чипов больше, чем ширины (390: «…Стри» обрезался, «Видео»/«Ещё» недостижимы —
           тестер 20.09.2026). Ряд прокручивается по горизонтали, полоса прокрутки скрыта. */}
       {/* На низком десктопном экране (<820px) панель не рисуется: вкладки Задачи/Анализ/Коуч уже в шапке, а 48px нужны доске */}
-      {!streamerMode&&!setup&&on&&tab==="play"&&(vwPx<769||vhPx>=820)&&(
+      {/* Ряд «Анализ · Коуч · Задачи · Стрим · Видео · Ещё» в партии на десктопе скрыт:
+          вкладки Анализ/Коуч/Задачи уже стоят в шапке строкой выше, а Стрим и Видео живут
+          в «⚙ Ещё». Ряд занимал 40 px высоты, которые по варианту А принадлежат доске. */}
+      {!streamerMode&&!setup&&on&&tab==="play"&&vwPx<769&&(
         <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"nowrap",overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none",paddingBottom:2,paddingRight:vwPx<769?96:0}}>
           {([
             ...(isHumanGame?[]:[
@@ -7744,66 +7793,18 @@ export default function CyberChessPage(){
         // paddingRight = резерв под правый WorkspaceDock (dockReserve: 56 на десктопе, 0 на
         // мобайле где док скрыт) + баннер «Проекты» (244, когда показан). Инлайн (надёжнее
         // CSS-var: правый док больше не наезжает на панель ходов).
-        ["--cc-banner-reserve" as any]:(showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!anyOnboardingModal&&vwPx>=1100)?"244px":"0px",
-        paddingRight:((showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!anyOnboardingModal&&vwPx>=1100)?244:0)+dockReserve}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
+        ["--cc-banner-reserve" as any]:(showProjectsBanner&&!streamerMode&&!рабочийЭкран&&!scratchOn&&!anyOnboardingModal&&vwPx>=1100)?"244px":"0px",
+        paddingRight:((showProjectsBanner&&!streamerMode&&!рабочийЭкран&&!scratchOn&&!anyOnboardingModal&&vwPx>=1100)?244:0)+dockReserve}} onContextMenu={e=>{e.preventDefault();if(pms.length>0)sPms(p=>p.slice(0,-1));else if(pmSel)sPmSel(null)}}>
         {/* Inline media pane on the LEFT — visible only in Stream workspace */}
         {wsShowMedia&&<WorkspaceMediaPane/>}
         {/* ─── Left info rail (chess.com-style) — 3-колоночная раскладка на ноутбуках+.
             Порог vwPx>=1100 (синхронен с railShown выше — бюджет ширины доски резервирует
             под рейл, поэтому aside(248)+доска+панель(340)+gaps влезают без overflow на любой
             ширине ≥1100). Ниже 1100 рейл скрыт → привычная раскладка доска+правая панель. */}
-        {(on||over||tab==="analysis")&&!streamerMode&&vwPx>=1100&&(()=>{
-          const PV:Record<string,number>={"♕":9,"♛":9,"♖":5,"♜":5,"♗":3,"♝":3,"♘":3,"♞":3,"♙":1,"♟":1};
-          const sum=(a:string[])=>a.reduce((s,c)=>s+(PV[c]||0),0);
-          const adv=sum(capB)-sum(capW); // >0 = белые впереди
-          const evalStr=evalMate!==0?(evalMate>0?`+M${Math.abs(evalMate)}`:`-M${Math.abs(evalMate)}`):`${evalCp>=0?"+":""}${(evalCp/100).toFixed(1)}`;
-          const wPct=evalMate!==0?(evalMate>0?98:2):Math.max(4,Math.min(96,50+evalCp/16));
-          // Единый каркас карточек рейла через <Card> из ui.tsx (Фаза 2 — консолидация).
-          // elevation:none + padding 10/12 воспроизводят прежний инлайн-стиль 1:1 (без тени).
-          const cardProps={tone:"surface1" as const,radius:RADIUS.md,elevation:"none" as const,style:{padding:"10px 12px"}};
-          const lbl={fontSize:10,fontWeight:800,letterSpacing:"0.06em",textTransform:"uppercase" as const,color:CC.textMute,marginBottom:6} as const;
-          return <aside style={{flex:`0 0 ${railW}px`,width:railW,display:"flex",flexDirection:"column",gap:10,overflowY:"auto",alignSelf:"stretch",paddingRight:2}}>
-            <Card {...cardProps}>
-              <div style={lbl}>Оценка</div>
-              <div style={{fontSize:26,fontWeight:900,color:CC.text,fontFamily:"ui-monospace,monospace"}}>{evalStr}</div>
-              <div style={{marginTop:8,height:8,borderRadius:4,overflow:"hidden",display:"flex",background:"#0f172a"}}>
-                <div style={{width:`${wPct}%`,background:"#f8fafc"}}/>
-                <div style={{flex:1,background:"#0f172a"}}/>
-              </div>
-            </Card>
-            <Card {...cardProps}>
-              <div style={lbl}>Материал</div>
-              <div style={{fontSize:13,color:CC.text,fontWeight:800}}>{adv===0?"Равенство":(adv>0?`Белые +${adv}`:`Чёрные +${-adv}`)}</div>
-              <div style={{marginTop:6,fontSize:14,color:CC.textDim,minHeight:18,wordBreak:"break-all"}}>{capB.join("")||"—"}</div>
-              <div style={{marginTop:2,fontSize:14,color:CC.textDim,minHeight:18,wordBreak:"break-all"}}>{capW.join("")||"—"}</div>
-            </Card>
-            {currentOpening&&<Card {...cardProps}>
-              <div style={lbl}>Дебют</div>
-              <div style={{fontSize:13,fontWeight:800,color:CC.text}}>{currentOpening.eco?`${currentOpening.eco} `:""}{currentOpening.name}</div>
-            </Card>}
-            <Card {...cardProps}>
-              <div style={lbl}>Партия</div>
-              <div style={{fontSize:13,color:CC.textDim}}>Ход: <b style={{color:CC.text}}>{Math.max(1,Math.ceil(hist.length/2))}</b></div>
-              {/* Подпись говорит о том, что ПРОИСХОДИТ, а не о том, что задумано.
-                  Замер 03.09.2026 на живом сайте: здесь стояло «Stockfish 18 · d22»,
-                  а движок не выдал НИ ОДНОЙ реплики — ход считал запасной расчёт, и
-                  человек ждал соперника до двадцати секунд, читая имя движка,
-                  который не запустился. */}
-              <div style={{fontSize:13,color:CC.textDim,marginTop:3}}>Движок: <b style={{color:sfOk?CC.text:CC.gold}}>{sfOk?"Stockfish 18 · d22":sfZapusk?"загружается…":"не запустился — считает запасной расчёт"}</b></div>
-              <div style={{fontSize:13,color:CC.textDim,marginTop:3}}>Коуч: <b style={{color:CC.text}}>супер-GM</b></div>
-            </Card>
-            {/* Теория дебюта — в потоке, после «Партии»: ничего не накрывает по построению */}
-            {currentOpening&&<OpeningFlashCard
-      open={showOpeningCard}
-      opening={currentOpening}
-      currentPly={hist.length}
-      isPlayerTurn={game.turn()===pCol}
-      onDismiss={()=>sShowOpeningCard(false)}
-      surface={CC.surface1} border={CC.border}
-      text={CC.text} textDim={CC.textDim} accent={CC.brand}
-    />}
-          </aside>;
-        })()}
+        {/* Левый инфо-рейл удалён 30.09.2026 по слову основателя: «левая колонка зачем такая
+            большая и широкая… оценки ходов в партии с людьми или компами можно и не делать».
+            Ничего не потеряно: оценка — вертикальной полосой у доски, материал, дебют и
+            статус партии повторяются во вкладке «Инфо» правой панели. Освободилось 370 px. */}
         {/* Колонка доски: не растягиваем (flex:0 1 auto) — иначе мелкая доска центрируется
             в широкой колонке и правый рейл уезжает далеко. Группа [доска+рейл] центрируется
             через justifyContent на cc-main-row, рейл встаёт вплотную (gap 12). */}
@@ -8481,8 +8482,10 @@ export default function CyberChessPage(){
           {/* Телефон: палитра тем и масштаб уходят на вторую строку, а буквы a–h занимают всю ширину
               доски — иначе на 390 сетка букв сжималась до ~70px и «ABCDEFGH» слипалось слева (тестер 20.09.2026). */}
           <div style={{display:"flex",alignItems:"center",paddingLeft:23,width:bw,gap:4,flexWrap:vwPx<769?"wrap":"nowrap"}}>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:vwPx<769?"1 1 100%":1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div>
-            <div style={{display:"flex",gap:3,flexShrink:0,alignItems:"center"}}>
+            <div style={{display:рабочийЭкран&&vwPx>=769?"none":"grid",gridTemplateColumns:"repeat(8,1fr)",flex:vwPx<769?"1 1 100%":1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div>
+            <div style={{display:рабочийЭкран&&vwPx>=769?"none":"flex",gap:3,flexShrink:0,alignItems:"center"}}>
+              {/* Палитра тем доски и зум спрятаны на рабочем экране: тема выбирается один раз,
+                  а место под доской отнимается постоянно. Оба остались в настройках (⚙). */}
               {BOARD_THEMES.slice(0,8).map((th,i)=><button key={i} title={`Тема: ${th.name}`} aria-label={`Тема доски: ${th.name}`} aria-pressed={boardTheme===i} onClick={()=>sBoardTheme(i)} style={{width:22,height:22,borderRadius:"50%",border:boardTheme===i?`2px solid ${CC.text}`:`2px solid ${CC.border}`,background:th.dark,cursor:"pointer",padding:0,flexShrink:0,outline:"none",transition:"transform 120ms",transform:boardTheme===i?"scale(1.18)":"scale(1)"}}/>)}
               <div style={{width:1,height:12,background:CC.border,margin:"0 2px"}}/>
               <button title="Уменьшить доску (Ctrl+-)" aria-label="Уменьшить доску" onClick={()=>sBoardScale(s=>Math.max(0.5,parseFloat((s-0.1).toFixed(1))))} style={{width:26,height:26,borderRadius:4,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,fontSize:15,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>−</button>
@@ -8567,10 +8570,15 @@ export default function CyberChessPage(){
 
           {/* Controls — under-board strip. Game-essentials only. Heatmap/Whisper/Share/History live in the
               right-sidebar Tools card to reduce visual clutter under the board. */}
-          <div style={{display:"flex",gap:8,marginTop:SPACE[2],...podDoskoyRow}}>
-            <Btn size="md" variant="secondary" icon={<Icon.Flip width={16} height={16}/>} onClick={()=>sFlip(!flip)}>Перевернуть</Btn>
-            <Btn size="md" variant="primary" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>Новая партия</Btn>
-            {on&&!setup&&<Btn size="md" variant={mirrorActive?"primary":"secondary"} onClick={()=>{if(mirrorActive){sMirrorActive(false);showToast("🪞 Зеркальный режим выключен","info");}else{sMirrorActive(true);showToast("🪞 Зеркальный режим — соперник играет как ты","info");}}} title="Зеркальный режим — соперник копирует твой стиль">🪞</Btn>}
+          {/* 🔴 Вариант А (выбор основателя 30.09): под доской ОДИН ряд кнопок.
+              Во время партии здесь нужны «Сдаться · Ничья · Отменить · Подсказка» — они ниже.
+              Этот ряд («Перевернуть · Новая партия · Голос · Ход текстом») в идущей партии
+              на десктопе скрыт: его кнопки есть в «⚙ Ещё», а два ряда съедали 110 px высоты,
+              которые доска не могла забрать. */}
+          <div style={{display:(plotnyNiz&&on&&!over&&!setup&&tab==="play")?"none":"flex",gap:plotnyNiz?6:8,marginTop:plotnyNiz?4:SPACE[2],...podDoskoyRow}}>
+            <Btn size={plotnyNiz?"sm":"md"} variant="secondary" icon={<Icon.Flip width={16} height={16}/>} onClick={()=>sFlip(!flip)}>Перевернуть</Btn>
+            <Btn size={plotnyNiz?"sm":"md"} variant="primary" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>Новая партия</Btn>
+            {on&&!setup&&<Btn size={plotnyNiz?"sm":"md"} variant={mirrorActive?"primary":"secondary"} onClick={()=>{if(mirrorActive){sMirrorActive(false);showToast("🪞 Зеркальный режим выключен","info");}else{sMirrorActive(true);showToast("🪞 Зеркальный режим — соперник играет как ты","info");}}} title="Зеркальный режим — соперник копирует твой стиль">🪞</Btn>}
             {(tab==="play"||tab==="coach"||tab==="analysis")&&btn(voiceListening?"🔴 Слушаю (нажми для паузы)":"🎤 Голос",()=>{
               const SR=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;
               if(!SR){showToast("Браузер не поддерживает голосовой ввод (нужен Chrome)","error");return}
@@ -8762,10 +8770,10 @@ export default function CyberChessPage(){
           </div>
           {/* Ряд «Сдаться · Ничья · Отменить · Подсказка» — только на вкладке партии: на Задачах/Коуче/Анализе
               при паузе партии он сбивал с толку (тестер 20.09.2026, 390: «Сдаться» под доской задачи). */}
-          {on&&!over&&!setup&&tab==="play"&&<div style={{display:"flex",gap:8,marginTop:lowDesktop?4:SPACE[2],...podDoskoyRow}}>
-            <Btn size="md" variant="danger" className="cc-game-btn" onClick={()=>{if(armed!=="resign"){sArmed("resign");return;}sArmed(null);if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{const nr=новыйРейтинг(rat,lv.elo,false);sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>{armed==="resign"?"Точно сдаться? ✓":"🏳 Сдаться"}</Btn>
-            <Btn size="md" variant="gold" className="cc-game-btn" onClick={()=>{if(armed!=="draw"){sArmed("draw");return;}sArmed(null);if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("ИИ отклонил ничью","error")}}>{armed==="draw"?"Предложить ничью? ✓":"½ Ничья"}</Btn>
-            <Btn size="md" variant="secondary" className="cc-game-btn" icon={<Icon.Undo width={14} height={14}/>} onClick={()=>{
+          {on&&!over&&!setup&&tab==="play"&&<div style={{display:"flex",gap:plotnyNiz?6:8,marginTop:plotnyNiz?4:SPACE[2],...podDoskoyRow}}>
+            <Btn size={plotnyNiz?"sm":"md"} variant="danger" className="cc-game-btn" onClick={()=>{if(armed!=="resign"){sArmed("resign");return;}sArmed(null);if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{const nr=новыйРейтинг(rat,lv.elo,false);sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>{armed==="resign"?"Точно сдаться? ✓":"🏳 Сдаться"}</Btn>
+            <Btn size={plotnyNiz?"sm":"md"} variant="gold" className="cc-game-btn" onClick={()=>{if(armed!=="draw"){sArmed("draw");return;}sArmed(null);if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("ИИ отклонил ничью","error")}}>{armed==="draw"?"Предложить ничью? ✓":"½ Ничья"}</Btn>
+            <Btn size={plotnyNiz?"sm":"md"} variant="secondary" className="cc-game-btn" icon={<Icon.Undo width={14} height={14}/>} onClick={()=>{
               if(hist.length<2){showToast("Ходов нет","error");return}
               if(think){showToast("ИИ думает — подожди","error");return}
               if(!hotseat){
@@ -8783,7 +8791,7 @@ export default function CyberChessPage(){
               sHist(h=>h.slice(0,-2));sFenHist(h=>h.slice(0,-2));sLm(null);sSel(null);sVm(new Set());sBk(k=>k+1);
               showToast("↩ Ход отменён","success");
             }}>↩ Отменить ход</Btn>
-            {sfOk&&myT&&!hotseat&&<Btn size="md" variant="secondary" className="cc-game-btn" loading={hintLoading} onClick={()=>{
+            {sfOk&&myT&&!hotseat&&<Btn size={plotnyNiz?"sm":"md"} variant="secondary" className="cc-game-btn" loading={hintLoading} onClick={()=>{
               if(hintLoading)return;
               if(!sfR.current?.ready()){showToast("SF загружается…","error");return}
               sHintLoading(true);
@@ -8844,6 +8852,37 @@ export default function CyberChessPage(){
             }}
           />}
           {/* ── Live Stats Card — показываем только в Info (не в Coach — там eval дублируется) ── */}
+          {/* 🔴 01.10.2026: подпись движка ПЕРЕЕХАЛА сюда из левого рейла.
+              Рейл убран по слову основателя, и вместе с ним едва не пропала
+              эта строка. Она не украшение: замер 03.09.2026 на живом сайте —
+              там стояло «Stockfish 18 · d22», а движок не выдал ни одной
+              реплики, ход считал запасной расчёт, и человек ждал соперника до
+              двадцати секунд, читая имя движка, который не запустился.
+              Цветная точка у доски различает только «работает / не работает»;
+              третьего состояния — «ещё загружается» — она не передаёт, а
+              именно оно и выглядело как поломка. Поэтому текст сохранён. */}
+          {on&&!setup&&(tab==="play"&&rpTab==="info")&&<div style={{fontSize:12,color:CC.textDim,marginBottom:6}}>
+            Движок: <b style={{color:sfOk?CC.text:CC.gold}}>{sfOk?"Stockfish 18 · d22":sfZapusk?"загружается…":"не запустился — считает запасной расчёт"}</b>
+          </div>}
+          {/* 🔴 01.10.2026: КАРТОЧКА ТЕОРИИ ДЕБЮТА ВОЗВРАЩЕНА.
+              Она жила в левом инфо-рейле и уехала вместе с ним — а в списке
+              удаляемого её не было: убирали «левую колонку», не теорию.
+              Замер: в проде вызов карточки встречается один раз, после
+              удаления рейла — ноль. При этом состояние currentOpening и оба
+              эффекта, считающие showOpeningCard, остались на месте: код
+              продолжал работать, а показать результат было некому.
+              Ставится во вкладку «Инфо» правой панели — туда же, куда
+              переехала подпись движка, и ровно туда, куда обещал перенести
+              комментарий об удалении рейла. */}
+          {on&&!setup&&(tab==="play"&&rpTab==="info")&&currentOpening&&<OpeningFlashCard
+            open={showOpeningCard}
+            opening={currentOpening}
+            currentPly={hist.length}
+            isPlayerTurn={game.turn()===pCol}
+            onDismiss={()=>sShowOpeningCard(false)}
+            surface={CC.surface1} border={CC.border}
+            text={CC.text} textDim={CC.textDim} accent={CC.brand}
+          />}
           {on&&!setup&&(tab==="play"&&rpTab==="info")&&<div style={{
             padding:"10px 12px",borderRadius:RADIUS.md,
             background:CC.surface1,border:`1px solid ${CC.border}`,
@@ -9271,8 +9310,12 @@ export default function CyberChessPage(){
             </div>
           </Card>}
 
-          {/* Player block (top = opponent) */}
-          {!setup&&(tab==="play"||tab==="coach")&&(()=>{
+          {/* Player block (top = opponent) — только на телефоне.
+              На десктопе имя соперника с рейтингом и часами уже стоит НАД доской, а своё —
+              под ней, поэтому те же три карточки в правой панели были дублем и съедали
+              166 px её высоты (замер 30.09: карточки 62+47+62, а списку ходов оставалось 255).
+              Слово основателя: «там где строка ходов, одни разделы перекрывают другие». */}
+          {!setup&&vwPx<769&&(tab==="play"||tab==="coach")&&(()=>{
             const isAiTurn=game.turn()===aiC&&!over&&on;
             return <div style={{
               padding:"10px 14px",borderRadius:RADIUS.lg,
@@ -9337,7 +9380,7 @@ export default function CyberChessPage(){
             <button onClick={()=>{sGhostDuelMode(false);sGhostDuelConfig(null);showToast("Дуэль завершена","info")}} style={{padding:"3px 10px",borderRadius:6,border:"1px solid #a78bfa",background:"white",color:"#6d28d9",fontSize:11,fontWeight:800,cursor:"pointer"}}>Выйти</button>
           </div>}
           {/* Status bar */}
-          {(tab==="play"||tab==="coach")&&<StatusBar over={over} chk={chk} think={think} myT={myT} useSF={useSF&&sfOk} pmsLen={pms.length} histLen={hist.length} rat={rat} rkI={rk.i}/>}
+          {vwPx<769&&(tab==="play"||tab==="coach")&&<StatusBar over={over} chk={chk} think={think} myT={myT} useSF={useSF&&sfOk} pmsLen={pms.length} histLen={hist.length} rat={rat} rkI={rk.i}/>}
           {(tab==="play"||tab==="coach")&&over&&<PostGameCard hist={hist} analysis={analysis} pCol={pCol} schitaem={hist.length>=6} />}
           {/* Variant HUD: shows variant-specific info (Diceblade die, Twin Kings royal-queen status, Asymmetric armies) */}
           {variant!=="standard"&&on&&!over&&(tab==="play"||tab==="coach")&&<div style={{
@@ -12738,7 +12781,9 @@ ${question.trim()}`;
         к игре, а к предложению включить чужой стрим. Про перекрытие доски
         здесь уже думали (условие !on ниже), про мобильный первый экран — нет. */}
     {/* !setup: на лаунчпаде подсказка стрима накрывала плитку «Онлайн-матч» и блок писем (скрин 1920, 20.09.2026) */}
-    {showPipSuggest&&!on&&!setup&&!anyOnboardingModal&&vwPx>=900&&<div
+    {/* Предложение стрима не выпрыгивает на рабочем экране: основатель видел его поверх
+        низа доски на вкладке «Коуч». Условие !on закрывало только партию. */}
+    {showPipSuggest&&!рабочийЭкран&&!setup&&!anyOnboardingModal&&vwPx>=900&&<div
       role="alert"
       style={{
         position:"fixed",right:"calc(20px + var(--aevion-projects-w, 0px))",bottom:POLOSA_VSPLYVASHEK,zIndex:7900,
@@ -15747,7 +15792,7 @@ ${question.trim()}`;
     />
     {/* Projects banner — ТОЛЬКО на лаунчпаде/между партиями. Никогда во время активной
         игры/пазла/скретча: фиксированная плашка перекрывала ходы и премувы (фидбэк юзера). */}
-    {showProjectsBanner&&!streamerMode&&!on&&!pzCurrent&&!scratchOn&&!anyOnboardingModal&&vwPx>=1100&&<AevionProjectsBanner onHide={()=>sShowProjectsBanner(false)}/>}
+    {showProjectsBanner&&!streamerMode&&!рабочийЭкран&&!scratchOn&&!anyOnboardingModal&&vwPx>=1100&&<AevionProjectsBanner onHide={()=>sShowProjectsBanner(false)}/>}
     {/* Drag ghost is now an IMPERATIVE DOM node managed by useBoardInput.
         document.createElement → document.body.appendChild → direct transform on
         pointermove. Bypasses React entirely so the ghost follows the cursor with

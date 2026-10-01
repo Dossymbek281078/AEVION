@@ -35,14 +35,26 @@ describe("тосты на телефоне — сверху под шапкой,
   });
 });
 
-describe("карточка теории дебюта — в потоке левой колонки, не fixed", () => {
-  it("рендерится ОДИН раз, внутри aside после карточки «Партия»", () => {
+describe("карточка теории дебюта — в потоке панели, не fixed", () => {
+  it("рендерится ОДИН раз, во вкладке «Инфо» правой панели", () => {
+    // 🔴 ПЕРЕНАЦЕЛЕНО 01.10.2026. Проверка требовала, чтобы карточка стояла
+    // внутри левого инфо-рейла: рядом с подписью «Коуч: супер-GM» и до
+    // закрывающего aside. Рейл убран по слову основателя — и карточка уехала
+    // вместе с ним МОЛЧА: в списке удаляемого её не было, а состояние
+    // currentOpening и оба эффекта, считающие showOpeningCard, остались
+    // работать вхолостую. Замер: в проде вызов один, после удаления рейла
+    // ноль. Карточка возвращена во вкладку «Инфо» правой панели.
+    //
+    // Что охраняется теперь: карточка ОДНА (не продублирована), её можно
+    // закрыть, и она живёт в потоке панели, а не поверх страницы.
     expect(page.split("<OpeningFlashCard").length - 1).toBe(1);
     const i = page.indexOf("<OpeningFlashCard");
-    const before = page.slice(Math.max(0, i - 700), i);
-    expect(before).toContain("Коуч: <b style={{color:CC.text}}>супер-GM</b>");
-    expect(page.slice(i, page.indexOf("/>}", i) + 3)).toContain("onDismiss");
-    expect(page.indexOf("</aside>;", i)).toBeGreaterThan(i);
+    expect(i, "карточка теории дебюта не рендерится вовсе").toBeGreaterThan(0);
+    const вызов = page.slice(i, page.indexOf("/>}", i) + 3);
+    expect(вызов).toContain("onDismiss");
+    // Условие показа — вкладка «Инфо», а не левая колонка.
+    const передНей = page.slice(Math.max(0, i - 400), i);
+    expect(передНей, "карточка вне вкладки «Инфо»").toContain('rpTab==="info"');
   });
   it("компонент не fixed: position relative, ширина колонки", () => {
     expect(card).toMatch(/position: "relative",\n\s*width: "100%",/);

@@ -580,6 +580,40 @@ export default function DevHubPage() {
                   {!hydrated ? t("hero.loading") : ideaStarting ? t("hero.building") : t("hero.build")}
             </button>
           </div>
+          {/* ПОДНЯТО 01.10.2026 по замеру приёмки: на 390x844 верх блока стоял
+              на y=764. На настоящем телефоне адресная строка съедает около
+              100 px, видимая высота около 740 — цена уходила под сгиб, и 16
+              сессий с Product Hunt до неё не добрались. Место здесь дорогое:
+              по замеру в комментарии ниже только шапка сайта занимает 218 px.
+              Поэтому цена стоит сразу после главного действия — человек сперва
+              видит, куда писать, и тут же сколько это стоит. */}
+          {/*
+            ЦЕНА В ПЕРВОМ ЭКРАНЕ (01.10.2026).
+            Повод денежный: с Product Hunt и LaunchNest пришло 16 сессий на
+            /devhub и /en/devhub, до страницы цен не дошёл НИ ОДИН. Ссылки на
+            /pricing были, но ниже сгиба — человек их просто не видел.
+
+            Бесплатный вход и поле «опиши — сделаю» остаются главными по весу:
+            сюда поставлен только факт цены и прямой путь в кассу.
+
+            Числа НЕ вписаны руками: {b} это priceUsd из STANDALONE_APPS,
+            {a} — fromPricePerMonth от той же базы (цена за 12 месяцев). Оба
+            конца сверяются с бэкендом тестом termPricingMatchesBackend, иначе
+            страница обещала бы цену, которой касса не знает.
+          */}
+          {devhubProduct ? (
+            <div data-devhub-price="1" style={{ fontSize: 13.5, color: "#e2e8f0", marginTop: 10, lineHeight: 1.5 }}>
+              {t("hero.price")
+                .replace("{a}", `$${fromPricePerMonth(devhubProduct.priceUsd)}`)
+                .replace("{b}", `$${devhubProduct.priceUsd}`)}{" "}
+              <Link
+                href={devhubProduct.href}
+                style={{ color: "#5eead4", fontWeight: 700, whiteSpace: "nowrap" }}
+              >
+                {t("hero.priceCta")} →
+              </Link>
+            </div>
+          ) : null}
           {/* Подзаголовок стоит ПОД полем, а не над ним, и это замер, а не вкус.
               На 360x640 до поля ввода лежало 859px: 218 шапка сайта + 189
               навигация волны + 169 заголовок с подписью + 60 заголовок карточки
@@ -627,33 +661,6 @@ export default function DevHubPage() {
           <div style={{ fontSize: 13.5, color: "#99f6e4", marginTop: 12, lineHeight: 1.5 }}>
                 {t("hero.subtitle")}
           </div>
-          {/*
-            ЦЕНА В ПЕРВОМ ЭКРАНЕ (01.10.2026).
-            Повод денежный: с Product Hunt и LaunchNest пришло 16 сессий на
-            /devhub и /en/devhub, до страницы цен не дошёл НИ ОДИН. Ссылки на
-            /pricing были, но ниже сгиба — человек их просто не видел.
-
-            Бесплатный вход и поле «опиши — сделаю» остаются главными по весу:
-            сюда поставлен только факт цены и прямой путь в кассу.
-
-            Числа НЕ вписаны руками: {b} это priceUsd из STANDALONE_APPS,
-            {a} — fromPricePerMonth от той же базы (цена за 12 месяцев). Оба
-            конца сверяются с бэкендом тестом termPricingMatchesBackend, иначе
-            страница обещала бы цену, которой касса не знает.
-          */}
-          {devhubProduct ? (
-            <div style={{ fontSize: 13.5, color: "#e2e8f0", marginTop: 10, lineHeight: 1.5 }}>
-              {t("hero.price")
-                .replace("{a}", `$${fromPricePerMonth(devhubProduct.priceUsd)}`)
-                .replace("{b}", `$${devhubProduct.priceUsd}`)}{" "}
-              <Link
-                href={devhubProduct.href}
-                style={{ color: "#5eead4", fontWeight: 700, whiteSpace: "nowrap" }}
-              >
-                {t("hero.priceCta")} →
-              </Link>
-            </div>
-          ) : null}
           {/* An empty box is the hardest thing to answer. These are not
               decoration: each one exercises a different part of the pipeline
               (plain UI, a real database, media), so the first thing a person

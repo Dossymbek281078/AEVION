@@ -2073,10 +2073,18 @@ function foldHistory(history: ChatTurn[] | undefined): string {
  * (перевод, распознавание речи), цену теперь считаем; где прайса нет (звук, клон
  * голоса) — по-прежнему честная пометка, а не выдуманное число.
  */
-function учтиПоОбъёму(поверхность: string, объём: number, userId: string | null): void {
-  const цена = ценаПоЕдиницам(поверхность, объём);
+function учтиПоОбъёму(
+  поверхность: string,
+  объём: number,
+  userId: string | null,
+  фактическийПоставщик?: string | null,
+): void {
+  const цена = ценаПоЕдиницам(поверхность, объём, фактическийПоставщик);
   if (цена === null) {
-    учтиБезЦены(поверхность, userId);
+    // Сюда попадаем в двух случаях: тарифа нет вовсе ИЛИ работу выполнил не тот
+    // поставщик, по чьему прайсу тариф посчитан. Второй случай и есть находка
+    // 01.10: DeepL исчерпан, перевод ушёл на LLM, а цена считалась прежняя.
+    учтиБезЦены(поверхность, userId, фактическийПоставщик);
     return;
   }
   try {
@@ -2089,10 +2097,12 @@ function учтиПоОбъёму(поверхность: string, объём: nu
     });
   } catch { /* Учёт не должен ронять ответ, ради которого его зовут. */ }
 }
-function учтиБезЦены(поверхность: string, userId: string | null): void {
+function учтиБезЦены(поверхность: string, userId: string | null, кто?: string | null): void {
   try {
     insertSmartRun({
-      module: `devhub-${поверхность}-БЕЗ-ЦЕНЫ`,
+      // Имя поставщика в модуле — чтобы «цена неизвестна» было РЕШАЕМЫМ: видно,
+      // чей прайс искать. Без него строка говорит только «мы не знаем».
+      module: `devhub-${поверхность}-БЕЗ-ЦЕНЫ${кто ? `-${кто}` : ""}`,
       resolved: "single",
       costUsd: 0,
       savedUsd: 0,
@@ -6948,11 +6958,22 @@ function deeplEndpoint(apiKey: string): string {
   return apiKey.endsWith(":fx") ? "https://api-free.deepl.com/v2/translate" : "https://api.deepl.com/v2/translate";
 }
 
-// Порядок запасных переводчиков: дешёвый платный → бесплатные → остальные
-// настроенные. 17.09.2026 первый же прогон на проде показал, зачем нужен
-// СПИСОК, а не один кандидат: у OpenAI кончились кредиты (429
+// Порядок запасных переводчиков. 17.09.2026 первый же прогон на проде показал,
+// зачем нужен СПИСОК, а не один кандидат: у OpenAI кончились кредиты (429
 // credit_balance_exhausted), и запасной путь из одного звена умер вместе с ним.
-const LLM_TRANSLATE_ORDER = ["openai", "gemini", "openrouter", "anthropic"];
+//
+// 01.10.2026: ПЕРВЫМ стал Gemini, и это решение о деньгах, а не о качестве.
+// Замер на проде: квота DeepL исчерпалась (fallbackReason
+// "deepl_quota_exhausted"), и перевод ушёл на Anthropic — а расход через
+// Anthropic API основатель считает самой больной тратой: за месяц по нему ушло
+// больше $800. Gemini при этом у нас живой и несёт основную работу: генерация
+// кода и картинки идут через него (замер того же дня: картинка 200 за 6.7 с
+// после падения openai и workers-ai).
+//
+// Anthropic остаётся в списке ПОСЛЕДНИМ намеренно: убрать его совсем значило бы
+// оставить перевод без последнего звена, а молчаливый отказ хуже дорогого
+// ответа. Он включается, только когда не ответил никто.
+const LLM_TRANSLATE_ORDER = ["gemini", "openai", "openrouter", "anthropic"];
 function llmTranslateCandidates(): Array<{ id: string; model: string }> {
   const configured = getProviders().filter((p) => p.configured && p.id !== "stub");
   const rank = (id: string) => { const i = LLM_TRANSLATE_ORDER.indexOf(id); return i === -1 ? LLM_TRANSLATE_ORDER.length : i; };
@@ -7097,8 +7118,10 @@ devhubRouter.post("/media/translate", dhCostlyLimit("dhtranslate"), async (req, 
     const out = await translateText(text, targetLang, sourceLang, formality);
     if (!out.ok) return res.status(out.status).json(out.body);
     await debitQuietly(trUserId, "translate");
-    // Объём — знаки ИСХОДНОГО текста: именно их считает DeepL.
-    учтиПоОбъёму("translate", String(text ?? "").length, trUserId);
+    // Объём — знаки ИСХОДНОГО текста: именно их считает DeepL. И передаём, КТО
+    // на самом деле перевёл: при исчерпании квоты DeepL работу делает LLM, и
+    // тариф DeepL к ней не относится.
+    учтиПоОбъёму("translate", String(text ?? "").length, trUserId, out.provider);
     res.json({
       ok: true,
       ...creditNote(trCredit),

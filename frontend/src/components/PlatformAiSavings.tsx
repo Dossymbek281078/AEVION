@@ -7,7 +7,7 @@
 // desync server/client hydration; renders nothing until the first successful
 // read AND at least one routed run exists.
 import { useEffect, useState } from "react";
-import { fetchAiSavings, type AiSavings } from "@/lib/aiSavings";
+import { fetchAiSavings, счётчикГоденДляПоказа, type AiSavings } from "@/lib/aiSavings";
 
 
 export default function PlatformAiSavings() {
@@ -29,7 +29,19 @@ export default function PlatformAiSavings() {
     };
   }, []);
 
-  if (!data || data.runs <= 0) return null;
+  /*
+   * 🔴 Условия «есть хоть один вызов» не хватало. Замер прода 01.10.2026:
+   * вызовов 145, а экономия считалась у 3 — и значок сообщал покупателю
+   * «AI saved $0.23» в шапке КАЖДОЙ страницы, включая ту, где мы просим $400
+   * в месяц. Число было правдой и работало против нас; доля при этом считалась
+   * по двум разным совокупностям и расходилась с полями того же ответа в
+   * 41.7 раза.
+   *
+   * Теперь показываем только при достаточном ОХВАТЕ, и порог назван в
+   * lib/aiSavings.ts, а не спрятан здесь. Неизвестный охват (старый сервер без
+   * поля) — тоже молчание: «не знаю» не равно «можно».
+   */
+  if (!data || data.runs <= 0 || !счётчикГоденДляПоказа(data)) return null;
 
   const usd = data.savedUsd >= 0.005 ? `$${data.savedUsd.toFixed(2)}` : "<$0.01";
   const tip =

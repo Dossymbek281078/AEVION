@@ -944,7 +944,7 @@ export default function QSignPage() {
                 aria-label="Auth"
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
-                placeholder="Bearer token (auto-filled from /auth)"
+                placeholder="Токен доступа (подставится сам после входа)"
                 style={{ ...inputStyle, fontFamily: "monospace", fontSize: 12 }}
               />
             </div>
@@ -1052,7 +1052,7 @@ export default function QSignPage() {
                 </div>
               </div>
               <textarea
-                aria-label="Payload (JSON)"
+                aria-label="Данные для подписи (JSON)"
                 value={payloadText}
                 onChange={(e) => setPayloadText(e.target.value)}
                 rows={8}
@@ -1439,23 +1439,23 @@ export default function QSignPage() {
             >
               <div style={label}>HMAC kid</div>
               <input
-                aria-label="HMAC kid"
+                aria-label="Идентификатор ключа HMAC"
                 value={verifyHmacKid}
                 onChange={(e) => setVerifyHmacKid(e.target.value)}
-                placeholder="leave empty → active"
+                placeholder="пусто → действующий"
                 style={{ ...inputStyle, ...mono, fontSize: 11 }}
               />
               <div style={label}>HMAC sig</div>
               <input
-                aria-label="HMAC sig"
+                aria-label="Подпись HMAC"
                 value={verifyHmacSig}
                 onChange={(e) => setVerifyHmacSig(e.target.value)}
-                placeholder="64 hex chars"
+                placeholder="64 шестнадцатеричных знака"
                 style={{ ...inputStyle, ...mono, fontSize: 11 }}
               />
               <div style={label}>Ed25519 kid</div>
               <input
-                aria-label="Ed25519 kid"
+                aria-label="Идентификатор ключа Ed25519"
                 value={verifyEdKid}
                 onChange={(e) => setVerifyEdKid(e.target.value)}
                 placeholder="optional"
@@ -1463,10 +1463,10 @@ export default function QSignPage() {
               />
               <div style={label}>Ed25519 sig</div>
               <input
-                aria-label="Ed25519 sig"
+                aria-label="Подпись Ed25519"
                 value={verifyEdSig}
                 onChange={(e) => setVerifyEdSig(e.target.value)}
-                placeholder="optional · 128 hex"
+                placeholder="необязательно · 128 hex"
                 style={{ ...inputStyle, ...mono, fontSize: 11 }}
               />
             </div>
@@ -1772,7 +1772,7 @@ export default function QSignPage() {
 
             <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
               <input
-                aria-label="Webhook URL"
+                aria-label="Адрес вебхука"
                 value={webhookUrlInput}
                 onChange={(e) => setWebhookUrlInput(e.target.value)}
                 placeholder="https://your-app.example.com/qsign-webhook"
@@ -2063,7 +2063,7 @@ export default function QSignPage() {
           <WaitlistIfMissing
             lang="en"
             source="qsign-page"
-            title="Not signing today? Leave your email"
+            title="Сегодня не подписываете? Оставьте почту"
             description="We write when QSign gets new keys, formats and integrations."
             buttonLabel="Notify me"
             doneText="Done — your address is saved. A confirmation is already in your inbox."

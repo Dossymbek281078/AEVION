@@ -49,6 +49,27 @@ const ALL_ACCESS = productById("aevion-planet");
  */
 const BOOK = productById("ghvzq");
 
+/**
+ * 🔴 ТО ЕДИНСТВЕННОЕ, ЧТО У НАС КОГДА-ЛИБО ПОКУПАЛИ.
+ *
+ * Замер 01.10.2026 по воронке и кассе: за всё время платформа продала ТРИ раза
+ * один и тот же товар — `orcfbo`, «Gratitude ∞ Forever Young — книга», $9.99
+ * (две продажи дали $19.98 брутто). Пакет `ghvzq` за $29.99, который эта
+ * страница показывала, не купил никто ни разу.
+ *
+ * И вторая половина замера, из-за которой блок поднят в первый экран:
+ * `instagram|/go` — 17 сессий, 15 дошли до цен (88 %, лучший отрезок воронки),
+ * 0 нажали «Купить». Instagram приходит за долголетием, а платное предложение
+ * лежало на ШЕСТОМ экране, тогда как первым экраном шёл бесплатный протокол.
+ * То есть единственной аудитории, которая когда-либо платила, мы прятали
+ * единственное, что она покупала.
+ *
+ * Порядок на странице (решение основателя через оркестратора 01.10):
+ * заголовок → книга $9.99 → пакет $29.99 → бесплатный протокол. Бесплатное
+ * НЕ убрано: оно остаётся магнитом, просто больше не стоит впереди платного.
+ */
+const КНИГА = productById("orcfbo");
+
 interface AField { key: string; label: string; unit: string; placeholder: string; }
 const ASSESS_FIELDS: AField[] = [
   { key: "vitD", label: "Витамин D", unit: "нг/мл", placeholder: "35" },
@@ -187,6 +208,61 @@ export default function LongevityClient({ channel = null }: { channel?: string |
         <div style={styles.eyebrow}>AEVION · Longevity</div>
         <h1 style={styles.h1}>Протокол долголетия: измерь → воздействуй → перемерь</h1>
         <HealthDisclaimer />
+
+        {/*
+          Платное предложение в ПЕРВЫЙ экран — см. комментарий у КНИГА.
+          Якорь `kniga` стоит на товаре за $9.99 намеренно: реклама ведёт на
+          /longevity?c=ig-ad-bookN#kniga, а на странице четыре разные цены
+          (книга $9.99, пакет $29.99, протокол PDF $19, подписка от $200), и
+          платный клик обязан попасть ровно на то, за что заплатили клик.
+          Тексты взяты из каталога @/lib/products — здесь не пишется ни одного
+          нового обещания, и цена тоже оттуда, иначе проза устареет молча.
+        */}
+        {КНИГА && (
+          <div id="kniga" style={styles.offerAnchor}>
+            <BuyLink
+              href={withChannel(КНИГА.href, channel, "longevity-book-top")}
+              source="longevity-book-top"
+              productId={КНИГА.id}
+              priceUsd={КНИГА.priceUsd}
+              channel={channel}
+              style={styles.buyCard}
+            >
+              <div style={styles.buyLeft}>
+                <div style={styles.buyKicker}>{КНИГА.format}</div>
+                <div style={styles.buyTitle}>Книга, из которой вырос этот протокол</div>
+                <p style={styles.buyDesc}>{КНИГА.desc}</p>
+              </div>
+              <div style={styles.buyRight}>
+                <div style={styles.buyPrice}>${КНИГА.priceUsd}</div>
+                <div style={styles.buyBtn}>Книга&nbsp;→</div>
+              </div>
+            </BuyLink>
+          </div>
+        )}
+
+        {/* Второй вариант, дороже и полнее. Стоит ПОД книгой, а не вместо. */}
+        {BOOK && (
+          <BuyLink
+            href={withChannel(BOOK.href, channel, "longevity-bundle-top")}
+            source="longevity-bundle-top"
+            productId={BOOK.id}
+            priceUsd={BOOK.priceUsd}
+            channel={channel}
+            style={styles.buyCard}
+          >
+            <div style={styles.buyLeft}>
+              <div style={styles.buyKicker}>{BOOK.format}</div>
+              <div style={styles.buyTitle}>Книга + протокол + аудио</div>
+              <p style={styles.buyDesc}>{BOOK.desc}</p>
+            </div>
+            <div style={styles.buyRight}>
+              <div style={styles.buyPrice}>${BOOK.priceUsd}</div>
+              <div style={styles.buyBtn}>Пакет&nbsp;→</div>
+            </div>
+          </BuyLink>
+        )}
+
         <p style={styles.lede}>
           Один 12-недельный цикл. Стандартная панель показывает, чего не хватает и как стареет организм;
           движок собирает персональный стек по четырём рычагам, честно отсортированный по доказательности;
@@ -535,6 +611,13 @@ const styles: Record<string, React.CSSProperties> = {
   panelShows: { fontSize: 15, color: "#8b9bb0", marginTop: 2 },
   foot: { marginTop: 26, color: "#8b9bb0", fontSize: 15 },
   link: { color: "#35c9b3" },
+  /*
+   * Обёртка якоря `#kniga`. `scrollMarginTop` обязателен: шапка сайта липкая,
+   * и без отступа переход по якорю ставит карточку ПОД шапку — то есть платный
+   * клик приезжает на то, чего не видно. 96 px — высота шапки плюс запас на
+   * строку счётчиков; проверено замером после правки, а не на глаз.
+   */
+  offerAnchor: { scrollMarginTop: 96 },
   buyCard: {
     display: "flex",
     flexWrap: "wrap",

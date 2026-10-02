@@ -123,7 +123,7 @@ export default function BureauPage() {
   //
   // Их работа по скорости живёт в других местах файла и пришла БЕЗ конфликта.
   return (
-    <Suspense fallback={<div style={{ minHeight: "60vh", padding: 24, color: "#64748b", fontSize: 14 }}>Загрузка…</div>}>
+    <Suspense fallback={<div style={{ minHeight: "60vh", padding: 24, color: "#64748b", fontSize: 16 }}>Загрузка…</div>}>
       {/* Stripe возвращает сюда с ?paid=1 — без этой отметки оплата не
           связывается с каналом, из которого пришёл человек. */}
       <PurchaseReturnTracker source="bureau" provider="stripe" successParam="paid" />
@@ -508,20 +508,20 @@ function BureauPageInner() {
               <div style={{ width: 52, height: 52, borderRadius: 14, background: "linear-gradient(135deg, #0d9488, #06b6d4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26 }}>⚖️</div>
               <div>
                 <h1 style={{ fontSize: 26, fontWeight: 900, margin: 0, letterSpacing: "-0.02em" }}>AEVION Digital IP Bureau</h1>
-                <p style={{ margin: 0, fontSize: 13, opacity: 0.75 }}>Cryptographic Proof of Authorship & Prior Art</p>
+                <p style={{ margin: 0, fontSize: 15.5, opacity: 0.75 }}>Cryptographic Proof of Authorship & Prior Art</p>
               </div>
             </div>
-            <p style={{ margin: "0 0 16px", fontSize: 14, opacity: 0.8, lineHeight: 1.6, maxWidth: 640 }}>
+            <p style={{ margin: "0 0 16px", fontSize: 16, opacity: 0.8, lineHeight: 1.6, maxWidth: 640 }}>
               A cryptographic proof-of-authorship bureau. Register, sign, and certify your intellectual property with standards-based cryptography (SHA-256, Ed25519, Bitcoin-anchored timestamps) — backed by international copyright law.
             </p>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Link href="/qright" style={{ padding: "10px 20px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 14, display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <Link href="/qright" style={{ padding: "10px 20px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 16, display: "inline-flex", alignItems: "center", gap: 6 }}>
                 🛡️ Protect Your Work
               </Link>
-              <Link href="#registry" style={{ padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 13 }}>
+              <Link href="#registry" style={{ padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 15.5 }}>
                 🔎 Search prior art
               </Link>
-              <Link href="/quantum-shield" style={{ padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 13 }}>
+              <Link href="/quantum-shield" style={{ padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 15.5 }}>
                 Quantum Shield Dashboard
               </Link>
             </div>
@@ -531,11 +531,11 @@ function BureauPageInner() {
         {/* ── My Identity (authed users only) ── */}
         {authed && (dashboardFailed || myIdentity || inFlightUpgrade || (dashboard && dashboard.certificates.length > 0)) && (
           <div style={{ marginBottom: 22, borderRadius: 16, border: "1px solid rgba(99,102,241,0.25)", background: "linear-gradient(135deg, rgba(99,102,241,0.04), rgba(79,70,229,0.04))", padding: "18px 22px" }}>
-            <div style={{ fontSize: 13, fontWeight: 900, color: "#312e81", marginBottom: 8 }}>
+            <div style={{ fontSize: 15.5, fontWeight: 900, color: "#312e81", marginBottom: 8 }}>
               My Bureau identity
             </div>
             {dashboardFailed ? (
-              <div style={{ fontSize: 12, color: "#7f1d1d", lineHeight: 1.6 }}>
+              <div style={{ fontSize: 15, color: "#7f1d1d", lineHeight: 1.6 }}>
                 <b>Не удалось загрузить ваши сертификаты.</b> Это сбой загрузки, а не
                 утверждение о том, что их нет: ничего не потеряно.
                 {dashboardFailed === "auth"
@@ -548,7 +548,7 @@ function BureauPageInner() {
                   <div style={{ fontSize: 22, fontWeight: 900, color: "#0f172a" }}>
                     ⭐ {myIdentity.verifiedName || "Verified"}
                   </div>
-                  <div style={{ fontSize: 12, color: "#475569", marginTop: 4 }}>
+                  <div style={{ fontSize: 15, color: "#475569", marginTop: 4 }}>
                     Identity verified by AEVION Bureau
                     {myIdentity.verifiedAt && (
                       <> · {new Date(myIdentity.verifiedAt).toLocaleDateString()}</>
@@ -559,23 +559,23 @@ function BureauPageInner() {
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <Link href="/qright" style={{ padding: "10px 16px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 13 }}>
+                  <Link href="/qright" style={{ padding: "10px 16px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 15.5 }}>
                     Protect another work
                   </Link>
                 </div>
               </div>
             ) : inFlightUpgrade ? (
               <div>
-                <div style={{ fontSize: 12, color: "#312e81", lineHeight: 1.6 }}>
+                <div style={{ fontSize: 15, color: "#312e81", lineHeight: 1.6 }}>
                   You have an upgrade in progress — KYC <b>{inFlightUpgrade.kycStatus}</b>, payment <b>{inFlightUpgrade.paymentStatus}</b>. Continue from where you left off:
                 </div>
-                <div style={{ marginTop: 8, fontSize: 11, color: "#64748b" }}>
+                <div style={{ marginTop: 8, fontSize: 15, color: "#64748b" }}>
                   Pick the certificate you started upgrading from the registry below — the <em>Upgrade to Verified</em> button there resumes the same flow.
                 </div>
               </div>
             ) : (
               <div>
-                <div style={{ fontSize: 12, color: "#312e81", lineHeight: 1.6, marginBottom: 8 }}>
+                <div style={{ fontSize: 15, color: "#312e81", lineHeight: 1.6, marginBottom: 8 }}>
                   Anonymous certificates are fully cryptographically protected. Upgrade any one of yours to <b>Verified</b> ({ценаСПериодом(dashboard?.pricing?.verifiedTierCents)}) and the bureau will record your declared name alongside the certificate, with the identity check its provider performs.
                 </div>
               </div>
@@ -587,11 +587,11 @@ function BureauPageInner() {
         {authed && dashboard?.trustEdges && dashboard.trustEdges.length > 0 && (
           <div style={{ marginBottom: 22, borderRadius: 16, border: "1px solid rgba(217,119,6,0.25)", background: "linear-gradient(135deg, rgba(245,158,11,0.04), rgba(217,119,6,0.06))", padding: "18px 22px" }}>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 12 }}>
-              <div style={{ fontSize: 13, fontWeight: 900, color: "#92400e" }}>
+              <div style={{ fontSize: 15.5, fontWeight: 900, color: "#92400e" }}>
                 🔗 Trust Graph — your earned tiers
               </div>
               {dashboard.aecSummary && (
-                <div style={{ fontSize: 12, color: "#78350f" }}>
+                <div style={{ fontSize: 15, color: "#78350f" }}>
                   Total earned <b>{dashboard.aecSummary.totalPlanned}</b> AEC ·
                   claimed <b>{dashboard.aecSummary.totalClaimed}</b> ·
                   unclaimed <b style={{ color: dashboard.aecSummary.unclaimed > 0 ? "#b45309" : "#78350f" }}>{dashboard.aecSummary.unclaimed}</b>
@@ -606,25 +606,25 @@ function BureauPageInner() {
                 return (
                   <div key={e.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.7)", border: "1px solid rgba(217,119,6,0.15)" }}>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-                      <span style={{ fontSize: 13, fontWeight: 800, color: "#92400e", textTransform: "capitalize" }}>{e.tier}</span>
-                      <span style={{ fontSize: 11, color: "#78716c", fontFamily: "ui-monospace, monospace" }}>cert {e.certId.slice(0, 8)}…</span>
-                      <span style={{ fontSize: 11, color: "#a8a29e" }}>{new Date(e.createdAt).toLocaleDateString()}</span>
+                      <span style={{ fontSize: 15.5, fontWeight: 800, color: "#92400e", textTransform: "capitalize" }}>{e.tier}</span>
+                      <span style={{ fontSize: 15, color: "#78716c", fontFamily: "ui-monospace, monospace" }}>cert {e.certId.slice(0, 8)}…</span>
+                      <span style={{ fontSize: 15, color: "#a8a29e" }}>{new Date(e.createdAt).toLocaleDateString()}</span>
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span style={{ fontSize: 13, fontWeight: 900, color: "#0f172a" }}>{e.aecRewardPlanned ?? 0} AEC</span>
+                      <span style={{ fontSize: 15.5, fontWeight: 900, color: "#0f172a" }}>{e.aecRewardPlanned ?? 0} AEC</span>
                       {claimed ? (
-                        <span style={{ fontSize: 11, fontWeight: 700, color: "#16a34a" }}>✓ claimed</span>
+                        <span style={{ fontSize: 15, fontWeight: 700, color: "#16a34a" }}>✓ claimed</span>
                       ) : claimable ? (
                         <button
                           type="button"
                           disabled={isClaiming}
                           onClick={() => claimAec(e.id)}
-                          style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: isClaiming ? "#a8a29e" : "linear-gradient(135deg, #d97706, #ea580c)", color: "#fff", fontWeight: 800, fontSize: 12, cursor: isClaiming ? "default" : "pointer" }}
+                          style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: isClaiming ? "#a8a29e" : "linear-gradient(135deg, #d97706, #ea580c)", color: "#fff", fontWeight: 800, fontSize: 15, cursor: isClaiming ? "default" : "pointer" }}
                         >
                           {isClaiming ? BU.claiming : "Claim AEC"}
                         </button>
                       ) : (
-                        <span style={{ fontSize: 11, color: "#a8a29e" }}>no reward</span>
+                        <span style={{ fontSize: 15, color: "#a8a29e" }}>no reward</span>
                       )}
                     </div>
                   </div>
@@ -644,7 +644,7 @@ function BureauPageInner() {
           ].map((s) => (
             <div key={s.label} style={{ padding: "16px 14px", borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "#fff", textAlign: "center" }}>
               <div style={{ fontSize: 24, fontWeight: 900, color: s.color }}>{s.value}</div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: "#64748b", marginTop: 4 }}>{s.label}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#64748b", marginTop: 4 }}>{s.label}</div>
             </div>
           ))}
         </div>
@@ -661,11 +661,11 @@ function BureauPageInner() {
             ].map((s) => (
               <div key={s.n} style={{ padding: "16px 14px", borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: "50%", background: s.color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 900 }}>{s.n}</div>
+                  <div style={{ width: 28, height: 28, borderRadius: "50%", background: s.color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 900 }}>{s.n}</div>
                   <span style={{ fontSize: 16 }}>{s.icon}</span>
                 </div>
-                <div style={{ fontWeight: 800, fontSize: 13, color: "#0f172a", marginBottom: 4 }}>{s.title}</div>
-                <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.5 }}>{s.desc}</div>
+                <div style={{ fontWeight: 800, fontSize: 15.5, color: "#0f172a", marginBottom: 4 }}>{s.title}</div>
+                <div style={{ fontSize: 15, color: "#64748b", lineHeight: 1.5 }}>{s.desc}</div>
               </div>
             ))}
           </div>
@@ -674,7 +674,7 @@ function BureauPageInner() {
         {/* ── Service Tiers ── */}
         <div style={{ marginBottom: 28 }}>
           <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", marginBottom: 6 }}>Service Tiers</div>
-          <div style={{ fontSize: 13, color: "#64748b", marginBottom: 14, lineHeight: 1.6 }}>
+          <div style={{ fontSize: 15.5, color: "#64748b", marginBottom: 14, lineHeight: 1.6 }}>
             Anonymous certificates are free and cryptographically complete. Higher tiers add identity attestation and (soon) notary co-signing — useful when an IP claim needs strong author identification in court.
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
@@ -787,18 +787,18 @@ function BureauPageInner() {
             ].map((tier) => (
               <div key={tier.name} style={{ padding: "16px 16px 14px", borderRadius: 14, border: tier.name === "Notarized" ? "1px solid rgba(99,102,241,0.2)" : "1px solid rgba(15,23,42,0.1)", background: "#fff", display: "flex", flexDirection: "column" as const, gap: 8 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 14, fontWeight: 900, color: "#0f172a" }}>{tier.name}</span>
-                  <span style={{ fontSize: 10, fontWeight: 800, color: tier.badgeColor }}>{tier.badge}</span>
+                  <span style={{ fontSize: 16, fontWeight: 900, color: "#0f172a" }}>{tier.name}</span>
+                  <span style={{ fontSize: 13, fontWeight: 800, color: tier.badgeColor }}>{tier.badge}</span>
                 </div>
                 <div style={{ fontSize: 22, fontWeight: 900, color: "#0f172a" }}>{tier.price}</div>
-                <div style={{ fontSize: 11, color: "#475569", lineHeight: 1.55, flex: 1 }}>{tier.blurb}</div>
+                <div style={{ fontSize: 15, color: "#475569", lineHeight: 1.55, flex: 1 }}>{tier.blurb}</div>
                 {tier.cta && (
-                  <Link href={tier.cta.href} style={{ marginTop: 6, padding: "8px 14px", borderRadius: 8, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 12, textAlign: "center" as const }}>
+                  <Link href={tier.cta.href} style={{ marginTop: 6, padding: "8px 14px", borderRadius: 8, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 15, textAlign: "center" as const }}>
                     {tier.cta.label}
                   </Link>
                 )}
                 {tier.name === "Notarized" && (
-                  <div style={{ marginTop: 4, padding: "8px 12px", borderRadius: 8, background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.2)", fontSize: 11, color: "#7c3aed", fontWeight: 700, textAlign: "center" as const }}>
+                  <div style={{ marginTop: 4, padding: "8px 12px", borderRadius: 8, background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.2)", fontSize: 15, color: "#7c3aed", fontWeight: 700, textAlign: "center" as const }}>
                     Upgrade your Verified cert — select a notary and submit a request.
                   </div>
                 )}
@@ -812,13 +812,13 @@ function BureauPageInner() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, gap: 12, flexWrap: "wrap" as const }}>
             <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a" }}>
               Certificate Registry{" "}
-              <span style={{ color: "#94a3b8", fontWeight: 700, fontSize: 14 }}>
+              <span style={{ color: "#94a3b8", fontWeight: 700, fontSize: 16 }}>
                 ({filtersActive ? `${filteredCerts.length} of ${certificates.length}` : certificates.length})
               </span>
             </div>
-            <Link href="/qright" style={{ padding: "8px 16px", borderRadius: 8, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 12 }}>+ New Certificate</Link>
+            <Link href="/qright" style={{ padding: "8px 16px", borderRadius: 8, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 15 }}>+ New Certificate</Link>
           </div>
-          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 15, color: "#64748b", marginBottom: 12, lineHeight: 1.5 }}>
             Public prior-art lookup — search by title, author, or paste a SHA-256 hash. Or <strong>drop a file below</strong> to check it instantly.
           </div>
 
@@ -843,14 +843,14 @@ function BureauPageInner() {
           >
             <span style={{ fontSize: 20 }}>{fileChecking ? "⏳" : "📂"}</span>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "#334155" }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#334155" }}>
                 {fileChecking ? BU.hashing : "Drop a file here to check prior art"}
               </div>
-              <div style={{ fontSize: 11, color: "#94a3b8" }}>
+              <div style={{ fontSize: 15, color: "#94a3b8" }}>
                 {fileChecking ? BU.searching : "Any format — computes SHA-256 in your browser, then searches the registry instantly"}
               </div>
             </div>
-            <label style={{ padding: "6px 12px", borderRadius: 7, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 11, fontWeight: 700, color: "#475569", cursor: "pointer", flexShrink: 0 }}>
+            <label style={{ padding: "6px 12px", borderRadius: 7, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 15, fontWeight: 700, color: "#475569", cursor: "pointer", flexShrink: 0 }}>
               Browse
               <input type="file" className="aevion-file-input" onChange={(e) => { const f = e.target.files?.[0]; if (f) hashAndSearch(f); }} />
             </label>
@@ -867,7 +867,7 @@ function BureauPageInner() {
                 border: "1px solid rgba(185,28,28,0.25)",
                 background: "rgba(185,28,28,0.05)",
                 color: "#b91c1c",
-                fontSize: 13,
+                fontSize: 15.5,
                 lineHeight: 1.5,
               }}
             >
@@ -890,7 +890,7 @@ function BureauPageInner() {
                       padding: "8px 30px 8px 32px",
                       borderRadius: 8,
                       border: "1px solid rgba(15,23,42,0.15)",
-                      fontSize: 13,
+                      fontSize: 15.5,
                       fontFamily: hashLooksLikeSha256 ? "monospace" : undefined,
                       color: "#0f172a",
                       background: "#f8fafc",
@@ -898,7 +898,7 @@ function BureauPageInner() {
                       boxSizing: "border-box" as const,
                     }}
                   />
-                  <span style={{ position: "absolute" as const, left: 10, top: "50%", transform: "translateY(-50%)", color: "#94a3b8", fontSize: 14, pointerEvents: "none" as const }}>🔎</span>
+                  <span style={{ position: "absolute" as const, left: 10, top: "50%", transform: "translateY(-50%)", color: "#94a3b8", fontSize: 16, pointerEvents: "none" as const }}>🔎</span>
                   {query && (
                     <button
                       type="button"
@@ -914,13 +914,13 @@ function BureauPageInner() {
                   value={sort}
                   onChange={(e) => setSort(e.target.value as SortMode)}
                   aria-label="Sort registry"
-                  style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", fontSize: 12, fontWeight: 700, color: "#334155", background: "#fff", cursor: "pointer" }}
+                  style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", fontSize: 15, fontWeight: 700, color: "#334155", background: "#fff", cursor: "pointer" }}
                 >
                   <option value="newest">Newest first</option>
                   <option value="oldest">Oldest first</option>
                   <option value="verified">Most verified</option>
                 </select>
-                <label style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8, border: `1px solid ${verifiedOnly ? "rgba(16,185,129,0.45)" : "rgba(15,23,42,0.15)"}`, background: verifiedOnly ? "rgba(16,185,129,0.08)" : "#fff", fontSize: 12, fontWeight: 700, color: verifiedOnly ? "#065f46" : "#334155", cursor: "pointer", userSelect: "none" as const }}>
+                <label style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8, border: `1px solid ${verifiedOnly ? "rgba(16,185,129,0.45)" : "rgba(15,23,42,0.15)"}`, background: verifiedOnly ? "rgba(16,185,129,0.08)" : "#fff", fontSize: 15, fontWeight: 700, color: verifiedOnly ? "#065f46" : "#334155", cursor: "pointer", userSelect: "none" as const }}>
                   <input
                     type="checkbox"
                     checked={verifiedOnly}
@@ -933,7 +933,7 @@ function BureauPageInner() {
                   <button
                     type="button"
                     onClick={() => { setQuery(""); setKindFilter("all"); setSort("newest"); setVerifiedOnly(false); }}
-                    style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontSize: 11, fontWeight: 700, color: "#475569", cursor: "pointer" }}
+                    style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontSize: 15, fontWeight: 700, color: "#475569", cursor: "pointer" }}
                   >
                     Reset
                   </button>
@@ -957,7 +957,7 @@ function BureauPageInner() {
                         background: active ? "rgba(13,148,136,0.12)" : "#fff",
                         color: active ? "#0d9488" : "#475569",
                         fontWeight: 700,
-                        fontSize: 11,
+                        fontSize: 15,
                         cursor: "pointer",
                         display: "inline-flex",
                         alignItems: "center",
@@ -965,7 +965,7 @@ function BureauPageInner() {
                       }}
                     >
                       {k === "all" ? "All" : <>{KIND_ICONS[k]} {KIND_LABELS[k]?.split(" / ")[0] || k}</>}
-                      <span style={{ fontSize: 10, opacity: 0.7 }}>({count})</span>
+                      <span style={{ fontSize: 13, opacity: 0.7 }}>({count})</span>
                     </button>
                   );
                 })}
@@ -978,35 +978,35 @@ function BureauPageInner() {
           ) : certsFailed ? (
             <div style={{ textAlign: "center", padding: "48px 20px", borderRadius: 16, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
               <div style={{ fontWeight: 800, fontSize: 16, color: "#0f172a", marginBottom: 6 }}>Не удалось загрузить сертификаты</div>
-              <div style={{ fontSize: 13, color: "#64748b" }}>Это не значит, что их нет: сервис не ответил. Обновите страницу.</div>
+              <div style={{ fontSize: 15.5, color: "#64748b" }}>Это не значит, что их нет: сервис не ответил. Обновите страницу.</div>
             </div>
           ) : certificates.length === 0 ? (
             <div style={{ textAlign: "center", padding: "48px 20px", borderRadius: 16, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
               <div style={{ fontSize: 48, marginBottom: 12 }}>📜</div>
               <div style={{ fontWeight: 800, fontSize: 16, color: "#0f172a", marginBottom: 6 }}>No certificates yet</div>
-              <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16 }}>Protect your first work to see it here</div>
-              <Link href="/qright" style={{ display: "inline-block", padding: "12px 24px", borderRadius: 12, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 14 }}>🛡️ Protect Your Work</Link>
+              <div style={{ fontSize: 15.5, color: "#64748b", marginBottom: 16 }}>Protect your first work to see it here</div>
+              <Link href="/qright" style={{ display: "inline-block", padding: "12px 24px", borderRadius: 12, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 16 }}>🛡️ Protect Your Work</Link>
             </div>
           ) : filteredCerts.length === 0 ? (
             <div style={{ textAlign: "center", padding: "32px 20px", borderRadius: 16, border: "1px dashed rgba(15,23,42,0.12)", background: "#fff" }}>
               <div style={{ fontSize: 32, marginBottom: 8 }}>🔎</div>
-              <div style={{ fontWeight: 800, fontSize: 14, color: "#0f172a", marginBottom: 4 }}>
+              <div style={{ fontWeight: 800, fontSize: 16, color: "#0f172a", marginBottom: 4 }}>
                 {hashLooksLikeSha256 ? "No prior art for this hash" : "Nothing matches your filters"}
               </div>
-              <div style={{ fontSize: 12, color: "#64748b", marginBottom: 14, lineHeight: 1.55 }}>
+              <div style={{ fontSize: 15, color: "#64748b", marginBottom: 14, lineHeight: 1.55 }}>
                 {hashLooksLikeSha256
                   ? "Your content is unique in the AEVION registry — safe to register as new IP."
                   : "Try a different search term or reset filters."}
               </div>
               {hashLooksLikeSha256 ? (
-                <Link href="/qright" style={{ display: "inline-block", padding: "10px 20px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 13 }}>
+                <Link href="/qright" style={{ display: "inline-block", padding: "10px 20px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 15.5 }}>
                   🛡️ Register this work
                 </Link>
               ) : (
                 <button
                   type="button"
                   onClick={() => { setQuery(""); setKindFilter("all"); setSort("newest"); setVerifiedOnly(false); }}
-                  style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontSize: 12, fontWeight: 700, color: "#334155", cursor: "pointer" }}
+                  style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontSize: 15, fontWeight: 700, color: "#334155", cursor: "pointer" }}
                 >
                   Reset filters
                 </button>
@@ -1020,19 +1020,19 @@ function BureauPageInner() {
                     <div>
                       <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 4 }}>
                         <span style={{ fontSize: 16 }}>{KIND_ICONS[cert.kind] || "📦"}</span>
-                        <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: 10, fontWeight: 800, background: "rgba(13,148,136,0.1)", color: "#0d9488", textTransform: "uppercase" as const }}>{KIND_LABELS[cert.kind] || cert.kind}</span>
-                        <span style={{ fontSize: 11, color: "#94a3b8" }}>{new Date(cert.protectedAt).toLocaleDateString()}</span>
+                        <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: 13, fontWeight: 800, background: "rgba(13,148,136,0.1)", color: "#0d9488", textTransform: "uppercase" as const }}>{KIND_LABELS[cert.kind] || cert.kind}</span>
+                        <span style={{ fontSize: 15, color: "#94a3b8" }}>{new Date(cert.protectedAt).toLocaleDateString()}</span>
                       </div>
                       <div style={{ fontWeight: 800, fontSize: 17, color: "#0f172a" }}>{cert.title}</div>
-                      <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>by {cert.author}{cert.location ? ` · ${cert.location}` : ""}</div>
+                      <div style={{ fontSize: 15, color: "#64748b", marginTop: 2 }}>by {cert.author}{cert.location ? ` · ${cert.location}` : ""}</div>
                     </div>
                     <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "flex-end", gap: 4 }}>
                       {cert.verificationLevel === "verified" ? (
-                        <span style={{ padding: "3px 10px", borderRadius: 8, fontSize: 10, fontWeight: 800, background: "linear-gradient(135deg, rgba(16,185,129,0.15), rgba(13,148,136,0.15))", color: "#065f46", whiteSpace: "nowrap" as const, border: "1px solid rgba(16,185,129,0.3)" }}>
+                        <span style={{ padding: "3px 10px", borderRadius: 8, fontSize: 13, fontWeight: 800, background: "linear-gradient(135deg, rgba(16,185,129,0.15), rgba(13,148,136,0.15))", color: "#065f46", whiteSpace: "nowrap" as const, border: "1px solid rgba(16,185,129,0.3)" }}>
                           ✓ VERIFIED AUTHOR
                         </span>
                       ) : (
-                        <span style={{ padding: "3px 10px", borderRadius: 8, fontSize: 10, fontWeight: 800, background: "rgba(16,185,129,0.1)", color: "#059669", whiteSpace: "nowrap" as const }}>✓ CERTIFIED</span>
+                        <span style={{ padding: "3px 10px", borderRadius: 8, fontSize: 13, fontWeight: 800, background: "rgba(16,185,129,0.1)", color: "#059669", whiteSpace: "nowrap" as const }}>✓ CERTIFIED</span>
                       )}
                       {(() => {
                         // Состояние якоря в биткойне — главный козырь продукта,
@@ -1043,13 +1043,13 @@ function BureauPageInner() {
                         return (
                           <span
                             title={b.title}
-                            style={{ padding: "3px 8px", borderRadius: 8, fontSize: 10, fontWeight: 800, background: c.bg, color: c.fg, whiteSpace: "nowrap" as const }}
+                            style={{ padding: "3px 8px", borderRadius: 8, fontSize: 13, fontWeight: 800, background: c.bg, color: c.fg, whiteSpace: "nowrap" as const }}
                           >
                             {b.label}
                           </span>
                         );
                       })()}
-                      {cert.verifiedCount > 0 && <span style={{ fontSize: 10, color: "#94a3b8" }}>Verified {cert.verifiedCount}x</span>}
+                      {cert.verifiedCount > 0 && <span style={{ fontSize: 13, color: "#94a3b8" }}>Verified {cert.verifiedCount}x</span>}
                     </div>
                   </div>
 
@@ -1057,46 +1057,46 @@ function BureauPageInner() {
                     <div style={{ padding: "8px 10px", borderRadius: 8, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 9, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" as const }}>SHA-256 Content Hash</div>
-                        <div style={{ fontSize: 11, fontFamily: "monospace", color: "#334155", wordBreak: "break-all" as const }}>{cert.contentHash}</div>
+                        <div style={{ fontSize: 15, fontFamily: "monospace", color: "#334155", wordBreak: "break-all" as const }}>{cert.contentHash}</div>
                       </div>
-                      <button onClick={() => copy(cert.contentHash, "Hash")} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", color: "#475569", flexShrink: 0 }}>Copy</button>
+                      <button onClick={() => copy(cert.contentHash, "Hash")} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", color: "#475569", flexShrink: 0 }}>Copy</button>
                     </div>
                     {cert.fileHash && (
                       <div style={{ padding: "8px 10px", borderRadius: 8, background: "rgba(13,148,136,0.03)", border: "1px solid rgba(13,148,136,0.15)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                         <div style={{ minWidth: 0 }}>
                           <div style={{ fontSize: 9, fontWeight: 700, color: "#0d9488", textTransform: "uppercase" as const }}>📎 File Hash (SHA-256)</div>
-                          <div style={{ fontSize: 11, fontFamily: "monospace", color: "#0d9488", wordBreak: "break-all" as const }}>{cert.fileHash}</div>
+                          <div style={{ fontSize: 15, fontFamily: "monospace", color: "#0d9488", wordBreak: "break-all" as const }}>{cert.fileHash}</div>
                         </div>
-                        <button onClick={() => copy(cert.fileHash!, "File Hash")} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(13,148,136,0.2)", background: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", color: "#0d9488", flexShrink: 0 }}>Copy</button>
+                        <button onClick={() => copy(cert.fileHash!, "File Hash")} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(13,148,136,0.2)", background: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", color: "#0d9488", flexShrink: 0 }}>Copy</button>
                       </div>
                     )}
                   </div>
 
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    <Link href={`/verify/${cert.id}`} style={{ padding: "7px 14px", borderRadius: 8, background: "#0d9488", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}>✓ Verify</Link>
+                    <Link href={`/verify/${cert.id}`} style={{ padding: "7px 14px", borderRadius: 8, background: "#0d9488", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 15, display: "inline-flex", alignItems: "center", gap: 4 }}>✓ Verify</Link>
                     <a
                       href={apiUrl(`/api/pipeline/certificate/${cert.id}/pdf`)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      style={{ padding: "7px 14px", borderRadius: 8, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}
+                      style={{ padding: "7px 14px", borderRadius: 8, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 15, display: "inline-flex", alignItems: "center", gap: 4 }}
                     >
                       📄 PDF
                     </a>
                     {cert.verificationLevel !== "verified" && (
                       <Link
                         href={`/bureau/upgrade/${cert.id}`}
-                        style={{ padding: "7px 14px", borderRadius: 8, background: "linear-gradient(135deg, #6366f1, #4f46e5)", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}
+                        style={{ padding: "7px 14px", borderRadius: 8, background: "linear-gradient(135deg, #6366f1, #4f46e5)", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 15, display: "inline-flex", alignItems: "center", gap: 4 }}
                       >
                         ⭐ Upgrade to Verified
                       </Link>
                     )}
-                    <button onClick={() => copy(cert.verifyUrl, "Verify URL")} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", color: "#475569" }}>Copy Link</button>
-                    <button onClick={() => copy(cert.id, "Certificate ID")} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontWeight: 700, fontSize: 12, cursor: "pointer", color: "#475569" }}>Copy ID</button>
+                    <button onClick={() => copy(cert.verifyUrl, "Verify URL")} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontWeight: 700, fontSize: 15, cursor: "pointer", color: "#475569" }}>Copy Link</button>
+                    <button onClick={() => copy(cert.id, "Certificate ID")} style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontWeight: 700, fontSize: 15, cursor: "pointer", color: "#475569" }}>Copy ID</button>
                     {cert.shieldId && (
                       <Link
                         href={`/quantum-shield/${cert.shieldId}`}
                         title={`Quantum Shield ${cert.shieldId}`}
-                        style={{ padding: "7px 14px", borderRadius: 8, background: "rgba(13,148,136,0.1)", color: "#0d9488", textDecoration: "none", fontWeight: 800, fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4, border: "1px solid rgba(13,148,136,0.25)" }}
+                        style={{ padding: "7px 14px", borderRadius: 8, background: "rgba(13,148,136,0.1)", color: "#0d9488", textDecoration: "none", fontWeight: 800, fontSize: 15, display: "inline-flex", alignItems: "center", gap: 4, border: "1px solid rgba(13,148,136,0.25)" }}
                       >
                         🛡️ Shield
                       </Link>
@@ -1111,7 +1111,7 @@ function BureauPageInner() {
         {/* ── Legal Framework ── */}
         <div style={{ marginBottom: 28 }}>
           <div style={{ fontSize: 18, fontWeight: 900, color: "#0f172a", marginBottom: 6 }}>Legal Framework</div>
-          <div style={{ fontSize: 13, color: "#64748b", marginBottom: 14, lineHeight: 1.6 }}>
+          <div style={{ fontSize: 15.5, color: "#64748b", marginBottom: 14, lineHeight: 1.6 }}>
             AEVION IP Bureau builds on established international copyright and digital signature law. Our certificates are cryptographic proof that a work existed at a recorded time — how much weight that carries depends on the forum and on the frameworks listed below.
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
@@ -1119,10 +1119,10 @@ function BureauPageInner() {
               <div key={l.name} style={{ padding: "14px 16px", borderRadius: 12, border: "1px solid rgba(15,23,42,0.08)", background: "#fff" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
                   <div style={{ width: 8, height: 8, borderRadius: "50%", background: l.color, flexShrink: 0 }} />
-                  <div style={{ fontWeight: 800, fontSize: 12, color: "#0f172a" }}>{l.name}</div>
+                  <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a" }}>{l.name}</div>
                 </div>
-                <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.5, marginBottom: 6 }}>{l.desc}</div>
-                <div style={{ fontSize: 10, fontWeight: 700, color: l.color }}>{l.scope}</div>
+                <div style={{ fontSize: 15, color: "#64748b", lineHeight: 1.5, marginBottom: 6 }}>{l.desc}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: l.color }}>{l.scope}</div>
               </div>
             ))}
           </div>
@@ -1130,18 +1130,18 @@ function BureauPageInner() {
 
         {/* ── Disclaimer ── */}
         <div style={{ padding: "14px 18px", borderRadius: 12, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)", marginBottom: 28 }}>
-          <div style={{ fontSize: 12, fontWeight: 800, color: "#92400e", marginBottom: 4 }}>Legal Disclaimer</div>
-          <div style={{ fontSize: 11, color: "#78716c", lineHeight: 1.6 }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: "#92400e", marginBottom: 4 }}>Legal Disclaimer</div>
+          <div style={{ fontSize: 15, color: "#78716c", lineHeight: 1.6 }}>
             Certificates issued by AEVION Digital IP Bureau constitute cryptographic proof of existence and authorship at the recorded time. They do not constitute a patent, trademark, or government-issued copyright registration. They serve as admissible evidence of prior art in intellectual property disputes under the legal frameworks referenced above.
           </div>
         </div>
 
         {/* ── Technology Stack ── */}
         <div style={{ padding: "16px 18px", borderRadius: 14, border: "1px solid rgba(15,23,42,0.08)", background: "rgba(15,23,42,0.02)", marginBottom: 40 }}>
-          <div style={{ fontWeight: 800, fontSize: 13, color: "#0f172a", marginBottom: 10 }}>Technology Stack</div>
+          <div style={{ fontWeight: 800, fontSize: 15.5, color: "#0f172a", marginBottom: 10 }}>Technology Stack</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {["SHA-256 (NIST FIPS 180-4)", "HMAC-SHA256", "Ed25519 (RFC 8032)", "Shamir's Secret Sharing", "Threshold 2-of-3", "PostgreSQL", "Public Verification API"].map((t) => (
-              <span key={t} style={{ padding: "5px 12px", borderRadius: 8, fontSize: 11, fontWeight: 600, background: "rgba(15,23,42,0.04)", border: "1px solid rgba(15,23,42,0.08)", color: "#334155" }}>{t}</span>
+              <span key={t} style={{ padding: "5px 12px", borderRadius: 8, fontSize: 15, fontWeight: 600, background: "rgba(15,23,42,0.04)", border: "1px solid rgba(15,23,42,0.08)", color: "#334155" }}>{t}</span>
             ))}
           </div>
         </div>

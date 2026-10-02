@@ -226,12 +226,14 @@ export default function LongevityClient({ channel = null }: { channel?: string |
               productId={КНИГА.id}
               priceUsd={КНИГА.priceUsd}
               channel={channel}
-              style={styles.buyCard}
+              style={styles.buyCardTight}
             >
               <div style={styles.buyLeft}>
                 <div style={styles.buyKicker}>{КНИГА.format}</div>
-                <div style={styles.buyTitle}>Книга, из которой вырос этот протокол</div>
-                <p style={styles.buyDesc}>{КНИГА.desc}</p>
+                {/* Заголовок без слова «этот» и без описания — ровно те 56 px,
+                    которых не хватало, чтобы цена и кнопка попали в первый
+                    экран телефона. Описание осталось в подробной карточке. */}
+                <div style={styles.buyTitle}>Книга, из которой вырос протокол</div>
               </div>
               <div style={styles.buyRight}>
                 <div style={styles.buyPrice}>${КНИГА.priceUsd}</div>
@@ -618,6 +620,38 @@ const styles: Record<string, React.CSSProperties> = {
    * строку счётчиков; проверено замером после правки, а не на глаз.
    */
   offerAnchor: { scrollMarginTop: 96 },
+  /*
+   * Плотная карточка для ПЕРВОГО экрана. Не косметика — арифметика.
+   *
+   * Замер на живом проде (волна 9d, 794394e5c9a2), iframe 390×700: над
+   * карточкой стоят заголовок 154 px и медицинская оговорка 143 px, карточка
+   * начинается на 469. Обычный `buyCard` на такой ширине ПЕРЕНОСИТ правый блок
+   * под текст и вырастает до 254 px, и цена с кнопкой оказываются на 698 —
+   * ниже первого экрана, то есть требование «выше 600» не выполнялось.
+   *
+   * Что проверено подстановкой прямо в живую страницу, по одному изменению:
+   *   как было (перенос + описание)          → низ цены 698
+   *   запретить перенос, убрать описание      → 656
+   *   плюс заголовок на слово короче          → 579, запас 21 px
+   * Поэтому здесь: без переноса, отступы плотнее, описание в первом экране не
+   * печатается (оно осталось в подробной карточке ниже), меньший отступ сверху.
+   * Оговорку и заголовок я не трогал: первое — юридический текст, второе —
+   * смысл страницы.
+   */
+  buyCardTight: {
+    display: "flex",
+    flexWrap: "nowrap",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    background: "linear-gradient(135deg,#0f1a2c 0%,#0d1422 100%)",
+    border: "1px solid #2a3f5f",
+    borderRadius: 16,
+    padding: "16px 18px",
+    marginTop: 14,
+    textDecoration: "none",
+    color: "#e8eef6",
+  },
   buyCard: {
     display: "flex",
     flexWrap: "wrap",

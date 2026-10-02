@@ -103,6 +103,36 @@ describe("счётчик событий по типам", () => {
     }
   });
 
+  test("сервер ПРИНИМАЕТ daily_solved и считает его", async () => {
+    // 🔴 Это главная проверка для новой пары событий, и вот почему. 29.09 событие
+    // завели только на фронте: сервер отвечал 400 «invalid_type», шаг воронки терялся
+    // целиком, и выглядело это как «никто не делал». Имя обязано жить в ДВУХ списках —
+    // здесь охраняется серверный. Отправку из задачи дня добавляет окно 61; пока её
+    // нет, by-type честно покажет ноль, и это значит «фронт ещё не шлёт».
+    const приём = await request(приложение())
+      .post("/api/pricing/events")
+      .set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131")
+      .send({ type: "daily_solved", source: "cyberchess", sid: "решивший" });
+    expect(приём.status, "сервер не принял daily_solved — имя не попало в ALLOWED_TYPES").toBe(204);
+
+    const о = await request(приложение()).get(
+      `/api/pricing/events/by-type?day=${new Date().toISOString().slice(0, 10)}&types=daily_solved`,
+    );
+    expect(о.status).toBe(200);
+    expect(о.body.поТипу.daily_solved, "типа нет в списке счётчика").toBeTruthy();
+    expect(о.body.поТипу.daily_solved.всего, "принятое событие не посчиталось").toBe(1);
+  });
+
+  test("контроль: выдуманный тип сервер по-прежнему НЕ принимает", async () => {
+    // Без этого контроля проверка выше зеленела бы и на «принимаем что угодно»,
+    // а тогда любой мусор попадал бы в числа отчётов.
+    const о = await request(приложение())
+      .post("/api/pricing/events")
+      .set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131")
+      .send({ type: "daily_vyigral_milliard", source: "cyberchess" });
+    expect(о.status, "сервер принял выдуманный тип").toBe(400);
+  });
+
   test("день по умолчанию — сегодняшний, а не вчерашний", async () => {
     const о = await request(приложение()).get("/api/pricing/events/by-type");
     expect(о.body.день).toBe(new Date().toISOString().slice(0, 10));

@@ -1,0 +1,6 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "deploy": {
+    "startCommand": "cd aevion-globus-backend && exec node dist/index.js"
+  }
+}

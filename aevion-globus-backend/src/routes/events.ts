@@ -1030,6 +1030,89 @@ eventsRouter.get("/summary", (req, res) => {
  * причиной, а не нулями: ноль читается как «людей не было», хотя настоящий
  * ответ «мы не смотрели».
  */
+/**
+ * СКОЛЬКО РАЗ СЛУЧИЛОСЬ СОБЫТИЕ ЗА ДЕНЬ — и сколько из этого наше.
+ *
+ * Зачем ручка. Воронка считает только денежные ступени, а вопросы к ней приходят
+ * и про другие события: 02.10.2026 оркестратору понадобилось `daily_open` за день
+ * (сколько человек открыли задачу дня). Публичного источника не было вовсе:
+ * срез по типам жил в закрытой ручке `/events/aggregate`, у окон её токена нет,
+ * и число добывалось бы перепиской вместо замера.
+ *
+ * Отдаёт ТОЛЬКО числа и только по разрешённому списку типов: имена событий — не
+ * секрет, а вот свободный выбор поля дал бы способ выспрашивать хранилище.
+ * Личного здесь нет по устройству: ни адресов, ни путей, ни сессий в ответе.
+ *
+ * «Наши» считаются тем же признаком, что в воронке (метка канала вида probe-*),
+ * и выносятся ОТДЕЛЬНЫМ числом, а не вычитаются молча: читатель обязан видеть оба.
+ */
+const ТИПЫ_ДЛЯ_СЧЁТА = new Set([
+  "daily_open",
+  "page_view",
+  "pricing_view",
+  "checkout_start",
+  "faq_open",
+  "comparison_view",
+]);
+
+eventsRouter.get("/by-type", (req, res) => {
+  const сыройДень = typeof req.query.day === "string" ? req.query.day.trim() : "";
+  const день = /^\d{4}-\d{2}-\d{2}$/.test(сыройДень)
+    ? сыройДень
+    : new Date().toISOString().slice(0, 10);
+
+  const запрошены = (typeof req.query.types === "string" ? req.query.types : "daily_open")
+    .split(",")
+    .map((т) => т.trim())
+    .filter((т) => ТИПЫ_ДЛЯ_СЧЁТА.has(т));
+  if (!запрошены.length) {
+    // Пустой список — это ошибка ЗАПРОСА, а не наша поломка: отвечаем 4xx, иначе
+    // поднимем людей на пустом месте (правило про 4xx против 5xx).
+    return res.status(400).json({ error: "no_known_types", known: [...ТИПЫ_ДЛЯ_СЧЁТА] });
+  }
+
+  if (!existsSync(EVENTS_FILE)) {
+    return res.json({ измерено: false, почему: "store_missing", день, поТипу: {} });
+  }
+  let содержимое = "";
+  try {
+    содержимое = readFileSync(EVENTS_FILE, "utf8");
+  } catch (e) {
+    console.error("[events/by-type] хранилище не прочитано", e);
+    // Нечитаемое хранилище — НЕ ноль: ноль прочитали бы как «событий не было».
+    return res.status(503).json({ измерено: false, почему: "store_unreadable", день, поТипу: {} });
+  }
+
+  const нашиСессииДня = new Set<string>();
+  const строки: AnalyticsEvent[] = [];
+  for (const строка of содержимое.split(String.fromCharCode(10))) {
+    if (!строка.trim()) continue;
+    let ev: AnalyticsEvent;
+    try { ev = JSON.parse(строка) as AnalyticsEvent; } catch { continue; }
+    if (typeof ev.ts !== "string" || ev.ts.slice(0, 10) !== день) continue;
+    строки.push(ev);
+    if (ev.sid && нашаМетка(меткаИзПути(ev.path))) нашиСессииДня.add(ev.sid);
+  }
+
+  const поТипу: Record<string, { всего: number; наши: number }> = Object.create(null);
+  for (const т of запрошены) поТипу[т] = { всего: 0, наши: 0 };
+  for (const ev of строки) {
+    const счёт = поТипу[ev.type];
+    if (!счёт) continue;
+    счёт.всего += 1;
+    if (ev.sid && нашиСессииДня.has(ev.sid)) счёт.наши += 1;
+  }
+
+  return res.json({
+    измерено: true,
+    день,
+    поТипу,
+    наМомент: new Date().toISOString(),
+    оговорка:
+      "«наши» — заходы наших окон по метке канала probe-*; они НЕ вычтены из «всего», оба числа названы отдельно",
+  });
+});
+
 eventsRouter.get("/funnel", (req, res) => {
   const дней = Math.min(Math.max(queryNumber(req.query.days, 14), 1), 60);
   const сНачала = Date.now() - дней * 24 * 60 * 60 * 1000;

@@ -10,8 +10,7 @@ import { продаётсяОтдельно } from "../data/moduleAccess";
 import {
   TIERS, getTier, getModulePrice, resolvePromoCode, CURRENCY_RATES, MAX_PROMO_DISCOUNT_RATIO, buildQuote,
   type TierId, type CurrencyCode, type TermTier,
-  isTermTier, standaloneApp, termTotal, monthsLabelRu,
-} from "../data/pricing";
+  isTermTier, standaloneApp, termTotal, monthsLabel } from "../data/pricing";
 import { findAppSubscriptionByIntent } from "../lib/appEntitlements";
 import { provisionSubscription, countSubscriptions, findSubscriptionByPaymentId, termMonthsOf } from "./provisioning";
 import { модулиДляКассы } from "../lib/payment/customData";
@@ -496,7 +495,25 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
       });
     }
 
-    const description = `AEVION ${app ? `${app.name} ` : ""}${tier.name} — ${monthsLabelRu(termMonths ?? 1)}`;
+    /*
+     * 🔴 ЭТА СТРОКА — ИМЯ ТОВАРА НА СТРАНИЦЕ ОПЛАТЫ, а не внутренняя подпись.
+     *
+     * lemonSqueezyProvider кладёт `description` в `product_options.name`, и
+     * покупатель читает её в заголовке вкладки, в строке товара и на кнопке
+     * оплаты. Здесь стоял monthsLabelRu — ЖЁСТКО РУССКИЙ, для любого покупателя.
+     *
+     * Замер 05.10.2026 на живой кассе DevHub (все пять сроков): страница с
+     * `lang="en-US"` показывала «AEVION DevHub Lite — 1 месяц», а английское имя
+     * варианта («AEVION DevHub — Lite (1 mo)») шло вторым, в скобках. Кириллица
+     * в момент ввода карты на англоязычном сайте — потеря доверия там, где она
+     * дороже всего: за 14 дней 13 начатых оплат и НИ ОДНОЙ завершённой.
+     *
+     * Язык покупателя мы к этому месту уже знаем и передаём его кассе
+     * (`locale: языкПокупателя(req)` ниже) — но в имя товара он не попадал.
+     * Теперь попадает. Неизвестный язык даёт английский: сайт отдаёт английский
+     * по всем адресам.
+     */
+    const description = `AEVION ${app ? `${app.name} ` : ""}${tier.name} — ${monthsLabel(termMonths ?? 1, языкПокупателя(req))}`;
 
     // 0) PayBox — локальный KZT-канал (карты КЗ + Kaspi). Срабатывает только
     //    когда плательщик явно выбрал KZT и провайдер настроен. Сумму USD

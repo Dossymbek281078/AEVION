@@ -8,10 +8,12 @@
  *   LEMON_SQUEEZY_WEBHOOK_SECRET=<signing secret created when adding a webhook>
  *   AEVION_PUBLIC_BASE_URL=https://aevion.app    (success/cancel redirects)
  *
- *   # Default variant id used by createIntent if the input.reference isn't
- *   # mapped to a specific variant. Get from LS dashboard → Store →
- *   # Products → click product → variant id is in URL.
- *   LEMON_SQUEEZY_DEFAULT_VARIANT_ID=<numeric variant id>
+ *   # ❌ LEMON_SQUEEZY_DEFAULT_VARIANT_ID этим провайдером НЕ используется.
+ *   # Здесь было написано, что createIntent подставляет её, когда ссылка не
+ *   # сопоставлена товару. Так делать нельзя: 14.09.2026 такое поведение списало бы
+ *   # $149 за DevHub вместо отметки бюро — человек заплатил бы за чужой товар.
+ *   # createIntent теперь ОТКАЗЫВАЕТ на несопоставленной ссылке (см. ниже), а
+ *   # переменная осталась только у DevHub для его собственной покупки.
  *
  * Reference:
  *   https://docs.lemonsqueezy.com/api/checkouts/create-checkout

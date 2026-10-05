@@ -185,10 +185,43 @@ function isReference(s: string): s is LemonSqueezyReference {
 
 /**
  * Resolve the LS variant id for a checkout reference ("tier_lite_monthly").
- * Returns null if the reference is unknown or its variant env isn't set yet —
- * the provider then falls back to LEMON_SQUEEZY_DEFAULT_VARIANT_ID.
+ * Returns null if the reference is unknown or its variant env isn't set yet.
+ *
+ * 🔴 05.10.2026: прежняя версия этого описания обещала, что «провайдер подставит
+ * LEMON_SQUEEZY_DEFAULT_VARIANT_ID». ЭТО БОЛЬШЕ НЕВЕРНО, и неверность опасная:
+ * ровно такое поведение 14.09 списало бы $149 за DevHub вместо отметки бюро, потому
+ * что несопоставленная ссылка брала чужой товар. Провайдер теперь ОТКАЗЫВАЕТ
+ * (lemonSqueezyProvider.ts), а переменная осталась только у DevHub для его
+ * собственной покупки. Описание, обещающее подстановку, однажды вернуло бы её
+ * обратно руками доверчивого читателя.
  */
+/**
+ * Ссылка товара «отметка Verified» в бюро.
+ *
+ * 🔴 05.10.2026, находка окна кассы, проверенная по коду. Бюро звало кассу со
+ * ссылкой = verificationId, то есть РАЗНОЙ на каждую покупку. Вариант товара так
+ * не находится никогда: resolveLemonSqueezyVariant знает только перечисленные
+ * ссылки. Провайдер при этом отказывает честно (не подставляет товар по умолчанию —
+ * иначе человек заплатил бы чужую сумму), поэтому апгрейд за $29 просто не
+ * начинался: на проде BUREAU_PAYMENT_PROVIDER не задан и работает заглушка.
+ *
+ * Ссылка обязана быть ПОСТОЯННОЙ: вариант — это товар, а не номер покупки. Связь
+ * платежа с конкретной проверкой держится не на ней, а на собственном intentId
+ * провайдера, который бюро хранит в BureauVerification.paymentIntentId и по которому
+ * вебхук находит строку. Проверено по коду: провайдер кладёт свой intentId в
+ * custom_data.bureauIntentId, parseWebhook читает оттуда же.
+ */
+export const BUREAU_VERIFIED_REFERENCE = "bureau_verified";
+
+/** Переменная с вариантом этого товара. Заводит основатель в кабинете кассы. */
+export const BUREAU_VERIFIED_VARIANT_ENV = "LEMON_SQUEEZY_VARIANT_BUREAU_VERIFIED";
+
 export function resolveLemonSqueezyVariant(reference: string): string | null {
+  // Отметка Verified — свой товар, вне лестницы сроков: у неё нет ни ступени, ни
+  // периода, поэтому в TERM_REFERENCES она не входит и спрашивается отдельно.
+  if (reference === BUREAU_VERIFIED_REFERENCE) {
+    return process.env[BUREAU_VERIFIED_VARIANT_ENV]?.trim() || null;
+  }
   if (!isReference(reference)) return null;
   const id = process.env[TIER_VARIANT_ENV[reference]]?.trim();
   return id || null;

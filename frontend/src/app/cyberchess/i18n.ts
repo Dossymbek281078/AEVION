@@ -220,6 +220,13 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     // Opening Flash Card
     "flash.know_theory":           "Знаешь теорию этого дебюта?",
     "flash.continuation":          "продолжение по теории:",
+    // Уведомление о лицензии движка. GPLv3 требует назвать лицензию и дать
+    // доступ к исходникам ИМЕННО той сборки, которую мы раздаём. Ссылка ведёт
+    // на nmrugg/stockfish.js (производная от Stockfish), а не на официальный
+    // Stockfish: по ссылке человек должен найти тот код, из которого собраны
+    // наши файлы. Тег подтверждён у источника: v18.0.0, «Stockfish 18».
+    "engine.license": "Шахматный движок — Stockfish.js 18 (сборка v18.0.0), лицензия GPLv3. Исходный код:",
+    "engine.license.copy": "текст лицензии",
     "flash.on_my_own":             "Продолжаю сам 💪",
     "flash.show_theory":           "Покажи теорию 📚",
   },
@@ -398,6 +405,8 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     // Opening Flash Card
     "flash.know_theory":           "Know the theory for this opening?",
     "flash.continuation":          "theory continuation:",
+    "engine.license": "Chess engine — Stockfish.js 18 (build v18.0.0), licensed under GPLv3. Source:",
+    "engine.license.copy": "license text",
     "flash.on_my_own":             "I'll continue 💪",
     "flash.show_theory":           "Show theory 📚",
   },
@@ -575,6 +584,8 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     // Opening Flash Card
     "flash.know_theory":           "Бұл дебют теориясын білесің бе?",
     "flash.continuation":          "теория жалғасы:",
+    "engine.license": "Шахмат қозғалтқышы — Stockfish.js 18 (v18.0.0 құрастырымы), GPLv3 лицензиясы. Бастапқы код:",
+    "engine.license.copy": "лицензия мәтіні",
     "flash.on_my_own":             "Өзім жалғастырамын 💪",
     "flash.show_theory":           "Теорияны көрсет 📚",
   },

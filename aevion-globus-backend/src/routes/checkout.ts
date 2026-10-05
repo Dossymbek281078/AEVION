@@ -5,7 +5,7 @@ import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
 import { lemonSqueezyPaymentProvider } from "../lib/payment/lemonSqueezyProvider";
 import { payboxPaymentProvider, isPayboxConfigured, isPayboxWebhookSecretSet } from "../lib/payment/payboxProvider";
 import { paypalPaymentProvider, isPaypalConfigured } from "../lib/payment/paypalProvider";
-import { resolveLemonSqueezyVariant, lemonSqueezySellable, fallbackVariantForReference } from "../data/lemonSqueezyVariants";
+import { resolveLemonSqueezyVariant, lemonSqueezySellable, fallbackVariantForReference, appSlugForReference, type LemonSqueezyReference } from "../data/lemonSqueezyVariants";
 import { продаётсяОтдельно } from "../data/moduleAccess";
 import {
   TIERS, getTier, getModulePrice, resolvePromoCode, CURRENCY_RATES, MAX_PROMO_DISCOUNT_RATIO, buildQuote,
@@ -736,7 +736,32 @@ checkoutRouter.get("/subscriptions/count", (_req, res) => {
 
 // ── GET /healthz ──────────────────────────────────────────────────────────────
 checkoutRouter.get("/healthz", (_req, res) => {
-  const лс = lemonSqueezySellable();
+  // Единый источник правды «продаётся ли отдельно» — тот же предикат, что у
+  // кассы (`продаётсяОтдельно`, ~строка 303). Без фильтра витрина зажигала
+  // живую кнопку «Buy» у снятых 01.10 приложений (qright/qsign/qskyway/
+  // startup_exchange): fallbackVariantForReference держит их в `configured`,
+  // а касса им отвечает 400 invalid_app — живая кнопка в мёртвую кассу
+  // (ровно тот worst-case, о котором предупреждает lemonSqueezyVariants.ts:
+  // «предикат ОДИН на кассу и витрину»). Снятые убираем из ОБОИХ списков —
+  // тогда витрина покажет «входит в подписку» (безТовараСсылка), а не серую
+  // кнопку «оформить онлайн пока нельзя» (это была бы ложь об аварии кассы).
+  // tier_* и прочее — не приложение, их не трогаем.
+  const отдельноПродаётсяСсылка = (ref: string): boolean => {
+    const slug = appSlugForReference(ref as LemonSqueezyReference);
+    if (!slug) return true;
+    // Ровно тот же вход предиката, что у кассы (checkout.ts ~303):
+    // standaloneApp(slug).moduleId → продаётсяОтдельно. Второй способ
+    // вычислять moduleId здесь не заводим — иначе multichat-engine и
+    // startup-exchange разъехались бы с кассой.
+    const moduleId = standaloneApp(slug)?.moduleId;
+    if (!moduleId) return true;
+    return продаётсяОтдельно(moduleId);
+  };
+  const лсВсе = lemonSqueezySellable();
+  const лс = {
+    configured: лсВсе.configured.filter(отдельноПродаётсяСсылка),
+    missing: лсВсе.missing.filter(отдельноПродаётсяСсылка),
+  };
   // Тот же смысл, что и у маршрутизации выше: готовность включает СЕКРЕТ
   // ВЕБХУКА, иначе отчёт называл бы основным того, кто возьмёт деньги и не
   // выдаст купленное. Вариант тарифа здесь не проверяется намеренно — он
@@ -774,7 +799,9 @@ checkoutRouter.get("/healthz", (_req, res) => {
         // магазин», но начать покупку нельзя без ВАРИАНТА товара — а он
         // задаётся отдельной переменной на каждый тариф и модуль.
         // Два разных вопроса под одним словом; второй снаружи виден не был.
-        sellable: lemonSqueezySellable(),
+        // Берём отфильтрованный `лс` (без снятых с отдельной продажи), а не
+        // зовём предикат заново — иначе снятые вернулись бы живой кнопкой.
+        sellable: лс,
         webhookConfigured: Boolean(process.env.LEMON_SQUEEZY_WEBHOOK_SECRET?.trim()),
       },
       gumroad: {

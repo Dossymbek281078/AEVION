@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import { TERM_TIERS, STANDALONE_APPS } from "../src/data/pricing";
+import { продаётсяОтдельно } from "../src/data/moduleAccess";
 import request from "supertest";
 import express from "express";
 import { checkoutRouter } from "../src/routes/checkout";
@@ -159,8 +160,17 @@ describe("две ручки состояния согласны о том, кт�
     // Условие такое: ручка знает про ВСЕ позиции лестницы — ни одна не потеряна
     // между каталогом и кассой. Сверяем с источником, из которого строятся ссылки.
     // Прежние tier_*_monthly в список продаваемого по-прежнему не входят.
-    const всегоПозиций = TERM_TIERS.length * (1 + STANDALONE_APPS.length);
-    expect(s2.configured.length + s2.missing.length, "ручка знает не про все позиции каталога").toBe(всегоПозиций);
+    //
+    // 🔴 05.10.2026: приложения, СНЯТЫЕ с отдельной продажи (продаётсяОтдельно=
+    // false), healthz теперь исключает из ОБОИХ списков — иначе витрина зажигала
+    // живую кнопку «Buy» в мёртвую кассу (checkout.ts, фильтр по продаётсяОтдельно;
+    // сторож storefrontSellableHidesRemovedApps). Поэтому вселенная позиций — это
+    // тарифы плюс приложения, которые ЕЩЁ продаются отдельно, и считаем её тем же
+    // предикатом, что и касса, а не снимком числа. Guard по-прежнему ловит
+    // НЕнамеренную потерю среди продаваемого.
+    const продаваемыхОтдельно = STANDALONE_APPS.filter((a) => продаётсяОтдельно(a.moduleId)).length;
+    const всегоПозиций = TERM_TIERS.length * (1 + продаваемыхОтдельно);
+    expect(s2.configured.length + s2.missing.length, "ручка знает не про все продаваемые позиции каталога").toBe(всегоПозиций);
     expect([...s2.configured, ...s2.missing]).not.toContain("tier_lite_monthly");
     delete process.env.LEMON_SQUEEZY_VARIANT_LITE;
 

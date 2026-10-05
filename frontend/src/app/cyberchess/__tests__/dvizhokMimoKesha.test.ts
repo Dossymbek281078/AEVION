@@ -41,7 +41,11 @@ describe("файлы движка не проходят через кэш", () =
 
   it("движок — мимо кэша", () => {
     const p = pravilo();
-    for (const put of ["/stockfish-18-lite.js", "/stockfish-18-lite.wasm", "/stockfish-classic.js", "/stockfish.js"]) {
+    // Пути — те сборки, что сайт РАЗДАЁТ на самом деле (05.10.2026). Прежний
+    // список перечислял stockfish-18-lite и stockfish-classic, удалённые в тот
+    // же день как никем не загружаемые. «/stockfish.js» оставлен намеренно:
+    // правило обязано покрывать и будущие имена, а не только нынешние.
+    for (const put of ["/stockfish-18-lite-single.js", "/stockfish-18-lite-single.wasm", "/sf171-79.js", "/sf171-79.wasm", "/deep-engine-worker.js", "/stockfish.js"]) {
       expect(p(put)).toBe(true);
     }
   });

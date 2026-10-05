@@ -13,6 +13,7 @@
 import { Router, type Request, type Response } from "express";
 import * as fs from "node:fs";
 import { getPool } from "../lib/dbPool";
+import { ispravitPodpisMata } from "../lib/chessPuzzleLabel";
 
 const router = Router();
 
@@ -64,9 +65,21 @@ function ingest(arr: unknown, source: string): void {
     console.warn(`[cyberchess-puzzles] ${source}: unexpected shape — serving empty`);
     return;
   }
-  POOL = (arr as Puzzle[]).filter(
-    (p) => p && typeof p.fen === "string" && Array.isArray(p.sol) && p.sol.length > 0,
-  );
+  POOL = (arr as Puzzle[])
+    .filter((p) => p && typeof p.fen === "string" && Array.isArray(p.sol) && p.sol.length > 0)
+    // Подпись задачи приводим к её РЕШЕНИЮ здесь, в единственной воронке всех
+    // трёх источников (файл, база, URL). Делать это в ветке базы было бы
+    // починкой одной двери из трёх: пул грузится из файла и по URL тоже, и
+    // ровно файловая ветка работает в прогонах.
+    //
+    // Зачем вообще: у Lichess набор тем кончается на mateIn5, любой мат длиннее
+    // помечен тем же словом, и наш сев скопировал число и в поле, и в название.
+    // Замер 05.10.2026: 6 из 43 задач темы «Мат в 5+» матуют не в 5.
+    .map((p) => {
+      const podpis = ispravitPodpisMata({ name: p.name, sol: p.sol, goal: p.goal, mateIn: p.mateIn });
+      if (!podpis.ispravleno) return p;
+      return { ...p, name: podpis.name, ...(podpis.mateIn != null ? { mateIn: podpis.mateIn } : {}) };
+    });
   POOL_SOURCE = source;
   // По умолчанию источник равен тому, что загрузили: для файла и URL весь банк
   // и есть выборка. DB-ветка ниже перезапишет это настоящим COUNT(*).
@@ -120,6 +133,8 @@ function ensureLoaded(): Promise<void> {
             const raw = String(row.sol ?? "");
             try { const a = JSON.parse(raw); sol = Array.isArray(a) ? a.map(String) : raw.split(/\s+/).filter(Boolean); }
             catch { sol = raw.split(/\s+/).filter(Boolean); }
+            // Подпись НЕ правим здесь: это делает ingest() — одна воронка на
+            // файл, базу и URL. Две копии одного правила разошлись бы.
             return {
               fen: String(row.fen ?? ""),
               sol,

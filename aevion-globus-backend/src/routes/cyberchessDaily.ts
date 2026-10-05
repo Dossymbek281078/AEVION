@@ -7,6 +7,7 @@ import { createInMemoryRateLimiter } from '../lib/rateLimit/inMemoryWindow';
 import { clientIp } from '../lib/rateLimit';
 import { getPool } from '../lib/dbPool';
 import { похожеНаПробу } from "../lib/probeRows";
+import { ispravitPodpisMata } from "../lib/chessPuzzleLabel";
 
 const router = Router();
 
@@ -722,7 +723,15 @@ async function dailyFromBank(day: string, useCache = true): Promise<Puzzle | nul
       id: String(row.id),
       fen: String(row.fen),
       sol,
-      theme: String(row.theme || row.name || "Тактика"),
+      // Запасом идёт ИМЯ задачи, а в нём у матов длиннее пяти стоит «Мат в 5»
+      // (у Lichess набор тем кончается на mateIn5, наш сев скопировал число).
+      // Пропускаем запас через ту же правку, что и остальные выдачи, иначе
+      // задача дня могла бы подписаться неверной длиной мата.
+      theme: String(
+        row.theme ||
+          ispravitPodpisMata({ name: row.name != null ? String(row.name) : null, sol }).name ||
+          "Тактика"
+      ),
       rating: Number(row.rating) || 1200,
     };
     if (useCache) bankPuzzleCache = { day, puzzle };

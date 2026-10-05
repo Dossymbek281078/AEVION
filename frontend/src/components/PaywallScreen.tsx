@@ -44,7 +44,10 @@ interface Props {
 }
 
 export function PaywallScreen({ payload, backHref = "/", backLabel = "← На главную" }: Props) {
-  const { module, plan, requiredTiers, upgradeUrl } = payload;
+  const { module, plan, requiredTiers, upgradeUrl, authState, loginUrl } = payload;
+  // Не вошёл → возможно, уже оплатил: главный шаг — вход под почтой оплаты, а
+  // не «выбрать тариф» (иначе плательщику предлагают платить второй раз).
+  const anonymous = authState === "anonymous";
   const primaryTier = requiredTiers[0] ?? "full";
   const accent = TIER_ACCENT[primaryTier] ?? "#f59e0b";
 
@@ -131,18 +134,40 @@ export function PaywallScreen({ payload, backHref = "/", backLabel = "← На �
           а та с 31.08 читает метку и доводит её до кассы. Без переноса метка
           терялась ровно перед страницей, которая её ждёт.
         */}
+        {anonymous && loginUrl ? (
+          <div style={{ marginBottom: 14 }}>
+            <Link
+              href={loginUrl}
+              style={{
+                display: "inline-block",
+                padding: "12px 28px",
+                background: accent,
+                color: "#fff",
+                borderRadius: 10,
+                fontSize: 15,
+                fontWeight: 800,
+                textDecoration: "none",
+                boxShadow: `0 8px 24px -8px ${accent}99`,
+              }}
+            >
+              Войти под почтой оплаты →
+            </Link>
+          </div>
+        ) : null}
         <KeepChannelLink
           href={upgradeUrl}
           style={{
             display: "inline-block",
             padding: "12px 28px",
-            background: accent,
-            color: "#fff",
+            // Когда есть кнопка входа, «к тарифам» становится вторичной.
+            background: anonymous && loginUrl ? "transparent" : accent,
+            color: anonymous && loginUrl ? accent : "#fff",
+            border: anonymous && loginUrl ? `1px solid ${accent}66` : "none",
             borderRadius: 10,
             fontSize: 15,
             fontWeight: 800,
             textDecoration: "none",
-            boxShadow: `0 8px 24px -8px ${accent}99`,
+            boxShadow: anonymous && loginUrl ? "none" : `0 8px 24px -8px ${accent}99`,
           }}
         >
           Перейти к тарифам →

@@ -87,6 +87,20 @@ const STACKS = [
   { id: "python", label: "Python", desc: "stack.python" },
 ] as const;
 
+/**
+ * Стеки, которые НЕЛЬЗЯ опубликовать на живой адрес, и это надо сказать ДО
+ * выбора, а не последним шагом.
+ *
+ * Замер на проде 05.10.2026: стек react генерировался нормально (4 файла,
+ * $0.001053), а выкатка отказывала 409 «project is not static — nothing to
+ * serve» — статическому хостингу нужен index.html в КОРНЕ. У react это
+ * починено на стороне генерации (React с CDN, без сборки), а next, express и
+ * python требуют сервера, и Cloudflare Pages их не отдаст ни при какой
+ * раскладке. Молчать об этом нельзя: человек узнавал о запрете, уже потратив
+ * генерацию и время.
+ */
+const СТЕКИ_БЕЗ_ПУБЛИКАЦИИ = new Set<string>(["next", "express", "python"]);
+
 function formatDate(iso: string) {
   const d = new Date(iso);
   // Локаль БРАУЗЕРА, а не "en-US". Здесь была зашита американская: на русской
@@ -1533,6 +1547,11 @@ export default function DevHubPage() {
                     >
                       <div style={{ fontWeight: 700, fontSize: 13, color: selected ? c.bg : "#374151" }}>{s.label}</div>
                       <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{t(s.desc)}</div>
+                      {СТЕКИ_БЕЗ_ПУБЛИКАЦИИ.has(s.id) && (
+                        <div style={{ fontSize: 10, color: "#b45309", marginTop: 4, lineHeight: 1.3 }}>
+                          {t("stack.noPublish")}
+                        </div>
+                      )}
                     </button>
                   );
                 })}

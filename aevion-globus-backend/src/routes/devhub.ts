@@ -2000,6 +2000,11 @@ export function __parseGeneratedFilesForTest(reply: string, targetFiles: string[
   return parseGeneratedFiles(reply, targetFiles);
 }
 
+/** Тестовый доступ к указанию по стеку: сторож мерит ПОВЕДЕНИЕ, не слова в файле. */
+export function __указаниеПоСтекуForTest(stack: string, существующих = 0, целевых = 0): string {
+  return указаниеПоСтеку(stack, существующих, целевых);
+}
+
 const MAX_SYNTAX_FIX_ATTEMPTS = 1;
 
 /** Cap how much existing-project context rides in the prompt — enough for the
@@ -2180,6 +2185,44 @@ function порядокПоСтупени<T extends { id: string }>(список
   return [...дешёвый, ...список.filter((p) => p.id !== ДЕШЁВЫЙ_ДЛЯ_ГОСТЯ)];
 }
 
+/**
+ * Указание по стеку для ПЕРВОЙ генерации проекта.
+ *
+ * ЗАМЕР НА ПРОДЕ 05.10.2026 (гость, стек react): генерация прошла — 4 файла,
+ * $0.001053, — а выкатка отказала с 409 «project is not static — nothing to
+ * serve». Модель разложила проект по обычаю: public/index.html + src/App.jsx +
+ * src/index.jsx. Статический хостинг отдаёт файлы КАК ЕСТЬ, поэтому ему нужен
+ * index.html в КОРНЕ (lib/staticServable.ts), а сырые .jsx браузер не исполнит.
+ *
+ * Отказ при этом ЧЕСТНЫЙ и его трогать не надо: публикация такого проекта
+ * «удалась бы» и отдавала 404 — ровно тот класс, который запрещён правилом
+ * «deploy = uploaded + serves». Дефект выше: вход предлагает React, и человек
+ * получает файлы, которые нельзя опубликовать.
+ *
+ * Поэтому для react просим сборку-без-сборки: index.html в корне, React с CDN,
+ * JSX через Babel standalone. Такой проект публикуется тем же путём, что static,
+ * и обещание «выбрал React — получил живой адрес» становится выполнимым.
+ *
+ * next / express / python сюда НЕ попадают намеренно: им нужен сервер, и
+ * Cloudflare Pages их не отдаст ни при какой раскладке. Там честный путь —
+ * сказать это на входе, а не подменять стек втихую.
+ */
+const УКАЗАНИЕ_ПУБЛИКУЕМЫЙ_REACT =
+  " The project MUST be publishable as plain static files: put index.html at the PROJECT ROOT" +
+  " (never public/index.html), load React and ReactDOM from a CDN with script tags, and write JSX" +
+  " inside a script type=\"text/babel\" block (Babel standalone from CDN) so the app runs with NO" +
+  " build step. Do not emit package.json, src/, public/, or any bundler config.";
+
+/**
+ * Применяется только к ПЕРВОЙ генерации: ни целевых файлов, ни существующих.
+ * У начатого проекта своя раскладка, и ломать её посреди работы нельзя —
+ * человек просил правку, а не переезд.
+ */
+function указаниеПоСтеку(stack: string, существующихФайлов: number, целевыхФайлов: number): string {
+  if (целевыхФайлов > 0 || существующихФайлов > 0) return "";
+  return String(stack ?? "").trim().toLowerCase() === "react" ? УКАЗАНИЕ_ПУБЛИКУЕМЫЙ_REACT : "";
+}
+
 async function generateCodeWithAI(
   prompt: string,
   stack: string,
@@ -2252,7 +2295,7 @@ async function generateCodeWithAI(
   // Когда вход нужен, модель ОБЯЗАНА пользоваться нашим шаблоном, а не писать свой:
   // иначе рядом появится второй вход, и дырявым окажется именно он.
   const проВход = нуженВход(prompt) ? ` ${УКАЗАНИЕ_ПРО_ВХОД}` : "";
-  const userMsg = `${foldHistory(history)}Generate code for: ${prompt}. Stack: ${stack}.${проВход}${images?.length ? " Recreate the attached screenshot/design as closely as practical (layout, colors, spacing, text)." : ""}${buildFileContext(existingFiles, targetFiles)}`;
+  const userMsg = `${foldHistory(history)}Generate code for: ${prompt}. Stack: ${stack}.${указаниеПоСтеку(stack, existingFiles.length, targetFiles.length)}${проВход}${images?.length ? " Recreate the attached screenshot/design as closely as practical (layout, colors, spacing, text)." : ""}${buildFileContext(existingFiles, targetFiles)}`;
 
   const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
     { role: "system", content: systemPrompt },

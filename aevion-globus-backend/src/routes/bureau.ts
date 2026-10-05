@@ -12,6 +12,7 @@
  * webhook.
  */
 import { Router, type Request, type Response } from "express";
+import { BUREAU_VERIFIED_REFERENCE } from "../data/lemonSqueezyVariants";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { verifyBearerOptional, getJwtSecret } from "../lib/authJwt";
@@ -805,7 +806,16 @@ bureauRouter.post("/payment/intent", bureauAnonWriteRateLimit, async (req, res) 
      * молчаливой подмены товара (lib/payment/lemonSqueezyProvider.ts).
      */
     const intent = await pay.createIntent({
-      reference: verificationId,
+      // Ссылка ПОСТОЯННАЯ: вариант товара в кассе один на всех покупателей отметки.
+      // Прежде здесь стоял verificationId — разный на каждую покупку, — и вариант не
+      // находился никогда, то есть апгрейд за $29 не начинался вовсе.
+      //
+      // Связь с конкретной проверкой при этом НЕ теряется: её держит собственный
+      // intentId провайдера, он уезжает в custom_data.bureauIntentId и возвращается
+      // вебхуком, а бюро хранит его в BureauVerification.paymentIntentId. Номер
+      // проверки дополнительно кладём в customData — для разбора, не для связи.
+      reference: BUREAU_VERIFIED_REFERENCE,
+      customData: { verificationId },
       amountCents,
       currency,
       description: "AEVION Bureau — Verified tier upgrade",

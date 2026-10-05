@@ -7634,18 +7634,14 @@ export default function CyberChessPage(){
               → 200), а уведомления не было ни одного: ни файла с текстом
               лицензии, ни слова «GPL» на странице.
 
-              Ссылка ведёт на nmrugg/stockfish.js — ПРОИЗВОДНУЮ сборку, а не на
-              официальный Stockfish: по ней человек должен найти тот код, из
-              которого собраны наши файлы. Релиз v18.0.0 сверен хешами с
-              ассетами релиза, sha256 записаны в public/stockfish-ORIGIN.txt. */}
+              Версия в строке НЕ названа намеренно: движков ДВА и они из разных
+              проектов — игровой Stockfish.js (nmrugg) и аналитический
+              lila-stockfish-web. Любая одна версия в подписи была бы неверна
+              для второго и устарела бы при первом же обновлении. Точные версии,
+              ссылки на исходники и sha256 — в /stockfish-COPYING и
+              public/stockfish-ORIGIN.txt; сторож сверяет хеши с файлами. */}
           <div style={{marginTop:SPACE[3],padding:`${SPACE[2]}px 0`,fontSize:11,lineHeight:1.5,color:CC.textMute}}>
             {cc.t("engine.license")}{" "}
-            <a href="https://github.com/nmrugg/stockfish.js/releases/tag/v18.0.0"
-               target="_blank" rel="noopener noreferrer"
-               style={{color:CC.textDim,textDecoration:"underline"}}>
-              github.com/nmrugg/stockfish.js · v18.0.0
-            </a>
-            {" · "}
             <a href="/stockfish-COPYING" style={{color:CC.textDim,textDecoration:"underline"}}>
               {cc.t("engine.license.copy")}
             </a>

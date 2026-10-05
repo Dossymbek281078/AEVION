@@ -6,6 +6,8 @@
 // rendered on /cyberchess: that surface is owned by a separate session/branch
 // (see aevion-globus-backend/CLAUDE.md) and stays untouched from here.
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { скрытьЗначокПрогресса } from "@/lib/revenueBadgeHidden";
 import { useEffect, useState } from "react";
 import { useRevenueGoal } from "@/lib/useRevenueGoal";
 import { useI18nOptional } from "@/lib/i18n";
@@ -31,6 +33,13 @@ const MIN_WIDTH_PX = 420;
 export function AppShellRevenueBadge() {
   const shellLang = useI18nOptional()?.lang ?? "ru";
   const { goals, summary, pct, days } = useRevenueGoal();
+  const путь = usePathname();
+
+  // Тот же список, что у значка в общей шапке, и ОДИН на двоих: /cyberchess это
+  // app-оболочка, поэтому значок там рисует этот компонент, а не RevenueGoalBadge.
+  // Две копии условия разошлись бы молча — у нас уже был такой случай со счётом
+  // ключей словаря и с признаком пробы.
+  if (скрытьЗначокПрогресса(путь)) return null;
   // На сервере ширины нет. Начинаем со «слишком узко» и включаем плашку уже
   // в браузере: иначе на телефоне она мелькнёт поверх навигации до гидрации.
   const [wideEnough, setWideEnough] = useState(false);

@@ -47,7 +47,7 @@ import {
 import { applyOgEtag, applyEtag } from "../lib/ogEtag";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { csvNeutralizeFormula } from "../lib/csv";
-import { safeErrorText } from "../lib/safeError";
+import { PublicError, safeErrorText } from "../lib/safeError";
 const capturePipelineError = makeServiceCapture("pipeline");
 
 export const pipelineRouter = Router();
@@ -465,7 +465,16 @@ export function проверитьКодировку(input: Record<string, unkno
   }
 }
 
-class ProtectInputError extends Error {
+/**
+ * 05.10.2026: наследуется от PublicError, а не от Error. Причина в замере: правка
+ * «порченый текст не принимаем» отдавала 400 с телом «internal error» — человек
+ * видел отказ без причины и не мог догадаться, что прислать. Санитайзер
+ * `safeErrorText` пропускает наружу только PublicError, и его же правило говорит:
+ * наружу идёт то, что мы САМИ написали для пользователя. Все пять сообщений этого
+ * класса именно такие (проверено перечислением: кодировка, два предела длины,
+ * обязательные поля, формат хеша) — внутренних подробностей в них нет.
+ */
+class ProtectInputError extends PublicError {
   status: number;
   constructor(message: string, status = 400) {
     super(message);
@@ -492,6 +501,19 @@ type ResolvedUser = { userId: string | null; name: string | null; email: string 
  * caller decides how to map each to an HTTP response.
  */
 async function protectOne(input: ProtectInput, user: ResolvedUser) {
+  // 🔴 ПРОВЕРКА КОДИРОВКИ ЖИВЁТ ЗДЕСЬ, А НЕ В МАРШРУТЕ (05.10.2026).
+  //
+  // Она была добавлена 01.10 в обработчик POST /protect — и этого оказалось мало:
+  // `protectOne` зовут ДВА маршрута, /protect и /protect-batch, а проверка стояла
+  // только у первого. То есть порченый текст по-прежнему записывался пачкой.
+  // Это наш записанный класс «вторая дверь в ту же комнату»: запер одну, вторая
+  // осталась открытой, и снаружи это выглядит как закрытая.
+  //
+  // Внутри помощника она покрывает ВСЕХ вызывающих по построению, а не по
+  // внимательности того, кто добавит третий маршрут. Стоит первой, до ensureTables:
+  // отказ по неверному вводу не должен стоить запроса к базе.
+  проверитьКодировку(input as unknown as Record<string, unknown> | undefined);
+
   await ensureTables();
 
   // Sane caps on free-text fields — title 500c, description 10kc.
@@ -920,7 +942,6 @@ pipelineRouter.post("/protect", async (req, res) => {
 
     // Кодировку проверяем ДО любой работы: негодный текст не должен стоить нам
     // ни запроса к базе, ни разбора пользователя.
-    проверитьКодировку(req.body as Record<string, unknown> | undefined);
 
     const user = await resolveUser(req);
     const result = await protectOne(req.body || {}, user);

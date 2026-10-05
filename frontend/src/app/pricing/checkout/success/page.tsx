@@ -486,6 +486,11 @@ function SuccessInner() {
                 ? [{ icon: "🔑", text: t("pricing.checkoutSuccess.nextDevhubLink"), href: "/devhub/link" }]
                 : appLink
                 ? [{ icon: "🔑", text: t("pricing.checkoutSuccess.nextLogin", { app: appLink.name }), href: `/auth?next=${encodeURIComponent(appLink.href)}` }]
+                // Платформенная подписка (основные тарифы): отдельного приложения нет,
+                // поэтому вход ведёт в каталог модулей /apps (проверен 200 на проде
+                // 05.10.2026), а текст говорит, что в тарифе теперь открыто всё.
+                : appId === "platform"
+                ? [{ icon: "🔑", text: t("pricing.checkoutSuccess.nextLoginPlatform"), href: `/auth?next=${encodeURIComponent("/apps")}` }]
                 : []),
               {
                 icon: "🚀",

@@ -27,6 +27,26 @@ describe("страница успеха: подсказка про вход с �
     expect(devhubLink).toBeLessThan(openApp);
   });
 
+  // 05.10.2026: платформенная подписка (основные тарифы) возвращается с appId="platform",
+  // отдельного приложения нет → раньше пункта про вход не было вовсе. Вход ведёт в каталог
+  // /apps и обязан стоять ДО «Откройте приложение».
+  it("платформенная подписка: вход ведёт в /apps и стоит ДО «Откройте приложение»", () => {
+    expect(page).toContain('appId === "platform"');
+    expect(page).toContain('t("pricing.checkoutSuccess.nextLoginPlatform"), href: `/auth?next=${encodeURIComponent("/apps")}`');
+    const openApp = page.indexOf('t("pricing.checkoutSuccess.nextOpenApp"');
+    const platform = page.indexOf('t("pricing.checkoutSuccess.nextLoginPlatform"');
+    expect(platform).toBeGreaterThan(-1);
+    expect(platform).toBeLessThan(openApp);
+  });
+
+  it("ключ nextLoginPlatform есть во всех трёх словарях", () => {
+    for (const l of ["ru", "en", "kk"]) {
+      const m = dict(l).match(/"pricing\.checkoutSuccess\.nextLoginPlatform": "([^"]+)"/);
+      expect(m, l).toBeTruthy();
+      expect(m![1].length, l).toBeGreaterThan(30);
+    }
+  });
+
   it("ключ есть во всех трёх словарях и содержит {app}", () => {
     for (const l of ["ru", "en", "kk"]) {
       const m = dict(l).match(/"pricing\.checkoutSuccess\.nextLogin": "([^"]+)"/);

@@ -22,6 +22,7 @@ import { getPool } from "../lib/dbPool";
 import { verifyBearerOptional } from "../lib/authJwt";
 import rateLimit from "express-rate-limit";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { resolveApiKey } from "../lib/apiKeyAuth";
 
 const capture = makeServiceCapture("apiKeys");
 
@@ -327,28 +328,20 @@ apiKeysRouter.get("/:id/usage", async (req, res) => {
 apiKeysRouter.get("/verify", verifyLimiter, async (req, res) => {
   try {
     await ensureTables();
-    const raw = req.headers["x-api-key"] as string | undefined;
-    if (!raw) return res.status(401).json({ error: "missing x-api-key header" });
-
-    const hash = crypto.createHash("sha256").update(raw).digest("hex");
-    const r = await pool.query(
-      `SELECT "id","userId","tier","env","callsMonth"
-       FROM "PlatformApiKey"
-       WHERE "keyHash" = $1 AND "revokedAt" IS NULL
-       LIMIT 1`,
-      [hash]
-    );
-
-    if (r.rowCount === 0) return res.status(401).json({ error: "invalid_or_revoked_key" });
-
-    // Bump last-used (fire-and-forget)
-    pool.query(
-      `UPDATE "PlatformApiKey" SET "lastUsedAt" = NOW(), "callsMonth" = "callsMonth" + 1 WHERE "id" = $1`,
-      [(r.rows[0] as any).id]
-    ).catch(() => {});
-
-    const key = r.rows[0] as any;
-    res.json({ valid: true, userId: key.userId, tier: key.tier, env: key.env });
+    /*
+     * Проверка живёт в `lib/apiKeyAuth.ts` и зовётся отсюда, а не наоборот.
+     * 05.10.2026 QSign стал первым, кто пускает по ключу, и копировать сюда
+     * второй экземпляр правила нельзя: отзыв ключа чинился бы в одном месте,
+     * а работал в двух. Ответ этой ручки не изменился ни одним полем.
+     */
+    const identity = await resolveApiKey(req);
+    if (!identity) {
+      const raw = req.headers["x-api-key"];
+      return res
+        .status(401)
+        .json({ error: typeof raw === "string" && raw ? "invalid_or_revoked_key" : "missing x-api-key header" });
+    }
+    res.json({ valid: true, userId: identity.userId, tier: identity.tier, env: identity.env });
   } catch (err: unknown) {
     capture(err);
     console.error("[apiKeys] verify_failed", err instanceof Error ? err.message : err);

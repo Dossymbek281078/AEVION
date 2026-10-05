@@ -4,6 +4,7 @@ import rateLimit from "express-rate-limit";
 import { getPool } from "../lib/dbPool";
 import { учестьДействие, отказПоНорме } from "../lib/freeActionQuota";
 import { verifyBearerOptional, type JwtPayload } from "../lib/authJwt";
+import { resolveApiKey } from "../lib/apiKeyAuth";
 import { ensureQSignV2Tables } from "../lib/qsignV2/ensureTables";
 import { canonicalJson, sha256Hex, CANONICALIZATION_SPEC } from "../lib/qsignV2/canonicalize";
 import { resolveGeo, extractClientIp as _extractClientIpImpl } from "../lib/qsignV2/geo";
@@ -141,6 +142,49 @@ function errResp(
 }
 
 /* ───────── helpers ───────── */
+
+/**
+ * Вход по ПЛАТФОРМЕННОМУ КЛЮЧУ — альтернатива Bearer, только для подписи.
+ *
+ * ЗАЧЕМ. Пилот с покупателем данных обещает подписать поставку из нескольких
+ * файлов. Замер 05.10.2026: сделать это было НЕЧЕМ — `/sign` требует JWT
+ * живого человека, а ключей у этого роутера не было вовсе. Наш собственный
+ * боевой смоук пунктом 6 проверяет «POST /sign (no auth) -> 401», то есть ни
+ * один скрипт платформы никогда не подписывал через API: механизма не
+ * существовало, а обещание уже было дано.
+ *
+ * ГРАНИЦЫ, намеренно узкие:
+ *   - ключ открывает ТОЛЬКО подпись. Отзыв, вебхуки, ротация ключей и выдача
+ *     ключей по-прежнему требуют Bearer: это действия владельца аккаунта, а
+ *     не машины.
+ *   - подпись ставится от имени ВЛАДЕЛЬЦА ключа (`userId`), не от имени
+ *     платформы и не анонимно. Чужую подпись ключом поставить нельзя.
+ *   - отозванный ключ не пускает: проверка идёт через общий `resolveApiKey`,
+ *     который ищет строку с `revokedAt IS NULL`.
+ *   - предел частоты у ручки прежний (`signLimiter`) и действует одинаково
+ *     для обоих способов входа.
+ *
+ * Порядок проверки — сперва Bearer: человек в браузере ходит чаще, и лишний
+ * запрос в базу за ключом ему ни к чему.
+ */
+async function requireAuthOrApiKey(req: Request, res: Response): Promise<JwtPayload | null> {
+  const bearer = verifyBearerOptional(req);
+  if (bearer) return bearer;
+
+  const identity = await resolveApiKey(req);
+  if (identity) {
+    /*
+     * Дальше по коду личность читается как `auth.sub`. Отдаём ровно то же
+     * поле, чтобы подпись легла на владельца ключа и ни одна ветка ниже не
+     * узнала, каким способом он вошёл, — иначе появится второй путь подписи
+     * со своими отличиями.
+     */
+    return { sub: identity.userId } as JwtPayload;
+  }
+
+  res.status(401).json({ error: "missing or invalid bearer token or x-api-key" });
+  return null;
+}
 
 function requireAuth(req: Request, res: Response): JwtPayload | null {
   const payload = verifyBearerOptional(req);
@@ -878,7 +922,7 @@ async function findIdempotentSignature(
 }
 
 qsignV2Router.post("/sign", signLimiter, async (req, res) => {
-  const auth = requireAuth(req, res);
+  const auth = await requireAuthOrApiKey(req, res);
   if (!auth) return;
 
   // Бесплатная норма подписей в месяц, дальше платно. Проверка ПЕРЕД работой:

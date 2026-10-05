@@ -90,6 +90,11 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "stats.total": "Всего {n}",
     "stats.achievements": "Достижения",
     "more.title": "А ещё",
+    "chip.lichessDaily": "Задача дня · Lichess",
+    "chip.classics": "Классика",
+    "chip.rating": "Рейтинг",
+    "chip.history": "История",
+    "chip.history.aria": "История онлайн-матчей",
     "nav.coach": "Тренер",
     // Нижняя навигация на телефоне подписана короче, чем кнопка в шапке.
     // Разные ключи намеренно: иначе русский интерфейс менялся бы вместе с переводом.
@@ -343,6 +348,11 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "stats.total": "Total {n}",
     "stats.achievements": "Achievements",
     "more.title": "And more",
+    "chip.lichessDaily": "Puzzle of the day · Lichess",
+    "chip.classics": "Classics",
+    "chip.rating": "Rating",
+    "chip.history": "History",
+    "chip.history.aria": "Online match history",
     "nav.coach": "Coach",
     "nav.coachShort": "Coach",
     "nav.more": "More",
@@ -594,8 +604,19 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "stats.total": "Барлығы {n}",
     "stats.achievements": "Жетістіктер",
     "more.title": "Тағы да",
+    "chip.lichessDaily": "Күннің есебі · Lichess",
+    "chip.classics": "Классика",
+    "chip.rating": "Рейтинг",
+    "chip.history": "Тарих",
+    "chip.history.aria": "Онлайн ойындар тарихы",
     "nav.coach": "Жаттықтырушы",
-    "nav.coachShort": "Жаттықтырушы",
+    // 🔴 КОРОТКОЕ слово здесь обязательно. «Жаттықтырушы» — 12 знаков, а в
+    // нижнюю навигацию на 320px помещается пять разделов, то есть ~8 знаков
+    // на подпись. Длинное слово молча обрезается в «Жаттықт…»: контейнер
+    // стоит с textOverflow:"ellipsis" и об ошибке никто не узнает.
+    // Поймал сторож nizhnyayaNavigaciya320 — я бы этого не увидел.
+    // На вычитку носителю: нужен короткий казахский вариант вместо заимствования.
+    "nav.coachShort": "Коуч",
     "nav.more": "Тағы",
     "nav.play": "Ойнау",
     "nav.puzzles": "Есептер",

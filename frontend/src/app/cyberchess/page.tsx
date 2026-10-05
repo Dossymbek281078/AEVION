@@ -7117,14 +7117,14 @@ export default function CyberChessPage(){
                     border:`1px solid #c4b5fd`,background:lichessLoading?"#f5f3ff":"linear-gradient(135deg,#f5f3ff,#ede9fe)",color:CC.accent,
                     fontSize:12,fontWeight:800,cursor:lichessLoading?"wait":"pointer",
                     display:"inline-flex",alignItems:"center",gap:5,opacity:lichessLoading?0.6:1}}>
-                  🌐 Задача дня · Lichess{lichessLoading?" …":""}
+                  🌐 {cc.t("chip.lichessDaily")}{lichessLoading?" …":""}
                 </button>
                 <button onClick={()=>{sShowMasters(true);sMasterCurrent(null);sMasterMode("replay")}}
                   className="cc-focus-ring"
                   style={{padding:"6px 12px",borderRadius:RADIUS.full,
                     border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,
                     fontSize:12,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
-                  ★ Классика
+                  ★ {cc.t("chip.classics")}
                 </button>
                 <button onClick={()=>{sTab("analysis");sShowAnal(true)}}
                   className="cc-focus-ring"
@@ -7140,15 +7140,15 @@ export default function CyberChessPage(){
                   style={{padding:"6px 12px",borderRadius:RADIUS.full,textDecoration:"none",
                     border:"1px solid #fcd34d",background:"linear-gradient(135deg,#fffbeb,#fef3c7)",color:"#92400e",
                     fontSize:12,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
-                  🏆 Рейтинг{onlineRating!=null&&<span style={{color:"#b45309",fontWeight:900,fontSize:11}}>{onlineRating}</span>}
+                  🏆 {cc.t("chip.rating")}{onlineRating!=null&&<span style={{color:"#b45309",fontWeight:900,fontSize:11}}>{onlineRating}</span>}
                 </Link>
                 <Link href="/cyberchess/history"
                   className="cc-focus-ring"
-                  aria-label="История онлайн-матчей"
+                  aria-label={cc.t("chip.history.aria")}
                   style={{padding:"6px 12px",borderRadius:RADIUS.full,textDecoration:"none",
                     border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,
                     fontSize:12,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
-                  📜 История
+                  📜 {cc.t("chip.history")}
                 </Link>
               </div>
 

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { bezKommentariev } from "./bezKommentariev";
 import { readFileSync } from "fs";
 import { join } from "path";
+import { SUPPORTED_LOCALES, tFor } from "../i18n";
 
 /**
  * Английские слова на русском экране шахмат.
@@ -51,18 +52,28 @@ describe("на экране шахмат нет английских слов в
   });
 
   it("«AI» рядом с рейтингом соперника — по-русски", () => {
-    const s = KOD();
-    expect(s.length).toBeGreaterThan(100000); // контроль: файл прочитан
-    expect(s).not.toContain("AI ≈ {rat}");
-    expect(s).toContain("ИИ ≈ {rat}");
+    // 05.10.2026 подпись уехала из кода в словарь (перевод на казахский).
+    // Спрашиваем словарь: требовать литерал в page.tsx теперь значит краснеть
+    // на верной правке. Смысл проверки тот же — на русском экране не «AI».
+    const рус = tFor("ru", "mode.quick.sub");
+    expect(рус, "ключа mode.quick.sub нет в русском словаре").not.toBe("mode.quick.sub");
+    expect(рус).toContain("ИИ");
+    expect(рус).not.toContain("AI");
+    // И в английском он обязан БЫТЬ — иначе проверка выше доказывает лишь то,
+    // что слова «AI» нет нигде.
+    expect(tFor("en", "mode.quick.sub")).toContain("AI");
   });
 
   it("подписи задачи дня Lichess переведены, имя сервиса сохранено", () => {
     const s = KOD();
     expect(s).not.toContain("🌐 Lichess Daily");
-    expect(s).toContain("🌐 Задача дня · Lichess");
-    // Имя сервиса обязано остаться: это не перевод, а название.
-    expect(s).toContain("Lichess");
+    const рус = tFor("ru", "chip.lichessDaily");
+    expect(рус, "ключа chip.lichessDaily нет в русском словаре").not.toBe("chip.lichessDaily");
+    expect(рус).toContain("Задача дня");
+    // Имя сервиса обязано остаться на ВСЕХ языках: это не перевод, а название.
+    for (const { code } of SUPPORTED_LOCALES) {
+      expect(tFor(code, "chip.lichessDaily"), `${code}: пропало имя сервиса`).toContain("Lichess");
+    }
   });
 
   it("название уровня в описании совпадает с кнопкой", () => {

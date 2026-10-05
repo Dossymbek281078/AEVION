@@ -19,6 +19,7 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import SetupBoardPreview from "../SetupBoardPreview";
+import { SUPPORTED_LOCALES, tFor } from "../i18n";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PAGE = readFileSync(join(HERE, "..", "page.tsx"), "utf8");
@@ -130,7 +131,15 @@ describe("доска на стартовом экране", () => {
     const i = PAGE.indexOf("<SetupBoardPreview");
     const блок = PAGE.slice(i, i + 1400);
     // Текст призыва: не техническое «Начать партию», а действие, которое видно.
-    expect(блок, "на странице нет видимого призыва нажать доску").toMatch(/label="[^"]*Нажмите доску[^"]*"/);
+    // 05.10.2026 текст призыва уехал в словарь (перевод на казахский): здесь
+    // проверяем, что призыв ПОДСТАВЛЯЕТСЯ, а в словаре — что он не пустой и
+    // есть на каждом языке. Требовать литерал значило бы краснеть на верной правке.
+    expect(блок, "на странице нет видимого призыва нажать доску").toMatch(/label=\{`▶ \$\{cc\.t\("board\.cta\.start"\)\}`\}/);
+    for (const { code } of SUPPORTED_LOCALES) {
+      const текст = tFor(code, "board.cta.start");
+      expect(текст, `${code}: призыва нажать доску нет в словаре`).not.toBe("board.cta.start");
+      expect(текст.length, `${code}: призыв подозрительно короток — «${текст}»`).toBeGreaterThan(8);
+    }
     // Бюджет высоты: на невысоком рабочем столе доска обязана уступить место,
     // иначе выбор цвета (772) и «ИГРАТЬ» (820) остаются за кромкой окна 768,
     // а страница листается всего на 50 px и колесо проносит блок мимо.

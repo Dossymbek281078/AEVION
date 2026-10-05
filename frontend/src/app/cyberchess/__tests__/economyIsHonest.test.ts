@@ -2,6 +2,7 @@ import { describe, test, expect } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { stripComments } from "./_stripComments";
+import { SUPPORTED_LOCALES, tFor } from "../i18n";
 
 // Страница экономики говорит о себе правду. 19.08.2026.
 //
@@ -54,10 +55,19 @@ const landing = () => stripComments(fs.readFileSync(LANDING, "utf-8"));
 
 describe("карточка-вход в экономику не выдаёт концепт за рабочую фичу", () => {
   test("обещание стримеров на лендинге помечено как превью замысла", () => {
-    const s = landing().replace(/\s+/g, " ");
-    // «подписки на стримеров» есть только в продающей killer-карточке лендинга.
-    expect(s).toMatch(/подписки на стримеров/);
-    // ...и в пределах того же текста карточки обязан стоять маркер концепта.
-    expect(s).toMatch(/подписки на стримеров[^}]{0,140}(превью|замысл|скоро|в плане)/);
+    // 05.10.2026 текст карточки уехал в словарь. Честность проверяем ТАМ, где
+    // текст теперь живёт, и на КАЖДОМ языке: обещание, переведённое без оговорки,
+    // — то же самое обещание без оговорки.
+    let проверено = 0;
+    for (const { code } of SUPPORTED_LOCALES) {
+      const desc = tFor(code, "killer.economy.desc");
+      expect(desc, `${code}: описания экономики нет в словаре`).not.toBe("killer.economy.desc");
+      expect(
+        desc,
+        `${code}: обещание без пометки, что это замысел — «${desc}»`
+      ).toMatch(/превью|замысл|скоро|в плане|preview|soon|идея|идеяның|жақында|әзірге/i);
+      проверено++;
+    }
+    expect(проверено, `проверено языков: ${проверено}`).toBe(SUPPORTED_LOCALES.length);
   });
 });

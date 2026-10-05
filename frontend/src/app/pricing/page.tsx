@@ -176,7 +176,7 @@ function availabilityBadge(a: ModulePrice["availability"]) {
       style={{
         background: m.bg,
         color: m.fg,
-        fontSize: 10,
+        fontSize: 13,
         fontWeight: 800,
         padding: "2px 6px",
         borderRadius: 4,
@@ -774,7 +774,7 @@ export default function PricingPage() {
             borderRadius: 12,
             background: "rgba(234,179,8,0.10)",
             border: "1px solid rgba(234,179,8,0.35)",
-            fontSize: 13,
+            fontSize: 15.5,
             color: "#713f12",
           }}
         >
@@ -846,7 +846,7 @@ export default function PricingPage() {
           textAlign: "left",
         };
         const значок: React.CSSProperties = {
-          fontSize: 12, fontWeight: 800, color: "#0d9488", letterSpacing: "0.04em", textTransform: "uppercase",
+          fontSize: 15, fontWeight: 800, color: "#0d9488", letterSpacing: "0.04em", textTransform: "uppercase",
         };
         const кнопка: React.CSSProperties = {
           padding: "12px 28px",
@@ -895,11 +895,11 @@ export default function PricingPage() {
                 )}
               </div>
               {!нетТовара && (
-                <div style={{ fontSize: 12, color: "#334155", fontWeight: 700, marginBottom: 2 }}>
+                <div style={{ fontSize: 15, color: "#334155", fontWeight: 700, marginBottom: 2 }}>
                   {заСрок(termTotal(app.baseMonthly, appTerm), TERM_MONTHS[appTerm])}
                 </div>
               )}
-              <div style={{ fontSize: 12, color: "#64748b" }}>
+              <div style={{ fontSize: 15, color: "#64748b" }}>
                 {t("pricing.home.heroModule.paymentCard")}{" "}
                 {/* Сведено 31.08: взята их сторона — та же логика, вынесенная в
                     lib/chargeCurrencyNote.ts. Причина не в красоте: страница цен
@@ -922,7 +922,7 @@ export default function PricingPage() {
                      видел серую кнопку и не знал ни почему, ни что делать.
                      Касса на этом пути отвечает честным 503 с текстом «напишите
                      нам», но только ПОСЛЕ нажатия; здесь та же мысль сказана до. */
-                  <p style={{ fontSize: 11, lineHeight: 1.4, color: "#64748b", marginBottom: 8 }}>
+                  <p style={{ fontSize: 15, lineHeight: 1.4, color: "#64748b", marginBottom: 8 }}>
                     {t("pricing.home.tier.notSellable")}{" "}
                     <Link href={`/pricing/contact?tier=${appTerm}&app=${app.slug}`} style={{ color: "#0d9488", fontWeight: 700 }}>
                       {t("pricing.home.tier.notSellableCta")}
@@ -956,7 +956,7 @@ export default function PricingPage() {
             padding: "4px 12px",
             background: "linear-gradient(135deg, #0d9488, #0ea5e9)",
             color: "#fff",
-            fontSize: 11,
+            fontSize: 15,
             fontWeight: 800,
             letterSpacing: "0.06em",
             borderRadius: 999,
@@ -1025,7 +1025,7 @@ export default function PricingPage() {
               </div>
               <div
                 style={{
-                  fontSize: 11,
+                  fontSize: 15,
                   color: "#475569",
                   fontWeight: 700,
                   marginTop: 2,
@@ -1052,10 +1052,10 @@ export default function PricingPage() {
           }}
         >
           <div style={{ maxWidth: 620 }}>
-            <div style={{ fontSize: 14, fontWeight: 800, color: "#065f46", marginBottom: 2 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: "#065f46", marginBottom: 2 }}>
               ⚡ AI spend optimizes itself: {aiSavings.savedUsd >= 0.005 ? `$${aiSavings.savedUsd.toFixed(2)}` : "<$0.01"} saved across {aiSavings.runs} smart call{aiSavings.runs === 1 ? "" : "s"}
             </div>
-            <div style={{ fontSize: 12.5, color: "#475569", lineHeight: 1.5 }}>
+            <div style={{ fontSize: 15, color: "#475569", lineHeight: 1.5 }}>
               Every module routes AI calls to the cheapest tier that can do the job — {Math.round(aiSavings.savedPct)}%
               below always running the full council. Your plan price buys features, not wasted tokens.
             </div>
@@ -1086,7 +1086,7 @@ export default function PricingPage() {
         >
           <div
             style={{
-              fontSize: 11,
+              fontSize: 15,
               fontWeight: 800,
               color: "#64748b",
               letterSpacing: "0.06em",
@@ -1124,7 +1124,7 @@ export default function PricingPage() {
               title={localizePromoDescription(p.description, lang)}
               style={{
                 padding: "6px 12px",
-                fontSize: 12,
+                fontSize: 15,
                 fontWeight: 800,
                 fontFamily: "ui-monospace, monospace",
                 letterSpacing: "0.04em",
@@ -1166,7 +1166,7 @@ export default function PricingPage() {
           marginBottom: 32,
         }}
       >
-        <p style={{ width: "100%", margin: 0, textAlign: "center", fontSize: 14, color: "#334155", lineHeight: 1.5 }}>
+        <p style={{ width: "100%", margin: 0, textAlign: "center", fontSize: 16, color: "#334155", lineHeight: 1.5 }}>
           {t("pricing.home.tier.termNote")}
         </p>
         <select
@@ -1177,7 +1177,7 @@ export default function PricingPage() {
           }}
           style={{
             padding: "8px 12px",
-            fontSize: 13,
+            fontSize: 15.5,
             fontWeight: 600,
             borderRadius: 8,
             border: BORDER,
@@ -1199,7 +1199,7 @@ export default function PricingPage() {
         */}
         <div
           data-testid="charge-currency-note"
-          style={{ fontSize: 12, color: "#64748b", width: "100%", marginTop: 6 }}
+          style={{ fontSize: 15, color: "#64748b", width: "100%", marginTop: 6 }}
         >
           {t("pricing.home.heroModule.paymentCard")} {чемСпишется()}
         </div>
@@ -1215,7 +1215,7 @@ export default function PricingPage() {
             border: "1px solid rgba(251,191,36,0.3)",
             borderRadius: 10,
             color: "#d97706",
-            fontSize: 13,
+            fontSize: 15.5,
             lineHeight: 1.5,
           }}
         >
@@ -1271,7 +1271,7 @@ export default function PricingPage() {
                     right: 16,
                     background: "linear-gradient(135deg, #f59e0b, #ef4444)",
                     color: "#fff",
-                    fontSize: 10,
+                    fontSize: 13,
                     fontWeight: 800,
                     letterSpacing: "0.06em",
                     padding: "3px 10px",
@@ -1302,7 +1302,7 @@ export default function PricingPage() {
               </h3>
               <p
                 style={{
-                  fontSize: 12,
+                  fontSize: 15,
                   color: isHighlight ? "#94a3b8" : "#64748b",
                   margin: 0,
                   marginBottom: 16,
@@ -1318,7 +1318,7 @@ export default function PricingPage() {
                 {showPrice !== null && showPrice > 0 && (
                   <span
                     style={{
-                      fontSize: 13,
+                      fontSize: 15.5,
                       color: isHighlight ? "#94a3b8" : "#64748b",
                       marginLeft: 4,
                     }}
@@ -1327,7 +1327,7 @@ export default function PricingPage() {
                   </span>
                 )}
                 {!безТовара(tier.id) && tier.termMonths !== null && tier.priceTermTotal !== null && tier.priceTermTotal > 0 && (
-                  <div style={{ fontSize: 13, fontWeight: 700, color: isHighlight ? "#cbd5e1" : "#334155", marginTop: 4 }}>
+                  <div style={{ fontSize: 15.5, fontWeight: 700, color: isHighlight ? "#cbd5e1" : "#334155", marginTop: 4 }}>
                     {заСрок(tier.priceTermTotal, tier.termMonths)}
                   </div>
                 )}
@@ -1338,7 +1338,7 @@ export default function PricingPage() {
                       marginTop: 6,
                       background: isHighlight ? "rgba(52,211,153,0.18)" : "#d1fae5",
                       color: isHighlight ? "#6ee7b7" : "#065f46",
-                      fontSize: 11,
+                      fontSize: 15,
                       fontWeight: 800,
                       padding: "2px 8px",
                       borderRadius: 999,
@@ -1355,7 +1355,7 @@ export default function PricingPage() {
                     display: "block",
                     width: "100%",
                     padding: "10px 16px",
-                    fontSize: 13,
+                    fontSize: 15.5,
                     fontWeight: 800,
                     borderRadius: 10,
                     cursor: "pointer",
@@ -1377,7 +1377,7 @@ export default function PricingPage() {
                      ни что делать. Касса на этом пути отвечает честным 503 с
                      текстом «напишите нам», но только ПОСЛЕ нажатия; здесь
                      та же мысль сказана до него. */
-                  <p style={{ fontSize: 11, lineHeight: 1.4, color: "#64748b", marginBottom: 8 }}>
+                  <p style={{ fontSize: 15, lineHeight: 1.4, color: "#64748b", marginBottom: 8 }}>
                     {t("pricing.home.tier.notSellable")}{" "}
                     <Link href={`/pricing/contact?tier=${tier.id}`} style={{ color: "#0d9488", fontWeight: 700 }}>
                       {t("pricing.home.tier.notSellableCta")}
@@ -1389,7 +1389,7 @@ export default function PricingPage() {
                   style={{
                     width: "100%",
                     padding: "10px 16px",
-                    fontSize: 13,
+                    fontSize: 15.5,
                     fontWeight: 800,
                     borderRadius: 10,
                     border: "none",
@@ -1423,7 +1423,7 @@ export default function PricingPage() {
                     style={{
                       width: "100%",
                       padding: "6px 16px",
-                      fontSize: 11,
+                      fontSize: 15,
                       fontWeight: 700,
                       borderRadius: 8,
                       border: "none",
@@ -1447,7 +1447,7 @@ export default function PricingPage() {
                   margin: 0,
                   padding: 0,
                   listStyle: "none",
-                  fontSize: 13,
+                  fontSize: 15.5,
                   lineHeight: 1.5,
                 }}
               >
@@ -1476,7 +1476,7 @@ export default function PricingPage() {
                 style={{
                   display: "inline-block",
                   marginTop: 14,
-                  fontSize: 12,
+                  fontSize: 15,
                   fontWeight: 700,
                   color: isHighlight ? "#5eead4" : "#0d9488",
                   textDecoration: "none",
@@ -1541,7 +1541,7 @@ export default function PricingPage() {
                   style={{
                     flex: "1 1 auto",
                     padding: "8px 12px",
-                    fontSize: 13,
+                    fontSize: 15.5,
                     fontWeight: 700,
                     borderRadius: 8,
                     border: "none",
@@ -1590,8 +1590,8 @@ export default function PricingPage() {
                         <span style={{ fontSize: 26, fontWeight: 900, letterSpacing: "-0.02em" }}>
                           {displayPrice(termPricePerMonth(a.baseMonthly, appTerm))}
                         </span>
-                        <span style={{ fontSize: 13, color: "#64748b", marginLeft: 4 }}>{tp("tier.perMonth")}</span>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: "#334155", marginTop: 2 }}>
+                        <span style={{ fontSize: 15.5, color: "#64748b", marginLeft: 4 }}>{tp("tier.perMonth")}</span>
+                        <div style={{ fontSize: 15.5, fontWeight: 700, color: "#334155", marginTop: 2 }}>
                           {заСрок(termTotal(a.baseMonthly, appTerm), месяцев)}
                         </div>
                         {/* Вторая граница цены (29.09.2026).
@@ -1605,7 +1605,7 @@ export default function PricingPage() {
                             ключей перевода не заводим, иначе на девяти языках
                             пропуск молча откатится на английский. */}
                         {appTerm !== "max" && можноОбещатьСрок(ссылкаПриложения(a.slug, "max")) && (
-                          <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                          <div style={{ fontSize: 15, color: "#64748b", marginTop: 2 }}>
                             {TERM_NAME.max}: {displayPrice(termPricePerMonth(a.baseMonthly, "max"))}
                             {tp("tier.perMonth")}
                           </div>
@@ -1619,7 +1619,7 @@ export default function PricingPage() {
                           display: "block",
                           marginTop: "auto",
                           padding: "10px 16px",
-                          fontSize: 13,
+                          fontSize: 15.5,
                           fontWeight: 800,
                           borderRadius: 10,
                           background: "#0f172a",
@@ -1633,7 +1633,7 @@ export default function PricingPage() {
                     ) : (
                       <>
                         {!продаётсяСсылка(ссылка) && (
-                          <p style={{ fontSize: 11, lineHeight: 1.4, color: "#64748b", margin: 0 }}>
+                          <p style={{ fontSize: 15, lineHeight: 1.4, color: "#64748b", margin: 0 }}>
                             {t("pricing.home.tier.notSellable")}{" "}
                             <Link href={контакт} style={{ color: "#0d9488", fontWeight: 700 }}>
                               {t("pricing.home.tier.notSellableCta")}
@@ -1648,7 +1648,7 @@ export default function PricingPage() {
                             marginTop: "auto",
                             width: "100%",
                             padding: "10px 16px",
-                            fontSize: 13,
+                            fontSize: 15.5,
                             fontWeight: 800,
                             borderRadius: 10,
                             border: "none",
@@ -1671,7 +1671,7 @@ export default function PricingPage() {
             {/* Утверждение печатается, только если оно ВЕРНО на выбранном сроке:
                 сумма всех приложений и цена планеты считаются здесь же. */}
             {суммаПриложений > планета && (
-              <p data-testid="apps-vs-planet" style={{ margin: "16px 0 0", fontSize: 14, color: "#334155", lineHeight: 1.5 }}>
+              <p data-testid="apps-vs-planet" style={{ margin: "16px 0 0", fontSize: 16, color: "#334155", lineHeight: 1.5 }}>
                 {t("pricing.home.apps.allAppsDearer", {
                   apps: displayPrice(суммаПриложений),
                   planet: displayPrice(планета),
@@ -1731,14 +1731,14 @@ export default function PricingPage() {
                 }}
               >
                 {t.rating && (
-                  <div style={{ fontSize: 12, color: "#f59e0b" }}>
+                  <div style={{ fontSize: 15, color: "#f59e0b" }}>
                     {"★".repeat(t.rating)}
                     <span style={{ color: "#cbd5e1" }}>{"★".repeat(5 - t.rating)}</span>
                   </div>
                 )}
                 <p
                   style={{
-                    fontSize: 14,
+                    fontSize: 16,
                     color: "#0f172a",
                     lineHeight: 1.5,
                     margin: 0,
@@ -1759,7 +1759,7 @@ export default function PricingPage() {
                       alignItems: "center",
                       justifyContent: "center",
                       fontWeight: 800,
-                      fontSize: 14,
+                      fontSize: 16,
                       flexShrink: 0,
                     }}
                   >
@@ -1771,8 +1771,8 @@ export default function PricingPage() {
                       .toUpperCase()}
                   </div>
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a" }}>{t.author}</div>
-                    <div style={{ fontSize: 11, color: "#64748b" }}>
+                    <div style={{ fontSize: 15.5, fontWeight: 800, color: "#0f172a" }}>{t.author}</div>
+                    <div style={{ fontSize: 15, color: "#64748b" }}>
                       {t.role} · {t.company}
                     </div>
                   </div>
@@ -1809,7 +1809,7 @@ export default function PricingPage() {
           }}
         >
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 15.5 }}>
               <thead>
                 <tr style={{ background: "#f8fafc" }}>
                   <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 800, color: "#475569" }}>
@@ -1839,7 +1839,7 @@ export default function PricingPage() {
                   >
                     <td style={{ padding: "10px 14px", fontWeight: 700 }}>
                       {m.name}
-                      <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600 }}>
+                      <div style={{ fontSize: 13, color: "#94a3b8", fontWeight: 600 }}>
                         {m.code}
                       </div>
                     </td>
@@ -1875,13 +1875,13 @@ export default function PricingPage() {
                     <td style={{ padding: "10px 14px" }}>
                       <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                         {m.includedIn.length === 0 ? (
-                          <span style={{ color: "#94a3b8", fontSize: 11 }}>—</span>
+                          <span style={{ color: "#94a3b8", fontSize: 15 }}>—</span>
                         ) : (
                           m.includedIn.map((t) => (
                             <span
                               key={t}
                               style={{
-                                fontSize: 10,
+                                fontSize: 13,
                                 fontWeight: 800,
                                 padding: "2px 6px",
                                 background: "#e0f2fe",
@@ -1946,7 +1946,7 @@ export default function PricingPage() {
             <div>
               <label
                 style={{
-                  fontSize: 11,
+                  fontSize: 15,
                   fontWeight: 800,
                   color: "#94a3b8",
                   letterSpacing: "0.06em",
@@ -1963,7 +1963,7 @@ export default function PricingPage() {
                     onClick={() => setCalcTier(t.id)}
                     style={{
                       padding: "8px 14px",
-                      fontSize: 12,
+                      fontSize: 15,
                       fontWeight: 800,
                       borderRadius: 8,
                       border: "none",
@@ -1981,7 +1981,7 @@ export default function PricingPage() {
               <label
                 htmlFor="calc-seats"
                 style={{
-                  fontSize: 11,
+                  fontSize: 15,
                   fontWeight: 800,
                   color: "#94a3b8",
                   letterSpacing: "0.06em",
@@ -2001,7 +2001,7 @@ export default function PricingPage() {
                 style={{
                   width: 120,
                   padding: "8px 10px",
-                  fontSize: 14,
+                  fontSize: 16,
                   fontWeight: 700,
                   borderRadius: 8,
                   border: "1px solid rgba(255,255,255,0.12)",
@@ -2014,7 +2014,7 @@ export default function PricingPage() {
               <label
                 htmlFor="calc-promo"
                 style={{
-                  fontSize: 11,
+                  fontSize: 15,
                   fontWeight: 800,
                   color: "#94a3b8",
                   letterSpacing: "0.06em",
@@ -2037,7 +2037,7 @@ export default function PricingPage() {
                 style={{
                   width: 200,
                   padding: "8px 10px",
-                  fontSize: 13,
+                  fontSize: 15.5,
                   fontWeight: 700,
                   letterSpacing: "0.04em",
                   borderRadius: 8,
@@ -2062,19 +2062,19 @@ export default function PricingPage() {
               */}
               <div id="calc-promo-msg" role="status" aria-live="polite">
                 {quote?.promo && (
-                  <div style={{ marginTop: 4, fontSize: 11, color: "#34d399" }}>
+                  <div style={{ marginTop: 4, fontSize: 15, color: "#34d399" }}>
                     ✓ {localizePromoDescription(quote.promo.description, lang)}
                   </div>
                 )}
                 {calcPromo && !quote?.promo && quote?.notes.some((n) => n.toLowerCase().includes("промо")) && (
-                  <div style={{ marginTop: 4, fontSize: 11, color: "#fca5a5" }}>
+                  <div style={{ marginTop: 4, fontSize: 15, color: "#fca5a5" }}>
                     ✗ {quote.notes.find((n) => n.toLowerCase().includes("промо"))}
                   </div>
                 )}
               </div>
             </div>
             {/* Выбора надстроек больше нет: любой платный срок включает все модули. */}
-            <p style={{ margin: 0, fontSize: 12, color: "#94a3b8", lineHeight: 1.5 }}>
+            <p style={{ margin: 0, fontSize: 15, color: "#94a3b8", lineHeight: 1.5 }}>
               {t("pricing.home.calc.allIncluded")}
             </p>
           </div>
@@ -2089,7 +2089,7 @@ export default function PricingPage() {
           >
             <div
               style={{
-                fontSize: 11,
+                fontSize: 15,
                 fontWeight: 800,
                 color: "#94a3b8",
                 letterSpacing: "0.06em",
@@ -2102,7 +2102,7 @@ export default function PricingPage() {
               <>
                 <div style={{ marginBottom: 16 }}>
                   {quote.lines.length === 0 ? (
-                    <div style={{ color: "#94a3b8", fontSize: 13 }}>
+                    <div style={{ color: "#94a3b8", fontSize: 15.5 }}>
                       {tp("calc.freeBilling")}
                     </div>
                   ) : (
@@ -2113,7 +2113,7 @@ export default function PricingPage() {
                           display: "flex",
                           justifyContent: "space-between",
                           padding: "6px 0",
-                          fontSize: 13,
+                          fontSize: 15.5,
                           borderBottom: "1px solid rgba(255,255,255,0.06)",
                         }}
                       >
@@ -2131,7 +2131,7 @@ export default function PricingPage() {
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
-                      fontSize: 13,
+                      fontSize: 15.5,
                       color: "#34d399",
                       paddingBottom: 8,
                     }}
@@ -2153,7 +2153,7 @@ export default function PricingPage() {
                     marginTop: 8,
                   }}
                 >
-                  <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 700 }}>
+                  <span style={{ fontSize: 15, color: "#94a3b8", fontWeight: 700 }}>
                     {quote.termMonths
                       ? t("pricing.home.calc.totalTerm", {
                           months: String(quote.termMonths),
@@ -2169,7 +2169,7 @@ export default function PricingPage() {
                 {calcTier !== "free" && calcTier !== "enterprise" && !продаётся(calcTier) && (
                   /* Калькулятор ведёт в ту же кассу, что и карточки: гасим кнопку
                      и говорим почему — серая кнопка без объяснения это тупик. */
-                  <p style={{ fontSize: 11, lineHeight: 1.4, color: "#94a3b8", marginTop: 16, marginBottom: 0 }}>
+                  <p style={{ fontSize: 15, lineHeight: 1.4, color: "#94a3b8", marginTop: 16, marginBottom: 0 }}>
                     {t("pricing.home.tier.notSellable")}{" "}
                     <Link href={`/pricing/contact?tier=${calcTier}`} style={{ color: "#5eead4", fontWeight: 700 }}>
                       {t("pricing.home.tier.notSellableCta")}
@@ -2190,7 +2190,7 @@ export default function PricingPage() {
                       width: "100%",
                       marginTop: 16,
                       padding: "12px 16px",
-                      fontSize: 14,
+                      fontSize: 16,
                       fontWeight: 800,
                       borderRadius: 10,
                       border: "none",
@@ -2213,7 +2213,7 @@ export default function PricingPage() {
                       width: "100%",
                       marginTop: 16,
                       padding: "12px 16px",
-                      fontSize: 14,
+                      fontSize: 16,
                       fontWeight: 800,
                       borderRadius: 10,
                       background: "#0f172a",
@@ -2234,7 +2234,7 @@ export default function PricingPage() {
                       background: "rgba(245,158,11,0.1)",
                       border: "1px solid rgba(245,158,11,0.3)",
                       borderRadius: 8,
-                      fontSize: 11,
+                      fontSize: 15,
                       color: "#fbbf24",
                     }}
                   >
@@ -2245,7 +2245,7 @@ export default function PricingPage() {
                 )}
               </>
             ) : (
-              <div style={{ color: "#94a3b8", fontSize: 13 }}>{tp("calc.empty")}</div>
+              <div style={{ color: "#94a3b8", fontSize: 15.5 }}>{tp("calc.empty")}</div>
             )}
           </div>
         </div>
@@ -2331,7 +2331,7 @@ export default function PricingPage() {
           }}
         >
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 15.5 }}>
               <thead>
                 <tr style={{ background: "#f8fafc" }}>
                   <th style={{ padding: "12px 14px", textAlign: "left", fontWeight: 800, color: "#475569", width: "26%" }}>
@@ -2410,7 +2410,7 @@ export default function PricingPage() {
           <div
             style={{
               padding: "10px 14px",
-              fontSize: 11,
+              fontSize: 15,
               color: "#94a3b8",
               borderTop: "1px solid rgba(15,23,42,0.05)",
               background: "#f8fafc",
@@ -2500,7 +2500,7 @@ export default function PricingPage() {
             >
               <summary
                 style={{
-                  fontSize: 14,
+                  fontSize: 16,
                   fontWeight: 700,
                   color: "#0f172a",
                   outline: "none",
@@ -2513,7 +2513,7 @@ export default function PricingPage() {
                 style={{
                   margin: 0,
                   marginTop: 10,
-                  fontSize: 13,
+                  fontSize: 15.5,
                   color: "#475569",
                   lineHeight: 1.6,
                 }}
@@ -2539,7 +2539,7 @@ export default function PricingPage() {
                   key={b.id}
                   style={{
                     padding: "8px 14px",
-                    fontSize: 12,
+                    fontSize: 15,
                     fontWeight: 700,
                     borderRadius: 8,
                     border: live
@@ -2552,12 +2552,12 @@ export default function PricingPage() {
                     gap: 6,
                   }}
                 >
-                  <span style={{ color: live ? "#10b981" : "#94a3b8", fontSize: 14 }}>
+                  <span style={{ color: live ? "#10b981" : "#94a3b8", fontSize: 16 }}>
                     {live ? "✓" : "○"}
                   </span>
                   <span>{b.label}</span>
                   {b.status && b.status !== "live" && (
-                    <span style={{ color: "#94a3b8", fontWeight: 500, fontSize: 11 }}>
+                    <span style={{ color: "#94a3b8", fontWeight: 500, fontSize: 15 }}>
                       · {b.status}
                     </span>
                   )}
@@ -2582,7 +2582,7 @@ export default function PricingPage() {
         <h3 style={{ fontSize: 22, fontWeight: 900, margin: 0, marginBottom: 6, letterSpacing: "-0.02em" }}>
           {tp("newsletter.title")}
         </h3>
-        <p style={{ color: "#94a3b8", margin: 0, marginBottom: 20, fontSize: 14 }}>
+        <p style={{ color: "#94a3b8", margin: 0, marginBottom: 20, fontSize: 16 }}>
           {tp("newsletter.subtitle")}
         </p>
         {newsletterStatus === "ok" ? (
@@ -2595,7 +2595,7 @@ export default function PricingPage() {
               borderRadius: 10,
               color: "#34d399",
               fontWeight: 700,
-              fontSize: 14,
+              fontSize: 16,
             }}
           >
             {tp("newsletter.success")}
@@ -2625,7 +2625,7 @@ export default function PricingPage() {
               disabled={newsletterStatus === "submitting"}
               style={{
                 padding: "10px 14px",
-                fontSize: 14,
+                fontSize: 16,
                 fontWeight: 600,
                 borderRadius: 10,
                 border: "1px solid rgba(255,255,255,0.12)",
@@ -2641,7 +2641,7 @@ export default function PricingPage() {
               disabled={newsletterStatus === "submitting" || !newsletterEmail.trim()}
               style={{
                 padding: "10px 20px",
-                fontSize: 14,
+                fontSize: 16,
                 fontWeight: 800,
                 borderRadius: 10,
                 border: "none",
@@ -2658,7 +2658,7 @@ export default function PricingPage() {
           <div
             style={{
               marginTop: 12,
-              fontSize: 12,
+              fontSize: 15,
               color: "#fca5a5",
             }}
           >
@@ -2675,7 +2675,7 @@ export default function PricingPage() {
             margin: 0,
             paddingLeft: 20,
             color: "#475569",
-            fontSize: 13,
+            fontSize: 15.5,
             lineHeight: 1.6,
           }}
         >
@@ -2701,7 +2701,7 @@ export default function PricingPage() {
         <div
           style={{
             marginTop: 16,
-            fontSize: 13,
+            fontSize: 15.5,
             color: "#64748b",
             display: "flex",
             flexWrap: "wrap",
@@ -2797,7 +2797,7 @@ export default function PricingPage() {
               background: "#f1f5f9",
               padding: "1px 6px",
               borderRadius: 4,
-              fontSize: 12,
+              fontSize: 15,
             }}
           >
             GET /api/pricing

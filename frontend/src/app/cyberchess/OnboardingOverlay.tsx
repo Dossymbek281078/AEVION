@@ -243,7 +243,7 @@ export default function OnboardingOverlay({ onComplete, onSkip, mode = "dark" }:
         <h2 style={{ margin: 0, fontSize: 24, fontWeight: 800, textAlign: "center", color: p.text }}>
           Добро пожаловать в CyberChess
         </h2>
-        <p style={{ margin: "8px 0 22px", fontSize: 14, color: p.textMuted, textAlign: "center", lineHeight: 1.5 }}>
+        <p style={{ margin: "8px 0 22px", fontSize: 16, color: p.textMuted, textAlign: "center", lineHeight: 1.5 }}>
           С чего начнём? Выбор можно сменить в любой момент — вкладки сверху.
           <br />
           <span translate="no" className="notranslate" style={{ color: p.accent, fontWeight: 700 }}>+50 Chessy</span> уже на счёте.
@@ -291,7 +291,7 @@ export default function OnboardingOverlay({ onComplete, onSkip, mode = "dark" }:
             >
               <span style={{ fontSize: 36, lineHeight: 1 }}>{opt.icon}</span>
               <span style={{ fontSize: 17, fontWeight: 700 }}>{opt.title}</span>
-              <span style={{ fontSize: 12, color: p.textMuted, lineHeight: 1.35 }}>{opt.hint}</span>
+              <span style={{ fontSize: 15, color: p.textMuted, lineHeight: 1.4 }}>{opt.hint}</span>
             </button>
           ))}
         </div>
@@ -305,8 +305,8 @@ export default function OnboardingOverlay({ onComplete, onSkip, mode = "dark" }:
               border: `1px solid ${p.border}`,
               color: p.textMuted,
               borderRadius: 8,
-              padding: "8px 16px",
-              fontSize: 13,
+              padding: "9px 16px",
+              fontSize: 15,
               cursor: "pointer",
               fontFamily: FONT,
             }}

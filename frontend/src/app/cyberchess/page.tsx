@@ -7400,7 +7400,7 @@ export default function CyberChessPage(){
                   <div style={{fontSize:10,fontWeight:900,letterSpacing:1.5,color:h.sym.color,textTransform:"uppercase" as const}}>{h.sym.short}</div>
                 </div>
                 <div style={{position:"relative",fontSize:16,fontWeight:900,color:CC.text,lineHeight:1.2}}>{h.title}</div>
-                <div style={{position:"relative",fontSize:12,color:CC.textDim,marginTop:4,lineHeight:1.45}}>{h.sub}</div>
+                <div style={{position:"relative",fontSize:15,color:CC.textDim,marginTop:4,lineHeight:1.45}}>{h.sub}</div>
                 <div style={{position:"relative",marginTop:14,display:"inline-flex",alignItems:"center",gap:6,fontSize:12,fontWeight:800,color:h.sym.color}}>
                   {h.cta} <span style={{fontSize:14}}>›</span>
                 </div>
@@ -7499,8 +7499,8 @@ export default function CyberChessPage(){
                 onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.borderColor=t.accent;(e.currentTarget as HTMLElement).style.transform="translateY(-2px)"}}
                 onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.borderColor=CC.border;(e.currentTarget as HTMLElement).style.transform="translateY(0)"}}>
                   <div style={{fontSize:28,lineHeight:1}}>{t.emoji}</div>
-                  <div style={{fontSize:14,fontWeight:900,color:CC.text,letterSpacing:0.2}}>{t.title}</div>
-                  <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4,minHeight:30}}>{t.desc}</div>
+                  <div style={{fontSize:16,fontWeight:900,color:CC.text,letterSpacing:0.2}}>{t.title}</div>
+                  <div style={{fontSize:15,color:CC.textDim,lineHeight:1.45,minHeight:34}}>{t.desc}</div>
                   <div style={{marginTop:SPACE[1],fontSize:11,fontWeight:900,color:t.accent,letterSpacing:0.4,textTransform:"uppercase" as const}}>{t.cta} →</div>
                 </button>)}
               </div>
@@ -7540,8 +7540,8 @@ export default function CyberChessPage(){
                 onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.boxShadow=`0 6px 20px ${t.accent}33`;(e.currentTarget as HTMLElement).style.transform="translateY(-2px)"}}
                 onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.boxShadow="none";(e.currentTarget as HTMLElement).style.transform="translateY(0)"}}>
                   <div style={{width:44,height:44,borderRadius:11,background:`${t.accent}26`,border:`1px solid ${t.accent}55`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,lineHeight:1}}>{t.emoji}</div>
-                  <div style={{fontSize:14,fontWeight:900,color:CC.text,letterSpacing:0.2}}>{t.title}</div>
-                  <div style={{fontSize:11,color:CC.textDim,lineHeight:1.4,minHeight:30}}>{t.desc}</div>
+                  <div style={{fontSize:16,fontWeight:900,color:CC.text,letterSpacing:0.2}}>{t.title}</div>
+                  <div style={{fontSize:15,color:CC.textDim,lineHeight:1.45,minHeight:34}}>{t.desc}</div>
                   <div style={{marginTop:SPACE[1],fontSize:11,fontWeight:900,color:t.accent,letterSpacing:0.4,textTransform:"uppercase" as const}}>{t.cta} →</div>
                 </button>)}
               </div>

@@ -324,12 +324,12 @@ const DEMO_NOTE =
               border: "1px solid rgba(255,255,255,0.28)",
               color: "#fff",
               textDecoration: "none",
-              fontSize: 13.5,
+              fontSize: 15.5,
               fontWeight: 600,
             }}
           >
             <span style={{
-              fontSize: 10.5, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase",
+              fontSize: 13, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase",
               padding: "3px 8px", borderRadius: 999, background: "#7c3aed", color: "#fff",
             }}>
               New planet
@@ -340,7 +340,7 @@ const DEMO_NOTE =
           <div
             style={{
               display: "block",
-              fontSize: 12,
+              fontSize: 15,
               fontWeight: 800,
               letterSpacing: "0.06em",
               textTransform: "uppercase",
@@ -447,7 +447,7 @@ const DEMO_NOTE =
           <div style={{ marginTop: 28 }}>
             <div
               style={{
-                fontSize: 13,
+                fontSize: 15.5,
                 fontWeight: 800,
                 letterSpacing: "0.08em",
                 textTransform: "uppercase",
@@ -490,7 +490,7 @@ const DEMO_NOTE =
                 };
                 const нутро = (
                   <>
-                    <span style={{ fontSize: 12, opacity: 0.8 }}>{п.вид}</span>
+                    <span style={{ fontSize: 15, opacity: 0.8 }}>{п.вид}</span>
                     {/*
                       translate="no" — НАЗВАНИЕ ТОВАРА не переводим. Замер 22.09
                       на живом сайте: AutoTranslate превратил «Gratitude ∞ Forever
@@ -569,7 +569,7 @@ const DEMO_NOTE =
                   border: "1px solid rgba(255,255,255,0.14)",
                 }}
               >
-                <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.75, textTransform: "uppercase" }}>
+                <div style={{ fontSize: 15, fontWeight: 700, opacity: 0.75, textTransform: "uppercase" }}>
                   {row.k}
                 </div>
                 <div style={{ fontSize: 22, fontWeight: 900, marginTop: 6 }}>{row.v}</div>
@@ -646,14 +646,14 @@ const DEMO_NOTE =
               }}
             >
               <div style={{ fontWeight: 900, fontSize: 16, color: "#0f172a", marginBottom: 8 }}>{c.t}</div>
-              <div style={{ fontSize: 13, color: "#64748b", lineHeight: 1.5 }}>{c.d}</div>
+              <div style={{ fontSize: 15.5, color: "#64748b", lineHeight: 1.5 }}>{c.d}</div>
             </Link>
           ))}
         </section>
 
         {/* How it works — 4-step pipeline */}
         <section style={{ marginBottom: 28, padding: "28px 24px", borderRadius: 20, background: "linear-gradient(135deg, #0f172a, #1e293b)", color: "#fff" }}>
-          <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "#5eead4", marginBottom: 8 }}>HOW IT WORKS</div>
+          <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "#5eead4", marginBottom: 8 }}>HOW IT WORKS</div>
           <h2 style={{ fontSize: 22, fontWeight: 900, margin: "0 0 20px", letterSpacing: "-0.02em" }}>From idea to monetization in 4 steps</h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
             {[
@@ -664,14 +664,14 @@ const DEMO_NOTE =
             ].map((s) => (
               <div key={s.step} style={{ padding: "18px 16px", borderRadius: 14, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)" }}>
                 <div style={{ fontSize: 28, marginBottom: 6 }}>{s.icon}</div>
-                <div style={{ fontSize: 11, fontWeight: 800, color: s.color, marginBottom: 4 }}>STEP {s.step}</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: s.color, marginBottom: 4 }}>STEP {s.step}</div>
                 <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 6 }}>{s.title}</div>
-                <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.5 }}>{s.desc}</div>
+                <div style={{ fontSize: 15, color: "#94a3b8", lineHeight: 1.5 }}>{s.desc}</div>
               </div>
             ))}
           </div>
           <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <Link href="/qright" style={{ padding: "10px 18px", borderRadius: 10, background: "#0d9488", color: "#fff", fontWeight: 800, fontSize: 13, textDecoration: "none" }}>
+            <Link href="/qright" style={{ padding: "10px 18px", borderRadius: 10, background: "#0d9488", color: "#fff", fontWeight: 800, fontSize: 15.5, textDecoration: "none" }}>
               Try it now — register your first IP →
             </Link>
           </div>
@@ -679,7 +679,7 @@ const DEMO_NOTE =
 
         {/* Why invest */}
         <section style={{ marginBottom: 28, padding: "24px", borderRadius: 20, border: "1px solid rgba(15,23,42,0.1)", background: "#fff" }}>
-          <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "#7c3aed", marginBottom: 8 }}>FOR INVESTORS</div>
+          <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "#7c3aed", marginBottom: 8 }}>FOR INVESTORS</div>
           <h2 style={{ fontSize: 22, fontWeight: 900, margin: "0 0 16px", letterSpacing: "-0.02em", color: "#0f172a" }}>Why partner with AEVION</h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
             {[
@@ -695,18 +695,18 @@ const DEMO_NOTE =
                   <div style={{ fontWeight: 800, fontSize: 15, color: "#0f172a" }}>{card.title}</div>
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontWeight: 900, fontSize: 20, color: "#7c3aed" }}>{card.metric}</div>
-                    <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600 }}>{card.sub}</div>
+                    <div style={{ fontSize: 13, color: "#94a3b8", fontWeight: 600 }}>{card.sub}</div>
                   </div>
                 </div>
-                <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.5 }}>{card.desc}</div>
+                <div style={{ fontSize: 15, color: "#475569", lineHeight: 1.5 }}>{card.desc}</div>
               </div>
             ))}
           </div>
           <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <Link href="/demo" style={{ padding: "10px 18px", borderRadius: 10, background: "linear-gradient(135deg,#7c3aed,#2563eb)", color: "#fff", fontWeight: 800, fontSize: 13, textDecoration: "none", boxShadow: "0 4px 14px rgba(124,58,237,0.3)" }}>
+            <Link href="/demo" style={{ padding: "10px 18px", borderRadius: 10, background: "linear-gradient(135deg,#7c3aed,#2563eb)", color: "#fff", fontWeight: 800, fontSize: 15.5, textDecoration: "none", boxShadow: "0 4px 14px rgba(124,58,237,0.3)" }}>
               Full investor demo →
             </Link>
-            <Link href="/qright" style={{ padding: "10px 18px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.2)", color: "#0f172a", fontWeight: 700, fontSize: 13, textDecoration: "none" }}>
+            <Link href="/qright" style={{ padding: "10px 18px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.2)", color: "#0f172a", fontWeight: 700, fontSize: 15.5, textDecoration: "none" }}>
               Try the pipeline yourself →
             </Link>
           </div>
@@ -752,7 +752,7 @@ const DEMO_NOTE =
                     background: "rgba(255,255,255,0.7)",
                   }}
                 >
-                  <div style={{ fontSize: 11, color: "#64748b", fontWeight: 700 }}>{m.label}</div>
+                  <div style={{ fontSize: 15, color: "#64748b", fontWeight: 700 }}>{m.label}</div>
                   <div style={{ fontSize: 22, fontWeight: 900, color: "#0f766e", marginTop: 4 }}>{m.value}</div>
                 </div>
               ))}
@@ -766,7 +766,7 @@ const DEMO_NOTE =
                   background: "#0f766e",
                   color: "#fff",
                   fontWeight: 800,
-                  fontSize: 13,
+                  fontSize: 15.5,
                   textDecoration: "none",
                 }}
               >
@@ -780,7 +780,7 @@ const DEMO_NOTE =
                   border: "1px solid rgba(15,118,110,0.3)",
                   color: "#0f766e",
                   fontWeight: 700,
-                  fontSize: 13,
+                  fontSize: 15.5,
                   textDecoration: "none",
                 }}
               >
@@ -794,7 +794,7 @@ const DEMO_NOTE =
                   border: "1px solid rgba(124,58,237,0.3)",
                   color: "#4c1d95",
                   fontWeight: 700,
-                  fontSize: 13,
+                  fontSize: 15.5,
                   textDecoration: "none",
                 }}
               >
@@ -808,7 +808,7 @@ const DEMO_NOTE =
                   border: "1px solid rgba(180,83,9,0.3)",
                   color: "#92400e",
                   fontWeight: 700,
-                  fontSize: 13,
+                  fontSize: 15.5,
                   textDecoration: "none",
                 }}
               >
@@ -848,19 +848,19 @@ const DEMO_NOTE =
                     background: "rgba(15,23,42,0.02)",
                   }}
                 >
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "#0f766e", minWidth: 48, textTransform: "uppercase" }}>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: "#0f766e", minWidth: 48, textTransform: "uppercase" }}>
                     {a.artifactType || "—"}
                   </span>
-                  <span style={{ fontWeight: 700, fontSize: 14, color: "#0f172a", flex: 1 }}>
+                  <span style={{ fontWeight: 700, fontSize: 16, color: "#0f172a", flex: 1 }}>
                     {a.submissionTitle || "Untitled"}
                   </span>
                   {a.voteCount != null && a.voteCount > 0 ? (
-                    <span style={{ fontSize: 12, color: "#64748b" }}>
+                    <span style={{ fontSize: 15, color: "#64748b" }}>
                       {a.voteAverage != null ? `${Number(a.voteAverage).toFixed(1)} ★` : ""}{" "}
                       ({a.voteCount})
                     </span>
                   ) : null}
-                  <span style={{ fontSize: 12, color: "#0d9488", fontWeight: 700 }}>→</span>
+                  <span style={{ fontSize: 15, color: "#0d9488", fontWeight: 700 }}>→</span>
                 </Link>
               ))}
             </div>
@@ -869,7 +869,7 @@ const DEMO_NOTE =
               style={{
                 display: "inline-block",
                 marginTop: 10,
-                fontSize: 13,
+                fontSize: 15.5,
                 fontWeight: 700,
                 color: "#0f766e",
                 textDecoration: "none",
@@ -903,7 +903,7 @@ const DEMO_NOTE =
                 (уже случилось при первом прогоне — текст о вещи неотличим
                 от самой вещи). */}
             {process.env.NODE_ENV !== "production" ? (
-              <div style={{ marginTop: 6, fontSize: 13, color: "#722" }}>
+              <div style={{ marginTop: 6, fontSize: 15.5, color: "#722" }}>
                 Globus still renders. Start backend on 4001; if needed set{" "}
                 <code>BACKEND_PROXY_TARGET</code> in build and <code>NEXT_PUBLIC_API_BASE_URL</code> for direct URL.
               </div>
@@ -924,7 +924,7 @@ const DEMO_NOTE =
           <div style={{ fontWeight: 800, marginBottom: 8, color: "#111" }}>
             Demo pipeline — Wave 1
           </div>
-          <div style={{ fontSize: 14, color: "#444", marginBottom: 10 }}>
+          <div style={{ fontSize: 16, color: "#444", marginBottom: 10 }}>
             Auth → QRight → QSign → Bureau. Left: node catalog, right: Globus (sticky column).
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -944,7 +944,7 @@ const DEMO_NOTE =
                   textDecoration: "none",
                   color: "#111",
                   fontWeight: 700,
-                  fontSize: 13,
+                  fontSize: 15.5,
                   background: "#fff",
                 }}
               >
@@ -969,7 +969,7 @@ const DEMO_NOTE =
           }}
         >
           <section style={{ flex: "1 1 420px", minWidth: 0, order: 1 }}>
-            <div style={{ fontSize: 14, color: "#64748b", marginBottom: 12 }}>
+            <div style={{ fontSize: 16, color: "#64748b", marginBottom: 12 }}>
               Ecosystem catalog:{" "}
               <b style={{ color: "#0f172a" }}>{loading ? "…" : projects.length}</b>
               {loading ? (
@@ -1106,7 +1106,7 @@ const DEMO_NOTE =
               </a>
             </div>
 
-            <div style={{ marginTop: 14, color: "#64748b", lineHeight: 1.5, fontSize: 13 }}>
+            <div style={{ marginTop: 14, color: "#64748b", lineHeight: 1.5, fontSize: 15.5 }}>
               Data from API; <code>runtime</code> field is for monitoring and integrations.
             </div>
 
@@ -1133,7 +1133,7 @@ const DEMO_NOTE =
                       </Link>
                       <span
                         style={{
-                          fontSize: 10,
+                          fontSize: 13,
                           fontWeight: 800,
                           padding: "2px 6px",
                           borderRadius: 6,
@@ -1146,7 +1146,7 @@ const DEMO_NOTE =
                       {hasPlanet ? (
                         <span
                           style={{
-                            fontSize: 10,
+                            fontSize: 13,
                             fontWeight: 800,
                             padding: "2px 6px",
                             borderRadius: 6,
@@ -1158,7 +1158,7 @@ const DEMO_NOTE =
                         </span>
                       ) : null}
                     </div>
-                    <div style={{ fontSize: 12, color: "#64748b" }}>
+                    <div style={{ fontSize: 15, color: "#64748b" }}>
                       {p.kind} • {p.status}
                       {p.runtime?.hint ? ` — ${p.runtime.hint}` : ""}
                     </div>
@@ -1184,7 +1184,7 @@ const DEMO_NOTE =
               <div
                 style={{
                   marginBottom: 10,
-                  fontSize: 12,
+                  fontSize: 15,
                   color: "#844",
                   padding: "8px 10px",
                   borderRadius: 10,
@@ -1207,8 +1207,8 @@ const DEMO_NOTE =
               <Globus3DPlaceholder />
             )}
 
-            <div style={{ marginTop: 12, color: "#64748b", lineHeight: 1.6, fontSize: 14 }}>
-              <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 4 }}>Globus · right panel</div>
+            <div style={{ marginTop: 12, color: "#64748b", lineHeight: 1.6, fontSize: 16 }}>
+              <div style={{ fontSize: 15, color: "#94a3b8", marginBottom: 4 }}>Globus · right panel</div>
               <div>
                 Location:{" "}
                 <b style={{ color: "#0f172a" }}>
@@ -1235,7 +1235,7 @@ const DEMO_NOTE =
                   color: "#fff",
                   cursor: "pointer",
                   fontWeight: 800,
-                  fontSize: 14,
+                  fontSize: 16,
                 }}
               >
                 Register object in QRight here
@@ -1253,7 +1253,7 @@ const DEMO_NOTE =
                       borderRadius: 10,
                     }}
                   >
-                    <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    <div style={{ fontSize: 15, color: "#94a3b8", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
                       Constitution отпечаток
                     </div>
                     <ConstitutionEmbed sliders={cc.sliders} label={`${cc.flag} ${cc.name}`} size="sm" />
@@ -1266,7 +1266,7 @@ const DEMO_NOTE =
                           background: "#d4af37",
                           color: "#0b1736",
                           fontWeight: 700,
-                          fontSize: 12,
+                          fontSize: 15,
                           textDecoration: "none",
                           textAlign: "center",
                         }}
@@ -1282,7 +1282,7 @@ const DEMO_NOTE =
                           border: "1px solid rgba(34,211,238,0.5)",
                           color: "#0891b2",
                           fontWeight: 700,
-                          fontSize: 12,
+                          fontSize: 15,
                           textDecoration: "none",
                           textAlign: "center",
                         }}
@@ -1298,7 +1298,7 @@ const DEMO_NOTE =
                           border: "1px solid rgba(16,185,129,0.4)",
                           color: "#059669",
                           fontWeight: 700,
-                          fontSize: 12,
+                          fontSize: 15,
                           textDecoration: "none",
                           textAlign: "center",
                         }}
@@ -1340,7 +1340,7 @@ const DEMO_NOTE =
             <h2 style={{ fontSize: 22, fontWeight: 800, color: "#0f172a", marginBottom: 6 }}>
               Какой социальный контракт строит AEVION
             </h2>
-            <p style={{ fontSize: 14, color: "#475569", lineHeight: 1.55, marginBottom: 10 }}>
+            <p style={{ fontSize: 16, color: "#475569", lineHeight: 1.55, marginBottom: 10 }}>
               Open Access как философия экосистемы: высокий пол снизу, закон
               над верхом, ротация, прозрачность, полицентричность. Это не
               маркетинг — это конкретные 8 ползунков, заложенных в дизайн
@@ -1355,7 +1355,7 @@ const DEMO_NOTE =
                 background: "#0f172a",
                 color: "#fff",
                 fontWeight: 700,
-                fontSize: 14,
+                fontSize: 16,
                 textDecoration: "none",
               }}
             >

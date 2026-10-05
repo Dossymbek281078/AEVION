@@ -64,6 +64,7 @@ import { deployViaWrangler, warmWrangler } from "../lib/wranglerPagesDeploy";
 import { redactInfraDetails } from "../lib/safeErrorText";
 import { checkPublicUrl } from "../lib/publicUrlOnly";
 import { можноСлужитьСтатикой } from "../lib/staticServable";
+import { проверитьРасход, этоОк, запросOpenAI, запросAnthropic, запросGemini } from "../lib/providerSpendCheck";
 import { вставитьБейдж, нуженБейдж } from "../lib/aevionBadge";
 import { файлыВхода, нуженВход, УКАЗАНИЕ_ПРО_ВХОД } from "../lib/devhubAuthScaffold";
 import { сметаПродукта, РАСЦЕНКИ_ПРОДУКТА } from "../lib/pipelineQuote";
@@ -8925,12 +8926,27 @@ devhubRouter.get("/providers/health", async (_req, res) => {
     }),
     // Зона DNS — Vercel или Cloudflare по выбранному поставщику (lib/devhubDns).
     zoneProbe(),
+    // 05.10.2026: проверка спрашивала «не отозван ли ключ», а знать надо было
+    // «есть ли деньги». 26.09–03.10 в Sentry дважды прилетело
+    // `openai 429 insufficient_quota`, и ровно в эти дни панель показывала
+    // `openai: ok — key valid (billing not visible here)`. Теперь шлём самый
+    // дешёвый настоящий запрос (один токен) и разбираем ответ по смыслу;
+    // результат кэшируется на PROVIDER_SPEND_CHECK_HOURS (по умолчанию 6 ч),
+    // поэтому заход на панель не стоит денег.
     probe("openai", async () => {
       if (!process.env.OPENAI_API_KEY) return { ok: false, detail: "OPENAI_API_KEY not set" };
-      const r = await fetch("https://api.openai.com/v1/models", {
-        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-      });
-      return { ok: r.ok, detail: r.ok ? "key valid (billing not visible here)" : `HTTP ${r.status}` };
+      const r = await проверитьРасход("openai", () => запросOpenAI());
+      return { ok: этоОк(r.состояние), detail: r.detail };
+    }),
+    probe("anthropic", async () => {
+      if (!process.env.ANTHROPIC_API_KEY) return { ok: false, detail: "ANTHROPIC_API_KEY not set" };
+      const r = await проверитьРасход("anthropic", () => запросAnthropic());
+      return { ok: этоОк(r.состояние), detail: r.detail };
+    }),
+    probe("gemini", async () => {
+      if (!process.env.GEMINI_API_KEY) return { ok: false, detail: "GEMINI_API_KEY not set" };
+      const r = await проверитьРасход("gemini", () => запросGemini());
+      return { ok: этоОк(r.состояние), detail: r.detail };
     }),
     // Добавлено 28.08.2026. Замер показал границу: проверок было ПЯТЬ на
     // семнадцать возможностей, то есть панель говорила «настроено» по наличию

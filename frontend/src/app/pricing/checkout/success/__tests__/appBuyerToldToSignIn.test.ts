@@ -13,6 +13,20 @@ describe("страница успеха: подсказка про вход с �
     expect(page).toContain('t("pricing.checkoutSuccess.nextLogin", { app: appLink.name }), href: `/auth?next=${encodeURIComponent(appLink.href)}`');
   });
 
+  // 05.10.2026: пункт про вход обязан стоять ДО «Откройте приложение». Иначе покупатель
+  // открывал приложение первым, видел гостевое и считал, что заплатил зря. Проверяем по
+  // позиции в исходнике: и ветка devhub, и общий вход идут раньше nextOpenApp.
+  it("вход с почтой оплаты стоит ДО «Откройте приложение»", () => {
+    const openApp = page.indexOf('t("pricing.checkoutSuccess.nextOpenApp"');
+    const login = page.indexOf('t("pricing.checkoutSuccess.nextLogin"');
+    const devhubLink = page.indexOf('t("pricing.checkoutSuccess.nextDevhubLink"');
+    expect(openApp).toBeGreaterThan(-1);
+    expect(login).toBeGreaterThan(-1);
+    expect(devhubLink).toBeGreaterThan(-1);
+    expect(login).toBeLessThan(openApp);
+    expect(devhubLink).toBeLessThan(openApp);
+  });
+
   it("ключ есть во всех трёх словарях и содержит {app}", () => {
     for (const l of ["ru", "en", "kk"]) {
       const m = dict(l).match(/"pricing\.checkoutSuccess\.nextLogin": "([^"]+)"/);

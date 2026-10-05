@@ -475,23 +475,24 @@ function SuccessInner() {
               { icon: "📧", text: processor
                   ? t("pricing.checkoutSuccess.nextEmail", { processor })
                   : t("pricing.checkoutSuccess.nextEmailNoName") },
+              // Вход с почтой оплаты стоит ДО «Откройте приложение»: иначе покупатель
+              // открывал приложение первым, видел гостевое и считал, что заплатил зря
+              // (05.10.2026). Отдельное приложение выдаётся по ПОЧТЕ из оплаты
+              // (AppSubscription): гость, купивший без входа, про вход с той же почтой
+              // не знал (22.09.2026, CyberChess Lite). У DevHub шаг ДРУГОЙ: аккаунта у него
+              // нет вовсе, вход ничего не откроет — покупку связывают с браузером по почте
+              // оплаты (/devhub/link); /auth был бы тупиком сразу после списания денег.
+              ...(appId === "devhub"
+                ? [{ icon: "🔑", text: t("pricing.checkoutSuccess.nextDevhubLink"), href: "/devhub/link" }]
+                : appLink
+                ? [{ icon: "🔑", text: t("pricing.checkoutSuccess.nextLogin", { app: appLink.name }), href: `/auth?next=${encodeURIComponent(appLink.href)}` }]
+                : []),
               {
                 icon: "🚀",
                 text: appLink
                   ? t("pricing.checkoutSuccess.nextOpenApp", { app: appLink.name })
                   : t("pricing.checkoutSuccess.nextOpenAppNoName"),
               },
-              // Отдельное приложение выдаётся по ПОЧТЕ из оплаты (AppSubscription): гость, купивший
-              // без входа, открывал страницу приложения и видел то же, что и любой гость, — про
-              // вход с той же почтой ему никто не говорил (22.09.2026, CyberChess Lite).
-              // У DevHub шаг ДРУГОЙ: аккаунта у него нет вовсе, вход ничего не откроет —
-              // покупку связывают с браузером по почте оплаты (/devhub/link). Отправить
-              // его на /auth значило бы послать в тупик сразу после списания денег.
-              ...(appId === "devhub"
-                ? [{ icon: "🔑", text: t("pricing.checkoutSuccess.nextDevhubLink"), href: "/devhub/link" }]
-                : appLink
-                ? [{ icon: "🔑", text: t("pricing.checkoutSuccess.nextLogin", { app: appLink.name }), href: `/auth?next=${encodeURIComponent(appLink.href)}` }]
-                : []),
               // Куда идти управлять подпиской, можно сказать только зная сервис.
               // Не знаем — пункт не показываем, а не отправляем наугад.
               ...(processor

@@ -52,6 +52,27 @@ function языкПокупателя(req: { body?: unknown; headers: Record<str
   return undefined;
 }
 
+/**
+ * Сообщение покупателю на ЕГО языке. Английский первым — он же ответ при
+ * неизвестном языке, потому что сайт отдаёт английский по всем адресам.
+ *
+ * ЗАЧЕМ. Замер 05.10.2026 по этому файлу: из 11 сообщений покупателю 8 были
+ * ТОЛЬКО по-русски, а 3 только по-английски — непоследовательность внутри одного
+ * файла, то есть недосмотр, а не решение. Англоязычный покупатель, упёршийся в
+ * любой из восьми отказов (неверный тариф, приложение не продаётся отдельно,
+ * предел темпа, не удалось проверить статус оплаты), читал кириллицу — в
+ * единственный момент, когда он уже достал карту.
+ *
+ * Почему ОДНО поле, а не две половины `error`/`errorEn`, как в QSkyway: там
+ * клиент выбирает половину сам, и ради этого контракта пришлось бы править
+ * фронт. Здесь язык покупателя уже известен серверу (языкПокупателя выше, он же
+ * едет в кассу полем `locale`), ответы чекаута не кэшируются, и выбрать можно на
+ * месте — без нового контракта и без второй правки на фронте.
+ */
+function наЯзыке(язык: string | undefined, en: string, ru: string): string {
+  return String(язык ?? "").trim().toLowerCase().startsWith("ru") ? ru : en;
+}
+
 export const checkoutRouter = Router();
 
 /**
@@ -179,6 +200,11 @@ interface CheckoutBody {
 const sessionLimiter = rateLimit({
   windowMs: 60_000,
   max: 30,
+  // ⚠️ ЯЗЫК ЗДЕСЬ НЕ ВЫБРАТЬ, и это не недосмотр. Текст идёт в общую обёртку
+  // lib/rateLimit.ts (`message?: string`, в теле ответа уходит полем `error`),
+  // одну на весь бэкенд. Чтобы ответить на языке покупателя, обёртка должна
+  // принимать функцию от запроса — это правка общей библиотеки, её владелец
+  // не мы. Замерено и передано 05.10.2026; пока остаётся русским.
   message: "Слишком много попыток оплаты. Подождите минуту и попробуйте снова.",
 });
 
@@ -206,6 +232,7 @@ const sessionLimiter = rateLimit({
 const statusLimiter = rateLimit({
   windowMs: 60_000,
   max: 60,
+  // То же ограничение, что у sessionLimiter выше: язык задаёт общая обёртка.
   message: "Слишком много проверок. Подождите минуту.",
 });
 
@@ -214,7 +241,9 @@ checkoutRouter.get("/status", statusLimiter, (req, res) => {
   if (!intentId) {
     return res.status(400).json({
       error: "intent_required",
-      message: "В адресе не хватает номера оплаты. Откройте страницу по ссылке из письма об оплате — или напишите нам, доступ не потерян.",
+      message: наЯзыке(языкПокупателя(req),
+        "The payment reference is missing from the address. Open the page from the link in your payment email — or write to us, your access is not lost.",
+        "В адресе не хватает номера оплаты. Откройте страницу по ссылке из письма об оплате — или напишите нам, доступ не потерян."),
     });
   }
   try {
@@ -244,7 +273,9 @@ checkoutRouter.get("/status", statusLimiter, (req, res) => {
         // а не показать отказ.
         res.status(503).json({
           error: "lookup_failed",
-          message: "Не удалось проверить статус. Оплата не потеряна — обновите страницу через минуту.",
+          message: наЯзыке(языкПокупателя(req),
+            "We could not check the status. Your payment is not lost — refresh the page in a minute.",
+            "Не удалось проверить статус. Оплата не потеряна — обновите страницу через минуту."),
         });
       });
     return;
@@ -253,7 +284,9 @@ checkoutRouter.get("/status", statusLimiter, (req, res) => {
     console.error("[checkout/status] lookup failed", e);
     return res.status(503).json({
       error: "lookup_failed",
-      message: "Не удалось проверить статус. Оплата не потеряна — обновите страницу через минуту.",
+      message: наЯзыке(языкПокупателя(req),
+        "We could not check the status. Your payment is not lost — refresh the page in a minute.",
+        "Не удалось проверить статус. Оплата не потеряна — обновите страницу через минуту."),
     });
   }
 });
@@ -273,7 +306,9 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
       // а не решение.
       return res.status(400).json({
         error: "invalid_tier",
-        message: "Такого тарифа нет. Вернитесь на страницу цен и выберите план заново.",
+        message: наЯзыке(языкПокупателя(req),
+          "No such plan. Please go back to the pricing page and pick a plan again.",
+          "Такого тарифа нет. Вернитесь на страницу цен и выберите план заново."),
       });
     }
     const tier = getTier(body.tierId)!;
@@ -303,7 +338,9 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
     if (body.app && (!app || снятСПродажи || !isTermTier(tier.id))) {
       return res.status(400).json({
         error: "invalid_app",
-        message: "Это приложение отдельно не продаётся — оно входит в подписку AEVION. Выберите срок подписки на странице цен.",
+        message: наЯзыке(языкПокупателя(req),
+          "This app is not sold separately — it is included in the AEVION subscription. Pick a subscription term on the pricing page.",
+          "Это приложение отдельно не продаётся — оно входит в подписку AEVION. Выберите срок подписки на странице цен."),
       });
     }
     const ценаПриложения = app && isTermTier(tier.id) ? termTotal(app.baseMonthly, tier.id as TermTier) : null;
@@ -707,9 +744,11 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
       tier: tier.id,
       termMonths,
       app: app?.slug,
-      message:
+      message: наЯзыке(языкПокупателя(req),
+        "This plan cannot be paid for right now: the payment variant is not configured. " +
+          "Nothing was charged and no subscription was created — write to us and we will issue access manually.",
         "Оплата этого тарифа сейчас недоступна: платёжный вариант не настроен. " +
-        "Подписка не оформлена и деньги не списаны — напишите нам, и мы оформим доступ вручную.",
+          "Подписка не оформлена и деньги не списаны — напишите нам, и мы оформим доступ вручную."),
       contactUrl: `${FRONTEND_URL}/pricing/contact?tier=${tier.id}`,
     });
   } catch (e: unknown) {

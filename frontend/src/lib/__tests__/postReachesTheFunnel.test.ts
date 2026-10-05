@@ -77,6 +77,34 @@ describe("подметка поста доезжает до учёта", () => {
     expect(мета().post).toBe("своё");
   });
 
+  it("🔴 пост доживает до КАССЫ: переход на страницу без метки его не теряет", async () => {
+    /*
+     * Деньги случаются не на посадочной. Человек приходит по ролику, ходит по
+     * сайту и жмёт «купить» на /pricing — там в адресе метки уже нет. До этой
+     * правки подметка хранилась только в адресе, в памяти вкладки лежал
+     * канонический канал «yt», и `postFrom("yt")` давал null. То есть на вопрос
+     * «какой ролик привёл к ОПЛАТЕ» ответа не было никогда.
+     */
+    адрес("?c=yt-chess-level");
+    const track = await свежийТрекер();
+    track({ type: "page_view", source: "cyberchess", meta: { channel: "youtube" } });
+    expect(мета(0).post).toBe("chess-level");
+
+    адрес("", "/pricing");
+    track({ type: "checkout_start", source: "pricing", meta: { channel: "youtube" } });
+    expect(мета(1).post, "на кассе пост потерян — ради него подметка и ставилась").toBe("chess-level");
+  });
+
+  it("КОНТРОЛЬ: адрес старше памяти — новая подметка не перебивается старой", async () => {
+    адрес("?c=yt-chess-level");
+    const track = await свежийТрекер();
+    track({ type: "page_view", source: "cyberchess" });
+    адрес("?c=ig-post3");
+    track({ type: "page_view", source: "cyberchess" });
+    expect(мета(1).post, "первый пост вкладки прилип ко всем следующим").toBe("post3");
+    expect(мета(1).channel).toBe("instagram");
+  });
+
   it("КОНТРОЛЬ: метки нет вовсе — поля поста нет, пустышка не уезжает", async () => {
     адрес("");
     const track = await свежийТрекер();

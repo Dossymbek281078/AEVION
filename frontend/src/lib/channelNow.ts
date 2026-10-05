@@ -24,6 +24,19 @@ import { channelFrom, channelFromRef, channelParam, postFrom } from "./products"
  * пропуска — по нему увеличивают бюджет каналу, который его не заработал.
  */
 const CHANNEL_KEY = "aevion_gtm_channel";
+/*
+ * 🔴 Пост хранится ОТДЕЛЬНЫМ ключом, а не внутри канального.
+ *
+ * В канальном лежит КАНОНИЧЕСКАЯ короткая метка («yt»), и это намеренно: в
+ * кассе канал обязан называться одним именем. Но из неё подметку уже не
+ * достать, поэтому после первого же перехода `postNow()` отвечал null —
+ * пост доезжал только с посадочной страницы, а деньги случаются позже, на
+ * кассе. Вопрос «какой ролик привёл к оплате» оставался без ответа.
+ *
+ * Класть подметку в канальный ключ нельзя: его читает `channelFrom`, и
+ * «yt-chess-level» в кассе стало бы отдельным «каналом».
+ */
+const POST_KEY = "aevion_gtm_post";
 
 /**
  * КАНОНИЧЕСКАЯ метка канала — то, что кладём в память и что уедет в кассу.
@@ -40,6 +53,22 @@ const CHANNEL_KEY = "aevion_gtm_channel";
  */
 function каноничная(имя: string): string | undefined {
   return channelParam(имя) ?? undefined;
+}
+
+function запомнитьПост(пост: string | null): void {
+  try {
+    if (пост && !sessionStorage.getItem(POST_KEY)) sessionStorage.setItem(POST_KEY, пост);
+  } catch {
+    // Хранилище закрыто — пост доедет только с посадочной. Потеря точности.
+  }
+}
+
+function вспомнитьПост(): string | undefined {
+  try {
+    return sessionStorage.getItem(POST_KEY) ?? undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function запомнить(метка: string): void {
@@ -104,6 +133,12 @@ export function channelNow(): string | null {
  */
 export function postNow(): string | null {
   if (typeof window === "undefined") return null;
-  const метка = new URLSearchParams(window.location.search).get("c") ?? вспомнить();
-  return postFrom(метка ?? undefined);
+  const изАдреса = postFrom(new URLSearchParams(window.location.search).get("c") ?? undefined);
+  if (изАдреса) {
+    запомнитьПост(изАдреса);
+    return изАдреса;
+  }
+  // Память — только когда в адресе подметки нет. Адрес старше памяти, как и
+  // у канала: иначе первый пост вкладки прилипал бы ко всем следующим.
+  return вспомнитьПост() ?? null;
 }

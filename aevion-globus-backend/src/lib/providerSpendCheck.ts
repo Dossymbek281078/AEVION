@@ -177,10 +177,27 @@ export async function запросAnthropic(env: NodeJS.ProcessEnv = process.env
   return { status: r.status, body: await r.text().catch(() => "") };
 }
 
-export async function запросGemini(env: NodeJS.ProcessEnv = process.env): Promise<ОтветПоставщика> {
-  const модель = env.GEMINI_MODEL || "gemini-2.0-flash";
-  const r = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${модель}:generateContent?key=${env.GEMINI_API_KEY ?? ""}`,
+/**
+ * Gemini спрашиваем в два шага, и это не перестраховка.
+ *
+ * Живой замер 05.10.2026, через час после выкатки этой самой проверки:
+ * `gemini → ответ не разобран, HTTP 404`. Имя модели в коде (`gemini-2.0-flash`)
+ * у нашего ключа не существует, и проверка честно отвечала «НЕ ЗНАЮ» — лучше,
+ * чем зелёный обман, но вопрос «есть ли деньги» оставался без ответа навсегда.
+ *
+ * Жёстко вписать другое имя — значит повторить ошибку: имена моделей у Google
+ * меняются и уходят в отставку, а проверка должна пережить отставку. Поэтому на
+ * 404 (и только на него) спрашиваем СПИСОК моделей и берём первую, умеющую
+ * generateContent. Список бесплатен, сам по себе про деньги не отвечает — он
+ * нужен лишь чтобы знать, у кого спросить.
+ */
+async function вызовGemini(
+  модель: string,
+  ключ: string,
+  fetchFn: typeof fetch,
+): Promise<ОтветПоставщика> {
+  const r = await fetchFn(
+    `https://generativelanguage.googleapis.com/v1beta/models/${модель}:generateContent?key=${ключ}`,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -191,4 +208,37 @@ export async function запросGemini(env: NodeJS.ProcessEnv = process.env): 
     },
   );
   return { status: r.status, body: await r.text().catch(() => "") };
+}
+
+/** Первое имя модели, умеющей generateContent. null — спросить не вышло. */
+async function перваяЖиваяМодель(ключ: string, fetchFn: typeof fetch): Promise<string | null> {
+  try {
+    const r = await fetchFn(`https://generativelanguage.googleapis.com/v1beta/models?key=${ключ}`);
+    if (!r.ok) return null;
+    const j = JSON.parse(await r.text()) as {
+      models?: { name?: string; supportedGenerationMethods?: string[] }[];
+    };
+    const годная = (j.models ?? []).find((m) =>
+      (m.supportedGenerationMethods ?? []).includes("generateContent"),
+    );
+    if (!годная?.name) return null;
+    // Приходит "models/gemini-...", а в адрес нужна часть после "models/".
+    return годная.name.replace(/^models\//, "");
+  } catch {
+    return null;
+  }
+}
+
+export async function запросGemini(
+  env: NodeJS.ProcessEnv = process.env,
+  fetchFn: typeof fetch = fetch,
+): Promise<ОтветПоставщика> {
+  const ключ = String(env.GEMINI_API_KEY ?? "");
+  const первый = await вызовGemini(env.GEMINI_MODEL || "gemini-flash-latest", ключ, fetchFn);
+  if (первый.status !== 404) return первый;
+  const имя = await перваяЖиваяМодель(ключ, fetchFn);
+  // Имени не нашлось — отдаём ПЕРВЫЙ ответ как есть. Выдумывать «ok» здесь
+  // нельзя: 404 означает, что про деньги мы так и не спросили.
+  if (!имя) return первый;
+  return вызовGemini(имя, ключ, fetchFn);
 }

@@ -133,9 +133,18 @@ export function channelNow(): string | null {
  */
 export function postNow(): string | null {
   if (typeof window === "undefined") return null;
-  const изАдреса = postFrom(new URLSearchParams(window.location.search).get("c") ?? undefined);
+  const параметры = new URLSearchParams(window.location.search);
+  const изАдреса = postFrom(параметры.get("c") ?? undefined);
   if (изАдреса) {
-    запомнитьПост(изАдреса);
+    /*
+     * 🔴 Проверочный заход (`?probe=<окно>`) подметку НЕ закрепляет.
+     *
+     * Иначе наша проба пачкает вкладку: человек, зашедший следом по этой же
+     * вкладке без метки, унаследовал бы наш пост и уехал в отчёт как пришедший
+     * с него. Сам заход при этом метку несёт и считается — он помечен нашим на
+     * стороне воронки по тому же параметру.
+     */
+    if (!параметры.has("probe")) запомнитьПост(изАдреса);
     return изАдреса;
   }
   // Память — только когда в адресе подметки нет. Адрес старше памяти, как и

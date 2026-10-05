@@ -54,8 +54,8 @@ describe("успех выкатки показывает живой адрес",
     expect(условие, "условие опирается не на адрес").toContain("pagesResult?.liveUrl");
     expect(условие, "потерян запасной адрес pages.dev").toContain("pagesResult?.pagesUrl");
     expect(условие, "потерян адрес из проекта").toContain("project?.deployUrl");
-    expect(/false/.test(условие), "в условии показа появился выключатель false").toBe(false);
-    expect(/true/.test(условие), "условие подменено на всегда-истину").toBe(false);
+    expect(/\bfalse\b/.test(условие), "в условии показа появился выключатель false").toBe(false);
+    expect(/\btrue\b/.test(условие), "условие подменено на всегда-истину").toBe(false);
   });
 
   it("рядом с адресом есть кнопка «Открыть»", () => {

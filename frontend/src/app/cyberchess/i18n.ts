@@ -103,6 +103,9 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "ai.expert": "Эксперт",
     "ai.master": "Мастер",
     "ai.stockfish": "Stockfish",
+    "tc.approxMin": "≈ {n} мин",
+    "ai.label": "ИИ",
+    "chip.analysis": "Анализ",
     "nav.coach": "Тренер",
     // Нижняя навигация на телефоне подписана короче, чем кнопка в шапке.
     // Разные ключи намеренно: иначе русский интерфейс менялся бы вместе с переводом.
@@ -368,6 +371,9 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "ai.expert": "Expert",
     "ai.master": "Master",
     "ai.stockfish": "Stockfish",
+    "tc.approxMin": "≈ {n} min",
+    "ai.label": "AI",
+    "chip.analysis": "Analysis",
     "nav.coach": "Coach",
     "nav.coachShort": "Coach",
     "nav.more": "More",
@@ -633,6 +639,9 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "ai.expert": "Сарапшы",
     "ai.master": "Шебер",
     "ai.stockfish": "Stockfish",
+    "tc.approxMin": "≈ {n} мин",
+    "ai.label": "ЖИ",
+    "chip.analysis": "Талдау",
     "nav.coach": "Жаттықтырушы",
     // 🔴 КОРОТКОЕ слово здесь обязательно. «Жаттықтырушы» — 12 знаков, а в
     // нижнюю навигацию на 320px помещается пять разделов, то есть ~8 знаков

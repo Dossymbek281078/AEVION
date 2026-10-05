@@ -40,6 +40,18 @@ function подменитьFetch(ответ: { ok: boolean; status: number; те
   вызовы = [];
   globalThis.fetch = (async (u: any, o: any) => {
     вызовы.push({ url: String(u), method: String(o?.method ?? "GET") });
+    // Список доменов проекта: отдаём один привязанный, иначе снимать нечего и
+    // проверка порядка ничего не проверяет.
+    if (/\/domains$/.test(String(u)) && String(o?.method ?? "GET") === "GET") {
+      return {
+        ok: true, status: 200,
+        json: async () => ({ result: [{ name: "probe.aevion.app" }] }),
+        text: async () => "",
+      } as any;
+    }
+    if (/\/domains\//.test(String(u))) {
+      return { ok: true, status: 200, json: async () => ({}), text: async () => "" } as any;
+    }
     return {
       ok: ответ.ok,
       status: ответ.status,
@@ -74,7 +86,11 @@ describe("удаление проекта снимает опубликован�
     const r = await request(приложение()).delete("/api/devhub/projects/" + p.id);
     expect(r.status).toBe(200);
     expect(r.body.pagesRemoved).toBe(true);
-    const удаления = вызовы.filter((в) => в.method === "DELETE" && в.url.includes("/pages/projects/"));
+    // 05.10.2026: фильтр уточнён. Теперь перед проектом удаляются его ДОМЕНЫ
+    // (иначе Cloudflare отвечает 8000028), и они тоже лежат под /pages/projects/.
+    // Широкая подстрока считала их за удаление проекта — тест краснел на верной
+    // правке. Считаем только адрес, который КОНЧАЕТСЯ именем проекта.
+    const удаления = вызовы.filter((в) => в.method === "DELETE" && /\/pages\/projects\/[^/]+$/.test(в.url));
     expect(удаления.length).toBe(1);
     expect(удаления[0].url).toContain("aevion-");
     expect(удаления[0].url).toContain(p.id.slice(0, 6));
@@ -131,6 +147,44 @@ describe("удаление проекта снимает опубликован�
     const r = await request(приложение()).delete("/api/devhub/projects/" + p.id);
     expect(r.body.pagesRemoved).toBe(true);
     expect(r.body.orphanSiteUrl, "поле пришло там, где сайт снят").toBeUndefined();
+  });
+
+  test("домены снимаются ДО удаления проекта, иначе Cloudflare отвечает 8000028", async () => {
+    /*
+     * Найдено 05.10.2026 живым отказом на проде. Cloudflare дословно:
+     *   код 8000028: "To delete your project, you must first delete all custom
+     *   domains associated with your project."
+     * А домен <слаг>.aevion.app привязывается при КАЖДОЙ выкатке — значит
+     * механизм снятия сайта отказывал на каждом проекте с 28.09, и молча.
+     *
+     * Проверяем ПОРЯДОК, а не наличие вызовов: в обратном порядке Cloudflare
+     * отвергает удаление, и сайт остаётся публичным.
+     */
+    const p = await создать("Проект с доменом");
+    подменитьFetch({ ok: true, status: 200 });
+    const r = await request(приложение()).delete("/api/devhub/projects/" + p.id);
+    expect(r.status).toBe(200);
+
+    const списокДоменов = вызовы.findIndex((в) => /\/domains$/.test(в.url) && в.method === "GET");
+    const удалДомена = вызовы.findIndex((в) => /\/domains\//.test(в.url) && в.method === "DELETE");
+    const удалПроекта = вызовы.findIndex((в) => в.method === "DELETE" && /\/pages\/projects\/[^/]+$/.test(в.url));
+
+    expect(списокДоменов, "список доменов проекта не запрашивался").toBeGreaterThanOrEqual(0);
+    expect(удалДомена, "привязанный домен не снимался").toBeGreaterThanOrEqual(0);
+    expect(удалПроекта, "сам проект не удалялся").toBeGreaterThanOrEqual(0);
+    expect(удалДомена, "домен снимается ПОСЛЕ удаления проекта — Cloudflare это отвергнет").toBeLessThan(удалПроекта);
+    expect(списокДоменов, "список запрашивается после удаления домена").toBeLessThan(удалДомена);
+  });
+
+  test("не снялись домены — это видно в причине, а не молча", async () => {
+    // Уборка, которая молчит о своей неудаче, ничем не отличается от отсутствующей.
+    const p = await создать("Упрямые домены");
+    подменитьFetch({ ok: false, status: 400, тело: '{"errors":[{"code":8000028,"message":"delete all custom domains first"}]}' });
+    const r = await request(приложение()).delete("/api/devhub/projects/" + p.id);
+    expect(r.body.pagesRemoved).toBe(false);
+    const причина = String(r.body.pagesRemoveError);
+    expect(причина, "в причине нет тела ответа Cloudflare").toContain("8000028");
+    expect(причина, "в причине не сказано, что стало с доменами").toMatch(/домен/i);
   });
 
   test("без ключей Cloudflare поля нет вовсе — не выдаём незнание за уборку", async () => {

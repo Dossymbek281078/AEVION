@@ -1314,6 +1314,53 @@ function slugify(name: string): string {
  * снимала бы не тот сайт или не снимала ничего, и заметить это можно было бы
  * только сравнив два места, то есть никогда.
  */
+/**
+ * Снять собственные домены с проекта Pages — ДО удаления самого проекта.
+ *
+ * Найдено 05.10.2026 по живому отказу, который стал виден только после правки
+ * «читать причину из тела» (30.09). Cloudflare отвечает дословно:
+ *   код 8000028: "To delete your project, you must first delete all custom
+ *   domains associated with your project."
+ * А домен <слаг>.aevion.app мы привязываем при КАЖДОЙ выкатке. Поэтому механизм
+ * снятия сайта, добавленный 28.09, с первого дня отказывал на каждом проекте —
+ * и молча: в журнале было только «Cloudflare ответил 400».
+ *
+ * Следствие было публичным: удалённый проект оставлял работающий сайт, который
+ * видит посетитель, а ниточка к нему обрывалась вместе с записью в базе.
+ *
+ * Возвращаем, что удалось и что нет: уборка, которая молчит о своей неудаче,
+ * ничем не отличается от отсутствующей.
+ */
+async function снятьДоменыPages(имяСайта: string): Promise<{ снято: number; осталось: string[]; ошибка?: string }> {
+  const акк = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const ключ = process.env.CLOUDFLARE_API_TOKEN;
+  if (!акк || !ключ) return { снято: 0, осталось: [], ошибка: "нет ключей Cloudflare" };
+  const база = `https://api.cloudflare.com/client/v4/accounts/${акк}/pages/projects/${имяСайта}/domains`;
+  const заголовки = { Authorization: `Bearer ${ключ}` };
+  let имена: string[] = [];
+  try {
+    const r = await fetch(база, { headers: заголовки });
+    if (!r.ok) return { снято: 0, осталось: [], ошибка: `список доменов: Cloudflare ответил ${r.status}` };
+    const j = (await r.json()) as { result?: Array<{ name?: string }> };
+    имена = (j.result ?? []).map((d) => String(d?.name ?? "")).filter(Boolean);
+  } catch (e) {
+    return { снято: 0, осталось: [], ошибка: `список доменов: ${e instanceof Error ? e.message : String(e)}` };
+  }
+  let снято = 0;
+  const осталось: string[] = [];
+  for (const имя of имена) {
+    try {
+      const r = await fetch(`${база}/${encodeURIComponent(имя)}`, { method: "DELETE", headers: заголовки });
+      // 404 считаем успехом: цель — «домена нет», а не «мы его удалили».
+      if (r.ok || r.status === 404) снято += 1;
+      else осталось.push(`${имя} (${r.status})`);
+    } catch (e) {
+      осталось.push(`${имя} (${e instanceof Error ? e.message : String(e)})`);
+    }
+  }
+  return { снято, осталось };
+}
+
 function имяPagesПроекта(project: { name: string; id: string }): string {
   return `aevion-${slugify(project.name)}-${project.id.slice(0, 6)}`;
 }
@@ -2870,6 +2917,9 @@ devhubRouter.delete("/projects/:id", async (req, res) => {
   let orphanSiteUrl: string | undefined;
   if (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) {
     const имяСайта = имяPagesПроекта(project);
+    // Сначала домены, потом проект: обратный порядок Cloudflare отвергает с
+    // 8000028, и именно в этом порядке дело, а не в правах или имени.
+    const домены = await снятьДоменыPages(имяСайта);
     try {
       const r = await fetch(
         `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/pages/projects/${имяСайта}`,
@@ -2893,7 +2943,16 @@ devhubRouter.delete("/projects/:id", async (req, res) => {
         } catch {
           подробно = " — тело ответа не прочиталось";
         }
-        pagesRemoveError = `Cloudflare ответил ${r.status}${подробно}`;
+        // Судьбу доменов называем рядом: без неё «Cloudflare ответил 400»
+        // снова не говорит, что делать.
+        const проДомены = домены.ошибка
+          ? ` | домены не сняты: ${домены.ошибка}`
+          : домены.осталось.length
+            ? ` | не снялись домены: ${домены.осталось.join(", ")}`
+            : домены.снято
+              ? ` | доменов снято: ${домены.снято}`
+              : "";
+        pagesRemoveError = `Cloudflare ответил ${r.status}${подробно}${проДомены}`;
       }
     } catch (e) {
       pagesRemoved = false;

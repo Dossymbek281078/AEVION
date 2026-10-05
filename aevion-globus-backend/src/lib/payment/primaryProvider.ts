@@ -46,6 +46,40 @@ export function lemonSqueezyCanDeliver(): boolean {
  * Значение читают и люди (отчёты), и код (маршрутизация), поэтому имена
  * возвращаются ровно те, что уже стоят в ответах ручек.
  */
-export function primaryCheckoutProvider(): "lemonsqueezy" | "gumroad" {
-  return lemonSqueezyCanDeliver() ? "lemonsqueezy" : "gumroad";
+/**
+ * Может ли Gumroad вообще оформить покупку: есть хотя бы один товар.
+ *
+ * Ссылка на товар задаётся переменной на позицию (`GUMROAD_PERMALINK_<ССЫЛКА>`) либо
+ * общей `GUMROAD_DEFAULT_PERMALINK`. Нет ни одной — касса не продаст ничего, сколько
+ * бы ключей у неё ни было.
+ */
+export function gumroadCanSell(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.GUMROAD_DEFAULT_PERMALINK?.trim()) return true;
+  return Object.keys(env).some(
+    (k) => k.startsWith("GUMROAD_PERMALINK_") && Boolean(env[k]?.trim()),
+  );
+}
+
+/**
+ * Основная касса: та, через которую сейчас реально пойдёт покупка.
+ *
+ * 🔴 ИСХОДОВ ТРИ, А НЕ ДВА — поправка 05.10.2026 к моей же версии от 29.09.
+ *
+ * Прежняя возвращала «gumroad» всякий раз, когда Lemon Squeezy не может выдавать. И
+ * это противоречило замеру, записанному в шапке ЭТОГО ЖЕ файла: у Gumroad не
+ * настроено ни одной продаваемой позиции. Замер прода 05.10: у Lemon Squeezy товаров
+ * 30, у Gumroad — 0 из 30. То есть при отказе LS платформа называла бы основной
+ * кассой ту, которая не может продать ничего, и говорила бы это и людям (отчёты), и
+ * коду (маршрутизация). Я написал диагноз в шапке и не применил его в функции —
+ * ровно тот класс, за который сам же ругал чужой код.
+ *
+ * Поэтому: «none» — честный третий исход «кассы сейчас нет». Он хуже для отчёта и
+ * лучше для правды: отсутствие кассы видно сразу, а не после первой неудачной
+ * покупки. Правило трёх исходов у нас записано: «нет», «есть», «не знаю/нечем» —
+ * путать последние два нельзя.
+ */
+export function primaryCheckoutProvider(): "lemonsqueezy" | "gumroad" | "none" {
+  if (lemonSqueezyCanDeliver()) return "lemonsqueezy";
+  if (gumroadCanSell()) return "gumroad";
+  return "none";
 }

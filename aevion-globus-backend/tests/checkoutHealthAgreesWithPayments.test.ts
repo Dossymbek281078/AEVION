@@ -82,6 +82,12 @@ describe("две ручки состояния согласны о том, кт�
     process.env.LEMON_SQUEEZY_API_KEY = "тест-ключ";
     process.env.LEMON_SQUEEZY_STORE_ID = "1234";
     delete process.env.LEMON_SQUEEZY_WEBHOOK_SECRET;
+    // 🔴 05.10.2026: у Gumroad здесь ТЕПЕРЬ есть товар, и это не косметика. Замысел
+    // теста верен («LS не доведёт покупку — ведём в Gumroad»), но допущение было
+    // ложным: на проде у Gumroad не настроено НИ ОДНОЙ позиции (замер: 0 из 30).
+    // Касса без товаров продать не может, поэтому «основной» её называть нельзя —
+    // теперь это отдельный исход «none», и для него есть свой случай ниже.
+    process.env.GUMROAD_DEFAULT_PERMALINK = "aevion";
     const { поCheckout, поPayments } = await ктоОсновной();
     expect(поCheckout).toBe("gumroad");
     expect(поPayments).toEqual(["gumroad"]);
@@ -108,9 +114,23 @@ describe("две ручки состояния согласны о том, кт�
   test("LemonSqueezy НЕ настроен — обе называют Gumroad", async () => {
     delete process.env.LEMON_SQUEEZY_API_KEY;
     delete process.env.LEMON_SQUEEZY_STORE_ID;
+    process.env.GUMROAD_DEFAULT_PERMALINK = "aevion"; // см. пояснение выше: без товара касса не продаёт
     const { поCheckout, поPayments } = await ктоОсновной();
     expect(поCheckout).toBe("gumroad");
     expect(поPayments).toEqual(["gumroad"]);
+  });
+
+  test("ни одна касса не может продать — обе отвечают «none», а не называют мёртвую", async () => {
+    // Состояние прода на 05.10: у Lemon Squeezy нет секрета вебхука ИЛИ ключей, у
+    // Gumroad нет ни одного товара. Прежде обе ручки называли основной Gumroad —
+    // то есть кассу, которая не продаёт ничего, и это читали и люди, и код.
+    delete process.env.LEMON_SQUEEZY_API_KEY;
+    delete process.env.LEMON_SQUEEZY_STORE_ID;
+    delete process.env.LEMON_SQUEEZY_WEBHOOK_SECRET;
+    delete process.env.GUMROAD_DEFAULT_PERMALINK;
+    const { поCheckout, поPayments } = await ктоОсновной();
+    expect(поCheckout, "основной названа касса без товаров").toBe("none");
+    expect(поPayments, "отчёт называет основной мёртвую кассу").toEqual([]);
   });
 
   test("healthz говорит не только «можно взять деньги», но и «дойдёт ли выдача»", async () => {
@@ -179,17 +199,33 @@ describe("две ручки состояния согласны о том, кт�
     expect(JSON.stringify(s2)).not.toContain("12345");
   });
 
-  test("основной ровно один — не ноль и не два", async () => {
+  test("двух основных не бывает; ноль бывает — когда продать некому", async () => {
+    // 🔴 05.10.2026 требование уточнено. Было «ровно один — не ноль и не два», и это
+    // закрепляло допущение, что рабочая касса есть всегда. На проде её может не быть:
+    // у Lemon Squeezy нет секрета вебхука, у Gumroad не настроено ни одного товара
+    // (замер: 0 из 30). Требование «ровно один» заставляло код называть основной
+    // мёртвую кассу — то есть врать и людям в отчётах, и себе в маршрутизации.
+    //
+    // Что осталось неизменным и важно: ДВУХ основных не бывает никогда.
     for (const настроен of [true, false]) {
       if (настроен) {
         process.env.LEMON_SQUEEZY_API_KEY = "тест-ключ";
         process.env.LEMON_SQUEEZY_STORE_ID = "1234";
+        process.env.LEMON_SQUEEZY_WEBHOOK_SECRET = "тест-секрет";
       } else {
         delete process.env.LEMON_SQUEEZY_API_KEY;
         delete process.env.LEMON_SQUEEZY_STORE_ID;
+        delete process.env.LEMON_SQUEEZY_WEBHOOK_SECRET;
+        delete process.env.GUMROAD_DEFAULT_PERMALINK;
       }
       const { поPayments } = await ктоОсновной();
-      expect(поPayments).toHaveLength(1);
+      expect(
+        поPayments.length,
+        `двое основных при настройках «${настроен ? "LS готов" : "никто не продаёт"}»: ${поPayments.join(", ")}`,
+      ).toBeLessThanOrEqual(1);
+      // И положительная сторона: когда касса ЕСТЬ, она обязана быть названа.
+      if (настроен) expect(поPayments).toEqual(["lemonsqueezy"]);
+      else expect(поPayments, "продать некому — основной быть не должно").toEqual([]);
     }
   });
 });

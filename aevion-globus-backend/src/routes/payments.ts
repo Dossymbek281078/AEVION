@@ -290,6 +290,9 @@ paymentsRouter.get("/health", (_req, res) => {
   // К 29.09.2026 копий стало три, и третья (/api/revenue/health) лгала.
   const lsReady = lemonSqueezyCanCharge();
   const lsCanDeliver = lemonSqueezyCanDeliver();
+  // Единственный источник ответа «кто основная касса»: три исхода, включая честное
+  // «none» — когда продать не может никто.
+  const основнаяКасса = primaryCheckoutProvider();
   res.json({
     // `primary` раньше стояло у Gumroad КОНСТАНТОЙ true. Поле выглядело
     // замером, а было литералом — и после перехода на LemonSqueezy оно
@@ -301,8 +304,14 @@ paymentsRouter.get("/health", (_req, res) => {
     // Выражение взято ОДИН В ОДИН из checkout.ts (/healthz), а не
     // придумано заново: второй способ отвечать на тот же вопрос и есть
     // причина расхождения.
-    lemonsqueezy: { configured: lsReady, primary: lsCanDeliver },
-    gumroad: { configured: Boolean(GUMROAD_TOKEN()), primary: !lsCanDeliver },
+    // 🔴 05.10.2026: ОБА поля `primary` теперь спрашивают одну функцию, а не считают
+    // сами. Выше написано «выражение НЕ повторяется здесь» — и это было неправдой
+    // ровно на одну строку: у Gumroad стояло `!lsCanDeliver`, то есть четвёртая копия
+    // ответа. Она давала «основная — Gumroad» всякий раз, когда LS не выдаёт, хотя у
+    // Gumroad на проде не настроено НИ ОДНОГО товара (замер: 0 из 30). Отчёт называл
+    // основной кассу, которая не может продать ничего.
+    lemonsqueezy: { configured: lsReady, primary: основнаяКасса === "lemonsqueezy" },
+    gumroad: { configured: Boolean(GUMROAD_TOKEN()), primary: основнаяКасса === "gumroad" },
     // Готовность PayBox спрашиваем у ЕГО ЖЕ модуля, а не пересобираем здесь:
     // ему нужны И идентификатор продавца, И PAYBOX_SECRET (без секрета нельзя
     // ни подписать запрос, ни проверить ответ). Своя проверка по одному

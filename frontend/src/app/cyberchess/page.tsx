@@ -3053,6 +3053,11 @@ export default function CyberChessPage(){
           let podskazka="Сервер не засчитал решение — обновите страницу и попробуйте ещё раз";
           try{const j=await r.json();if(typeof j?.hint==="string"&&j.hint)podskazka=j.hint;console.warn("[daily] сервер отказал:",j?.error??r.status);}catch{console.warn("[daily] сервер отказал:",r.status);}
           showToast(`Решение не попало в таблицу лидеров: ${podskazka}`,"error");
+        }else{
+          // Шаг воронки возврата: засчитанное решение задачи дня. Пара к
+          // daily_open, который шлёт плитка целей. Внутри ветки r.ok намеренно:
+          // считаем то, что признал СЕРВЕР, иначе число разойдётся с таблицей.
+          track({type:"daily_solved",source:"cyberchess/board",meta:{surface:"board",day:srv.day}});
         }
       }catch{
         // Награду человек уже получил; молчать про недоставленное решение

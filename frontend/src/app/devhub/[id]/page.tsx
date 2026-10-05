@@ -84,7 +84,7 @@ const PODPIS_VKLADKI: Record<Vkladka, string> = {
 // словарь IDE (~400 строк) ждёт языкового решения основателя; здесь
 // НАМЕРЕННО только замеренный поимённо остаток пути новичка (проба
 // en-newcomer-probe, 06.09.2026: 66 знаков до генерации + тосты после).
-const GEN_UI: Record<string, { ph: string; noteContinued: string; noteTruncated: string; noteNoProvider: string; noteSyntax: string; created: string; noChanges: string; syntaxWarn: string; memoryWarn: string; runCost: string; runTokens: string; stCalling: string; stWriting: string; stContinue: string; stSyntax: string; stSelfFix: string; stSaving: string; busyDb: string; busyDesign: string; busyGen: string; busyUndo: string; busyPublish: string; busyPull: string; busyDeploy: string; busyPlan: string; busyImg: string; busySave: string; busyApply: string; busyPush: string; busySync: string; busyCompose: string; busySend: string; busyTranslate: string; busyCreate: string; busyPreview: string; busyUpload: string; busyStt: string; busyAgent: string; busySetup: string; deployNeedsFiles: string; confirmDelFile: string }> = {
+const GEN_UI: Record<string, { ph: string; noteContinued: string; noteTruncated: string; noteNoProvider: string; noteSyntax: string; created: string; noChanges: string; syntaxWarn: string; memoryWarn: string; runCost: string; runTokens: string; stCalling: string; stWriting: string; stContinue: string; stSyntax: string; stSelfFix: string; stSaving: string; busyDb: string; busyDesign: string; busyGen: string; busyUndo: string; busyPublish: string; busyPull: string; busyDeploy: string; busyPlan: string; busyImg: string; busySave: string; busyApply: string; busyPush: string; busySync: string; busyCompose: string; busySend: string; busyTranslate: string; busyCreate: string; busyPreview: string; busyUpload: string; busyStt: string; busyAgent: string; busySetup: string; deployNeedsFiles: string; siteLive: string; openSite: string; domainSoon: string; confirmDelFile: string }> = {
   ru: {
     ph: "Опишите, что нужно построить…\nНапример: «REST API с входом пользователей и ручкой товаров»",
     noteContinued: "Ответ упёрся в предел длины — недостающие файлы дозагружены отдельным вызовом",
@@ -102,7 +102,7 @@ const GEN_UI: Record<string, { ph: string; noteContinued: string; noteTruncated:
     stSaving: "💾 Сохраняю файлы…",
     busyDb: "Создаю базу…", busyDesign: "Проектирую…", busyGen: "Генерируем…",
     busyUndo: "Отменяем…", busyPublish: "⏳ Публикуем…", busyPull: "Забираю из репозитория…",
-    deployNeedsFiles: "Сначала соберите проект: выкатывать нечего, пока нет файлов", busyDeploy: "Выкатываю…", busyPlan: "Продумываю…", busyImg: "Генерирую…",
+    deployNeedsFiles: "Сначала соберите проект: выкатывать нечего, пока нет файлов", siteLive: "Сайт в интернете", openSite: "Открыть", domainSoon: "свой адрес на aevion.app появится через несколько минут", busyDeploy: "Выкатываю…", busyPlan: "Продумываю…", busyImg: "Генерирую…",
     busySave: "Сохраняю…", busyApply: "Применяю…", busyPush: "Отправляю…", busySync: "Синхронизирую…",
     busyCompose: "Сочиняю…", busySend: "Отправляю…", busyTranslate: "Перевожу…",
     busyCreate: "Создаю…", busyPreview: "Слушаю образец…", busyUpload: "Загружаю…",
@@ -129,7 +129,7 @@ const GEN_UI: Record<string, { ph: string; noteContinued: string; noteTruncated:
     stSaving: "💾 Saving files…",
     busyDb: "Creating the database…", busyDesign: "Designing…", busyGen: "Generating…",
     busyUndo: "Undoing…", busyPublish: "⏳ Publishing…", busyPull: "Pulling…",
-    deployNeedsFiles: "Build the project first: there is nothing to deploy until files exist", busyDeploy: "Deploying…", busyPlan: "Thinking it through…", busyImg: "Generating…",
+    deployNeedsFiles: "Build the project first: there is nothing to deploy until files exist", siteLive: "Your site is live", openSite: "Open", domainSoon: "your own address on aevion.app will appear in a few minutes", busyDeploy: "Deploying…", busyPlan: "Thinking it through…", busyImg: "Generating…",
     busySave: "Saving…", busyApply: "Applying…", busyPush: "Pushing…", busySync: "Syncing…",
     busyCompose: "Composing…", busySend: "Sending…", busyTranslate: "Translating…",
     busyCreate: "Creating…", busyPreview: "Previewing…", busyUpload: "Uploading…",
@@ -156,7 +156,7 @@ const GEN_UI: Record<string, { ph: string; noteContinued: string; noteTruncated:
     stSaving: "💾 Файлдарды сақтап жатырмын…",
     busyDb: "Дерекқор жасалуда…", busyDesign: "Жобалануда…", busyGen: "Генерациялануда…",
     busyUndo: "Болдырылмауда…", busyPublish: "⏳ Жариялануда…", busyPull: "Репозиторийден алынуда…",
-    deployNeedsFiles: "Алдымен жобаны жинаңыз: файлдар жоқ болса, жариялауға ештеңе жоқ", busyDeploy: "Жариялануда…", busyPlan: "Ойластырылуда…", busyImg: "Генерациялануда…",
+    deployNeedsFiles: "Алдымен жобаны жинаңыз: файлдар жоқ болса, жариялауға ештеңе жоқ", siteLive: "Сайт интернетте", openSite: "Ашу", domainSoon: "aevion.app-тағы өз мекенжайыңыз бірнеше минутта пайда болады", busyDeploy: "Жариялануда…", busyPlan: "Ойластырылуда…", busyImg: "Генерациялануда…",
     busySave: "Сақталуда…", busyApply: "Қолданылуда…", busyPush: "Жіберілуде…", busySync: "Синхрондалуда…",
     busyCompose: "Шығарылуда…", busySend: "Жіберілуде…", busyTranslate: "Аударылуда…",
     busyCreate: "Жасалуда…", busyPreview: "Үлгі тыңдалуда…", busyUpload: "Жүктелуде…",
@@ -2759,8 +2759,15 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           : d.domain && d.domainDns
             ? `Адрес: ${d.liveUrl ?? d.pagesUrl} — https://${d.domain} подключается: DNS готов, сертификат выпускается (1–5 мин), статус обновится сам`
             : d.domain
-              ? `Адрес: ${d.liveUrl ?? d.pagesUrl} — ${d.domain} пока не разрешается (запись DNS ещё не видна)`
-              : `Адрес: ${d.liveUrl ?? d.pagesUrl}`,
+              /*
+               * 05.10.2026. Здесь стояло «${d.domain} пока не разрешается (запись
+               * DNS ещё не видна)». Формально верно, а человеком читается как
+               * ПОЛОМКА — и ровно в момент, когда всё получилось: сайт работает
+               * по выданному адресу. Про собственный домен говорим спокойно и
+               * вторым, а главным — что сайт в интернете.
+               */
+              ? `${GL.siteLive}: ${d.liveUrl ?? d.pagesUrl} — ${GL.domainSoon}`
+              : `${GL.siteLive}: ${d.liveUrl ?? d.pagesUrl}`,
         d.domain && !d.domainReady && !d.domainDns ? "warning" : "success",
       );
       setTimeout(async () => {
@@ -4912,22 +4919,33 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
                     {/* Live URL display */}
                     {(pagesResult || project?.customDomain || project?.deployUrl?.includes("pages.dev")) && (
                       <div style={{ marginBottom: 10, padding: "8px 12px", background: "#d1fae5", borderRadius: 8 }}>
-                        {project?.customDomain && (
-                          <div style={{ marginBottom: 4 }}>
-                            <span style={{ fontSize: 11, color: "#065f46", fontWeight: 700 }}>🌐 Domain: </span>
-                            <a href={`https://${project.customDomain}`} target="_blank" rel="noopener noreferrer"
-                              style={{ fontSize: 12, color: "#065f46", fontWeight: 700, wordBreak: "break-all" }}>
-                              https://{project.customDomain}
+                        {/*
+                            ПОРЯДОК ПЕРЕВЁРНУТ 05.10.2026, и это не косметика.
+                            Было: сверху собственный домен (которого может ещё не
+                            быть), под ним РАБОТАЮЩИЙ адрес мелким 11px и без
+                            кнопки. Человек в момент успеха видел сначала то, что
+                            не работает. Теперь первым идёт адрес, который
+                            отвечает прямо сейчас, и рядом кнопка «Открыть» —
+                            выкатка кончается не сообщением, а живым сайтом.
+                        */}
+                        {(pagesResult?.liveUrl || pagesResult?.pagesUrl || project?.deployUrl?.includes("pages.dev")) && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: project?.customDomain ? 6 : 0 }}>
+                            <span style={{ fontSize: 12, color: "#065f46", fontWeight: 800 }}>{GL.siteLive}:</span>
+                            <a href={pagesResult?.liveUrl ?? pagesResult?.pagesUrl ?? project?.deployUrl ?? ""} target="_blank" rel="noopener noreferrer"
+                              style={{ fontSize: 12, color: "#065f46", fontWeight: 700, wordBreak: "break-all", flex: "1 1 180px" }}>
+                              {pagesResult?.liveUrl ?? pagesResult?.pagesUrl ?? project?.deployUrl}
+                            </a>
+                            <a href={pagesResult?.liveUrl ?? pagesResult?.pagesUrl ?? project?.deployUrl ?? ""} target="_blank" rel="noopener noreferrer"
+                              style={{ fontSize: 12, fontWeight: 800, color: "#fff", background: "#047857", borderRadius: 6, padding: "4px 10px", whiteSpace: "nowrap" }}>
+                              {GL.openSite} →
                             </a>
                           </div>
                         )}
-                        {(pagesResult?.pagesUrl || project?.deployUrl?.includes("pages.dev")) && (
-                          <div>
-                            <span style={{ fontSize: 11, color: "#047857" }}>pages.dev: </span>
-                            <a href={pagesResult?.pagesUrl ?? project?.deployUrl ?? ""} target="_blank" rel="noopener noreferrer"
-                              style={{ fontSize: 11, color: "#047857", wordBreak: "break-all" }}>
-                              {pagesResult?.pagesUrl ?? project?.deployUrl}
-                            </a>
+                        {project?.customDomain && (
+                          <div style={{ fontSize: 11, color: "#047857" }}>
+                            {/* Спокойно и вторым: домен может быть ещё не готов, и
+                                это нормальный ход дела, а не отказ. */}
+                            https://{project.customDomain} — {pagesResult?.domainReady ? GL.siteLive : GL.domainSoon}
                           </div>
                         )}
                       </div>

@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from "express";
-import { этоНашаПроба } from "../lib/publicRegistryProbes";
+import { этоНашаПроба, нечитаемыйЗаголовок } from "../lib/publicRegistryProbes";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { verifyBearerOptional, getJwtSecret } from "../lib/authJwt";
@@ -1782,9 +1782,8 @@ pipelineRouter.get("/certificates", async (_req, res) => {
     // витрина бесплатного сертификата, и посетитель видел на ней «smoke test».
     // Фильтр применяет наше же соглашение об именовании проб (§19), строки в
     // базе остаются — удалять данные на проде необратимо.
-    res.json({
-      certificates: rows
-        .map((r: Record<string, unknown>) => ({
+    const видимые = rows
+      .map((r: Record<string, unknown>) => ({
         id: r.id,
         title: r.title,
         kind: r.kind,
@@ -1805,8 +1804,30 @@ pipelineRouter.get("/certificates", async (_req, res) => {
         bitcoinAnchor: anchorSummary(r),
         verifyUrl: `https://aevion.app/verify/${r.id}`,
       }))
-        .filter((c: { id: unknown; title: unknown; author: unknown }) => !этоНашаПроба(c)),
-      total: rows.length,
+      .filter((c: { id: unknown; title: unknown; author: unknown }) => !этоНашаПроба(c));
+
+    // Нечитаемые заголовки — ОТДЕЛЬНЫЙ вопрос от «наша проба», и фильтруются
+    // отдельно. Посетителю вместо названия достался бы ряд ромбиков; при этом
+    // запись могла принадлежать живому автору, поэтому она остаётся в данных и
+    // доступна по прямой ссылке, а мы ГОВОРИМ о скрытии в журнал — иначе чужая
+    // работа тихо исчезнет с витрины и никто об этом не узнает.
+    const нечитаемые = видимые.filter((c: { id: unknown; title: unknown }) => нечитаемыйЗаголовок(c));
+    if (нечитаемые.length) {
+      console.warn(
+        `[pipeline/certificates] скрыто записей с нечитаемым заголовком: ${нечитаемые.length} ` +
+          `(${нечитаемые.map((c: { id: unknown }) => String(c.id)).join(", ")}) — данные целы, нужна починка с автором`,
+      );
+    }
+    const показываем = видимые.filter((c: { id: unknown; title: unknown }) => !нечитаемыйЗаголовок(c));
+
+    res.json({
+      certificates: показываем,
+      // 🔴 05.10.2026: было `rows.length`, то есть счёт ДО фильтра. Страница
+      // подписывает список словами «Certificate Registry (N)», и при скрытых пробах
+      // N обещал больше записей, чем показан, — посетитель считал бы, что часть
+      // реестра от него спрятана. Считаем ПОСЛЕ фильтра: число обязано совпадать с
+      // тем, что видно глазами.
+      total: показываем.length,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "list failed"; // только для журнала

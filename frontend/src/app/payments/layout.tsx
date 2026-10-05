@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import ComplianceBanner from "@/components/ComplianceBanner";
 
 export const metadata: Metadata = {
   title: "Payments Rail",
@@ -27,5 +28,17 @@ export default function PaymentsLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <>{children}</>;
+  return (
+    <>
+      {/* Витрина Payments Rail выглядит как настоящий платёжный продукт
+          (settlements, subscriptions, fraud, compliance reports), но это ДЕМО:
+          за /api/payments/v1 нет эквайрера, настоящая карта не проходит, записи
+          лежат в памяти процесса (проверено 05.10.2026). Баннер делает это явным
+          на КАЖДОЙ странице payments/*, как требует честность (0-ДЕНЬГИ п.3):
+          страница без пометки создаёт ложное впечатление лицензированного
+          платёжного сервиса. Настоящие деньги идут через LemonSqueezy в бэкенде. */}
+      <ComplianceBanner variant="financial" />
+      {children}
+    </>
+  );
 }

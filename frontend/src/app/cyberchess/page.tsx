@@ -6964,7 +6964,7 @@ export default function CyberChessPage(){
                   style={{marginTop:6,padding:"3px 8px",borderRadius:RADIUS.sm,
                     border:"1px solid #fcd34d",background:"#fef3c7",color:"#92400e",
                     fontSize:10,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:3}}>
-                  🔒 Мастер · 30 Chessy
+                  🔒 {cc.t("ai.master")} · 30 Chessy
                 </button>}
               </div>
 

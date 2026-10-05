@@ -27,6 +27,16 @@ export interface PaywallPayload {
   requiredTiers: CanonicalTier[];
   upgradeUrl: string;
   message: string;
+  /**
+   * С 05.10.2026 бэкенд (planGate.upgradeResponse) различает две ситуации:
+   *  • "anonymous"     — человек НЕ вошёл: мог уже оплатить, сперва вход под
+   *                      почтой оплаты (кнопка входа ведёт на loginUrl);
+   *  • "authenticated" — вошёл, но на этом email прав нет (платил другим адресом
+   *                      или не оформлял).
+   * Старый бэкенд эти поля не шлёт — оба опциональны, UI падает на прежний вид.
+   */
+  authState?: "anonymous" | "authenticated";
+  loginUrl?: string;
 }
 
 export class PaywallError extends Error {

@@ -52,6 +52,8 @@ export function PaywallModal() {
   if (!info) return null;
 
   const tiers = formatTiers(info.requiredTiers);
+  // Не вошёл → первичная кнопка «войти под почтой оплаты» (см. ниже).
+  const anonymous = info.authState === "anonymous";
   const message =
     info.message ||
     `Этот раздел доступен на тарифах: ${tiers}. Оформи подписку, чтобы продолжить.`;
@@ -155,6 +157,29 @@ export function PaywallModal() {
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {/* Не вошёл → возможно, уже оплатил. Главная кнопка — вход под почтой
+              оплаты, а не «к тарифам» (иначе плательщику предлагают платить
+              второй раз). Вход ведёт на loginUrl с возвратом в модуль. */}
+          {anonymous && info.loginUrl ? (
+            <a
+              href={info.loginUrl}
+              style={{
+                flex: 1,
+                minWidth: 160,
+                textAlign: "center",
+                padding: "12px 18px",
+                borderRadius: 12,
+                fontSize: 15,
+                fontWeight: 800,
+                textDecoration: "none",
+                color: "#0b1020",
+                background: "linear-gradient(135deg, #a78bfa, #818cf8)",
+                boxShadow: "0 8px 24px rgba(129,140,248,0.4)",
+              }}
+            >
+              Войти под почтой оплаты
+            </a>
+          ) : null}
           <a
             href={info.upgradeUrl}
             style={{
@@ -164,11 +189,16 @@ export function PaywallModal() {
               padding: "12px 18px",
               borderRadius: 12,
               fontSize: 15,
-              fontWeight: 800,
+              fontWeight: anonymous && info.loginUrl ? 700 : 800,
               textDecoration: "none",
-              color: "#0b1020",
-              background: "linear-gradient(135deg, #a78bfa, #818cf8)",
-              boxShadow: "0 8px 24px rgba(129,140,248,0.4)",
+              // Когда есть кнопка входа, «к тарифам» становится вторичной.
+              color: anonymous && info.loginUrl ? "rgba(226,232,240,0.9)" : "#0b1020",
+              background:
+                anonymous && info.loginUrl
+                  ? "rgba(255,255,255,0.06)"
+                  : "linear-gradient(135deg, #a78bfa, #818cf8)",
+              border: anonymous && info.loginUrl ? "1px solid rgba(148,163,184,0.35)" : "none",
+              boxShadow: anonymous && info.loginUrl ? "none" : "0 8px 24px rgba(129,140,248,0.4)",
             }}
           >
             Перейти к тарифам

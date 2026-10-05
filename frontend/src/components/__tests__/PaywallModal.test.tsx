@@ -110,3 +110,36 @@ describe("PaywallModal — повторное всплытие", () => {
     expect(isOpen()).toBe(true);
   });
 });
+
+/**
+ * 05.10.2026: бэкенд стал различать «не вошёл» и «вошёл, прав нет» (поля
+ * authState + loginUrl). Не вошедшему (возможно, уже оплатившему) главная кнопка
+ * — ВОЙТИ под почтой оплаты, а не «к тарифам», иначе плательщику предлагают
+ * заплатить второй раз.
+ */
+describe("PaywallModal — вход для не вошедшего", () => {
+  const LOGIN = "https://aevion.app/auth?next=%2Fmultichat-engine";
+
+  it("anonymous + loginUrl: есть кнопка входа на loginUrl", () => {
+    render(<PaywallModal />);
+    fire({ ...BASE, authState: "anonymous", loginUrl: LOGIN, userInitiated: true });
+    const login = screen.getByText("Войти под почтой оплаты") as HTMLAnchorElement;
+    expect(login.getAttribute("href")).toBe(LOGIN);
+    // «К тарифам» всё ещё есть — для того, кто действительно не покупал.
+    const toPricing = screen.getByText("Перейти к тарифам") as HTMLAnchorElement;
+    expect(toPricing.getAttribute("href")).toBe(BASE.upgradeUrl);
+  });
+
+  it("authenticated: кнопки входа НЕТ (платил другим адресом или не оформлял)", () => {
+    render(<PaywallModal />);
+    fire({ ...BASE, authState: "authenticated", loginUrl: LOGIN, userInitiated: true });
+    expect(screen.queryByText("Войти под почтой оплаты")).toBeNull();
+    expect((screen.getByText("Перейти к тарифам") as HTMLAnchorElement).getAttribute("href")).toBe(BASE.upgradeUrl);
+  });
+
+  it("КОНТРОЛЬ: старый ответ без authState кнопки входа не даёт", () => {
+    render(<PaywallModal />);
+    fire({ ...BASE, userInitiated: true });
+    expect(screen.queryByText("Войти под почтой оплаты")).toBeNull();
+  });
+});

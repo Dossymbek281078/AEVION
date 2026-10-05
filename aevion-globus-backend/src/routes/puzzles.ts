@@ -6,6 +6,7 @@ import { Router, Request, Response } from "express";
 import { queryNumber } from "../lib/queryNumber";
 import { getPool } from "../lib/dbPool";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { ispravitPodpisMata } from "../lib/chessPuzzleLabel";
 
 const capture = makeServiceCapture("puzzles");
 export const puzzlesRouter = Router();
@@ -91,7 +92,11 @@ puzzlesRouter.get("/", async (req: Request, res: Response) => {
     const safeOffset = random ? Math.floor(Math.random() * Math.max(1, total - nb)) : offset;
     params.push(nb, safeOffset);
     const rows = await pool.query(`SELECT * FROM "ChessPuzzle" WHERE ${where} ORDER BY "rating" ASC LIMIT $${params.length - 1} OFFSET $${params.length}`, params);
-    const puzzles = rows.rows.map((p: any) => ({ id: p.id, fen: p.fen, sol: (()=>{try{return JSON.parse(p.sol)}catch{return [p.sol]}})(), name: p.name, r: p.rating, theme: p.theme, phase: p.phase, side: p.side, goal: p.goal, ...(p.mateIn ? { mateIn: p.mateIn } : {}) }));
+    const puzzles = rows.rows.map((p: any) => { const sol = (()=>{try{return JSON.parse(p.sol)}catch{return [p.sol]}})();
+      // Подпись считается из РЕШЕНИЯ, а не берётся из базы: у Lichess любой
+      // мат длиннее пяти помечен как mateIn5, и наш сев скопировал это в имя.
+      const podpis = ispravitPodpisMata({ name: p.name, sol, goal: p.goal, mateIn: p.mateIn });
+      return ({ id: p.id, fen: p.fen, sol, name: podpis.name, r: p.rating, theme: p.theme, phase: p.phase, side: p.side, goal: p.goal, ...(podpis.mateIn != null ? { mateIn: podpis.mateIn } : {}) }); });
     res.json({ puzzles, total, returned: rows.rows.length });
   } catch (err) { capture(err); console.error("[Puzzles] GET:", err); res.status(500).json({ error: "puzzle_fetch_failed" }); }
 });

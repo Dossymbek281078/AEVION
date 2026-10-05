@@ -6,6 +6,7 @@ import { themeRu } from './themes';
 import { tournamentUserId, tournamentDisplayName } from '../tournaments/playerIdentity';
 import { Chess, Square } from 'chess.js';
 import { zadachaDlyaEkrana } from "../puzzleNormalize";
+import { track } from "@/lib/track";
 
 type Puzzle = {
   /** Есть только у задач из банка; у встроенных его нет. */
@@ -450,6 +451,10 @@ export default function DailyPuzzlePage() {
       // Серию показываем ТУ, что признал сервер: иначе на экране одно число, а
       // в таблице лидеров другое — два писателя одного значения.
       if (r.ok) {
+        // Тот же шаг воронки, что и на доске: решения с ЭТОЙ страницы иначе
+        // остались бы невидимы, и «сколько человек решили задачу дня» отвечало
+        // бы только про один из двух входов.
+        track({ type: 'daily_solved', source: 'cyberchess/daily', meta: { surface: 'daily-page', day: today } });
         const j = (await r.json()) as { streak?: number; bestStreak?: number };
         if (typeof j.streak === 'number') {
           setStreak(j.streak);

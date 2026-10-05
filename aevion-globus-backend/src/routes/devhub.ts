@@ -1985,6 +1985,21 @@ function parseGeneratedFiles(reply: string, targetFiles: string[]): ParsedGenera
 }
 
 
+/**
+ * Тестовый доступ к разбору ответа модели.
+ *
+ * Разбор приватный намеренно, но ровно он решает, увидит человек ФАЙЛЫ или
+ * сырой ответ модели одним куском (mode "fallback" — «сломанное первое
+ * впечатление», как сказано выше). С переводом бесплатных гостей на Gemini
+ * (05.10.2026) это перестало быть теорией: Gemini отвечает свободным текстом —
+ * responseMimeType мы ему НЕ задаём (providers.ts, вызов generateContent), —
+ * то есть обычно оборачивает JSON в забор кода. Форму его ответа надо мерить,
+ * а не предполагать.
+ */
+export function __parseGeneratedFilesForTest(reply: string, targetFiles: string[] = []) {
+  return parseGeneratedFiles(reply, targetFiles);
+}
+
 const MAX_SYNTAX_FIX_ATTEMPTS = 1;
 
 /** Cap how much existing-project context rides in the prompt — enough for the

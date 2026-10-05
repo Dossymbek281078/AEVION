@@ -20,6 +20,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import SetupBoardPreview from "../SetupBoardPreview";
 import { SUPPORTED_LOCALES, tFor } from "../i18n";
+import { klyuchEstVYazyke } from "./_slovar";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PAGE = readFileSync(join(HERE, "..", "page.tsx"), "utf8");
@@ -137,7 +138,8 @@ describe("доска на стартовом экране", () => {
     expect(блок, "на странице нет видимого призыва нажать доску").toMatch(/label=\{`▶ \$\{cc\.t\("board\.cta\.start"\)\}`\}/);
     for (const { code } of SUPPORTED_LOCALES) {
       const текст = tFor(code, "board.cta.start");
-      expect(текст, `${code}: призыва нажать доску нет в словаре`).not.toBe("board.cta.start");
+      // Наличие — у словаря: tFor при пропуске откатится на русский и соврёт.
+      expect(klyuchEstVYazyke(code, "board.cta.start"), `${code}: призыва нет в словаре этого языка`).toBe(true);
       expect(текст.length, `${code}: призыв подозрительно короток — «${текст}»`).toBeGreaterThan(8);
     }
     // Бюджет высоты: на невысоком рабочем столе доска обязана уступить место,

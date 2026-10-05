@@ -1094,6 +1094,14 @@ export default function CyberChessPage(){
   // рендер доски за !mounted-гейтом (ниже) — до гидрации ничего не рисуем,
   // поэтому синхронный t() не даёт вспышки ru→en на первом экране.
   const cc=useCcI18n();
+  // Имя уровня ИИ на языке интерфейса. Семь мест вывода тянули поле `ru`
+  // напрямую, и на казахском экране уровень оставался русским. Поле `ru`
+  // остаётся запасом: пропал ключ — показываем русское имя, а не ключ.
+  const imyaUrovnya=useCallback((a:AL)=>{
+    const klyuch="ai."+a.name.toLowerCase();
+    const t=cc.t(klyuch);
+    return t===klyuch?a.ru:t;
+  },[cc]);
   const[game,setGame]=useState(()=>new Chess());
   const[bk,sBk]=useState(0);
   const[boardTheme,sBoardTheme]=useState(()=>{try{const v=parseInt(localStorage.getItem("aevion_chess_theme_v1")||"0");return isNaN(v)||v<0||v>=BOARD_THEMES.length?0:v}catch{return 0}});
@@ -3896,7 +3904,7 @@ export default function CyberChessPage(){
             if(doubleActive){
               sChessy(c=>({...c,ach:{...c.ach,chessy_double:0}}));
             }
-            setTimeout(()=>{addChessy(reward,`победа над ${lv.ru}${doubleActive?" 💰x2":""}`);bumpDaily("game")},400);
+            setTimeout(()=>{addChessy(reward,`победа над ${imyaUrovnya(lv)}${doubleActive?" 💰x2":""}`);bumpDaily("game")},400);
             // Achievements
             const newWinCount=sts.w+1;
             setTimeout(()=>{
@@ -6949,7 +6957,7 @@ export default function CyberChessPage(){
                     value={Math.min(aiI,(chessy.owned.master_ai||isPro)?6:4)}
                     onChange={e=>{const v=+e.target.value;if(v>=5&&!(chessy.owned.master_ai||isPro)){showToast("Master/Stockfish — платный уровень. Купи в Chessy-магазине","info");sShowShop(true);return}sAiI(v)}}
                     style={{flex:1,accentColor:lv.color}}/>
-                  <span style={{fontSize:11,fontWeight:800,color:lv.color,whiteSpace:"nowrap"}}>{lv.ru} · {lv.elo}{aiI>=5&&!(chessy.owned.master_ai||isPro)?" 🔒":""}</span>
+                  <span style={{fontSize:11,fontWeight:800,color:lv.color,whiteSpace:"nowrap"}}>{imyaUrovnya(lv)} · {lv.elo}{aiI>=5&&!(chessy.owned.master_ai||isPro)?" 🔒":""}</span>
                 </div>
                 {!(chessy.owned.master_ai||isPro)&&<button onClick={()=>sShowShop(true)}
                   className="cc-focus-ring"
@@ -7889,7 +7897,7 @@ export default function CyberChessPage(){
             const bMat=capW.reduce((s,c)=>s+pieceVal(c),0);
             const al=ALS[aiI];
             const PRow=({isAI,getSeconds,isActive,captures,advantage}:{isAI:boolean;getSeconds:()=>number;isActive:boolean;captures:string[];advantage:number})=>{
-              const name=isAI?al.ru+" AI":"Вы";
+              const name=isAI?imyaUrovnya(al)+" AI":"Вы";
               const elo=isAI?al.elo:rat;
               return <div style={{
                 display:"flex",alignItems:"center",justifyContent:"space-between",
@@ -8816,7 +8824,7 @@ export default function CyberChessPage(){
                 // Probability-based AI acceptance: Beginner=100% ... Master=0%
                 const prob=Math.max(0,(5-aiI)/5);
                 if(Math.random()>prob){
-                  showToast(`${ALS[aiI].ru} отклонил запрос ↩`,"error");
+                  showToast(`${imyaUrovnya(ALS[aiI])} отклонил запрос ↩`,"error");
                   return;
                 }
               }
@@ -9342,7 +9350,7 @@ export default function CyberChessPage(){
               </div>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
-                  <span style={{fontSize:14,fontWeight:800,color:CC.text}}>{useSF?"Stockfish":lv.ru}</span>
+                  <span style={{fontSize:14,fontWeight:800,color:CC.text}}>{useSF?"Stockfish":imyaUrovnya(lv)}</span>
                   <Badge tone={useSF?"accent":"info"} size="xs">{lv.elo}</Badge>
                   {think&&<Badge tone="gold" size="xs" icon={<Spinner size={10}/>}>думаю</Badge>}
                 </div>
@@ -15623,7 +15631,7 @@ ${question.trim()}`;
                   color:active?al.color:"#878481",
                   cursor:"pointer",fontSize:12,fontWeight:700,
                   transition:"border-color 0.12s,background 0.12s,color 0.12s",
-                }}>{al.ru}</button>;
+                }}>{imyaUrovnya(al)}</button>;
               })}
             </div>
           </div>
@@ -15633,7 +15641,7 @@ ${question.trim()}`;
             background:"#759900",border:"none",color:"#fff",
             fontSize:16,fontWeight:900,cursor:"pointer",
             boxShadow:"0 4px 16px rgba(117,153,0,0.35)",
-          }}>▶ Играть · {useCustom?`${customMin}+${customInc}`:(TCS[tcI]?.name||"?")} · {ALS[aiI]?.ru}</button>
+          }}>▶ Играть · {useCustom?`${customMin}+${customInc}`:(TCS[tcI]?.name||"?")} · {ALS[aiI]?imyaUrovnya(ALS[aiI]):""}</button>
           <button onClick={()=>{sShowQuickSetupModal(false);sTab("play");sSetup(true);}} style={{
             display:"block",margin:"12px auto 0",background:"none",
             border:"none",color:"#5d5b59",cursor:"pointer",fontSize:13,

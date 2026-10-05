@@ -95,6 +95,14 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "chip.rating": "Рейтинг",
     "chip.history": "История",
     "chip.history.aria": "История онлайн-матчей",
+    // Названия уровней ИИ. Ключ — поле name из таблицы ALS в нижнем регистре.
+    "ai.beginner": "Новичок",
+    "ai.casual": "Любитель",
+    "ai.club": "Клубный",
+    "ai.advanced": "Продвинутый",
+    "ai.expert": "Эксперт",
+    "ai.master": "Мастер",
+    "ai.stockfish": "Stockfish",
     "nav.coach": "Тренер",
     // Нижняя навигация на телефоне подписана короче, чем кнопка в шапке.
     // Разные ключи намеренно: иначе русский интерфейс менялся бы вместе с переводом.
@@ -353,6 +361,13 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "chip.rating": "Rating",
     "chip.history": "History",
     "chip.history.aria": "Online match history",
+    "ai.beginner": "Beginner",
+    "ai.casual": "Casual",
+    "ai.club": "Club",
+    "ai.advanced": "Advanced",
+    "ai.expert": "Expert",
+    "ai.master": "Master",
+    "ai.stockfish": "Stockfish",
     "nav.coach": "Coach",
     "nav.coachShort": "Coach",
     "nav.more": "More",
@@ -609,6 +624,15 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "chip.rating": "Рейтинг",
     "chip.history": "Тарих",
     "chip.history.aria": "Онлайн ойындар тарихы",
+    // Коротко намеренно: подпись стоит рядом с рейтингом в строке без переноса.
+    // «Жаңадан бастаушы» (16 знаков) эту строку развалило бы.
+    "ai.beginner": "Бастаушы",
+    "ai.casual": "Әуесқой",
+    "ai.club": "Клубтық",
+    "ai.advanced": "Озық",
+    "ai.expert": "Сарапшы",
+    "ai.master": "Шебер",
+    "ai.stockfish": "Stockfish",
     "nav.coach": "Жаттықтырушы",
     // 🔴 КОРОТКОЕ слово здесь обязательно. «Жаттықтырушы» — 12 знаков, а в
     // нижнюю навигацию на 320px помещается пять разделов, то есть ~8 знаков

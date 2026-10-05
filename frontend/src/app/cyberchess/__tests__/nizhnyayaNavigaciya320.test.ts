@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { SUPPORTED_LOCALES, tFor } from "../i18n";
+import { klyuchEstVYazyke } from "./_slovar";
 
 /**
  * Нижняя навигация на 320px — самые дешёвые телефоны.
@@ -77,9 +78,10 @@ describe("нижняя навигация помещается в 320px", () => 
       for (const k of ключи) {
         const текст = tFor(code, k);
         проверено++;
-        // Ключ без перевода вернул бы сам ключ — это тоже дефект, и он виден
-        // по длине и по точке внутри.
-        expect(текст, `${code}/${k}: перевода нет, вернулся ключ`).not.toBe(k);
+        // 🔴 Спрашивать tFor «есть ли перевод» нельзя: при пропуске ключа он
+        // отдаёт РУССКОЕ значение, а не ключ, и проверка зеленеет на пустом
+        // казахском. Наличие спрашиваем у самого словаря.
+        expect(klyuchEstVYazyke(code, k), `${code}/${k}: ключа нет в словаре этого языка`).toBe(true);
         if (текст.length > ПРЕДЕЛ) длинные.push(`${code}/${k} = «${текст}» (${текст.length})`);
       }
     }

@@ -2,7 +2,8 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { bezKommentariev } from "./bezKommentariev";
-import { SUPPORTED_LOCALES, tFor } from "../i18n";
+import { SUPPORTED_LOCALES } from "../i18n";
+import { klyuchEstVYazyke } from "./_slovar";
 
 /**
  * Тему задачи показывают ПЯТЬ мест, а перевод я применил сперва к двум.
@@ -50,7 +51,7 @@ describe("тема задачи переведена во всех местах 
     // И на каждом языке описание турниров обязано БЫТЬ — пропуск перевода
     // тихо откатывается на русский, а не падает.
     for (const { code } of SUPPORTED_LOCALES) {
-      expect(tFor(code, "killer.tournaments.desc"), `${code}: описания турниров нет`).not.toBe("killer.tournaments.desc");
+      expect(klyuchEstVYazyke(code, "killer.tournaments.desc"), `${code}: описания турниров нет в словаре этого языка`).toBe(true);
     }
   });
 });

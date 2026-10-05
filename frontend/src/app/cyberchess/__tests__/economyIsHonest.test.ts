@@ -2,7 +2,8 @@ import { describe, test, expect } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { stripComments } from "./_stripComments";
-import { SUPPORTED_LOCALES, tFor } from "../i18n";
+import { SUPPORTED_LOCALES } from "../i18n";
+import { znachenieVYazyke } from "./_slovar";
 
 // Страница экономики говорит о себе правду. 19.08.2026.
 //
@@ -60,8 +61,10 @@ describe("карточка-вход в экономику не выдаёт ко
     // — то же самое обещание без оговорки.
     let проверено = 0;
     for (const { code } of SUPPORTED_LOCALES) {
-      const desc = tFor(code, "killer.economy.desc");
-      expect(desc, `${code}: описания экономики нет в словаре`).not.toBe("killer.economy.desc");
+      // Берём значение ИМЕННО этого языка: tFor откатился бы на русский, и
+      // непереведённая карточка выглядела бы честной за счёт русского текста.
+      const desc = znachenieVYazyke(code, "killer.economy.desc");
+      expect(desc, `${code}: описания экономики нет в словаре этого языка`).not.toBeNull();
       expect(
         desc,
         `${code}: обещание без пометки, что это замысел — «${desc}»`

@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { bezKommentariev } from "./bezKommentariev";
+import { SUPPORTED_LOCALES } from "../i18n";
+import { klyuchEstVYazyke } from "./_slovar";
 
 /**
  * Тему задачи показывают ПЯТЬ мест, а перевод я применил сперва к двум.
@@ -33,8 +35,23 @@ describe("тема задачи переведена во всех местах 
   });
 
   it("форматы турниров в описаниях по-русски", () => {
+    // 05.10.2026 одно из трёх мест уехало в словарь (перевод на казахский).
+    // Считаем по ОБОИМ файлам: иначе проверка либо краснеет на верной правке,
+    // либо, если просто ослабить число, перестаёт ловить удаление.
     const s = KOD();
+    const СЛОВАРЬ = readFileSync(join(process.cwd(), "src/app/cyberchess/i18n.ts"), "utf8");
     expect(s).not.toContain("Swiss · Round-robin");
-    expect((s.match(/Швейцарская · круговой/g) || []).length).toBe(3);
+    const вКоде = (s.match(/Швейцарская · круговой/g) || []).length;
+    const вСловаре = (СЛОВАРЬ.match(/Швейцарская · круговой/g) || []).length;
+    expect(
+      вКоде + вСловаре,
+      `мест с русским названием форматов: ${вКоде} в page.tsx + ${вСловаре} в словаре`
+    ).toBe(3);
+
+    // И на каждом языке описание турниров обязано БЫТЬ — пропуск перевода
+    // тихо откатывается на русский, а не падает.
+    for (const { code } of SUPPORTED_LOCALES) {
+      expect(klyuchEstVYazyke(code, "killer.tournaments.desc"), `${code}: описания турниров нет в словаре этого языка`).toBe(true);
+    }
   });
 });

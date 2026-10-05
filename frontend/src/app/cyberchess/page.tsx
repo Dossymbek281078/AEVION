@@ -7627,6 +7627,30 @@ export default function CyberChessPage(){
             </Card>;
           })()}
 
+          {/* ─── Лицензия движка ───────────────────────────────────────────
+              GPLv3 требует НЕ только назвать лицензию, но и дать доступ к
+              исходникам ИМЕННО той сборки, которую мы раздаём. Сборки лежат в
+              public/ и отдаются всем (aevion.app/stockfish-18-lite-single.js
+              → 200), а уведомления не было ни одного: ни файла с текстом
+              лицензии, ни слова «GPL» на странице.
+
+              Ссылка ведёт на nmrugg/stockfish.js — ПРОИЗВОДНУЮ сборку, а не на
+              официальный Stockfish: по ней человек должен найти тот код, из
+              которого собраны наши файлы. Релиз v18.0.0 сверен хешами с
+              ассетами релиза, sha256 записаны в public/stockfish-ORIGIN.txt. */}
+          <div style={{marginTop:SPACE[3],padding:`${SPACE[2]}px 0`,fontSize:11,lineHeight:1.5,color:CC.textMute}}>
+            {cc.t("engine.license")}{" "}
+            <a href="https://github.com/nmrugg/stockfish.js/releases/tag/v18.0.0"
+               target="_blank" rel="noopener noreferrer"
+               style={{color:CC.textDim,textDecoration:"underline"}}>
+              github.com/nmrugg/stockfish.js · v18.0.0
+            </a>
+            {" · "}
+            <a href="/stockfish-COPYING" style={{color:CC.textDim,textDecoration:"underline"}}>
+              {cc.t("engine.license.copy")}
+            </a>
+          </div>
+
           {/* Лидерборды убраны с главного экрана — открываются через /cyberchess/cpi/leaderboard */}
           {false&&(()=>{
             const categories:LbCategory[]=["blitz","rapid","bullet","puzzles","rush"];

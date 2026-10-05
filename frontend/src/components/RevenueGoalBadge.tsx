@@ -8,6 +8,7 @@ import { usePathname } from "next/navigation";
 import { useRevenueGoal } from "@/lib/useRevenueGoal";
 import { useI18nOptional } from "@/lib/i18n";
 import { revenueTip } from "@/lib/revenueTip";
+import { скрытьЗначокПрогресса } from "@/lib/revenueBadgeHidden";
 
 export default function RevenueGoalBadge() {
   const { goals, summary, pct, days } = useRevenueGoal();
@@ -30,7 +31,7 @@ export default function RevenueGoalBadge() {
    * Прячем ровно здесь, а не правим сам значок и не трогаем остальные страницы:
    * /revenue, главная и витрины показывают его как раньше.
    */
-  if (путь === "/bureau" || путь.startsWith("/bureau/")) return null;
+  if (скрытьЗначокПрогресса(путь)) return null;
 
   if (!goals || !summary || pct === null || days === null) return null;
 

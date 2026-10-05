@@ -63,6 +63,17 @@ describe("значок прогресса и страница бюро", () => {
     );
   });
 
+  test.each(["/pricing", "/pricing/checkout", "/go", "/devhub", "/bureau"])(
+    "на денежной странице %s значка нет",
+    (адрес) => {
+      // 🔴 Кадр прода 05.10.2026: значок стоял в шапке /pricing прямо над кнопкой
+      // «Купить Multichat» — на единственной странице, где человек платит.
+      путь.значение = адрес;
+      const { container } = render(<RevenueGoalBadge />);
+      expect(container.textContent ?? "", `значок остался на ${адрес}`).not.toContain("$1M");
+    },
+  );
+
   test("КОНТРОЛЬ: на /revenue значок остался", () => {
     путь.значение = "/revenue";
     const { container } = render(<RevenueGoalBadge />);

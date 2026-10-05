@@ -432,7 +432,7 @@ export function denyAudience(plan: ResolvedPlan): DenyAudience {
   return plan.email ? "registered" : "anonymous";
 }
 
-function upgradeResponse(res: Response, moduleId: string, plan: ResolvedPlan): void {
+function upgradeResponse(res: Response, moduleId: string, plan: ResolvedPlan, authenticated: boolean): void {
   // 🔴 Дубликаты убираем, и это не косметика. С 15.09.2026 любой платный тариф —
   // доступ ко ВСЕЙ планете, поэтому normalizeTier схлопывает lite/medium/pro/max
   // в «full». Список `includedIn` из шести ступеней превращался в
@@ -451,18 +451,33 @@ function upgradeResponse(res: Response, moduleId: string, plan: ResolvedPlan): v
   // paywallDenyLog. Аудитория добавлена 13.09.2026: без неё «спрос» считал
   // наравне и обход роботами (проверено на проде одним анонимным запросом).
   recordDeny(moduleId, plan.tier, denyAudience(plan));
+  // 🔴 Две РАЗНЫЕ ситуации, и до 05.10.2026 обе получали один текст «входит в
+  // платную подписку → оформить» (замер окна Связи). Это значит, что человеку,
+  // который УЖЕ заплатил, но зашёл не войдя (или под другим email), предлагали
+  // заплатить второй раз. Источник различия — наличие JWT (вошёл или нет):
+  //   • не вошёл      → сперва вход под почтой оплаты, доступ привязан к ней;
+  //   • вошёл, нет прав → возможно, платил другим адресом; либо ещё не оформлял.
+  // Доступ при этом не меняется — дверь всё равно закрыта; меняется только то,
+  // что человек читает. loginUrl ведёт на вход с возвратом на страницу модуля.
+  const authState = authenticated ? "authenticated" : "anonymous";
+  const loginUrl = `${PUBLIC_BASE}/auth?next=${encodeURIComponent(`/${moduleId}`)}`;
+  const message = authenticated
+    ? `На этом аккаунте покупки модуля «${moduleId}» нет. ` +
+      `Если вы оплачивали другим адресом — войдите под ним: ${loginUrl}. ` +
+      `Если ещё не оформляли — модуль входит в любую платную подписку: ${PUBLIC_BASE}/pricing`
+    : `Если вы уже оплатили — войдите под почтой, которой платили, и доступ откроется: ${loginUrl}. ` +
+      `Если ещё нет — модуль «${moduleId}» входит в любую платную подписку: ${PUBLIC_BASE}/pricing`;
   res.status(402).json({
     error: "upgrade_required",
     module: moduleId,
     plan: plan.tier,
     requiredTiers: requiredTiers.length ? requiredTiers : ["full"],
     upgradeUrl: `${PUBLIC_BASE}/pricing`,
-    // Человеческий текст вместо перечисления внутренних имён: после
-    // схлопывания ступеней список всегда «full[, enterprise]», и называть его
-    // тарифами неверно — платных ступеней у нас пять.
-    message:
-      `Модуль «${moduleId}» входит в любую платную подписку AEVION. ` +
-      `Оформить → ${PUBLIC_BASE}/pricing`,
+    // authState и loginUrl — чтобы фронт показал кнопку входа в случае
+    // «не вошёл», а не только «к тарифам». Старые клиенты поля игнорируют.
+    authState,
+    loginUrl,
+    message,
   });
 }
 
@@ -506,7 +521,10 @@ export function requireModule(moduleId: string) {
       return;
     }
 
-    upgradeResponse(res, moduleId, plan);
+    // Наличие JWT различает «не вошёл» и «вошёл, но прав нет» — два разных
+    // текста в upgradeResponse. verifyBearerOptional здесь, в редком пути
+    // отказа (вошедшим с правами сюда не дойти), второго разбора токена не жаль.
+    upgradeResponse(res, moduleId, plan, verifyBearerOptional(req) !== null);
   };
 }
 

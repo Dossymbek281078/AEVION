@@ -64,7 +64,7 @@ import { deployViaWrangler, warmWrangler } from "../lib/wranglerPagesDeploy";
 import { redactInfraDetails } from "../lib/safeErrorText";
 import { checkPublicUrl } from "../lib/publicUrlOnly";
 import { можноСлужитьСтатикой } from "../lib/staticServable";
-import { проверитьРасход, этоОк, запросOpenAI, запросAnthropic, запросGemini } from "../lib/providerSpendCheck";
+import { проверитьРасход, этоОк, запросOpenAI, запросAnthropic, запросGemini, разборElevenLabs } from "../lib/providerSpendCheck";
 import { вставитьБейдж, нуженБейдж } from "../lib/aevionBadge";
 import { файлыВхода, нуженВход, УКАЗАНИЕ_ПРО_ВХОД } from "../lib/devhubAuthScaffold";
 import { сметаПродукта, РАСЦЕНКИ_ПРОДУКТА } from "../lib/pipelineQuote";
@@ -8975,7 +8975,16 @@ devhubRouter.get("/providers/health", async (_req, res) => {
       });
       // Valid key only. Credit is invisible here — an empty balance still
       // answers 200, which is exactly how "video: live" stayed wrong.
-      return { ok: r.ok, detail: r.ok ? "key valid (balance not visible here)" : `HTTP ${r.status}` };
+      //
+      // 05.10.2026: у openai и elevenlabs этот же вопрос теперь задаётся
+      // по-настоящему, а здесь дешёвого способа нет — у Replicate остаток
+      // показывает только кабинет, а пробный запуск модели стоит денег.
+      // Поэтому зелёный кружок остаётся, но подпись больше не делает вид,
+      // что про деньги спросили.
+      return {
+        ok: r.ok,
+        detail: r.ok ? "ключ годен; ДЕНЬГИ НЕ ПРОВЕРЕНЫ — остаток виден только в кабинете" : `HTTP ${r.status}`,
+      };
     }),
     probe("cloudflare", async () => {
       if (!process.env.CLOUDFLARE_API_TOKEN) return { ok: false, detail: "CLOUDFLARE_API_TOKEN not set" };
@@ -9043,9 +9052,11 @@ devhubRouter.get("/providers/health", async (_req, res) => {
       const r = await fetch("https://api.elevenlabs.io/v1/user/subscription", {
         headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY },
       });
-      // Ключ действителен. Остаток знаков отсюда виден, но судить по нему
-      // здесь не берёмся: это ответ на другой вопрос.
-      return { ok: r.ok, detail: r.ok ? "key valid" : `HTTP ${r.status}` };
+      // Остаток знаков виден прямо здесь — и теперь он читается. Прежде
+      // панель смотрела только на HTTP 200 и писала "key valid": при
+      // исчерпанном пакете кружок оставался зелёным.
+      const итог = разборElevenLabs({ status: r.status, body: await r.text().catch(() => "") });
+      return { ok: этоОк(итог.состояние), detail: итог.detail };
     }),
   ]);
 

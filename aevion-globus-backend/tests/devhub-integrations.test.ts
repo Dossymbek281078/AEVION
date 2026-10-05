@@ -2882,7 +2882,14 @@ describe("provider key health", () => {
     const rep = r.body.checks.find((c: { name: string }) => c.name === "replicate");
     expect(rep.ok).toBe(true);
     // Says so out loud: this is exactly how "video: live" stayed wrong.
-    expect(rep.detail).toMatch(/balance not visible/);
+    //
+    // 05.10.2026: сторож ловил ДОСЛОВНУЮ английскую строку "balance not
+    // visible" и покраснел на правке, которая сделала подпись ЯСНЕЕ
+    // ("ДЕНЬГИ НЕ ПРОВЕРЕНЫ"). Смысл теста — «не выдаём годный ключ за
+    // оплаченный счёт», и проверять надо его, а не формулировку.
+    expect(rep.detail).toMatch(/balance not visible|ДЕНЬГИ НЕ ПРОВЕРЕНЫ/);
+    // И вторая половина смысла: подпись не смеет утверждать, что деньги есть.
+    expect(rep.detail).not.toMatch(/деньги есть|funded|balance ok/i);
     delete process.env.REPLICATE_API_TOKEN;
   });
 });

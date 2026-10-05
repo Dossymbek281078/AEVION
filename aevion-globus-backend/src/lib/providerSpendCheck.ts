@@ -242,3 +242,51 @@ export async function запросGemini(
   if (!имя) return первый;
   return вызовGemini(имя, ключ, fetchFn);
 }
+
+// ── ElevenLabs: тут деньги ВИДНЫ, и не спрашивать их было бы ленью ──────────
+//
+// Повод тот же, что и у всей этой проверки, но с другого конца. Ручка
+// `/v1/user/subscription` отдаёт `character_count` и `character_limit` — то
+// есть прямой ответ на вопрос «можно ли ещё озвучивать». Код смотрел только на
+// HTTP 200 и писал «key valid», оставляя числа лежать в теле нетронутыми.
+//
+// Платного вызова здесь НЕ нужно: ответ бесплатен и точен. Это тот редкий
+// случай, когда дорогой вопрос стоит дешевле дешёвого.
+
+export function разборElevenLabs(ответ: ОтветПоставщика): { состояние: СостояниеРасхода; detail: string } {
+  if (ответ.status === 401 || ответ.status === 403) {
+    return { состояние: "ключ плох", detail: подпись("ключ плох") };
+  }
+  if (ответ.status < 200 || ответ.status >= 300) {
+    return { состояние: "непонятно", detail: `ответ ${ответ.status}, остаток знаков не прочитан` };
+  }
+  let тело: { character_count?: number; character_limit?: number; status?: string };
+  try {
+    тело = JSON.parse(ответ.body || "{}");
+  } catch {
+    // Тело не разобралось — это «не знаю», а не «всё хорошо».
+    return { состояние: "непонятно", detail: "ответ 200, но тело не разобрано" };
+  }
+  const потрачено = Number(тело.character_count);
+  const предел = Number(тело.character_limit);
+  // Нет чисел — значит ответили не тем, чем мы думали. Выдавать это за «деньги
+  // есть» нельзя: именно так и появляется зелёный кружок при пустом счёте.
+  if (!Number.isFinite(потрачено) || !Number.isFinite(предел) || предел <= 0) {
+    return { состояние: "непонятно", detail: "ответ 200, но остатка знаков в нём нет" };
+  }
+  const осталось = предел - потрачено;
+  if (осталось <= 0) {
+    return { состояние: "нет денег", detail: `ЗНАКИ КОНЧИЛИСЬ: ${потрачено} из ${предел}` };
+  }
+  return { состояние: "ok", detail: `осталось ${осталось} знаков из ${предел}` };
+}
+
+export async function запросElevenLabs(
+  env: NodeJS.ProcessEnv = process.env,
+  fetchFn: typeof fetch = fetch,
+): Promise<ОтветПоставщика> {
+  const r = await fetchFn("https://api.elevenlabs.io/v1/user/subscription", {
+    headers: { "xi-api-key": String(env.ELEVENLABS_API_KEY ?? "") },
+  });
+  return { status: r.status, body: await r.text().catch(() => "") };
+}

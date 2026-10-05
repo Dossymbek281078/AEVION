@@ -225,8 +225,8 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     // на nmrugg/stockfish.js (производная от Stockfish), а не на официальный
     // Stockfish: по ссылке человек должен найти тот код, из которого собраны
     // наши файлы. Тег подтверждён у источника: v18.0.0, «Stockfish 18».
-    "engine.license": "Шахматный движок — Stockfish.js 18 (сборка v18.0.0), лицензия GPLv3. Исходный код:",
-    "engine.license.copy": "текст лицензии",
+    "engine.license": "Шахматные движки — Stockfish.js и lila-stockfish-web, производные от Stockfish. Лицензии, версии и исходный код:",
+    "engine.license.copy": "лицензии движков",
     "flash.on_my_own":             "Продолжаю сам 💪",
     "flash.show_theory":           "Покажи теорию 📚",
   },
@@ -405,8 +405,8 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     // Opening Flash Card
     "flash.know_theory":           "Know the theory for this opening?",
     "flash.continuation":          "theory continuation:",
-    "engine.license": "Chess engine — Stockfish.js 18 (build v18.0.0), licensed under GPLv3. Source:",
-    "engine.license.copy": "license text",
+    "engine.license": "Chess engines — Stockfish.js and lila-stockfish-web, derived from Stockfish. Licences, versions and source code:",
+    "engine.license.copy": "engine licences",
     "flash.on_my_own":             "I'll continue 💪",
     "flash.show_theory":           "Show theory 📚",
   },
@@ -584,8 +584,8 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     // Opening Flash Card
     "flash.know_theory":           "Бұл дебют теориясын білесің бе?",
     "flash.continuation":          "теория жалғасы:",
-    "engine.license": "Шахмат қозғалтқышы — Stockfish.js 18 (v18.0.0 құрастырымы), GPLv3 лицензиясы. Бастапқы код:",
-    "engine.license.copy": "лицензия мәтіні",
+    "engine.license": "Шахмат қозғалтқыштары — Stockfish.js және lila-stockfish-web, Stockfish негізінде. Лицензиялар, нұсқалар және бастапқы код:",
+    "engine.license.copy": "қозғалтқыш лицензиялары",
     "flash.on_my_own":             "Өзім жалғастырамын 💪",
     "flash.show_theory":           "Теорияны көрсет 📚",
   },

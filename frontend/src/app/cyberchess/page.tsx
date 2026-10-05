@@ -939,17 +939,20 @@ function BottomNav({setup,tab,onPlay,onPuzzles,onAnalysis,onCoach,onProfile,bran
   onPlay:()=>void; onPuzzles:()=>void; onAnalysis:()=>void; onCoach:()=>void; onProfile:()=>void;
   brand:string; textMute:string; surface1:string; border:string;
 }){
+  // Нижняя навигация — то немногое, что видно на телефоне ВСЕГДА. Подписи были
+  // жёстко русскими и оставались русскими даже при выбранном «Қазақша».
+  const ccNav=useCcI18n();
   const activeTab = setup ? "play"
     : tab === "puzzles" ? "puzzles"
     : tab === "analysis" ? "analysis"
     : tab === "coach" ? "coach"
     : "play";
   const items=[
-    {id:"play",    icon:"▶", label:"Играть",  action:onPlay},
-    {id:"puzzles", icon:"🧩",label:"Задачи",   action:onPuzzles},
-    {id:"analysis",icon:"📊",label:"Анализ",  action:onAnalysis},
-    {id:"coach",   icon:"🎓",label:"Коуч",    action:onCoach},
-    {id:"profile", icon:"👤",label:"Профиль", action:onProfile},
+    {id:"play",    icon:"▶", label:ccNav.t("nav.play"),     action:onPlay},
+    {id:"puzzles", icon:"🧩",label:ccNav.t("nav.puzzles"),  action:onPuzzles},
+    {id:"analysis",icon:"📊",label:ccNav.t("nav.analysis"), action:onAnalysis},
+    {id:"coach",   icon:"🎓",label:ccNav.t("nav.coachShort"), action:onCoach},
+    {id:"profile", icon:"👤",label:ccNav.t("nav.profile"),  action:onProfile},
   ];
   return(
     <div className="cc-bottom-nav" style={{
@@ -6523,14 +6526,14 @@ export default function CyberChessPage(){
         <Btn variant="secondary" size="sm" icon={<Icon.Settings/>} onClick={()=>sShowSettings(true)} title="Настройки" ariaLabel="Настройки" style={{padding:"6px 10px",minHeight:36,minWidth:36}}/>
         {vwPx>=769&&<Btn variant={muted?"danger":"secondary"} size="sm" icon={muted?<Icon.Mute/>:<Icon.Sound/>} onClick={()=>{sMuted(v=>!v);showToast(muted?"Звук включён":"Звук выключен","info")}} title={muted?"Включить звук (M)":"Выключить звук (M)"} ariaLabel={muted?"Включить звук":"Выключить звук"} style={{padding:"6px 10px",minHeight:36,minWidth:36}}/>}
         {/* Mobile sidebar toggle — visible only on mobile via CSS */}
-        <button onClick={()=>sMobileSidebarOpen(v=>!v)} title="Открыть боковую панель" aria-label="Свернуть боковую панель" style={{padding:"6px 10px",minHeight:36,minWidth:36,border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,background:mobileSidebarOpen?CC.brandSoft:CC.surface1,color:mobileSidebarOpen?CC.brand:"inherit",cursor:"pointer",fontSize:18,fontWeight:700,display:"none",alignItems:"center",justifyContent:"center"}} className="cc-mobile-sidebar-btn">☰<span style={{fontSize:11,fontWeight:800,marginLeft:6}}>Тренер</span></button>
+        <button onClick={()=>sMobileSidebarOpen(v=>!v)} title="Открыть боковую панель" aria-label="Свернуть боковую панель" style={{padding:"6px 10px",minHeight:36,minWidth:36,border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,background:mobileSidebarOpen?CC.brandSoft:CC.surface1,color:mobileSidebarOpen?CC.brand:"inherit",cursor:"pointer",fontSize:18,fontWeight:700,display:"none",alignItems:"center",justifyContent:"center"}} className="cc-mobile-sidebar-btn">☰<span style={{fontSize:11,fontWeight:800,marginLeft:6}}>{cc.t("nav.coach")}</span></button>
         </div>
 
         {/* ⚙ Ещё — overflow-меню. Свернули «Инструменты» (клавиши/музыка/стрим/фулскрин/
             онлайн) и «Навигацию» (раскладка/язык/экосистема) в одно меню → чистая шапка. */}
         <div style={{position:"relative",flexShrink:0}}>
           <button onClick={()=>sMoreMenuOpen(v=>!v)} aria-haspopup="menu" aria-expanded={moreMenuOpen} title="Ещё — клавиши, музыка, стрим, раскладка, язык, экосистема" className="cc-focus-ring" style={{display:"inline-flex",alignItems:"center",gap:5,padding:"7px 12px",borderRadius:RADIUS.full,border:`1px solid ${moreMenuOpen?CC.brand:CC.borderStrong}`,background:moreMenuOpen?CC.brandSoft:CC.surface1,color:moreMenuOpen?CC.brand:CC.textDim,fontSize:12,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap"}}>
-            <span style={{fontSize:14}} aria-hidden>⚙</span><span>Ещё</span><span style={{fontSize:9}} aria-hidden>▾</span>
+            <span style={{fontSize:14}} aria-hidden>⚙</span><span>{cc.t("nav.more")}</span><span style={{fontSize:9}} aria-hidden>▾</span>
           </button>
           {moreMenuOpen&&<>
             <div onClick={()=>sMoreMenuOpen(false)} style={{position:"fixed",inset:0,zIndex:190}}/>
@@ -6580,11 +6583,11 @@ export default function CyberChessPage(){
         return <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",marginBottom:12,borderRadius:10,background:"linear-gradient(135deg,#fffbeb,#fef3c7)",border:"1px solid #fcd34d",flexWrap:"wrap"}}>
           <div style={{fontSize:18}}>⏸</div>
           <div style={{flex:"1 1 200px",minWidth:0}}>
-            <div style={{fontSize:14,fontWeight:800,color:"#92400e"}}>Незавершённая партия</div>
+            <div style={{fontSize:14,fontWeight:800,color:"#92400e"}}>{cc.t("game.unfinished")}</div>
             <div style={{fontSize:13,color:"#b45309"}}>{s.hist.length} ходов · {tcLabel} · {s.pCol==="w"?"белыми":"чёрными"} · {ccAgoHuman(ago)}</div>
           </div>
-          <button onClick={()=>resumeGame(s)} style={{padding:"8px 16px",borderRadius:8,border:"none",background:T.accent,color:"#fff",fontWeight:800,fontSize:14,cursor:"pointer"}}>▶ Продолжить</button>
-          <button onClick={discardResume} style={{padding:"8px 14px",borderRadius:8,border:`1px solid #fcd34d`,background:"#fff",color:"#92400e",fontWeight:700,fontSize:13,cursor:"pointer"}}>Отменить</button>
+          <button onClick={()=>resumeGame(s)} style={{padding:"8px 16px",borderRadius:8,border:"none",background:T.accent,color:"#fff",fontWeight:800,fontSize:14,cursor:"pointer"}}>▶ {cc.t("game.continue")}</button>
+          <button onClick={discardResume} style={{padding:"8px 14px",borderRadius:8,border:`1px solid #fcd34d`,background:"#fff",color:"#92400e",fontWeight:700,fontSize:13,cursor:"pointer"}}>{cc.t("game.cancel")}</button>
         </div>;
       })()}
 
@@ -6640,7 +6643,7 @@ export default function CyberChessPage(){
             dark={bT.dark}
             border={bT.border}
             maxPx={isMobileLayout?340:(lowDesktop?300:420)}
-            label="▶ Нажмите доску — начнём партию"
+            label={`▶ ${cc.t("board.cta.start")}`}
             onStart={()=>{sHotseat(false);sRivalMode(false);newG()}}
           />
 
@@ -6777,8 +6780,8 @@ export default function CyberChessPage(){
               <div style={{display:"flex",alignItems:"center",gap:6,minWidth:100}}>
                 <span style={{fontSize:14}}>{allDone?"🏆":"🎯"}</span>
                 <div>
-                  <div style={{fontSize:11,fontWeight:900,color:allDone?"#15803d":CC.text,lineHeight:1.2}}>Цели на сегодня</div>
-                  <div style={{fontSize:9,color:CC.textDim,fontWeight:700}}>{doneCount}/3 выполнено</div>
+                  <div style={{fontSize:11,fontWeight:900,color:allDone?"#15803d":CC.text,lineHeight:1.2}}>{cc.t("goals.title")}</div>
+                  <div style={{fontSize:9,color:CC.textDim,fontWeight:700}}>{doneCount}/3 {cc.t("goals.done")}</div>
                 </div>
               </div>
               {/* Progress bar */}
@@ -6787,9 +6790,9 @@ export default function CyberChessPage(){
               </div>
               {/* Goal chips */}
               {([
-                {icon:"♟",label:`Сыграй ${dailyGoals.gamesGoal}`,cur:g1,max:dailyGoals.gamesGoal,done:g1done,onClick:()=>{}},
-                {icon:"◆",label:`Реши ${dailyGoals.puzzleGoal} задач`,cur:g2,max:dailyGoals.puzzleGoal,done:g2done,onClick:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
-                {icon:"🎓",label:"Открой тренера",cur:g3done?1:0,max:1,done:g3done,onClick:()=>{sTab("coach");sSetup(false)}},
+                {icon:"♟",label:cc.t("goals.play").replace("{n}",String(dailyGoals.gamesGoal)),cur:g1,max:dailyGoals.gamesGoal,done:g1done,onClick:()=>{}},
+                {icon:"◆",label:cc.t("goals.solve").replace("{n}",String(dailyGoals.puzzleGoal)),cur:g2,max:dailyGoals.puzzleGoal,done:g2done,onClick:()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}},
+                {icon:"🎓",label:cc.t("goals.opencoach"),cur:g3done?1:0,max:1,done:g3done,onClick:()=>{sTab("coach");sSetup(false)}},
               ]).map(g=><button key={g.label} onClick={g.onClick} style={{
                 display:"inline-flex",alignItems:"center",gap:5,
                 padding:"4px 10px",borderRadius:RADIUS.full,
@@ -6905,9 +6908,9 @@ export default function CyberChessPage(){
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))",gap:SPACE[3]}}>
               {/* Color — tight pill row */}
               <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
-                <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>Цвет</span>
+                <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>{cc.t("side.color")}</span>
                 <div style={{display:"inline-flex",gap:2,padding:2,borderRadius:RADIUS.full,background:CC.surface2,border:`1px solid ${CC.border}`}}>
-                  {([["w","♔","Белые"],["b","♚","Чёрные"]] as const).map(([v,ic,name])=>{
+                  {([["w","♔",cc.t("side.white")],["b","♚",cc.t("side.black")]] as const).map(([v,ic,name])=>{
                     const selected=pCol===v;
                     return <button key={v} onClick={()=>sPCol(v as ChessColor)} 
                       style={{display:"inline-flex",alignItems:"center",gap:5,
@@ -6959,7 +6962,7 @@ export default function CyberChessPage(){
 
               {/* Premove queue limit — compact pill row, без range-слайдера */}
               <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
-                <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const,whiteSpace:"nowrap"}}>⚡ Премувы</span>
+                <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const,whiteSpace:"nowrap"}}>⚡ {cc.t("board.premoves")}</span>
                 <div style={{display:"inline-flex",gap:2,padding:2,borderRadius:RADIUS.full,background:CC.surface2,border:`1px solid ${CC.border}`}}>
                   {[10,20,30,50].map(n=><button key={n} onClick={()=>sPmLim(n)}
                     style={{padding:"4px 12px",borderRadius:RADIUS.full,fontSize:12,fontWeight:pmLim===n?900:700,
@@ -6999,16 +7002,16 @@ export default function CyberChessPage(){
                   setTimeout(()=>newG(),50);
                 }}>
                   <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                    <span>⚡ Быстрый матч</span>
-                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>ИИ ≈ {rat}</span>
+                    <span>⚡ {cc.t("mode.quick")}</span>
+                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>{cc.t("mode.quick.sub").replace("{n}",String(rat))}</span>
                   </div>
                 </Btn>
                 <Btn size="lg" variant="secondary" onClick={()=>{sHotseat(true);sRivalMode(false);setTimeout(()=>newG(),50)}}
                   style={{background:"linear-gradient(135deg,#eff6ff,#dbeafe)",
                     border:"1px solid #bfdbfe",color:CC.info}}>
                   <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                    <span>👥 Два игрока</span>
-                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>один экран</span>
+                    <span>👥 {cc.t("mode.two")}</span>
+                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>{cc.t("mode.two.sub")}</span>
                   </div>
                 </Btn>
                 {/* Онлайн-матч с реальными игроками (matchmaking) — первый класс, как «Play online» у lichess */}
@@ -7017,8 +7020,8 @@ export default function CyberChessPage(){
                   style={{background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",
                     border:"1px solid #ddd6fe",color:"#6d28d9"}}>
                   <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                    <span>🌐 Онлайн-матч</span>
-                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>реальный соперник</span>
+                    <span>🌐 {cc.t("mode.online")}</span>
+                    <span style={{fontSize:11,color:CC.textDim,fontWeight:600}}>{cc.t("mode.online.sub")}</span>
                   </div>
                 </Btn>
               </div>
@@ -7048,7 +7051,7 @@ export default function CyberChessPage(){
 
               {/* Tertiary: задача / классика / база партий — small inline pills, не доминируют */}
               <div style={{marginTop:SPACE[2],display:"flex",gap:SPACE[2],flexWrap:"wrap",alignItems:"center"}}>
-                <span style={{fontSize:10,fontWeight:900,color:CC.textMute,letterSpacing:1.4,textTransform:"uppercase" as const}}>А ещё</span>
+                <span style={{fontSize:10,fontWeight:900,color:CC.textMute,letterSpacing:1.4,textTransform:"uppercase" as const}}>{cc.t("more.title")}</span>
                 <button onClick={()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}}
                   className="cc-focus-ring"
                   style={{padding:"6px 12px",borderRadius:RADIUS.full,
@@ -7444,7 +7447,7 @@ export default function CyberChessPage(){
               </div>
               {/* Win rate */}
               <div style={{padding:`${SPACE[3]}px ${SPACE[3]}px`,borderRight:`1px solid ${CC.border}`}}>
-                <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Процент побед</div>
+                <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>{cc.t("stats.winrate")}</div>
                 {totalGames>0?<>
                   <div style={{display:"flex",alignItems:"baseline",gap:6,marginTop:2}}>
                     <span style={{fontSize:24,fontWeight:900,color:winPct>=50?CC.brand:CC.danger,lineHeight:1.1}}>{winPct}%</span>
@@ -7456,7 +7459,7 @@ export default function CyberChessPage(){
                     <div style={{width:`${sts.l/totalGames*100}%`,background:CC.danger}}/>
                   </div>
                   <div style={{fontSize:10,color:CC.textDim,marginTop:4,fontFamily:"ui-monospace,monospace"}}>{sts.w}W · {sts.l}L · {sts.d}D</div>
-                </>:<div style={{fontSize:12,color:CC.textDim,marginTop:6}}>Пока нет игр</div>}
+                </>:<div style={{fontSize:12,color:CC.textDim,marginTop:6}}>{cc.t("stats.nogames")}</div>}
               </div>
               {/* Chessy */}
               <button onClick={()=>sShowShop(true)} style={{padding:`${SPACE[3]}px ${SPACE[3]}px`,borderRight:`1px solid ${CC.border}`,border:"none",borderTop:"none",borderBottom:"none",background:"transparent",textAlign:"left",cursor:"pointer"}}>
@@ -7465,11 +7468,11 @@ export default function CyberChessPage(){
                   <Icon.Coin width={18} height={18}/>
                   <span style={{fontSize:24,fontWeight:900,color:"#78350f",lineHeight:1.1}}>{chessy.balance}</span>
                 </div>
-                <div style={{fontSize:10,color:CC.textDim,marginTop:2}}>Всего {chessy.lifetime}{chessy.streak>=2?` · 🔥${chessy.streak}д`:""}</div>
+                <div style={{fontSize:10,color:CC.textDim,marginTop:2}}>{cc.t("stats.total").replace("{n}",String(chessy.lifetime))}{chessy.streak>=2?` · 🔥${chessy.streak}д`:""}</div>
               </button>
               {/* Achievements */}
               <button onClick={()=>sShowShop(true)} style={{padding:`${SPACE[3]}px ${SPACE[3]}px`,border:"none",background:"transparent",textAlign:"left",cursor:"pointer"}}>
-                <div style={{fontSize:10,color:CC.accent,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Достижения</div>
+                <div style={{fontSize:10,color:CC.accent,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>{cc.t("stats.achievements")}</div>
                 <div style={{display:"flex",alignItems:"baseline",gap:6,marginTop:2}}>
                   <span style={{fontSize:24,fontWeight:900,color:CC.accent,lineHeight:1.1}}>{achGot}</span>
                   <span style={{fontSize:12,color:CC.textDim}}>/{achTotal}</span>
@@ -7484,14 +7487,14 @@ export default function CyberChessPage(){
           {/* ─── Onboarding tiles — заполняют hub пока у пользователя <3 партий ─── */}
           {savedGames.length<3&&(()=>{
             const tiles:Array<{emoji:string;title:string;desc:string;cta:string;accent:string;onClick:()=>void}>=[
-              {emoji:"♟",title:"Сыграй первую партию",desc:"Соперник любого уровня — от Новичка до полной силы движка. 5 секунд до старта.",cta:"Начать",accent:CC.brand,onClick:()=>{sSetup(true);sTab("play");try{window.scrollTo({top:0,behavior:"smooth"})}catch{}}},
-              {emoji:"◆",title:"Реши задачу",desc:`Тактика на 1–5 ходов. ${pzSolvedCount>0?`Решено ${pzSolvedCount}`:pzTotal?`${pzTotal.toLocaleString("ru-RU")} ${ccPlural(pzTotal,"задача","задачи","задач")} в банке.`:"Полмиллиона задач в банке."}`,cta:"К задачам",accent:"#7c3aed",onClick:()=>{sTab("puzzles")}},
-              {emoji:"🎓",title:"Спроси тренера",desc:"ИИ-тренер разберёт партию, объяснит план, подскажет ход.",cta:"Открыть",accent:"#0891b2",onClick:()=>{sTab("coach")}},
-              {emoji:"📅",title:"Задача дня",desc:"Одна задача каждый день. Серия, таблица лидеров, награды.",cta:"Сегодня",accent:"#ea580c",onClick:()=>{try{window.location.href="/cyberchess/daily"}catch{}}},
+              {emoji:"♟",title:cc.t("start.game.title"),desc:cc.t("start.game.desc"),cta:cc.t("start.game.cta"),accent:CC.brand,onClick:()=>{sSetup(true);sTab("play");try{window.scrollTo({top:0,behavior:"smooth"})}catch{}}},
+              {emoji:"◆",title:cc.t("start.puzzle.title"),desc:`${cc.t("start.puzzle.descHead")} ${pzSolvedCount>0?cc.t("start.puzzle.solved").replace("{n}",String(pzSolvedCount)):pzTotal?(cc.locale==="ru"?`${pzTotal.toLocaleString("ru-RU")} ${ccPlural(pzTotal,"задача","задачи","задач")} в банке.`:cc.t("start.puzzle.bank").replace("{n}",pzTotal.toLocaleString("ru-RU"))):cc.t("start.puzzle.bankHalf")}`,cta:cc.t("start.puzzle.cta"),accent:"#7c3aed",onClick:()=>{sTab("puzzles")}},
+              {emoji:"🎓",title:cc.t("start.coach.title"),desc:cc.t("start.coach.desc"),cta:cc.t("start.coach.cta"),accent:"#0891b2",onClick:()=>{sTab("coach")}},
+              {emoji:"📅",title:cc.t("start.daily.title"),desc:cc.t("start.daily.desc"),cta:cc.t("start.daily.cta"),accent:"#ea580c",onClick:()=>{try{window.location.href="/cyberchess/daily"}catch{}}},
             ];
             return <Card padding={SPACE[3]} elevation="sm">
               <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:0.8,textTransform:"uppercase" as const,marginBottom:SPACE[3]}}>
-                ✨ С чего начать
+                ✨ {cc.t("start.title")}
               </div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:SPACE[2]}}>
                 {tiles.map(t=><button key={t.title} onClick={t.onClick} style={{
@@ -7517,18 +7520,18 @@ export default function CyberChessPage(){
                на первом экране. Дополняет навигационный хаб «☰ Все разделы» в хедере. ─── */}
           {!streamerMode&&(()=>{
             const killer:Array<{emoji:string;title:string;desc:string;cta:string;accent:string;onClick:()=>void}>=[
-              {emoji:"🏆",title:"Турниры онлайн",desc:"Швейцарская · круговой · нокаут. Призовой фонд в Chessy.",cta:"К турнирам",accent:"#d97706",onClick:()=>{try{window.location.href="/cyberchess/tournaments"}catch{}}},
-              {emoji:"📈",title:"CPI рейтинг",desc:"Составной рейтинг по 11 факторам — такого нет ни у lichess, ни у chess.com.",cta:"Открыть",accent:"#0891b2",onClick:()=>{try{window.location.href="/cyberchess/cpi/dashboard"}catch{}}},
-              {emoji:"🪙",title:"Chessy Экономика",desc:"Аукцион, аренда коуча, подписки на стримеров на нашей валюте. Пока превью замысла — скоро.",cta:"Смотреть",accent:"#ca8a04",onClick:()=>{try{window.location.href="/cyberchess/economy"}catch{}}},
-              {emoji:"🎲",title:"12 вариантов",desc:"Атомные · Шахматы Фишера · Царь горы · Крейзихаус · Только кони и др.",cta:"Выбрать",accent:"#7c3aed",onClick:()=>sShowVariants(true)},
+              {emoji:"🏆",title:cc.t("killer.tournaments.title"),desc:cc.t("killer.tournaments.desc"),cta:cc.t("killer.tournaments.cta"),accent:"#d97706",onClick:()=>{try{window.location.href="/cyberchess/tournaments"}catch{}}},
+              {emoji:"📈",title:cc.t("killer.cpi.title"),desc:cc.t("killer.cpi.desc"),cta:cc.t("killer.cpi.cta"),accent:"#0891b2",onClick:()=>{try{window.location.href="/cyberchess/cpi/dashboard"}catch{}}},
+              {emoji:"🪙",title:cc.t("killer.economy.title"),desc:cc.t("killer.economy.desc"),cta:cc.t("killer.economy.cta"),accent:"#ca8a04",onClick:()=>{try{window.location.href="/cyberchess/economy"}catch{}}},
+              {emoji:"🎲",title:cc.t("killer.variants.title"),desc:cc.t("killer.variants.desc"),cta:cc.t("killer.variants.cta"),accent:"#7c3aed",onClick:()=>sShowVariants(true)},
             ];
             return <Card padding={SPACE[3]} elevation="sm">
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:SPACE[2],marginBottom:SPACE[3],flexWrap:"wrap"}}>
                 <div style={{fontSize:11,fontWeight:900,color:CC.textDim,letterSpacing:0.8,textTransform:"uppercase" as const}}>
-                  ⭐ Чего нет у конкурентов
+                  ⭐ {cc.t("killer.title")}
                 </div>
                 <button onClick={()=>sShowSections(true)} style={{fontSize:11,fontWeight:900,color:CC.brand,background:"none",border:"none",cursor:"pointer",letterSpacing:0.3}}>
-                  ☰ Все разделы →
+                  ☰ {cc.t("killer.sections")} →
                 </button>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:SPACE[2]}}>
@@ -10120,7 +10123,7 @@ export default function CyberChessPage(){
             {pms.length>0&&(tab==="play"||tab==="coach")&&(()=>{
               const cmp=pms.length>6; // компактный режим: мелкие чипы, чтобы много премувов влезло
               return <div style={{padding:cmp?"5px 8px":"7px 10px",borderBottom:`1px solid #bfdbfe`,background:"linear-gradient(90deg,#eff6ff,#dbeafe)",display:"flex",alignItems:"center",gap:cmp?3:6,flexWrap:"wrap"}}>
-              <span style={{fontSize:10,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase" as const,color:"#1d4ed8"}}>Премувы · {pms.length}</span>
+              <span style={{fontSize:10,fontWeight:900,letterSpacing:1.1,textTransform:"uppercase" as const,color:"#1d4ed8"}}>{cc.t("board.premoves")} · {pms.length}</span>
               {pms.map((pm,i)=>(<span key={`pm-rp-${i}`} style={{display:"inline-flex",alignItems:"center",gap:cmp?2:3,padding:cmp?"1px 2px 1px 5px":"2px 3px 2px 8px",borderRadius:999,background:"#fff",border:"1px solid #93c5fd",fontSize:cmp?10:11,fontFamily:"ui-monospace, SFMono-Regular, monospace",color:"#1e40af",fontWeight:800}}>
                 <span style={{minWidth:cmp?11:14,height:cmp?11:14,borderRadius:7,background:"#2563eb",color:"#fff",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:cmp?8:9,fontWeight:900}}>{i+1}</span>
                 <span>{pm.from}→{pm.to}</span>
@@ -15159,7 +15162,7 @@ ${question.trim()}`;
               <div style={{fontSize:24,fontWeight:900,color:CC.text}}>{ins.total}</div>
             </Card>
             <Card padding={SPACE[2]} tone="surface1">
-              <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Процент побед</div>
+              <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>{cc.t("stats.winrate")}</div>
               <div style={{fontSize:24,fontWeight:900,color:ins.overall.winPct>=50?CC.brand:CC.danger}}>{ins.overall.winPct}%</div>
               <div style={{fontSize:11,color:CC.textDim,marginTop:2}}>{ins.overall.wins}В · {ins.overall.draws}Н · {ins.overall.losses}П</div>
             </Card>

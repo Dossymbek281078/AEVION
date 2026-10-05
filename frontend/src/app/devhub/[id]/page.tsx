@@ -84,7 +84,7 @@ const PODPIS_VKLADKI: Record<Vkladka, string> = {
 // словарь IDE (~400 строк) ждёт языкового решения основателя; здесь
 // НАМЕРЕННО только замеренный поимённо остаток пути новичка (проба
 // en-newcomer-probe, 06.09.2026: 66 знаков до генерации + тосты после).
-const GEN_UI: Record<string, { ph: string; noteContinued: string; noteTruncated: string; noteNoProvider: string; noteSyntax: string; created: string; noChanges: string; syntaxWarn: string; memoryWarn: string; runCost: string; runTokens: string; stCalling: string; stWriting: string; stContinue: string; stSyntax: string; stSelfFix: string; stSaving: string; busyDb: string; busyDesign: string; busyGen: string; busyUndo: string; busyPublish: string; busyPull: string; busyDeploy: string; busyPlan: string; busyImg: string; busySave: string; busyApply: string; busyPush: string; busySync: string; busyCompose: string; busySend: string; busyTranslate: string; busyCreate: string; busyPreview: string; busyUpload: string; busyStt: string; busyAgent: string; busySetup: string; confirmDelFile: string }> = {
+const GEN_UI: Record<string, { ph: string; noteContinued: string; noteTruncated: string; noteNoProvider: string; noteSyntax: string; created: string; noChanges: string; syntaxWarn: string; memoryWarn: string; runCost: string; runTokens: string; stCalling: string; stWriting: string; stContinue: string; stSyntax: string; stSelfFix: string; stSaving: string; busyDb: string; busyDesign: string; busyGen: string; busyUndo: string; busyPublish: string; busyPull: string; busyDeploy: string; busyPlan: string; busyImg: string; busySave: string; busyApply: string; busyPush: string; busySync: string; busyCompose: string; busySend: string; busyTranslate: string; busyCreate: string; busyPreview: string; busyUpload: string; busyStt: string; busyAgent: string; busySetup: string; deployNeedsFiles: string; confirmDelFile: string }> = {
   ru: {
     ph: "Опишите, что нужно построить…\nНапример: «REST API с входом пользователей и ручкой товаров»",
     noteContinued: "Ответ упёрся в предел длины — недостающие файлы дозагружены отдельным вызовом",
@@ -102,7 +102,7 @@ const GEN_UI: Record<string, { ph: string; noteContinued: string; noteTruncated:
     stSaving: "💾 Сохраняю файлы…",
     busyDb: "Создаю базу…", busyDesign: "Проектирую…", busyGen: "Генерируем…",
     busyUndo: "Отменяем…", busyPublish: "⏳ Публикуем…", busyPull: "Забираю из репозитория…",
-    busyDeploy: "Выкатываю…", busyPlan: "Продумываю…", busyImg: "Генерирую…",
+    deployNeedsFiles: "Сначала соберите проект: выкатывать нечего, пока нет файлов", busyDeploy: "Выкатываю…", busyPlan: "Продумываю…", busyImg: "Генерирую…",
     busySave: "Сохраняю…", busyApply: "Применяю…", busyPush: "Отправляю…", busySync: "Синхронизирую…",
     busyCompose: "Сочиняю…", busySend: "Отправляю…", busyTranslate: "Перевожу…",
     busyCreate: "Создаю…", busyPreview: "Слушаю образец…", busyUpload: "Загружаю…",
@@ -129,7 +129,7 @@ const GEN_UI: Record<string, { ph: string; noteContinued: string; noteTruncated:
     stSaving: "💾 Saving files…",
     busyDb: "Creating the database…", busyDesign: "Designing…", busyGen: "Generating…",
     busyUndo: "Undoing…", busyPublish: "⏳ Publishing…", busyPull: "Pulling…",
-    busyDeploy: "Deploying…", busyPlan: "Thinking it through…", busyImg: "Generating…",
+    deployNeedsFiles: "Build the project first: there is nothing to deploy until files exist", busyDeploy: "Deploying…", busyPlan: "Thinking it through…", busyImg: "Generating…",
     busySave: "Saving…", busyApply: "Applying…", busyPush: "Pushing…", busySync: "Syncing…",
     busyCompose: "Composing…", busySend: "Sending…", busyTranslate: "Translating…",
     busyCreate: "Creating…", busyPreview: "Previewing…", busyUpload: "Uploading…",
@@ -156,7 +156,7 @@ const GEN_UI: Record<string, { ph: string; noteContinued: string; noteTruncated:
     stSaving: "💾 Файлдарды сақтап жатырмын…",
     busyDb: "Дерекқор жасалуда…", busyDesign: "Жобалануда…", busyGen: "Генерациялануда…",
     busyUndo: "Болдырылмауда…", busyPublish: "⏳ Жариялануда…", busyPull: "Репозиторийден алынуда…",
-    busyDeploy: "Жариялануда…", busyPlan: "Ойластырылуда…", busyImg: "Генерациялануда…",
+    deployNeedsFiles: "Алдымен жобаны жинаңыз: файлдар жоқ болса, жариялауға ештеңе жоқ", busyDeploy: "Жариялануда…", busyPlan: "Ойластырылуда…", busyImg: "Генерациялануда…",
     busySave: "Сақталуда…", busyApply: "Қолданылуда…", busyPush: "Жіберілуде…", busySync: "Синхрондалуда…",
     busyCompose: "Шығарылуда…", busySend: "Жіберілуде…", busyTranslate: "Аударылуда…",
     busyCreate: "Жасалуда…", busyPreview: "Үлгі тыңдалуда…", busyUpload: "Жүктелуде…",
@@ -1280,6 +1280,24 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       return;
     }
     setToast(next);
+    /*
+     * ОТКАЗ НЕ ИСЧЕЗАЕТ САМ (05.10.2026), остальное живёт как прежде.
+     *
+     * Цена этой правки уже измерена, и она в полдня работы трёх окон. Ролики
+     * трижды нажали «Выкатить» на проекте без файлов, сервер трижды ответил 400
+     * и ПОКАЗАЛ понятный тост «В проекте нет файлов. Добавьте хотя бы
+     * index.html и повторите» — а они его не увидели, потому что он исчезал
+     * через 4 секунды, и их проверка смотрела позже. Дальше два окна искали
+     * дефект, которого нет.
+     *
+     * Успех по-прежнему исчезает: он не требует действия. Отказ требует, и
+     * пока человек его не прочитал, очередь ждёт — иначе следующий тост
+     * затирал бы сообщение, из-за которого всё и остановилось.
+     */
+    if (next.type === "error") {
+      toastTimer.current = null;
+      return;
+    }
     // Shorter when more are waiting, so a queue never feels stuck.
     toastTimer.current = setTimeout(drainToasts, toastQueue.current.length > 0 ? 2200 : 4000);
   }, []);
@@ -3890,8 +3908,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
           </button>
           <button
             onClick={deploy}
-            disabled={deploying || pagesDeploying}
-            title={capabilityHint(caps, каналВыкатки(caps) ?? "pages", uiLang)}
+            /* Без файлов выкатка заведомо откажет: сервер отвечает 400 «нет
+               файлов». Не давать нажать честнее, чем дать и отказать — именно
+               на этом 05.10 потеряли полдня. Подсказка обязательна: неактивная
+               кнопка без объяснения читается как поломка. */
+            disabled={deploying || pagesDeploying || files.length === 0}
+            title={files.length === 0 ? GL.deployNeedsFiles : capabilityHint(caps, каналВыкатки(caps) ?? "pages", uiLang)}
             style={{
               padding: "8px 18px", background: deploying ? "#99f6e4" : "#0d9488",
               color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 13,
@@ -4913,7 +4935,8 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
 
                     <button
                       onClick={deployToPages}
-                      disabled={pagesDeploying}
+                      disabled={pagesDeploying || files.length === 0}
+                      title={files.length === 0 ? GL.deployNeedsFiles : undefined}
                       style={{
                         width: "100%", padding: "10px", borderRadius: 8, border: "none",
                         background: pagesDeploying ? "#fed7aa" : "#f97316",
@@ -6766,7 +6789,18 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
         />
       )}
 
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          /* Закрыли отказ — очередь идёт дальше. Без этого следующий тост
+             не показался бы вовсе: таймер у отказа намеренно не ставится. */
+          onClose={() => {
+            setToast(null);
+            if (toastQueue.current.length > 0) drainToasts();
+          }}
+        />
+      )}
 
       {/* Несмываемая плашка кассы: появляется при денежном отказе (перехват в
           showToast) и живёт, пока человек её не закроет. До неё исчерпанная

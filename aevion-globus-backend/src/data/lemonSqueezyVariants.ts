@@ -185,8 +185,15 @@ function isReference(s: string): s is LemonSqueezyReference {
 
 /**
  * Resolve the LS variant id for a checkout reference ("tier_lite_monthly").
- * Returns null if the reference is unknown or its variant env isn't set yet —
- * the provider then falls back to LEMON_SQUEEZY_DEFAULT_VARIANT_ID.
+ * Returns null if the reference is unknown or its variant env isn't set yet.
+ *
+ * 🔴 05.10.2026: прежняя версия этого описания обещала, что «провайдер подставит
+ * LEMON_SQUEEZY_DEFAULT_VARIANT_ID». ЭТО БОЛЬШЕ НЕВЕРНО, и неверность опасная:
+ * ровно такое поведение 14.09 списало бы $149 за DevHub вместо отметки бюро, потому
+ * что несопоставленная ссылка брала чужой товар. Провайдер теперь ОТКАЗЫВАЕТ
+ * (lemonSqueezyProvider.ts), а переменная осталась только у DevHub для его
+ * собственной покупки. Описание, обещающее подстановку, однажды вернуло бы её
+ * обратно руками доверчивого читателя.
  */
 /**
  * Ссылка товара «отметка Verified» в бюро.

@@ -51,6 +51,45 @@ describe("товар отметки Verified", () => {
     expect(resolveLemonSqueezyVariant(BUREAU_VERIFIED_REFERENCE)).toBe("987654");
   });
 
+  test("случай 14.09 исключён: чужой товар не подставляется", () => {
+    // 🔴 14.09.2026 включение lemonsqueezy для бюро отзывали: несопоставленная ссылка
+    // брала товар «по умолчанию», и покупка отметки списала бы $149 за DevHub.
+    // Здесь проверяется, что этого больше не может быть ДВУМЯ независимыми фактами:
+    // у отметки своя переменная, и при её отсутствии резолвер отдаёт null (касса
+    // откажет), даже когда переменная «по умолчанию» и чужие товары заданы.
+    process.env.LEMON_SQUEEZY_DEFAULT_VARIANT_ID = "149149";
+    process.env.LEMON_SQUEEZY_VARIANT_DEVHUB_LITE = "777777";
+    try {
+      expect(
+        resolveLemonSqueezyVariant(BUREAU_VERIFIED_REFERENCE),
+        "отметка взяла чужой товар — это и есть случай 14.09",
+      ).toBeNull();
+      // И наоборот: со своей переменной берётся именно она, а не «по умолчанию».
+      process.env[BUREAU_VERIFIED_VARIANT_ENV] = "292929";
+      expect(resolveLemonSqueezyVariant(BUREAU_VERIFIED_REFERENCE)).toBe("292929");
+    } finally {
+      delete process.env.LEMON_SQUEEZY_DEFAULT_VARIANT_ID;
+      delete process.env.LEMON_SQUEEZY_VARIANT_DEVHUB_LITE;
+    }
+  });
+
+  test("описания не обещают подстановку товара по умолчанию", () => {
+    // Текстовая проверка, и она здесь по делу: именно УСТАРЕВШЕЕ ОПИСАНИЕ («провайдер
+    // подставит DEFAULT_VARIANT_ID») и есть то, что вернёт дефект руками следующего
+    // читателя. Код уже отказывает, а комментарий обещал обратное.
+    const данные = readFileSync(join(__dirname, "..", "src", "data", "lemonSqueezyVariants.ts"), "utf8");
+    const провайдер = readFileSync(
+      join(__dirname, "..", "src", "lib", "payment", "lemonSqueezyProvider.ts"),
+      "utf8",
+    );
+    expect(данные, "описание снова обещает подстановку по умолчанию").not.toMatch(
+      /provider then falls back to LEMON_SQUEEZY_DEFAULT_VARIANT_ID/,
+    );
+    expect(провайдер, "шапка снова обещает подстановку по умолчанию").not.toMatch(
+      /Default variant id used by createIntent/,
+    );
+  });
+
   test("бюро зовёт кассу ПОСТОЯННОЙ ссылкой, а не номером проверки", () => {
     // ⚠️ Это проверка ТЕКСТА, и она слабее остальных: поднять маршрут бюро в тесте
     // значит поднять KYC, базу и кассу. Она ловит самый дорогой случай — возврат

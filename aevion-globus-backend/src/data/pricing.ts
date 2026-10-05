@@ -238,6 +238,30 @@ export function termTotal(base: number, term: TermTier): number {
 }
 
 /** «3 месяца», «6 месяцев» — для подписей. */
+/**
+ * Подпись срока ПО-АНГЛИЙСКИ.
+ *
+ * Понадобилась не для красоты: эта строка попадает в имя товара на странице
+ * оплаты (checkout.ts собирает `description`, а lemonSqueezyProvider кладёт его
+ * в `product_options.name`). Замер 05.10.2026 на живой кассе DevHub: страница
+ * с `lang="en-US"` показывала «AEVION DevHub Lite — 1 месяц», английское имя
+ * шло в скобках вторым. Кириллица в момент оплаты на англоязычном сайте — это
+ * недоверие ровно там, где человек вводит карту.
+ */
+export function monthsLabelEn(n: number): string {
+  return n === 1 ? "1 month" : `${n} months`;
+}
+
+/**
+ * Подпись срока на языке покупателя. Язык неизвестен — АНГЛИЙСКИЙ: сайт отдаёт
+ * английский по всем адресам, и русский по умолчанию был бы случайным выбором,
+ * а не вежливостью.
+ */
+export function monthsLabel(n: number, lang?: string | null): string {
+  const код = String(lang ?? "").trim().toLowerCase();
+  return код.startsWith("ru") ? monthsLabelRu(n) : monthsLabelEn(n);
+}
+
 export function monthsLabelRu(n: number): string {
   const d = n % 10;
   const dd = n % 100;

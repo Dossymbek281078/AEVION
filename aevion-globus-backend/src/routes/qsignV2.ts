@@ -719,11 +719,29 @@ qsignV2Router.get("/recent", async (req, res) => {
   try {
     await ensureQSignV2Tables(pool);
 
+    /*
+     * Выход за предел ОБРЕЗАЕТСЯ до предела, а не откатывается к умолчанию.
+     *
+     * ПОВОД 05.10.2026, замер на живом проде:
+     *   limit=20 -> 20 записей,  limit=40 -> 8,  limit=100 -> 8.
+     * Попросить побольше означало получить ВТРОЕ МЕНЬШЕ, и ни слова об ошибке.
+     * Мой собственный скрипт пересборки образца на этом и попался: просил 40,
+     * получил 8 и честно сообщил «живых записей меньше пяти» — при 22 живых на
+     * проде. Ошибался прибор, а не реестр, и заметить это можно было только
+     * сверкой с /health.
+     *
+     * Молчаливое «меньше, чем просили» — худший вид отказа: ответ выглядит
+     * успешным, и неверным оказывается ВЫВОД вызывающего, а не его код.
+     * Поэтому ответ теперь НАЗЫВАЕТ применённый предел (`limitApplied`):
+     * клиент сверяет его со своим запросом и видит, что его обрезали.
+     */
+    const МАКСИМУМ = 20;
+    const УМОЛЧАНИЕ = 8;
     const rawLimit = Number(req.query.limit);
-    const limit =
-      Number.isFinite(rawLimit) && rawLimit >= 1 && rawLimit <= 20
-        ? Math.floor(rawLimit)
-        : 8;
+    const запрошен = req.query.limit !== undefined && Number.isFinite(rawLimit);
+    const limit = запрошен
+      ? Math.min(МАКСИМУМ, Math.max(1, Math.floor(rawLimit)))
+      : УМОЛЧАНИЕ;
 
     const r = (await pool.query(
       `SELECT
@@ -755,6 +773,10 @@ qsignV2Router.get("/recent", async (req, res) => {
       items,
       total: items.length,
       limit,
+      /* Сколько просили и сколько применили — чтобы обрезку было ВИДНО. */
+      limitRequested: запрошен ? Math.floor(rawLimit) : null,
+      limitApplied: limit,
+      limitMax: МАКСИМУМ,
     });
   } catch (e: any) {
     errResp(req, res, 500, { error: "recent_failed" }, e);

@@ -36,9 +36,34 @@ let fetchMock: ReturnType<typeof vi.fn>;
 function reply(status: number, body: unknown) {
   return { ok: status >= 200 && status < 300, status, json: async () => body, text: async () => JSON.stringify(body) };
 }
+/*
+ * 🔴 ДАТА В ТЕКСТЕ ПОСТАВЩИКА СЧИТАЕТСЯ ОТ СЕГОДНЯ, А НЕ ВПИСАНА ЧИСЛОМ.
+ *
+ * Здесь стояло «regain access on 2026-10-01». Код намеренно отбрасывает уже
+ * наступивший срок (outageUntil: `t > now`) — иначе отключение снималось бы
+ * мгновенно и поставщик, закрытый по лимиту, дёргался бы снова и снова. Поэтому
+ * с 01.10.2026 этот тест падал КАЖДЫЙ день у всех окон: он требовал от кода
+ * вернуть дату из прошлого, а код честно подставлял умолчание.
+ *
+ * Найдено 05.10.2026 на пятый день — ровно то, чем опасна постоянно красная
+ * проверка: её перестают читать и перестают отличать от настоящей поломки.
+ * (Я сам сперва принял её за соседа по своему списку «падает и на базе».)
+ *
+ * Поэтому дата вычисляется от текущего времени. Тест проверяет РАЗБОР срока, а
+ * не календарь, и не сгниёт снова.
+ */
+const СРОК_ИЗ_ТЕКСТА = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+const СРОК_ДЕНЬ = СРОК_ИЗ_ТЕКСТА.toISOString().slice(0, 10);
+
 const ANTHROPIC_LIMIT = reply(429, {
   type: "error",
-  error: { type: "rate_limit_error", message: "You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC." },
+  error: { type: "rate_limit_error", message: `You have reached your specified API usage limits. You will regain access on ${СРОК_ДЕНЬ} at 00:00 UTC.` },
+});
+
+/** Тот же отказ, но БЕЗ срока в тексте — для контроля ниже. */
+const ANTHROPIC_LIMIT_БЕЗ_СРОКА = reply(429, {
+  type: "error",
+  error: { type: "rate_limit_error", message: "You have reached your specified API usage limits." },
 });
 const GEMINI_OK = reply(200, { candidates: [{ content: { parts: [{ text: "PROBE-OK" }] } }], usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 2 } });
 const MESSAGES: ChatMessage[] = [{ role: "user", content: "Reply with exactly: PROBE-OK" }];
@@ -87,9 +112,32 @@ describe("поставщик, закрытый по лимиту, не роня�
     fetchMock.mockResolvedValueOnce(ANTHROPIC_LIMIT).mockResolvedValueOnce(GEMINI_OK);
     await callProvider("anthropic", MESSAGES, "claude-opus-4-8", 0.2);
     const o = listProviderOutages().find((x) => x.id === "anthropic");
-    expect(o?.until).toBe("2026-10-01T00:00:00.000Z");
+    const ожидаемый = СРОК_ДЕНЬ + "T00:00:00.000Z";
+    expect(o?.until, "срок взят не из текста поставщика").toBe(ожидаемый);
+    // ПОРЯДОК ВАЖЕН: проверка с наступившим сроком УДАЛЯЕТ запись об отключении
+    // (providers.ts: `if (o.until <= now) { delete; return false }`), поэтому
+    // «до срока — закрыт» спрашивается первым. Поймал на себе: обратный порядок
+    // давал false на живом коде и выглядел как дефект кода, а не теста.
+    expect(isProviderOutOfService("anthropic", Date.parse(ожидаемый) - 1000), "до срока поставщик не закрыт").toBe(true);
     // Уже наступивший срок — поставщик снова в строю.
-    expect(isProviderOutOfService("anthropic", Date.parse("2026-10-01T00:00:01Z"))).toBe(false);
+    expect(isProviderOutOfService("anthropic", Date.parse(ожидаемый) + 1000)).toBe(false);
+  });
+
+  test("3б. КОНТРОЛЬ: без срока в тексте берётся умолчание, а не выдуманная дата", async () => {
+    /*
+     * Без этого контроля проверка выше была бы зелёной и у кода, который ВСЕГДА
+     * подставляет умолчание и текст поставщика не читает вовсе. Разница между
+     * двумя случаями и есть доказательство разбора.
+     */
+    fetchMock.mockResolvedValueOnce(ANTHROPIC_LIMIT_БЕЗ_СРОКА).mockResolvedValueOnce(GEMINI_OK);
+    await callProvider("anthropic", MESSAGES, "claude-opus-4-8", 0.2);
+    const o = listProviderOutages().find((x) => x.id === "anthropic");
+    expect(o?.until, "отключение не записано вовсе").toBeTruthy();
+    expect(o?.until, "без срока в тексте подставился срок ИЗ текста — значит разбора нет").not.toBe(
+      СРОК_ДЕНЬ + "T00:00:00.000Z",
+    );
+    // Умолчание обязано быть в будущем: иначе закрытый поставщик дёргается снова.
+    expect(Date.parse(String(o?.until)), "умолчание в прошлом").toBeGreaterThan(Date.now());
   });
 
   test("4. пустой ответ с кодом 200 — тоже повод идти к следующему", async () => {

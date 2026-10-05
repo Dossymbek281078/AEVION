@@ -2033,6 +2033,21 @@ function parseGeneratedFiles(reply: string, targetFiles: string[]): ParsedGenera
 }
 
 
+/**
+ * Тестовый доступ к разбору ответа модели.
+ *
+ * Разбор приватный намеренно, но ровно он решает, увидит человек ФАЙЛЫ или
+ * сырой ответ модели одним куском (mode "fallback" — «сломанное первое
+ * впечатление», как сказано выше). С переводом бесплатных гостей на Gemini
+ * (05.10.2026) это перестало быть теорией: Gemini отвечает свободным текстом —
+ * responseMimeType мы ему НЕ задаём (providers.ts, вызов generateContent), —
+ * то есть обычно оборачивает JSON в забор кода. Форму его ответа надо мерить,
+ * а не предполагать.
+ */
+export function __parseGeneratedFilesForTest(reply: string, targetFiles: string[] = []) {
+  return parseGeneratedFiles(reply, targetFiles);
+}
+
 const MAX_SYNTAX_FIX_ATTEMPTS = 1;
 
 /** Cap how much existing-project context rides in the prompt — enough for the
@@ -2186,6 +2201,33 @@ function учтиГенерацию(
   }
 }
 
+/**
+ * Порядок провайдеров генерации по ступени — решение основателя 05.10.2026.
+ *
+ * ЗАМЕР, из которого оно принято (цена из ответа сервера, не из прайса):
+ *   gemini-2.5-flash: 3852 выходных токена, $0.002331, выдал 3 файла
+ *   claude-opus-4-8:  2756 выходных токенов, $0.069880, выдал 2 файла
+ * Дороже в 30 раз при МЕНЬШЕМ результате. Гостевая норма — 30 генераций в месяц:
+ * $0.07 против $2.10 на одного гостя, то есть $7 против $210 на сотне гостей,
+ * у которых выручки ноль по определению — это бесплатный режим.
+ *
+ * Поэтому БЕСПЛАТНЫМ ступеням дешёвый поставщик идёт первым, ПЛАТНЫМ порядок не
+ * меняется: там за качество платят, и экономить на нём никто не просил.
+ *
+ * Важно, что это именно ПОРЯДОК, а не замена: если дешёвый откажет, перебор
+ * пойдёт дальше по цепочке. Отказ дешёвого не должен превращаться в отказ
+ * человеку — это было бы хуже дорогой генерации.
+ */
+const ДЕШЁВЫЙ_ДЛЯ_ГОСТЯ = "gemini";
+const БЕСПЛАТНЫЕ_СТУПЕНИ = new Set(["free", "registered"]);
+
+function порядокПоСтупени<T extends { id: string }>(список: T[], ступень: string): T[] {
+  if (!БЕСПЛАТНЫЕ_СТУПЕНИ.has(ступень)) return список;
+  const дешёвый = список.filter((p) => p.id === ДЕШЁВЫЙ_ДЛЯ_ГОСТЯ);
+  if (дешёвый.length === 0) return список; // его нет среди настроенных — порядок прежний
+  return [...дешёвый, ...список.filter((p) => p.id !== ДЕШЁВЫЙ_ДЛЯ_ГОСТЯ)];
+}
+
 async function generateCodeWithAI(
   prompt: string,
   stack: string,
@@ -2206,7 +2248,10 @@ async function generateCodeWithAI(
   userId: string | null = null,
 ): Promise<GeneratedCodeResult> {
   const providers = getProviders();
-  const configured = providers.filter((p) => p.configured);
+  // Ступень спрашиваем ОДИН раз: она решает порядок поставщиков. Для гостя без
+  // личности это "free" — то есть дешёвый пойдёт первым, как и задумано.
+  const ступеньДляПорядка = await getUserTier(userId ?? "anonymous");
+  const configured = порядокПоСтупени(providers.filter((p) => p.configured), ступеньДляПорядка);
   if (configured.length === 0) {
     // Fallback — one stub PER requested file, so multi-file callers (e.g.
     // /database/design asking for schema + client) get the same shape a real
@@ -2289,7 +2334,22 @@ async function generateCodeWithAI(
     // потерять причину отказа, а она отличает «кончились деньги» от «ключ
     // неверный».
     const attempts: Array<{ provider: string; error: string }> = [];
-    const chain = images?.length && visionChain.length > 0 ? visionChain : [provider];
+    /*
+     * ЦЕПОЧКА ЗАПАСНЫХ И ДЛЯ ТЕКСТА (05.10.2026).
+     *
+     * Здесь стояло `[provider]` — ОДИН поставщик. Для картинок цепочка была (её
+     * завели 31.08 ровно потому, что одного звена не хватало), а для текста нет:
+     * отказ первого означал отказ человеку, хотя рядом стояли настроенные
+     * запасные.
+     *
+     * Это стало обязательным теперь, когда бесплатным первым идёт дешёвый
+     * поставщик: без цепочки его сбой ронял бы генерацию, которая прежде шла
+     * через дорогого и работала. Экономия не имеет права превращаться в отказ.
+     *
+     * Порядок цепочки — тот же `configured`, уже упорядоченный по ступени, так
+     * что первым пробуется выбранный, а дальше остальные.
+     */
+    const chain = images?.length && visionChain.length > 0 ? visionChain : configured;
     // Шаг 1 стриминга (07.09): для anthropic БЕЗ картинок ответ читается
     // ПОТОКОМ — те же max_tokens (паритет держит сторож streamCapsMatch…),
     // тот же учёт (учтиГенерацию по done-событию), плюс живой счётчик байтов

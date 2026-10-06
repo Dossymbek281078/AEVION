@@ -816,12 +816,35 @@ function utmMedium(channel: string): string {
  *   продажу, но и какая витрина. Значение по умолчанию намеренно безликое:
  *   новый вызов без аргумента даст валидную UTM-тройку, а не сломанную.
  */
-export function withChannel(href: string, channel: string | null, landing = "site"): string {
-  if (!channel) return href;
+/*
+ * 🔴 06.10.2026, ЧЕТВЁРТЫЙ ПАРАМЕТР — СЫРАЯ МЕТКА, и без него реклама не учитывалась.
+ *
+ * Повод: 06–07.10 запускается реклама книги в Meta на /longevity?c=meta-book-<кампания>.
+ * Замер того же дня: `channelFrom` нормализует метку в ИЗВЕСТНЫЙ канал, а всё
+ * неизвестное превращает в null (это сделано намеренно, чтобы не записать выдуманный
+ * канал). Составная метка «meta-book-<кампания>» в список каналов не попадает, значит
+ * channel приходит сюда null, а первая строка возвращала ссылку БЕЗ ИЗМЕНЕНИЙ — то есть
+ * на Gumroad не уезжало ни метки, ни UTM, и продажу с рекламы нельзя было отличить.
+ *
+ * Поэтому: если канал неизвестен, но входящая метка ЕСТЬ, тройка всё равно строится по
+ * ней. Нормализованный канал, когда он известен, по-прежнему главный — он единственный,
+ * чьё имя совпадает с нашими отчётами.
+ *
+ * Измерено на живой кассе 06.10: `gumroad.com/l/orcfbo?wanted=true&utm_source=…&utm_campaign=…`
+ * отдаёт 200, и метки доезжают до адреса оплаты вместе с `wanted=true`.
+ */
+export function withChannel(
+  href: string,
+  channel: string | null,
+  landing = "site",
+  сыраяМетка?: string | null,
+): string {
+  const метка = channel ?? (сыраяМетка?.trim() || null);
+  if (!метка) return href;
   // Внутренний адрес (/pricing?app=…#apps) — не касса продавца: странице цен
   // нужна короткая метка ?c=, которую читает channelNow, и её надо вставить ДО
   // хеша. Дописанная после `#` UTM-тройка до сервера не доехала бы вовсе.
-  if (href.startsWith("/")) return keepChannel(href, channel);
+  if (href.startsWith("/")) return keepChannel(href, channel ?? метка);
   const sep = href.includes("?") ? "&" : "?";
   if (href.includes("lemonsqueezy.com")) {
     // 🔴 ПОДПИСАННЫЙ адрес не дополняем НИЧЕМ. Замер 20.09.2026 с контролями:
@@ -844,15 +867,22 @@ export function withChannel(href: string, channel: string | null, landing = "sit
     // Непод­писанные ссылки на товар (`/buy/<uuid>`) параметры принимают, и для
     // них поведение сохранено: признак — наличие `signature` в адресе.
     if (/[?&]signature=/.test(href)) return href;
-    return `${href}${sep}checkout[custom][channel]=${encodeURIComponent(channel)}`;
+    return `${href}${sep}checkout[custom][channel]=${encodeURIComponent(метка)}`;
   }
   // UTM-тройка целиком: Gumroad заводит ссылку в отчёте по первому переходу,
   // и неполный набор в этот отчёт не попадает.
   const q = new URLSearchParams({
-    channel,
-    utm_source: channel,
-    utm_medium: utmMedium(channel),
-    utm_campaign: landing,
+    channel: метка,
+    // Источник: `метка` и есть «канал, если известен, иначе входящая метка» — она так
+    // и собрана выше. Писать здесь `channel ?? метка` было избыточно: выражения равны
+    // всегда, и мутация это показала, выжив как эквивалентная.
+    utm_source: метка,
+    // Среда: у известного канала своя, у неизвестной метки «referral» — значение уже
+    // используется в utmMedium для площадок-агрегаторов, нового слова не вводим.
+    utm_medium: channel ? utmMedium(channel) : "referral",
+    // Кампания: входящая метка целиком (`meta-book-<кампания>`), иначе — кнопка, как было.
+    // Именно по ней основатель и увидит в кассе, какая реклама дала продажу.
+    utm_campaign: сыраяМетка?.trim() || landing,
   });
   return `${href}${sep}${q.toString()}`;
 }

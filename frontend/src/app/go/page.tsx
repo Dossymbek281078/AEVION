@@ -213,6 +213,13 @@ export default async function GoPage({
   // Она доезжает до чекаута и возвращается в вебхуке рядом с продажей — иначе
   // «какой канал принёс деньги» остаётся без ответа.
   const rawChannel = (await searchParams).c;
+  /*
+   * Входящая метка как есть — её ждёт внешняя касса. `channelFrom` ниже нормализует
+   * метку в известный канал и роняет неизвестное в null; составная рекламная метка
+   * («meta-book-<кампания>») в список каналов не входит, поэтому для кассы нужна она
+   * целиком, иначе продажу с рекламы не отличить.
+   */
+  const сыраяМетка = Array.isArray(rawChannel) ? rawChannel[0] : rawChannel;
   const channel = channelFrom(rawChannel);
 
   // Языковая маршрутизация — тот же приём, что у /longevity (ветка
@@ -325,7 +332,7 @@ export default async function GoPage({
           <p style={{ ...styles.headLink, marginBottom: 6 }}>Пришли за протоколом долголетия?</p>
           {книга && (
             <LinkCard
-              href={withChannel(книга.href, channel, "go-book-top")}
+              href={withChannel(книга.href, channel, "go-book-top", сыраяМетка)}
               external
               product={книга}
               channel={channel}
@@ -439,7 +446,7 @@ export default async function GoPage({
           <h2 style={styles.h2}>Книга</h2>
           {bookFull && (
             <LinkCard
-              href={withChannel(bookFull.href, channel, "go")}
+              href={withChannel(bookFull.href, channel, "go", сыраяМетка)}
               external
               product={bookFull}
               channel={channel}

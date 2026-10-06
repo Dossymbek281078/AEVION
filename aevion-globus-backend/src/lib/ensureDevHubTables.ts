@@ -215,6 +215,34 @@ export async function ensureDevHubTables(pool: PgPoolInstance): Promise<void> {
         ON "DevHubCheckpoint" ("projectId", "createdAt" DESC);
     `);
 
+    /*
+     * Пара «гость + ХЕШ адреса». Нужна ровно для одного вопроса: сколько РАЗНЫХ
+     * гостей за одним адресом. Пока её не было, месячный потолок на адрес нельзя
+     * было ни оценить, ни защитить — отказ выглядел одинаково и для
+     * злоупотребления, и для общей сети (CGNAT мобильного оператора: тысячи
+     * абонентов за одним адресом). Замер 06.10.2026 упёрся именно в это.
+     *
+     * СЫРОГО АДРЕСА ЗДЕСЬ НЕТ и быть не должно: пишется солёный хеш (соль из
+     * GUEST_IP_HASH_SALT). Без соли запись не делается вовсе — несолёный хеш
+     * IPv4 перебирается и равносилен хранению адреса.
+     */
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "DevHubGuestAddress" (
+        "id"          TEXT PRIMARY KEY,
+        "guestId"     TEXT NOT NULL,
+        "ipHash"      TEXT NOT NULL,
+        "month"       TEXT NOT NULL,
+        "seenCount"   INTEGER NOT NULL DEFAULT 1,
+        "firstSeenAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        "lastSeenAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE ("guestId", "ipHash", "month")
+      );
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS "DevHubGuestAddress_ip_month_idx"
+        ON "DevHubGuestAddress" ("ipHash", "month");
+    `);
+
     dbReady = true;
     ensured = true;
   } catch (e: any) {

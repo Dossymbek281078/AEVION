@@ -1,6 +1,8 @@
 import { describe, test, expect, vi, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 /**
  * Имя товара на странице оплаты — на языке ПОКУПАТЕЛЯ, а не всегда по-русски.
@@ -115,5 +117,51 @@ describe("имя товара в кассе — на языке покупате
   test("планета без приложения — то же правило", async () => {
     const { имя } = await купить("en-US", { tierId: "max" });
     expect(КИРИЛЛИЦА.test(имя), `тариф планеты: «${имя}»`).toBe(false);
+  });
+  test("ОТКАЗЫ тоже на языке покупателя: неверный тариф", async () => {
+    /*
+     * Замер 05.10.2026 по этому файлу: из 11 сообщений покупателю 8 были только
+     * по-русски, а 3 только по-английски — непоследовательность внутри одного
+     * файла, то есть недосмотр, а не решение. Отказ — худший момент, чтобы
+     * заговорить на незнакомом языке: человек уже достал карту.
+     */
+    const анг = await request(приложение()).post("/api/pricing/checkout/session")
+      .set("Accept-Language", "en-US").send({ email: "b@example.test", tierId: "нет-такого" });
+    expect(анг.status).toBe(400);
+    expect(КИРИЛЛИЦА.test(String(анг.body.message)), `англичанину: «${анг.body.message}»`).toBe(false);
+
+    const рус = await request(приложение()).post("/api/pricing/checkout/session")
+      .set("Accept-Language", "ru-RU").send({ email: "b@example.test", tierId: "нет-такого" });
+    expect(КИРИЛЛИЦА.test(String(рус.body.message)), "русскому ушло не русское").toBe(true);
+    // Код ошибки от языка НЕ зависит — иначе клиент начнёт разбирать текст.
+    expect(анг.body.error).toBe(рус.body.error);
+  });
+
+  test("ОТКАЗЫ: приложение отдельно не продаётся — на языке покупателя", async () => {
+    // qright снят с продажи решением основателя 01.10 — отказ здесь постоянный,
+    // значит его текст читают чаще остальных.
+    const анг = await request(приложение()).post("/api/pricing/checkout/session")
+      .set("Accept-Language", "en-US").send({ email: "b@example.test", tierId: "lite", app: "qright" });
+    const рус = await request(приложение()).post("/api/pricing/checkout/session")
+      .set("Accept-Language", "ru-RU").send({ email: "b@example.test", tierId: "lite", app: "qright" });
+    expect(анг.body.error, "ветка «не продаётся отдельно» не сработала").toBe("invalid_app");
+    expect(КИРИЛЛИЦА.test(String(анг.body.message)), `англичанину: «${анг.body.message}»`).toBe(false);
+    expect(КИРИЛЛИЦА.test(String(рус.body.message)), "русскому ушло не русское").toBe(true);
+  });
+
+  test("предел темпа — ЧЕСТНАЯ ГРАНИЦА: его текст задаёт общая обёртка", () => {
+    /*
+     * Два сообщения в этом файле остаются русскими намеренно, и это надо знать,
+     * а не обнаружить: они передаются в lib/rateLimit.ts (`message?: string`,
+     * в теле ответа уходит полем `error`) — одну обёртку на весь бэкенд. Чтобы
+     * ответить на языке покупателя, обёртка должна принимать функцию от запроса;
+     * это правка общей библиотеки, её владелец не мы.
+     *
+     * Проверка закрепляет границу: если кто-то научит обёртку языку, этот тест
+     * покраснеет и его надо будет снять — вместе с переводом этих двух строк.
+     */
+    const src = readFileSync(join(__dirname, "..", "src", "routes", "checkout.ts"), "utf8");
+    const остались = (src.match(/message: "Слишком много/g) ?? []).length;
+    expect(остались, "число русских сообщений темпа изменилось — пересмотрите границу").toBe(2);
   });
 });

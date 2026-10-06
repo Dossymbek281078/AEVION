@@ -93,6 +93,39 @@ export function withGuestHeader(init: RequestInit | undefined, id: string): Requ
   return { ...init, headers };
 }
 
+/**
+ * Личность только на эту страницу — когда хранилище недоступно.
+ *
+ * 🔴 ЗАЧЕМ. Ниже стоял ранний выход: `const id = getDevhubGuestId(); if (!id)
+ * return;` — то есть при заблокированном хранилище (приватный режим, запрет
+ * данных сайта) заголовок не ставился ВООБЩЕ, и все запросы такого посетителя
+ * уходили без метки. На бэкенде отсутствие метки даёт общую личность
+ * "anonymous" (lib/devhubGuest.ts), а значит: список проектов общий, любой
+ * может править чужие файлы и `DELETE /projects/:id` удаляет чужой проект
+ * вместе с его базой. Это ровно тот дефект, который чинили 21.08.2026 — он
+ * просто остался для посетителей без хранилища. Подтверждено 06.10.2026
+ * соседним окном: проект, созданный без метки, удаляется любым таким же
+ * запросом (200, pagesRemoved).
+ *
+ * Ирония в том, что внутри самой подмены fetch ниже это и написано: «без него
+ * посетитель попадает в ОБЩИЙ ящик». Ранний выход делал именно это.
+ *
+ * Личность в памяти живёт столько же, сколько у такого посетителя в принципе
+ * может жить что-либо — до перезагрузки страницы. Зато она СВОЯ, и чужой
+ * удалить его проект уже не может.
+ *
+ * ⚠️ Контракт getDevhubGuestId НЕ меняем: его `null` — это признак «хранилище
+ * заблокировано», по нему страница честно предупреждает, что черновики не
+ * сохранятся (blockedStorageTellsTheTruth.guard.test.ts). Признак остаётся
+ * верным: хранилище действительно недоступно.
+ */
+let вПамяти: string | null = null;
+
+function личностьВПамяти(): string {
+  if (!вПамяти || !GUEST_ID.test(вПамяти)) вПамяти = newId();
+  return вПамяти;
+}
+
 let installed = false;
 
 /**
@@ -107,8 +140,8 @@ let installed = false;
  */
 export function installDevhubGuestHeader(): () => void {
   if (typeof window === "undefined" || installed) return () => {};
-  const id = getDevhubGuestId();
-  if (!id) return () => {};
+  // Хранилище недоступно — берём личность в памяти, но заголовок ставим ВСЕГДА.
+  const id = getDevhubGuestId() ?? личностьВПамяти();
   const original = window.fetch;
   installed = true;
   window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
@@ -125,7 +158,7 @@ export function installDevhubGuestHeader(): () => void {
     // Запасное значение — то, что было при установке: если хранилище вдруг
     // отказало, лучше слать прежнюю личность, чем не слать заголовок вовсе
     // (без него посетитель попадает в ОБЩИЙ ящик к чужим черновикам).
-    return original(input, withGuestHeader(init, getDevhubGuestId() ?? id));
+    return original(input, withGuestHeader(init, getDevhubGuestId() ?? вПамяти ?? id));
   }) as typeof window.fetch;
   return () => {
     window.fetch = original;

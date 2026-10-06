@@ -1229,6 +1229,53 @@ function scheduleServeVerification(
   }, step === 0 ? 4000 : SERVE_VERIFY_RETRY_DELAYS_MS[step - 1]);
 }
 
+/**
+ * Сроки перепроверки СВОЕГО домена после выкатки.
+ *
+ * 🔴 ЗАМЕР 06.10.2026 на живом проде, свежая гостевая выкатка:
+ *   24 с → HTTP 000
+ *   39 с → HTTP 000
+ *   54 с → HTTP 200   ← адрес заработал
+ * И контроль, что дело во ВРЕМЕНИ, а не в домене: сайт соседнего окна
+ * smoke-kofe-58231-c54d4f.aevion.app отдаёт 200 и 3508 знаков сгенерированной
+ * страницы («Кофейня Зерно»), CNAME в зоне есть. Два имени, которые никогда не
+ * выкатывались, — CNAME нет, HTTP 404. То есть свой домен РАБОТАЕТ, просто
+ * появляется примерно через минуту.
+ *
+ * А проверка в markDeploymentLive смотрела раньше: HTTPS 6 попыток по 5 с плюс
+ * CNAME 2 по 1 с — то есть на ~35-й секунде, когда записи ещё нет. И записывала
+ * noteProviderFailure("domain"), после чего витрина возможностей навсегда
+ * показывала degraded, а интерфейс каждому посетителю говорил «домен aevion.app
+ * пока не подтверждён». Переходное «ещё нет» выданное за отказ — это тот же
+ * класс, что постоянно красная проверка: её перестают читать, а здесь она прямо
+ * обесценивала работающую возможность.
+ *
+ * Поэтому: на выкатке отказ НЕ записываем, а перепроверяем позже. Отказом
+ * считаем только то, что не появилось и за долгое окно.
+ */
+export const DOMAIN_RECHECK_DELAYS_MS = [90_000, 5 * 60_000];
+
+function scheduleDomainRecheck(customDomain: string, step = 0): void {
+  deferred(async () => {
+    const виден =
+      (await dnsProbe.cnameResolves(customDomain, 2, 1000)) ||
+      (await verifyDeploymentServes(`https://${customDomain}`, 5000, 1).catch(() => false));
+    if (виден) {
+      noteProviderSuccess("domain");
+      return;
+    }
+    if (step + 1 < DOMAIN_RECHECK_DELAYS_MS.length) {
+      scheduleDomainRecheck(customDomain, step + 1);
+      return;
+    }
+    // Долгое окно вышло — вот ЭТО отказ, и витрина вправе покраснеть.
+    noteProviderFailure(
+      "domain",
+      `${customDomain} does not resolve ${Math.round(DOMAIN_RECHECK_DELAYS_MS.reduce((a, b) => a + b, 0) / 60000)} min after deploy — the CNAME is not visible in the ${siteZone()} zone at ${dnsProviderName()}`,
+    );
+  }, DOMAIN_RECHECK_DELAYS_MS[step]);
+}
+
 /** Страница ответила: выкатка и проект — live; домен спрашиваем по HTTPS, но не-ответ — не отказ (сертификат Pages). */
 async function markDeploymentLive(
   d: DevHubDeployment,
@@ -1249,10 +1296,17 @@ async function markDeploymentLive(
       noteProviderSuccess("domain");
       domainNote = ` | domain: https://${customDomain} not answering yet (Pages certificate pending); the DNS record is in place`;
     } else {
-      // Страница уже отвечает, прошло не меньше окна проверки, а CNAME так и не
-      // виден — вот это отказ DNS, и витрина «домен» вправе покраснеть.
-      noteProviderFailure("domain", `${customDomain} does not resolve — the CNAME is not visible in the ${siteZone()} zone at ${dnsProviderName()}`);
-      domainNote = ` | domain: ${customDomain} does not resolve (CNAME not visible at ${dnsProviderName()})`;
+      /*
+       * Записи ещё нет — и это НОРМА, а не отказ: замер 06.10.2026 дал 200 на
+       * 54-й секунде, а сюда мы приходим примерно на 35-й. Прежде здесь стоял
+       * noteProviderFailure, и витрина «домен» оставалась degraded навсегда,
+       * хотя адрес начинал работать через полминуты.
+       *
+       * Поэтому: честная запись в журнал и ОТЛОЖЕННАЯ перепроверка. Отказом
+       * станет только то, что не появится и за долгое окно.
+       */
+      domainNote = ` | domain: ${customDomain} not visible yet (DNS usually needs about a minute); ${pagesUrl} already answers`;
+      scheduleDomainRecheck(customDomain);
     }
   }
   d.buildLog = (d.buildLog || "") + " | verify: page answers 2xx" + domainNote;
@@ -2048,6 +2102,16 @@ export function __parseGeneratedFilesForTest(reply: string, targetFiles: string[
   return parseGeneratedFiles(reply, targetFiles);
 }
 
+/** Тестовый доступ к указанию по стеку: сторож мерит ПОВЕДЕНИЕ, не слова в файле. */
+export function __указаниеПоСтекуForTest(stack: string, существующих = 0, целевых = 0): string {
+  return указаниеПоСтеку(stack, существующих, целевых);
+}
+
+/** Тестовый доступ к отложенной перепроверке домена. */
+export function __scheduleDomainRecheckForTest(customDomain: string, step = 0): void {
+  scheduleDomainRecheck(customDomain, step);
+}
+
 const MAX_SYNTAX_FIX_ATTEMPTS = 1;
 
 /** Cap how much existing-project context rides in the prompt — enough for the
@@ -2228,6 +2292,44 @@ function порядокПоСтупени<T extends { id: string }>(список
   return [...дешёвый, ...список.filter((p) => p.id !== ДЕШЁВЫЙ_ДЛЯ_ГОСТЯ)];
 }
 
+/**
+ * Указание по стеку для ПЕРВОЙ генерации проекта.
+ *
+ * ЗАМЕР НА ПРОДЕ 05.10.2026 (гость, стек react): генерация прошла — 4 файла,
+ * $0.001053, — а выкатка отказала с 409 «project is not static — nothing to
+ * serve». Модель разложила проект по обычаю: public/index.html + src/App.jsx +
+ * src/index.jsx. Статический хостинг отдаёт файлы КАК ЕСТЬ, поэтому ему нужен
+ * index.html в КОРНЕ (lib/staticServable.ts), а сырые .jsx браузер не исполнит.
+ *
+ * Отказ при этом ЧЕСТНЫЙ и его трогать не надо: публикация такого проекта
+ * «удалась бы» и отдавала 404 — ровно тот класс, который запрещён правилом
+ * «deploy = uploaded + serves». Дефект выше: вход предлагает React, и человек
+ * получает файлы, которые нельзя опубликовать.
+ *
+ * Поэтому для react просим сборку-без-сборки: index.html в корне, React с CDN,
+ * JSX через Babel standalone. Такой проект публикуется тем же путём, что static,
+ * и обещание «выбрал React — получил живой адрес» становится выполнимым.
+ *
+ * next / express / python сюда НЕ попадают намеренно: им нужен сервер, и
+ * Cloudflare Pages их не отдаст ни при какой раскладке. Там честный путь —
+ * сказать это на входе, а не подменять стек втихую.
+ */
+const УКАЗАНИЕ_ПУБЛИКУЕМЫЙ_REACT =
+  " The project MUST be publishable as plain static files: put index.html at the PROJECT ROOT" +
+  " (never public/index.html), load React and ReactDOM from a CDN with script tags, and write JSX" +
+  " inside a script type=\"text/babel\" block (Babel standalone from CDN) so the app runs with NO" +
+  " build step. Do not emit package.json, src/, public/, or any bundler config.";
+
+/**
+ * Применяется только к ПЕРВОЙ генерации: ни целевых файлов, ни существующих.
+ * У начатого проекта своя раскладка, и ломать её посреди работы нельзя —
+ * человек просил правку, а не переезд.
+ */
+function указаниеПоСтеку(stack: string, существующихФайлов: number, целевыхФайлов: number): string {
+  if (целевыхФайлов > 0 || существующихФайлов > 0) return "";
+  return String(stack ?? "").trim().toLowerCase() === "react" ? УКАЗАНИЕ_ПУБЛИКУЕМЫЙ_REACT : "";
+}
+
 async function generateCodeWithAI(
   prompt: string,
   stack: string,
@@ -2300,7 +2402,7 @@ async function generateCodeWithAI(
   // Когда вход нужен, модель ОБЯЗАНА пользоваться нашим шаблоном, а не писать свой:
   // иначе рядом появится второй вход, и дырявым окажется именно он.
   const проВход = нуженВход(prompt) ? ` ${УКАЗАНИЕ_ПРО_ВХОД}` : "";
-  const userMsg = `${foldHistory(history)}Generate code for: ${prompt}. Stack: ${stack}.${проВход}${images?.length ? " Recreate the attached screenshot/design as closely as practical (layout, colors, spacing, text)." : ""}${buildFileContext(existingFiles, targetFiles)}`;
+  const userMsg = `${foldHistory(history)}Generate code for: ${prompt}. Stack: ${stack}.${указаниеПоСтеку(stack, existingFiles.length, targetFiles.length)}${проВход}${images?.length ? " Recreate the attached screenshot/design as closely as practical (layout, colors, spacing, text)." : ""}${buildFileContext(existingFiles, targetFiles)}`;
 
   const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
     { role: "system", content: systemPrompt },
@@ -2628,7 +2730,32 @@ async function planProjectWithAI(idea: string, existingFiles: Array<{ path: stri
 // POST /api/devhub/projects
 devhubRouter.post("/projects", dhCreateLimit(), async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = requesterId(req, auth?.sub);
+  /*
+   * 🔴 СОЗДАНИЕ БЕЗ МЕТКИ НЕ ЛОЖИТСЯ В ОБЩИЙ ЯЩИК (06.10.2026).
+   *
+   * Без входа и без заголовка x-devhub-guest личность выходила общей —
+   * "anonymous" (lib/devhubGuest.ts). А владение проверяется сравнением с
+   * userId, поэтому ЛЮБОЙ такой же запрос видел, правил и удалял эти проекты
+   * вместе с их базой. Подтверждено соседним окном в тот же день: проект,
+   * созданный без метки, удалён таким же запросом — 200, pagesRemoved.
+   *
+   * Это тот самый дефект, который чинили 21.08.2026 для вошедших и для гостей с
+   * меткой; для безметочных он остался. И попадал туда не только curl: фронт при
+   * недоступном хранилище (приватный режим, запрет данных сайта) заголовок не
+   * ставил ВООБЩЕ — то есть живой человек оказывался в общем ящике с чужими
+   * черновиками. Фронт починен отдельно (lib/devhubGuest.ts, личность в памяти).
+   *
+   * Здесь закрываем вход со стороны сервера: своя личность выдаётся на месте и
+   * ВОЗВРАЩАЕТСЯ вызывающему, иначе он не сможет обратиться к своему же проекту.
+   * Запрещать создание (400) было бы хуже: лендинг обещает работу без аккаунта,
+   * и отказ ломал бы обещание ради удобства проверки.
+   */
+  let userId = requesterId(req, auth?.sub);
+  let выданнаяМетка: string | null = null;
+  if (userId === ОБЩАЯ_ЛИЧНОСТЬ) {
+    выданнаяМетка = crypto.randomUUID();
+    userId = `guest:${выданнаяМетка}`;
+  }
   const { name, description, stack } = req.body || {};
   if (!name || typeof name !== "string") {
     return res.status(400).json({ error: "name is required" });
@@ -2679,7 +2806,19 @@ devhubRouter.post("/projects", dhCreateLimit(), async (req, res) => {
     memProjects.set(project.id, project);
     storage = "memory";
   }
-  res.status(201).json({ project, storage });
+  // Метка выдана — назвать её обязательно, и в заголовке тоже: без неё
+  // вызывающий потеряет доступ к собственному проекту на следующем запросе.
+  if (выданнаяМетка) res.setHeader(DEVHUB_GUEST_HEADER, выданнаяМетка);
+  res.status(201).json({
+    project,
+    storage,
+    ...(выданнаяМетка
+      ? {
+          guestId: выданнаяМетка,
+          guestIdNote: `Send this value as the ${DEVHUB_GUEST_HEADER} header on every later request — it is the only way back to this project.`,
+        }
+      : {}),
+  });
 });
 
 // GET /api/devhub/projects
@@ -4049,7 +4188,14 @@ Built, but ${url} did not answer 2xx in time`;
     return res.status(501).json({
       error: "Backend deploys are not available yet",
       detail: "This button used to trigger a redeploy of the AEVION platform service instead of your project — it has been disabled rather than left lying.",
-      alternative: "Static projects deploy for real via Cloudflare Pages (Deploy → Pages), including a verified *.aevion.app subdomain.",
+      /*
+       * Слово «verified» здесь было НЕПРАВДОЙ: домен никто не верифицирует,
+       * domainReady в ответе выкатки жёстко false, а зона aevion.app стоит на
+       * Vercel DNS (ns1/ns2.vercel-dns.com — проверено 06.10.2026). Адрес
+       * появляется сам, примерно через минуту после выкатки (замер: 200 на 54 с).
+       * Пишем то, что происходит, а не то, что звучит солиднее.
+       */
+      alternative: "Static projects deploy for real via Cloudflare Pages (Deploy → Pages): the *.pages.dev address answers right away, and a <slug>.aevion.app address follows about a minute later, once DNS picks it up.",
       deploymentId: deployment.id,
     });
   }

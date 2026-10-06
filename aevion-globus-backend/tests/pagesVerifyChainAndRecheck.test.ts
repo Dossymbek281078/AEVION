@@ -31,6 +31,7 @@ vi.mock("../src/lib/wranglerPagesDeploy", () => ({ deployViaWrangler: mockDeploy
 // eslint-disable-next-line import/first
 import {
   devhubRouter, __resetDevHubStore, __clearDeferredDevHubWork, dnsProbe, SERVE_VERIFY_RETRY_DELAYS_MS,
+  DOMAIN_RECHECK_DELAYS_MS,
 } from "../src/routes/devhub";
 // eslint-disable-next-line import/first
 import { __resetProviderHealth, getProviderHealth } from "../src/lib/providerHealth";
@@ -200,7 +201,26 @@ describe("домен судится по DNS, а не по HTTPS", () => {
     expect(getProviderHealth("domain")?.ok).toBe(true);
   });
 
-  test("КОНТРОЛЬ: CNAME не разрешился — в момент ответа витрина НЕ красная (запись только создана); красная — когда страница уже ответила, а CNAME так и не виден", async () => {
+  test("КОНТРОЛЬ: CNAME не разрешился — витрина НЕ красная НИ СРАЗУ, НИ когда страница ответила", async () => {
+    /*
+     * ⚠️ ПОВЕДЕНИЕ ИЗМЕНЕНО 06.10.2026, и прежняя проверка здесь утверждала
+     * обратное: «красная — когда страница уже ответила, а CNAME так и не виден».
+     * Это оказалось неверным по ЗАМЕРУ на живом проде, свежая гостевая выкатка:
+     *   24 с → HTTP 000 ; 39 с → HTTP 000 ; 54 с → HTTP 200
+     * Контроль, что дело во времени, а не в домене: сайт соседнего окна
+     * smoke-kofe-58231-c54d4f.aevion.app отдаёт 200 и 3508 знаков
+     * сгенерированной страницы, CNAME в зоне есть; два никогда не
+     * выкатывавшихся имени — CNAME нет, HTTP 404.
+     *
+     * Страница отвечает на ~35-й секунде, домен — примерно на 54-й. Значит в
+     * этот момент «CNAME не виден» означает «ещё рано», а не «отказ». Прежняя
+     * запись отказа делала витрину degraded НАВСЕГДА: ручка
+     * /studio/capabilities на проде так и отвечала degraded с причиной от чужой
+     * пробы, а интерфейс каждому посетителю говорил «домен пока не подтверждён».
+     *
+     * Опасение автора прежней проверки — «домен, который не появился вовсе,
+     * обязан краснеть» — остаётся в силе и проверяется НИЖЕ, на долгом окне.
+     */
     vercelDns();
     dnsProbe.cnameResolves = async () => false;
     const app = makeApp();
@@ -212,8 +232,25 @@ describe("домен судится по DNS, а не по HTTPS", () => {
     fetchMock.mockImplementation(async (url: string) => (String(url).includes(".pages.dev") ? ok({}) : String(url).includes(".aevion.app") ? dead(526) : ok()));
     await vi.advanceTimersByTimeAsync(4000 + 40_000);
     expect((await deployment(app, id, deploymentId)).status).toBe("live");
+    expect(getProviderHealth("domain"), "поспешный отказ вернулся: домен ещё не успел появиться").toBeNull();
+  });
+
+  test("опасение прежней проверки в силе: домен, не появившийся и за ДОЛГОЕ окно, краснеет", async () => {
+    // Это и есть то, чего боялся автор проверки выше, и бояться правильно:
+    // домен, которого нет вовсе, обязан делать витрину красной — иначе мы
+    // пообещали адрес и замолчали.
+    vercelDns();
+    dnsProbe.cnameResolves = async () => false;
+    const app = makeApp();
+    const { id, deploymentId } = await deployNew(app, "Shop");
+    pagesAlive = true;
+    fetchMock.mockImplementation(async (url: string) => (String(url).includes(".pages.dev") ? ok({}) : String(url).includes(".aevion.app") ? dead(526) : ok()));
+    await vi.advanceTimersByTimeAsync(4000 + 40_000);
+    expect((await deployment(app, id, deploymentId)).status).toBe("live");
+    // Доводим время до конца ВСЕХ перепроверок.
+    await vi.advanceTimersByTimeAsync(DOMAIN_RECHECK_DELAYS_MS.reduce((a, b) => a + b, 0) + 30_000);
     const h = getProviderHealth("domain");
-    expect(h?.ok).toBe(false);
+    expect(h?.ok, "домен так и не появился, а витрина зелёная").toBe(false);
     expect(h?.reason).toMatch(/does not resolve/);
     expect(h?.reason).toMatch(/Vercel/);
   });

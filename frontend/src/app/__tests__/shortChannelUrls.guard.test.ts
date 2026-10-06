@@ -67,6 +67,11 @@ const ROUTES: Array<[string, string]> = [
   // Метки, которые ставит НАШ код или платная кампания, а не человек в подписи.
   // Вход им всё равно нужен: по нему приходят с уже опубликованных сайтов
   // (бейдж «Сделано в AEVION») и с рекламных объявлений.
+  // 06.10.2026, приёмка волны 18: ветвь 761fe1ec8 завела метку `example`
+  // (галерея примеров DevHub) и СОЗДАЛА страницу src/app/example/page.tsx,
+  // но в этот список её не внесла — сторож ровно это и поймал. Адрес взят из
+  // самой страницы: она делает redirect("/devhub?c=example").
+  ["example", "/devhub?c=example"],
   ["badge", "/devhub?c=badge"],
   ["x-devhub", "/devhub?c=x-devhub"],
   ["x-multichat", "/multichat-engine?c=x-multichat"],

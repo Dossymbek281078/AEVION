@@ -94,7 +94,7 @@
   "app/qpaynet/merchant/page.tsx": 1,
   "app/qright/object/[id]/page.tsx": 1,
   "app/qright/page.tsx": 38,
-  "app/qsign/page.tsx": 10,
+  "app/qsign/page.tsx": 0,
   "app/qsign/verify/[id]/page.tsx": 2,
   "app/qsocial/page.tsx": 2,
   "app/qstore/page.tsx": 6,

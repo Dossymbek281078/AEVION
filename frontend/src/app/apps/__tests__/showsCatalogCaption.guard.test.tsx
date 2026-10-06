@@ -1,0 +1,127 @@
+import { describe, test, expect, vi, afterEach } from "vitest";
+import { render } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+// Зовём ТУ ЖЕ функцию поиска, что и страница. Своя копия (поиск по массиву MODULES)
+// дала знаменатель 5 вместо 6: карточка qrenew ищется по productId "kkiavh", который
+// лежит в другом массиве каталога — страница его находит, копия правила нет.
+import { productById } from "@/lib/products";
+
+/**
+ * ВИТРИНА /apps ПОКАЗЫВАЕТ ПОДПИСЬ КАТАЛОГА — ПРОВЕРЯЕТСЯ ПО ОТРИСОВАННОМУ.
+ *
+ * 🔴 Повод 06.10.2026, и это разбор МОЕЙ ошибки. Днём я написал подпись карточки
+ * DevHub, которая называет, за что деньги, и поставил на неё сторожа. Сторож был
+ * зелёным, а человек на /apps подписи НЕ ВИДЕЛ: у витрины была своя строка
+ * («Full-stack browser IDE + AI + deploy»). Я проверил ЗАМЫСЕЛ (каталог) вместо
+ * РАБОТЫ (страницы) — ровно то, от чего предостерегает правило про сторожей.
+ * Расхождение нашла приёмка, не я.
+ *
+ * Поэтому здесь страница РИСУЕТСЯ, и утверждения делаются о тексте на экране.
+ */
+
+vi.mock("@/lib/apiBase", () => ({ apiUrl: (p: string) => p }));
+
+const ПЕРЕВОД = String.fromCharCode(10); // эскейп съедается на границе вызова (§2е)
+
+/** Карточки витрины, связанные с каталогом: знаменатель охвата. */
+function связанные(): Array<{ id: string; desc: string }> {
+  const src = readFileSync(join(__dirname, "..", "page.tsx"), "utf8");
+  const найдено: Array<{ id: string; desc: string }> = [];
+  // Разделитель С КАВЫЧКОЙ: без неё первая версия посчитала слово productId из
+  // МОЕГО ЖЕ комментария в page.tsx и назвала devhub дважды. Текст о вещи неотличим
+  // от вещи, если не привязаться к синтаксису.
+  const куски = src.split('productId: "');
+  const виденные = new Set<string>();
+  for (let i = 1; i < куски.length; i++) {
+    const m = куски[i].match(/^([^"]+)"/);
+    const pid = m ? m[1] : "";
+    if (!pid || виденные.has(pid)) continue;
+    виденные.add(pid);
+    const товар = productById(pid);
+    if (товар && товар.desc) найдено.push({ id: pid, desc: товар.desc });
+  }
+  return найдено;
+}
+
+async function нарисовать(): Promise<string> {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(JSON.stringify({ ok: true, modules: [] }), { status: 200 })),
+  );
+  const { default: Стр } = await import("../page");
+  render(<Стр />);
+  await new Promise((r) => setTimeout(r, 40));
+  return document.body.textContent || "";
+}
+
+describe("/apps показывает подпись каталога", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  test("ЗНАМЕНАТЕЛЬ: сколько карточек связано с каталогом", () => {
+    const св = связанные();
+    process.stderr.write(
+      `[сторож] карточек, связанных с каталогом: ${св.length} — ${св.map((с) => с.id).join(", ")}` + ПЕРЕВОД,
+    );
+    // Ноль связанных означал бы, что productId исчезли, а проверки ниже зеленели молча.
+    expect(св.length, "ни одна карточка не связана с каталогом — сторож ослеп").toBeGreaterThanOrEqual(5);
+  });
+
+  test("на ЭКРАНЕ у каждой связанной карточки стоит текст каталога", async () => {
+    const экран = await нарисовать();
+    const нет: string[] = [];
+    for (const пара of связанные()) {
+      // По началу подписи: этого довольно, чтобы отличить текст каталога от прежней
+      // собственной строки витрины, и не ломается от переносов в разметке.
+      if (!экран.includes(пара.desc.slice(0, 40))) нет.push(пара.id);
+    }
+    expect(нет, "у этих карточек на экране НЕ текст каталога — витрина снова говорит своё").toEqual([]);
+  });
+
+  test("числа, за которые платят, видны на экране", async () => {
+    const экран = await нарисовать();
+    for (const число of ["50", "200", "200000", "1000"]) {
+      expect(
+        экран.includes(число),
+        `на витрине не видно число ${число}: подпись про нормы Pro не доехала до экрана`,
+      ).toBe(true);
+    }
+  });
+
+  test("ни одна связанная карточка не осталась без подписи вовсе", async () => {
+    // Это регрессия, которую я почти внёс: удалив свои строки у связанных карточек,
+    // карточка с productId, у которого в каталоге нет desc, осталась бы ПУСТОЙ.
+    // Проверять надо не «текст каталога стоит», а «подпись есть хоть какая-то».
+    const src = readFileSync(join(__dirname, "..", "page.tsx"), "utf8");
+    const экран = await нарисовать();
+    const куски = src.split('productId: "');
+    const пустые: string[] = [];
+    const виденные = new Set<string>();
+    for (let i = 1; i < куски.length; i++) {
+      const m = куски[i].match(/^([^"]+)"/);
+      const pid = m ? m[1] : "";
+      if (!pid || виденные.has(pid)) continue;
+      виденные.add(pid);
+      const товар = productById(pid);
+      const своя = куски[i].match(/tagline: "([^"]*)"/);
+      const ждём = (товар && товар.desc) || (своя ? своя[1] : "");
+      if (!ждём || !экран.includes(ждём.slice(0, 30))) пустые.push(pid);
+    }
+    expect(пустые, "у этих связанных карточек на экране нет никакой подписи").toEqual([]);
+  });
+
+  test("КОНТРОЛЬ: карточка БЕЗ каталога сохранила свою строку", async () => {
+    // Иначе правка «брать из каталога» молча обнулила бы подписи у бесплатных
+    // приложений, и витрина стала бы наполовину безымянной.
+    const экран = await нарисовать();
+    // Строки взяты ЗАМЕРОМ по файлу, а не по памяти: сперва я поставил сюда
+    // «A council of models…», и контроль честно покраснел — эта строка не подпись
+    // карточки вовсе. Ниже — подписи карточек, у которых productId НЕТ.
+    const свои = [
+      "Multi-model AI assistant",
+      "Publish finished videos to your own TikTok",
+      "Embedded payment infrastructure",
+    ];
+    expect(свои.filter((с) => !экран.includes(с)), "у карточек без productId исчезла подпись").toEqual([]);
+  });
+});

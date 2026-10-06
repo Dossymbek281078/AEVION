@@ -117,7 +117,15 @@ export const EN_TEXTS: Record<
   devhub: {
     badge: "FLAGSHIP",
     format: "app · term of 1–12 months",
-    desc: "Browser IDE on the VS Code engine, AI code generation and deploys to Cloudflare Pages.",
+    // 🔴 06.10.2026: английская витрина тоже говорит, ЗА ЧТО деньги.
+    // Русскую подпись я написал днём, а здесь текст свой — и англоязычный покупатель
+    // про нормы Pro не узнавал вовсе. Числа ТЕ ЖЕ, что в русской подписи и в таблице
+    // TIER_LIMITS бэкенда; сторож devhubCardSaysWhatMoneyBuys сверяет обе поверхности
+    // с той таблицей, поэтому разойтись молча они не могут.
+    desc:
+      "Browser IDE on the VS Code engine, AI code generation and deploys to Cloudflare Pages. " +
+      "Paying raises studio quotas to Pro: 50 videos, 200 images, 100 tracks and 200000 " +
+      "characters of speech per month, unlimited deploys — against 3, 10, 5 and 10000 on the free tier.",
   },
   multichat: {
     format: "app · term of 1–12 months",

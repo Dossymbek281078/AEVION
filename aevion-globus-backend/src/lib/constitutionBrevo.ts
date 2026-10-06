@@ -21,6 +21,8 @@ const BREVO_API = "https://api.brevo.com/v3";
 
 type BrevoRecipient = { email: string; name?: string };
 
+import { send as sendFallback } from "./build/email";
+
 export type ConstitutionEmailPayload = {
   to: BrevoRecipient[];
   subject: string;
@@ -687,6 +689,54 @@ export function buildEmailVerifyEmail(email: string, verifyUrl: string): Constit
 
 /** Отправляет письмо подтверждения. Возвращает, УДАЛОСЬ ли — вызывающий обязан
  *  сообщить человеку правду, а не «отправлено» в любом случае. */
+/**
+ * Отправка с запасным каналом: Brevo → Resend.
+ *
+ * Повод. 05.10.2026 Brevo прислал «your API keys have been marked as
+ * inactive». Через него идут подтверждение листа ожидания (сбор адресов со
+ * ВСЕХ витрин) и письма по заявкам агентства — то есть денежные потоки. До
+ * этой правки `sendBrevoEmail` при отказе просто возвращал false, и поток
+ * умирал целиком: запасного канала не было вовсе.
+ *
+ * Запас берётся ТОТ ЖЕ, которым уже пользуется регистрация, — `send()` из
+ * `lib/build/email.ts` (внутри SMTP, иначе Resend). Второй способ отправки
+ * заводить нельзя: через месяц он разойдётся с первым, и разницу заметят
+ * только по пропавшим письмам.
+ *
+ * Отказ Brevo НЕ проглатывается: он пишется в журнал с причиной и с именем
+ * потока, даже когда запасной канал спас письмо. Молчаливый успех поверх
+ * отказа — это то, из-за чего поломку замечают через неделю.
+ */
+async function отправитьСЗапасом(
+  поток: string,
+  payload: ConstitutionEmailPayload,
+): Promise<boolean> {
+  const основной = await sendBrevoEmail(payload);
+  if (основной.ok) {
+    if (основной.degraded) {
+      // Слово "degraded" в строке — не украшение: в файле есть общая
+      // конвенция (tests/constitutionBrevo.test.ts, «degraded convention»):
+      // неподтверждённая доставка пишется ПРЕДУПРЕЖДЕНИЕМ с этим словом, а
+      // не ошибкой. Своя формулировка молча вывела бы поток из-под сторожа.
+      console.warn(`[mail:${поток}] Brevo degraded (принял без подтверждения): ${основной.degradedReason}`);
+    }
+    return true;
+  }
+  console.error(`[mail:${поток}] Brevo отказал: ${основной.error} — пробуем запасной канал`);
+  const адрес = payload.to[0]?.email;
+  if (!адрес) {
+    console.error(`[mail:${поток}] запасной канал не вызван: в письме нет получателя`);
+    return false;
+  }
+  const ушло = await sendFallback(адрес, payload.subject, payload.htmlContent);
+  if (!ушло) {
+    console.error(`[mail:${поток}] запасной канал тоже не смог — письмо НЕ отправлено на ${адрес.replace(/(.).*(@.*)/, "$1***$2")}`);
+    return false;
+  }
+  console.warn(`[mail:${поток}] письмо ушло ЗАПАСНЫМ каналом, Brevo недоступен`);
+  return true;
+}
+
 export async function sendEmailVerify(email: string, verifyUrl: string): Promise<boolean> {
   const result = await sendBrevoEmail(buildEmailVerifyEmail(email, verifyUrl));
   if (!result.ok) {
@@ -703,15 +753,10 @@ export async function sendEmailVerify(email: string, verifyUrl: string): Promise
  *  молчаливый провал неотличим от задержки почты и не всплывает никогда. */
 export async function sendWaitlistConfirm(email: string, source?: string): Promise<boolean> {
   const payload = buildWaitlistConfirmEmail(email, source);
-  const result = await sendBrevoEmail(payload);
-  if (!result.ok) {
-    console.error("[Brevo] waitlist-confirm failed:", result.error);
-    return false;
-  }
-  if (result.degraded) {
-    console.warn(`[Brevo] waitlist-confirm degraded for ${email}: ${result.degradedReason}`);
-  }
-  return true;
+  // Сбор адресов — единственный денежный след большинства витрин. Запасной
+  // канал обязателен: 05.10 Brevo пометил ключи неактивными, и без запаса
+  // поток умер бы целиком и молча.
+  return отправитьСЗапасом("лист-ожидания", payload);
 }
 
 export async function sendWeeklyDigestEmail(
@@ -784,15 +829,9 @@ export async function sendAgencyLeadNotice(lead: {
     tags: ["agency-lead"],
   };
 
-  const result = await sendBrevoEmail(payload);
-  if (!result.ok) {
-    console.error("[Brevo] agency-lead notice failed:", result.error);
-    return false;
-  }
-  if (result.degraded) {
-    console.warn(`[Brevo] agency-lead notice degraded: ${result.degradedReason}`);
-  }
-  return true;
+  // Заявка с витрины — деньги на столе. Запасной канал тот же, что у
+  // регистрации (SMTP → Resend), второй способ отправки не заводим.
+  return отправитьСЗапасом("заявка-агентства", payload);
 }
 
 /**
@@ -861,13 +900,7 @@ export async function sendAgencyLeadReceipt(lead: {
     tags: ["agency-lead-receipt"],
   };
 
-  const result = await sendBrevoEmail(payload);
-  if (!result.ok) {
-    console.error(`[Brevo] agency-lead receipt failed for ${lead.contact}:`, result.error);
-    return false;
-  }
-  if (result.degraded) {
-    console.warn(`[Brevo] agency-lead receipt degraded: ${result.degradedReason}`);
-  }
-  return true;
+  // Расписка заявителю: без неё холодный посетитель думает, что отправил в
+  // никуда. Тот же запасной канал.
+  return отправитьСЗапасом("расписка-заявителю", payload);
 }

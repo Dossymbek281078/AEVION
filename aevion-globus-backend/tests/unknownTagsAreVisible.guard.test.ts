@@ -162,4 +162,27 @@ describe("разрез по чужим меткам", () => {
     const р = разрезВоронки(события);
     expect(Object.keys(р.byUnknownTag).length).toBe(20);
   });
+
+  it("метка платной кампании meta-book-* НЕ попадает в незнакомые", () => {
+    /*
+     * Вторая половина задания оркестратора 06.10.2026: канал заведён на фронте
+     * (`CHANNELS.meta`), и серверный разрез обязан увидеть его каналом, а не
+     * незнакомой меткой. Иначе платный трафик книги оказался бы в разрезе
+     * «кто-то пришёл с меткой, которую мы не знаем» — там, где его никто не
+     * ищет, считая его органикой.
+     */
+    const р = разрезВоронки([
+      {
+        type: "page_view",
+        path: "/book?c=meta-book-oct",
+        sid: "покупатель",
+        meta: { channel: "meta", post: "book-oct" },
+      },
+    ]);
+    expect(Object.keys(р.byChannel)).toContain("meta");
+    expect(р.byChannel.meta.visits).toBe(1);
+    expect(Object.keys(р.byPost)).toContain("meta/book-oct");
+    expect(Object.keys(р.byUnknownTag), "платная метка ушла в незнакомые").toHaveLength(0);
+  });
+
 });

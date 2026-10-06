@@ -206,8 +206,19 @@ describe("разрез воронки", () => {
 
     expect(r.byChannel["instagram"].pricing, "канал обязан сложить все посты вместе").toBe(3);
     expect(Object.keys(r.byChannel).sort(), "пост превратился в отдельный канал").toEqual(["instagram"]);
-    expect(r.byPost["instagram/kartinka3"]).toEqual({ visits: 2, pricing: 1, checkoutStart: 0, paid: 0 });
-    expect(r.byPost["instagram/video7"]).toEqual({ visits: 1, pricing: 1, checkoutStart: 0, paid: 0 });
+    /*
+     * Состав дополнен приёмкой 06.10.2026: у разреза появились счётчики НАШИХ
+     * проб (`?c=probe-<окно>`), отделённые от живых людей. Сторож оставлен
+     * СТРОГИМ (toEqual, а не «похоже»): так тихое появление или исчезновение
+     * поля снова покраснеет. Заодно это утверждение теперь говорит и то, чего
+     * раньше сказать было нечем, — живой заход не попал в наши пробы.
+     */
+    expect(r.byPost["instagram/kartinka3"]).toEqual({
+      visits: 2, pricing: 1, checkoutStart: 0, paid: 0, visitsProbe: 0, pricingProbe: 0,
+    });
+    expect(r.byPost["instagram/video7"]).toEqual({
+      visits: 1, pricing: 1, checkoutStart: 0, paid: 0, visitsProbe: 0, pricingProbe: 0,
+    });
     expect(
       r.byPost["instagram/undefined"],
       "заход без подметки попал в выдуманный пост",

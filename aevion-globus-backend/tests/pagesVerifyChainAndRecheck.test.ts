@@ -42,6 +42,11 @@ function makeApp() {
   app.set("trust proxy", true);
   app.use((req, _res, next) => { ip += 1; req.headers["x-forwarded-for"] = `10.9.${Math.floor(ip / 250) % 250}.${(ip % 250) + 1}`; next(); });
   app.use(express.json({ limit: "10mb" }));
+  // ЛИЧНОСТЬ ЭТОГО ФАЙЛА (перенос приёмкой 06.10.2026) — см. b1a7f395d:
+  // безметочное создание выдаёт новую личность каждому запросу, и проверка
+  // владения отвечает 404 на свой же проект. Этот файл про цепочку проверок
+  // адреса, а не про владение, поэтому ему достаточно устойчивой личности.
+  app.use((req, _res, next) => { req.headers["x-devhub-guest"] = "t-pagesverifychainandrecheck"; next(); });
   app.use("/api/devhub", devhubRouter);
   return app;
 }

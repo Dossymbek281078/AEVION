@@ -29,6 +29,14 @@ import { devhubRouter, __resetDevHubStore } from "../src/routes/devhub";
 function приложение() {
   const app = express();
   app.use(express.json());
+  // ЛИЧНОСТЬ ЭТОГО ФАЙЛА (перенос приёмкой 06.10.2026). Без заголовка
+  // x-devhub-guest создание выдаёт НОВУЮ личность на каждый запрос, и
+  // последующие обращения к своему же проекту получают 404 от проверки
+  // владения. Про удаление сайта этот файл и не спорит, поэтому ему нужна
+  // просто устойчивая личность — ровно как семи файлам, перенесённым автором
+  // b1a7f395d. Его знаменатель («78 файлов devhub/guest/project») был назван
+  // по ШАБЛОНУ ИМЕНИ, а в имени этого файла нет ни одного из трёх слов.
+  app.use((req, _res, next) => { req.headers["x-devhub-guest"] = "t-deleteremovesthepublishedsite"; next(); });
   app.use("/api/devhub", devhubRouter);
   return app;
 }

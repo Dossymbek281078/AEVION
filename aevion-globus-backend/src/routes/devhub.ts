@@ -1228,6 +1228,53 @@ function scheduleServeVerification(
   }, step === 0 ? 4000 : SERVE_VERIFY_RETRY_DELAYS_MS[step - 1]);
 }
 
+/**
+ * Сроки перепроверки СВОЕГО домена после выкатки.
+ *
+ * 🔴 ЗАМЕР 06.10.2026 на живом проде, свежая гостевая выкатка:
+ *   24 с → HTTP 000
+ *   39 с → HTTP 000
+ *   54 с → HTTP 200   ← адрес заработал
+ * И контроль, что дело во ВРЕМЕНИ, а не в домене: сайт соседнего окна
+ * smoke-kofe-58231-c54d4f.aevion.app отдаёт 200 и 3508 знаков сгенерированной
+ * страницы («Кофейня Зерно»), CNAME в зоне есть. Два имени, которые никогда не
+ * выкатывались, — CNAME нет, HTTP 404. То есть свой домен РАБОТАЕТ, просто
+ * появляется примерно через минуту.
+ *
+ * А проверка в markDeploymentLive смотрела раньше: HTTPS 6 попыток по 5 с плюс
+ * CNAME 2 по 1 с — то есть на ~35-й секунде, когда записи ещё нет. И записывала
+ * noteProviderFailure("domain"), после чего витрина возможностей навсегда
+ * показывала degraded, а интерфейс каждому посетителю говорил «домен aevion.app
+ * пока не подтверждён». Переходное «ещё нет» выданное за отказ — это тот же
+ * класс, что постоянно красная проверка: её перестают читать, а здесь она прямо
+ * обесценивала работающую возможность.
+ *
+ * Поэтому: на выкатке отказ НЕ записываем, а перепроверяем позже. Отказом
+ * считаем только то, что не появилось и за долгое окно.
+ */
+export const DOMAIN_RECHECK_DELAYS_MS = [90_000, 5 * 60_000];
+
+function scheduleDomainRecheck(customDomain: string, step = 0): void {
+  deferred(async () => {
+    const виден =
+      (await dnsProbe.cnameResolves(customDomain, 2, 1000)) ||
+      (await verifyDeploymentServes(`https://${customDomain}`, 5000, 1).catch(() => false));
+    if (виден) {
+      noteProviderSuccess("domain");
+      return;
+    }
+    if (step + 1 < DOMAIN_RECHECK_DELAYS_MS.length) {
+      scheduleDomainRecheck(customDomain, step + 1);
+      return;
+    }
+    // Долгое окно вышло — вот ЭТО отказ, и витрина вправе покраснеть.
+    noteProviderFailure(
+      "domain",
+      `${customDomain} does not resolve ${Math.round(DOMAIN_RECHECK_DELAYS_MS.reduce((a, b) => a + b, 0) / 60000)} min after deploy — the CNAME is not visible in the ${siteZone()} zone at ${dnsProviderName()}`,
+    );
+  }, DOMAIN_RECHECK_DELAYS_MS[step]);
+}
+
 /** Страница ответила: выкатка и проект — live; домен спрашиваем по HTTPS, но не-ответ — не отказ (сертификат Pages). */
 async function markDeploymentLive(
   d: DevHubDeployment,
@@ -1248,10 +1295,17 @@ async function markDeploymentLive(
       noteProviderSuccess("domain");
       domainNote = ` | domain: https://${customDomain} not answering yet (Pages certificate pending); the DNS record is in place`;
     } else {
-      // Страница уже отвечает, прошло не меньше окна проверки, а CNAME так и не
-      // виден — вот это отказ DNS, и витрина «домен» вправе покраснеть.
-      noteProviderFailure("domain", `${customDomain} does not resolve — the CNAME is not visible in the ${siteZone()} zone at ${dnsProviderName()}`);
-      domainNote = ` | domain: ${customDomain} does not resolve (CNAME not visible at ${dnsProviderName()})`;
+      /*
+       * Записи ещё нет — и это НОРМА, а не отказ: замер 06.10.2026 дал 200 на
+       * 54-й секунде, а сюда мы приходим примерно на 35-й. Прежде здесь стоял
+       * noteProviderFailure, и витрина «домен» оставалась degraded навсегда,
+       * хотя адрес начинал работать через полминуты.
+       *
+       * Поэтому: честная запись в журнал и ОТЛОЖЕННАЯ перепроверка. Отказом
+       * станет только то, что не появится и за долгое окно.
+       */
+      domainNote = ` | domain: ${customDomain} not visible yet (DNS usually needs about a minute); ${pagesUrl} already answers`;
+      scheduleDomainRecheck(customDomain);
     }
   }
   d.buildLog = (d.buildLog || "") + " | verify: page answers 2xx" + domainNote;
@@ -2003,6 +2057,11 @@ export function __parseGeneratedFilesForTest(reply: string, targetFiles: string[
 /** Тестовый доступ к указанию по стеку: сторож мерит ПОВЕДЕНИЕ, не слова в файле. */
 export function __указаниеПоСтекуForTest(stack: string, существующих = 0, целевых = 0): string {
   return указаниеПоСтеку(stack, существующих, целевых);
+}
+
+/** Тестовый доступ к отложенной перепроверке домена. */
+export function __scheduleDomainRecheckForTest(customDomain: string, step = 0): void {
+  scheduleDomainRecheck(customDomain, step);
 }
 
 const MAX_SYNTAX_FIX_ATTEMPTS = 1;
@@ -4032,7 +4091,14 @@ Built, but ${url} did not answer 2xx in time`;
     return res.status(501).json({
       error: "Backend deploys are not available yet",
       detail: "This button used to trigger a redeploy of the AEVION platform service instead of your project — it has been disabled rather than left lying.",
-      alternative: "Static projects deploy for real via Cloudflare Pages (Deploy → Pages), including a verified *.aevion.app subdomain.",
+      /*
+       * Слово «verified» здесь было НЕПРАВДОЙ: домен никто не верифицирует,
+       * domainReady в ответе выкатки жёстко false, а зона aevion.app стоит на
+       * Vercel DNS (ns1/ns2.vercel-dns.com — проверено 06.10.2026). Адрес
+       * появляется сам, примерно через минуту после выкатки (замер: 200 на 54 с).
+       * Пишем то, что происходит, а не то, что звучит солиднее.
+       */
+      alternative: "Static projects deploy for real via Cloudflare Pages (Deploy → Pages): the *.pages.dev address answers right away, and a <slug>.aevion.app address follows about a minute later, once DNS picks it up.",
       deploymentId: deployment.id,
     });
   }

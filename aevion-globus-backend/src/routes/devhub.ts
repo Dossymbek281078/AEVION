@@ -64,7 +64,7 @@ import { deployViaWrangler, warmWrangler } from "../lib/wranglerPagesDeploy";
 import { redactInfraDetails } from "../lib/safeErrorText";
 import { checkPublicUrl } from "../lib/publicUrlOnly";
 import { можноСлужитьСтатикой } from "../lib/staticServable";
-import { проверитьРасход, этоОк, запросOpenAI, запросAnthropic, запросGemini, разборElevenLabs } from "../lib/providerSpendCheck";
+import { проверитьРасход, этоОк, запросOpenAI, запросAnthropic, запросGemini, разборElevenLabs, разборBrevo, запросBrevo } from "../lib/providerSpendCheck";
 import { вставитьБейдж, нуженБейдж } from "../lib/aevionBadge";
 import { файлыВхода, нуженВход, УКАЗАНИЕ_ПРО_ВХОД } from "../lib/devhubAuthScaffold";
 import { сметаПродукта, РАСЦЕНКИ_ПРОДУКТА } from "../lib/pipelineQuote";
@@ -9109,10 +9109,13 @@ devhubRouter.get("/providers/health", async (_req, res) => {
   const checks = await Promise.all([
     probe("brevo", async () => {
       if (!process.env.BREVO_API_KEY) return { ok: false, detail: "BREVO_API_KEY not set" };
-      const r = await fetch("https://api.brevo.com/v3/account", {
-        headers: { "api-key": process.env.BREVO_API_KEY, accept: "application/json" },
-      });
-      return { ok: r.ok, detail: `HTTP ${r.status}` };
+      // 06.10.2026: раньше здесь читался ТОЛЬКО код ответа, и панель писала
+      // «ok, HTTP 200» в тот самый день, когда Brevo прислал «your API keys
+      // have been marked as inactive». Остаток писем лежит в теле того же
+      // ответа. Через Brevo идёт сбор адресов со всех витрин — слепота тут
+      // стоит воронки.
+      const итог = разборBrevo(await запросBrevo());
+      return { ok: этоОк(итог.состояние), detail: итог.detail };
     }),
     probe("replicate", async () => {
       if (!process.env.REPLICATE_API_TOKEN) return { ok: false, detail: "REPLICATE_API_TOKEN not set" };

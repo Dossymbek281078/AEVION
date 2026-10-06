@@ -290,3 +290,56 @@ export async function запросElevenLabs(
   });
   return { status: r.status, body: await r.text().catch(() => "") };
 }
+
+// ── Brevo: остаток писем лежит в теле /v3/account и до 06.10 не читался ─────
+//
+// Повод. 05.10 в 14:22 Brevo прислал «Your Brevo API keys have been marked as
+// inactive». Наша проверка в это же время отвечала `brevo: ok, HTTP 200`,
+// потому что смотрела ТОЛЬКО на код ответа. Ключ действительно отвечает — но
+// «ключ годен» и «письма уйдут» это разные утверждения, и через Brevo у нас
+// идёт сбор адресов со всех витрин.
+//
+// Форма ответа: `plan` — массив записей вида
+// `{ type: "free" | "subscription" | "sms" | …, creditsType: "sendLimit", credits: N }`.
+// Про письма отвечает запись с `creditsType: "sendLimit"`; записи по SMS к
+// почте отношения не имеют и в расчёт не берутся.
+
+interface ЗаписьПлана { type?: string; creditsType?: string; credits?: number }
+
+export function разборBrevo(ответ: ОтветПоставщика): { состояние: СостояниеРасхода; detail: string } {
+  if (ответ.status === 401 || ответ.status === 403) {
+    return { состояние: "ключ плох", detail: подпись("ключ плох") + ` [HTTP ${ответ.status}]` };
+  }
+  if (ответ.status < 200 || ответ.status >= 300) {
+    return { состояние: "непонятно", detail: `ответ ${ответ.status}, остаток писем не прочитан` };
+  }
+  let тело: { plan?: ЗаписьПлана[] };
+  try {
+    тело = JSON.parse(ответ.body || "{}");
+  } catch {
+    return { состояние: "непонятно", detail: "ответ 200, но тело не разобрано" };
+  }
+  const план = Array.isArray(тело.plan) ? тело.plan : [];
+  const почтовые = план.filter((p) => p && p.creditsType === "sendLimit" && Number.isFinite(Number(p.credits)));
+  if (!почтовые.length) {
+    // Тариф без счётчика писем (безлимитный или иная форма ответа) — честное
+    // «не знаю». Красить зелёным нельзя: именно так и прошёл незамеченным
+    // отключённый ключ.
+    return { состояние: "непонятно", detail: "ответ 200, но остатка писем в нём нет" };
+  }
+  const осталось = почтовые.reduce((s, p) => s + Number(p.credits), 0);
+  if (осталось <= 0) {
+    return { состояние: "нет денег", detail: `ПИСЬМА КОНЧИЛИСЬ: остаток ${осталось}` };
+  }
+  return { состояние: "ok", detail: `осталось ${осталось} писем` };
+}
+
+export async function запросBrevo(
+  env: NodeJS.ProcessEnv = process.env,
+  fetchFn: typeof fetch = fetch,
+): Promise<ОтветПоставщика> {
+  const r = await fetchFn("https://api.brevo.com/v3/account", {
+    headers: { "api-key": String(env.BREVO_API_KEY ?? ""), accept: "application/json" },
+  });
+  return { status: r.status, body: await r.text().catch(() => "") };
+}

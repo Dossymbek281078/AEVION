@@ -26,12 +26,30 @@ export function GET() {
   const lost = durable
     ? undefined
     : "хранилище в памяти процесса — записи теряются при перезапуске";
+  /*
+   * 🔴 05.10.2026: ПОВЕРХНОСТИ ОПЛАТЫ — ДЕМОНСТРАЦИЯ, И ТАК И НАДО ПИСАТЬ.
+   *
+   * Раньше их `ok` равнялся «настроено ли KV», и без него ручка отдавала
+   * status: "degraded". Снаружи это читается как «у нас сломаны платежи» — то есть
+   * как потеря денег. А денег здесь нет вовсе: за /payments/* не стоит эквайрер,
+   * данные засеяны (seedSettlements), и хранение в памяти процесса для демонстрации
+   * нормально, а не аварийно.
+   *
+   * Поэтому у них появляется честное `mode: "demo"`, и они НЕ роняют общий status.
+   * Что при этом НЕ меняется: примечание про память процесса остаётся на месте —
+   * оно правда, и скрывать её нельзя. Ложная тревога и ложное «ok» одинаково плохи;
+   * разница в том, что тревогу перестают читать, а «ok» верят.
+   *
+   * Настоящие проверки (idempotency_cache) по-прежнему могут уронить status: они не
+   * про демонстрацию, а про работу самого процесса.
+   */
+  const демо = "demo" as const;
   const surfaces = [
-    { name: "links", count: store.links.size, ok: durable, note: lost },
-    { name: "checkouts", count: store.checkouts.size, ok: durable, note: lost },
-    { name: "subscriptions", count: store.subscriptions.size, ok: durable, note: lost },
-    { name: "webhooks", count: store.webhooks.size, ok: durable, note: lost },
-    { name: "settlements", count: store.settlements.size, ok: durable, note: lost },
+    { name: "links", count: store.links.size, ok: true, mode: демо, note: lost },
+    { name: "checkouts", count: store.checkouts.size, ok: true, mode: демо, note: lost },
+    { name: "subscriptions", count: store.subscriptions.size, ok: true, mode: демо, note: lost },
+    { name: "webhooks", count: store.webhooks.size, ok: true, mode: демо, note: lost },
+    { name: "settlements", count: store.settlements.size, ok: true, mode: демо, note: lost },
     {
       name: "idempotency_cache",
       count: store.idempotency.size,
@@ -39,11 +57,17 @@ export function GET() {
     },
   ];
 
-  const allOk = surfaces.every((s) => s.ok);
+  // Статус считают ТОЛЬКО настоящие проверки. Демонстрационные поверхности не
+  // «ok по договорённости» — они просто отвечают на другой вопрос.
+  const allOk = surfaces.filter((s) => !("mode" in s)).every((s) => s.ok);
 
   return Response.json(
     {
       status: allOk ? "ok" : "degraded",
+      // Чтобы читатель не выводил режим из косвенных признаков: поверхности
+      // /payments/* демонстрационные, эквайрера за ними нет.
+      paymentsMode: демо,
+      paymentsDurable: durable,
       timestamp: now,
       iso: new Date(now).toISOString(),
       uptime_ms: uptimeMs,

@@ -174,6 +174,74 @@ function нашаМетка(значение: string | null | undefined): boolea
   return НАШИ_МЕТКИ_КАНАЛА.some((m) => v === m || v.startsWith(`${m}-`) || v.startsWith(`${m}_`));
 }
 
+/**
+ * Отдельный параметр `probe=<окно>` в адресе — явное «это наш заход».
+ *
+ * 🔴 Замер 05.10.2026: окно данных зашло с `?c=mail-ai3&probe=40`, чтобы проверить
+ * разрез по постам, и воронка посчитала его ЖИВЫМ человеком: признак «наше»
+ * читал только метку канала вида `probe-*`. То есть любой наш проверочный
+ * заход, сохраняющий настоящую метку канала (а он обязан её сохранять, иначе
+ * нечего проверять), попадал в живые числа.
+ *
+ * Разделение намеренное: метка канала отвечает «откуда пришли», а `probe=` —
+ * «кто пришёл». Смешивать их в одном параметре значит выбирать между «проверить
+ * атрибуцию» и «не испортить счёт».
+ */
+function пробаИзПути(path: string | null | undefined): string | null {
+  const m = /[?&]probe=([^&#]*)/.exec(String(path ?? ""));
+  if (!m) return null;
+  return безопаснаяМетка(decodeURIComponent(m[1] || "")) || "безымянная";
+}
+
+/**
+ * Проба ОКНА — отдельный признак, а не расширение «нашего».
+ *
+ * 🔴 Почему отдельный. «Наше» уже отвечает на вопрос «наша ли это попытка
+ * оплаты» и питает `checkoutStartOurs`/`paidOurs`. Подмешать туда проверочные
+ * ЗАХОДЫ значило бы снова заставить один признак отвечать на два вопроса — у
+ * нас это уже ломало счёт дважды за неделю. Поэтому две приметы живут порознь:
+ *   `c=probe-*`  → наша попытка оплаты (старое, не трогаем);
+ *   `?probe=<окно>` → проверочный ЗАХОД окна (новое, этот признак).
+ *
+ * Вынесено функцией ради проверяемости: пока условие стояло строкой внутри
+ * цикла, мутация «убрать примету» выжила — сторож смотрел на потребление
+ * готового множества, а не на то, как оно собирается.
+ */
+export function этоПробаОкна(path: string | null | undefined): boolean {
+  return Boolean(пробаИзПути(path));
+}
+
+/**
+ * Два множества сессий из журнала: наши попытки оплаты и проверочные заходы окон.
+ *
+ * Вынесено из обработчика РАДИ ПРОВЕРЯЕМОСТИ. Пока сбор стоял строками внутри
+ * запроса, мутация «убрать примету probe=» выживала: сторож проверял разрез,
+ * которому множество передают готовым, а не то, как оно собирается.
+ *
+ * Работает и ЗАДНИМ ЧИСЛОМ, по уже собранным событиям: примета живёт в адресе
+ * страницы, а не в теле события.
+ */
+export function разобратьСессии(content: string): {
+  нашиСессии: Set<string>;
+  пробыОкон: Set<string>;
+} {
+  const нашиСессии = new Set<string>();
+  const пробыОкон = new Set<string>();
+  for (const line of content.split(String.fromCharCode(10))) {
+    if (!line.trim()) continue;
+    let ev: AnalyticsEvent;
+    try {
+      ev = JSON.parse(line) as AnalyticsEvent;
+    } catch {
+      continue;
+    }
+    if (ev.type !== "page_view" || !ev.sid) continue;
+    if (нашаМетка(меткаИзПути(ev.path))) нашиСессии.add(ev.sid);
+    if (этоПробаОкна(ev.path)) пробыОкон.add(ev.sid);
+  }
+  return { нашиСессии, пробыОкон };
+}
+
 /** Метка канала из адреса страницы: `/pricing?c=cold-visit-check` → `cold-visit-check`. */
 function меткаИзПути(path: string | null | undefined): string | null {
   const p = String(path ?? "");
@@ -308,7 +376,29 @@ export interface РазрезВоронки {
    * Ключ составной, «канал/пост», а не просто пост: один и тот же пост может
    * жить в двух каналах, и складывать их в одно число значило бы терять ответ.
    */
-  byPost: Record<string, { visits: number; pricing: number; checkoutStart: number; paid: number }>;
+  /*
+   * 🔴 ЕДИНИЦА `visits` здесь — УНИКАЛЬНЫЕ СЕССИИ, как и в `byChannel`.
+   *
+   * До 05.10.2026 было иначе: канал считал сессии, а пост — каждый просмотр
+   * страницы. Два разных числа под одним словом в одном ответе: заход в одну
+   * вкладку с двумя страницами давал «1 визит» у канала и «2 визита» у поста.
+   * Это тот же дефект, что чинили 30.09 между итогом и разрезом по каналам.
+   *
+   * `visitsOurs` и `pricingOurs` — сколько из них НАШИ проверочные заходы
+   * (сессия помечена `?probe=<окно>` или меткой `probe-*`). Живое число
+   * считается вычитанием, и обе половины видны рядом, а не вместо друг друга.
+   */
+  byPost: Record<
+    string,
+    {
+      visits: number;
+      visitsProbe: number;
+      pricing: number;
+      pricingProbe: number;
+      checkoutStart: number;
+      paid: number;
+    }
+  >;
   /**
    * Куда ЗАХОДЯТ с каждого канала: «канал → страница входа».
    *
@@ -328,15 +418,75 @@ export interface РазрезВоронки {
    * выдуманные адреса раздул бы ответ и стал бы способом его испортить.
    */
   byEntryPage: Record<string, { сессий: number; доЦен: number; началиОплату: number }>;
+  /**
+   * Какие ЧУЖИЕ метки приводят людей — те, что наш каталог каналов не знает.
+   *
+   * 🔴 Замер 05.10.2026: канал «unknown» дал 37 заходов за 14 дней, 19 из них на
+   * /cyberchess. Все НАШИ опубликованные метки известны, значит это метки
+   * внешних площадок (`?ref=` каталогов, чужие `?c=`), которых нет в CHANNELS.
+   * Пока они сложены в одно слово «unknown», мы знаем, что люди пришли, и не
+   * знаем откуда — то есть не можем ни поблагодарить площадку, ни повторить.
+   *
+   * Что здесь НЕ лежит: адреса страниц, идентификаторы, что-либо о человеке.
+   * Только само значение метки, и то обеззараженное: нижний регистр, разрешены
+   * `a-z 0-9 . _ -`, остальное заменяется на `?`, длина до 40 знаков. Иначе
+   * чужая метка стала бы способом протащить произвольный текст в публичный
+   * ответ — он открыт без токена.
+   *
+   * Отдаются первые 20 по числу визитов: без ограничения десяток выдуманных
+   * меток раздул бы ответ, а ответ на вопрос «кто нас приводит» дают верхние.
+   */
+  byUnknownTag: Record<string, { visits: number; pricing: number }>;
+}
+
+/**
+ * Метка чужой площадки в безопасном виде.
+ *
+ * Правило простое и названное: нижний регистр, разрешены латиница, цифры,
+ * точка, подчёркивание и дефис; всё прочее — один знак `?`. Длина до 40.
+ * Кириллицу тоже заменяем: ответ публичный, и единственное, что нам нужно от
+ * метки, — узнать площадку, а её имя всегда латиницей.
+ */
+export function безопаснаяМетка(сырое: string): string {
+  const низ = String(сырое ?? "").trim().toLowerCase().slice(0, 40);
+  let из = "";
+  for (const знак of низ) {
+    из += /[a-z0-9._-]/.test(знак) ? знак : "?";
+  }
+  return из;
+}
+
+/** Метка из пути, если канал для неё НЕ распознан. Иначе null. */
+export function чужаяМетка(
+  канал: string,
+  path: string | null | undefined,
+): string | null {
+  // «unknown» ставит фронт, когда метка в адресе есть, а каталог её не знает.
+  // Опираемся на его ответ, а не заводим второй список каналов на бэкенде:
+  // два списка одного и того же неизбежно разъезжаются (урок 30.09–05.10).
+  if (канал !== "unknown") return null;
+  const p = String(path ?? "");
+  const m = /[?&](?:c|ref)=([^&#]+)/.exec(p);
+  if (!m) return null;
+  let сырое: string;
+  try {
+    сырое = decodeURIComponent(m[1]);
+  } catch {
+    сырое = m[1];
+  }
+  const безопасная = безопаснаяМетка(сырое);
+  return безопасная ? безопасная : null;
 }
 
 export function разрезВоронки(
   events: Array<Pick<AnalyticsEvent, "type" | "path" | "meta" | "sid">>,
   нашиСессии: ReadonlySet<string> = new Set(),
+  пробыОкон: ReadonlySet<string> = new Set(),
 ): РазрезВоронки {
   const byChannel = Object.create(null) as РазрезВоронки["byChannel"];
   const byApp = Object.create(null) as РазрезВоронки["byApp"];
   const byPost = Object.create(null) as РазрезВоронки["byPost"];
+  const byUnknownTag = Object.create(null) as РазрезВоронки["byUnknownTag"];
   /** Путь без запроса, до трёх участков, идентификаторы скрыты. */
   const чистыйПуть = (raw: string | null | undefined): string => {
     const без = String(raw ?? "/").split("?")[0].split("#")[0];
@@ -372,7 +522,7 @@ export function разрезВоронки(
     const пост = typeof сыройПост === "string" && сыройПост.trim() ? сыройПост.trim().slice(0, 40) : null;
     const ключПоста = пост ? `${канал}/${пост}` : null;
     if (ключПоста && !byPost[ключПоста]) {
-      byPost[ключПоста] = { visits: 0, pricing: 0, checkoutStart: 0, paid: 0 };
+      byPost[ключПоста] = { visits: 0, visitsProbe: 0, pricing: 0, pricingProbe: 0, checkoutStart: 0, paid: 0 };
     }
     const п = ключПоста ? byPost[ключПоста] : null;
 
@@ -393,8 +543,41 @@ export function разрезВоронки(
       }
       if (typeof ev.path === "string" && ev.path.includes("/pricing")) к.pricing += 1;
       if (п) {
-        п.visits += 1;
-        if (typeof ev.path === "string" && ev.path.includes("/pricing")) п.pricing += 1;
+        // Та же единица, что у канала: уникальные сессии, а не просмотры.
+        const проба = Boolean(ev.sid && пробыОкон.has(ev.sid));
+        if (ev.sid) {
+          const ключПостаСессии = `post|${ключПоста}|${ev.sid}`;
+          if (!виденныеСессии.has(ключПостаСессии)) {
+            виденныеСессии.add(ключПостаСессии);
+            п.visits += 1;
+            if (проба) п.visitsProbe += 1;
+          }
+        } else {
+          п.visits += 1;
+          if (проба) п.visitsProbe += 1;
+        }
+        if (typeof ev.path === "string" && ev.path.includes("/pricing")) {
+          п.pricing += 1;
+          if (проба) п.pricingProbe += 1;
+        }
+      }
+      // Чужая метка — только когда канал не распознан. Считаем так же, как
+      // канал: визиты по уникальным сессиям, иначе одна вкладка с десятью
+      // страницами выглядела бы десятью площадками.
+      const чужая = чужаяМетка(канал, ev.path);
+      if (чужая) {
+        if (!byUnknownTag[чужая]) byUnknownTag[чужая] = { visits: 0, pricing: 0 };
+        const м = byUnknownTag[чужая];
+        if (ev.sid) {
+          const ключМетки = `tag|${чужая}|${ev.sid}`;
+          if (!виденныеСессии.has(ключМетки)) {
+            виденныеСессии.add(ключМетки);
+            м.visits += 1;
+          }
+        } else {
+          м.visits += 1;
+        }
+        if (typeof ev.path === "string" && ev.path.includes("/pricing")) м.pricing += 1;
       }
       continue;
     }
@@ -520,7 +703,16 @@ export function разрезВоронки(
     }
   }
 
-  return { byChannel, byApp, byPost, byEntryPage };
+  // Топ-20 по визитам: ответ публичный, и без ограничения десяток выдуманных
+  // меток раздул бы его, а на вопрос «кто нас приводит» отвечают верхние.
+  const топМеток = Object.create(null) as РазрезВоронки["byUnknownTag"];
+  for (const [метка, числа] of Object.entries(byUnknownTag)
+    .sort((a, b) => b[1].visits - a[1].visits)
+    .slice(0, 20)) {
+    топМеток[метка] = числа;
+  }
+
+  return { byChannel, byApp, byPost, byEntryPage, byUnknownTag: топМеток };
 }
 
 /**
@@ -1187,14 +1379,7 @@ eventsRouter.get("/funnel", (req, res) => {
   // покрасило его в красный — текст о вещи неотличим от вещи.)
   // Способ работает и ЗАДНИМ ЧИСЛОМ, для уже собранных событий, и не требует
   // правок страницы.
-  const нашиСессии = new Set<string>();
-  for (const line of content.split(String.fromCharCode(10))) {
-    if (!line.trim()) continue;
-    let ev: AnalyticsEvent;
-    try { ev = JSON.parse(line) as AnalyticsEvent; } catch { continue; }
-    if (ev.type !== "page_view" || !ev.sid) continue;
-    if (нашаМетка(меткаИзПути(ev.path))) нашиСессии.add(ev.sid);
-  }
+  const { нашиСессии, пробыОкон } = разобратьСессии(content);
 
   for (const line of content.split(String.fromCharCode(10))) {
     if (!line.trim()) continue;
@@ -1288,7 +1473,7 @@ eventsRouter.get("/funnel", (req, res) => {
       checkoutStartOurs: поДням[д].checkoutStartOurs,
     }));
 
-  const разрез = разрезВоронки(событияВоронки, нашиСессии);
+  const разрез = разрезВоронки(событияВоронки, нашиСессии, пробыОкон);
 
   const итог = byDay.reduce(
     (a, b) => ({
@@ -1386,6 +1571,12 @@ eventsRouter.get("/funnel", (req, res) => {
     byChannelUnitsNote:
       "checkoutStart считает метку НА СОБЫТИИ, checkoutStartSessions — канал ПЕРВОГО КАСАНИЯ сессии; " +
       "на вопрос «кто привёл человека» отвечает второе, расхождение между ними нормально",
+    byPostVisitsNote:
+      "ключ byPost — «канал/пост»; visits считает те же УНИКАЛЬНЫЕ СЕССИИ, что byChannel и total, " +
+      "уникальность в пределах пары канал+пост. Сумма byPost по одному каналу ≤ его visits " +
+      "(посты есть не у каждого захода) и складывать byPost с byChannel нельзя — это один и тот же " +
+      "человек в двух разрезах. ВАЖНО: pricing здесь и в byChannel — ПРОСМОТРЫ страницы цен, не сессии. " +
+      "visitsProbe и pricingProbe — проверочные заходы окон (?probe=<окно>), живое число = разность",
     byChannelVisitsNote:
       "визиты по каналам уникальны В ПРЕДЕЛАХ канала: один человек с двумя метками попадёт в оба, " +
       "поэтому сумма по каналам ≥ total.visits и разницу нельзя читать как ошибку",

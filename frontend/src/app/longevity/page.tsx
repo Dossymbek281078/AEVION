@@ -7,6 +7,7 @@ import { PaywallScreen } from "@/components/PaywallScreen";
 import { channelFrom, keepChannel, keepChannelOrProbe } from "@/lib/products";
 import LongevityClient from "./_client";
 import { PageTracking } from "@/components/PageTracking";
+import { языки } from "@/lib/hreflang";
 
 // Своя карточка в поиске. До 19.08.2026 страница наследовала общий заголовок
 // сайта («AEVION — Trust infrastructure for digital assets & IP») и описание про
@@ -35,8 +36,14 @@ export const metadata: Metadata = {
     "VO2max",
     "доказательная медицина добавки",
   ],
-  alternates: { canonical: "https://aevion.app/longevity" },
+  alternates: { canonical: "https://aevion.app/longevity", languages: языки("/longevity") },
   openGraph: {
+    // 06.10.2026: язык объявлен СЕРВЕРНО. Замер того же дня: у этой страницы
+    // кириллицы больше, чем латиницы, а og:locale не было вовсе, и корневой
+    // макет отдаёт lang="en". Поправить сам lang на уровне страницы нельзя
+    // (<html> живёт только в корневом макете, разбор там же в комментарии),
+    // поэтому серверный языковой сигнал даём тем, чем можно: og:locale.
+    locale: "ru_RU",
     title: "Протокол долголетия: измерь → воздействуй → перемерь",
     description:
       "Что сдать, что делать и что из этого доказано. Честная градация A/B/C — включая то, что переоценено.",

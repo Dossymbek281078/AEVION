@@ -30,7 +30,14 @@ import { stripComments } from "./helpers/sourceCode";
 const HERE = dirname(fileURLToPath(import.meta.url));
 // Комментарии вырезаем: пояснение выше само содержит и `translate="no"`, и
 // `setКанал`, и сторож по сырому исходнику остался бы зелёным при УДАЛЁННОМ коде.
-const src = stripComments(readFileSync(join(HERE, "..", "page.tsx"), "utf8"));
+/*
+ * 06.10.2026: содержимое главной уехало в _home.tsx — на её месте серверная
+ * обёртка ради canonical (клиентский компонент не может экспортировать
+ * metadata). Путь здесь обновлён, иначе сторож читал бы обёртку из тридцати
+ * строк и был бы зелёным НА ПУСТОМ МЕСТЕ — то есть проверял бы замысел, а не
+ * страницу. Охват не изменился.
+ */
+const src = stripComments(readFileSync(join(HERE, "..", "_home.tsx"), "utf8"));
 
 describe("блок покупки на главной", () => {
   it("ПОЛОЖИТЕЛЬНЫЙ КОНТРОЛЬ: блок вообще на месте", () => {

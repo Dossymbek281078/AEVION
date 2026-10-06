@@ -5098,6 +5098,7 @@ const ru: Record<string, string> = {
   "pricing.home.tier.saving": "Экономия {percent}%",
   "pricing.home.tier.termNote": "Тариф — это срок доступа ко всей планете AEVION: все модули в любом платном тарифе. Оплата за весь срок вперёд, продление на тот же срок.",
   "pricing.home.apps.title": "Отдельные приложения",
+  "pricing.home.apps.whatIsPaid.cyberchess": "Платно — «Глубокий анализ» движком Stockfish 17.1. Играть, решать задачи и спрашивать ИИ-тренера можно бесплатно и без аккаунта.",
   "pricing.home.apps.subtitle": "{count} приложений продаются и без тарифа — по той же лестнице сроков. Остальные модули входят только в тарифы.",
   "pricing.home.apps.termAria": "Срок для отдельных приложений",
   "pricing.home.apps.allAppsDearer": "Все приложения по отдельности — {apps} за этот срок — дороже всей планеты: {planet}.",

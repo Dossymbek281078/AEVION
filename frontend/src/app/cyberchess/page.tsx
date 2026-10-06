@@ -10728,7 +10728,7 @@ export default function CyberChessPage(){
                     sPCol(g.turn());sFlip(g.turn()==="b");
                     sCoachAIEnabled(true);sEditorMode(false);sSetup(false);sTab("coach");
                     showToast("Позиция задачи у тренера — спрашивай","success");
-                  }} title="Открыть эту позицию у ИИ-тренера и спросить о ней">🎓 Спросить тренера</Btn>}
+                  }} title={cc.t("coach.askAboutPuzzle")}>🎓 Спросить тренера</Btn>}
                 </div>
                 {/* Подсказка по хоткеям — discoverability клавиш пазла */}
                 <div style={{marginTop:6,display:"flex",gap:8,flexWrap:"wrap",fontSize:10,color:T.dim,fontWeight:700}}>
@@ -11957,7 +11957,7 @@ ${question.trim()}`;
                     value={fenPole}
                     onChange={e=>sFenPole(e.target.value)}
                     onKeyDown={e=>{if(e.key==="Enter")zagruzitFen()}}
-                    aria-label="FEN позиции"
+                    aria-label={cc.t("coach.fenField")}
                     placeholder="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
                     autoFocus
                     style={{flex:1,minWidth:0,padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,

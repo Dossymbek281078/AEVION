@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { bezKommentariev } from "./bezKommentariev";
+import { klyuchEstVYazyke } from "./_slovar";
 
 /**
  * Тренер доступен там, где он ценнее всего — на задачах.
@@ -68,7 +69,13 @@ describe("тренер доступен на задачах", () => {
     const i = ИСХОДНИК.indexOf("aria-expanded={fenPole!==null}");
     expect(i, "кнопка FEN больше не раскрывает поле").toBeGreaterThan(0);
     const блок = ИСХОДНИК.slice(i, i + 1800);
-    expect(блок, "поле ввода FEN пропало").toContain("aria-label=\"FEN позиции\"");
+    // 06.10.2026 подпись уехала в словарь: сторож attrI18n считает кириллицу
+    // в атрибутах долгом, и ему разрешено только уменьшаться. Требовать
+    // литерал — значит краснеть на верной правке, что и случилось.
+    expect(блок, "поле ввода FEN пропало").toContain('aria-label={cc.t("coach.fenField")}');
+    for (const язык of ["ru", "en", "kk"]) {
+      expect(klyuchEstVYazyke(язык, "coach.fenField"), `${язык}: подписи поля FEN нет в словаре`).toBe(true);
+    }
     expect(блок, "поле не связано с состоянием").toContain("onChange={e=>sFenPole(e.target.value)}");
     expect(блок, "в этом месте снова модальное окно").not.toContain("prompt(");
 

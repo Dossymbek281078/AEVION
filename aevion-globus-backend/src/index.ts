@@ -31,6 +31,7 @@ import { helpContactRouter } from "./routes/helpContact";
 import { statusRouter } from "./routes/status";
 import { entitlementsRouter } from "./routes/entitlements";
 import { requireModule } from "./lib/planGate";
+import { сводкаПейволла } from "./lib/paywallHealth";
 import { awardsRouter } from "./routes/awards";
 import { qcoreaiRouter, startScheduler } from "./routes/qcoreai";
 import { agentRuntimeRouter } from "./routes/agentRuntime";
@@ -289,6 +290,9 @@ function healthPayload() {
     // 21.09.2026: прод отвечал commit "unknown", и опознать сборку было нечем —
     // выкатка встала у всех окон. Коммит она НЕ заменяет (см. buildInfo.ts).
     deploymentId: BUILD_INFO.deploymentId,
+    // Настроена ли выдача купленного — ответ одной ручкой, без Railway и без
+    // печати значений. Устройство и повод — в lib/paywallHealth.ts.
+    paywall: сводкаПейволла(),
     // Заявки — единственный след человека, который хотел купить, но не смог
     // (сегодня это четыре модуля запуска: касса отвечает 503 и отправляет его
     // на страницу «напишите нам»). Спрашиваем хранилище тем же вопросом, что

@@ -64,6 +64,21 @@ const СОБЫТИЯ = [
   { type: "page_view", path: "/pricing", sid: "s-1", meta: { channel: "mail-outreach", post: "ai7" } },
   { type: "page_view", path: "/",        sid: "s-2", meta: { channel: "mail-outreach", post: "ai7" } },
   { type: "page_view", path: "/pricing", sid: "s-2", meta: { channel: "mail-outreach", post: "ai7" } },
+  /*
+   * ЧУЖАЯ МЕТКА — третий разрез, и он отставал от двух остальных.
+   * Условие чужой метки: канал пришёл «unknown» (так фронт говорит «метка в
+   * адресе есть, а каталог её не знает») и в пути стоит ?c= или ?ref=.
+   *   s-9  — живой человек с площадки, дописавшей свой ref: цены ДВАЖДЫ в одной
+   *          сессии, то есть по сессиям pricing 1, по просмотрам 2;
+   *   s-10 — НАШ заход: метка probe-*, значит сессия попадает в «наши», и
+   *          visitsOurs/pricingOurs обязаны стать 1, иначе наша проба уйдёт в
+   *          живое число (живое считается как разность).
+   */
+  { type: "page_view", path: "/?ref=foreignsite",        sid: "s-9",  meta: { channel: "unknown" } },
+  { type: "page_view", path: "/pricing?ref=foreignsite", sid: "s-9",  meta: { channel: "unknown" } },
+  { type: "page_view", path: "/pricing?ref=foreignsite", sid: "s-9",  meta: { channel: "unknown" } },
+  { type: "page_view", path: "/?c=probe-priemka",        sid: "s-10", meta: { channel: "unknown" } },
+  { type: "page_view", path: "/pricing?c=probe-priemka", sid: "s-10", meta: { channel: "unknown" } },
 ];
 
 // Поле времени называется ts (НЕ at): с «at» события молча выпадают по окну дат,
@@ -78,10 +93,13 @@ writeFileSync(
 afterAll(() => rmSync(каталог, { recursive: true, force: true }));
 
 type Разрез = { visits: number; pricing: number };
+type РазрезСНашими = Разрез & { visitsOurs: number; pricingOurs: number };
 type Тело = {
   byChannel?: Record<string, Разрез>;
   byPost?: Record<string, Разрез>;
+  byUnknownTag?: Record<string, РазрезСНашими>;
   byPostVisitsNote?: string;
+  byUnknownTagNote?: string;
 };
 
 async function воронка(): Promise<Тело> {
@@ -164,5 +182,56 @@ describe("«дошли до цен» — уникальные сессии, а �
       окрестности,
       "про pricing сказано, но не сказано, что это СЕССИИ — читающий снова не узнает единицу",
     ).toContain("сесси");
+  });
+
+  test("ЧУЖИЕ МЕТКИ: разрез вообще ДОЕЗЖАЕТ до тела ответа", async () => {
+    /*
+     * 🔴 Главная из находок приёмки 06.10.2026: `разрезВоронки` возвращал
+     * byUnknownTag, а ручка его в ответ НЕ КЛАЛА. Проверено на живом проде по
+     * списку ключей ответа: byChannel, byApp, byPost, byHour, byEntryPage — и
+     * ни одного byUnknownTag. Возможность «чужие метки видны поимённо» не
+     * работала вовсе: функция права, ручка молчит.
+     *
+     * Это ДОСЛОВНО дефект 30.09 у byPost и byEntryPage, повторённый на третьем
+     * разрезе. Значит охранять надо не каждый разрез по отдельности, а место
+     * склейки «посчитал → отдал». Отсюда проверка именно ТЕЛА, а не функции.
+     */
+    const тело = await воронка();
+    const метки = Object.keys(тело.byUnknownTag ?? {});
+    process.stderr.write(`[сторож] чужих меток в ТЕЛЕ ответа: ${метки.length} (${метки.join(", ")})` + ПЕРЕВОД);
+    expect(
+      тело.byUnknownTag,
+      "byUnknownTag не пришёл в тело — разрез снова считается и выбрасывается",
+    ).toBeTruthy();
+    expect(метки.length, "чужих меток в теле ноль, хотя в данных их две").toBeGreaterThanOrEqual(2);
+  });
+
+  test("ЧУЖИЕ МЕТКИ: цены по сессиям, а не по просмотрам", async () => {
+    const тело = await воронка();
+    const м = тело.byUnknownTag?.["foreignsite"];
+    expect(м, "метки foreignsite нет в разрезе — ключ зовётся иначе, проверка смотрит не туда").toBeTruthy();
+    expect(м?.visits, "визиты чужой метки считаются не по сессиям").toBe(1);
+    expect(
+      м?.pricing,
+      "pricing чужой метки считает ПРОСМОТРЫ — третий разрез отстал от byChannel и byPost",
+    ).toBe(1);
+  });
+
+  test("ЧУЖИЕ МЕТКИ: наши пробы отделены, иначе уйдут в живое число", async () => {
+    /*
+     * visitsOurs и pricingOurs объявлялись в объекте и НЕ УВЕЛИЧИВАЛИСЬ никогда —
+     * всегда ноль. Живое число считается как разность, значит наша проба по чужой
+     * метке шла за живого человека. А чужая метка — ровно то место, где мы ищем
+     * новый источник трафика, и там ложный человек дороже всего.
+     */
+    const тело = await воронка();
+    const наш = тело.byUnknownTag?.["probe-priemka"];
+    expect(наш, "метка probe-priemka не попала в разрез чужих меток").toBeTruthy();
+    expect(наш?.visitsOurs, "наш заход по чужой метке не помечен нашим").toBe(1);
+    expect(наш?.pricingOurs, "наш заход до цен по чужой метке не помечен нашим").toBe(1);
+    // Контроль обратной стороны: у ЖИВОЙ метки наших быть не должно, иначе
+    // «помечаем наше» превратилось бы в «помечаем всё».
+    expect(тело.byUnknownTag?.["foreignsite"]?.visitsOurs, "живой заход помечен нашим").toBe(0);
+    expect(тело.byUnknownTag?.["foreignsite"]?.pricingOurs, "живой заход до цен помечен нашим").toBe(0);
   });
 });

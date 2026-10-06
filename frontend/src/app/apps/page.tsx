@@ -46,7 +46,8 @@ interface AppDef {
   id: string;
   icon: string;
   name: string;
-  tagline: string;
+  /** Своя строка — ТОЛЬКО для карточек без productId: у связанных её даёт каталог. */
+  tagline?: string;
   href: string;
   cat: string;
   highlights: string[];
@@ -64,7 +65,6 @@ const APP_DEFS: AppDef[] = [
     productId: "devhub",
     icon: "🛠",
     name: "DevHub Studio Pro",
-    tagline: "Full-stack browser IDE + AI + deploy",
     href: "/devhub",
     cat: "Developer",
     highlights: [
@@ -98,7 +98,6 @@ const APP_DEFS: AppDef[] = [
     productId: "multichat",
     icon: "💬",
     name: "AEVION Multichat",
-    tagline: "A council of models instead of one answer",
     href: "/multichat-engine",
     cat: "Developer",
     // Текст — с посадочной модуля (/multichat-engine/launch), не сочинён здесь.
@@ -134,7 +133,6 @@ const APP_DEFS: AppDef[] = [
     productId: "qventure",
     icon: "📈",
     name: "QVenture",
-    tagline: "AI investment analyst · score 0–100",
     href: "/qventure",
     cat: "Finance",
     highlights: ["4-role advice panel", "Market sizing, stress test & red flags", "PDF export"],
@@ -200,7 +198,6 @@ const APP_DEFS: AppDef[] = [
     productId: "bureau",
     icon: "🔐",
     name: "AEVION IP Bureau",
-    tagline: "Proof-of-creation & authorship",
     href: "/bureau",
     cat: "Business",
     highlights: [
@@ -215,7 +212,6 @@ const APP_DEFS: AppDef[] = [
     productId: "kkiavh",
     icon: "🌱",
     name: "QRenew / QMelanin",
-    tagline: "Longevity & cellular renewal protocol",
     href: "/qrenew",
     cat: "Health",
     highlights: [
@@ -246,7 +242,6 @@ const APP_DEFS: AppDef[] = [
     productId: "cyberchess",
     icon: "♟",
     name: "CyberChess Pro",
-    tagline: "AI chess coaching & tournament platform",
     href: "/cyberchess",
     cat: "Education",
     highlights: [
@@ -266,6 +261,22 @@ const APPS: App[] = APP_DEFS.map((a) => {
   const product = a.productId ? productById(a.productId) : undefined;
   return {
     ...a,
+    /*
+     * 🔴 06.10.2026: ПОДПИСЬ БЕРЁТСЯ ИЗ КАТАЛОГА, а не из своей строки.
+     *
+     * Нашла приёмка. У /apps была собственная строка на карточку («Full-stack browser
+     * IDE + AI + deploy» у DevHub), и подпись каталога, которая называет, ЗА ЧТО
+     * деньги, человек здесь не видел вовсе. Мой сторож при этом был зелёным: он
+     * проверял каталог, то есть замысел, а не то, что отрисовано.
+     *
+     * Цена и ссылка на кассу подставляются здесь же и ровно так же — значит и подпись
+     * должна приходить отсюда, иначе на одной карточке два источника правды и они
+     * расходятся молча.
+     *
+     * У карточек БЕЗ productId своя строка остаётся: каталога у них нет, и это не
+     * копия, а единственный источник.
+     */
+    tagline: product?.desc ?? a.tagline,
     price: product?.priceUsd ?? 0,
     checkoutUrl: product?.href,
     term: product?.billing === "term",

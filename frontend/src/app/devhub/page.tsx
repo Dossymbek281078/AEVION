@@ -1090,6 +1090,17 @@ export default function DevHubPage() {
                 <div key={ex.url} style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
                   <div style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>{exT.title}</div>
                   <div style={{ fontSize: 12.5, color: "#475569", fontStyle: "italic", flex: 1 }}>&laquo;{exT.prompt}&raquo;</div>
+                  {/*
+                    Секунды показываются ТОЛЬКО когда они замерены (examples.ts,
+                    поле measured). У примеров от 06.09 замера нет, и выдумывать
+                    его нельзя — карточка просто молчит. Дата рядом обязательна:
+                    без неё число стареет молча.
+                  */}
+                  {ex.measured && (
+                    <div style={{ fontSize: 11.5, color: "#0d9488", fontWeight: 600 }}>
+                      {t("ex.builtIn")} {ex.measured.seconds} s · {t("ex.measuredOn")} {ex.measured.on}
+                    </div>
+                  )}
                   <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                     <a href={ex.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12.5, color: "#0d9488", fontWeight: 600 }}>{t("ex.open")}</a>
                     <button

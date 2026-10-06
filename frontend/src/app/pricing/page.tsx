@@ -188,6 +188,15 @@ function availabilityBadge(a: ModulePrice["availability"]) {
   );
 }
 
+/**
+ * Что именно открывает оплата — по приложениям, у которых это ИЗМЕРЕНО.
+ * Ключ перевода, а не готовый текст: страница многоязычная.
+ * Пусто для приложения = граница не мерена, а не «всё бесплатно».
+ */
+const ЧТО_ПЛАТНО: Record<string, string> = {
+  cyberchess: "pricing.home.apps.whatIsPaid.cyberchess",
+};
+
 export default function PricingPage() {
   const tp = usePricingT();
   const { t, lang } = useI18n();
@@ -1583,6 +1592,25 @@ export default function PricingPage() {
                     }}
                   >
                     <h3 style={{ fontSize: 18, fontWeight: 900, margin: 0 }}>{a.name}</h3>
+                    {/* ЧТО ИМЕННО ПОКУПАЮТ. Замер 06.10.2026 на проде: карточка
+                        говорила «CyberChess · $24/мес · Max: $12/мес · Купить» —
+                        цену без единого слова о том, за что она. А задачи, партия,
+                        задача дня и ИИ-тренер у шахмат БЕСПЛАТНЫ и доступны без
+                        аккаунта (/api/cyberchess-puzzles/meta и /cyberchess-daily/puzzle
+                        отвечают 200 без входа; контроль на том же приборе —
+                        /api/multichat/presets даёт 402). То есть человек читал
+                        предложение заплатить за то, что у него уже есть.
+                        Страница самих шахмат это уже чинила 29.09; здесь было нет.
+
+                        Строка есть ТОЛЬКО у тех приложений, у кого граница
+                        «платно/бесплатно» ИЗМЕРЕНА. У остальных её нет не потому,
+                        что там всё бесплатно, а потому что я этого не мерил —
+                        и выдумывать не стал. */}
+                    {ЧТО_ПЛАТНО[a.slug] && (
+                      <div style={{ fontSize: 13.5, lineHeight: 1.45, color: "#475569" }}>
+                        {t(ЧТО_ПЛАТНО[a.slug])}
+                      </div>
+                    )}
                     {нетТовара ? (
                       <div style={{ fontSize: 20, fontWeight: 900 }}>{t("pricing.home.price.onRequest")}</div>
                     ) : (

@@ -5098,6 +5098,7 @@ const kk: Record<string, string> = {
   "pricing.home.tier.saving": "Үнемдеу {percent}%",
   "pricing.home.tier.termNote": "Тариф — бүкіл AEVION планетасына қолжетімділік мерзімі: кез келген ақылы тарифте барлық модуль бар. Бүкіл мерзімге алдын ала төленеді, сол мерзімге ұзартылады.",
   "pricing.home.apps.title": "Жеке қосымшалар",
+  "pricing.home.apps.whatIsPaid.cyberchess": "Ақылы бөлігі — Stockfish 17.1 қозғалтқышымен «Терең талдау». Ойнау, есеп шығару және ЖИ-жаттықтырушыдан сұрау тегін, тіркелусіз.",
   "pricing.home.apps.subtitle": "{count} қосымша тарифсіз де сатылады — сол мерзім баспалдағы бойынша. Қалған модульдер тек тарифтерге кіреді.",
   "pricing.home.apps.termAria": "Жеке қосымшалардың мерзімі",
   "pricing.home.apps.allAppsDearer": "Барлық қосымшаны жеке алу — осы мерзімге {apps} — бүкіл планетадан қымбат: {planet}.",

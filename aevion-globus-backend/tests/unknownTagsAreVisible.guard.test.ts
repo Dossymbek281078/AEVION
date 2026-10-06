@@ -28,7 +28,9 @@ describe("разрез по чужим меткам", () => {
     ]);
     expect(р.byUnknownTag["toolify"], "чужая метка не видна — разрез пуст").toEqual({
       visits: 1,
+      visitsOurs: 0,
       pricing: 1,
+      pricingOurs: 0,
     });
   });
 
@@ -92,8 +94,8 @@ describe("разрез по чужим меткам", () => {
     const строка = р.byPost["mail-outreach/ai3"];
     expect(строка, "метка потеряна — проверять стало нечего").toBeTruthy();
     expect(строка.visits, "заход не посчитан вовсе").toBe(1);
-    expect(строка.visitsProbe, "проверочный заход не помечен пробой").toBe(1);
-    expect(строка.visits - строка.visitsProbe, "проверочный заход попал в живые").toBe(0);
+    expect(строка.visitsOurs, "проверочный заход не помечен нашим").toBe(1);
+    expect(строка.visits - строка.visitsOurs, "проверочный заход попал в живые").toBe(0);
   });
 
   it("КОНТРОЛЬ: такой же заход БЕЗ probe= остаётся живым", () => {
@@ -106,7 +108,7 @@ describe("разрез по чужим меткам", () => {
       },
     ]);
     const строка = р.byPost["mail-outreach/ai3"];
-    expect(строка.visits - строка.visitsProbe, "живой заход записан пробой").toBe(1);
+    expect(строка.visits - строка.visitsOurs, "живой заход записан нашим").toBe(1);
   });
 
   it("единица byPost — сессии, как у канала (а не просмотры)", () => {

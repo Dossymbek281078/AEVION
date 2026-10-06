@@ -38,7 +38,9 @@ describe("разрез воронки", () => {
     // `thankYouOpened`, как и в итоге.
     expect(r.byChannel["youtube"]).toEqual({
       visits: 2,
+      visitsOurs: 0,
       pricing: 1,
+      pricingOurs: 0,
       checkoutStart: 1,
       checkoutStartOurs: 0,
       thankYouOpened: 1,
@@ -52,7 +54,9 @@ describe("разрез воронки", () => {
     });
     expect(r.byChannel["product-hunt"]).toEqual({
       visits: 1,
+      visitsOurs: 0,
       pricing: 1,
+      pricingOurs: 0,
       checkoutStart: 0,
       checkoutStartOurs: 0,
       thankYouOpened: 0,
@@ -206,8 +210,8 @@ describe("разрез воронки", () => {
 
     expect(r.byChannel["instagram"].pricing, "канал обязан сложить все посты вместе").toBe(3);
     expect(Object.keys(r.byChannel).sort(), "пост превратился в отдельный канал").toEqual(["instagram"]);
-    expect(r.byPost["instagram/kartinka3"]).toEqual({ visits: 2, pricing: 1, checkoutStart: 0, paid: 0 });
-    expect(r.byPost["instagram/video7"]).toEqual({ visits: 1, pricing: 1, checkoutStart: 0, paid: 0 });
+    expect(r.byPost["instagram/kartinka3"]).toEqual({ visits: 2, visitsOurs: 0, pricing: 1, pricingOurs: 0, checkoutStart: 0, paid: 0 });
+    expect(r.byPost["instagram/video7"]).toEqual({ visits: 1, visitsOurs: 0, pricing: 1, pricingOurs: 0, checkoutStart: 0, paid: 0 });
     expect(
       r.byPost["instagram/undefined"],
       "заход без подметки попал в выдуманный пост",
@@ -237,12 +241,12 @@ describe("разрез воронки", () => {
     expect(
       r.byEntryPage["instagram|/qskyway"],
       "запрос не отброшен или взята не первая страница",
-    ).toEqual({ сессий: 1, доЦен: 1, началиОплату: 0 });
-    expect(r.byEntryPage["instagram|/pricing"]).toEqual({ сессий: 1, доЦен: 1, началиОплату: 1 });
+    ).toEqual({ сессий: 1, сессийНаших: 0, доЦен: 1, доЦенНаших: 0, началиОплату: 0 });
+    expect(r.byEntryPage["instagram|/pricing"]).toEqual({ сессий: 1, сессийНаших: 0, доЦен: 1, доЦенНаших: 0, началиОплату: 1 });
     expect(
       r.byEntryPage["youtube|/devhub/:id"],
       "идентификатор уехал в отчёт как есть",
-    ).toEqual({ сессий: 1, доЦен: 0, началиОплату: 0 });
+    ).toEqual({ сессий: 1, сессийНаших: 0, доЦен: 0, доЦенНаших: 0, началиОплату: 0 });
   });
 
   it("КОНТРОЛЬ: предел действует ВНУТРИ канала, хвост у каждого свой", () => {

@@ -127,6 +127,11 @@ interface AnalyticsEvent {
   meta?: Record<string, string | number | boolean | null>;
   ip?: string;
   ua?: string;
+  /**
+   * Браузером управляет программа (Playwright/Puppeteer/Selenium) — это шлёт
+   * клиент из `navigator.webdriver`. Булево про ПРОГРАММУ, не про человека.
+   */
+  webdriver?: boolean;
 }
 
 /** Тип события, которое пишет ВЕБХУК кассы, получив подтверждение платежа. */
@@ -326,7 +331,11 @@ export interface РазрезВоронки {
     string,
     {
       visits: number;
+      /** Сколько из `visits` — НАШИ заходы (метка `probe-*` либо `?probe=<окно>`). */
+      visitsOurs: number;
       pricing: number;
+      /** Сколько из `pricing` — наши. Живое число считается вычитанием. */
+      pricingOurs: number;
       checkoutStart: number;
       checkoutStartOurs: number;
       thankYouOpened: number;
@@ -392,9 +401,9 @@ export interface РазрезВоронки {
     string,
     {
       visits: number;
-      visitsProbe: number;
+      visitsOurs: number;
       pricing: number;
-      pricingProbe: number;
+      pricingOurs: number;
       checkoutStart: number;
       paid: number;
     }
@@ -417,7 +426,10 @@ export interface РазрезВоронки {
    * сверх него складывается в «прочие»: без ограничения десяток заходов на
    * выдуманные адреса раздул бы ответ и стал бы способом его испортить.
    */
-  byEntryPage: Record<string, { сессий: number; доЦен: number; началиОплату: number }>;
+  byEntryPage: Record<
+    string,
+    { сессий: number; сессийНаших: number; доЦен: number; доЦенНаших: number; началиОплату: number }
+  >;
   /**
    * Какие ЧУЖИЕ метки приводят людей — те, что наш каталог каналов не знает.
    *
@@ -436,7 +448,7 @@ export interface РазрезВоронки {
    * Отдаются первые 20 по числу визитов: без ограничения десяток выдуманных
    * меток раздул бы ответ, а ответ на вопрос «кто нас приводит» дают верхние.
    */
-  byUnknownTag: Record<string, { visits: number; pricing: number }>;
+  byUnknownTag: Record<string, { visits: number; visitsOurs: number; pricing: number; pricingOurs: number }>;
 }
 
 /**
@@ -483,6 +495,24 @@ export function разрезВоронки(
   нашиСессии: ReadonlySet<string> = new Set(),
   пробыОкон: ReadonlySet<string> = new Set(),
 ): РазрезВоронки {
+  /*
+   * 🔴 ДЛЯ ВИЗИТОВ «наш заход» — ОБЪЕДИНЕНИЕ двух примет, и это не возврат к
+   * одному признаку на два вопроса.
+   *
+   * Вопросов по-прежнему два, и они разные:
+   *   «наша ли это попытка ОПЛАТЫ» → `нашиСессии` (метка канала `probe-*`),
+   *      ею и считаются checkoutStartOurs / paidOurs, как считались;
+   *   «наш ли это ЗАХОД» → обе приметы сразу: и `probe-*` в метке канала, и
+   *      отдельный параметр `?probe=<окно>`.
+   * Разделять их на уровне визита значило бы оставить половину наших заходов
+   * в живых числах — а именно от этого разрез и страхует.
+   *
+   * Повод: замер 06.10.2026 — наши заходы с `?c=ig` раздули Instagram до
+   * «70 % дошли до цен», и пометки «наше» у визитов не было вовсе: она стояла
+   * только у начатых оплат.
+   */
+  const нашЗаход = (sid: string | undefined): boolean =>
+    Boolean(sid && (нашиСессии.has(sid) || пробыОкон.has(sid)));
   const byChannel = Object.create(null) as РазрезВоронки["byChannel"];
   const byApp = Object.create(null) as РазрезВоронки["byApp"];
   const byPost = Object.create(null) as РазрезВоронки["byPost"];
@@ -506,7 +536,9 @@ export function разрезВоронки(
     if (!byChannel[канал]) {
       byChannel[канал] = {
         visits: 0,
+        visitsOurs: 0,
         pricing: 0,
+        pricingOurs: 0,
         checkoutStart: 0,
         checkoutStartOurs: 0,
         thankYouOpened: 0,
@@ -522,7 +554,7 @@ export function разрезВоронки(
     const пост = typeof сыройПост === "string" && сыройПост.trim() ? сыройПост.trim().slice(0, 40) : null;
     const ключПоста = пост ? `${канал}/${пост}` : null;
     if (ключПоста && !byPost[ключПоста]) {
-      byPost[ключПоста] = { visits: 0, visitsProbe: 0, pricing: 0, pricingProbe: 0, checkoutStart: 0, paid: 0 };
+      byPost[ключПоста] = { visits: 0, visitsOurs: 0, pricing: 0, pricingOurs: 0, checkoutStart: 0, paid: 0 };
     }
     const п = ключПоста ? byPost[ключПоста] : null;
 
@@ -532,33 +564,55 @@ export function разрезВоронки(
       // 519, потому что здесь считался КАЖДЫЙ просмотр страницы. Два разных
       // числа под одним словом в одном ответе: основатель увидел бы 167 или 519
       // в зависимости от того, куда посмотрел.
+      const наш = нашЗаход(ev.sid);
       if (ev.sid) {
         const ключ = `${канал}|${ev.sid}`;
         if (!виденныеСессии.has(ключ)) {
           виденныеСессии.add(ключ);
           к.visits += 1;
+          if (наш) к.visitsOurs += 1;
         }
       } else {
         к.visits += 1;
+        if (наш) к.visitsOurs += 1;
       }
-      if (typeof ev.path === "string" && ev.path.includes("/pricing")) к.pricing += 1;
+      /*
+       * 🔴 «Дошли до цен» — ТОЖЕ УНИКАЛЬНЫЕ СЕССИИ, а не просмотры.
+       *
+       * До 06.10.2026 рядом в одном объекте жили две единицы: `visits` считал
+       * сессии, а `pricing` — каждый просмотр страницы цен. Человек, открывший
+       * цены трижды, давал «1 визит и 3 до цен», и доля доходимости вылезала
+       * за 100 %. Читающий отчёт об этом не знал.
+       */
+      if (typeof ev.path === "string" && ev.path.includes("/pricing")) {
+        const ключЦен = `цены|${канал}|${ev.sid ?? Math.random()}`;
+        if (!виденныеСессии.has(ключЦен)) {
+          виденныеСессии.add(ключЦен);
+          к.pricing += 1;
+          if (наш) к.pricingOurs += 1;
+        }
+      }
       if (п) {
-        // Та же единица, что у канала: уникальные сессии, а не просмотры.
-        const проба = Boolean(ev.sid && пробыОкон.has(ev.sid));
+        // Та же единица, что у канала: уникальные сессии, а не просмотры —
+        // и для визитов, и для «дошли до цен».
         if (ev.sid) {
           const ключПостаСессии = `post|${ключПоста}|${ev.sid}`;
           if (!виденныеСессии.has(ключПостаСессии)) {
             виденныеСессии.add(ключПостаСессии);
             п.visits += 1;
-            if (проба) п.visitsProbe += 1;
+            if (наш) п.visitsOurs += 1;
           }
         } else {
           п.visits += 1;
-          if (проба) п.visitsProbe += 1;
+          if (наш) п.visitsOurs += 1;
         }
         if (typeof ev.path === "string" && ev.path.includes("/pricing")) {
-          п.pricing += 1;
-          if (проба) п.pricingProbe += 1;
+          const ключЦенПоста = `цены|post|${ключПоста}|${ev.sid ?? Math.random()}`;
+          if (!виденныеСессии.has(ключЦенПоста)) {
+            виденныеСессии.add(ключЦенПоста);
+            п.pricing += 1;
+            if (наш) п.pricingOurs += 1;
+          }
         }
       }
       // Чужая метка — только когда канал не распознан. Считаем так же, как
@@ -566,7 +620,7 @@ export function разрезВоронки(
       // страницами выглядела бы десятью площадками.
       const чужая = чужаяМетка(канал, ev.path);
       if (чужая) {
-        if (!byUnknownTag[чужая]) byUnknownTag[чужая] = { visits: 0, pricing: 0 };
+        if (!byUnknownTag[чужая]) byUnknownTag[чужая] = { visits: 0, visitsOurs: 0, pricing: 0, pricingOurs: 0 };
         const м = byUnknownTag[чужая];
         if (ev.sid) {
           const ключМетки = `tag|${чужая}|${ev.sid}`;
@@ -635,7 +689,7 @@ export function разрезВоронки(
         вход: чистыйПуть(ev.path),
         доЦен: false,
         начал: false,
-        наш: нашиСессии.has(ev.sid),
+        наш: нашЗаход(ev.sid),
       };
       заходы.set(ev.sid, з);
     }
@@ -656,12 +710,23 @@ export function разрезВоронки(
     if (з.наш) к.checkoutStartSessionsOurs += 1;
   }
 
-  const сырыеВходы = new Map<string, { сессий: number; доЦен: number; началиОплату: number }>();
+  const сырыеВходы = new Map<
+    string,
+    { сессий: number; сессийНаших: number; доЦен: number; доЦенНаших: number; началиОплату: number }
+  >();
   for (const з of заходы.values()) {
     const ключ = `${з.канал}|${з.вход}`;
-    const т = сырыеВходы.get(ключ) ?? { сессий: 0, доЦен: 0, началиОплату: 0 };
+    const т = сырыеВходы.get(ключ) ?? {
+      сессий: 0,
+      сессийНаших: 0,
+      доЦен: 0,
+      доЦенНаших: 0,
+      началиОплату: 0,
+    };
     т.сессий += 1;
+    if (з.наш) т.сессийНаших += 1;
     if (з.доЦен) т.доЦен += 1;
+    if (з.доЦен && з.наш) т.доЦенНаших += 1;
     if (з.начал) т.началиОплату += 1;
     сырыеВходы.set(ключ, т);
   }
@@ -678,7 +743,10 @@ export function разрезВоронки(
   // (`<канал>|прочие`). Число ключей по-прежнему ограничено: каналов закрытый
   // список, значит их не больше десятка.
   const ПРЕДЕЛ_НА_КАНАЛ = 8;
-  const поКаналам = new Map<string, [string, { сессий: number; доЦен: number; началиОплату: number }][]>();
+  const поКаналам = new Map<
+    string,
+    [string, { сессий: number; сессийНаших: number; доЦен: number; доЦенНаших: number; началиОплату: number }][]
+  >();
   for (const [ключ, т] of сырыеВходы) {
     const канал = ключ.slice(0, ключ.indexOf("|"));
     const список = поКаналам.get(канал) ?? [];
@@ -695,10 +763,12 @@ export function разрезВоронки(
       byEntryPage[`${канал}|прочие`] = хвост.reduce(
         (а, [, т]) => ({
           сессий: а.сессий + т.сессий,
+          сессийНаших: а.сессийНаших + т.сессийНаших,
           доЦен: а.доЦен + т.доЦен,
+          доЦенНаших: а.доЦенНаших + т.доЦенНаших,
           началиОплату: а.началиОплату + т.началиОплату,
         }),
-        { сессий: 0, доЦен: 0, началиОплату: 0 },
+        { сессий: 0, сессийНаших: 0, доЦен: 0, доЦенНаших: 0, началиОплату: 0 },
       );
     }
   }
@@ -1388,7 +1458,10 @@ eventsRouter.get("/funnel", (req, res) => {
     const t = Date.parse(ev.ts || "");
     if (!Number.isFinite(t) || t < сНачала) continue;
     всего += 1;
-    if (видОтправителя(ev.ua)) { ботов += 1; continue; }
+    // Две приметы автоматики, а не одна: строка браузера и признак от самого
+    // браузера. 06.10.2026 съёмка Playwright прошла мимо первой — в UA той
+    // сборки слова «Headless» не было, — и три наших захода легли в живые.
+    if (видОтправителя(ev.ua) || ev.webdriver === true) { ботов += 1; continue; }
 
     событияВоронки.push(ev);
     const день = new Date(t).toISOString().slice(0, 10);
@@ -1575,8 +1648,10 @@ eventsRouter.get("/funnel", (req, res) => {
       "ключ byPost — «канал/пост»; visits считает те же УНИКАЛЬНЫЕ СЕССИИ, что byChannel и total, " +
       "уникальность в пределах пары канал+пост. Сумма byPost по одному каналу ≤ его visits " +
       "(посты есть не у каждого захода) и складывать byPost с byChannel нельзя — это один и тот же " +
-      "человек в двух разрезах. ВАЖНО: pricing здесь и в byChannel — ПРОСМОТРЫ страницы цен, не сессии. " +
-      "visitsProbe и pricingProbe — проверочные заходы окон (?probe=<окно>), живое число = разность",
+      "человек в двух разрезах. С 06.10.2026 pricing здесь и в byChannel — ТОЖЕ уникальные сессии, " +
+      "а не просмотры: раньше человек, открывший цены трижды, давал «1 визит и 3 до цен». " +
+      "visitsOurs и pricingOurs — наши собственные заходы (метка probe-* либо ?probe=<окно>), " +
+      "живое число = разность; у byEntryPage то же самое зовётся сессийНаших и доЦенНаших",
     byChannelVisitsNote:
       "визиты по каналам уникальны В ПРЕДЕЛАХ канала: один человек с двумя метками попадёт в оба, " +
       "поэтому сумма по каналам ≥ total.visits и разницу нельзя читать как ошибку",

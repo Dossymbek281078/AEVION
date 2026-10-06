@@ -29,7 +29,7 @@ const { mockDeployViaWrangler } = vi.hoisted(() => ({ mockDeployViaWrangler: vi.
 vi.mock("../src/lib/wranglerPagesDeploy", () => ({ deployViaWrangler: mockDeployViaWrangler }));
 
 // eslint-disable-next-line import/first
-import { devhubRouter, __resetDevHubStore, __clearDeferredDevHubWork } from "../src/routes/devhub";
+import { devhubRouter, __resetDevHubStore, __clearDeferredDevHubWork, пределАдреса, __setMonthUsageForTest } from "../src/routes/devhub";
 // eslint-disable-next-line import/first
 import { __resetProviderHealth } from "../src/lib/providerHealth";
 
@@ -84,14 +84,30 @@ const FREE_DEPLOYS = 10;
 let createSeq = 1;
 
 describe("потолок кредита гостя по адресу клиента", () => {
-  test("одиннадцать разных гостей с одного адреса — одиннадцатая выкатка 402; тот же гость с другого адреса — проходит", async () => {
+  test("новый заголовок с того же адреса НЕ обходит потолок адреса; с другого адреса — проходит", async () => {
+    /*
+     * ⚠️ ЧИСЛО ИЗМЕНЕНО 06.10.2026, и прежняя проверка требовала «одиннадцатая
+     * выкатка — 402». Это было верно, пока норма адреса равнялась норме ОДНОГО
+     * гостя (10). Замер того же дня показал, чем это оборачивается: под CGNAT
+     * мобильного оператора за одним адресом тысячи абонентов, и одиннадцатый
+     * человек получал 402, ничего не сделав. Потолок адреса сделан кратным
+     * (решение оркестратора по цене возможности), у выкатки ×10 = 100.
+     *
+     * ОПАСЕНИЕ АВТОРА ПРЕЖНЕЙ ПРОВЕРКИ — «новым заголовком потолок адреса не
+     * обходится» — остаётся ровно тем же и проверяется здесь же, просто на
+     * настоящей границе. Чтобы не делать сто живых выкаток, расход адреса
+     * подсаживается до предела: проверяется ГРАНИЦА, а не арифметика цикла.
+     */
+    const ПРЕДЕЛ = пределАдреса("deploy");
+    expect(ПРЕДЕЛ, "потолок адреса снова равен гостевому — сеть упрётся").toBeGreaterThan(FREE_DEPLOYS);
+
     const sameIp = makeApp("203.0.113.7");
-    for (let i = 0; i < FREE_DEPLOYS; i++) {
-      const r = await deployAsGuest(sameIp, `guest-rot-${i}-xxxx`);
-      expect(r.status, `выкатка ${i + 1}: ${JSON.stringify(r.body)}`).toBe(200);
-    }
-    const eleventh = await deployAsGuest(sameIp, "guest-rot-10-xxxx");
-    expect(eleventh.status, "новый заголовок с того же адреса обошёл кредит").toBe(402);
+    __setMonthUsageForTest("guest-ip:203.0.113.7", "deploy", ПРЕДЕЛ - 1);
+    const последняя = await deployAsGuest(sameIp, "guest-rot-last-xxxx");
+    expect(последняя.status, `последняя разрешённая выкатка отбита: ${JSON.stringify(последняя.body)}`).toBe(200);
+
+    const eleventh = await deployAsGuest(sameIp, "guest-rot-over-xxxx");
+    expect(eleventh.status, "новый заголовок с того же адреса обошёл потолок адреса").toBe(402);
     expect(eleventh.body.error).toMatch(/limit/i);
 
     // Контроль: дело в адресе, а не в самом гостевом id — с другого адреса тот же гость проходит.
@@ -102,10 +118,9 @@ describe("потолок кредита гостя по адресу клиен�
 
   test("вошедший с «исчерпанного» адреса проходит: его кредит — по его id, не по адресу", async () => {
     const sameIp = makeApp("203.0.113.8");
-    for (let i = 0; i < FREE_DEPLOYS; i++) {
-      expect((await deployAsGuest(sameIp, `guest-a-${i}-xxxx`)).status).toBe(200);
-    }
-    expect((await deployAsGuest(sameIp, "guest-a-10-xxxx")).status).toBe(402);
+    // Тот же приём: доводим расход адреса до предела одним шагом.
+    __setMonthUsageForTest("guest-ip:203.0.113.8", "deploy", пределАдреса("deploy"));
+    expect((await deployAsGuest(sameIp, "guest-a-over-xxxx")).status).toBe(402);
     const h = bearer();
     const cr = await request(sameIp).post("/api/devhub/projects").set({ ...h, "x-test-ip": "10.98.0.1" }).send({ name: "P" });
     const id = cr.body.project.id as string;

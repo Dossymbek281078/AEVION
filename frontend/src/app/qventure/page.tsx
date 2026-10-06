@@ -10,6 +10,9 @@ import { PageTracking } from "@/components/PageTracking";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import ModuleStatusNote from "@/components/ModuleStatusNote";
 import { apiUrl } from "@/lib/apiBase";
+// Токен входа в запросы модуля. Образец взят у соседа по тому же модулю
+// (_watchlist.ts уже шлёт ...getAuthHeaders()), второго способа не заводим.
+import { getAuthHeaders } from "@/lib/auth";
 import paper from "@/styles/aevionPaper.module.css";
 import {
   ResultView, ScoreGauge, STAGES, STAGE_LABEL, VERDICT_COLOR, VERDICT_LABEL,
@@ -91,7 +94,14 @@ async function analyzeReq(data: FormShape): Promise<{ ok: true; data: AnalysisRe
     if (proj.length >= 2) payload.projections = proj;
 
     const res = await fetch(apiUrl("/api/qventure/analyze"), {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+      method: "POST",
+      // 🔴 06.10.2026: БЕЗ ТОКЕНА заплативший неотличим от гостя.
+      // Замер того же дня: у модуля ноль проверок прав на сервере, а интерфейс
+      // платного отказа уже готов (сторожа на requiredTier и upgradeUrl). Включить
+      // стену при безымянных запросах значило бы закрыть модуль и для тех, кто
+      // заплатил: сервер не узнал бы их. Токен — предусловие включения стены.
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      body: JSON.stringify(payload),
     });
     const j = await res.json();
     if (!res.ok || !j?.ok) {
@@ -171,7 +181,10 @@ export default function QVenturePage() {
   const [mode, setMode] = useState<"single" | "compare">("single");
 
   useEffect(() => {
-    fetch(apiUrl("/api/qventure/sectors"))
+    // Справочник отраслей тоже с токеном: он безобиден сегодня, но после включения
+    // стены безымянный запрос вернул бы заплатившему пустой список отраслей, то есть
+    // сломанную форму вместо отказа с объяснением.
+    fetch(apiUrl("/api/qventure/sectors"), { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((j) => { if (Array.isArray(j?.data)) setSectors(j.data); })
       .catch(() => { /* non-fatal — dropdown falls back to empty */ });
@@ -369,7 +382,9 @@ function SinglePanel({ sectors }: { sectors: SectorOption[] }) {
     setExtracting(true); setError(null); setExtractNote(null);
     try {
       const res = await fetch(apiUrl("/api/qventure/extract"), {
-        method: "POST", headers: { "Content-Type": "application/pdf" }, body: file,
+        method: "POST",
+        headers: { "Content-Type": "application/pdf", ...getAuthHeaders() },
+        body: file,
       });
       const j = await res.json();
       if (!res.ok || !j?.ok) { setExtractNote(j?.hint || j?.error || "Не удалось разобрать презентацию — заполните поля вручную."); return; }

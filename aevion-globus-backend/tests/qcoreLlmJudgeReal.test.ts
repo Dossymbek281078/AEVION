@@ -18,8 +18,18 @@ const anyKey = hasAnthropic || hasOpenAI || hasGemini;
 
 // Don't mock dbPool — real-LLM tests don't touch the store.
 
+// 🔴 06.10.2026: пропуск печатается в ПОТОК ОШИБОК, а не console.log.
+// Замер 05.10 на обеих половинах: console.log у проходящего теста репортёр глотает
+// (0 вхождений в выводе), process.stderr.write доходит (1). А тест, который сам себя
+// пропускает и молчит, неотличим от пройденного: весь этот набор не исполнялся вовсе,
+// и снаружи это выглядело как «пять зелёных тестов на живых провайдерах».
+// Значения ключей НЕ печатаем — только факт наличия (правило про секреты).
 const skip = (reason: string) => () => {
-  console.log(`[skip] ${reason}`);
+  const ПЕРЕВОД = String.fromCharCode(10); // эскейп съедается на границе вызова (§2е)
+  process.stderr.write(
+    `[ПРОПУЩЕНО, набор не исполнялся] ${reason} | ключи заданы: ` +
+      `anthropic=${hasAnthropic} openai=${hasOpenAI} gemini=${hasGemini}` + ПЕРЕВОД,
+  );
 };
 
 describe.skipIf(!anyKey)("V6-J real-LLM judge smoke", () => {

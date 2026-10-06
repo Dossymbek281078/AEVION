@@ -1348,6 +1348,26 @@ export default function CyberChessPage(){
   // Board editor state (Coach tab)
   const[editorMode,sEditorMode]=useState(false);
   const[coachAIEnabled,sCoachAIEnabled]=useState(false);  // default off — user opts in via 🔮 button
+  // Поле ввода FEN в панели тренера. Было window.prompt — модальное окно
+  // браузера: на телефоне оно ненадёжно, а в автоматике гасится, и человек
+  // видит, что по кнопке «ничего не происходит». Именно так дефект и нашли
+  // (окно Роликов, прод 06.10.2026, 390×844). null — поле скрыто.
+  const[fenPole,sFenPole]=useState<string|null>(null);
+  /** Загрузить позицию из поля FEN. Пустое поле — ничего не делаем молча. */
+  const zagruzitFen=useCallback(()=>{
+    const fen=(fenPole||"").trim();
+    if(!fen)return;
+    try{
+      const g=new Chess(fen);
+      setGame(g);sBk(k=>k+1);sHist([]);sFenHist([fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);
+      sPCol(g.turn());sFlip(g.turn()==="b");
+      // Тренера включаем: поле живёт в его панели, и позиция грузится ради
+      // разбора. Без этого человек получал доску и пустое место вместо вопроса.
+      sCoachAIEnabled(true);
+      sFenPole(null);
+      showToast("FEN загружен — спроси тренера","success");
+    }catch{showToast("Неверный FEN","error")}
+  },[fenPole,showToast]);
   // Coach Quick-Actions remark — shown inline in the in-game panel after a quick-action.
   // null = nothing to show; { kind, title, body } = panel content.
   const[coachRemark,sCoachRemark]=useState<{kind:"plan"|"tactic"|"position"|"weakness"|"explain";title:string;body:string;hint?:string}|null>(null);
@@ -10697,6 +10717,18 @@ export default function CyberChessPage(){
                   {pzAttempt==="wrong"&&<Btn size="md" variant="secondary" icon={<Icon.Undo width={12} height={12}/>} onClick={()=>{const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sPzAttempt("idle");sLm(null);sHist([]);sFenHist([pzCurrent.fen]);}}>Заново</Btn>}
                   {pzAttempt!=="correct"&&pzMode!=="rush"&&<Btn size="md" variant="secondary" icon={<Icon.Play width={12} height={12}/>} onClick={playPuzzleSolution} title="Проиграть решение на доске">Решение</Btn>}
                   {pzAttempt!=="correct"&&pzAttempt!=="shown"&&<Btn size="md" variant="gold" icon={<Icon.Lightbulb width={12} height={12}/>} onClick={()=>{if(!spendChessy(5,"подсказка"))return;sPzAttempt("shown")}}>Подсказка · 5</Btn>}
+                  {/* 🔴 ВХОД К ТРЕНЕРУ ПРЯМО ОТСЮДА. Во вкладке «Задачи» кнопки коуча
+                      не было вовсе: панель тренера живёт в своей вкладке, и человек,
+                      застрявший на задаче, не мог спросить о НЕЙ. А это ровно тот
+                      момент, когда тренер ценнее всего.
+                      Найдено окном Роликов на проде 06.10.2026, 390×844. */}
+                  {pzCurrent&&<Btn size="md" variant="secondary" onClick={()=>{
+                    const g=new Chess(pzCurrent.fen);
+                    setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pzCurrent.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);
+                    sPCol(g.turn());sFlip(g.turn()==="b");
+                    sCoachAIEnabled(true);sEditorMode(false);sSetup(false);sTab("coach");
+                    showToast("Позиция задачи у тренера — спрашивай","success");
+                  }} title="Открыть эту позицию у ИИ-тренера и спросить о ней">🎓 Спросить тренера</Btn>}
                 </div>
                 {/* Подсказка по хоткеям — discoverability клавиш пазла */}
                 <div style={{marginTop:6,display:"flex",gap:8,flexWrap:"wrap",fontSize:10,color:T.dim,fontWeight:700}}>
@@ -11835,8 +11867,18 @@ ${question.trim()}`;
                     })}
                     {modeBtn("🧩","Из задач","активная задача",()=>{
                       if(!pzCurrent){showToast("Сначала выбери задачу во вкладке «Задачи»","info");sTab("puzzles");return}
-                      const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pzCurrent.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sCoachAIEnabled(false);sEditorMode(false);
-                      showToast(`Задача: ${pzCurrent.name}`,"success");
+                      const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pzCurrent.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");
+                      // 🔴 Здесь стояло sCoachAIEnabled(false), и это был дефект:
+                      // плитка живёт ВНУТРИ панели тренера и существует ровно для
+                      // того, чтобы принести ему позицию задачи, — а последним
+                      // действием выключала тренера. Поле вопроса рисуется при
+                      // tab==="coach" && !editorMode && coachAIEnabled, поэтому
+                      // человек видел: позиция встала, а спросить о ней нечем.
+                      // Скопировано, судя по всему, у соседних плиток «Свободная
+                      // игра» и «Импорт», где выключение осмысленно.
+                      // Найдено окном Роликов на проде 06.10.2026, 390×844.
+                      sCoachAIEnabled(true);sEditorMode(false);
+                      showToast(`Задача: ${pzCurrent.name} — спроси тренера`,"success");
                     })}
                     {modeBtn("📜",savedGames.length>0?`Библиотека · ${savedGames.length}`:"Библиотека","твои партии",()=>{
                       if(savedGames.length===0){showToast("Нет сыгранных партий — сыграй хотя бы одну","error");return}
@@ -11881,8 +11923,10 @@ ${question.trim()}`;
 
                 <button onClick={()=>{
                   if(!pzCurrent){showToast("Нет активной задачи","error");return}
-                  const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pzCurrent.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPCol(g.turn());sFlip(g.turn()==="b");
-                  showToast(`Из задачи · ${pzCurrent.name}`,"success");
+                  const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([pzCurrent.fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPCol(g.turn());sFlip(g.turn()==="b");sCoachAIEnabled(true);
+                  // Тренера включаем и здесь: кнопка в панели тренера, а без
+                  // флага позиция встаёт молча и спросить о ней негде.
+                  showToast(`Из задачи · ${pzCurrent.name} — спроси тренера`,"success");
                 }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>🧩 Текущая задача</button>
 
                 <label style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left",display:"block"}}>
@@ -11901,11 +11945,29 @@ ${question.trim()}`;
                   }}/>
                 </label>
 
-                <button onClick={()=>{
-                  const fen=prompt("Введите FEN позиции:");
-                  if(!fen)return;
-                  try{const g=new Chess(fen);setGame(g);sBk(k=>k+1);sHist([]);sFenHist([fen]);sLm(null);sSel(null);sVm(new Set());sOver(null);sPCol(g.turn());sFlip(g.turn()==="b");showToast("FEN загружен","success")}catch{showToast("Неверный FEN","error")}
-                }} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>🔤 FEN</button>
+                <button onClick={()=>sFenPole(v=>v===null?"":null)} aria-expanded={fenPole!==null} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>🔤 FEN</button>
+
+                {/* Поле ввода FEN прямо на странице. Было window.prompt — модальное
+                    окно браузера: на телефоне ненадёжно, а в автоматике гасится, и
+                    человек видит, что по кнопке «ничего не происходит». Так дефект и
+                    нашли (окно Роликов, прод 06.10.2026, 390×844).
+                    Занимает обе колонки сетки — строка FEN длинная. */}
+                {fenPole!==null&&<div style={{gridColumn:"1 / -1",display:"flex",gap:6,alignItems:"center"}}>
+                  <input
+                    value={fenPole}
+                    onChange={e=>sFenPole(e.target.value)}
+                    onKeyDown={e=>{if(e.key==="Enter")zagruzitFen()}}
+                    aria-label="FEN позиции"
+                    placeholder="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+                    autoFocus
+                    style={{flex:1,minWidth:0,padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,
+                      fontSize:12,fontFamily:"ui-monospace,monospace",color:T.text,background:"#fff"}}
+                  />
+                  <button onClick={zagruzitFen} style={{padding:"8px 12px",borderRadius:7,border:"none",
+                    background:T.accent,color:"#fff",fontSize:12,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap"}}>
+                    Загрузить
+                  </button>
+                </div>}
 
                 <button onClick={()=>{sEditorMode(true)}} style={{padding:"8px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",color:T.text,textAlign:"left"}}>✏️ Расставить вручную</button>
 

@@ -6905,7 +6905,7 @@ export default function CyberChessPage(){
                   </div>
                 )}
                 <span style={{flex:1}}/>
-                <span style={{fontSize:11,color:CC.textMute,fontWeight:700,whiteSpace:"nowrap"}}>≈ {Math.round(tc.ini/60*2+tc.inc*0.5)} мин</span>
+                <span style={{fontSize:11,color:CC.textMute,fontWeight:700,whiteSpace:"nowrap"}}>{cc.t("tc.approxMin").replace("{n}",String(Math.round(tc.ini/60*2+tc.inc*0.5)))}</span>
               </div>
             </div>
 
@@ -6952,7 +6952,7 @@ export default function CyberChessPage(){
               {/* AI opponent */}
               <div>
                 <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
-                  <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>ИИ</span>
+                  <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>{cc.t("ai.label")}</span>
                   <input type="range" aria-label="Сила соперника" min={0} max={(chessy.owned.master_ai||isPro)?6:4}
                     value={Math.min(aiI,(chessy.owned.master_ai||isPro)?6:4)}
                     onChange={e=>{const v=+e.target.value;if(v>=5&&!(chessy.owned.master_ai||isPro)){showToast("Master/Stockfish — платный уровень. Купи в Chessy-магазине","info");sShowShop(true);return}sAiI(v)}}
@@ -6964,7 +6964,7 @@ export default function CyberChessPage(){
                   style={{marginTop:6,padding:"3px 8px",borderRadius:RADIUS.sm,
                     border:"1px solid #fcd34d",background:"#fef3c7",color:"#92400e",
                     fontSize:10,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:3}}>
-                  🔒 Мастер · 30 Chessy
+                  🔒 {cc.t("ai.master")} · 30 Chessy
                 </button>}
               </div>
 
@@ -7139,7 +7139,7 @@ export default function CyberChessPage(){
                   style={{padding:"6px 12px",borderRadius:RADIUS.full,
                     border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,
                     fontSize:12,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
-                  ▲ Анализ
+                  ▲ {cc.t("chip.analysis")}
                 </button>
                 {/* Рейтинг-платформа: лидерборд (с текущим онлайн-рейтингом) и история партий */}
                 <Link href="/cyberchess/leaderboard"
@@ -7429,7 +7429,7 @@ export default function CyberChessPage(){
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",alignItems:"stretch"}}>
               {/* Rating */}
               <div style={{padding:`${SPACE[3]}px ${SPACE[3]}px`,borderRight:`1px solid ${CC.border}`}}>
-                <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>Рейтинг</div>
+                <div style={{fontSize:10,color:CC.textDim,fontWeight:800,letterSpacing:1,textTransform:"uppercase" as const}}>{cc.t("stats.rating")}</div>
                 <div style={{display:"flex",alignItems:"baseline",gap:6,marginTop:2}}>
                   <span style={{fontSize:24,fontWeight:900,color:CC.gold,lineHeight:1.1}}>{rat}</span>
                   <span style={{fontSize:10,color:CC.textDim}}>{rk.t}</span>

@@ -42,7 +42,7 @@ export type ПокупкаНаГлавной = {
  * странице выглядит поломкой, а поломка на ПЕРВОМ экране стоит покупателя.
  * Заголовки товаров тоже свои, а не из каталога: там они смешанные.
  */
-export function покупкиНаГлавной(канал: string | null): ПокупкаНаГлавной[] {
+export function покупкиНаГлавной(канал: string | null, сыраяМетка?: string | null): ПокупкаНаГлавной[] {
   const из: ПокупкаНаГлавной[] = [];
   const книга = productById("orcfbo");
   const протокол = productById("oijxmq");
@@ -56,7 +56,7 @@ export function покупкиНаГлавной(канал: string | null): П�
       // «Gratitude ∞ Forever Young — книга».
       название: "Gratitude ∞ Forever Young",
       цена: "$" + книга.priceUsd,
-      href: withChannel(книга.href, канал, "home"),
+      href: withChannel(книга.href, канал, "home", сыраяМетка),
       внешняя: true,
       id: книга.id,
       ценаUsd: книга.priceUsd,

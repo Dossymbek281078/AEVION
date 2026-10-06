@@ -121,7 +121,15 @@ interface AssessResp {
 interface ProgMetric { key: string; name: string; baseline: number; latest: number; change: number; improved: boolean; }
 interface ProgResp { metrics: ProgMetric[]; improvedCount: number; total: number; progressScore: number; trajectory: string; interpretation: string; }
 
-export default function LongevityClient({ channel = null }: { channel?: string | null }) {
+export default function LongevityClient({
+  channel = null,
+  сыраяМетка = null,
+}: {
+  channel?: string | null;
+  /** Входящая метка как есть — приходит с сервера, см. пояснение в page.tsx. */
+  сыраяМетка?: string | null;
+}) {
+
   const [panel, setPanel] = useState<PanelResp | null>(null);
 
   const [vals, setVals] = useState<Record<string, string>>({});
@@ -221,7 +229,7 @@ export default function LongevityClient({ channel = null }: { channel?: string |
         {КНИГА && (
           <div id="kniga" style={styles.offerAnchor}>
             <BuyLink
-              href={withChannel(КНИГА.href, channel, "longevity-book-top")}
+              href={withChannel(КНИГА.href, channel, "longevity-book-top", сыраяМетка)}
               source="longevity-book-top"
               productId={КНИГА.id}
               priceUsd={КНИГА.priceUsd}
@@ -246,7 +254,7 @@ export default function LongevityClient({ channel = null }: { channel?: string |
         {/* Второй вариант, дороже и полнее. Стоит ПОД книгой, а не вместо. */}
         {BOOK && (
           <BuyLink
-            href={withChannel(BOOK.href, channel, "longevity-bundle-top")}
+            href={withChannel(BOOK.href, channel, "longevity-bundle-top", сыраяМетка)}
             source="longevity-bundle-top"
             productId={BOOK.id}
             priceUsd={BOOK.priceUsd}
@@ -471,7 +479,7 @@ export default function LongevityClient({ channel = null }: { channel?: string |
         {/* Книга той же темы — см. комментарий у BOOK. */}
         {BOOK && (
           <BuyLink
-            href={withChannel(BOOK.href, channel, "longevity-book")}
+            href={withChannel(BOOK.href, channel, "longevity-book", сыраяМетка)}
             source="longevity-book"
             productId={BOOK.id}
             priceUsd={BOOK.priceUsd}

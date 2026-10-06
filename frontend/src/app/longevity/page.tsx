@@ -70,6 +70,13 @@ export default async function Page({
   // запишется как живой прямой заход и завысит воронку.
   const rawChannel = (await searchParams).c;
   const channel = channelFrom(rawChannel);
+  /*
+   * Входящая метка как есть — для внешней кассы. Берём её ЗДЕСЬ, на сервере, а не в
+   * клиенте: `channel` читают так же, и это единственный способ, при котором ссылка
+   * правильна уже в первом кадре. Прочитай метку в клиенте при рендере — первый
+   * клиентский кадр разошёлся бы с серверным (гидратация).
+   */
+  const сыраяМетка = Array.isArray(rawChannel) ? rawChannel[0] : rawChannel;
 
   // Языковая маршрутизация: у страницы ЕСТЬ английская версия (/en/longevity),
   // но посетитель с выбранным английским всё равно попадал сюда и читал
@@ -106,7 +113,7 @@ export default async function Page({
   return (
     <>
       <PageTracking page="longevity" />
-      <LongevityClient channel={channel} />
+      <LongevityClient channel={channel} сыраяМетка={сыраяМетка ?? null} />
     </>
   );
 }

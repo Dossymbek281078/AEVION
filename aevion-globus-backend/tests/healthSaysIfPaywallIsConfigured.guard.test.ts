@@ -19,6 +19,7 @@ import { сводкаПейволла } from "../src/lib/paywallHealth";
  */
 
 const СОХРАНЕНО = process.env.PAYWALL_MODULES;
+const СОХРАНЕНО_ДЕЙСТВИЯ = process.env.PAID_ACTIONS;
 const ПЕРЕВОД = String.fromCharCode(10); // эскейп съедается на границе вызова (§2е)
 
 beforeEach(() => {
@@ -27,6 +28,8 @@ beforeEach(() => {
 afterAll(() => {
   if (СОХРАНЕНО === undefined) delete process.env.PAYWALL_MODULES;
   else process.env.PAYWALL_MODULES = СОХРАНЕНО;
+  if (СОХРАНЕНО_ДЕЙСТВИЯ === undefined) delete process.env.PAID_ACTIONS;
+  else process.env.PAID_ACTIONS = СОХРАНЕНО_ДЕЙСТВИЯ;
 });
 
 describe("состояние: настроена ли выдача купленного", () => {
@@ -77,6 +80,35 @@ describe("состояние: настроена ли выдача куплен�
     const с = сводкаПейволла();
     expect(с.configured).toBe(true);
     expect(с.walledNow, "сводка пересказала настройку, а не фактический ответ гейта").toBe(0);
+  });
+
+  test("НОРМА: сводка говорит, включены ли платные действия и какие", () => {
+    // Повод: я доложил «у CyberChess товар есть — оплата снимает норму коуча», а норма
+    // СПИТ, пока действие не названо в PAID_ACTIONS. Снаружи это было не проверить.
+    delete process.env.PAID_ACTIONS;
+    const спит = сводкаПейволла().paidActions;
+    expect(спит.configured, "переменной нет, а механизм назван включённым").toBe(false);
+    expect(спит.count, "действий ноль, а счёт не ноль").toBe(0);
+
+    process.env.PAID_ACTIONS = "cyberchess_coach, qright_protect";
+    const живёт = сводкаПейволла().paidActions;
+    expect(живёт.configured).toBe(true);
+    expect(живёт.count, "названы два действия, а сводка видит другое число").toBe(2);
+    expect(живёт.actions, "имена действий не названы — «включено: да» ни на что не отвечает").toContain(
+      "cyberchess_coach",
+    );
+    process.stderr.write(
+      `[сторож] платных действий названо: ${живёт.count} — ${живёт.actions.join(", ")}` + ПЕРЕВОД,
+    );
+  });
+
+  test("КОНТРОЛЬ: пробелы и пустые куски не создают действий из воздуха", () => {
+    // Иначе PAID_ACTIONS=",, ," читалось бы как «три платных действия», и сводка
+    // отвечала бы «включено» на пустую настройку — худший исход для денежного вопроса.
+    process.env.PAID_ACTIONS = " , ,, ";
+    const с = сводкаПейволла().paidActions;
+    expect(с.count, "пустые куски посчитаны действиями").toBe(0);
+    expect(с.configured, "пустая настройка названа включённой").toBe(false);
   });
 
   test("ручка состояния действительно отдаёт эту сводку", () => {

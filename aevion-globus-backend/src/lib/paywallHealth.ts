@@ -1,5 +1,6 @@
 import { paywallEnabledFor } from "./planGate";
 import { ДОСТУП_МОДУЛЕЙ, модулиСоСтенойПоДанным } from "../data/moduleAccess";
+import { сводкаПлатныхДействий } from "./freeActionQuota";
 
 /**
  * Сводка о том, настроена ли ВЫДАЧА КУПЛЕННОГО — для ручки состояния.
@@ -40,6 +41,12 @@ export interface СводкаПейволла {
   /** Главное денежное число: продаётся, а по факту открыто. */
   soldButOpen: number;
   soldTotal: number;
+  /**
+   * Второй способ брать деньги, и его тоже не было видно снаружи: норма бесплатных
+   * действий. Она СПИТ, пока действие не названо в PAID_ACTIONS, поэтому «продаём
+   * снятие нормы» могло означать «продаём пустоту».
+   */
+  paidActions: { configured: boolean; count: number; actions: string[] };
 }
 
 export function сводкаПейволла(): СводкаПейволла {
@@ -51,5 +58,6 @@ export function сводкаПейволла(): СводкаПейволла {
     walledByData: модулиСоСтенойПоДанным().length,
     soldButOpen: продаётся.filter((м) => !paywallEnabledFor(м.moduleId)).length,
     soldTotal: продаётся.length,
+    paidActions: сводкаПлатныхДействий(),
   };
 }

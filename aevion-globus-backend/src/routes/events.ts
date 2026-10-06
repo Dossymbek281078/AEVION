@@ -4,6 +4,7 @@ import { queryNumber } from "../lib/queryNumber";
 import { existsSync, mkdirSync, appendFileSync, readFileSync } from "fs";
 import { join, dirname } from "path";
 import { clientIp } from "../lib/rateLimit";
+import { queryDate } from "../lib/queryDate";
 
 const captureEventsError = makeServiceCapture("qevents");
 
@@ -375,6 +376,22 @@ export interface РазрезВоронки {
   };
   /** Словами: какая единица у каждого числа в `total`. */
   totalUnits: string;
+  /**
+   * Откуда человек к нам перешёл — по ХОСТУ страницы-источника, единица
+   * «сессия». У каждой сессии берётся ПЕРВОЕ её событие в окне: вопрос стоит
+   * «что привело человека», а не «по какой ссылке он ходил внутри сайта».
+   *
+   * Два имени служебные и названы словами, потому что это разные ответы:
+   *   `(не назван)`    — источника нет: встроенный браузер приложения,
+   *                      закладка, адрес руками, переход с https на http;
+   *   `(внутри сайта)` — переход с нашего же домена.
+   * Слить их в «direct» значило бы снова получить неотвечаемый вопрос — ровно
+   * тот, из-за которого 212 заходов за 14 дней нечем объяснить.
+   */
+  byReferrerHost: Record<
+    string,
+    { visits: number; visitsOurs: number; pricing: number; pricingOurs: number }
+  >;
   byChannel: Record<
     string,
     {
@@ -526,20 +543,28 @@ export function чужаяМетка(
   // два списка одного и того же неизбежно разъезжаются (урок 30.09–05.10).
   if (канал !== "unknown") return null;
   const p = String(path ?? "");
-  const m = /[?&](?:c|ref)=([^&#]+)/.exec(p);
+  const m = /[?&](c|ref)=([^&#]+)/.exec(p);
   if (!m) return null;
   let сырое: string;
   try {
-    сырое = decodeURIComponent(m[1]);
+    сырое = decodeURIComponent(m[2]);
   } catch {
-    сырое = m[1];
+    сырое = m[2];
   }
   const безопасная = безопаснаяМетка(сырое);
-  return безопасная ? безопасная : null;
+  if (!безопасная) return null;
+  /*
+   * Откуда метка — часть ответа, а не косметика. `?c=` ставим мы сами
+   * (значит, в тексте поста опечатка или метка не заведена), `?ref=`
+   * дописывает ПЛОЩАДКА (значит, появился каталог, о котором мы не знаем, и
+   * заводить надо не опечатку, а канал). Это разные поручения, поэтому имена
+   * в разрезе разные: `ref:<значение>`.
+   */
+  return m[1] === "ref" ? `ref:${безопасная}` : безопасная;
 }
 
 export function разрезВоронки(
-  events: Array<Pick<AnalyticsEvent, "type" | "path" | "meta" | "sid">>,
+  events: Array<Pick<AnalyticsEvent, "type" | "path" | "meta" | "sid" | "refHost">>,
   нашиСессии: ReadonlySet<string> = new Set(),
   пробыОкон: ReadonlySet<string> = new Set(),
 ): РазрезВоронки {
@@ -579,6 +604,14 @@ export function разрезВоронки(
    * Итог: считается ДО всякого `continue` и без оглядки на канал, поэтому в
    * него попадает и трафик с незнакомых меток, и события без метки вовсе.
    */
+  /*
+   * Источник сессии: первое её событие в окне и есть вход. Журнал дописывается
+   * по времени, поэтому «первое встреченное» и есть «первое по времени».
+   */
+  const источникСессии = new Map<string, string>();
+  const byReferrerHost = Object.create(null) as РазрезВоронки["byReferrerHost"];
+  const НАШИ_ДОМЕНЫ = new Set(["aevion.app", "www.aevion.app", "aevion.vercel.app"]);
+
   const людиИтог = new Set<string>();
   const людиИтогНаши = new Set<string>();
   const людиЦенИтог = new Set<string>();
@@ -634,6 +667,13 @@ export function разрезВоронки(
      * где люди были).
      */
     const нашЭтот = нашЗаход(ev.sid);
+    if (ev.type === "page_view" && ev.sid && !источникСессии.has(ev.sid)) {
+      const хост = typeof ev.refHost === "string" ? ev.refHost.trim().toLowerCase() : "";
+      источникСессии.set(
+        ev.sid,
+        !хост ? "(не назван)" : НАШИ_ДОМЕНЫ.has(хост) ? "(внутри сайта)" : хост,
+      );
+    }
     if (ev.type === "page_view") {
       if (ev.sid) {
         людиИтог.add(ev.sid);
@@ -916,6 +956,25 @@ export function разрезВоронки(
     топМеток[метка] = числа;
   }
 
+  /*
+   * Разрез собирается ПОСЛЕ цикла, из «источника сессии» и уже посчитанных
+   * множеств: визит считается один раз на сессию, то есть той же единицей, что
+   * и итог, и числа законно складываются между собой.
+   */
+  for (const [sid, источник] of источникСессии) {
+    if (!byReferrerHost[источник]) {
+      byReferrerHost[источник] = { visits: 0, visitsOurs: 0, pricing: 0, pricingOurs: 0 };
+    }
+    const и2 = byReferrerHost[источник];
+    и2.visits += 1;
+    const нашаСессия = нашиСессии.has(sid) || пробыОкон.has(sid);
+    if (нашаСессия) и2.visitsOurs += 1;
+    if (людиЦенИтог.has(sid)) {
+      и2.pricing += 1;
+      if (нашаСессия) и2.pricingOurs += 1;
+    }
+  }
+
   итог.visits += людиИтог.size;
   итог.visitsOurs += людиИтогНаши.size;
   итог.pricing += людиЦенИтог.size;
@@ -927,6 +986,7 @@ export function разрезВоронки(
     byPost,
     byEntryPage,
     byUnknownTag: топМеток,
+    byReferrerHost,
     total: итог,
     totalUnits:
       "визиты и доЦен — уникальные сессии за всё окно (не сумма по каналам: " +
@@ -1498,7 +1558,11 @@ const ТИПЫ_ДЛЯ_СЧЁТА = new Set([
 ]);
 
 eventsRouter.get("/by-type", (req, res) => {
-  const сыройДень = typeof req.query.day === "string" ? req.query.day.trim() : "";
+  // Тот же общий помощник, что и у /day: своя регулярка рядом была третьей
+  // копией проверки этого класса, и сторож queryDateGuard её не признавал —
+  // то есть маршрут считался незакрытым, хотя проверка стояла. Красное на
+  // верном коде опаснее отсутствия сторожа: к нему привыкают.
+  const сыройДень = queryDate(req.query.day) ?? "";
   const день = /^\d{4}-\d{2}-\d{2}$/.test(сыройДень)
     ? сыройДень
     : new Date().toISOString().slice(0, 10);
@@ -1825,6 +1889,13 @@ eventsRouter.get("/funnel", (req, res) => {
      * источник трафика (каталог дописывает свой ref сам, нашего `?c=` там нет).
      * Пока разрез не доезжал, такой источник не существовал для нас совсем.
      */
+    byReferrerHost: разрез.byReferrerHost,
+    byReferrerHostNote:
+      "откуда перешёл человек, по хосту страницы-источника; единица — сессия, " +
+      "взято ПЕРВОЕ событие сессии. «(не назван)» — источника нет: встроенный " +
+      "браузер приложения, закладка, адрес руками, переход с https на http; " +
+      "«(внутри сайта)» — переход с нашего же домена. Пишется с 06.10.2026, " +
+      "события до этой даты поля не имеют и все лежат в «(не назван)»",
     byUnknownTag: разрез.byUnknownTag,
     byUnknownTagNote:
       "чужая метка — значение ?c= или ?ref=, которого каталог не знает (канал пришёл «unknown»); " +
@@ -1914,7 +1985,16 @@ export function границыДняАлматы(дата: string, сейчас:
  * параметром `?probe=<окно>` наша, живое число считается вычитанием.
  */
 eventsRouter.get("/day", (req, res) => {
-  const { дата, от, до } = границыДняАлматы(String(req.query.date ?? ""));
+  /*
+   * Дату из запроса проверяет ОБЩИЙ помощник класса (`queryDate`), а не
+   * собственная регулярка рядом: сторож `queryDateGuard` знает именно его, и
+   * третья копия проверки была бы ещё одним местом, где следующий забудет.
+   * Непригодное значение (`undefined`) ведёт себя как «дата не названа» —
+   * ручка берёт вчерашний день, как и обещает: 4xx здесь не нужен, параметр
+   * необязательный.
+   */
+  const проверенная = queryDate(req.query.date);
+  const { дата, от, до } = границыДняАлматы(проверенная ?? "");
 
   if (!existsSync(EVENTS_FILE)) {
     return res.json({ known: false, reason: "store_missing", дата });
@@ -1995,6 +2075,16 @@ eventsRouter.get("/day", (req, res) => {
       живые: и.paid - и.paidOurs,
     },
     топПостов: посты,
+    топИсточников: Object.entries(разрез.byReferrerHost)
+      .map(([хост, и3]) => ({
+        хост,
+        визиты: и3.visits,
+        визитыНаши: и3.visitsOurs,
+        визитыЖивые: и3.visits - и3.visitsOurs,
+        доЦенЖивые: и3.pricing - и3.pricingOurs,
+      }))
+      .sort((a, b) => b.визитыЖивые - a.визитыЖивые || b.визиты - a.визиты)
+      .slice(0, 8),
     единицы:
       "визиты и доЦен — уникальные сессии; оплаты подтверждает касса (вебхук), " +
       "а не загрузка страницы «спасибо»; живое число = всего минус наши",

@@ -2682,7 +2682,32 @@ async function planProjectWithAI(idea: string, existingFiles: Array<{ path: stri
 // POST /api/devhub/projects
 devhubRouter.post("/projects", dhCreateLimit(), async (req, res) => {
   const auth = verifyBearerOptional(req);
-  const userId = requesterId(req, auth?.sub);
+  /*
+   * 🔴 СОЗДАНИЕ БЕЗ МЕТКИ НЕ ЛОЖИТСЯ В ОБЩИЙ ЯЩИК (06.10.2026).
+   *
+   * Без входа и без заголовка x-devhub-guest личность выходила общей —
+   * "anonymous" (lib/devhubGuest.ts). А владение проверяется сравнением с
+   * userId, поэтому ЛЮБОЙ такой же запрос видел, правил и удалял эти проекты
+   * вместе с их базой. Подтверждено соседним окном в тот же день: проект,
+   * созданный без метки, удалён таким же запросом — 200, pagesRemoved.
+   *
+   * Это тот самый дефект, который чинили 21.08.2026 для вошедших и для гостей с
+   * меткой; для безметочных он остался. И попадал туда не только curl: фронт при
+   * недоступном хранилище (приватный режим, запрет данных сайта) заголовок не
+   * ставил ВООБЩЕ — то есть живой человек оказывался в общем ящике с чужими
+   * черновиками. Фронт починен отдельно (lib/devhubGuest.ts, личность в памяти).
+   *
+   * Здесь закрываем вход со стороны сервера: своя личность выдаётся на месте и
+   * ВОЗВРАЩАЕТСЯ вызывающему, иначе он не сможет обратиться к своему же проекту.
+   * Запрещать создание (400) было бы хуже: лендинг обещает работу без аккаунта,
+   * и отказ ломал бы обещание ради удобства проверки.
+   */
+  let userId = requesterId(req, auth?.sub);
+  let выданнаяМетка: string | null = null;
+  if (userId === ОБЩАЯ_ЛИЧНОСТЬ) {
+    выданнаяМетка = crypto.randomUUID();
+    userId = `guest:${выданнаяМетка}`;
+  }
   const { name, description, stack } = req.body || {};
   if (!name || typeof name !== "string") {
     return res.status(400).json({ error: "name is required" });
@@ -2733,7 +2758,19 @@ devhubRouter.post("/projects", dhCreateLimit(), async (req, res) => {
     memProjects.set(project.id, project);
     storage = "memory";
   }
-  res.status(201).json({ project, storage });
+  // Метка выдана — назвать её обязательно, и в заголовке тоже: без неё
+  // вызывающий потеряет доступ к собственному проекту на следующем запросе.
+  if (выданнаяМетка) res.setHeader(DEVHUB_GUEST_HEADER, выданнаяМетка);
+  res.status(201).json({
+    project,
+    storage,
+    ...(выданнаяМетка
+      ? {
+          guestId: выданнаяМетка,
+          guestIdNote: `Send this value as the ${DEVHUB_GUEST_HEADER} header on every later request — it is the only way back to this project.`,
+        }
+      : {}),
+  });
 });
 
 // GET /api/devhub/projects

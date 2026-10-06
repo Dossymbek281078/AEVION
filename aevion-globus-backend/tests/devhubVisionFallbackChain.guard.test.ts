@@ -40,6 +40,12 @@ import { devhubRouter, __resetDevHubStore } from "../src/routes/devhub";
 function makeApp() {
   const a = express();
   a.use(express.json({ limit: "5mb" }));
+  // ЛИЧНОСТЬ ЭТОГО ФАЙЛА. Без заголовка x-devhub-guest создание даёт
+  // собственную метку (devhub.ts, 06.10.2026: безметочные проекты больше не
+  // лежат в общем ящике "anonymous", откуда их удалял любой посторонний), и
+  // следующий запрос без метки получал бы 404 на свой же проект. Тесты про
+  // владение этим не занимаются — даём им одну устойчивую личность на файл.
+  a.use((req, _res, next) => { req.headers["x-devhub-guest"] = "t-devhubvisionfallbackchain-guard"; next(); });
   a.use("/api/devhub", devhubRouter);
   return a;
 }
@@ -82,6 +88,9 @@ describe("скриншот в код: отказ провайдера не ро�
     const { devhubRouter: r2 } = await import("../src/routes/devhub");
     const a = express();
     a.use(express.json({ limit: "5mb" }));
+    // Та же личность, что у приложения выше: без метки создание выдаёт свою, и
+    // следующий запрос получил бы 404 вместо проверяемого отказа по зрению.
+    a.use((req, _res, next) => { req.headers["x-devhub-guest"] = "t-devhubvisionfallbackchain-guard"; next(); });
     a.use("/api/devhub", r2);
     const cr = await request(a).post("/api/devhub/projects").send({ name: "V3" });
     const res = await request(a)

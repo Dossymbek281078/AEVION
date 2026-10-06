@@ -140,3 +140,64 @@ describe("перехватчик на месте", () => {
     restore = () => {};
   });
 });
+
+describe("ЗАБЛОКИРОВАННОЕ ХРАНИЛИЩЕ: заголовок всё равно уходит", () => {
+  /*
+   * 🔴 НАЙДЕНО 06.10.2026. installDevhubGuestHeader делал ранний выход при
+   * `getDevhubGuestId() === null`, то есть при недоступном хранилище (приватный
+   * режим, запрет данных сайта) заголовок не ставился ВООБЩЕ. Бэкенд без метки
+   * даёт общую личность "anonymous", а владение проверяется сравнением с userId —
+   * значит такой посетитель попадал в ОДИН ящик с чужими черновиками: его проект
+   * видел и удалял любой другой безметочный запрос. Соседнее окно подтвердило это
+   * на живом проде: созданный без метки проект удалён таким же запросом (200,
+   * pagesRemoved), вместе с опубликованным сайтом.
+   *
+   * Личность в памяти живёт до перезагрузки — ровно столько, сколько у такого
+   * посетителя в принципе может жить что-либо. Зато она СВОЯ.
+   */
+  let restore: () => void = () => {};
+  let seen: Array<{ url: string; header: string | null }> = [];
+
+  beforeEach(() => {
+    seen = [];
+    // Хранилище отказывает НА ЧТЕНИЕ и НА ЗАПИСЬ — как в приватном режиме.
+    vi.spyOn(window.localStorage.__proto__, "getItem").mockImplementation(() => {
+      throw new Error("storage blocked");
+    });
+    vi.spyOn(window.localStorage.__proto__, "setItem").mockImplementation(() => {
+      throw new Error("storage blocked");
+    });
+    window.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      seen.push({
+        url: String(input),
+        header: new Headers(init?.headers as HeadersInit | undefined).get(DEVHUB_GUEST_HEADER),
+      });
+      return new Response("{}", { status: 200 });
+    }) as typeof window.fetch;
+    restore = installDevhubGuestHeader();
+  });
+  afterEach(() => { restore(); vi.restoreAllMocks(); });
+
+  test("прибор исправен: хранилище действительно недоступно", () => {
+    // Признак «хранилище заблокировано» остаётся верным — по нему страница
+    // честно предупреждает, что черновики не сохранятся.
+    expect(getDevhubGuestId(), "хранилище не заблокировано — проверка мерит не то").toBeNull();
+  });
+
+  test("🔴 запрос к DevHub всё равно несёт СВОЮ метку, а не уходит без неё", async () => {
+    await window.fetch("https://api.aevion.app/api/devhub/projects");
+    expect(seen.length, "перехватчик не установился — заголовка не будет вовсе").toBe(1);
+    expect(seen[0].header, "заголовок не ушёл: посетитель попал в общий ящик").toMatch(GUEST_ID);
+  });
+
+  test("метка устойчива между запросами — иначе каждый запрос новый владелец", async () => {
+    await window.fetch("https://api.aevion.app/api/devhub/projects");
+    await window.fetch("https://api.aevion.app/api/devhub/snippets");
+    expect(seen[0].header).toBe(seen[1].header);
+  });
+
+  test("посторонние запросы по-прежнему не трогаются — отрицательный контроль", async () => {
+    await window.fetch("https://api.aevion.app/api/auth/login", { method: "POST" });
+    expect(seen[0].header).toBeNull();
+  });
+});

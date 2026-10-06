@@ -52,6 +52,12 @@ import { devhubRouter, __resetDevHubStore, __указаниеПоСтекуForTe
 function приложение() {
   const a = express();
   a.use(express.json());
+  // ЛИЧНОСТЬ ЭТОГО ФАЙЛА. Без заголовка x-devhub-guest создание даёт
+  // собственную метку (devhub.ts, 06.10.2026: безметочные проекты больше не
+  // лежат в общем ящике "anonymous", откуда их удалял любой посторонний), и
+  // следующий запрос без метки получал бы 404 на свой же проект. Тесты про
+  // владение этим не занимаются — даём им одну устойчивую личность на файл.
+  a.use((req, _res, next) => { req.headers["x-devhub-guest"] = "t-reactprojectispublishable-guard"; next(); });
   a.use("/api/devhub", devhubRouter);
   return a;
 }

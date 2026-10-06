@@ -44,9 +44,20 @@ vi.mock("../src/services/qcoreai/providers", () => ({
 // eslint-disable-next-line import/first
 import { devhubRouter, __resetDevHubStore } from "../src/routes/devhub";
 
+/** Личность этого файла. Поддельные строки базы ниже обязаны называть ЕЁ же:
+ * владение проверяется сравнением userId, и чужая строка даёт законный 404. */
+const ЛИЧНОСТЬ_ФАЙЛА = "t-devhub-lost-project-save";
+const ВЛАДЕЛЕЦ = `guest:${ЛИЧНОСТЬ_ФАЙЛА}`;
+
 function makeApp() {
   const app = express();
   app.use(express.json({ limit: "10mb" }));
+  // ЛИЧНОСТЬ ЭТОГО ФАЙЛА. Без заголовка x-devhub-guest создание даёт
+  // собственную метку (devhub.ts, 06.10.2026: безметочные проекты больше не
+  // лежат в общем ящике "anonymous", откуда их удалял любой посторонний), и
+  // следующий запрос без метки получал бы 404 на свой же проект. Тесты про
+  // владение этим не занимаются — даём им одну устойчивую личность на файл.
+  app.use((req, _res, next) => { req.headers["x-devhub-guest"] = ЛИЧНОСТЬ_ФАЙЛА; next(); });
   app.use("/api/devhub", devhubRouter);
   return app;
 }
@@ -124,7 +135,7 @@ describe("a project whose save failed is still there afterwards", () => {
       if (/^\s*(INSERT|UPDATE|DELETE)/i.test(sql)) return { rows: [] };
       return {
         rows: [{
-          id, userId: "anonymous", name: "Fresh from db", description: "", stack: "static",
+          id, userId: ВЛАДЕЛЕЦ, name: "Fresh from db", description: "", stack: "static",
           status: "active", repoUrl: null, deployUrl: null, customDomain: null,
           envVars: {}, collaborators: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
         }],
@@ -196,7 +207,9 @@ describe("an undo point whose save failed must not be invisible", () => {
       await request(app).patch(`/api/devhub/projects/${id}`).send({ repoUrl: "https://github.com/o/r" });
 
       // The pull overwrites a.ts and takes a checkpoint first — whose save fails.
-      const sync = await request(app).post(`/api/devhub/projects/${id}/github/sync`).set({ Authorization: `Bearer ${jwt.sign({ sub: "anonymous", email: "a@test.dev" }, process.env.AUTH_JWT_SECRET || "dev-auth-secret", { algorithm: "HS256" })}` });
+      const sync = await request(app).post(`/api/devhub/projects/${id}/github/sync`).set({ Authorization: `Bearer ${// Токен обязан называть ТОГО ЖЕ владельца, что создал проект: иначе законный 404.
+      // (Прежде здесь стоял sub "anonymous" — он совпадал с общей личностью.)
+      jwt.sign({ sub: ВЛАДЕЛЕЦ, email: "a@test.dev" }, process.env.AUTH_JWT_SECRET || "dev-auth-secret", { algorithm: "HS256" })}` });
       expect(sync.body.ok).toBe(true);
 
       const list = await request(app).get(`/api/devhub/projects/${id}/checkpoints`);

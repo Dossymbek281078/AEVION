@@ -128,6 +128,22 @@ export function track(payload: TrackPayload): void {
   const meta = Object.keys(собранная).length > 0 ? собранная : undefined;
 
   /*
+   * 🔴 Признак автоматики шлём САМИ: по строке браузера её видно не всегда.
+   *
+   * Замер 06.10.2026 (окно Роликов): съёмка через Playwright с боевой меткой
+   * дала три «визита зрителей», и фильтр роботов их не отсёк — в User-Agent
+   * той сборки Chromium слова «Headless» нет. То есть наша же съёмка попадала
+   * в живые числа, а отличить её на сервере было нечем.
+   *
+   * `navigator.webdriver` ставит сам браузер, когда им управляет программа
+   * (Playwright, Puppeteer, Selenium). Это булево про ПРОГРАММУ, а не про
+   * человека: ничего личного в нём нет, и отправляем мы его только когда он
+   * истинен — чтобы не раздувать каждое событие ложным полем.
+   */
+  const подУправлением =
+    typeof navigator !== "undefined" && (navigator as Navigator).webdriver === true;
+
+  /*
    * Оповещаем страницу о событии — этим пользуются рекламные счётчики.
    *
    * Найдено 31.08.2026: счётчик Meta/TikTok ловил только клики по ССЫЛКАМ в
@@ -150,6 +166,7 @@ export function track(payload: TrackPayload): void {
   const body = JSON.stringify({
     ...payload,
     ...(meta ? { meta } : {}),
+    ...(подУправлением ? { webdriver: true } : {}),
     sid: getSid(),
     path: window.location.pathname + window.location.search,
   });

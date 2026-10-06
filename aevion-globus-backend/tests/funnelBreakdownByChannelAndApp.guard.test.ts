@@ -38,7 +38,9 @@ describe("разрез воронки", () => {
     // `thankYouOpened`, как и в итоге.
     expect(r.byChannel["youtube"]).toEqual({
       visits: 2,
+      visitsOurs: 0,
       pricing: 1,
+      pricingOurs: 0,
       checkoutStart: 1,
       checkoutStartOurs: 0,
       thankYouOpened: 1,
@@ -52,7 +54,9 @@ describe("разрез воронки", () => {
     });
     expect(r.byChannel["product-hunt"]).toEqual({
       visits: 1,
+      visitsOurs: 0,
       pricing: 1,
+      pricingOurs: 0,
       checkoutStart: 0,
       checkoutStartOurs: 0,
       thankYouOpened: 0,
@@ -207,18 +211,18 @@ describe("разрез воронки", () => {
     expect(r.byChannel["instagram"].pricing, "канал обязан сложить все посты вместе").toBe(3);
     expect(Object.keys(r.byChannel).sort(), "пост превратился в отдельный канал").toEqual(["instagram"]);
     /*
-     * Состав дополнен приёмкой 06.10.2026: у разреза появились счётчики НАШИХ
-     * проб (`?c=probe-<окно>`), отделённые от живых людей. Сторож оставлен
-     * СТРОГИМ (toEqual, а не «похоже»): так тихое появление или исчезновение
-     * поля снова покраснеет. Заодно это утверждение теперь говорит и то, чего
-     * раньше сказать было нечем, — живой заход не попал в наши пробы.
+     * Состав разреза дополнен счётчиками НАШИХ заходов. Разрешено приёмкой
+     * 06.10.2026 в пользу ветви воронки: там поля зовутся visitsOurs/pricingOurs,
+     * и имена в сторожé обязаны совпадать с кодом, а не с моей промежуточной
+     * правкой (у меня они назывались *Probe — та же мысль, другое слово).
+     *
+     * Строгость СОХРАНЕНА обеими сторонами независимо: toEqual, а не «похоже».
+     * Это важнее состава — ослабь до toMatchObject, и тихое ИСЧЕЗНОВЕНИЕ поля
+     * пройдёт молча. Заодно утверждение говорит то, чего сказать было нечем:
+     * живой заход не попал в наши пробы.
      */
-    expect(r.byPost["instagram/kartinka3"]).toEqual({
-      visits: 2, pricing: 1, checkoutStart: 0, paid: 0, visitsProbe: 0, pricingProbe: 0,
-    });
-    expect(r.byPost["instagram/video7"]).toEqual({
-      visits: 1, pricing: 1, checkoutStart: 0, paid: 0, visitsProbe: 0, pricingProbe: 0,
-    });
+    expect(r.byPost["instagram/kartinka3"]).toEqual({ visits: 2, visitsOurs: 0, pricing: 1, pricingOurs: 0, checkoutStart: 0, paid: 0 });
+    expect(r.byPost["instagram/video7"]).toEqual({ visits: 1, visitsOurs: 0, pricing: 1, pricingOurs: 0, checkoutStart: 0, paid: 0 });
     expect(
       r.byPost["instagram/undefined"],
       "заход без подметки попал в выдуманный пост",
@@ -248,12 +252,12 @@ describe("разрез воронки", () => {
     expect(
       r.byEntryPage["instagram|/qskyway"],
       "запрос не отброшен или взята не первая страница",
-    ).toEqual({ сессий: 1, доЦен: 1, началиОплату: 0 });
-    expect(r.byEntryPage["instagram|/pricing"]).toEqual({ сессий: 1, доЦен: 1, началиОплату: 1 });
+    ).toEqual({ сессий: 1, сессийНаших: 0, доЦен: 1, доЦенНаших: 0, началиОплату: 0 });
+    expect(r.byEntryPage["instagram|/pricing"]).toEqual({ сессий: 1, сессийНаших: 0, доЦен: 1, доЦенНаших: 0, началиОплату: 1 });
     expect(
       r.byEntryPage["youtube|/devhub/:id"],
       "идентификатор уехал в отчёт как есть",
-    ).toEqual({ сессий: 1, доЦен: 0, началиОплату: 0 });
+    ).toEqual({ сессий: 1, сессийНаших: 0, доЦен: 0, доЦенНаших: 0, началиОплату: 0 });
   });
 
   it("КОНТРОЛЬ: предел действует ВНУТРИ канала, хвост у каждого свой", () => {

@@ -22,7 +22,7 @@ import { sendWaitlistConfirm, sendWeeklyDigestEmail as sendDigestEmail } from ".
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { csvFromRows } from "../lib/csv";
 import { unsubConfigured, unsubContact, verifyUnsubToken } from "../lib/waitlistUnsubToken";
-import { похожеНаПробу } from "../lib/probeRows";
+import { похожеНаПробу, просятПробы } from "../lib/probeRows";
 
 const capture = makeServiceCapture("constitutionWaitlist");
 
@@ -444,10 +444,28 @@ constitutionWaitlistAdminRouter.get(
         res.setHeader("Content-Disposition", `attachment; filename="constitution-waitlist-${Date.now()}.csv"`);
         return res.send(lines.join("\n"));
       }
+      // 🔴 06.10.2026: наши собственные пробы попадали в счёт листа ожидания
+      // наравне с людьми. Повод — строка `yahiin1978+probe-brevo@gmail.com`,
+      // `source: probe-brevo-0610`, оставшаяся после проверки живости Brevo.
+      // Отписка у поставщика её не трогает: она про рассылку, а не про наш
+      // учёт. Данные НЕ удаляем (правило §19: пробу метят и убирают из счёта,
+      // а не стирают) — просто перестаём считать её человеком.
+      //
+      // Признак берём ОБЩИЙ (`lib/probeRows`), тот же, которым рассылка уже
+      // отсеивает пробные адреса. Свой второй признак разошёлся бы с ним
+      // молча, и разницу было бы видно только по расхождению двух чисел.
+      // Смотрим и на адрес, и на метку источника: проба может быть помечена
+      // любым из двух.
+      const этоПроба = (r: WaitlistRow) => похожеНаПробу({ ref: r.email, title: r.source });
+      const пробы = rows.filter(этоПроба);
+      const живые = просятПробы(req.query) ? rows : rows.filter((r) => !этоПроба(r));
       res.json({
-        total: rows.length,
-        items: rows,
-        ...aggregateBySource(rows),
+        total: живые.length,
+        // Скрытое называем числом, а не умалчиваем: исчезнувшая без следа
+        // строка — это та же ложь, только в другую сторону.
+        ourProbesHidden: просятПробы(req.query) ? 0 : пробы.length,
+        items: живые,
+        ...aggregateBySource(живые),
         // `total` — это столько, сколько отдали, а не сколько есть. При
         // truncated=true или source="memory" по нему нельзя судить о размере
         // списка заявок.
@@ -581,12 +599,18 @@ export async function sendWeeklyDigest(): Promise<{ sent: number; skipped: numbe
     if (!topArtifacts.length) return { sent: 0, skipped: 1 };
 
     // 2. Get waitlist subscribers
-    let subscribers: Array<{ email: string }> = Array.from(memList.values());
+    let subscribers: Array<{ email: string; source?: string }> = Array.from(memList.values());
     if (dbAvailable) {
       try {
         const pool = getPool();
-        const r = await pool.query(`SELECT "email" FROM constitution_waitlist ORDER BY "createdAt" ASC LIMIT 5000`);
-        subscribers = r.rows.map((x: Record<string, unknown>) => ({ email: String(x.email) }));
+        // Метку источника берём ВМЕСТЕ с адресом: без неё признак пробы
+        // слеп к плюс-адресам. Замер 06.10.2026:
+        //   похожеНаПробу({ref: "yahiin1978+probe-brevo@gmail.com"}) → false
+        //   похожеНаПробу({title: "probe-brevo-0610"})               → true
+        // То есть наша же проба прошла бы в рассылку, а исключение выглядело
+        // бы работающим.
+        const r = await pool.query(`SELECT "email","source" FROM constitution_waitlist ORDER BY "createdAt" ASC LIMIT 5000`);
+        subscribers = r.rows.map((x: Record<string, unknown>) => ({ email: String(x.email), source: String(x.source ?? "") }));
       } catch (dbErr) {
         // Раньше при сбое базы дайджест уходил по списку из ПАМЯТИ — в проде
         // это почти пустой список, — и функция рапортовала об успехе. То есть
@@ -620,9 +644,9 @@ export async function sendWeeklyDigest(): Promise<{ sent: number; skipped: numbe
     //
     // Признак общий (`lib/probeRows`): он требует разделителя после слова, поэтому
     // `smoke-c2@…` и `probe-chess@…` отсекаются, а живой `test@company.com` — нет.
-    const пробныеАдреса = subscribers.filter((s) => похожеНаПробу({ ref: s.email }));
+    const пробныеАдреса = subscribers.filter((s) => похожеНаПробу({ ref: s.email, title: s.source }));
     if (пробныеАдреса.length) {
-      subscribers = subscribers.filter((s) => !похожеНаПробу({ ref: s.email }));
+      subscribers = subscribers.filter((s) => !похожеНаПробу({ ref: s.email, title: s.source }));
       console.warn(
         `[waitlist] из рассылки исключены наши пробные адреса (${пробныеАдреса.length}): ` +
           пробныеАдреса.map((s) => s.email).join(", "),

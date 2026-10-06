@@ -8,7 +8,6 @@
 import { useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import {
-  AEC_PAYOUTS,
   AwardSubmission,
   AwardTrack,
   castVote,
@@ -107,7 +106,6 @@ export function AwardsTrackPanel({ track }: { track: AwardTrack }) {
     setToast({ kind: "success", text: t("awardsTrack.toast.resetDone", { label: trackLabel.toLowerCase() }) });
   }
 
-  const userCount = items.filter((x) => !x.seeded).length;
 
   return (
     <div
@@ -219,39 +217,19 @@ export function AwardsTrackPanel({ track }: { track: AwardTrack }) {
           ) : null}
         </section>
 
-        {/* ─── Section: AEC payout preview ───────────────────── */}
-        <section
-          style={{
-            marginTop: 18,
-            padding: "14px 18px",
-            borderRadius: 14,
-            border: "1px solid rgba(94,234,212,0.3)",
-            background: "linear-gradient(120deg, rgba(13,148,136,0.16), rgba(15,23,42,0.55))",
-            display: "flex",
-            flexWrap: "wrap",
-            alignItems: "center",
-            gap: 14,
-          }}
-          aria-label={t("awardsTrack.payout.aria")}
-        >
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 800,
-              letterSpacing: "0.2em",
-              color: "#5eead4",
-              textTransform: "uppercase",
-            }}
-          >
-            {t("awardsTrack.payout.kicker")}
-          </div>
-          <div style={{ fontSize: 14, color: "#e2e8f0", lineHeight: 1.5, flex: "1 1 320px" }}>
-            {t("awardsTrack.payout.text.before")}{" "}
-            <strong style={{ color: "#fde047" }}>{t("awardsTrack.payout.first", { n: AEC_PAYOUTS.first })}</strong>,{" "}
-            <strong style={{ color: "#cbd5e1" }}>{t("awardsTrack.payout.second", { n: AEC_PAYOUTS.second })}</strong>,{" "}
-            <strong style={{ color: "#d97706" }}>{t("awardsTrack.payout.third", { n: AEC_PAYOUTS.third })}</strong>{t("awardsTrack.payout.text.after")}
-          </div>
-        </section>
+        {/* 06.10.2026. Здесь рисовался блок «AEC payout»: «1st = 500 AEC,
+            2nd = 250, 3rd = 100, settled to your AEVION Bank wallet».
+            Замер по коду: AEC_PAYOUTS — константы ФРОНТА в модуле локального
+            хранилища (_lib/submissions.ts), и ни одна строка бэкенда не
+            начисляет AEC победителю премии. Механизм начисления существует
+            (internalMintForDevice в routes/aev.ts), но зовут его из ровно
+            ОДНОГО места — routes/bureau.ts:1160, награда за сертификат бюро;
+            слова «award» в обоих файлах ноль. Победителя к тому же нечем
+            определить: distinctVotersAllTime = 0 за всё время.
+            Решение оркестратора от 06.10: блок снять со всех страниц премий,
+            пока начисление не связано с премиями. Константу НЕ удаляем —
+            просто не рисуем, чтобы вернуть блок одним движением, когда
+            механизм появится. */}
 
         {/* ─── Section: Leaderboard ──────────────────────────── */}
         <section style={{ marginTop: 28 }} aria-labelledby={`board-${track}-heading`}>
@@ -542,39 +520,9 @@ const ПУТЬ_ПОДАЧИ: Record<"music" | "film", string> = {
   film: "/planet?type=movie&preset=film&productKey=aevion_award_film_v1&title=AEVION%20Film%20Awards%20Submission",
 };
 
-function Field({
-  label,
-  full,
-  children,
-}: {
-  label: string;
-  full?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <label
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 6,
-        gridColumn: full ? "1 / -1" : undefined,
-      }}
-    >
-      <span
-        style={{
-          fontSize: 11,
-          fontWeight: 800,
-          letterSpacing: "0.1em",
-          textTransform: "uppercase",
-          color: "#94a3b8",
-        }}
-      >
-        {label}
-      </span>
-      {children}
-    </label>
-  );
-}
+// Компонент Field (подпись + поле ввода) удалён 06.10.2026 вместе с демо-формой
+// подачи: он больше ничем не вызывается. Оставлять его значило бы держать след
+// удалённого — код, который выглядит живым и не делает ничего.
 
 function inputStyle(theme: Theme): React.CSSProperties {
   return {

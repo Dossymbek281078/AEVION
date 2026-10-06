@@ -6,6 +6,7 @@ import { keepChannel, withChannel } from "@/lib/products";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { productById } from "@/lib/products";
+import { EN_TEXTS } from "@/lib/enTexts";
 import { track } from "@/lib/track";
 import { PageTracking } from "@/components/PageTracking";
 import {
@@ -276,7 +277,20 @@ const APPS: App[] = APP_DEFS.map((a) => {
      * У карточек БЕЗ productId своя строка остаётся: каталога у них нет, и это не
      * копия, а единственный источник.
      */
-    tagline: product?.desc ?? a.tagline,
+    /*
+     * 🔴 06.10.2026, ПОПРАВКА В ТОТ ЖЕ ДЕНЬ: берём английский текст, а не русский.
+     *
+     * Утром я поставил здесь подпись каталога (product.desc) — она русская, а корень
+     * сайта объявлен lang="en". На проде шесть связанных карточек заговорили по-русски
+     * на английской странице: приёмка замерила d295ebab4e5e и увидела 16 строк с
+     * кириллицей против 45 латиницей. Для англоязычного посетителя стало ХУЖЕ, чем
+     * было, хотя подпись по сути правильнее: прежняя короткая строка была английской.
+     *
+     * Порядок источников: английский текст каталога → русский текст каталога → своя
+     * строка карточки. Второй копии не появляется: EN_TEXTS это тот же каталог, только
+     * по-английски, и его же читает магазин.
+     */
+    tagline: (a.productId ? EN_TEXTS[a.productId]?.desc : undefined) ?? product?.desc ?? a.tagline,
     price: product?.priceUsd ?? 0,
     checkoutUrl: product?.href,
     term: product?.billing === "term",

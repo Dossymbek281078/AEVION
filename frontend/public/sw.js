@@ -64,7 +64,13 @@ self.addEventListener("activate", (event) => {
 // никогда, а сильные уровни соперника молча играли запасным выбором ходов.
 // На проде тоже.
 function isEngineAsset(url) {
-  return /^\/stockfish[\w.-]*\.(js|wasm)$/i.test(url.pathname);
+  // 🔴 Было только /stockfish* — и аналитический движок проходил МИМО этого
+  // правила: sf171-79.js/.wasm (~75 МБ) и его воркер deep-engine-worker.js
+  // попадали в обычный кэш статики как любые .js. То есть ровно тот тихий
+  // дефект, от которого правило и написано выше, оставался открытым для
+  // «Глубокого анализа». Найдено 05.10.2026, когда список путей в проверке
+  // свели к файлам, которые сайт раздаёт на самом деле.
+  return /^\/(stockfish[\w.-]*|sf\d[\w.-]*|deep-engine-worker)\.(js|wasm)$/i.test(url.pathname);
 }
 
 function isStaticAsset(url) {

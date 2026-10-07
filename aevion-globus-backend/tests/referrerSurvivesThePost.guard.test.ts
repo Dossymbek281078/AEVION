@@ -80,6 +80,54 @@ describe("источник перехода доживает от клиента
     expect(JSON.parse(readFileSync(файл, "utf8").trim()).refHost).toBeUndefined();
   });
 
+  it("🔴 флаг пробы телом делает заход нашим без метки в адресе", async () => {
+    /*
+     * Повод 07.10.2026 (нашло окно шахмат): прямые POST-пробы окон уходят с
+     * адресом БЕЗ метки, и отличить их от человека нечем — так единственное
+     * «живое» решение задачи дня за 14 дней оказалось тестом окна. Правило
+     * «ставьте ?c=probe-<окно>» требует помнить; флаг не требует.
+     */
+    const app = await приложение();
+    await request(app)
+      .post("/api/pricing/events")
+      .send({ type: "page_view", sid: "проба-телом", path: "/cyberchess", probe: true })
+      .expect(204);
+    const записано = JSON.parse(readFileSync(файл, "utf8").trim());
+    expect(записано.probe, "флаг выпал при записи").toBe(true);
+
+    const r = await request(app).get("/api/pricing/events/funnel?days=1");
+    expect(r.body.total.visits).toBe(1);
+    expect(r.body.byChannel.direct.visitsOurs, "проба с флагом сочтена живым человеком").toBe(1);
+    expect(
+      r.body.byChannel.direct.visits - r.body.byChannel.direct.visitsOurs,
+      "проба ушла в живое число",
+    ).toBe(0);
+  });
+
+  it("🔴 заголовок X-AEVION-Probe работает так же — для curl и обёрток", async () => {
+    const app = await приложение();
+    await request(app)
+      .post("/api/pricing/events")
+      .set("X-AEVION-Probe", "okno-61")
+      .send({ type: "page_view", sid: "проба-заголовком", path: "/cyberchess" })
+      .expect(204);
+    const r = await request(app).get("/api/pricing/events/funnel?days=1");
+    expect(r.body.byChannel.direct.visitsOurs).toBe(1);
+  });
+
+  it("КОНТРОЛЬ: без флага и без метки заход остаётся ЖИВЫМ", async () => {
+    // Обратная сторона: признак не должен красить всех подряд, иначе живые
+    // посетители исчезнут из чисел — это хуже, чем наша проба среди них.
+    const app = await приложение();
+    await request(app)
+      .post("/api/pricing/events")
+      .send({ type: "page_view", sid: "человек", path: "/cyberchess" })
+      .expect(204);
+    const r = await request(app).get("/api/pricing/events/funnel?days=1");
+    expect(r.body.byChannel.direct.visitsOurs).toBe(0);
+    expect(r.body.byChannel.direct.visits - r.body.byChannel.direct.visitsOurs).toBe(1);
+  });
+
   it("🔴 разрез по источникам приходит в ТЕЛЕ ответа воронки", async () => {
     const app = await приложение();
     const события = [

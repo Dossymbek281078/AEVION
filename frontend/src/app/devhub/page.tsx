@@ -11,7 +11,7 @@ import { useDevhubT, type DevhubKey } from "./i18n";
 import { COMPARISON_ROWS, capabilityIsKnownOff, comparisonTotalUsd } from "./capabilityRows";
 import { howtoTranscript } from "./howtoTranscript";
 import { getDevhubGuestId } from "@/lib/devhubGuest";
-import { fromPricePerMonth } from "@/lib/termPricing";
+import { fromPricePerMonth, termPricePerMonth, termTotal, TERM_MONTHS, СРОК_ПО_УМОЛЧАНИЮ } from "@/lib/termPricing";
 import { useI18n } from "@/lib/i18n";
 import { catalog } from "@/lib/aevionCatalog";
 import { fixDoubledScheme } from "@/lib/urls";
@@ -113,6 +113,31 @@ function formatDate(iso: string) {
 // Price and checkout URL come from the product catalogue, which is verified
 // against the live payment dashboards — the page must not carry its own copy.
 const STUDIO_PRO = productById("devhub");
+/* Цена и срок — ИЗ ДАННЫХ, а не из подписи. 07.10.2026: кнопка говорила
+   «Оформить Pro — $200/мес», а по данным цен «pro» это 6 месяцев с множителем
+   0.75, то есть $150/мес и $900 всего; $200/мес — это Lite (1 мес), и именно
+   Lite открывается по ссылке (срок по умолчанию один на обе поверхности).
+   Покупатель читал одну ступень, а открывал другую. Сторож
+   devhub/__tests__/moneyPanelNamesWhatOpens.guard.test.ts сверяет подпись с
+   таблицей цен. */
+/* Цена и срок — ИЗ ДАННЫХ, а не из подписи. 07.10.2026: кнопка говорила
+   «Оформить Pro — $200/мес», а по данным «pro» это 6 месяцев с множителем 0.75,
+   то есть $150/мес и $900 всего; $200/мес — это Lite (1 мес), и именно Lite
+   открывается по ссылке.
+
+   🔴 ФУНКЦИИ, А НЕ КОНСТАНТЫ — поправка 07.10 по находке сборщика волны.
+   Первая редакция считала цену на уровне модуля от STUDIO_PRO.priceUsd, а
+   STUDIO_PRO — это productById(), которая МОЖЕТ вернуть undefined (запись
+   пропала из каталога). Проверка типов дала 4 ошибки TS18048, и это не
+   придирка: ветка рядом уже умеет жить без записи — она показывает
+   «pro.unavailable» вместо кнопки. Ноль подставлять нельзя (нарисуется
+   покупателю как «$0»), поэтому числа считаются ТАМ, где запись уже проверена:
+   функция принимает товар, и внутри ветви типы сходятся сами. */
+const pricePerMonth = (товар: { priceUsd: number }) =>
+  termPricePerMonth(товар.priceUsd, СРОК_ПО_УМОЛЧАНИЮ);
+const termTotalFor = (товар: { priceUsd: number }) =>
+  termTotal(товар.priceUsd, СРОК_ПО_УМОЛЧАНИЮ);
+const TERM_MONTHS_SHOWN = TERM_MONTHS[СРОК_ПО_УМОЛЧАНИЮ];
 
 /**
  * Почему возможность отключена — словами человека.
@@ -912,12 +937,23 @@ export default function DevHubPage() {
                   whiteSpace: "nowrap",
                 }}
               >
-                {t("pro.upgrade")} — {`$${STUDIO_PRO.priceUsd}`}{t("pro.perMonth")}
+                {t("pro.upgrade")} — {`$${pricePerMonth(STUDIO_PRO)}`}{t("pro.perMonth")}
               </a>
               ) : (
                 <span style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, fontWeight: 600 }}>
                   {t("pro.unavailable")}
                 </span>
+              )}
+              {/* Срок и итог — ОТДЕЛЬНЫМ узлом за тернарным оператором.
+                  07.10.2026: сперва я поставил их рядом с кнопкой ВНУТРИ ветви, и
+                  это дало два соседних элемента без обёртки — проверка типов
+                  сказала TS2657 «JSX expressions must have one parent element»,
+                  а прогон тестов этого не увидел: сторожа читают файл текстом,
+                  а не собирают его. Нашёл сборщик волны прогоном tsc. */}
+              {STUDIO_PRO && (
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.85)", width: "100%" }}>
+                  {t("pro.termNote").replace("{m}", String(TERM_MONTHS_SHOWN)).replace("{t}", `$${termTotalFor(STUDIO_PRO)}`)}
+                </div>
               )}
               {/* Правда, которая нужна человеку ДО оплаты, а не после.
                   Модуль работает без аккаунта, а оплата приходит нам с одним

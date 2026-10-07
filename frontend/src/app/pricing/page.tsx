@@ -31,8 +31,7 @@ import {
   termPricePerMonth,
   termSavingPercent,
   termTotal,
-  type TermTier,
-} from "@/lib/termPricing";
+  type TermTier, СРОК_ПО_УМОЛЧАНИЮ } from "@/lib/termPricing";
 import { useI18n } from "@/lib/i18n";
 import { useABVariant, getAllVariants } from "@/lib/abVariant";
 import AskAi from "@/components/AskAi";
@@ -245,7 +244,7 @@ export default function PricingPage() {
 
   // Срок для блока «Отдельные приложения». По умолчанию Lite (1 месяц): так
   // цена на карточке совпадает с базой приложения, от которой считается лестница.
-  const [appTerm, setAppTerm] = useState<TermTier>("lite");
+  const [appTerm, setAppTerm] = useState<TermTier>(СРОК_ПО_УМОЛЧАНИЮ);
   // Модуль из deep-link (?module=) — для prominent hero-баннера «Купить <модуль>».
   const [heroModule, setHeroModule] = useState<string>("");
   // Слаг приложения, до карточки которого довезти не удалось. Пустая строка —

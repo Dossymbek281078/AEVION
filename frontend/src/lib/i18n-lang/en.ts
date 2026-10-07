@@ -5098,7 +5098,6 @@ const en: Record<string, string> = {
   "pricing.home.tier.saving": "Save {percent}%",
   "pricing.home.tier.termNote": "A plan is a term of access to the whole AEVION planet: every module in every paid plan. You pay for the full term up front; it renews for the same term.",
   "pricing.home.apps.title": "Standalone apps",
-  "pricing.home.apps.whatIsPaid.cyberchess": "Paid part: “Deep analysis” powered by the Stockfish 17.1 engine. Playing, solving puzzles and asking the AI coach are free, no account needed.",
   "pricing.home.apps.subtitle": "{count} apps are also sold without a plan — on the same term ladder. All other modules come only with a plan.",
   "pricing.home.apps.termAria": "Term for standalone apps",
   "pricing.home.apps.allAppsDearer": "All apps bought separately — {apps} for this term — cost more than the whole planet: {planet}.",

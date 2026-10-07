@@ -757,12 +757,11 @@ export function channelFrom(raw: string | string[] | undefined): string | null {
    * null, то есть «канал неизвестен» — ровно то умолчание, которое здесь стояло
    * до подметок. Наши собственные ссылки строит код, у него хвост всегда годный.
    */
-  const дефис = ключ.indexOf("-");
-  if (дефис > 0) {
-    const префикс = ключ.slice(0, дефис);
-    if (Object.prototype.hasOwnProperty.call(CHANNELS, префикс) && postFrom(ключ) !== null) {
-      return CHANNELS[префикс] ?? null;
-    }
+  // Самое длинное совпадение ключа, иначе `ads-devhub-post7` теряет канал, а
+  // `x-devhub-post7` приписывается каналу «x» (замер 07.10.2026, см. ключКанала).
+  const подметка = ключКанала(ключ);
+  if (подметка && подметка.пост !== null && postFrom(ключ) !== null) {
+    return CHANNELS[подметка.ключ] ?? null;
   }
 
   /*
@@ -808,6 +807,39 @@ export function channelFrom(raw: string | string[] | undefined): string | null {
 }
 
 /**
+ * Разбирает метку на КЛЮЧ КАНАЛА и пост, беря самое ДЛИННОЕ совпадение ключа.
+ *
+ * 🔴 Замер 07.10.2026, ради которого правило появилось. Прежний разбор резал по
+ * ПЕРВОМУ дефису, а у четырёх каналов дефис есть в самом ключе
+ * (x-devhub, x-multichat, ads-devhub, ads-multichat). Поэтому:
+ *
+ *   x-devhub-post7   -> канал «x» (ТВИТТЕР), пост «devhub-post7»  ← подмена
+ *   ads-devhub-post7 -> канал null, пост null                      ← потеря
+ *
+ * Первое хуже второго: переход из объявления о DevHub записывался каналу X,
+ * то есть один канал выглядел бы живее, чем он есть, а другой мертвее. Это тот
+ * же класс, из-за которого подметки постов вообще ввели: попытка разметить
+ * ссылку точнее ОТБИРАЛА канал.
+ *
+ * Самое длинное совпадение однозначно: ключи закрытым списком, и `x-devhub`
+ * длиннее `x`, поэтому выигрывает он; `x-anons` ключом не является, и там
+ * выигрывает `x` с постом «anons».
+ */
+function ключКанала(метка: string): { ключ: string; пост: string | null } | null {
+  // Точное совпадение — метка без поста.
+  if (Object.prototype.hasOwnProperty.call(CHANNELS, метка)) return { ключ: метка, пост: null };
+  // Дефисы справа налево: первый найденный ключ и есть самый длинный.
+  for (let i = метка.lastIndexOf("-"); i > 0; i = метка.lastIndexOf("-", i - 1)) {
+    const префикс = метка.slice(0, i);
+    // hasOwnProperty, а не прямая индексация: «constructor» вернул бы функцию.
+    if (Object.prototype.hasOwnProperty.call(CHANNELS, префикс)) {
+      return { ключ: префикс, пост: метка.slice(i + 1) };
+    }
+  }
+  return null;
+}
+
+/**
  * Пост из метки: `ig-kartinka3` → «kartinka3». Без подметки — null.
  *
  * Ограничения намеренные: до 40 знаков, только строчные буквы, цифры, дефис и
@@ -819,12 +851,9 @@ export function postFrom(raw: string | string[] | undefined): string | null {
   const v = Array.isArray(raw) ? raw[0] : raw;
   if (!v) return null;
   const ключ = v.trim().toLowerCase();
-  const дефис = ключ.indexOf("-");
-  if (дефис <= 0) return null;
-  const префикс = ключ.slice(0, дефис);
-  if (!Object.prototype.hasOwnProperty.call(CHANNELS, префикс)) return null;
-  const пост = ключ.slice(дефис + 1);
-  return /^[a-z0-9_-]{1,40}$/.test(пост) ? пост : null;
+  const разбор = ключКанала(ключ);
+  if (!разбор || разбор.пост === null) return null;
+  return /^[a-z0-9_-]{1,40}$/.test(разбор.пост) ? разбор.пост : null;
 }
 
 /** Тип трафика для `utm_medium`. Все метки из CHANNELS — соцсети, кроме

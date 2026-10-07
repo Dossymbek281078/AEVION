@@ -2217,6 +2217,13 @@ export function __setMonthUsageForTest(userId: string, capability: CapabilityKey
   memUsage.set(`${userId}:${creditMonth()}:${capability}`, used);
 }
 
+/** Тестовый доступ к порогам потолка проектов Pages. */
+export const __потолокПроектовPagesForTest = {
+  предел: () => ПРЕДЕЛ_ПРОЕКТОВ_PAGES,
+  порогПредупреждения: () => ПОРОГ_ПРЕДУПРЕЖДЕНИЯ,
+  порогОтказаГостям: () => ПОРОГ_ОТКАЗА_ГОСТЯМ,
+};
+
 const MAX_SYNTAX_FIX_ATTEMPTS = 1;
 
 /** Cap how much existing-project context rides in the prompt — enough for the
@@ -8264,6 +8271,75 @@ devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
 //   5. Return live URL + domain
 // ═════════════════════════════════════════════════════════════════════════════
 
+/**
+ * Потолок ЧИСЛА проектов Cloudflare Pages на аккаунт.
+ *
+ * 🔴 ЗАЧЕМ. Каждый опубликованный проект DevHub — ОТДЕЛЬНЫЙ проект Pages
+ * (`aevion-<слаг>-<id>`, wrangler pages deploy) в ОДИН наш аккаунт. Проверено по
+ * коду 06.10.2026 при разборе нормы на адрес: потолок аккаунта наступает раньше
+ * любой нормы на гостя или на адрес, и когда он наступит, публикация встанет у
+ * ВСЕХ — включая платных.
+ *
+ * ⚠️ ЧИСЛО 100 — ДОКУМЕНТИРОВАННОЕ, А НЕ ЗАМЕРЕННОЕ. Я не могла спросить аккаунт:
+ * CLOUDFLARE_API_TOKEN в рабочей копии не задан. Поэтому предел берётся из
+ * переменной окружения, а 100 стоит умолчанием как осторожная оценка. Подтвердят
+ * в панели другое — меняется переменная, а не код.
+ *
+ * Пороги: при 80 занятых — предупреждение в журнал (чтобы узнать ДО аварии), при
+ * 95 — честный отказ ГОСТЯМ, а пять последних слотов остаются платным. Логика
+ * простая: бесплатная проба не должна съедать место у того, кто заплатил.
+ */
+const ПРЕДЕЛ_ПРОЕКТОВ_PAGES = Math.max(1, Number(process.env.CF_PAGES_PROJECT_LIMIT ?? 100));
+const ПОРОГ_ПРЕДУПРЕЖДЕНИЯ = Math.floor(ПРЕДЕЛ_ПРОЕКТОВ_PAGES * 0.8);
+const ПОРОГ_ОТКАЗА_ГОСТЯМ = Math.floor(ПРЕДЕЛ_ПРОЕКТОВ_PAGES * 0.95);
+
+/**
+ * Сколько проектов Pages мы уже заняли.
+ *
+ * Считаем СВОИ опубликованные проекты: у них заполнен deployUrl. Удаление
+ * проекта снимает и проект Pages (починка 2f7766b32), поэтому живые строки с
+ * адресом — это и есть занятые слоты.
+ *
+ * ЧЕСТНАЯ ГРАНИЦА: это ОЦЕНКА СНИЗУ. Если снятие проекта Pages когда-то не
+ * удалось, останется сирота, которой в нашей базе уже нет, — её мы не видим.
+ * Спросить аккаунт напрямую нечем (нет токена в этой копии), и выдавать оценку
+ * за точное число нельзя.
+ *
+ * Три исхода, а не два: число, ноль и НЕ ЗНАЮ (null) — последнее при отказе базы.
+ */
+/**
+ * Подмена подсчёта для сторожа.
+ *
+ * Иначе проверку границы пришлось бы покупать ста девяноста запросами (создать
+ * 95 проектов и каждому выставить адрес). Сторож проверяет РЕАКЦИЮ ручки на
+ * число, а сам подсчёт — отдельной проверкой на запасном пути.
+ */
+let подменаПодсчёта: (() => Promise<number | null>) | null = null;
+export function __setПодсчётПроектовForTest(f: (() => Promise<number | null>) | null): void {
+  подменаПодсчёта = f;
+}
+
+async function занятоПроектовPages(): Promise<number | null> {
+  if (подменаПодсчёта) return подменаПодсчёта();
+  if (!isDevHubDbReady()) {
+    let n = 0;
+    for (const p of memProjects.values()) if (p.deployUrl) n++;
+    return n;
+  }
+  try {
+    const r = await pool.query(
+      `SELECT COUNT(*)::int AS n
+         FROM "DevHubProject"
+        WHERE "deployUrl" IS NOT NULL AND "deployUrl" <> ''`,
+    );
+    return Number((r.rows[0] as { n: number } | undefined)?.n ?? 0);
+  } catch {
+    return null;
+  }
+}
+
+let предупреждалиОПотолке = false;
+
 devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
@@ -8283,6 +8359,64 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       needs: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"],
       setupUrl: "https://dash.cloudflare.com/profile/api-tokens",
     });
+  }
+
+  /*
+   * ПОТОЛОК АККАУНТА — ТОЛЬКО ДЛЯ НОВОГО ПРОЕКТА PAGES.
+   *
+   * Повторная выкатка уже опубликованного проекта нового слота не занимает, и
+   * запрещать её было бы чистым вредом: человек не может обновить свой же сайт.
+   * Поэтому проверка висит на признаке «проекта Pages ещё нет» (deployUrl пуст),
+   * а не на самой выкатке.
+   */
+  /*
+   * ПРИЗНАК «ПРОЕКТ PAGES ЕЩЁ НЕ СОЗДАВАЛСЯ» — не только пустой deployUrl.
+   *
+   * Поймал прогоном: deployUrl ставится лишь ПОСЛЕ проверки отдачи
+   * (markDeploymentLive), то есть вторая выкатка вскоре после первой выглядела бы
+   * «новым проектом» и у гостя на пороге отбивалась бы — человек не смог бы
+   * обновить свой же сайт. Поэтому спрашиваем ещё и о прошлых выкатках: если они
+   * были, проект Pages уже существует и нового слота не занимает.
+   */
+  const прошлыеВыкатки = await dbListDeployments(project.id, 1).catch(() => [] as DevHubDeployment[]);
+  const проектPagesУжеЕсть = Boolean(project.deployUrl) || прошлыеВыкатки.length > 0;
+  if (!проектPagesУжеЕсть) {
+    const занято = await занятоПроектовPages();
+    if (занято === null) {
+      /*
+       * База не ответила. Пропускаем — и НЕ молча: заблокировать публикацию из-за
+       * сбоя чтения хуже, чем занять слот (тот же выбор, что в checkCredit, и по
+       * той же причине). Но след обязателен, иначе потолок однажды наступит без
+       * единой записи о том, что мы его не считали.
+       */
+      console.warn("[devhub] потолок проектов Pages не посчитан (база не ответила) — выкатка пропущена без проверки");
+    } else {
+      if (занято >= ПОРОГ_ПРЕДУПРЕЖДЕНИЯ && !предупреждалиОПотолке) {
+        предупреждалиОПотолке = true;
+        console.warn(
+          `[devhub] проектов Cloudflare Pages занято ${занято} из ${ПРЕДЕЛ_ПРОЕКТОВ_PAGES} ` +
+            `(порог предупреждения ${ПОРОГ_ПРЕДУПРЕЖДЕНИЯ}, отказ гостям с ${ПОРОГ_ОТКАЗА_ГОСТЯМ}). ` +
+            "Это оценка СНИЗУ по нашей базе: осиротевшие проекты в ней не видны.",
+        );
+        captureException(new Error("devhub: Cloudflare Pages project ceiling approaching"), {
+          route: "devhub/deploy/pages:ceiling", занято, предел: ПРЕДЕЛ_ПРОЕКТОВ_PAGES,
+        });
+      }
+      if (занято >= ПОРОГ_ОТКАЗА_ГОСТЯМ && isGuestRequester(userId)) {
+        // Честный отказ, а не 500 и не тишина: место кончилось у НАС, а не у человека.
+        return res.status(503).json({
+          error: "publishing_temporarily_unavailable",
+          message:
+            "Publishing is temporarily unavailable: our hosting account has run out of free site slots. " +
+            "Your files are saved — sign in or write to us and we will publish this project.",
+          detail: `occupied ${занято} of ${ПРЕДЕЛ_ПРОЕКТОВ_PAGES} project slots`,
+          // Адрес берём так же, как сосед по этому файлу (строка с frontendUrl):
+          // FRONTEND_URL в devhub.ts не объявлена, и заводить вторую константу
+          // для одного и того же значения — тот самый второй источник правды.
+          contactUrl: `${(process.env.FRONTEND_URL || "https://aevion.app").replace(/\/+$/, "")}/devhub/link`,
+        });
+      }
+    }
   }
 
   const pagesDeployCredit = await checkCredit(userId, "deploy");

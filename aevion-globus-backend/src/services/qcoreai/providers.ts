@@ -723,7 +723,23 @@ async function callGemini(messages: ChatMessage[], model: string, temperature: n
   }));
   const body: any = {
     contents,
-    generationConfig: { temperature, maxOutputTokens: maxTokens ?? 4096 },
+    generationConfig: {
+      temperature,
+      maxOutputTokens: maxTokens ?? 4096,
+      // 🔴 07.10.2026. `gemini-2.5-flash` — модель с внутренним «размышлением»,
+      // и токены на него берутся ИЗ ТОГО ЖЕ `maxOutputTokens`. Когда звонящий
+      // просит короткий ответ (512 — столько исторически просил qgood у
+      // Anthropic, где скрытого размышления нет), размышление съедает почти
+      // весь бюджет, и человеку достаётся обрывок на 60–95 знаков, часто
+      // посреди слова и не по теме вопроса. Именно это увидела приёмка на
+      // проде 07.10: на «сколько будет два плюс два» пришёл кусок про лень.
+      //
+      // Поэтому при МАЛЕНЬКОМ бюджете размышление выключается: бюджет
+      // звонящего — на ОТВЕТ, а не на невидимые рассуждения. Большие бюджеты
+      // (4096 по умолчанию и выше) не трогаем — там размышление уместно и
+      // помещается.
+      ...(maxTokens != null && maxTokens < 2048 ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+    },
   };
   if (systemMsg) body.systemInstruction = { parts: [{ text: systemMsg.content }] };
   const r = await fetch(

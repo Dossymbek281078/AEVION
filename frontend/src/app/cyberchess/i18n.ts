@@ -35,7 +35,13 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     // они оставались русскими. Дата запуска здесь НЕ пишется — её подставляет
     // page.tsx из CHESS_LAUNCH_UTC и убирает, когда день прошёл.
     "wl.launch.title": "Полный запуск CyberChess",
-    "buy.card.title": "Оплата картой · открывает «Глубокий анализ» (Stockfish NNUE)",
+    // 07.10.2026: обещание «открывает Глубокий анализ» СНЯТО. Замер показал, что
+    // эта платная часть не работает ни у кого, включая оплативших: движок берёт
+    // нейросети по адресу /nnue, а их на проде нет — 404, каталога в сборке нет,
+    // переменная NEXT_PUBLIC_NNUE_BASE не задана (в бандле осталось само
+    // выражение). Продавать то, чего не получит и заплативший, нельзя.
+    // Нового обещания тут НЕТ намеренно: назвать платную часть сейчас нечем.
+    "buy.card.title": "Оплата картой · подписка CyberChess",
     // Категории контроля времени (первый экран выбора игры). Были хардкодом в
     // page.tsx — теперь через словарь, чтобы следовать выбранному языку.
     "tc.bullet": "Пуля", "tc.blitz": "Блиц", "tc.rapid": "Рапид", "tc.custom": "Свой",
@@ -328,7 +334,7 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
   },
   en: {
     "wl.launch.title": "CyberChess full launch",
-    "buy.card.title": "Card payment · unlocks Deep analysis (Stockfish NNUE)",
+    "buy.card.title": "Card payment · CyberChess subscription",
     "tc.bullet": "Bullet", "tc.blitz": "Blitz", "tc.rapid": "Rapid", "tc.custom": "Custom",
     "start.title": "Where to start",
     "start.game.title": "Play your first game",
@@ -588,7 +594,7 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
   },
   kk: {
     "wl.launch.title": "CyberChess толық іске қосылуы",
-    "buy.card.title": "Картамен төлеу · «Терең талдауды» ашады (Stockfish NNUE)",
+    "buy.card.title": "Картамен төлеу · CyberChess жазылымы",
     // 🔴 ЭТИХ ЧЕТЫРЁХ КЛЮЧЕЙ ЗДЕСЬ НЕ БЫЛО до 05.10.2026, и пропуск не падал,
     // а ТИХО откатывался на русский: человек выбирал «Қазақша» и видел
     // «Пуля · Блиц · Рапид · Свой». Замер того дня: при выбранном KZ из 57

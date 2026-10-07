@@ -5101,7 +5101,7 @@ const en: Record<string, string> = {
   "pricing.home.apps.whatIsPaid.cyberchess": "Paid part: “Deep analysis” powered by the Stockfish 17.1 engine. Playing, solving puzzles and asking the AI coach are free, no account needed.",
   "pricing.home.apps.subtitle": "{count} apps are also sold without a plan — on the same term ladder. All other modules come only with a plan.",
   "pricing.home.apps.termAria": "Term for standalone apps",
-  "pricing.home.apps.allAppsDearer": "All apps bought separately — {apps} for this term — cost more than the whole planet: {planet}.",
+  "pricing.home.apps.allAppsDearer": "All nine apps bought separately — {apps} for this term — cost more than the whole planet: {planet}. Four of them are enabled on request; their prices are included in this sum.",
   "pricing.home.calc.total": "TOTAL",
   "pricing.home.calc.totalTerm": "TOTAL for {months} {unit}",
   "pricing.home.calc.discount": "Discounts",

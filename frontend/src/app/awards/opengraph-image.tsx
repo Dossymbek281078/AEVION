@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
-export const alt = "AEVION Awards — Music & Film recognition with AEC payouts";
+export const alt = "AEVION Awards — Music & Film recognition on the Planet network";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -9,7 +9,7 @@ const PIPELINE = [
   { step: "01", label: "QRight", color: "#7dd3fc" },
   { step: "02", label: "Submit", color: "#a78bfa" },
   { step: "03", label: "Planet validate", color: "#5eead4" },
-  { step: "04", label: "AEC → Bank", color: "#fbbf24" },
+  { step: "04", label: "Certificate", color: "#fbbf24" },
 ];
 
 export default function AwardsOg() {
@@ -48,7 +48,7 @@ export default function AwardsOg() {
             <span style={{ color: "#a78bfa" }}>tied to revenue.</span>
           </div>
           <div style={{ fontSize: 22, color: "#cbd5e1", maxWidth: 980, lineHeight: 1.45, display: "flex" }}>
-            QRight registers authorship → Planet validators certify → top-3 receive AEC prizes
+            QRight registers authorship → Planet validators certify the work
             settled directly into AEVION Bank wallets. Music wave 1, film wave 2.
           </div>
           <div style={{ display: "flex", gap: 12, marginTop: 8 }}>

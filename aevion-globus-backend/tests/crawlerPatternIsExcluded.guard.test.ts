@@ -276,6 +276,43 @@ describe("обходчик ссылок отсеян, люди целы", () => 
     );
   });
 
+  it("🔴 начало оплаты без единого признака жизни названо отдельным числом", async () => {
+    /*
+     * Повод 07.10.2026, нашла приёмка после выкатки: отсев убрал шесть
+     * поддельных начал оплаты из восьми, а два выжили — разные метки роликов,
+     * одна страница входа, ноль дошедших до цен, ноль внимания. По форме тот же
+     * обходчик, только партия мелкая и порога шаблона не добирает.
+     *
+     * Отличить его от ЖИВОГО человека, нажавшего «купить» прямо на странице
+     * модуля, по публичным данным нельзя: нужна строка браузера, а её в ответе
+     * нет и быть не должно. Поэтому мы не угадываем и не отсеиваем молча, а
+     * НАЗЫВАЕМ число: сколько начал оплаты не имеют ни одного признака живого
+     * человека. Снижать порог шаблона ради этих двух нельзя — он выбран с
+     * запасом вчетверо, чтобы не прятать людей.
+     */
+    журнал([
+      // Подозрительное: один адрес, без цен, без внимания.
+      { type: "page_view", ts: вМинуту(9), sid: "подозр", path: "/qmelanin?c=yt-rolik1", meta: { channel: "youtube" } },
+      { type: "checkout_start", ts: вМинуту(9), sid: "подозр", path: "/qmelanin", meta: { channel: "youtube", app: "plan" } },
+      // Живое: человек задержался (engaged) и нажал оттуда же.
+      { type: "page_view", ts: вМинуту(8), sid: "живой", path: "/qmelanin?c=yt-rolik2", meta: { channel: "youtube" } },
+      { type: "engaged", ts: вМинуту(8), sid: "живой", path: "/qmelanin", meta: { channel: "youtube" } },
+      { type: "checkout_start", ts: вМинуту(7), sid: "живой", path: "/qmelanin", meta: { channel: "youtube", app: "plan" } },
+      // Живое вторым способом: смотрел цены, потом нажал.
+      { type: "page_view", ts: вМинуту(6), sid: "ценник", path: "/qmelanin?c=yt-rolik3", meta: { channel: "youtube" } },
+      { type: "page_view", ts: вМинуту(6), sid: "ценник", path: "/pricing", meta: { channel: "youtube" } },
+      { type: "checkout_start", ts: вМинуту(5), sid: "ценник", path: "/pricing", meta: { channel: "youtube", app: "plan" } },
+    ]);
+    const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");
+    expect(r.status).toBe(200);
+    const yt = r.body.byChannel.youtube;
+    expect(yt.checkoutStart, "начала оплаты потеряны").toBe(3);
+    expect(yt.checkoutStartNoSignal, "подозрительное начало оплаты не названо").toBe(1);
+    // Контроли обратной стороны: ни внимательный, ни смотревший цены не попали.
+    expect(yt.engaged).toBe(1);
+    expect(yt.pricing).toBe(1);
+  });
+
   it("порог назван числом и объяснён, а не спрятан в коде", async () => {
     const { ОБХОД_МЕТОК_МИНИМУМ, ОБХОД_ОКНО_МС } = await import("../src/routes/events");
     expect(ОБХОД_МЕТОК_МИНИМУМ).toBeGreaterThanOrEqual(5);

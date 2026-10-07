@@ -47,6 +47,8 @@ vi.mock("../src/lib/payment/gumroadProvider", () => ({
 
 const { checkoutRouter } = await import("../src/routes/checkout");
 const { buildQuote, MODULES_PRICING, termTotal, standaloneApp } = await import("../src/data/pricing");
+const { STANDALONE_APPS } = await import("../src/data/pricing");
+const { продаётсяОтдельно } = await import("../src/data/moduleAccess");
 
 function app() {
   const a = express();
@@ -188,3 +190,74 @@ describe("канал привлечения доезжает до кассы", (
     expect((charged.customData as Record<string, string> | undefined)?.channel?.length, "длина не ограничена").toBe(40);
   });
 });
+/*
+ * 🔴 ИМЯ ПОЛЯ НЕ ИМЕЕТ ПРАВА МЕНЯТЬ ЦЕНУ.
+ *
+ * Замер на проде 07.10.2026 (ffa6cbcaddd6), 6 проб без оплаты:
+ *   app: devhub     -> $200  «AEVION DevHub — Lite»  верно
+ *   appId: devhub   -> $400  «AEVION Planet — Lite»  ВДВОЕ дороже, другой товар
+ *   appSlug: devhub -> $400  то же
+ *   app: qright (снят с продажи) -> 400 invalid_app
+ *   appId/appSlug: qright        -> 200 и ссылка на ПЛАНЕТУ
+ * Условие отказа начиналось с `body.app &&` — смотрело одно имя из трёх.
+ * Купить снятое приложение было нельзя (его подменяла планета), но
+ * покупателя продаваемого молча переводили на вдвое дорогой товар.
+ *
+ * Проверяем СУММУ, перехваченную у провайдера, а не код ответа: 200 с
+ * неверной ценой — это и есть разбираемый дефект.
+ */
+describe("касса: синонимы имени приложения", () => {
+  const ИМЕНА = ["app", "appId", "appSlug"] as const;
+
+  const продаваемое = STANDALONE_APPS.find((a) => продаётсяОтдельно(a.moduleId));
+  const снятое = STANDALONE_APPS.find((a) => !продаётсяОтдельно(a.moduleId));
+
+  test("знаменатель набора: есть и продаваемое, и снятое приложение", () => {
+    process.stderr.write(
+      `[сторож] имён поля: ${ИМЕНА.length}; продаваемое: ${продаваемое?.slug ?? "НЕТ"}; ` +
+        `снятое: ${снятое?.slug ?? "НЕТ"}${String.fromCharCode(10)}`,
+    );
+    expect(продаваемое, "в наборе нет ни одного продаваемого приложения — проверять нечего").toBeTruthy();
+    expect(снятое, "в наборе нет ни одного снятого — вторая половина проверки пуста").toBeTruthy();
+  });
+
+  test("продаваемое: все имена дают ОДНУ сумму, и это цена приложения, а не планеты", async () => {
+    const a = продаваемое!;
+    const суммы: number[] = [];
+    for (const имя of ИМЕНА) {
+      суммы.push(await checkoutCents({ tierId: "lite", [имя]: a.slug, seats: 1 }));
+      // ТОВАР, а не только сумма: reference называет, что именно куплено.
+      // Из-за дефекта здесь оказывалась планета вместо приложения.
+      expect(
+        charged.reference,
+        `поле «${имя}» купило не то приложение: ${charged.reference}`,
+      ).toBe(`app_${a.slug}_lite`);
+    }
+    process.stderr.write(
+      `[сторож] ${a.slug}: суммы по именам ${JSON.stringify(суммы)}${String.fromCharCode(10)}`,
+    );
+    // termTotal считает в долларах, провайдер получает центы — ×100, как и
+    // в соседней проверке этого же файла. Моё первое ожидание сравнивало
+    // 2400¢ с 24$ и покраснело на ИСПРАВНОМ коде: ошибка была в приборе.
+    const ожидаемо = termTotal(a.baseMonthly, "lite") * 100;
+    for (let i = 0; i < ИМЕНА.length; i++) {
+      expect(
+        суммы[i],
+        `поле «${ИМЕНА[i]}» выставило ${суммы[i]}¢ вместо ${ожидаемо}¢ — имя поля изменило цену`,
+      ).toBe(ожидаемо);
+    }
+    expect(new Set(суммы).size, "имена дали РАЗНЫЕ суммы").toBe(1);
+  });
+
+  test("снятое с продажи: все имена отбиваются одинаково", async () => {
+    const a = снятое!;
+    for (const имя of ИМЕНА) {
+      const r = await request(app())
+        .post("/api/pricing/checkout/session")
+        .send({ tierId: "lite", [имя]: a.slug, seats: 1 });
+      expect(r.status, `поле «${имя}»: ${JSON.stringify(r.body)}`).toBe(400);
+      expect(String(r.body?.error), `поле «${имя}» отбито не по той причине`).toBe("invalid_app");
+    }
+  });
+});
+

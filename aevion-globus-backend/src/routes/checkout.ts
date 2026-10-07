@@ -151,6 +151,21 @@ interface CheckoutBody {
   period?: string;
   /** Отдельное приложение (STANDALONE_APPS: slug или id модуля); tierId тогда — ступень срока. */
   app?: string;
+  /*
+   * 🔴 Синонимы имени ОБЯЗАНЫ читаться здесь же. Замер 07.10.2026 на проде:
+   * условие отказа начиналось с `body.app &&`, то есть смотрело ОДНО имя, а
+   * во фронте в ходу `appId` и `appSlug` (комментарий на странице бюро прямо
+   * учил вызову с `appId`). Что это давало:
+   *   app: devhub     -> $200  «AEVION DevHub — Lite»   верно
+   *   appId: devhub   -> $400  «AEVION Planet — Lite»   ВДВОЕ дороже и другой товар
+   *   appSlug: devhub -> $400  то же
+   *   app: qright (снят) -> 400 invalid_app; appId/appSlug -> 200, планета
+   * То есть имя поля решало цену, а снятое приложение не покупалось вовсе —
+   * просто подменялось планетой. Нормализуем на ВХОДЕ, а не вторым условием:
+   * иначе через месяц появится четвёртое имя.
+   */
+  appId?: string;
+  appSlug?: string;
   /** Срок обязательства в месяцах: 24 и 36 дают ступень веерной скидки. */
   commitmentMonths?: number;
   seats?: number;
@@ -316,7 +331,9 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
     // Отдельное приложение — та же лестница сроков, своя база цены (STANDALONE_APPS).
     // Всё остальное продаётся только в составе планеты: чужое имя — отказ, а не
     // тихая покупка тарифа вместо приложения.
-    const app = body.app ? standaloneApp(String(body.app)) : null;
+    // Одно значение на все синонимы — дальше по коду имя поля уже не решает ничего.
+    const имяПриложения = body.app ?? body.appId ?? body.appSlug;
+    const app = имяПриложения ? standaloneApp(String(имяПриложения)) : null;
     /*
      * 🔴 01.10.2026: «есть цена» БОЛЬШЕ НЕ ЗНАЧИТ «продаётся».
      *
@@ -335,7 +352,7 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
      * повод.
      */
     const снятСПродажи = Boolean(app && !продаётсяОтдельно(app.moduleId));
-    if (body.app && (!app || снятСПродажи || !isTermTier(tier.id))) {
+    if (имяПриложения && (!app || снятСПродажи || !isTermTier(tier.id))) {
       return res.status(400).json({
         error: "invalid_app",
         message: наЯзыке(языкПокупателя(req),

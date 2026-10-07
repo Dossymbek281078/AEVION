@@ -72,6 +72,10 @@ const ROUTES: Array<[string, string]> = [
   // но в этот список её не внесла — сторож ровно это и поймал. Адрес взят из
   // самой страницы: она делает redirect("/devhub?c=example").
   ["example", "/devhub?c=example"],
+  // 07.10.2026: платная реклама Meta. Канал завёден волной 23 (`meta-*` — только
+  // платное, `fb-*` остаётся органическим), вход ведёт на страницу книги, под
+  // которую реклама и запускается.
+  ["meta", "/longevity?c=meta"],
   ["badge", "/devhub?c=badge"],
   ["x-devhub", "/devhub?c=x-devhub"],
   ["x-multichat", "/multichat-engine?c=x-multichat"],

@@ -86,13 +86,30 @@ export function SiteHeader() {
         border: 1px solid rgba(15,23,42,0.12); background: #fff; color: #0f172a;
       }
       .aev-hdr-menu > summary::-webkit-details-marker { display: none; }
+      /* Панель скрыта по умолчанию, grid — только под [open]. Это ГИГИЕНА, а не
+         починка видимого дефекта: замер 07.10 на проде (Chrome 154, окно 390x844,
+         не iframe) показал, что человек панель и так НЕ видит.
+
+         🔴 История важнее правки, потому что доклад был неверен дважды. Сосед
+         насчитал 13 из 13 пунктов «в кадре» с ненулевыми прямоугольниками, и я
+         это подтвердил. Прямоугольник ненулевой на самом деле: y 52, h 421, w 20.
+         Но elementFromPoint в центре панели даёт DIV, в центре первого пункта —
+         MAIN, а сетка точек по первому экрану не находит меню НИ В ОДНОЙ точке:
+         то есть геометрия у панели есть, а видимости нет. ЧЕМ скрыта — не
+         установлено: у ::details-content намерено content-visibility: hidden,
+         а у самой панели и у details соседнее окно намерило visible, при этом
+         пункты лежат на x 385..481 при окне 390, то есть за правым краем.
+         Прямоугольник проверкой видимости не является в любом случае.
+         Признак был на виду: ширина 20 px при высоте 421.
+         Кадр: Desktop/АЕВИОН/15-Аудиты-и-сводки/2026-10-07-навигация-телефон/. */
       .aev-hdr-menu-panel {
         position: absolute; right: 12px; left: 12px; margin-top: 8px;
-        display: grid; grid-template-columns: 1fr 1fr; gap: 2px;
+        display: none; grid-template-columns: 1fr 1fr; gap: 2px;
         padding: 8px; border-radius: 14px; background: #fff;
         border: 1px solid rgba(15,23,42,0.12);
         box-shadow: 0 12px 30px rgba(15,23,42,0.14); z-index: 60;
       }
+      .aev-hdr-menu[open] > .aev-hdr-menu-panel { display: grid; }
       @media (max-width: 700px) {
         .aev-hdr-menu { display: block; }
         .aev-hdr-full { display: none !important; }

@@ -22,6 +22,19 @@ export const TERM_MONTHS: Record<TermTier, number> = { lite: 1, medium: 3, pro: 
 export const TERM_FACTOR: Record<TermTier, number> = { lite: 1, medium: 0.875, pro: 0.75, full: 0.625, max: 0.5 };
 export const TERM_NAME: Record<TermTier, string> = { lite: "Lite", medium: "Medium", pro: "Pro", full: "Full", max: "Max" };
 
+/**
+ * Срок, который открывается у ПОКУПАТЕЛЯ по умолчанию на странице цен.
+ *
+ * 🔴 Заведено 07.10.2026: это число жило литералом в pricing/page.tsx
+ * (`useState<TermTier>("lite")`), а денежная плашка DevHub подписывала кнопку
+ * словом «Pro» и ценой $200/мес. По данным это Lite: у «pro» множитель 0.75,
+ * то есть $150/мес и $900 за 6 месяцев. Покупатель читал «Оформить Pro» и
+ * открывал Lite — то самое «обещание и списание расходятся». Теперь срок один
+ * на обе поверхности, а сторож moneyPanelNamesWhatOpens сверяет подпись с
+ * данными цен.
+ */
+export const СРОК_ПО_УМОЛЧАНИЮ: TermTier = "lite";
+
 /** Цена месяца всей планеты на самом коротком сроке (Lite). */
 export const PLANET_BASE_MONTHLY = 400;
 

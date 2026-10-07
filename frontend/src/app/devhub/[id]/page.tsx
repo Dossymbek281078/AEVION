@@ -17,6 +17,7 @@ import { devhubServerError, useDevhubServerError } from "@/lib/devhubServerError
 import { track } from "@/lib/track";
 import { useI18nOptional } from "@/lib/i18n";
 import { tDevhub, type DevhubKey } from "../i18n";
+import { termPricePerMonth, termTotal, TERM_MONTHS, СРОК_ПО_УМОЛЧАНИЮ } from "@/lib/termPricing";
 import { productById } from "@/lib/products";
 
 /**
@@ -49,6 +50,16 @@ const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false 
 // оплат). Нет записи — плашка покажет путь через подключение покупки, но
 // не выдумает цену.
 const STUDIO_PRO = productById("devhub");
+/* Цена и срок — ИЗ ДАННЫХ, а не из подписи. 07.10.2026: кнопка говорила
+   «Оформить Pro — $200/мес», а по данным цен «pro» это 6 месяцев с множителем
+   0.75, то есть $150/мес и $900 всего; $200/мес — это Lite (1 мес), и именно
+   Lite открывается по ссылке (срок по умолчанию один на обе поверхности).
+   Покупатель читал одну ступень, а открывал другую. Сторож
+   devhub/__tests__/moneyPanelNamesWhatOpens.guard.test.ts сверяет подпись с
+   таблицей цен. */
+const PRICE_PER_MONTH = termPricePerMonth(STUDIO_PRO.priceUsd, СРОК_ПО_УМОЛЧАНИЮ);
+const TERM_MONTHS_SHOWN = TERM_MONTHS[СРОК_ПО_УМОЛЧАНИЮ];
+const TERM_TOTAL_SHOWN = termTotal(STUDIO_PRO.priceUsd, СРОК_ПО_УМОЛЧАНИЮ);
 
 /** Вкладки рабочего окна. Список один — из него же берутся подписи. */
 const VKLADKI = ["chat", "visual", "agent", "templates", "github", "media", "env", "deployments", "settings"] as const;
@@ -6856,8 +6867,15 @@ if (/Месячная норма исчерпана|Месячный лимит[
                 whiteSpace: "nowrap",
               }}
             >
-              {tPro("pro.upgrade")} — ${STUDIO_PRO.priceUsd}{tPro("pro.perMonth")}
+              {tPro("pro.upgrade")} — ${PRICE_PER_MONTH}{tPro("pro.perMonth")}
             </a>
+          )}
+          {/* Срок и итог рядом с кнопкой: без них «$150/мес» не говорит, за
+              сколько месяцев спишут. Числа считаются из таблицы цен. */}
+          {STUDIO_PRO && (
+            <span style={{ fontSize: 11, color: "rgba(255,255,255,0.85)" }}>
+              {tPro("pro.termNote").replace("{m}", String(TERM_MONTHS_SHOWN)).replace("{t}", `$${TERM_TOTAL_SHOWN}`)}
+            </span>
           )}
           <Link href="/devhub/link" style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, textDecoration: "underline", whiteSpace: "nowrap" }}>
             {tPro("pro.linkPurchase")}

@@ -11,7 +11,7 @@ import { useDevhubT, type DevhubKey } from "./i18n";
 import { COMPARISON_ROWS, capabilityIsKnownOff, comparisonTotalUsd } from "./capabilityRows";
 import { howtoTranscript } from "./howtoTranscript";
 import { getDevhubGuestId } from "@/lib/devhubGuest";
-import { fromPricePerMonth } from "@/lib/termPricing";
+import { fromPricePerMonth, termPricePerMonth, termTotal, TERM_MONTHS, СРОК_ПО_УМОЛЧАНИЮ } from "@/lib/termPricing";
 import { useI18n } from "@/lib/i18n";
 import { catalog } from "@/lib/aevionCatalog";
 import { fixDoubledScheme } from "@/lib/urls";
@@ -113,6 +113,16 @@ function formatDate(iso: string) {
 // Price and checkout URL come from the product catalogue, which is verified
 // against the live payment dashboards — the page must not carry its own copy.
 const STUDIO_PRO = productById("devhub");
+/* Цена и срок — ИЗ ДАННЫХ, а не из подписи. 07.10.2026: кнопка говорила
+   «Оформить Pro — $200/мес», а по данным цен «pro» это 6 месяцев с множителем
+   0.75, то есть $150/мес и $900 всего; $200/мес — это Lite (1 мес), и именно
+   Lite открывается по ссылке (срок по умолчанию один на обе поверхности).
+   Покупатель читал одну ступень, а открывал другую. Сторож
+   devhub/__tests__/moneyPanelNamesWhatOpens.guard.test.ts сверяет подпись с
+   таблицей цен. */
+const PRICE_PER_MONTH = termPricePerMonth(STUDIO_PRO.priceUsd, СРОК_ПО_УМОЛЧАНИЮ);
+const TERM_MONTHS_SHOWN = TERM_MONTHS[СРОК_ПО_УМОЛЧАНИЮ];
+const TERM_TOTAL_SHOWN = termTotal(STUDIO_PRO.priceUsd, СРОК_ПО_УМОЛЧАНИЮ);
 
 /**
  * Почему возможность отключена — словами человека.
@@ -912,8 +922,11 @@ export default function DevHubPage() {
                   whiteSpace: "nowrap",
                 }}
               >
-                {t("pro.upgrade")} — {`$${STUDIO_PRO.priceUsd}`}{t("pro.perMonth")}
+                {t("pro.upgrade")} — {`$${PRICE_PER_MONTH}`}{t("pro.perMonth")}
               </a>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.85)", width: "100%" }}>
+                {t("pro.termNote").replace("{m}", String(TERM_MONTHS_SHOWN)).replace("{t}", `$${TERM_TOTAL_SHOWN}`)}
+              </div>
               ) : (
                 <span style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, fontWeight: 600 }}>
                   {t("pro.unavailable")}

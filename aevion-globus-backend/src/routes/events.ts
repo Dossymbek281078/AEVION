@@ -704,6 +704,67 @@ export function чужаяМетка(
   return m[1] === "ref" ? `ref:${безопасная}` : безопасная;
 }
 
+/*
+ * 🔴 СОСТАВ СТРОКИ РАЗРЕЗА ЖИВЁТ В ОДНОМ МЕСТЕ.
+ *
+ * Повод, замеченный приёмкой 07.10.2026 как повторяющийся: за сутки дважды моя
+ * правка разреза покрасила чужие сторожа — они сравнивают строгим `toEqual` по
+ * составу, и добавление ступени требовало правки в пяти файлах. Ослаблять
+ * строгость нельзя: именно она ловит тихое ИСЧЕЗНОВЕНИЕ поля.
+ *
+ * Поэтому состав объявлен фабриками, и ими же инициализируется разрез. Сторожа
+ * строят ожидание как `{ ...пустойКанал(), visits: 2 }` — тогда новое поле не
+ * ломает их, а пропавшее по-прежнему ломает. Сам состав закреплён в ОДНОМ
+ * стороже (`cutShapeIsPinned`), где ключи перечислены руками: без него фабрика
+ * стала бы и определением, и проверкой себя самой.
+ */
+export function пустойКанал(): РазрезВоронки["byChannel"][string] {
+  return {
+    visits: 0,
+    visitsOurs: 0,
+    pricing: 0,
+    pricingOurs: 0,
+    checkoutStart: 0,
+    checkoutStartOurs: 0,
+    thankYouOpened: 0,
+    paid: 0,
+    paidOurs: 0,
+    tried: 0,
+    triedOurs: 0,
+    engaged: 0,
+    engagedOurs: 0,
+    checkoutStartSessions: 0,
+    checkoutStartSessionsOurs: 0,
+  };
+}
+
+export function пустойПост(): РазрезВоронки["byPost"][string] {
+  return {
+    visits: 0,
+    visitsOurs: 0,
+    pricing: 0,
+    pricingOurs: 0,
+    checkoutStart: 0,
+    paid: 0,
+    tried: 0,
+    triedOurs: 0,
+  };
+}
+
+export function пустойВход(): РазрезВоронки["byEntryPage"][string] {
+  return {
+    сессий: 0,
+    сессийНаших: 0,
+    доЦен: 0,
+    доЦенНаших: 0,
+    началиОплату: 0,
+    попробовали: 0,
+    попробовалиНаших: 0,
+    внимание: 0,
+    вниманиеНаших: 0,
+  };
+}
+
 export function разрезВоронки(
   events: Array<Pick<AnalyticsEvent, "type" | "path" | "meta" | "sid" | "refHost">>,
   нашиСессии: ReadonlySet<string> = new Set(),
@@ -780,23 +841,7 @@ export function разрезВоронки(
     const сырой = ev.meta?.channel;
     const канал = typeof сырой === "string" && сырой.trim() ? сырой.trim() : "direct";
     if (!byChannel[канал]) {
-      byChannel[канал] = {
-        visits: 0,
-        visitsOurs: 0,
-        pricing: 0,
-        pricingOurs: 0,
-        checkoutStart: 0,
-        checkoutStartOurs: 0,
-        thankYouOpened: 0,
-        paid: 0,
-        paidOurs: 0,
-        tried: 0,
-        triedOurs: 0,
-        engaged: 0,
-        engagedOurs: 0,
-        checkoutStartSessions: 0,
-        checkoutStartSessionsOurs: 0,
-      };
+      byChannel[канал] = пустойКанал();
     }
     const к = byChannel[канал];
 
@@ -804,16 +849,7 @@ export function разрезВоронки(
     const пост = typeof сыройПост === "string" && сыройПост.trim() ? сыройПост.trim().slice(0, 40) : null;
     const ключПоста = пост ? `${канал}/${пост}` : null;
     if (ключПоста && !byPost[ключПоста]) {
-      byPost[ключПоста] = {
-        visits: 0,
-        visitsOurs: 0,
-        pricing: 0,
-        pricingOurs: 0,
-        checkoutStart: 0,
-        paid: 0,
-        tried: 0,
-        triedOurs: 0,
-      };
+      byPost[ключПоста] = пустойПост();
     }
     const п = ключПоста ? byPost[ключПоста] : null;
 
@@ -1166,17 +1202,7 @@ export function разрезВоронки(
   >();
   for (const з of заходы.values()) {
     const ключ = `${з.канал}|${з.вход}`;
-    const т = сырыеВходы.get(ключ) ?? {
-      сессий: 0,
-      сессийНаших: 0,
-      доЦен: 0,
-      доЦенНаших: 0,
-      началиОплату: 0,
-      попробовали: 0,
-      попробовалиНаших: 0,
-      внимание: 0,
-      вниманиеНаших: 0,
-    };
+    const т = сырыеВходы.get(ключ) ?? пустойВход();
     т.сессий += 1;
     if (з.наш) т.сессийНаших += 1;
     if (з.доЦен) т.доЦен += 1;

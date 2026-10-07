@@ -90,6 +90,11 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "calc.recalc": "пересчёт...",
     "calc.freeBilling": "Бесплатный тариф — оплата не требуется.",
     "calc.payQuote": "Оплатить смету",
+    // 07.10.2026: показывается ВМЕСТО кнопки, когда мест больше одного или задан
+    // промокод. Причина не в удобстве: наша сумма в этих случаях не доезжает до
+    // кассы (Lemon Squeezy спишет цену своего варианта), поэтому кнопка обещала бы
+    // одно, а списалось бы другое. Замер: ступень full за 3 места — 2331 против 2250.
+    "calc.invoiceOnly": "Несколько мест и промокоды оформляем счётом — напишите нам →",
     "calc.opening": "Открываем оплату...",
     "calc.contactSales": "Связаться с продажами →",
     "calc.empty": "Выбери параметры слева...",
@@ -574,6 +579,7 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "calc.recalc": "recalculating...",
     "calc.freeBilling": "Free tier — no payment required.",
     "calc.payQuote": "Pay quote",
+    "calc.invoiceOnly": "Multiple seats and promo codes are handled by invoice — write to us →",
     "calc.opening": "Opening checkout...",
     "calc.contactSales": "Contact sales →",
     "calc.empty": "Pick options on the left...",

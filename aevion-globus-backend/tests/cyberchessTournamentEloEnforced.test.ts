@@ -1,6 +1,7 @@
 import { describe, test, expect, vi, beforeEach, beforeAll } from "vitest";
 import express from "express";
 import request from "supertest";
+import { svoyTurnir } from "./helpers/svoyTurnir";
 
 // Объявленный диапазон рейтинга обеспечивается. 19.08.2026.
 //
@@ -67,12 +68,21 @@ function app() {
   return a;
 }
 
-// Турнир с рамками берём из выдачи, а не зашиваем: зашитый id разъедется с
-// набором заготовок при первой его правке.
+// Турнир с рамками ЗАВОДИМ СВОЙ, а не ищем в выдаче.
+//
+// Прежде он брался из GET /list — и с 30.09 эта ручка отдаёт только турниры,
+// созданные людьми (толькоНастоящие): наши заготовки она скрывает, чтобы
+// витрина не заявляла 534 участника при нуле живых. Список стал пуст, find
+// вернул undefined, и дальше сыпалось «Cannot read properties of undefined».
+// Фильтр правильный; неправ был тест — он проверяет допуск по рейтингу, а
+// предмет брал из витрины с её собственной политикой показа.
+//
+// Турнир создаётся ОДИН раз на файл: создание ограничено пятью за 10 минут
+// с адреса, а адрес в прогоне у всех запросов один.
+let турнирКэш: Record<string, any> | null = null;
 async function турнирСРамками(a: express.Express) {
-  const r = await request(a).get("/api/cyberchess-tournaments/list");
-  const list = (r.body?.tournaments ?? []) as Array<Record<string, any>>;
-  return list.find((t) => t.status === "upcoming" && t.eloMin > 0 && t.players < t.maxPlayers);
+  if (!турнирКэш) турнирКэш = await svoyTurnir((u, b) => request(a).post(u).send(b as object), { eloMin: 1400, eloMax: 1800, maxPlayers: 8 });
+  return турнирКэш;
 }
 
 beforeEach(() => { db.games = 0; db.rating = 1200; db.отвечает = true; });

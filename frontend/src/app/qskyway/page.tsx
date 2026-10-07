@@ -6,6 +6,7 @@ import { englishUrlWithChannel } from "@/lib/englishPages";
 import { PaywallScreen } from "@/components/PaywallScreen";
 import QSkywayClient from "./_client";
 import { PageTracking } from "@/components/PageTracking";
+import { языки } from "@/lib/hreflang";
 
 const TITLE = "QSkyway — navigation layer for the urban sky · навигация городского неба";
 // 13.09.2026: у превью СВОЁ описание, короткое.
@@ -39,8 +40,14 @@ export const metadata: Metadata = {
     "urban air mobility", "UAM", "eVTOL", "air taxi", "air corridors", "vertiport",
     "airspace management", "3D city", "navigation", "AEVION", "QSkyway",
   ],
-  alternates: { canonical: "/qskyway" },
+  alternates: { canonical: "/qskyway", languages: языки("/qskyway") },
   openGraph: {
+    // 06.10.2026: язык объявлен СЕРВЕРНО. Замер того же дня: у этой страницы
+    // кириллицы больше, чем латиницы, а og:locale не было вовсе, и корневой
+    // макет отдаёт lang="en". Поправить сам lang на уровне страницы нельзя
+    // (<html> живёт только в корневом макете, разбор там же в комментарии),
+    // поэтому серверный языковой сигнал даём тем, чем можно: og:locale.
+    locale: "ru_RU",
     title: TITLE,
     description: OG_DESCRIPTION,
     type: "website",

@@ -730,7 +730,7 @@ export default function MultichatEnginePage() {
                 { t: "Edit & resend", c: T.cyanDeep },
                 { t: "Webhook on done", c: T.skyDeep },
                 { t: "Public share + OG preview", c: T.brandAlt },
-                { t: "Export JSON + Markdown", c: T.warnDeep },
+                { t: "Export JSON + CSV", c: T.warnDeep },
                 { t: "↩ Thread continuation", c: T.brandDeeper },
                 { t: "📋 Templates", c: T.indigoBright },
                 { t: "⚡ Batch runs", c: T.indigoDeep },

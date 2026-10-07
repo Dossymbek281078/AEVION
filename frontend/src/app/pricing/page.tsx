@@ -8,7 +8,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { fetchAiSavings, счётчикГоденДляПоказа } from "@/lib/aiSavings";
 import { запомнитьНамерение } from "@/lib/checkoutIntent";
-import { channelFrom, withChannel } from "@/lib/products";
+import { channelFrom, keepChannel, withChannel } from "@/lib/products";
 import { track } from "@/lib/track";
 import { chargeCurrencyNoteKey, shouldWarnAboutCurrency } from "@/lib/chargeCurrencyNote";
 import { usePricingT, termUnitKey } from "@/lib/pricingI18n";
@@ -1540,6 +1540,9 @@ export default function PricingPage() {
                 gap: 4,
                 marginBottom: 20,
               }}
+              /* Якорь нужен карточкам: по нему они прокручивают сюда человека,
+                 который пришёл по ссылке модуля и переключателя не видел. */
+              id="app-term"
             >
               {TERM_TIERS.map((term) => (
                 <button
@@ -1592,6 +1595,49 @@ export default function PricingPage() {
                     }}
                   >
                     <h3 style={{ fontSize: 18, fontWeight: 900, margin: 0 }}>{a.name}</h3>
+                    {/*
+                      🔴 ЧТО ИМЕННО ПОКУПАЕТСЯ — НА САМОЙ КАРТОЧКЕ (06.10.2026).
+                      Замер пути покупателя на 390x844: страница приводит человека
+                      по ?app=<слаг> прямо к карточке (автопрокрутка 29.09), и
+                      переключатель срока оказывается на 793 px ВЫШЕ экрана —
+                      видимых из пяти кнопок НОЛЬ. По умолчанию выбран Lite.
+                      Значит пришедший за Pro видел «$200/mo» и «Buy», слова
+                      «Pro» на экране не было вовсе, а нажатие покупало месяц.
+                      Автопрокрутка, починившая одно (карточку не находили),
+                      проскочила мимо органа управления, решающего ЧТО покупается.
+
+                      Поэтому карточка называет ступень и срок сама — и этим же
+                      местом даёт их сменить: нажатие прокручивает к переключателю.
+                      Текст собран из ГОТОВЫХ кусков (TERM_NAME + срокТекст): новых
+                      ключей перевода не заводим, иначе на девяти языках пропуск
+                      молча откатится на английский — рядом в этом файле тот же
+                      довод записан про вторую границу цены.
+                    */}
+                    {/*
+                      ССЫЛКА НА ЯКОРЬ, А НЕ КНОПКА — и это не вкусовщина. Прежний
+                      тест unsellableTierExplainsItself опознаёт кнопку ПОКУПКИ как
+                      «кнопку внутри карточки»; добавленная сюда вторая <button>
+                      ломала три его проверки (поймал прогоном, не рассуждением).
+                      Ссылка на #app-term вдобавок работает без скрипта.
+                    */}
+                    <a
+                      href="#app-term"
+                      data-app-term-badge={a.slug}
+                      style={{
+                        alignSelf: "flex-start",
+                        padding: "3px 10px",
+                        fontSize: 13,
+                        fontWeight: 800,
+                        color: "#0f766e",
+                        background: "#ccfbf1",
+                        border: "1px solid #99f6e4",
+                        borderRadius: 999,
+                        cursor: "pointer",
+                        textDecoration: "none",
+                      }}
+                    >
+                      {TERM_NAME[appTerm]} · {срокТекст(месяцев)}
+                    </a>
                     {/* ЧТО ИМЕННО ПОКУПАЮТ. Замер 06.10.2026 на проде: карточка
                         говорила «CyberChess · $24/мес · Max: $12/мес · Купить» —
                         цену без единого слова о том, за что она. А задачи, партия,
@@ -2204,15 +2250,45 @@ export default function PricingPage() {
                     </Link>
                   </p>
                 )}
-                {calcTier !== "free" && calcTier !== "enterprise" && (
+                {/*
+                  🔴 07.10.2026: КНОПКА КАЛЬКУЛЯТОРА ПОКУПАЕТ ТОЛЬКО ГОЛУЮ СТУПЕНЬ.
+                  Она единственная передавала seats и promoCode в кассу, а сумма до
+                  Lemon Squeezy НЕ доезжает: LS списывает цену своего варианта.
+                  Замер на проде 07.10: ступень full за 3 места даёт итого 2331 против
+                  2250 за одно — страница обещала бы на $81 больше, чем спишется.
+                  Купить «молча одно место» тоже нельзя: человек выбрал три, и
+                  обещание всё равно разошлось бы. Поэтому при местах > 1 или
+                  промокоде кнопки нет, а есть честная строка со счётом — тем же
+                  приёмом, что у ступени enterprise ниже.
+                */}
+                {calcTier !== "free" && calcTier !== "enterprise" && (calcSeats > 1 || calcPromo) && (
+                  <Link
+                    href={keepChannel("/pricing/contact?topic=seats-invoice", channel)}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      marginTop: 16,
+                      padding: "12px 16px",
+                      fontSize: 15,
+                      fontWeight: 700,
+                      borderRadius: 10,
+                      border: "1px solid #0d9488",
+                      color: "#0f766e",
+                      background: "#f0fdfa",
+                      textAlign: "center",
+                      textDecoration: "none",
+                    }}
+                  >
+                    {tp("calc.invoiceOnly")}
+                  </Link>
+                )}
+                {calcTier !== "free" && calcTier !== "enterprise" && calcSeats <= 1 && !calcPromo && (
                   <button
                     disabled={checkingOut === calcTier || !продаётся(calcTier)}
                     onClick={() =>
-                      startCheckout({
-                        tierId: calcTier,
-                        seats: calcSeats,
-                        promoCode: calcPromo || undefined,
-                      })
+                      // Голая ступень: места и промокод сюда НЕ передаются, пока сумма
+                      // не доводится до кассы. Ветка выше показывает строку со счётом.
+                      startCheckout({ tierId: calcTier, seats: 1 })
                     }
                     style={{
                       width: "100%",

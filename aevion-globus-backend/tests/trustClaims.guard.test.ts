@@ -20,10 +20,26 @@ const SRC = path.resolve(__dirname, "../src");
 const REGISTRY = path.join(SRC, "data/projects.ts");
 const TRUST = path.join(SRC, "data/trust.ts");
 
-/** Записей в реестре модулей. */
+/** Записей в реестре модулей (`data/projects.ts`). */
 function registryEntries(): number {
   const src = readFileSync(REGISTRY, "utf8");
   return Array.from(src.matchAll(/status:\s*["'](\w+)["']/g)).length;
+}
+
+/**
+ * Строк в ТАБЛИЦЕ, которую подписывает счётчик: страница цен рисует
+ * `MODULES_PRICING` из `data/pricing.ts`.
+ *
+ * 🔴 07.10.2026. Прежде сторож сверял счётчик только с `projects.ts`, и
+ * расхождение двух реестров было ему не видно: в прайсе 44 строки, в реестре
+ * 43, подпись говорила «42». Человек читал число над таблицей, которая его
+ * опровергала. Теперь проверяется то, что обещано: подпись = длина таблицы,
+ * а два реестра обязаны совпадать по составу.
+ */
+function pricingTableRows(): number {
+  const src = readFileSync(path.join(SRC, "data/pricing.ts"), "utf8");
+  const tail = src.slice(src.indexOf("MODULES_PRICING"));
+  return Array.from(tail.matchAll(/^ {4}id: "[a-z0-9-]+"/gm)).length;
 }
 
 /**
@@ -35,7 +51,28 @@ function registryEntries(): number {
 const MAP_SHELL_ENTRIES = 1;
 
 describe("data/trust.ts — публичные счётчики не расходятся с реестром", () => {
-  test("счёт модулей равен записям реестра минус оболочка карты", () => {
+  test("счётчик не вписан руками, а считается из таблицы", () => {
+    // Подпись теперь `String(MODULES_PRICING.length)`: вписать сюда число
+    // нельзя даже случайно, и расхождение с таблицей невозможно.
+    const trust = readFileSync(TRUST, "utf8");
+    const line = trust.split("\n").find((l) => l.includes('label: "Модулей платформы"')) ?? "";
+
+    expect(line, "строку переименовали?").toBeTruthy();
+    expect(line, "счётчик снова вписан руками — он разойдётся с таблицей молча")
+      .toMatch(/value:\s*String\(MODULES_PRICING\.length\)/);
+  });
+
+  test("два реестра совпадают по составу, иначе счётчик спорит с таблицей", () => {
+    const expected = registryEntries() - MAP_SHELL_ENTRIES;
+    expect(
+      pricingTableRows(),
+      `в projects.ts ${registryEntries()} записей (минус оболочка карты = ${expected}), ` +
+        `а в таблице прайса ${pricingTableRows()} строк. Счётчик подписывает таблицу, ` +
+        "поэтому составы обязаны совпадать.",
+    ).toBe(expected);
+  });
+
+  test.skip("прежняя проверка числа руками — заменена двумя выше", () => {
     const expected = registryEntries() - MAP_SHELL_ENTRIES;
     const trust = readFileSync(TRUST, "utf8");
     const m = trust.match(/label:\s*"Модулей платформы",\s*value:\s*"(\d+)"/);

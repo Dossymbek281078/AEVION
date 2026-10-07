@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { PageTracking } from "@/components/PageTracking";
 import { channelFrom, keepChannel } from "@/lib/products";
+import { languagesFor } from "@/lib/hreflang";
 
 // /en/qrenew — английская посадочная QRenew.
 //
@@ -13,7 +14,7 @@ export const metadata: Metadata = {
   title: "QRenew — biological age from a blood panel",
   description:
     "Computes phenotypic age (PhenoAge) from nine standard blood markers and shows the gap versus your passport age. Interventions ranked by evidence. Wellness and education, not medical advice.",
-  alternates: { canonical: "https://aevion.app/en/qrenew" },
+  alternates: { canonical: "https://aevion.app/en/qrenew", languages: languagesFor("/en/qrenew") },
   openGraph: {
     title: "QRenew — biological age from a blood panel",
     description:

@@ -514,7 +514,7 @@ app.use("/api/status", statusRouter);
 // 100k tokens/mo with no metering yet to enforce that before falling back
 // to a paid gate, so requireModule() strips it from enforcement regardless
 // of PAYWALL_MODULES until that's built — see docs/PAYWALL_FLIP_READINESS.md.
-app.use("/api/qcoreai", requireModule("qcoreai"), qcoreaiRouter);
+app.use("/api/qcoreai", requireModule("qcoreai", qcoreaiRouter), qcoreaiRouter);
 // Our own agent runtime — a real provider tool-use loop, kept separate from
 // qcoreai (owned by another work stream). Ungated: no module id in the registry.
 app.use("/api/agent-runtime", agentRuntimeRouter);
@@ -546,7 +546,7 @@ app.use("/api/multichat", multichatPublicRouter);
 // личность и списывает норму ПОСЛЕ ответа, не за отказы.
 app.use(
   "/api/multichat",
-  гостевойСлой(multichatRouter, requireModule("multichat-engine")),
+  гостевойСлой(multichatRouter, requireModule("multichat-engine", multichatRouter)),
 );
 
 // Остаток бесплатной нормы — публично, чтобы страница знала, что показать
@@ -1226,8 +1226,11 @@ app.get("/api/openapi.json", (_req, res) => {
 // smeta-trainer, qbuild/build (active work in other worktrees), and
 // constitution* (has its own dedicated gate in lib/constitutionGate.ts).
 // qcoreai and multichat-engine are gated inline above (mounted earlier).
-const MODULE_GATE_PREFIXES: ReadonlyArray<readonly [string, string]> = [
-  ["/api/qfusionai", "qfusionai"],
+// Третий элемент — роутер этого префикса, необязательный. Он нужен стене,
+// чтобы отличить несуществующий путь от платного: без него стена отвечает
+// «купите тариф» на любую опечатку в адресе (замер 07.10.2026).
+const MODULE_GATE_PREFIXES: ReadonlyArray<readonly [string, string, express.Router?]> = [
+  ["/api/qfusionai", "qfusionai", qfusionaiRouter],
   ["/api/qright", "qright"],
   ["/api/qsign", "qsign"], // also covers /api/qsign/v2
   ["/api/bureau", "aevion-ip-bureau"],
@@ -1236,11 +1239,11 @@ const MODULE_GATE_PREFIXES: ReadonlyArray<readonly [string, string]> = [
   ["/api/qmaskcard", "qmaskcard"],
   ["/api/veilnetx", "veilnetx"],
   ["/api/veilnetx-ledger", "veilnetx"],
-  ["/api/healthai", "healthai"],
+  ["/api/healthai", "healthai", healthaiRouter],
   ["/api/longevity", "qrenew"],
-  ["/api/qai", "qai"],
-  ["/api/qlearn", "qlearn"],
-  ["/api/qnews", "qnews"],
+  ["/api/qai", "qai", qaiRouter],
+  ["/api/qlearn", "qlearn", qlearnRouter],
+  ["/api/qnews", "qnews", qnewsRouter],
   ["/api/qstore", "qstore"],
   ["/api/qmedia", "qmedia"],
   ["/api/qlife", "qlife"],
@@ -1274,8 +1277,11 @@ const MODULE_GATE_PREFIXES: ReadonlyArray<readonly [string, string]> = [
   ["/api/lifebox", "lifebox"],
   ["/api/qchaingov", "qchaingov"],
 ];
-for (const [prefix, moduleId] of MODULE_GATE_PREFIXES) {
-  app.use(prefix, requireModule(moduleId));
+for (const [prefix, moduleId, роутер] of MODULE_GATE_PREFIXES) {
+  // Третий элемент (роутер) не обязателен. Там, где он есть, стена сперва
+  // сверяет путь с маршрутами роутера и неизвестный путь пропускает дальше —
+  // чтобы Express ответил 404, а не «купите тариф» (замер 07.10.2026).
+  app.use(prefix, requireModule(moduleId, роутер));
 }
 
 // ==========================

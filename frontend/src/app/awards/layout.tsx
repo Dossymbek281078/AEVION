@@ -8,12 +8,12 @@ const SITE = getSiteUrl();
 const OG_IMAGE = `${getApiBase()}/api/awards/og.svg`;
 
 export const metadata: Metadata = {
-  title: "AEVION Awards · Music & Film recognition with AEC payouts",
+  title: "AEVION Awards · Music & Film recognition on the Planet network",
   description:
-    "Submit AI-music or AI-film to the AEVION Awards. Validators on Planet certify originality, the community votes, top-3 receive AEC prizes settled to your AEVION Bank wallet.",
+    "Submit AI-music or AI-film to the AEVION Awards. Authorship is registered in QRight and validators on Planet certify the work.",
   openGraph: {
-    title: "AEVION Awards — recognition tied to revenue",
-    description: "QRight register → submit → Planet validate → AEC payout.",
+    title: "AEVION Awards — recognition you can cite",
+    description: "QRight register → submit → Planet validate → certificate.",
     type: "website",
     siteName: "AEVION",
     images: [{ url: OG_IMAGE, width: 1200, height: 630, alt: "AEVION Awards" }],
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "AEVION Awards",
-    description: "AI-music & AI-film awards with AEC prizes.",
+    description: "AI-music & AI-film awards: authorship in QRight, certification on Planet.",
     images: [OG_IMAGE],
   },
   alternates: { canonical: "/awards" },
@@ -33,7 +33,7 @@ const articleJsonLd = {
   headline: "Recognition, tied to revenue.",
   name: "AEVION Awards",
   description:
-    "AEVION Awards hub: creative recognition wired to QRight authorship, Planet validator quorum and Bank AEC payouts. Music wave 1, film wave 2.",
+    "AEVION Awards hub: creative recognition wired to QRight authorship and Planet validator certification. Music wave 1, film wave 2.",
   inLanguage: ["en", "ru", "kk"],
   about: ["AEVION Awards", "Music Awards", "Film Awards", "Creator Economy", "Planet Validators"],
   publisher: { "@type": "Organization", name: "AEVION", url: SITE },

@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { DISALLOWED_PATHS } from "./robots";
+import { DISALLOWED_PATHS } from "./robotsRules";
 import { getApiBase } from "@/lib/apiBase";
 
 /** Адреса с `index: false`, собранные обходом; нужны и для статического списка. */
@@ -469,7 +469,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // Не звать поисковика туда, куда сами его не пускаем.
   //
-  // Список берём из robots.ts, а не переписываем: два списка неизбежно
+  // Список берём из robotsRules.ts, а не переписываем: два списка неизбежно
   // разъедутся. Замер 21.08.2026 до этого фильтра: карта отдавала 782 адреса,
   // и 19 из них robots.txt запрещает — /admin/* (9), /qpaynet/admin/* (8),
   // /account и /constitution/admin. Обход каталогов их честно находил, просто

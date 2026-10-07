@@ -73,12 +73,12 @@ function noIndexUpTheTree(rel: string): boolean {
 // подряд — вместе с разрешающим allow: "/", под который подходит любой адрес.
 // Сторож был бы пустым: мутация (перевёл запрет панели в разрешение) его не
 // покраснила. Границы списка ищутся позиционно, по имени объявления.
-const robotsSrc = readFileSync(join(APP, "robots.ts"), "utf8");
+const robotsSrc = readFileSync(join(APP, "robotsRules.ts"), "utf8");
 const listStart = robotsSrc.indexOf("DISALLOWED_PATHS = [");
 // Массив закрывается "] as const;", а не "];" — первая попытка искала
 // вторую форму, не находила и роняла сторожа. Ищется сама скобка.
 const listEnd = robotsSrc.indexOf(String.fromCharCode(10) + "]", listStart);
-if (listStart < 0 || listEnd < 0) throw new Error("в robots.ts не найден DISALLOWED_PATHS");
+if (listStart < 0 || listEnd < 0) throw new Error("в robotsRules.ts не найден DISALLOWED_PATHS");
 const disallowed = [...robotsSrc.slice(listStart, listEnd).matchAll(/"([^"]+)"/g)]
   .map((m) => m[1])
   .filter((v) => v.startsWith("/") && v !== "/");
@@ -112,7 +112,7 @@ describe("страницы управления не показываются в
     expect(
       open,
       "панель управления видна в поиске: добавьте layout.tsx с robots { index: false } " +
-        "или закройте раздел в robots.ts",
+        "или закройте раздел в robotsRules.ts",
     ).toEqual([]);
   });
 

@@ -214,7 +214,7 @@ describe("карточки страниц воронки", () => {
     // Карта берёт исключения из DISALLOWED_PATHS. Пропуск в ОБОИХ местах сразу
     // (нет в запретах, есть в карте) прежний сторож карты не ловил: он сверяет
     // списки в одну сторону. Проверено мутацией 29.08.2026.
-    const robots = readFileSync(join(APP, "robots.ts"), "utf8");
+    const robots = readFileSync(join(APP, "robotsRules.ts"), "utf8");
     for (const route of shortRedirects) {
       expect(robots.includes(`"/${route}"`), `/${route}: нет в DISALLOWED_PATHS robots.ts`).toBe(true);
     }

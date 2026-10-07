@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import robots, { SITEMAP_PATHS } from "../robots";
+import { текстRobots, SITEMAP_PATHS, CLEAN_PARAMS } from "../robotsRules";
 
 /**
  * robots.txt не имеет права запрещать путь к карте сайта, которую сам же
@@ -37,10 +37,20 @@ function решение(путь: string, allow: string[], disallow: string[]): 
 }
 
 describe("robots.txt не закрывает свои же карты сайта", () => {
-  const r = robots();
-  const первое = Array.isArray(r.rules) ? r.rules[0] : r.rules;
-  const allow = ([] as string[]).concat((первое?.allow as string | string[]) ?? []);
-  const disallow = ([] as string[]).concat((первое?.disallow as string | string[]) ?? []);
+  // 07.10.2026: разбираем НАСТОЯЩИЙ текст robots.txt, а не объект метаданных.
+  // Файл теперь собирается строкой (нужна директива Clean-param, которой нет в
+  // типе MetadataRoute.Robots), и сторож обязан смотреть на то, что уедет на
+  // прод, а не на промежуточную форму.
+  const БАЗА = "https://aevion.app";
+  const текст = текстRobots(БАЗА);
+  const строки = текст.split(String.fromCharCode(10));
+  const поля = (имя: string) =>
+    строки
+      .filter((s) => s.toLowerCase().startsWith(имя.toLowerCase() + ":"))
+      .map((s) => s.slice(имя.length + 1).trim());
+  const allow = поля("Allow");
+  const disallow = поля("Disallow");
+  const r = { sitemap: поля("Sitemap") };
 
   it("правила не пусты — иначе всё ниже зелёное на пустоте", () => {
     expect(allow.length).toBeGreaterThan(0);
@@ -75,5 +85,20 @@ describe("robots.txt не закрывает свои же карты сайта
     for (const путь of ["/", "/pricing", "/longevity", "/cyberchess", "/devhub", "/qright"]) {
       expect(решение(путь, allow, disallow), путь).toBe("открыт");
     }
+  });
+
+  it("Clean-param объявлен и перечисляет метки, которые мы реально ставим", () => {
+    const строка = строки.find((s) => s.startsWith("Clean-param:"));
+    expect(строка, "директивы Clean-param нет — Яндекс будет дробить страницы по меткам").toBeTruthy();
+    const перечень = (строка as string).slice("Clean-param:".length).trim().split("&");
+    // `c` — наша метка канала, она стоит почти в каждой ссылке из роликов и писем.
+    expect(перечень).toContain("c");
+    expect(перечень).toEqual([...CLEAN_PARAMS]);
+  });
+
+  it("ОТРИЦАТЕЛЬНЫЙ контроль: Clean-param не превратился в запрет", () => {
+    // Директива перечисляет параметры, а не пути: если бы кто-то записал её
+    // как Disallow, закрылись бы живые страницы с метками.
+    expect(disallow.some((d) => d.includes("utm_") || d === "c")).toBe(false);
   });
 });

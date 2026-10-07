@@ -67,7 +67,7 @@ const NON_PAGE_ROUTE_FILES = [
   "opengraph-image.tsx",
   "twitter-image.tsx",
   "manifest.ts",
-  "robots.ts",
+  "robotsRules.ts",
   "sitemap.ts",
 ];
 

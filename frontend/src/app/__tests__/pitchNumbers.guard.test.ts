@@ -23,7 +23,10 @@ const FRONTEND_ROOT = path.resolve(__dirname, "../../..");
 
 // Pitch surfaces that must stay consistent with the single revenue model.
 const SURFACES = [
-  "src/app/page.tsx",
+  // 06.10.2026: главная уехала в _home.tsx — на её месте серверная обёртка
+  // ради canonical, и числа питча живут теперь здесь. Путь обновлён, охват
+  // сторожа не изменился.
+  "src/app/_home.tsx",
   "src/app/pitch/page.tsx",
   "src/app/pitch/print/page.tsx",
   "src/app/pitch/opengraph-image.tsx",

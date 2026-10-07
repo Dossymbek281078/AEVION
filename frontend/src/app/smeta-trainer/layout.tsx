@@ -4,6 +4,7 @@ import { AutoSyncBridge } from "./lib/useAutoSync";
 import { KeyboardShortcuts } from "./components/KeyboardShortcuts";
 
 import type { Metadata } from "next";
+import { языки } from "@/lib/hreflang";
 
 export const metadata: Metadata = {
   title: {
@@ -14,6 +15,12 @@ export const metadata: Metadata = {
     "AI-тренажёр сметного дела РК. Подбор расценок НДЦС РК, расчёт ЛСР, учебный режим, AI-советник на типовых ошибках.",
   keywords: ["смета", "AEVION", "ЛСР", "сметное дело", "расценки РК", "тренажёр"],
   openGraph: {
+    // 06.10.2026: язык объявлен СЕРВЕРНО. Замер того же дня: у этой страницы
+    // кириллицы больше, чем латиницы, а og:locale не было вовсе, и корневой
+    // макет отдаёт lang="en". Поправить сам lang на уровне страницы нельзя
+    // (<html> живёт только в корневом макете, разбор там же в комментарии),
+    // поэтому серверный языковой сигнал даём тем, чем можно: og:locale.
+    locale: "ru_RU",
     title: "Сметный тренажёр · AEVION",
     description:
       "AI-тренажёр сметного дела РК. Подбор расценок НДЦС РК, расчёт ЛСР, учебный режим, AI-советник на типовых ошибках.",

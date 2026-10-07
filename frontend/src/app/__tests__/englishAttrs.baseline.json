@@ -50,7 +50,6 @@
   "app/modules/page.tsx": 5,
   "app/modules/tags/[tag]/page.tsx": 2,
   "app/multichat-engine/MultichatEngineClient.tsx": 13,
-  "app/page.tsx": 10,
   "app/partner/page.tsx": 5,
   "app/payments/api/page.tsx": 1,
   "app/payments/dashboard/page.tsx": 4,
@@ -141,5 +140,6 @@
   "lib/planetNominations.ts": 3,
   "lib/products.ts": 7,
   "lib/qrightServerI18n.ts": 1,
-  "app/qsign/keys/page.tsx": 5
+  "app/qsign/keys/page.tsx": 5,
+  "app/_home.tsx": 10
 }

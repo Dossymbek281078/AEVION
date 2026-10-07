@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeEach, afterAll, vi } from "vitest";
 import express from "express";
 import request from "supertest";
+import { svoyTurnir } from "./helpers/svoyTurnir";
 import crypto from "node:crypto";
 import os from "node:os";
 import fs from "node:fs";
@@ -77,18 +78,47 @@ function postSigned(url: string, body: Record<string, unknown>) {
     .send(body);
 }
 
-/** A tournament id plus a bracket match that has not been decided yet. */
+/**
+ * Свой турнир с нерешённой парой — вместо поиска по витрине.
+ *
+ * Прежде пара искалась среди турниров из GET /list. С 30.09 эта ручка отдаёт
+ * только созданные людьми (толькоНастоящие): наши заготовки она скрывает,
+ * чтобы витрина не заявляла 534 участника при нуле живых. Список стал пуст, и
+ * падало «no undecided match in the seed fixtures» — хотя проверяется здесь
+ * подпись результата, а не политика показа.
+ *
+ * Турнир заводится ОДИН раз на файл: создание ограничено пятью за 10 минут
+ * с адреса, а адрес в прогоне один на все запросы.
+ */
+let параКэш: { tournamentId: string; matchId: string } | null = null;
 async function findOpenMatch(): Promise<{ tournamentId: string; matchId: string }> {
-  const list = await request(app).get("/api/cyberchess-tournaments/list");
-  for (const t of list.body.tournaments ?? list.body.items ?? []) {
-    const bracket = await request(app).get(`/api/cyberchess-tournaments/${t.id}/bracket`);
-    for (const round of bracket.body.rounds ?? []) {
-      for (const m of round.matches ?? []) {
-        if (m.status !== "done") return { tournamentId: t.id, matchId: m.id };
+  if (параКэш) return параКэш;
+  const t = await svoyTurnir((u, b) => request(app).post(u).send(b as object), {
+    // Мест с запасом: в файле есть проверки повторной записи, и на тесном
+    // турнире они падали с tournament_full вместо already_registered —
+    // то есть по причине, не имеющей отношения к проверяемому.
+    maxPlayers: 16,
+    format: "swiss",
+  });
+  for (const uid of ["пара-1", "пара-2"]) {
+    const r = await request(app)
+      .post(`/api/cyberchess-tournaments/${t.id}/register`)
+      .send({ userId: uid, displayName: uid });
+    if (r.status !== 200) throw new Error(`регистрация ${uid}: ${r.status} ${JSON.stringify(r.body)}`);
+  }
+  const кругОтвет = await request(app).post(`/api/cyberchess-tournaments/${t.id}/queue-match`).send({});
+  const bracket = await request(app).get(`/api/cyberchess-tournaments/${t.id}/bracket`);
+  for (const round of bracket.body.rounds ?? []) {
+    for (const m of round.matches ?? []) {
+      if (m.status !== "done") {
+        параКэш = { tournamentId: t.id, matchId: m.id };
+        return параКэш;
       }
     }
   }
-  throw new Error("no undecided match in the seed fixtures");
+  throw new Error(
+    `в своём турнире не оказалось нерешённой пары; queue-match вернул ${кругОтвет.status} ${JSON.stringify(кругОтвет.body)}`,
+  );
 }
 
 beforeEach(() => {

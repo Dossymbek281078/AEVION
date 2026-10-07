@@ -14,7 +14,12 @@ describe("isPremiumModel", () => {
   it("flags frontier models priced at/above the $5/1M output threshold", () => {
     expect(isPremiumModel("anthropic", "claude-fable-5")).toBe(true);
     expect(isPremiumModel("anthropic", "claude-opus-4-8")).toBe(true);
-    expect(isPremiumModel("openai", "gpt-4-turbo")).toBe(true);
+    // 07.10.2026, приёмка волны 26g: примером стоял `gpt-4-turbo`, а его
+    // сняли из реестра и таблицы цен — модели нет у поставщика (нашла проба
+    // models_declared на проде). Пример заменён на `gpt-4o`: он В ТОЙ ЖЕ
+    // таблице и его выходная цена 10.0 при пороге 5, то есть утверждение
+    // проверяет ровно то же правило, а не ослаблено под зелёный.
+    expect(isPremiumModel("openai", "gpt-4o")).toBe(true);
   });
 
   it("does not flag cheap paid models or the free fleet", () => {

@@ -692,14 +692,21 @@ export default function DevHubPage() {
               <span style={{ fontSize: 12.5, color: "#99f6e4", lineHeight: 1.45 }}>{t("hero.mode.hint")}</span>
             </div>
           )}
-          {даннымНуженСервер(ideaPrompt) && (
-            <div style={{ fontSize: 13, color: "#fde68a", marginTop: 10, lineHeight: 1.5 }}>
-              {t("hero.needsServerNote")}
-            </div>
-          )}
-          <div style={{ fontSize: 13.5, color: "#99f6e4", marginTop: 12, lineHeight: 1.5 }}>
-                {t("hero.subtitle")}
-          </div>
+          {/* 🔴 ПОДНЯТО 07.10.2026 по замеру на живом проде. На 390×844 эти примеры
+              стояли на y=859–972 — ЗА первым экраном (высота 844), а подпись «Или
+              начните с примера» на y=832, у самого края. На 1366×720 они были видны
+              (527–595): на столе путь «начать БЕЗ НАБОРА» существовал, а на телефоне
+              его не было видно без прокрутки.
+              Денежный повод: за сутки youtube→/devhub дал 15 живых сессий, 2 с
+              чтением и НОЛЬ попыток — при 6 из 6 у шахмат на том же канале. Поле и
+              кнопка были в первом экране и достижимы (поле y=340, кнопка y=416,
+              включается при наборе), значит мешал не доступ к полю, а отсутствие
+              ВИДИМОГО способа начать без печатания. Нажатие примера заполняет поле
+              (54 знака) и включает кнопку — проверено на обоих экранах.
+              Место выбрано ПОСЛЕ блока цены намеренно: сторож приёмки
+              priceIsInTheFirstScreen считает первый экран префиксом ИСХОДНИКА, и
+              вставка перед ценой выбила бы её из его окна. На экране примеры при
+              этом всё равно попадают в первый: цена кончается около y=540. */}
           {/* An empty box is the hardest thing to answer. These are not
               decoration: each one exercises a different part of the pipeline
               (plain UI, a real database, media), so the first thing a person
@@ -724,6 +731,14 @@ export default function DevHubPage() {
                 {example}
               </button>
             ))}
+          </div>
+          {даннымНуженСервер(ideaPrompt) && (
+            <div style={{ fontSize: 13, color: "#fde68a", marginTop: 10, lineHeight: 1.5 }}>
+              {t("hero.needsServerNote")}
+            </div>
+          )}
+          <div style={{ fontSize: 13.5, color: "#99f6e4", marginTop: 12, lineHeight: 1.5 }}>
+                {t("hero.subtitle")}
           </div>
         </div>
 

@@ -79,7 +79,8 @@ export default async function AwardsHomePage() {
     { step: "01", titleKey: "awardsHub.pipeline.s1.title", bodyKey: "awardsHub.pipeline.s1.body", color: "#7dd3fc" },
     { step: "02", titleKey: "awardsHub.pipeline.s2.title", bodyKey: "awardsHub.pipeline.s2.body", color: "#c4b5fd" },
     { step: "03", titleKey: "awardsHub.pipeline.s3.title", bodyKey: "awardsHub.pipeline.s3.body", color: "#5eead4" },
-    { step: "04", titleKey: "awardsHub.pipeline.s4.title", bodyKey: "awardsHub.pipeline.s4.body", color: "#fde68a" },
+    // Шаг «Bank AEC payout» убран 06.10.2026: начисления победителю премии в
+    // коде нет (см. комментарий в AwardsTrackPanel.tsx). Вернуть вместе с механизмом.
   ];
 
   return (

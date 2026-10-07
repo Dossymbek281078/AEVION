@@ -248,19 +248,26 @@ export function getProviders(): Provider[] {
     {
       id: "openrouter",
       name: "OpenRouter (free models)",
-      // Real `:free` slugs verified against openrouter.ai/api/v1/models (2026-07-05).
-      // Ordered by observed availability: the most-requested free models
-      // (llama-3.3-70b) 429 first under load, so less-saturated strong models
-      // lead — this order is also the 429-fallback order. Override via
-      // OPENROUTER_MODEL / per call. The catalogue churns.
+      // 🔴 07.10.2026: из семи прежних слагов ПЯТИ в каталоге больше нет
+      // (`openai/gpt-oss-120b:free`, `qwen/qwen3-next-80b-a3b-instruct:free`,
+      // `meta-llama/llama-3.3-70b-instruct:free`,
+      // `nousresearch/hermes-3-llama-3.1-405b:free`, `qwen/qwen3-coder:free`).
+      // Комментарий выше сам предупреждал: «The catalogue churns» — и за три
+      // месяца список усох на две трети молча. Проверка:
+      // `node C:/Users/user/aevion-ai-models-alive.mjs --провайдер=openrouter`
+      // (каталог OpenRouter публичный, ключ не нужен — зовите перед волной).
+      //
+      // Живы на 07.10 (сверено с openrouter.ai/api/v1/models: 465 моделей,
+      // из них бесплатных 16). Порядок — по размеру модели, от крупной к
+      // мелкой. Прежний комментарий обещал порядок «по наблюдаемой
+      // доступности под нагрузкой»: такого замера у нас нет и сделать его без
+      // ключа нельзя, поэтому обещание убрано, а не переписано заново.
       models: [
         "nvidia/nemotron-3-super-120b-a12b:free",
-        "openai/gpt-oss-120b:free",
-        "qwen/qwen3-next-80b-a3b-instruct:free",
-        "meta-llama/llama-3.3-70b-instruct:free",
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
         "google/gemma-4-31b-it:free",
-        "nousresearch/hermes-3-llama-3.1-405b:free",
-        "qwen/qwen3-coder:free",
+        "google/gemma-4-26b-a4b-it:free",
+        "nvidia/nemotron-3.5-lightning:free",
       ],
       defaultModel: process.env.OPENROUTER_MODEL || "nvidia/nemotron-3-super-120b-a12b:free",
       envKey: "OPENROUTER_API_KEY",

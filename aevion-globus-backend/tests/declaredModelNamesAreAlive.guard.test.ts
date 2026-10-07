@@ -15,6 +15,7 @@ import { describe, test, expect, beforeEach, afterEach } from "vitest";
 process.env.GEMINI_API_KEY = "test-gemini";
 process.env.ANTHROPIC_API_KEY = "test-anthropic";
 process.env.OPENAI_API_KEY = "test-openai";
+process.env.OPENROUTER_API_KEY = "test-openrouter";
 
 const { проверитьИменаМоделей, сброситьКэшИмёнМоделей } = await import("../src/lib/объявленныеМодели");
 const { getProviders } = await import("../src/services/qcoreai/providers");
@@ -182,10 +183,12 @@ describe("умолчание поставщика отвечает на наст
       g: process.env.GEMINI_API_KEY,
       a: process.env.ANTHROPIC_API_KEY,
       o: process.env.OPENAI_API_KEY,
+      r: process.env.OPENROUTER_API_KEY,
     };
     delete process.env.GEMINI_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
+    delete process.env.OPENROUTER_API_KEY;
     сетьОтвечаетНаВызов([]);
     try {
       const r = await проверитьУмолчанияВызовом();
@@ -195,6 +198,7 @@ describe("умолчание поставщика отвечает на наст
       if (было.g) process.env.GEMINI_API_KEY = было.g;
       if (было.a) process.env.ANTHROPIC_API_KEY = было.a;
       if (было.o) process.env.OPENAI_API_KEY = было.o;
+      if (было.r) process.env.OPENROUTER_API_KEY = было.r;
     }
   });
 
@@ -208,6 +212,20 @@ describe("умолчание поставщика отвечает на наст
     expect(r.detail).toContain(умолчание);
     expect(r.detail).toContain("404");
   });
+  test("🔴 последнее звено запаса (OpenRouter) тоже зовётся вызовом", async () => {
+    // До 07.10 его модели были проверены ТОЛЬКО каталогом, а он — последнее
+    // звено цепочки: gemini (срок 12.10) → openai (денег нет) → anthropic
+    // ($8.93) → openrouter. Проверять каталогом то, на чём всё держится,
+    // значит не проверять: `gemini-2.5-pro` в каталоге был и отвечал 404.
+    const { проверитьУмолчанияВызовом } = await import("../src/lib/объявленныеМодели");
+    const { getProviders } = await import("../src/services/qcoreai/providers");
+    const умолчание = getProviders().find((p) => p.id === "openrouter")!.defaultModel;
+    сетьОтвечаетНаВызов([умолчание]);
+    const r = await проверитьУмолчанияВызовом();
+    expect(r.ok, "мёртвое умолчание OpenRouter прошло как «всё хорошо»").toBe(false);
+    expect(r.detail, "OpenRouter не зовётся вызовом — последнее звено не проверено").toContain(умолчание);
+  });
+
   test("🔴 ручка состояния действительно задаёт и ЭТОТ вопрос", async () => {
     // Мутация «убрать пробу из ручки» ПРОХОДИЛА, пока проверка смотрела
     // только на функцию: забытый вызов оставил бы её зелёной, а панель слепой.

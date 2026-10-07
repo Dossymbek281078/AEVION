@@ -177,6 +177,22 @@ async function вызватьОдинТокен(id: string, модель: string
     });
     return r.ok ? { ok: true } : { ok: false, почему: `HTTP ${r.status}` };
   }
+  if (id === "openrouter") {
+    // Последнее звено цепочки запаса, и до 07.10 оно было проверено ТОЛЬКО
+    // каталогом. Замер того дня: gemini — деньги есть, но срок перехода на
+    // предоплату 12.10; openai — ключ жив, денег нет; anthropic — $8.93.
+    // То есть запас держится на бесплатных слагах, а работают ли они на
+    // вызов, никто не спрашивал. Вызов бесплатный — спрашиваем.
+    const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${process.env.OPENROUTER_API_KEY?.trim() || ""}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ model: модель, max_tokens: 1, messages: [{ role: "user", content: "." }] }),
+    });
+    return r.ok ? { ok: true } : { ok: false, почему: `HTTP ${r.status}` };
+  }
   return { ok: false, почему: "вызывать этого поставщика не умею" };
 }
 
@@ -185,7 +201,7 @@ export async function проверитьУмолчанияВызовом(): Prom
 
   const отказали: string[] = [];
   let спрошено = 0;
-  for (const id of ["gemini", "anthropic", "openai"]) {
+  for (const id of ["gemini", "anthropic", "openai", "openrouter"]) {
     const п = getProviders().find((x) => x.id === id);
     if (!п?.configured) continue;
     try {

@@ -2213,6 +2213,22 @@ export function __scheduleDomainRecheckForTest(customDomain: string, step = 0): 
  * проверяет ГРАНИЦУ, и граница должна достигаться за один шаг, иначе проверка
  * станет самой дорогой в наборе и её выключат.
  */
+/**
+ * Положить проект прямо в память — дверь ДЛЯ ПРОВЕРКИ свипа пробных сайтов.
+ *
+ * Иначе сторожу пришлось бы сперва пройти создание и выкатку (а выкатка идёт в
+ * Cloudflare), то есть проверка отбора превратилась бы в проверку выкатки. Дверь
+ * узкая: кладёт запись и ничего не делает сама.
+ */
+export function __положитьПроектForTest(p: DevHubProject): void {
+  memProjects.set(p.id, p);
+}
+
+/** Прочитать проект из памяти — чтобы сторож видел, обнулён ли адрес. */
+export function __прочитатьПроектForTest(id: string): DevHubProject | undefined {
+  return memProjects.get(id);
+}
+
 export function __setMonthUsageForTest(userId: string, capability: CapabilityKey, used: number): void {
   memUsage.set(`${userId}:${creditMonth()}:${capability}`, used);
 }
@@ -3265,17 +3281,118 @@ async function снятьСайтPages(
 }
 
 /** Отложенное снятие пробного сайта. Снимается САЙТ, запись проекта остаётся. */
+/**
+ * Убрать пробный САЙТ (проект в базе остаётся). Одно поведение на два повода:
+ * таймер после выкатки и периодический свип.
+ *
+ * 🔴 ЗАЧЕМ ОБНУЛЯТЬ АДРЕС. Прежняя уборка по таймеру адрес не обнуляла — и это
+ * было верно, потому что рядом стоял DELETE, удалявший проект целиком. Для свипа
+ * так нельзя: Cloudflare на уже снятый проект отвечает 404, 404 считается
+ * успехом, и тот же проект попадал бы в выборку каждые четверть часа — вечный
+ * шум в журнале. Хуже того, счётчик потолка (занятоПроектовPages) считает
+ * проекты С АДРЕСОМ, то есть снятый сайт продолжал бы занимать место в пределе
+ * аккаунта. Поэтому адрес обнуляется ровно при успехе снятия.
+ */
+async function убратьПробныйСайт(
+  project: DevHubProject,
+  откуда: string,
+): Promise<{ снят: boolean; причина?: string }> {
+  const имя = имяPagesПроекта(project);
+  const r = await снятьСайтPages(project, откуда);
+  // Молчать нельзя ни при удаче, ни при отказе: это наше же действие над
+  // публичным адресом, и по журналу должно быть видно, что оно произошло.
+  console.warn(
+    `[devhub] пробный сайт ${имя} (${откуда}): ` +
+      (r.pagesRemoved ? "снят" : `снять НЕ удалось — ${r.pagesRemoveError ?? "причина не названа"}`),
+  );
+  if (r.pagesRemoved) {
+    try {
+      await dbSaveProject({ ...project, deployUrl: null, updatedAt: new Date().toISOString() });
+    } catch (e) {
+      // Сайт уже снят — это главное; но несохранённое обнуление вернёт проект в
+      // выборку, и молчать об этом нельзя.
+      console.warn(
+        `[devhub] пробный сайт ${имя}: снят, но адрес не обнулён — ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+  return { снят: Boolean(r.pagesRemoved), причина: r.pagesRemoveError };
+}
+
 function scheduleProbeSiteCleanup(project: DevHubProject): void {
   deferred(async () => {
-    const имя = имяPagesПроекта(project);
-    const r = await снятьСайтPages(project, "devhub/probe-site:self-clean");
-    // Молчать нельзя ни при удаче, ни при отказе: это наше же действие над
-    // публичным адресом, и по журналу должно быть видно, что оно произошло.
-    console.warn(
-      `[devhub] пробный сайт ${имя}: ` +
-        (r.pagesRemoved ? "снят сам по сроку" : `снять НЕ удалось — ${r.pagesRemoveError ?? "причина не названа"}`),
-    );
+    await убратьПробныйСайт(project, "devhub/probe-site:self-clean");
   }, СРОК_ПРОБНОГО_САЙТА_МС);
+}
+
+/** Пробные сайты, которые пережили свой срок. Признак пробы — один и тот же. */
+async function залежавшиесяПробныеСайты(срокМс: number, предел = 200): Promise<DevHubProject[] | null> {
+  const порог = new Date(Date.now() - срокМс).toISOString();
+  const годен = (p: DevHubProject) =>
+    Boolean(p.deployUrl) && пробныйГостевойПроект(p) && p.updatedAt < порог;
+  if (!isDevHubDbReady()) {
+    return [...memProjects.values()].filter(годен).slice(0, предел);
+  }
+  try {
+    // Сужаем запросом то, что сужается дёшево (адрес и срок), а признак пробного
+    // имени считаем ОДНОЙ функцией в коде: второй его формы в SQL быть не должно.
+    const r = await pool.query(
+      `SELECT * FROM "DevHubProject" WHERE "deployUrl" IS NOT NULL AND "updatedAt" < $1 ORDER BY "updatedAt" ASC LIMIT $2`,
+      [порог, предел],
+    );
+    return (r.rows.map(rowToProject) as DevHubProject[]).filter(годен);
+  } catch (e) {
+    // Третий исход: не «пусто», а НЕ ЗНАЮ. Пустой список прочитался бы как
+    // «сирот нет» и усыпил бы следующего читателя журнала.
+    console.warn(`[devhub] свип пробных сайтов: выборка не прочиталась — ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  }
+}
+
+/**
+ * Периодический свип пробных сайтов.
+ *
+ * ЗАЧЕМ, помимо таймера. Таймер живёт В ПАМЯТИ ПРОЦЕССА: перезапуск сервиса (а
+ * он случается при каждой выкатке) стирает все отложенные уборки, и пробный сайт
+ * остаётся публичным навсегда. Замер 07.10.2026: мою собственную пробу на проде
+ * пришлось убирать руками именно поэтому. Свип — страховка на тот случай, а не
+ * второй механизм: снимает он тем же убратьПробныйСайт.
+ */
+export async function свипПробныхСайтов(): Promise<{ осмотрено: number | null; снято: number; неудач: number }> {
+  const кандидаты = await залежавшиесяПробныеСайты(СРОК_ПРОБНОГО_САЙТА_МС);
+  if (кандидаты === null) return { осмотрено: null, снято: 0, неудач: 0 };
+  let снято = 0;
+  let неудач = 0;
+  for (const p of кандидаты) {
+    const r = await убратьПробныйСайт(p, "devhub/probe-site:sweep");
+    if (r.снят) снято += 1;
+    else неудач += 1;
+  }
+  if (кандидаты.length > 0) {
+    console.warn(`[devhub] свип пробных сайтов: осмотрено ${кандидаты.length}, снято ${снято}, неудач ${неудач}`);
+  }
+  return { осмотрено: кандидаты.length, снято, неудач };
+}
+
+/** Период свипа. Через переменную — чтобы в проде можно было уплотнить без выкатки. */
+const ПЕРИОД_СВИПА_МС = Math.max(
+  60_000,
+  Number(process.env.DEVHUB_PROBE_SWEEP_MIN || 15) * 60_000,
+);
+
+let таймерСвипа: ReturnType<typeof setInterval> | null = null;
+
+export function запуститьСвипПробныхСайтов(): void {
+  if (таймерСвипа) return;
+  таймерСвипа = setInterval(() => {
+    void свипПробныхСайтов().catch((e) => {
+      // Брошенное исключение внутри setInterval не доходит до обработчика ошибок
+      // приложения и роняет процесс — об этом сказано в index.ts про соседние
+      // рабочие. Поэтому ловим здесь и называем.
+      console.warn(`[devhub] свип пробных сайтов: сорвался — ${e instanceof Error ? e.message : String(e)}`);
+    });
+  }, ПЕРИОД_СВИПА_МС);
+  таймерСвипа.unref();
 }
 
 devhubRouter.delete("/projects/:id", async (req, res) => {

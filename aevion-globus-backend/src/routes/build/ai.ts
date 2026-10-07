@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { getProviders } from "../../services/qcoreai/providers";
 import crypto from "crypto";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import {
@@ -42,14 +43,24 @@ const aiRateLimiter = rateLimit({
   },
 });
 
-// Every /api/build/ai/* surface needs Anthropic. When the key is absent
-// (early deploys, dev without a key) return a clear 503 instead of a scary
-// generic 500 from deep inside each handler — frontends can show "AI
-// unavailable" and smoke treats it as SKIP via the details string.
+// Каждая ручка /api/build/ai/* нуждается в ИИ. Когда не настроен НИ ОДИН
+// поставщик, отвечаем понятным 503 вместо пугающей 500 из глубины
+// обработчика: фронт показывает «ИИ недоступен», смоук считает это SKIP.
+//
+// 🔴 07.10.2026. Здесь стояла проверка ровно на `ANTHROPIC_API_KEY` — она
+// была верна, пока модуль звал Anthropic напрямую. После перевода на общий
+// реестр (порядок Gemini → OpenAI → Anthropic) условие осталось прежним и
+// стало ЛОЖНЫМ ограничением: убери ключ Anthropic — и QBuild отказал бы всем,
+// хотя Gemini настроен и отвечает. Нашлось тестом: он поднимал маршрут без
+// ключа Anthropic и получал 503 там, где работа возможна.
+//
+// Теперь спрашиваем то, что нужно на самом деле: есть ли хоть один
+// настроенный поставщик.
 aiRouter.use((_req, res, next) => {
-  if (!process.env.ANTHROPIC_API_KEY?.trim()) {
+  const естьПоставщик = getProviders().some((p) => p.configured && p.id !== "stub");
+  if (!естьПоставщик) {
     return fail(res, 503, "ai_not_configured", {
-      details: "ANTHROPIC_API_KEY not configured",
+      details: "no AI provider configured",
     });
   }
   next();
@@ -810,6 +821,11 @@ Hard rules:
 - Do not invent facts that aren't in the source.`,
       messages: [{ role: "user", content: userPayload }],
       maxTokens: 2200,
+      // Ответ — строго JSON («Return ONLY a JSON object» в промпте выше).
+      // Обрыв такого ответа не «короче», а НЕРАЗБИРАЕМ: модуль отдаст ошибку
+      // вместо перевода. Поэтому модель просят не размышлять — у Gemini
+      // размышление тратит тот же бюджет, что и ответ (замер 07.10.2026).
+      structured: true,
       cacheSystem: false,
     });
 

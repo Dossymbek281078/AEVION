@@ -705,7 +705,7 @@ async function callOpenAICompat(
   return { reply, model: data.model || model, usage: data.usage || null };
 }
 
-async function callGemini(messages: ChatMessage[], model: string, temperature: number, images?: ChatImage[], maxTokens?: number): Promise<CallResult> {
+async function callGemini(messages: ChatMessage[], model: string, temperature: number, images?: ChatImage[], maxTokens?: number, структурныйОтвет?: boolean): Promise<CallResult> {
   const key = process.env.GEMINI_API_KEY?.trim();
   if (!key) throw new Error("GEMINI_API_KEY not configured");
   const systemMsg = messages.find((m) => m.role === "system");
@@ -738,7 +738,15 @@ async function callGemini(messages: ChatMessage[], model: string, temperature: n
       // звонящего — на ОТВЕТ, а не на невидимые рассуждения. Большие бюджеты
       // (4096 по умолчанию и выше) не трогаем — там размышление уместно и
       // помещается.
-      ...(maxTokens != null && maxTokens < 2048 ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+      // Размышление выключается в двух случаях, и причины у них разные:
+      //   • бюджет маленький (< 2048) — иначе размышление съест ответ;
+      //   • ответ СТРУКТУРНЫЙ (JSON) — обрыв такого ответа делает его
+      //     неразбираемым целиком, и модуль отдаст ошибку вместо результата.
+      // Второе не зависит от размера бюджета: перевод вакансии просит 2200,
+      // и этого хватило бы тексту, но не хватит, если часть уйдёт на мысли.
+      ...(структурныйОтвет || (maxTokens != null && maxTokens < 2048)
+        ? { thinkingConfig: { thinkingBudget: 0 } }
+        : {}),
     },
   };
   if (systemMsg) body.systemInstruction = { parts: [{ text: systemMsg.content }] };
@@ -864,7 +872,18 @@ export async function callProvider(
   images?: ChatImage[],
   maxTokens?: number,
   meter?: CallMeter,
-  порядокЗапаса?: ПорядокЗапаса
+  порядокЗапаса?: ПорядокЗапаса,
+  /**
+   * Ответ должен быть СТРУКТУРНЫМ (JSON, таблица, строгий формат).
+   *
+   * 🔴 07.10.2026. У моделей с внутренним размышлением (`gemini-2.5-flash`)
+   * оно тратит тот же бюджет, что и ответ. Для свободного текста обрыв —
+   * это неполный, но читаемый ответ; для JSON обрыв означает, что ответ не
+   * разберётся ВООБЩЕ и модуль отдаст ошибку вместо результата. Поэтому
+   * структурные вызовы просят не размышлять независимо от размера бюджета:
+   * правило по смыслу задачи, а не по числу.
+   */
+  структурныйОтвет?: boolean
 ): Promise<CallResult> {
   const tried: string[] = [];
   let current = providerId;
@@ -872,7 +891,7 @@ export async function callProvider(
   for (;;) {
     tried.push(current);
     try {
-      const res = await callProviderOnce(current, messages, currentModel, temperature, images, maxTokens, meter);
+      const res = await callProviderOnce(current, messages, currentModel, temperature, images, maxTokens, meter, структурныйОтвет);
       if (current !== "stub" && !String(res.reply ?? "").trim()) {
         throw new Error(`${current} answered with an empty reply`);
       }
@@ -904,7 +923,8 @@ async function callProviderOnce(
   temperature: number,
   images?: ChatImage[],
   maxTokens?: number,
-  meter?: CallMeter
+  meter?: CallMeter,
+  структурныйОтвет?: boolean
 ): Promise<CallResult> {
   if (providerId === "stub") {
     const reply = stubReply(messages);
@@ -914,7 +934,7 @@ async function callProviderOnce(
   }
   let res: CallResult;
   if (providerId === "anthropic") res = await callAnthropic(messages, model, temperature, images, maxTokens);
-  else if (providerId === "gemini") res = await callGemini(messages, model, temperature, images, maxTokens);
+  else if (providerId === "gemini") res = await callGemini(messages, model, temperature, images, maxTokens, структурныйОтвет);
   else if (OPENAI_COMPAT[providerId]) res = await callOpenAICompat(providerId, messages, model, temperature, images, maxTokens);
   else throw new Error("No AI provider configured");
   await meterCall(meter, providerId, model, res.usage);

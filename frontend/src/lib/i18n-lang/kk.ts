@@ -7414,6 +7414,8 @@ const kk: Record<string, string> = {
   "moduleChip.planetFrom": "бүкіл планета айына {price} бастап",
   "moduleChip.includedInPlanet": "AEVION жазылымына кіреді",
   "moduleChip.buy": "Сатып алу",
+  "moduleChip.requestAccess": "Қолжетімділікті талқылау",
+  "moduleChip.requestAccessTitle": "Әзірге бөлек сатылмайды — бізге жазыңыз, қолжетімділікті ұйымдастырамыз",
 };
 
 export default kk;

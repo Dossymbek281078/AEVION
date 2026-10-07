@@ -3141,6 +3141,143 @@ devhubRouter.patch("/projects/:id", async (req, res) => {
 });
 
 // DELETE /api/devhub/projects/:id
+/**
+ * ПРОБНЫЙ САЙТ СНИМАЕТ СЕБЯ САМ.
+ *
+ * 🔴 ЗАМЕР 07.10.2026 по живому аккаунту Cloudflare (вход основателя): из 34
+ * проектов Pages **20 были нашими пробами**, 15 из них ещё отдавали публичные
+ * страницы. Каждый такой проект навсегда занимает один из слотов аккаунта, и
+ * когда слоты кончатся, публикация встанет у ВСЕХ, включая платных.
+ *
+ * ВАЖНО, ОТКУДА МУСОР: штатный смоук (scripts/devhub-prod-smoke.js) за собой
+ * УБИРАЕТ — он зовёт DELETE /projects/:id, а тот снимает и проект Pages. Среди
+ * 20 найденных не было ни одного `aevion-smoke-*`. Весь мусор оставили РУЧНЫЕ
+ * пробы окон: человек (и я в том числе) выкатывал проверку curl-ом и уходил.
+ * Значит правило нельзя чинить в скрипте — его чинит сервер.
+ *
+ * Поэтому: проект с пробным именем, принадлежащий ГОСТЮ, снимает свой сайт сам
+ * через `DEVHUB_PROBE_SITE_TTL_MINUTES` минут (по умолчанию 120). Снимается
+ * только САЙТ: запись проекта остаётся, она слотов Cloudflare не занимает и
+ * ничего не стоит, а удаление чужой работы — необратимо, и к нему мы не
+ * приближаемся без человека.
+ *
+ * ⚠️ ЧЕСТНАЯ ГРАНИЦА: таймер живёт в процессе. Перезапуск (а выкаток бывает
+ * несколько в сутки) его теряет, и такой сайт останется. То есть это уменьшает
+ * поток мусора, но не заменяет периодический обход — его стоит завести отдельно,
+ * и я этого здесь не делаю, чтобы не выдать половину за целое.
+ */
+const ПРОБНОЕ_ИМЯ = /^\s*(probe|smoke)[-_ ]/i;
+const СРОК_ПРОБНОГО_САЙТА_МС =
+  Math.max(1, Number(process.env.DEVHUB_PROBE_SITE_TTL_MINUTES ?? 120)) * 60_000;
+
+/** Пробный проект гостя: и имя помечено, и владелец — не вошедший человек. */
+export function пробныйГостевойПроект(p: { name: string; userId: string }): boolean {
+  return isGuestRequester(p.userId) && ПРОБНОЕ_ИМЯ.test(String(p.name ?? ""));
+}
+
+/**
+ * Снять опубликованный сайт проекта (Cloudflare Pages).
+ *
+ * ВЫНЕСЕНО ИЗ РУЧКИ УДАЛЕНИЯ 07.10.2026 без изменения поведения: тот же код
+ * понадобился второму вызывающему — самоуборке пробных сайтов. Второй способ
+ * снимать сайт заводить нельзя: у этого уже есть и правильный порядок (домены,
+ * потом проект — иначе Cloudflare отвечает 8000028), и чтение причины из тела, и
+ * сохранение адреса осиротевшего сайта. Каждое из трёх куплено отдельным разбором.
+ *
+ * Возвращает те же три величины, что раньше складывались в ответ ручки.
+ */
+async function снятьСайтPages(
+  project: DevHubProject,
+  откуда: string,
+): Promise<{ pagesRemoved?: boolean; pagesRemoveError?: string; orphanSiteUrl?: string }> {
+  let pagesRemoved: boolean | undefined;
+  let pagesRemoveError: string | undefined;
+  let orphanSiteUrl: string | undefined;
+  if (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) {
+    const имяСайта = имяPagesПроекта(project);
+    // Сначала домены, потом проект: обратный порядок Cloudflare отвергает с
+    // 8000028, и именно в этом порядке дело, а не в правах или имени.
+    const домены = await снятьДоменыPages(имяСайта);
+    try {
+      const r = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/pages/projects/${имяСайта}`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` } },
+      );
+      pagesRemoved = r.ok || r.status === 404;
+      if (!pagesRemoved) {
+        /*
+         * ПРИЧИНУ берём из тела, а не только из кода (30.09.2026).
+         *
+         * Прежнее сообщение «Cloudflare ответил 400» не говорит, что делать:
+         * 400 бывает и когда имя не то, и когда у токена нет права, и когда
+         * проект держат незавершённые сборки. Проверено ночной пробой — я
+         * получил ровно это сообщение и не смог назвать причину, хотя имя
+         * сайта совпадало.
+         */
+        let подробно = "";
+        try {
+          const тело = await r.text();
+          подробно = тело ? ` — ${тело.slice(0, 300)}` : "";
+        } catch {
+          подробно = " — тело ответа не прочиталось";
+        }
+        // Судьбу доменов называем рядом: без неё «Cloudflare ответил 400»
+        // снова не говорит, что делать.
+        const проДомены = домены.ошибка
+          ? ` | домены не сняты: ${домены.ошибка}`
+          : домены.осталось.length
+            ? ` | не снялись домены: ${домены.осталось.join(", ")}`
+            : домены.снято
+              ? ` | доменов снято: ${домены.снято}`
+              : "";
+        pagesRemoveError = `Cloudflare ответил ${r.status}${подробно}${проДомены}`;
+      }
+    } catch (e) {
+      pagesRemoved = false;
+      pagesRemoveError = e instanceof Error ? e.message : String(e);
+    }
+    if (pagesRemoved === false) {
+      /*
+       * НЕ ТЕРЯТЬ АДРЕС ОСИРОТЕВШЕГО САЙТА (30.09.2026).
+       *
+       * Дальше проект удаляется из базы. Если сайт снять не удалось, он остаётся
+       * отвечать 200 публично, а единственная ниточка к нему — имя, выведенное из
+       * записи, которой уже нет. Ровно так и накопился тот мусор, про который
+       * сказано выше: «уборку пришлось делать руками по списку».
+       *
+       * Поэтому адрес называется трижды: в ответе (вызывающий видит сразу), в
+       * сборщике ошибок (чтобы пришёл человек) и в журнале. Проверено ночью на
+       * себе: проект отдал 404, сайт продолжал отдавать 200 и 4231 знак.
+       */
+      orphanSiteUrl = `https://${имяСайта}.pages.dev`;
+      captureException(new Error(`devhub: pages project delete failed: ${pagesRemoveError}`), {
+        route: откуда,
+        projectId: project.id,
+        orphanSiteUrl,
+        имяСайта,
+      });
+      console.warn(
+        `[devhub] сайт остался жить: ${orphanSiteUrl} — снять не удалось: ${pagesRemoveError}`,
+      );
+    }
+  }
+  return { pagesRemoved, pagesRemoveError, orphanSiteUrl };
+}
+
+/** Отложенное снятие пробного сайта. Снимается САЙТ, запись проекта остаётся. */
+function scheduleProbeSiteCleanup(project: DevHubProject): void {
+  deferred(async () => {
+    const имя = имяPagesПроекта(project);
+    const r = await снятьСайтPages(project, "devhub/probe-site:self-clean");
+    // Молчать нельзя ни при удаче, ни при отказе: это наше же действие над
+    // публичным адресом, и по журналу должно быть видно, что оно произошло.
+    console.warn(
+      `[devhub] пробный сайт ${имя}: ` +
+        (r.pagesRemoved ? "снят сам по сроку" : `снять НЕ удалось — ${r.pagesRemoveError ?? "причина не названа"}`),
+    );
+  }, СРОК_ПРОБНОГО_САЙТА_МС);
+}
+
 devhubRouter.delete("/projects/:id", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
@@ -3217,77 +3354,10 @@ devhubRouter.delete("/projects/:id", async (req, res) => {
    * тот стоит денег и продолжает работать). Но и не молчим: поле в ответе и запись
    * в Sentry — иначе это был бы ровно тот молчаливый отказ, который выглядит успехом.
    */
-  let pagesRemoved: boolean | undefined;
-  let pagesRemoveError: string | undefined;
-  let orphanSiteUrl: string | undefined;
-  if (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) {
-    const имяСайта = имяPagesПроекта(project);
-    // Сначала домены, потом проект: обратный порядок Cloudflare отвергает с
-    // 8000028, и именно в этом порядке дело, а не в правах или имени.
-    const домены = await снятьДоменыPages(имяСайта);
-    try {
-      const r = await fetch(
-        `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/pages/projects/${имяСайта}`,
-        { method: "DELETE", headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` } },
-      );
-      pagesRemoved = r.ok || r.status === 404;
-      if (!pagesRemoved) {
-        /*
-         * ПРИЧИНУ берём из тела, а не только из кода (30.09.2026).
-         *
-         * Прежнее сообщение «Cloudflare ответил 400» не говорит, что делать:
-         * 400 бывает и когда имя не то, и когда у токена нет права, и когда
-         * проект держат незавершённые сборки. Проверено ночной пробой — я
-         * получил ровно это сообщение и не смог назвать причину, хотя имя
-         * сайта совпадало.
-         */
-        let подробно = "";
-        try {
-          const тело = await r.text();
-          подробно = тело ? ` — ${тело.slice(0, 300)}` : "";
-        } catch {
-          подробно = " — тело ответа не прочиталось";
-        }
-        // Судьбу доменов называем рядом: без неё «Cloudflare ответил 400»
-        // снова не говорит, что делать.
-        const проДомены = домены.ошибка
-          ? ` | домены не сняты: ${домены.ошибка}`
-          : домены.осталось.length
-            ? ` | не снялись домены: ${домены.осталось.join(", ")}`
-            : домены.снято
-              ? ` | доменов снято: ${домены.снято}`
-              : "";
-        pagesRemoveError = `Cloudflare ответил ${r.status}${подробно}${проДомены}`;
-      }
-    } catch (e) {
-      pagesRemoved = false;
-      pagesRemoveError = e instanceof Error ? e.message : String(e);
-    }
-    if (pagesRemoved === false) {
-      /*
-       * НЕ ТЕРЯТЬ АДРЕС ОСИРОТЕВШЕГО САЙТА (30.09.2026).
-       *
-       * Дальше проект удаляется из базы. Если сайт снять не удалось, он остаётся
-       * отвечать 200 публично, а единственная ниточка к нему — имя, выведенное из
-       * записи, которой уже нет. Ровно так и накопился тот мусор, про который
-       * сказано выше: «уборку пришлось делать руками по списку».
-       *
-       * Поэтому адрес называется трижды: в ответе (вызывающий видит сразу), в
-       * сборщике ошибок (чтобы пришёл человек) и в журнале. Проверено ночью на
-       * себе: проект отдал 404, сайт продолжал отдавать 200 и 4231 знак.
-       */
-      orphanSiteUrl = `https://${имяСайта}.pages.dev`;
-      captureException(new Error(`devhub: pages project delete failed: ${pagesRemoveError}`), {
-        route: "devhub/projects:delete",
-        projectId: project.id,
-        orphanSiteUrl,
-        имяСайта,
-      });
-      console.warn(
-        `[devhub/delete] сайт остался жить: ${orphanSiteUrl} — снять не удалось: ${pagesRemoveError}`,
-      );
-    }
-  }
+  const снятие = await снятьСайтPages(project, "devhub/projects:delete");
+  const pagesRemoved = снятие.pagesRemoved;
+  const pagesRemoveError = снятие.pagesRemoveError;
+  const orphanSiteUrl = снятие.orphanSiteUrl;
 
   try {
     await dbDeleteProject(req.params.id);
@@ -8466,6 +8536,8 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
     // 5. «Страница отвечает» — цепочкой окон, а не одним (см. scheduleServeVerification).
     // Загрузка прошла, а адрес молчит — это «ещё поднимается», пока не истекли все окна.
     scheduleServeVerification(deployment, project, pagesUrl, customDomain);
+    // Пробный сайт снимет себя сам — см. разбор у пробныйГостевойПроект.
+    if (пробныйГостевойПроект(project)) scheduleProbeSiteCleanup(project);
 
     // Домен судим по DNS, а не по HTTPS: разрешился CNAME — зона отработала;
     // готовность HTTPS (сертификат Pages) проверяет та же цепочка после того, как

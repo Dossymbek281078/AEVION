@@ -22,6 +22,7 @@ vi.hoisted(() => {
 
 import express from "express";
 import request from "supertest";
+import { svoyTurnir } from "./helpers/svoyTurnir";
 
 async function модуль() {
   return await import("../src/routes/cyberchessTournaments");
@@ -42,9 +43,10 @@ describe("турниры начинаются сами", () => {
   test("турнир с участниками переходит в «идёт», когда время наступило", async () => {
     const a = await приложение();
     const m = await модуль();
-    const свободный = (await список(a)).find(
-      (t) => t.status === "upcoming" && t.players < t.maxPlayers);
-    expect(свободный, "нет предстоящего турнира со свободным местом").toBeTruthy();
+    // Турнир ЗАВОДИМ СВОЙ: GET /list с 30.09 отдаёт только созданные людьми,
+    // заготовки скрыты, и предмета в списке больше нет.
+    const свободный = await svoyTurnir((u, b) => request(a).post(u).send(b as object), { maxPlayers: 8 });
+    expect(свободный, "турнир не создался").toBeTruthy();
 
     for (const uid of ["игрок-1", "игрок-2"]) {
       const r = await request(a).post(`/api/cyberchess-tournaments/${свободный!.id}/register`)
@@ -71,8 +73,23 @@ describe("турниры начинаются сами", () => {
     // та выдумка, которую мы из модуля вычищали.
     const a = await приложение();
     const m = await модуль();
-    const пустые = (await список(a)).filter(
-      (t) => t.status === "upcoming" && t.origin === "seed" && (t.players ?? 0) === 0);
+    // 🔴 Образцы берём ИЗ КОДА и наблюдаем ПО ИДЕНТИФИКАТОРУ. В витрине их
+    // нет с 30.09 (толькоНастоящие), а ручка /:id отдаёт турнир без фильтра —
+    // то есть смотреть на живое состояние образца можно, а искать его в
+    // списке бессмысленно. Проверка про то, что пустой образец НЕ начинается
+    // сам; его видимость людям — другой вопрос и другая проверка.
+    const { buildSeedFixtures } = await import("../src/routes/cyberchessTournaments");
+    const поId = async (id: string) => {
+      const r = await request(a).get(`/api/cyberchess-tournaments/${id}`);
+      return (r.body?.tournament ?? null) as Record<string, any> | null;
+    };
+    const кандидаты = buildSeedFixtures().filter(
+      (t: any) => t.status === "upcoming" && (t.players ?? 0) === 0);
+    const пустые: Array<Record<string, any>> = [];
+    for (const k of кандидаты) {
+      const живой = await поId(k.id);
+      if (живой && живой.status === "upcoming" && (живой.players ?? 0) === 0) пустые.push(живой);
+    }
     expect(пустые.length, "не нашлось пустого образца").toBeGreaterThan(0);
     const до = new Map(пустые.map((t) => [t.id, t.startsAt]));
 

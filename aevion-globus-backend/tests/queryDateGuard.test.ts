@@ -136,7 +136,24 @@ describe("класс закрыт по маршрутам, а не по одно
         const near = lines.slice(i, i + 3).join(" ");
         const validatedHere = VALIDATORS.some((v) => line.includes(v));
         const validatedBelow = !!name && VALIDATORS.some((v) => near.includes(v + name));
-        const guarded = validatedHere || validatedBelow || EXEMPT.has(where);
+        /*
+         * 🔴 ПУТЬ ОТКАЗА — НЕ ИСПОЛЬЗОВАНИЕ (приёмка, 07.10.2026).
+         *
+         * Сторож покраснел на СОБСТВЕННОЙ ПОЧИНКЕ: строка
+         *   return res.status(400).json({ error: "bad_date", отдано: String(req.query.date ?? "") })
+         * возвращает вызывающему ОТВЕРГНУТОЕ значение — это и есть правильное
+         * поведение ручки, названное прямым текстом. Проверять тут нечего:
+         * значение уже признано непригодным, и дальше оно не идёт.
+         *
+         * Признак сделан по СМЫСЛУ, а не номером строки: номер в EXEMPT ломается
+         * от любой правки выше и молча перестаёт покрывать то место, ради которого
+         * внесён. Условие «строка отдаёт 4xx с телом» этого недостатка не имеет.
+         *
+         * Граница узкая намеренно: 2xx сюда не попадает, то есть отдать
+         * непроверенную дату в УСПЕШНОМ ответе сторож по-прежнему запретит.
+         */
+        const этоОтказ = /res\s*\.\s*status\(\s*4\d\d\s*\)/.test(line) && line.includes("json(");
+        const guarded = validatedHere || validatedBelow || этоОтказ || EXEMPT.has(where);
         if (!guarded) bad.push(`${path.relative(SRC, p)}:${i + 1}`);
       }
     }

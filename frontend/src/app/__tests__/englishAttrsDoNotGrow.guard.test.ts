@@ -59,8 +59,29 @@ const ATRIBUTY = ["placeholder", "aria-label", "title", "alt"];
 // длинный превращает сторожа в решето, а «перевод» термина делает текст хуже.
 const TERMINY = new Set(["ARR (USD)", "LTV / CAC", "saveAs (path)"]);
 
+/**
+ * Шахматная нотация FEN — не английская подпись, а запись позиции.
+ *
+ * Повод 06.10.2026: в поле ввода FEN появилась подсказка
+ * «rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1». Сторож счёл её
+ * английской фразой и потребовал перевода — но переводить тут нечего и вредно:
+ * FEN одинаков на всех языках, это формат, а не текст.
+ *
+ * Признак СТРОГИЙ, чтобы исключение не стало лазейкой для настоящих подписей:
+ *   только буквы, цифры, косые, дефисы и пробелы;
+ *   РОВНО СЕМЬ косых — у доски восемь рядов, разделённых семью чертами;
+ *   есть хотя бы одна цифра.
+ * Обычная английская фраза ни одного из этих условий не выполняет.
+ */
+function shahmatnayaNotaciya(v: string): boolean {
+  if (!/^[A-Za-z0-9/\- ]+$/.test(v)) return false;
+  if ((v.match(/\//g) || []).length !== 7) return false;
+  return /[0-9]/.test(v);
+}
+
 function poPrirodeLatinica(v: string): boolean {
   if (v.includes("@")) return true;
+  if (shahmatnayaNotaciya(v)) return true;
   // Значение без пробела — идентификатор, а не фраза: welcome-v1, KEY, src/x.tsx.
   // Фраза для человека почти всегда содержит пробел, и это надёжнее списка форм.
   if (!v.includes(" ")) return true;
@@ -186,6 +207,25 @@ function schitat(): Record<string, number> {
   }
   return itog;
 }
+
+describe("признак шахматной нотации не стал лазейкой", () => {
+  it("FEN пропускается, английская фраза — нет", () => {
+    expect(shahmatnayaNotaciya("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")).toBe(true);
+    expect(shahmatnayaNotaciya("8/8/5Kp1/8/6Pk/8/8/8 b - - 3 66")).toBe(true);
+    // Контроль в обратную сторону — ради него исключение и сделано строгим.
+    expect(shahmatnayaNotaciya("Describe your app and we will build it")).toBe(false);
+    expect(shahmatnayaNotaciya("Search by name or id")).toBe(false);
+    expect(shahmatnayaNotaciya("Enter FEN position here")).toBe(false);
+    // Похоже на путь, но косых не семь — не пропускаем.
+    expect(shahmatnayaNotaciya("src/app/cyberchess/page.tsx is here")).toBe(false);
+    // 🔴 А это щупает ИМЕННО правило «ровно семь»: знаки все разрешённые,
+    // цифра есть, косая есть — и всё же это не доска, а подпись. Без этого
+    // случая мутация «семь → хотя бы одна» проходила мимо проверки, то есть
+    // правило стояло в коде, но ничем не охранялось.
+    expect(shahmatnayaNotaciya("wins/losses 12 3")).toBe(false);
+    expect(shahmatnayaNotaciya("rate 1/2 per 10 games")).toBe(false);
+  });
+});
 
 describe("английские подписи в атрибутах не растут", () => {
   it("прибор исправен: файлы найдены и разбор что-то видит", () => {

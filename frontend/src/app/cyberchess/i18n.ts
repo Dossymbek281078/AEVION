@@ -106,6 +106,12 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "tc.approxMin": "≈ {n} мин",
     "ai.label": "ИИ",
     "chip.analysis": "Анализ",
+    // Подписи-атрибуты (title, aria-label) идут ЧЕРЕЗ СЛОВАРЬ, а не строкой
+    // в разметке: сторож attrI18n считает кириллицу в атрибутах долгом, и
+    // число ему разрешено только уменьшаться. Заодно эти подписи читает
+    // человек со скринридером — им тоже нужен его язык.
+    "coach.askAboutPuzzle": "Открыть эту позицию у ИИ-тренера и спросить о ней",
+    "coach.fenField": "FEN позиции",
     "nav.coach": "Тренер",
     // Нижняя навигация на телефоне подписана короче, чем кнопка в шапке.
     // Разные ключи намеренно: иначе русский интерфейс менялся бы вместе с переводом.
@@ -381,6 +387,8 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "tc.approxMin": "≈ {n} min",
     "ai.label": "AI",
     "chip.analysis": "Analysis",
+    "coach.askAboutPuzzle": "Open this position with the AI coach and ask about it",
+    "coach.fenField": "Position FEN",
     "nav.coach": "Coach",
     "nav.coachShort": "Coach",
     "nav.more": "More",
@@ -651,6 +659,8 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "tc.approxMin": "≈ {n} мин",
     "ai.label": "ЖИ",
     "chip.analysis": "Талдау",
+    "coach.askAboutPuzzle": "Бұл позицияны ЖИ-жаттықтырушыда ашып, сұрау қою",
+    "coach.fenField": "Позиция FEN-і",
     "nav.coach": "Жаттықтырушы",
     // 🔴 КОРОТКОЕ слово здесь обязательно. «Жаттықтырушы» — 12 знаков, а в
     // нижнюю навигацию на 320px помещается пять разделов, то есть ~8 знаков

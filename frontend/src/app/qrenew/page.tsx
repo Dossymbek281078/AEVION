@@ -7,8 +7,14 @@ export const metadata: Metadata = {
   title: "QRenew — биологический возраст по анализам крови",
   description:
     "Считает фенотипический возраст (PhenoAge) по девяти маркерам крови и показывает разницу с паспортным. Стек вмешательств отсортирован по доказательности.",
-  alternates: { canonical: "https://aevion.app/qrenew" },
+  alternates: { canonical: "https://aevion.app/qrenew", languages: языки("/qrenew") },
   openGraph: {
+    // 06.10.2026: язык объявлен СЕРВЕРНО. Замер того же дня: у этой страницы
+    // кириллицы больше, чем латиницы, а og:locale не было вовсе, и корневой
+    // макет отдаёт lang="en". Поправить сам lang на уровне страницы нельзя
+    // (<html> живёт только в корневом макете, разбор там же в комментарии),
+    // поэтому серверный языковой сигнал даём тем, чем можно: og:locale.
+    locale: "ru_RU",
     title: "QRenew — биологический возраст по анализам",
     description: "PhenoAge по девяти маркерам крови и честная градация того, что на него влияет.",
     url: "https://aevion.app/qrenew",
@@ -22,6 +28,7 @@ import { fetchOrPaywall } from "@/lib/paywall";
 import { PaywallScreen } from "@/components/PaywallScreen";
 import QRenewClient from "./_client";
 import { PageTracking } from "@/components/PageTracking";
+import { языки } from "@/lib/hreflang";
 
 export default async function Page({
   searchParams,

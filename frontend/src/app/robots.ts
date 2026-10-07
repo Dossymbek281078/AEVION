@@ -23,6 +23,19 @@ export const DISALLOWED_PATHS = [
   "/pay/",
   "/r/",
   "/account/",
+  /*
+   * 🔴 Запись БЕЗ косой черты заведена 06.10.2026, и это не косметика.
+   * По стандарту `Disallow: /account/` закрывает только то, что НИЖЕ, а сам
+   * адрес /account остаётся открытым. Замер того же дня: /account отвечает
+   * 200, в карте сайта его нет (isBlockedForCrawlers срезает косую черту и
+   * считает его закрытым), а robots.txt его не закрывал — то есть личный
+   * кабинет был доступен для обхода и мог попасть в выдачу.
+   * Нашлось отрицательным контролем нового сторожа
+   * robotsDoesNotBlockItsOwnSitemaps: он ожидал «закрыт», получил «открыт».
+   * Запись-префикс безопасна: живых адресов, начинающихся на /account и не
+   * являющихся кабинетом, в карте из 730 нет ни одного (проверено).
+   */
+  "/account",
   "/_next/",
   "/qpaynet/admin/",
   "/qpaynet/admin",
@@ -128,18 +141,52 @@ export function robotsLine(path: string): string {
   return EXACT_ONLY_PATHS.includes(path) ? path + "$" : path;
 }
 
+/**
+ * Пути карт сайта, которые мы ОБЪЯВЛЯЕМ поисковику.
+ *
+ * 🔴 Замер 06.10.2026: вторая карта объявлялась по пути
+ * /api-backend/api/aevion/sitemap.xml, а он запрещён записью "/api-backend/"
+ * выше. Карта при этом живая — код 200, 1811 байт, 16 адресов модулей
+ * (/qright и другие). Но робот обязан сперва прочитать robots.txt, и путь ему
+ * там запрещён: получалось объявление без исполнения, 16 адресов заявлены и
+ * недостижимы ни для Яндекса, ни для Google.
+ *
+ * Почему это не поймал ни один сторож: sitemapNeverAdvertisesDisallowed
+ * проверяет адреса ВНУТРИ карты, а противоречие было в самом ОБЪЯВЛЕНИИ карты.
+ * Сторож на это добавлен рядом (robotsDoesNotBlockItsOwnSitemaps).
+ *
+ * Список один и тот же для allow и для sitemap намеренно — по той же причине,
+ * по которой DISALLOWED_PATHS не продублирован в карте: разъедется, и мы снова
+ * будем звать поисковика туда, куда сами его не пускаем.
+ */
+export const SITEMAP_PATHS: readonly string[] = [
+  "/sitemap.xml",
+  "/api-backend/api/aevion/sitemap.xml",
+];
+
+/**
+ * Что открыто ЯВНО, поверх запретов выше.
+ *
+ * По стандарту (и у Google, и у Яндекса) при совпадении нескольких правил
+ * выигрывает САМОЕ ДЛИННОЕ, а не записанное первым. Поэтому
+ * `Allow: /api-backend/api/aevion/sitemap.xml` (36 знаков) сильнее
+ * `Disallow: /api-backend/` (14 знаков) ровно для этого одного адреса,
+ * и больше ни для чего: остальное под /api-backend/ остаётся закрытым.
+ */
+export const CRAWLER_ALLOW_PATHS: readonly string[] = [
+  "/",
+  ...SITEMAP_PATHS.filter((s) => s !== "/sitemap.xml"),
+];
+
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
       {
         userAgent: "*",
-        allow: "/",
+        allow: [...CRAWLER_ALLOW_PATHS],
         disallow: DISALLOWED_PATHS.map(robotsLine),
       },
     ],
-    sitemap: [
-      `${BASE_URL}/sitemap.xml`,
-      `${BASE_URL}/api-backend/api/aevion/sitemap.xml`,
-    ],
+    sitemap: SITEMAP_PATHS.map((s) => `${BASE_URL}${s}`),
   };
 }

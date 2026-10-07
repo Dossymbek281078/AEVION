@@ -997,7 +997,12 @@ async function callLlmGemini(
 ): Promise<{ advice: string; model: string }> {
   const key = process.env.GEMINI_API_KEY?.trim();
   if (!key) throw new Error("not-configured");
-  const model = process.env.GEMINI_MODEL || "gemini-2.0-flash-001";
+  // 🔴 07.10.2026. Здесь стояло `gemini-2.0-flash-001` — МЁРТВАЯ модель:
+  // живой вызов отвечает 404 «снята с обслуживания». То есть ветка «попросил
+  // gemini явно» не работала вовсе, а общий путь через реестр работал, и
+  // снаружи это выглядело бы как «ИИ иногда ломается».
+  // Умолчание выровнено с реестром (`providers.ts`), проверено вызовом.
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
   const r = await fetch(url, {
     method: "POST",

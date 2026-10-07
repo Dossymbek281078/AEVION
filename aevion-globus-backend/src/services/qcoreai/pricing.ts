@@ -33,8 +33,16 @@ const TABLE: Record<string, Record<string, UsdPer1M>> = {
   gemini: {
     // Free-tier (rate-limited) on Flash; paid list prices shown for reference.
     "gemini-2.5-flash": { input: 0.15, output: 0.6 },
-    "gemini-2.0-flash-001": { input: 0.075, output: 0.3 },
-    "gemini-1.5-pro": { input: 1.25, output: 5.0 },
+    // 07.10.2026: вместо снятых `gemini-2.0-flash-001` и `gemini-1.5-pro`
+    // (обе отвечают 404) — те, что объявлены в реестре и проверены вызовом.
+    //
+    // Цены взяты с прейскуранта поставщика (ai.google.dev/gemini-api/docs/pricing),
+    // стандартный тариф, действует по 31.12.2026 — с 01.01.2027 у 3.8 Flash
+    // вдвое дороже. Первую версию этих двух строк я написал ПО ПАМЯТИ и
+    // ошибся вдвое с лишним; числа в коде, которые кто-то сложит в деньги,
+    // пишутся только из источника.
+    "gemini-3.8-flash": { input: 0.75, output: 3.75 },
+    "gemini-3.5-flash-lite": { input: 0.3, output: 2.5 },
   },
   deepseek: {
     "deepseek-chat": { input: 0.14, output: 0.28 },

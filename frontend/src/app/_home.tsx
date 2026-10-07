@@ -405,6 +405,58 @@ const DEMO_NOTE =
               Перенесён под ряд действий — он никуда не делся, но перестал
               конкурировать с тем, зачем человек пришёл. */}
 
+
+          <div
+            className="aevion-hero-stats"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+              gap: 12,
+              marginTop: 40,
+            }}
+          >
+            {[
+              { k: "Nodes on map", v: loading ? "…" : String(projects.length) },
+              { k: "QRight records", v: loading ? "…" : String(qrightObjects.length) },
+              { k: "Planet participants", v: planetStats ? String(planetStats.eligibleParticipants) : "…" },
+              { k: "Certified", v: planetStats ? String(planetStats.certifiedArtifactVersions) : "…" },
+              { k: "Planet submissions", v: planetStats ? String(planetStats.submissions) : "…" },
+              { k: "Stack", v: "Next + Node + PG" },
+            ].map((row) => (
+              <div
+                key={row.k}
+                style={{
+                  padding: "14px 16px",
+                  borderRadius: 14,
+                  background: "rgba(255,255,255,0.08)",
+                  border: "1px solid rgba(255,255,255,0.14)",
+                }}
+              >
+                <div style={{ fontSize: 15, fontWeight: 700, opacity: 0.75, textTransform: "uppercase" }}>
+                  {row.k}
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 900, marginTop: 6 }}>{row.v}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 07.10.2026. Блок покупок ВЫНЕСЕН из секции героя — только положение,
+          состав и цены не тронуты.
+          Повод — замер на проде 4b3ee07c5dc4 сразу после предыдущей правки: герой
+          стал короче, и на освободившееся место поднялся этот блок. В первом экране
+          оказалось 5 действий на телефоне и 6 на столе вместо задуманных двух, причём
+          три из них предлагали купить ДРУГОЕ — книгу, протокол и подписку, а не то,
+          что обещает заголовок.
+          Урок, который стоит за правкой: укорачивая первый экран, мерить надо не
+          только то, что убрал, но и то, что заняло освободившееся место.
+          Стоит ВЫШЕ «Other modules» намеренно: платные предложения ценнее списка
+          модулей (решение оркестратора по слову основателя).
+          Фон задан здесь свой: блок свёрстан белым текстом под градиент героя, и
+          без тёмной подложки он лёг бы белым по белому. */}
+      <section style={{ background: "#0b1120", color: "#fff", padding: "4px 24px 22px" }}>
+        <div style={{ maxWidth: 1280, margin: "0 auto" }}>
           {/*
             🔴 «Buy now» — блок заведён 22.09.2026 по прямому слову
             основателя «доведи до оплат».
@@ -519,40 +571,6 @@ const DEMO_NOTE =
               разошлась бы с ним молча.
             */}
             <PaymentReachNotice />
-          </div>
-
-          <div
-            className="aevion-hero-stats"
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
-              gap: 12,
-              marginTop: 40,
-            }}
-          >
-            {[
-              { k: "Nodes on map", v: loading ? "…" : String(projects.length) },
-              { k: "QRight records", v: loading ? "…" : String(qrightObjects.length) },
-              { k: "Planet participants", v: planetStats ? String(planetStats.eligibleParticipants) : "…" },
-              { k: "Certified", v: planetStats ? String(planetStats.certifiedArtifactVersions) : "…" },
-              { k: "Planet submissions", v: planetStats ? String(planetStats.submissions) : "…" },
-              { k: "Stack", v: "Next + Node + PG" },
-            ].map((row) => (
-              <div
-                key={row.k}
-                style={{
-                  padding: "14px 16px",
-                  borderRadius: 14,
-                  background: "rgba(255,255,255,0.08)",
-                  border: "1px solid rgba(255,255,255,0.14)",
-                }}
-              >
-                <div style={{ fontSize: 15, fontWeight: 700, opacity: 0.75, textTransform: "uppercase" }}>
-                  {row.k}
-                </div>
-                <div style={{ fontSize: 22, fontWeight: 900, marginTop: 6 }}>{row.v}</div>
-              </div>
-            ))}
           </div>
         </div>
       </section>

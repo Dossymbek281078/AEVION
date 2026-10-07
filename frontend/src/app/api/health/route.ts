@@ -25,7 +25,7 @@ export function GET() {
   const durable = kvBackend() === "kv";
   const lost = durable
     ? undefined
-    : "хранилище в памяти процесса — записи теряются при перезапуске";
+    : "демонстрация: хранилище в памяти процесса, записи не сохраняются и теряются при перезапуске";
   /*
    * 🔴 05.10.2026: ПОВЕРХНОСТИ ОПЛАТЫ — ДЕМОНСТРАЦИЯ, И ТАК И НАДО ПИСАТЬ.
    *
@@ -43,13 +43,28 @@ export function GET() {
    * Настоящие проверки (idempotency_cache) по-прежнему могут уронить status: они не
    * про демонстрацию, а про работу самого процесса.
    */
+  /*
+   * 🔴 07.10.2026: ПОПРАВКА К ПРАВКЕ ВЫШЕ — «не роняет status» и «отвечает ok»
+   * это РАЗНЫЕ требования, а 05.10 они были исполнены одним движением.
+   *
+   * Чтобы демонстрационная часть перестала поднимать ложную тревогу, хватало
+   * строки 62: статус считают только НЕдемонстрационные поверхности. А `ok`
+   * заодно прибили к константе `true` — и поверхность, которая теряет записи
+   * при перезапуске, стала отвечать «ok» про саму себя. Примечание рядом
+   * говорило обратное; верят короткому полю, а не примечанию.
+   *
+   * Теперь `ok` отвечает на свой вопрос — переживут ли записи перезапуск, —
+   * а `mode: "demo"` говорит, что тревожиться из-за этого не надо. Общий
+   * `status` по-прежнему не зависит от них: решение 05.10 в силе, меняется
+   * только честность отдельной поверхности.
+   */
   const демо = "demo" as const;
   const surfaces = [
-    { name: "links", count: store.links.size, ok: true, mode: демо, note: lost },
-    { name: "checkouts", count: store.checkouts.size, ok: true, mode: демо, note: lost },
-    { name: "subscriptions", count: store.subscriptions.size, ok: true, mode: демо, note: lost },
-    { name: "webhooks", count: store.webhooks.size, ok: true, mode: демо, note: lost },
-    { name: "settlements", count: store.settlements.size, ok: true, mode: демо, note: lost },
+    { name: "links", count: store.links.size, ok: durable, mode: демо, note: lost },
+    { name: "checkouts", count: store.checkouts.size, ok: durable, mode: демо, note: lost },
+    { name: "subscriptions", count: store.subscriptions.size, ok: durable, mode: демо, note: lost },
+    { name: "webhooks", count: store.webhooks.size, ok: durable, mode: демо, note: lost },
+    { name: "settlements", count: store.settlements.size, ok: durable, mode: демо, note: lost },
     {
       name: "idempotency_cache",
       count: store.idempotency.size,

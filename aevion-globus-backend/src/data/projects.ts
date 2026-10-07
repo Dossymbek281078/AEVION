@@ -227,6 +227,45 @@ export const projects: GlobusProject[] = [
     updatedAt: now,
   },
 
+  // 🔴 Добавлены 07.10.2026. Оба модуля уже были в прайсе (`data/pricing.ts`,
+  // входят во все платные тарифы), но в ЭТОМ реестре их не было — и публичный
+  // счётчик «Модулей платформы», который считается отсюда, их не считал.
+  // Человек читал «42 модуля» над таблицей из 44 строк, собранной из прайса.
+  // Своей цены у обоих нет (`addonMonthly: null`): продаются только как часть
+  // планеты, поэтому состав платного предложения эта правка не меняет.
+  {
+    id: "qmelanin",
+    code: "QMELANIN",
+    name: "QMelanin — протокол против седины",
+    description:
+      "Anti-greying protocol: lab markers to nutrition plan. Informational, not medical advice. In every paid tier, no standalone price.",
+    kind: "product",
+    // В ЭТОМ реестре словаря "beta" нет (см. GlobusProjectStatus): соседи,
+    // помеченные БЕТА в прайсе — qgood, psyapp-deps, veilnetx — стоят здесь
+    // как "live". Беру тот же статус, чтобы не заводить своё правило.
+    status: "live",
+    priority: 3,
+    tags: ["health", "longevity", "informational"],
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    id: "qrenew",
+    code: "QRENEW",
+    name: "QRenew — клеточное обновление",
+    description:
+      "Cellular renewal: biological age plus protocol stack. Informational, not medical advice. In every paid tier, no standalone price.",
+    kind: "product",
+    // В ЭТОМ реестре словаря "beta" нет (см. GlobusProjectStatus): соседи,
+    // помеченные БЕТА в прайсе — qgood, psyapp-deps, veilnetx — стоят здесь
+    // как "live". Беру тот же статус, чтобы не заводить своё правило.
+    status: "live",
+    priority: 3,
+    tags: ["health", "longevity", "informational"],
+    createdAt: now,
+    updatedAt: now,
+  },
+
   // ===== PSYCHOLOGY / WELLBEING =====
   {
     id: "qgood",

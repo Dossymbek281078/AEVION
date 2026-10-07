@@ -5101,7 +5101,7 @@ const ru: Record<string, string> = {
   "pricing.home.apps.whatIsPaid.cyberchess": "Платно — «Глубокий анализ» движком Stockfish 17.1. Играть, решать задачи и спрашивать ИИ-тренера можно бесплатно и без аккаунта.",
   "pricing.home.apps.subtitle": "{count} приложений продаются и без тарифа — по той же лестнице сроков. Остальные модули входят только в тарифы.",
   "pricing.home.apps.termAria": "Срок для отдельных приложений",
-  "pricing.home.apps.allAppsDearer": "Все приложения по отдельности — {apps} за этот срок — дороже всей планеты: {planet}.",
+  "pricing.home.apps.allAppsDearer": "Все девять приложений по отдельности — {apps} за этот срок — дороже всей планеты: {planet}. Четыре из них подключаются по запросу, их цены входят в эту сумму.",
   "pricing.home.calc.total": "ИТОГО",
   "pricing.home.calc.totalTerm": "ИТОГО за {months} {unit}",
   "pricing.home.calc.discount": "Скидки",

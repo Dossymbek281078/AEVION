@@ -4,6 +4,8 @@
 
 import { WORK_MODES, EDUCATION_LEVELS, WORK_REGIONS_KZ } from "./index";
 
+import { спроситьИИ } from "../дешёвыйИИ";
+
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const DEFAULT_MODEL = "claude-haiku-4-5-20251001";
 
@@ -24,6 +26,23 @@ export type ClaudeReply = {
   cacheCreationInputTokens?: number;
 };
 
+/**
+ * 🔴 07.10.2026: текстовый путь переведён на ОБЩИЙ РЕЕСТР провайдеров.
+ *
+ * Было: прямой вызов Anthropic без запаса вообще. Кончались деньги на
+ * счёте — QBuild (коуч, разбор резюме, интервьюер) умирал целиком и молча.
+ * На 07.10 на счёте $8.93, консоль пытается автопополнить $20.
+ *
+ * Стало: `спроситьИИ` с порядком Gemini → OpenAI → Anthropic. Платный идёт
+ * ПОСЛЕДНИМ: у Gemini деньги есть, у OpenAI кончились (реестр перескочит
+ * сам). Имя функции и форма ответа не меняются — вызывающих трогать не
+ * пришлось.
+ *
+ * `model` и `cacheSystem` больше не используются: модель выбирает реестр по
+ * поставщику, а кэш системного промпта — особенность Anthropic, которой у
+ * остальных нет. Поля оставлены в сигнатуре, чтобы не править вызовы, и
+ * игнорируются осознанно, а не по недосмотру.
+ */
 export async function callClaude(opts: {
   systemPrompt: string;
   messages: ChatTurn[];
@@ -31,21 +50,24 @@ export async function callClaude(opts: {
   model?: string;
   cacheSystem?: boolean;
 }): Promise<ClaudeReply> {
-  const key = process.env.ANTHROPIC_API_KEY?.trim();
-  if (!key) throw new Error("ANTHROPIC_API_KEY not configured");
-
-  const system = opts.cacheSystem
-    ? [{ type: "text", text: opts.systemPrompt, cache_control: { type: "ephemeral" } }]
-    : opts.systemPrompt;
-
-  const body = {
-    model: opts.model || DEFAULT_MODEL,
-    max_tokens: opts.maxTokens ?? 1024,
-    system,
-    messages: opts.messages.map((m) => ({ role: m.role, content: m.content })),
+  // Диалог склеиваем в один вопрос: реестр принимает роли system/user, а
+  // многоходовую переписку QBuild здесь и так ведёт склейкой.
+  const вопрос = opts.messages
+    .map((m) => (m.role === "assistant" ? `Ассистент: ${m.content}` : `Человек: ${m.content}`))
+    .join(String.fromCharCode(10, 10));
+  const ответ = await спроситьИИ({
+    роль: opts.systemPrompt,
+    вопрос,
+    максТокенов: opts.maxTokens ?? 1024,
+  });
+  return {
+    text: ответ.текст,
+    // Счётчики токенов приходят от разных поставщиков в разной форме, и
+    // складывать их в одно число здесь было бы выдумкой. Ноль честнее: он
+    // виден в учёте как «не посчитано», а не как «ничего не потратили».
+    inputTokens: 0,
+    outputTokens: 0,
   };
-
-  return callClaudeRaw(body);
 }
 
 /** Vision-capable variant: accept a single user turn with multimodal content. */

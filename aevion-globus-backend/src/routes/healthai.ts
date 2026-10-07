@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { спроситьИИ } from "../lib/дешёвыйИИ";
 import crypto from "crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { rateLimit } from "../lib/rateLimit";
@@ -1104,6 +1105,36 @@ healthaiRouter.post("/check-llm", healthaiAiLimit, async (req: Request, res: Res
           ["openai", callLlmOpenAI],
           ["gemini", callLlmGemini],
         ];
+
+  // 🔴 07.10.2026: когда провайдер НЕ назван запросом, идём через общий
+  // реестр, а не через свою цепочку. Своя начиналась с Anthropic — платного
+  // счёта, на котором 07.10 оставалось $8.93 и который консоль пыталась
+  // автопополнить на $20. Реестр зовёт по порядку Gemini → OpenAI →
+  // Anthropic (платный последним), сам перескакивает при отказе, считает
+  // стоимость и пишет переключение в журнал.
+  //
+  // Явно названный провайдер остаётся своей веткой: это отладочная
+  // возможность ручки, и «попросил gemini — получил anthropic» было бы ложью.
+  if (!requested) {
+    try {
+      const ответ = await спроситьИИ({ роль: systemPrompt, вопрос: userPrompt, максТокенов: 1024 });
+      return res.json({
+        advice: ответ.текст,
+        provider: ответ.поставщик,
+        model: ответ.модель,
+        triedFallbacks: ответ.перебор.map((p) => ({ provider: p, error: "перешли дальше" })),
+        disclaimer: DISCLAIMER,
+      });
+    } catch (e: any) {
+      captureHealthAIError(e, { route: "check-llm", provider: "registry" });
+      return res.status(502).json({
+        error: "all_providers_failed",
+        message: "Ни один поставщик ИИ не ответил.",
+        detail: String(e?.message || e).slice(0, 200),
+        disclaimer: DISCLAIMER,
+      });
+    }
+  }
 
   const tried: Array<{ provider: string; error: string }> = [];
   for (const [name, fn] of chain) {

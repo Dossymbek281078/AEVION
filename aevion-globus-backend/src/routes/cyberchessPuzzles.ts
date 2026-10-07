@@ -394,7 +394,14 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
       res.status(503).json({
         ok: false,
         reason: "ids_unavailable",
+        // 🔴 poolSize НЕ публикуется в одиночку, и это не формальность. На проде
+        // выборка упирается в cap: «poolSize: 500000» при cap = 500 000 — это
+        // обрезка, а читается как измерение банка. Поэтому рядом всегда
+        // настоящий размер и признак обрезки; правило держит сторож
+        // puzzlePoolSizeNeverAlone, и он поймал ровно эту ветку (1 место из 7).
         poolSize: POOL.length,
+        bankTotal: POOL_TOTAL,
+        capped: POOL_CAPPED,
         source: POOL_SOURCE || POOL_PATH || POOL_URL,
       });
       return;

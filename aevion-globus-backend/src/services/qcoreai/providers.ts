@@ -204,7 +204,19 @@ export function getProviders(): Provider[] {
     {
       id: "gemini",
       name: "Gemini (Google)",
-      models: ["gemini-2.5-flash", "gemini-2.0-flash-001", "gemini-1.5-pro"],
+      // 🔴 07.10.2026. Здесь стояли `gemini-2.0-flash-001` и `gemini-1.5-pro`:
+      // живым вызовом обе отвечают 404 («снята с обслуживания», «не найдена»).
+      // Пока зовут умолчание, это невидимо — падает только явный вызов моделью
+      // из нашего же списка, и выглядит как «ИИ сломался».
+      //
+      // Замена проверена НАСТОЯЩИМ вызовом generateContent, а не наличием в
+      // каталоге: `gemini-2.5-pro` и `gemini-2.5-flash-lite` в каталоге ЕСТЬ,
+      // а на вызов отвечают 404. Присутствие в списке не значит пригодность.
+      // Проверка списка — `aevion-ai-models-alive.mjs`.
+      // Имена КОНКРЕТНЫЕ, не псевдонимы вида `*-latest`: псевдоним переезжает
+      // на другую модель вместе с другой ценой, и строка в прейскуранте
+      // перестаёт соответствовать тому, что мы зовём.
+      models: ["gemini-2.5-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite"],
       defaultModel: "gemini-2.5-flash",
       envKey: "GEMINI_API_KEY",
       configured: isConfigured("GEMINI_API_KEY"),

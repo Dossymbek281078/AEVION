@@ -49,6 +49,8 @@ export async function callClaude(opts: {
   maxTokens?: number;
   model?: string;
   cacheSystem?: boolean;
+  /** Ответ должен быть JSON: модель попросят не размышлять (см. спроситьИИ). */
+  structured?: boolean;
 }): Promise<ClaudeReply> {
   // Диалог склеиваем в один вопрос: реестр принимает роли system/user, а
   // многоходовую переписку QBuild здесь и так ведёт склейкой.
@@ -59,6 +61,7 @@ export async function callClaude(opts: {
     роль: opts.systemPrompt,
     вопрос,
     максТокенов: opts.maxTokens ?? 1024,
+    структурныйОтвет: opts.structured,
   });
   return {
     text: ответ.текст,

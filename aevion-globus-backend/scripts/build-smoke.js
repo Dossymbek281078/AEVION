@@ -289,9 +289,11 @@ async function main() {
   if (pdfRes.status === 200 && ct.includes("pdf")) ok("PDF resume export", `${ct}`);
   else return fail("PDF resume", `status=${pdfRes.status} type=${ct}`);
 
-  // 25. AI consult — only if ANTHROPIC_API_KEY is configured backend-side.
-  //     We probe with a minimal prompt; if it returns ai_consult_failed
-  //     with "ANTHROPIC_API_KEY not configured" we treat that as SKIP.
+  // 25. AI consult — only if SOME AI provider is configured backend-side.
+  //     Since 07.10.2026 the module goes through the shared registry
+  //     (Gemini -> OpenAI -> Anthropic), so the gate answers 503
+  //     "no AI provider configured" instead of naming one vendor.
+  //     Any non-2xx here is printed as SKIP, not a failure.
   r = await call("POST", "/api/build/ai/consult", {
     messages: [{ role: "user", content: "Hi, one-liner: am I ready to apply for vacancies?" }],
   }, workerToken);

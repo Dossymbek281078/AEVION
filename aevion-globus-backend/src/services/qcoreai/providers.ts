@@ -825,6 +825,21 @@ async function meterCall(meter: CallMeter | undefined, providerId: string, model
  * учёт не приписывали ответ логотипу, который молчал. Прочие ошибки (сеть,
  * неверный запрос) наружу как были — их лечит не смена поставщика.
  */
+/**
+ * Явный порядок запасных провайдеров для одного вызова.
+ *
+ * Зачем он понадобился (07.10.2026). Перебор при отказе идёт по порядку
+ * массива провайдеров, а он начинается с `anthropic`. У Anthropic счёт
+ * платный и почти пустой ($8.93 на 07.10, консоль пытается автопополнить
+ * $20), у Gemini деньги есть, у OpenAI кончились. То есть сегодня «начать с
+ * Gemini» мало: при первой же осечке звонок уходил бы именно в платного.
+ *
+ * Менять ПОРЯДОК В РЕЕСТРЕ ради этого нельзя — им пользуются 23 модуля, и
+ * тихая смена очереди у всех сразу хуже проблемы. Поэтому порядок задаётся
+ * на вызов, а умолчание (`undefined`) оставляет прежнее поведение байт в байт.
+ */
+export type ПорядокЗапаса = readonly string[];
+
 export async function callProvider(
   providerId: string,
   messages: ChatMessage[],
@@ -832,7 +847,8 @@ export async function callProvider(
   temperature: number,
   images?: ChatImage[],
   maxTokens?: number,
-  meter?: CallMeter
+  meter?: CallMeter,
+  порядокЗапаса?: ПорядокЗапаса
 ): Promise<CallResult> {
   const tried: string[] = [];
   let current = providerId;
@@ -849,7 +865,14 @@ export async function callProvider(
       const reason = providerOutageReason(e) ?? ((e instanceof Error ? e.message : "").includes("empty reply") ? "empty reply" : null);
       if (!reason || current === "stub") throw e;
       noteProviderOutage(current, reason);
-      const next = getProviders().find((p) => p.configured && p.id !== "stub" && !tried.includes(p.id) && !isProviderOutOfService(p.id));
+      // Кандидаты: либо явный порядок этого вызова, либо прежний — порядок
+      // реестра. Имена, которых в реестре нет, просто выпадают.
+      const кандидаты = порядокЗапаса
+        ? порядокЗапаса
+            .map((id) => getProviders().find((p) => p.id === id))
+            .filter((p): p is NonNullable<typeof p> => Boolean(p))
+        : getProviders();
+      const next = кандидаты.find((p) => p.configured && p.id !== "stub" && !tried.includes(p.id) && !isProviderOutOfService(p.id));
       if (!next) throw e;
       console.warn(`[providers] ${current} → ${next.id}: ${reason.slice(0, 100)}`);
       current = next.id;

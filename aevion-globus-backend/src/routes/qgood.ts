@@ -33,6 +33,7 @@
  */
 
 import { Router } from "express";
+import { спроситьИИ } from "../lib/дешёвыйИИ";
 import crypto from "node:crypto";
 import { getPool } from "../lib/dbPool";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
@@ -686,55 +687,29 @@ async function initPsychTables(): Promise<void> {
 
 // ── Helper: callLlm — uses first available provider ─────────────────────────
 
+/**
+ * 🔴 07.10.2026: переведено на ОБЩИЙ РЕЕСТР провайдеров.
+ *
+ * Было: своя цепочка Anthropic → OpenAI, зашитая в этот файл. Два изъяна.
+ * Первый — Anthropic шёл ПЕРВЫМ, а это платный счёт, на котором 07.10
+ * оставалось $8.93 и который консоль пыталась автопополнить на $20. Второй —
+ * решение «каким поставщиком звонить» принималось здесь отдельно от
+ * остальных модулей, то есть при отключении поставщика его пришлось бы
+ * менять в четырёх местах и в одном из них забыть.
+ *
+ * Стало: `спроситьИИ` — порядок Gemini → OpenAI → Anthropic (платный
+ * последним), перебор при отказе, учёт стоимости и журнал переключений уже
+ * внутри реестра. Форма ответа прежняя: строка или исключение.
+ */
 async function callLlm(systemPrompt: string, userPrompt: string): Promise<string> {
-  // Anthropic
-  const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
-  if (anthropicKey) {
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": anthropicKey,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 512,
-        temperature: 0.7,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userPrompt }],
-      }),
-    });
-    const data = (await r.json()) as { content?: Array<{ text?: string }>; error?: { message?: string } };
-    if (!r.ok) throw new Error(data.error?.message || `Anthropic ${r.status}`);
-    const text = data.content?.map((b) => b.text || "").join("").trim() || "";
-    if (!text) throw new Error("Anthropic returned an empty reply");
-    return text;
-  }
-
-  // OpenAI fallback
-  const openaiKey = process.env.OPENAI_API_KEY?.trim();
-  if (openaiKey) {
-    const base = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
-    const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
-    const r = await fetch(`${base}/chat/completions`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        max_tokens: 512,
-        temperature: 0.7,
-        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
-      }),
-    });
-    const data = (await r.json()) as { choices?: Array<{ message?: { content?: string } }>; error?: { message?: string } };
-    if (!r.ok) throw new Error(data.error?.message || `OpenAI ${r.status}`);
-    const text = data.choices?.[0]?.message?.content?.trim() || "";
-    if (!text) throw new Error("OpenAI returned an empty reply");
-    return text;
-  }
-
-  throw new Error("not-configured");
+  const ответ = await спроситьИИ({
+    роль: systemPrompt,
+    вопрос: userPrompt,
+    максТокенов: 512,
+    // Психологический помощник: живее, чем рабочие ответы, но не выдумщик.
+    температура: 0.7,
+  });
+  return ответ.текст;
 }
 
 // ── POST /api/qgood/mood ─────────────────────────────────────────────────────

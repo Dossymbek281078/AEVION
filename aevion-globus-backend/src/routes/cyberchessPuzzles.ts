@@ -18,6 +18,19 @@ import { ispravitPodpisMata } from "../lib/chessPuzzleLabel";
 const router = Router();
 
 interface Puzzle {
+  /**
+   * Идентификатор задачи у источника: id задачи Lichess ("382iH") либо "gen_…"
+   * для сгенерированных. Необязательное поле, и это НЕ недоделка — у банка три
+   * источника, и идентификаторы есть только у двух:
+   *   Postgres "ChessPuzzle" — id это первичный ключ, он есть всегда;
+   *   локальный файл дампа — есть, если дамп его нёс;
+   *   запасной публичный пул aevion.app/puzzles.json — НЕТ ни у одной записи
+   *     (проверено 07.10.2026: слово "id" в нём встречается 0 раз).
+   * Поэтому ссылка на конкретную задачу работает, когда банк пришёл из базы, и
+   * честно отказывается, когда работаем на запасном пуле. Молча отвечать
+   * «задачи нет» в этом случае нельзя: задача есть, её нельзя НАЙТИ.
+   */
+  id?: string;
   fen: string;
   sol: string[];
   name: string;
@@ -58,6 +71,16 @@ let POOL_TOTAL = 0;
 let POOL_CAPPED = false;
 // theme (lowercased) -> index list, built once for cheap filtered lookups
 const THEME_INDEX = new Map<string, number[]>();
+/**
+ * Указатель «id задачи → её место в пуле». Нужен ссылке на конкретную задачу
+ * (/api/cyberchess-puzzles/:id): перебор по 500 000 записей на каждый заход —
+ * это полсекунды процессорного времени на ровном месте.
+ *
+ * Пустой указатель при НЕпустом пуле — законное состояние, а не поломка: так
+ * выглядит запасной публичный пул, в котором идентификаторов нет вовсе. Ручка
+ * отличает это от «нет такой задачи» и отвечает по-разному.
+ */
+const ID_INDEX = new Map<string, number>();
 let loadPromise: Promise<void> | null = null;
 
 function ingest(arr: unknown, source: string): void {
@@ -86,11 +109,17 @@ function ingest(arr: unknown, source: string): void {
   POOL_TOTAL = POOL.length;
   POOL_CAPPED = false;
   THEME_INDEX.clear();
+  ID_INDEX.clear();
   for (let i = 0; i < POOL.length; i++) {
     const key = String(POOL[i].theme || "").toLowerCase();
     const bucket = THEME_INDEX.get(key);
     if (bucket) bucket.push(i);
     else THEME_INDEX.set(key, [i]);
+    // Map, а НЕ обычный объект: ключ приходит из адреса, а поиск по объекту
+    // ключом из запроса — наш известный класс (ищется aevion-proto-watch).
+    // "__proto__" и "constructor" в Map это обычные ключи и ничего не ломают.
+    const id = POOL[i].id;
+    if (typeof id === "string" && id.length > 0 && !ID_INDEX.has(id)) ID_INDEX.set(id, i);
   }
   console.log(`[cyberchess-puzzles] loaded ${POOL.length} puzzles, ${THEME_INDEX.size} themes (${source})`);
 }
@@ -124,7 +153,7 @@ function ensureLoaded(): Promise<void> {
         const cap = Math.max(1, Math.min(2_000_000, Number(process.env.CYBERCHESS_PUZZLES_DB_CAP) || 500_000));
         const pool = getPool();
         const q = await pool.query(
-          `SELECT "fen","sol","name","rating","theme","phase","side","goal","mateIn" FROM "ChessPuzzle" LIMIT $1`,
+          `SELECT "id","fen","sol","name","rating","theme","phase","side","goal","mateIn" FROM "ChessPuzzle" LIMIT $1`,
           [cap],
         );
         if (q.rows && q.rows.length > 0) {
@@ -136,6 +165,14 @@ function ensureLoaded(): Promise<void> {
             // Подпись НЕ правим здесь: это делает ingest() — одна воронка на
             // файл, базу и URL. Две копии одного правила разошлись бы.
             return {
+              // id выбирается и переносится здесь, а не «само собой»: эта ветвь
+              // собирает объект по полям, и всё, что не названо, теряется. До
+              // 07.10.2026 id не был назван — и прод, работающий ИМЕННО из базы
+              // (source: "db ChessPuzzle (500000)"), отдавал задачи без
+              // идентификатора, то есть ссылку на конкретную задачу дать было
+              // нечем. Ветви файла и URL ничего не теряли: там объект копируется
+              // целиком через ...p.
+              id: row.id != null ? String(row.id) : undefined,
               fen: String(row.fen ?? ""),
               sol,
               name: String(row.name ?? "Тактика"),
@@ -306,6 +343,78 @@ router.get("/meta", async (_req: Request, res: Response): Promise<void> => {
     themes: THEME_INDEX.size,
     source: POOL_SOURCE || POOL_PATH || POOL_URL,
   });
+});
+
+/**
+ * GET /:id — ОДНА задача по её идентификатору.
+ *
+ * Зачем: без неё ссылка на конкретную задачу невозможна. Ролик, пост или разбор
+ * может позвать человека «вот эта позиция», а открывалась у него случайная из
+ * 500 000 — то есть обещание ссылки не исполнялось.
+ *
+ * 🔴 ОБЪЯВЛЕН ПОСЛЕ /themes и /meta, и порядок здесь — не стиль. В Express
+ * маршруты сверяются по порядку объявления, и ":id" совпадает с ЛЮБЫМ одиночным
+ * отрезком пути. Объяви его выше — и /themes стал бы задачей с идентификатором
+ * "themes": обе ручки отвечали бы 404 на совершенно верный запрос, а причина
+ * выглядела бы как «данные пропали».
+ *
+ * 🔴 ТРИ ИСХОДА, А НЕ ДВА — иначе ручка врёт о банке:
+ *   400 bad_id   — на идентификатор не похоже (в адрес пришёл мусор). Неверные
+ *                  данные запроса это 4xx: 5xx поднимало бы людей зря.
+ *   503 ids_unavailable — пул загружен, но идентификаторов в нём НЕТ НИ У ОДНОЙ
+ *                  задачи. Так выглядит работа на запасном публичном пуле
+ *                  (проверено 07.10.2026: в aevion.app/puzzles.json слово "id"
+ *                  встречается 0 раз). Ответить здесь 404 значило бы сказать
+ *                  «такой задачи не существует», хотя она существует и просто
+ *                  не ищется. Это наш класс «не знаю — ведите себя как при
+ *                  отказе, но не молчите».
+ *   404 not_found — идентификаторы есть, этого среди них нет. В теле называем
+ *                  poolSize/bankTotal/capped: выборка упирается в cap (на проде
+ *                  500 000 из 502 584), поэтому «нет в выдаче» и «нет в банке» —
+ *                  разные утверждения, и читатель обязан видеть, какое из них.
+ */
+router.get("/:id", async (req: Request, res: Response): Promise<void> => {
+  // Форма проверяется ДО любого поиска. Идентификаторы Lichess это пять знаков
+  // букв и цифр ("382iH"), сгенерированные — "gen_<что-то>". Всё остальное
+  // отбиваем здесь: ручка перестаёт быть входом для чужих форм ввода.
+  const id = String(req.params.id || "");
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) {
+    res.status(400).json({ ok: false, reason: "bad_id" });
+    return;
+  }
+  try {
+    await ensureLoaded();
+    if (POOL.length === 0) {
+      // Тот же разбор, что у выборки выше: пустой пул означает неудачу загрузки,
+      // а не отсутствие задач, и ok:true показал бы пустой тренажёр.
+      res.status(503).json({ ok: false, reason: "puzzle_pool_empty" });
+      return;
+    }
+    if (ID_INDEX.size === 0) {
+      res.status(503).json({
+        ok: false,
+        reason: "ids_unavailable",
+        poolSize: POOL.length,
+        source: POOL_SOURCE || POOL_PATH || POOL_URL,
+      });
+      return;
+    }
+    const i = ID_INDEX.get(id);
+    if (i === undefined) {
+      res.status(404).json({
+        ok: false,
+        reason: "not_found",
+        poolSize: POOL.length,
+        bankTotal: POOL_TOTAL,
+        capped: POOL_CAPPED,
+      });
+      return;
+    }
+    res.json({ ok: true, puzzle: POOL[i] });
+  } catch (e) {
+    console.warn("[cyberchess-puzzles] lookup failed:", e instanceof Error ? e.message : e);
+    res.status(503).json({ ok: false, reason: "puzzle_lookup_failed" });
+  }
 });
 
 /**

@@ -45,7 +45,7 @@ export default function MusicAwardsOg() {
           </div>
           <div style={{ fontSize: 22, color: "#cbd5e1", maxWidth: 980, lineHeight: 1.45, display: "flex" }}>
             Submit through Planet (artifact type music). Validator quorum publishes verdicts on-chain.
-            Top-3 settle straight to your AEVION Bank wallet in AEC.
+            Authorship registered in QRight, work certified on Planet.
           </div>
           <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 100, maxWidth: 920, marginTop: 8 }}>
             {BARS.map((h, i) => (

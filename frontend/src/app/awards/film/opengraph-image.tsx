@@ -42,7 +42,7 @@ export default function FilmAwardsOg() {
           </div>
           <div style={{ fontSize: 22, color: "#cbd5e1", maxWidth: 980, lineHeight: 1.45, display: "flex" }}>
             No Cannes, no Oscar, no clear path for AI cinema. AEVION ships the first
-            certification track — QRight authorship, Planet validators, AEC payouts.
+            certification track — QRight authorship, Planet validators, certificate.
           </div>
           {/* Cinema-strip frames */}
           <div style={{ display: "flex", gap: 14, marginTop: 8 }}>

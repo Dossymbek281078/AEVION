@@ -71,6 +71,22 @@ const RULES: Array<[RegExp, string]> = [
   [/rate limit|too many requests/i, "Слишком часто. Подождите минуту и повторите."],
   [/\b(insufficient|not enough) (credits?|balance)\b/i, "Не хватает средств на счёте модуля."],
   [/\bpayment required\b|\bupgrade\b/i, "Нужен платный тариф."],
+
+  // 07.10.2026, приёмка (волна 24): у публикации гостей появился честный отказ
+  // 503 `publishing_temporarily_unavailable` — свободные места под новые сайты
+  // кончились у НАС (потолок проектов Cloudflare Pages), а не у человека. Код
+  // машинный, правила его не разбирали, и человек читал
+  // «Не удалось… (publishing_temporarily_unavailable)».
+  //
+  // Текст говорит то же, что сервер пишет в поле `message`: причина наша,
+  // файлы целы, выходов два. Ничего не обещаем про срок — сервер его не
+  // называет, а «попробуйте позже» здесь было бы неправдой: место не
+  // освобождается само.
+  [
+    /^publishing_temporarily_unavailable$/i,
+    "Публикация сейчас недоступна: у нас кончились свободные места под новые сайты. " +
+      "Ваши файлы сохранены — войдите в аккаунт или напишите нам, и мы опубликуем проект.",
+  ],
   // 15.09.2026: замки DevHub по тарифу (общий аккаунт GitHub и ссылки на оплату —
   // Studio Pro; покупка привязывается к браузеру гостя на /devhub/link) и отказы
   // DNS-слоя (проекту можно взять только своё имя внутри aevion.app). Тексты длиннее
@@ -202,9 +218,44 @@ const IMYA_NORMY: Record<string, string> = {
   translate: "перевод",
   generate: "генерации кода",
   generation: "генерации",
+  // 07.10.2026: бэкенд перестал писать эти два отказа по-русски (иначе они
+  // минуют карту и НЕ поднимают плашку кассы), и без этих двух строк
+  // русский читатель увидел бы «Месячная норма исчерпана: voice clone».
+  "voice clone": "клонирование голоса",
+  "audio effect": "аудиоэффекты",
 };
 
-const INFRA = /[A-Z][A-Z0-9]{3,}_[A-Z0-9_]{2,}|in Railway|dash.cloudflare/;
+/**
+ * Машинный код — это НЕ сообщение сервера. Замер 07.10.2026 (приёмка, волна 24):
+ * ru и kk получали человеческий текст, а EN-читатель видел
+ * `publishing_temporarily_unavailable` и `no_guest_id` как есть. То есть класс
+ * «код не доезжает до экрана» был закрыт на одном языке из трёх, причём
+ * открытым остался тот, на котором читает зарубежный покупатель.
+ *
+ * Правило EN-ветки ниже не трогает английские ФРАЗЫ сервера: для EN-читателя
+ * они родные, и подменять их русским было бы шагом назад (замер 06.09.2026).
+ */
+const MASHINNYJ_KOD = /^[a-z][a-z0-9_]{3,}$/;
+
+const KODY_EN: Record<string, string> = {
+  publishing_temporarily_unavailable:
+    "Publishing is unavailable right now: we have run out of free site slots. " +
+    "Your files are saved — sign in or write to us and we will publish this project.",
+  no_guest_id:
+    "Your browser is blocking site storage, so we cannot tell your projects apart. " +
+    "Allow storage for aevion.app, or sign in.",
+  not_signed_in: "This needs an account — guest mode does not cover it.",
+  admin_only: "This is an internal action: it is available to the platform owner only.",
+  invalid_path: "The file path is written incorrectly — it contains characters we cannot accept.",
+  storage_unavailable:
+    "Storage is temporarily unavailable. Your data is intact — please try again in a minute.",
+};
+
+// Replicate добавлен 07.10.2026: сообщение «Video provider has no credit — top up
+// the Replicate account» ru и kk получали человеческим текстом (карта ниже), а
+// EN-покупатель читал имя нашего поставщика и предложение пополнить НАШ счёт.
+// Это написано для нас, а не для него, — тот же класс, что переменные окружения.
+const INFRA = /[A-Z][A-Z0-9]{3,}_[A-Z0-9_]{2,}|in Railway|dash.cloudflare|Replicate/;
 
 /**
  * @param raw   текст из поля `error` ответа сервера (может отсутствовать)
@@ -234,6 +285,16 @@ export function devhubServerError(raw: unknown, fallback: string, lang: string =
         console.warn("devhub: техническое сообщение сервера не показано покупателю:", s);
       }
       return "This capability is not set up on our side yet. We know about it — please try again later.";
+    }
+    if (MASHINNYJ_KOD.test(s)) {
+      const gotovyj = KODY_EN[s.toLowerCase()];
+      if (gotovyj) return gotovyj;
+      // Незнакомый код не показываем, но и не теряем: без следа в консоли
+      // разбирать отказ станет не по чему (та же развилка, что у INFRA выше).
+      if (typeof console !== "undefined" && console.warn) {
+        console.warn("devhub: машинный код сервера не показан EN-покупателю:", s);
+      }
+      return "The request failed. Please try again.";
     }
     return s;
   }

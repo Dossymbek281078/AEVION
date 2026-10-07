@@ -1,3 +1,12 @@
+/*
+ * 🔴 07.10.2026, приёмка волны 24: числа подняты с 43/42/36 до 45/44/38.
+ * Причина — в реестр добавлены qmelanin и qrenew (ветвь, снявшая ложные
+ * обещания: счётчик «Модулей платформы» на витрине должен считаться из
+ * таблицы прайса). Сторожа pitchNumbers и scaleClaims назвали нужные числа
+ * сами и дали точную подсказку «Update src/data/pitchFacts.ts» — я их не
+ * угадывал. Числа здесь обязаны идти за реестром, а не наоборот: это
+ * утверждения о масштабе, которые читает инвестор.
+ */
 /**
  * pitchFacts — single source of truth for the numbers that appear across
  * investor-facing surfaces (home, /pitch, /partner, /investor, OG images,
@@ -36,11 +45,11 @@
  * счётчики, подписанные этим эндпоинтом, должны падать сюда, а не в
  * MODULE_NODES (тот на единицу меньше — он считает продуктовые узлы карты).
  */
-export const REGISTRY_ENTRIES = 43;
+export const REGISTRY_ENTRIES = 45;
 /** Public "product nodes on the Globus map" = registry entries − the globus map shell. */
-export const MODULE_NODES = 42;
+export const MODULE_NODES = 44;
 /** Registry entries with status:"live". The remaining 5 are status:"mvp". */
-export const LIVE_MODULES = 36;
+export const LIVE_MODULES = 38;
 /** Honest qualitative framing (from the #484 objectivity audit): deployed ≠ feature-complete. */
 export const FEATURE_COMPLETE_LABEL = "~a dozen feature-complete";
 /**

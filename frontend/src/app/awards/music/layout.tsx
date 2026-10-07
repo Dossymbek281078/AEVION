@@ -6,7 +6,7 @@ const SITE = getSiteUrl();
 export const metadata: Metadata = {
   title: "AEVION Music Awards — premium for AI and digital music",
   description:
-    "AEVION Music Awards: submit through Planet (artifact type music), get a compliance certificate and AEC payout into AEVION Bank.",
+    "AEVION Music Awards: submit through Planet (artifact type music) and get a compliance certificate with authorship registered in QRight.",
   alternates: { canonical: "/awards/music" },
   openGraph: {
     title: "AEVION Music Awards",
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "AEVION Music Awards",
-    description: "Pre-Grammy era for AI music. QRight authorship, Planet validators, AEC payouts.",
+    description: "Pre-Grammy era for AI music. QRight authorship, Planet validators, compliance certificate.",
   },
 };
 
@@ -25,7 +25,7 @@ const articleJsonLd = {
   headline: "Pre-Grammy era for AI music.",
   name: "AEVION Music Awards",
   description:
-    "AEVION Music Awards: submit through Planet (artifact type music), get a compliance certificate and AEC payout into AEVION Bank.",
+    "AEVION Music Awards: submit through Planet (artifact type music) and get a compliance certificate with authorship registered in QRight.",
   inLanguage: ["en", "ru", "kk"],
   about: ["AEVION Music Awards", "AI Music", "Creator Economy", "QRight", "Planet Validators"],
   publisher: { "@type": "Organization", name: "AEVION", url: SITE },
@@ -67,7 +67,7 @@ const faqJsonLd = {
       name: "What is the payout?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Top-3 winners settle in AEC directly into AEVION Bank. From there the funds are usable through Autopilot rules, savings goals, P2P transfer or off-ramp via Bank routes — no separate wallet step.",
+        text: "Wave 1 is about recognition and a verifiable authorship record, not prize money: there is no payout mechanism wired to the awards yet. What you get is a QRight record and a compliance certificate you can cite.",
       },
     },
     {
@@ -75,7 +75,7 @@ const faqJsonLd = {
       name: "Is there a submission fee?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Wave 1 submission for AI-music is free. The QRight registration step has a fixed micro-fee in AEC (covers Quantum Shield key derivation); the validator quorum itself is paid by the prize pool, not by submitters.",
+        text: "Wave 1 submission for AI-music is free. The QRight registration step has a fixed micro-fee in AEC (covers Quantum Shield key derivation). Wave 1 has no prize pool: validators are not paid out of one.",
       },
     },
     {
@@ -93,7 +93,7 @@ const howToJsonLd = {
   "@context": "https://schema.org",
   "@type": "HowTo",
   name: "Submit a track to AEVION Music Awards",
-  description: "Five-step flow from QRight authorship to AEC payout in AEVION Bank.",
+  description: "Five-step flow from QRight authorship to a compliance certificate on Planet.",
   inLanguage: "en",
   totalTime: "PT15M",
   step: [
@@ -126,8 +126,8 @@ const howToJsonLd = {
     {
       "@type": "HowToStep",
       position: 5,
-      name: "AEC payout into AEVION Bank",
-      text: "Winners receive AEC straight into their AEVION Bank wallet. Funds become immediately routable — Autopilot, savings goals, P2P, or off-ramp.",
+      name: "What a winner actually receives",
+      text: "A public Planet artifact page as proof of the award, authorship registered in QRight, and a compliance certificate. Prize money is not part of wave 1.",
       url: `${SITE}/bank`,
     },
   ],

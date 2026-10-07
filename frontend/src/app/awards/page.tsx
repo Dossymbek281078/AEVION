@@ -10,10 +10,10 @@ import { HubLeaderboard } from "./_components/HubLeaderboard";
 export const metadata: Metadata = {
   title: "AEVION Awards — music and film on the Planet validator layer",
   description:
-    "AEVION Awards hub: creative recognition wired to QRight authorship, Planet validator quorum and Bank AEC payouts.",
+    "AEVION Awards hub: creative recognition wired to QRight authorship and Planet validator certification.",
   openGraph: {
     title: "AEVION Awards",
-    description: "AEVION music and film awards on Planet infrastructure with auto AEC payout.",
+    description: "AEVION music and film awards on Planet infrastructure, with authorship registered in QRight.",
   },
 };
 

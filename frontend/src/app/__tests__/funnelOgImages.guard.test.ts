@@ -22,7 +22,13 @@ const APP = join(HERE, "..");
 
 /** Страницы, на которые ведут ролики и внешние ссылки. Список ведётся руками:
  *  он и есть утверждение о том, что мы считаем входом в воронку. */
-const FUNNEL = ["go", "longevity", "en/go", "en/longevity", "shop", "constitution/pricing", "qsign", "compare", "partner", "qrenew", "qventure", "qlearn", "bank", "qnews", "qai", "studio", "explore", "sdk", "api-explorer", "build", "build/pricing", "build/vacancies"];
+const FUNNEL = [
+  // 07.10.2026: qmelanin добавлен. На страницу ведут семь роликов, то есть это
+  // вход в воронку по факту, а карточки у неё не было вовсе — ни og:image, ни
+  // twitter:image (замер прода того же дня). Список ведётся руками, поэтому
+  // пробел и выжил: сторож проверял только то, что в него внесли.
+  "qmelanin",
+ "go", "longevity", "en/go", "en/longevity", "shop", "constitution/pricing", "qsign", "compare", "partner", "qrenew", "qventure", "qlearn", "bank", "qnews", "qai", "studio", "explore", "sdk", "api-explorer", "build", "build/pricing", "build/vacancies"];
 
 /** Все каталоги, где кто-то нарисовал opengraph-image.tsx. Обходом, а не
  *  списком: картинку рисуют осознанно, и сам факт её появления означает

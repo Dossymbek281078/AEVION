@@ -61,6 +61,15 @@ const btnPrimary: CSSProperties = {
   boxShadow: "0 4px 14px rgba(13,148,136,0.35)",
 };
 
+/* Ссылка в списке «Other modules»: намеренно НЕ кнопка. Семь одинаковых кнопок
+ * в первом экране и были причиной того, что человек не нажимал ничего — выбор из
+ * дюжины равновесных вариантов не является предложением. */
+const ссылкаСписка: React.CSSProperties = {
+  color: "#94a3b8",
+  textDecoration: "none",
+  borderBottom: "1px solid rgba(148,163,184,0.35)",
+};
+
 const btnGhost: CSSProperties = {
   display: "inline-block",
   padding: "12px 20px",
@@ -318,32 +327,6 @@ const DEMO_NOTE =
         }}
       >
         <div style={{ maxWidth: 1280, margin: "0 auto" }}>
-          <Link
-            href="/qventure"
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 10,
-              marginBottom: 16,
-              padding: "8px 16px",
-              borderRadius: 999,
-              background: "rgba(255,255,255,0.10)",
-              border: "1px solid rgba(255,255,255,0.28)",
-              color: "#fff",
-              textDecoration: "none",
-              fontSize: 15.5,
-              fontWeight: 600,
-            }}
-          >
-            <span style={{
-              fontSize: 13, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase",
-              padding: "3px 8px", borderRadius: 999, background: "#7c3aed", color: "#fff",
-            }}>
-              New planet
-            </span>
-            <span>QVenture — AI Investment Analyst: fund-grade due diligence in seconds</span>
-            <span aria-hidden style={{ opacity: 0.8 }}>→</span>
-          </Link>
           <div
             style={{
               display: "block",
@@ -370,7 +353,7 @@ const DEMO_NOTE =
               letterSpacing: "-0.03em",
             }}
           >
-            Trust infrastructure for digital assets and intellectual property
+            Describe it in a sentence — get a working site
           </h1>
           <p
             style={{
@@ -381,58 +364,46 @@ const DEMO_NOTE =
               margin: 0,
             }}
           >
-            A unified platform for identity, IP registration, cryptographic signatures, authorship & prior-art bureau, and compliance — on an interactive ecosystem map with{" "}
-            <strong>{MODULE_NODES} product nodes</strong>, digital banking, chess, and open APIs.
+            DevHub writes the code, shows a live preview and publishes to a real
+            subdomain. No GitHub, no cloud account, no sign-up for the first project.
+            <br />
+            <span style={{ opacity: 0.72, fontSize: "0.92em" }}>
+              AEVION is trust infrastructure for digital assets and intellectual
+              property: identity, IP registration, signatures, authorship bureau and
+              compliance across <strong>{MODULE_NODES} product nodes</strong>.
+            </span>
           </p>
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 28 }}>
-            <Link href="/auth" style={btnPrimary}>
-              Start with identity (Auth)
-            </Link>
-            <Link href="/qright" style={btnGhost}>
-              QRight Registry
-            </Link>
-            <Link
-              href="/multichat-engine"
-              style={{
-                ...btnGhost,
-                border: "1px solid rgba(196,181,253,0.7)",
-                background: "rgba(124,58,237,0.18)",
-                color: "#fff",
-                fontWeight: 800,
-              }}
-            >
-              QCoreAI · Multi-agent
-            </Link>
-            <Link href="/awards/music" style={btnGhost}>
-              Music Awards
-            </Link>
-            <Link href="/awards/film" style={btnGhost}>
-              Film Awards
+          {/* 07.10.2026, набросок по заданию оркестратора.
+              Замер, ради которого правка: за три дня 515 живых просмотров и ОДНО
+              нажатие. В первом экране было 6 действий на телефоне и 12 на столе,
+              все одного веса, и ни одно не вело в DevHub или шахматы — туда, куда
+              мы гоним трафик постами, роликами и каталогами. Главным действием
+              при этом стояла регистрация: мы просили счёт до того, как показали товар.
+              Здесь ОДНА крупная кнопка и ОДНА текстовая ссылка. Остальные входы не
+              исчезли — они ниже, списком: перестановка порядка одним действием не
+              является, пока семь кнопок стоят тем же рядом. */}
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", marginTop: 28 }}>
+            <Link href="/devhub" style={btnPrimary}>
+              Open DevHub — free, no account
             </Link>
             <Link
-              href="/demo"
+              href="/auth"
               style={{
-                ...btnGhost,
-                border: "2px solid rgba(255,255,255,0.55)",
-                background: "rgba(255,255,255,0.18)",
+                color: "rgba(255,255,255,0.86)",
+                textDecoration: "underline",
+                textUnderlineOffset: 4,
+                fontSize: 15,
+                fontWeight: 600,
               }}
             >
-              Full demo →
-            </Link>
-            <Link
-              href="/pitch"
-              style={{
-                ...btnGhost,
-                border: "2px solid rgba(251,191,36,0.7)",
-                background: "linear-gradient(135deg, rgba(251,191,36,0.25), rgba(245,158,11,0.18))",
-                color: "#fff",
-                fontWeight: 800,
-                boxShadow: "0 8px 24px rgba(251,191,36,0.25)",
-              }}
-            >
-              Investor pitch →
+              or start with identity (Auth)
             </Link>
           </div>
+          {/* 07.10.2026, набросок. Баннер QVenture стоял ПЕРВЫМ элементом экрана и
+              был самым крупным пятном: 325 из 390 пикселей на телефоне, 773 из 1280
+              на столе. Товар для инвесторов занимал лучшее место витрины для всех.
+              Перенесён под ряд действий — он никуда не делся, но перестал
+              конкурировать с тем, зачем человек пришёл. */}
 
           {/*
             🔴 «Buy now» — блок заведён 22.09.2026 по прямому слову
@@ -582,6 +553,29 @@ const DEMO_NOTE =
                 <div style={{ fontSize: 22, fontWeight: 900, marginTop: 6 }}>{row.v}</div>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 07.10.2026, набросок. Семь входов, что стояли тем же рядом кнопок в
+          первом экране, собраны сюда списком. Они не исчезли — они перестали
+          соперничать с единственным действием, ради которого человек пришёл.
+          Сюда же ушёл баннер QVenture: он был первым и самым крупным элементом
+          экрана (325 из 390 на телефоне, 773 из 1280 на столе), то есть лучшее
+          место витрины для всех занимал товар для инвесторов. */}
+      <section style={{ background: "#0b1120", color: "#cbd5e1", padding: "18px 24px 26px" }}>
+        <div style={{ maxWidth: 1280, margin: "0 auto" }}>
+          <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "#64748b", marginBottom: 10 }}>
+            Other modules
+          </div>
+          <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontSize: 14.5, lineHeight: 1.9 }}>
+            <Link href="/qright" style={ссылкаСписка}>QRight Registry</Link>
+            <Link href="/multichat-engine" style={ссылкаСписка}>QCoreAI · Multi-agent</Link>
+            <Link href="/awards/music" style={ссылкаСписка}>Music Awards</Link>
+            <Link href="/awards/film" style={ссылкаСписка}>Film Awards</Link>
+            <Link href="/demo" style={ссылкаСписка}>Full demo</Link>
+            <Link href="/pitch" style={ссылкаСписка}>Investor pitch</Link>
+            <Link href="/qventure" style={ссылкаСписка}>QVenture — AI Investment Analyst</Link>
           </div>
         </div>
       </section>

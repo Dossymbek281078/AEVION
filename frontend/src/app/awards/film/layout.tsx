@@ -6,7 +6,7 @@ const SITE = getSiteUrl();
 export const metadata: Metadata = {
   title: "AEVION Film Awards — premium for AI and digital cinema",
   description:
-    "AEVION Film Awards: submit through Planet (artifact type film), pass validator quorum, get a compliance certificate and AEC payout into AEVION Bank. No closed jury, no IP take.",
+    "AEVION Film Awards: submit through Planet (artifact type film), pass validator quorum, get a compliance certificate with authorship registered in QRight. No closed jury, no IP take.",
   alternates: { canonical: "/awards/film" },
   openGraph: {
     title: "AEVION Film Awards",
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "AEVION Film Awards",
-    description: "The first credible AI-film festival. QRight authorship, Planet validators, AEC payouts.",
+    description: "The first credible AI-film festival. QRight authorship, Planet validators, compliance certificate.",
   },
 };
 
@@ -25,7 +25,7 @@ const articleJsonLd = {
   headline: "The first credible AI-film festival.",
   name: "AEVION Film Awards",
   description:
-    "AEVION Film Awards: submit through Planet (artifact type film), pass validator quorum, get a compliance certificate and AEC payout into AEVION Bank.",
+    "AEVION Film Awards: submit through Planet (artifact type film), pass validator quorum, get a compliance certificate with authorship registered in QRight.",
   inLanguage: ["en", "ru", "kk"],
   about: ["AEVION Film Awards", "AI Film", "Digital Cinema", "Creator Economy", "QRight", "Planet Validators"],
   publisher: { "@type": "Organization", name: "AEVION", url: SITE },
@@ -75,7 +75,7 @@ const faqJsonLd = {
       name: "How are payouts and rights handled?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Top-3 receive AEC into AEVION Bank. Authorship and royalty splits stay with the creator — AEVION takes no IP, no exclusive license, no rev-share on future distribution. The Planet artifact page becomes a public proof of the award.",
+        text: "Authorship and royalty splits stay with the creator — AEVION takes no IP, no exclusive license, no rev-share on future distribution. The Planet artifact page becomes a public proof of the award. Prize money is not part of wave 1: no payout mechanism is wired to the awards yet.",
       },
     },
     {
@@ -93,7 +93,7 @@ const howToJsonLd = {
   "@context": "https://schema.org",
   "@type": "HowTo",
   name: "Submit a film to AEVION Film Awards",
-  description: "Five-step flow from QRight authorship to AEC payout in AEVION Bank.",
+  description: "Five-step flow from QRight authorship to a compliance certificate on Planet.",
   inLanguage: "en",
   totalTime: "PT30M",
   step: [
@@ -126,8 +126,8 @@ const howToJsonLd = {
     {
       "@type": "HowToStep",
       position: 5,
-      name: "AEC payout into AEVION Bank",
-      text: "Winners receive AEC into the AEVION Bank wallet. The Planet artifact page becomes the public award proof — citable in pitch decks, distribution deals and festival applications.",
+      name: "What a winner actually receives",
+      text: "The Planet artifact page becomes the public award proof — citable in pitch decks and distribution deals. Prize money is not part of wave 1.",
       url: `${SITE}/bank`,
     },
   ],

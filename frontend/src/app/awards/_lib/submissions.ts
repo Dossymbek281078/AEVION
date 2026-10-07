@@ -301,7 +301,14 @@ export function resetTrack(track: AwardTrack): void {
   }
 }
 
-/* ── AEC payout schedule (used by the payout preview box) ── */
+/* ── AEC payout schedule — НЕ РИСУЕТСЯ с 06.10.2026 ────────
+ * Блок выплат снят со всех страниц премий: начисления победителю премии в коде
+ * нет. Механизм существует (internalMintForDevice в routes/aev.ts), но зовут
+ * его из ровно одного места — routes/bureau.ts, награда за сертификат бюро.
+ * Константа оставлена намеренно, чтобы вернуть блок одним движением, когда
+ * начисление свяжут с премиями. Сторож awardsSubmitDoorIsReal.guard.test.ts
+ * краснеет, если её снова начнут рисовать.
+ * ──────────────────────────────────────────────────────── */
 
 export const AEC_PAYOUTS = {
   first: 500,

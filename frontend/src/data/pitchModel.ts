@@ -472,14 +472,14 @@ export const launchedModules: PitchModule[] = [
     href: "/awards",
     stage: "live",
     bucket: "engagement",
-    tagline: "Music & Film tracks on the Planet validator layer — recognition with AEC payout.",
+    tagline: "Music & Film tracks on the Planet validator layer — authorship registered, work certified.",
     problem:
       "AI-generated music and film have no home in the traditional awards landscape. Independent creators need recognition pathways tied directly to revenue.",
     killerFeature:
-      "Two production tracks (Music, Film) with submissions, voting, certification — winners receive AEC payouts straight into Bank.",
+      "Two production tracks (Music, Film): submission through Planet, authorship registered in QRight, compliance certificate on pass.",
     networkRole:
       "Awards drive QRight registrations (you must register before submitting), Planet validation activity, and Bank inflows. Every award is a Trust Graph trifecta.",
-    proof: ["Live submission/cert counts via Planet API", "Two distinct tracks (Music + Film)", "AEC payout integrated with Bank"],
+    proof: ["Live submission/cert counts via Planet API", "Two distinct tracks (Music + Film)", "Planned: AEC payouts once the award payout mechanism ships"],
     valueLine: "Marketing engine: every award winner is a case study + a recurring user across QRight, Bank and Planet.",
   },
   {
@@ -615,7 +615,7 @@ export const gtm = {
     {
       phase: "Phase 1 · Independent creators",
       body:
-        "AI-music and AI-film artists registering work in QRight + submitting to Awards. Wedge: 'provable authorship and timestamp in 30 seconds'. Conversion to Bank is automatic (royalty payout settles to AEC).",
+        "AI-music and AI-film artists registering work in QRight + submitting to Awards. Wedge: 'provable authorship and timestamp in 30 seconds'. Planned: conversion to Bank once award payouts ship — today the award gives a certificate, not money.",
     },
     {
       phase: "Phase 2 · IP-heavy SMBs",
@@ -746,7 +746,7 @@ export const videoReels = {
       cover: "💳",
     },
     {
-      title: "Submit to Awards, validate via Planet, payout in AEC",
+      title: "Submit to Awards, validate via Planet, certify on-chain",
       duration: "1:45",
       modules: "QRight · Planet · Awards · Bank",
       href: "/awards",
@@ -790,8 +790,9 @@ export const useCases = {
       avatar: "🎬",
       story:
         "AI-cinema startup pumps 50 short films per quarter. Each render is hashed in QRight, sealed by Quantum Shield, " +
-        "submitted to Awards/Film. Planet validators vote on originality and rights; winners get prize money in AEC " +
-        "directly to studio's Bank account, used to spin up the next render farm cycle.",
+        "submitted to Awards/Film. Planet validators check originality and rights, and the work gets a compliance " +
+        "certificate the studio can cite in distribution deals. Planned: winners will receive AEC payouts once the " +
+        "award payout mechanism ships — it is not wired to the awards yet.",
       modulesUsed: ["QRIGHT", "SHIELD", "PLANET", "AWARDS", "BANK"],
       revenueLine: "Submission fees + prize-pool sponsorship + Bank flow.",
     },

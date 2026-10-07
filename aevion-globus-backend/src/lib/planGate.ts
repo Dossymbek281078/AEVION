@@ -490,9 +490,71 @@ function upgradeResponse(res: Response, moduleId: string, plan: ResolvedPlan, au
  * No-op unless the module is listed in PAYWALL_MODULES, so attaching it is
  * always safe; flip the env to switch enforcement on.
  */
-export function requireModule(moduleId: string) {
+/**
+ * Пути маршрутов роутера — из его собственного стека, не списком руками.
+ *
+ * 🔴 Повод 07.10.2026. Платная стена отвечала РАНЬШЕ маршрутизации, поэтому
+ * `/api/multichat/vydumannyi-put` (такого маршрута нет вовсе) давал **402
+ * «купите тариф»**. Два следствия, и второе хуже первого:
+ *   1. человек с опечаткой в адресе читает предложение заплатить;
+ *   2. снаружи — в том числе нашими же проверками — «сломано» и «платно»
+ *      неразличимы: проверено 06.10, выдуманный путь отвечал тем же 402, что
+ *      и живой.
+ *
+ * Список маршрутов руками завести нельзя: он разойдётся с роутером молча.
+ * Берём стек самого роутера, поэтому новый маршрут появляется здесь сам.
+ */
+interface СлойРоутера { route?: { path?: string | string[] } }
+interface РоутерСоСтеком { stack?: СлойРоутера[] }
+
+export function путиРоутера(роутер: РоутерСоСтеком | undefined): string[] {
+  const слои = роутер?.stack;
+  if (!Array.isArray(слои)) return [];
+  const пути: string[] = [];
+  for (const слой of слои) {
+    const p = слой?.route?.path;
+    if (typeof p === "string") пути.push(p);
+    else if (Array.isArray(p)) for (const x of p) if (typeof x === "string") пути.push(x);
+  }
+  return пути;
+}
+
+/**
+ * Совпадает ли путь запроса с одним из шаблонов (`/a/:id/b`).
+ *
+ * Намеренно простое сопоставление: равенство по сегментам, `:параметр`
+ * совпадает с любым непустым сегментом, `*` — с любым хвостом. Всё, чего эта
+ * проверка не поняла, считается СОВПАДЕНИЕМ: сомнение обязано оставлять
+ * прежнее поведение, иначе опечатка в шаблоне закроет живой платный путь.
+ */
+export function путьСовпадает(шаблоны: string[], путь: string): boolean {
+  const ч = путь.split("/").filter(Boolean);
+  for (const шаблон of шаблоны) {
+    if (шаблон.includes("(") || шаблон.includes("{")) return true; // регулярка в пути — не беремся судить
+    const ш = шаблон.split("/").filter(Boolean);
+    const звезда = ш.indexOf("*");
+    if (звезда >= 0) {
+      if (ч.length >= звезда && ш.slice(0, звезда).every((seg, i) => seg.startsWith(":") || seg === ч[i])) return true;
+      continue;
+    }
+    if (ш.length !== ч.length) continue;
+    if (ш.every((seg, i) => (seg.startsWith(":") ? Boolean(ч[i]) : seg === ч[i]))) return true;
+  }
+  return false;
+}
+
+export function requireModule(moduleId: string, роутер?: РоутерСоСтеком) {
+  // Пути считаем один раз на монтирование: стек роутера после старта не растёт.
+  let пути: string[] | null = null;
   return async function moduleGate(req: Request, res: Response, next: NextFunction): Promise<void> {
     if (!paywallEnabledFor(moduleId)) { next(); return; }
+    // Неизвестный путь — это 404, и отвечать им должен Express, а не стена.
+    // Пустой список означает «стек прочитать не вышло»: тогда ведём себя
+    // как раньше, иначе собственная слепота закрыла бы платный модуль.
+    if (роутер) {
+      if (пути === null) пути = путиРоутера(роутер);
+      if (пути.length > 0 && !путьСовпадает(пути, req.path)) { next(); return; }
+    }
     if (isExemptPath(req)) { next(); return; }
     const plan = resolveUserPlan(req);
     if (isModuleEntitled(plan, moduleId)) { next(); return; }

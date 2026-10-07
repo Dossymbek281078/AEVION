@@ -72,8 +72,90 @@ export function PageTracking({ page }: { page: string }) {
       track({ type: "cta_click", source: page, meta: { channel, product } });
     }
 
+    /*
+     * 🔴 ПРИЗНАК ЧЕЛОВЕКА: «engaged» — одно событие за сессию.
+     *
+     * Повод 07.10.2026, слово оркестратора. Замер того же утра: за трое суток
+     * 515 живых просмотров и ОДНО нажатие на всю платформу. Прежде чем чинить
+     * первый экран, надо знать, люди ли эти просмотры: внешний обходчик ссылок
+     * YouTube исполняет JS и в наших числах выглядел живым человеком (76
+     * визитов за двое суток по шаблону «33 поста ровно по 2 визита»).
+     *
+     * Условие намеренно простое и дешёвое: ВИДИМАЯ вкладка 10 секунд ИЛИ
+     * прокрутка на четверть страницы. Машина обычно не делает ни того, ни
+     * другого: ей нужен ответ сервера, а не чтение.
+     *
+     * Чего признак НЕ обещает: он не доказывает человека. Обходчик, который
+     * подождёт десять секунд, пройдёт — поэтому «engaged» читается как «похоже
+     * на чтение», а не как «человек». Зато обратное надёжно: нулевая доля
+     * engaged среди живых означает, что чинить первый экран рано — его никто
+     * не смотрит.
+     *
+     * Единица — СЕССИЯ, отметка в sessionStorage. Доступ к хранилищу обёрнут:
+     * в приватном окне он бросает исключение, и тогда защёлка живёт в памяти
+     * страницы — событие уйдёт не более одного раза на загрузку, этого хватает.
+     */
+    const КЛЮЧ_ВНИМАНИЯ = "aevion_engaged_sent";
+    let вниманиеОтправлено = false;
+    try {
+      вниманиеОтправлено = window.sessionStorage.getItem(КЛЮЧ_ВНИМАНИЯ) === "1";
+    } catch {
+      вниманиеОтправлено = false;
+    }
+
+    let видимыхМс = 0;
+    let отметка = document.visibilityState === "visible" ? Date.now() : 0;
+    let тик: ReturnType<typeof setInterval> | null = null;
+
+    function отправитьВнимание(причина: "время" | "прокрутка") {
+      if (вниманиеОтправлено) return;
+      вниманиеОтправлено = true;
+      try {
+        window.sessionStorage.setItem(КЛЮЧ_ВНИМАНИЯ, "1");
+      } catch {
+        // Хранилище недоступно — защёлка остаётся в памяти страницы.
+      }
+      track({ type: "engaged", source: page, meta: { channel, причина } });
+    }
+
+    function накопить() {
+      if (отметка > 0) {
+        видимыхМс += Date.now() - отметка;
+        отметка = document.visibilityState === "visible" ? Date.now() : 0;
+      }
+      if (видимыхМс >= 10_000) отправитьВнимание("время");
+    }
+
+    function onVisibility() {
+      if (document.visibilityState === "visible") {
+        if (отметка === 0) отметка = Date.now();
+      } else {
+        накопить();
+        отметка = 0;
+      }
+    }
+
+    function onScroll() {
+      const высота = document.documentElement.scrollHeight - window.innerHeight;
+      // Страница короче экрана: прокручивать нечего, и требовать прокрутку
+      // значило бы считать внимательными только тех, у кого длинная страница.
+      if (высота <= 0) return;
+      if (window.scrollY / высота >= 0.25) отправитьВнимание("прокрутка");
+    }
+
+    if (!вниманиеОтправлено) {
+      тик = setInterval(накопить, 2_000);
+      document.addEventListener("visibilitychange", onVisibility);
+      window.addEventListener("scroll", onScroll, { passive: true });
+    }
+
     document.addEventListener("click", onClick, { capture: true });
-    return () => document.removeEventListener("click", onClick, { capture: true });
+    return () => {
+      document.removeEventListener("click", onClick, { capture: true });
+      if (тик) clearInterval(тик);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("scroll", onScroll);
+    };
   }, [page]);
 
   return null;

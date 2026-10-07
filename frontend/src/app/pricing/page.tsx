@@ -8,7 +8,7 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { fetchAiSavings, счётчикГоденДляПоказа } from "@/lib/aiSavings";
 import { запомнитьНамерение } from "@/lib/checkoutIntent";
-import { channelFrom, withChannel } from "@/lib/products";
+import { channelFrom, keepChannel, withChannel } from "@/lib/products";
 import { track } from "@/lib/track";
 import { chargeCurrencyNoteKey, shouldWarnAboutCurrency } from "@/lib/chargeCurrencyNote";
 import { usePricingT, termUnitKey } from "@/lib/pricingI18n";
@@ -194,7 +194,25 @@ function availabilityBadge(a: ModulePrice["availability"]) {
  * Пусто для приложения = граница не мерена, а не «всё бесплатно».
  */
 const ЧТО_ПЛАТНО: Record<string, string> = {
-  cyberchess: "pricing.home.apps.whatIsPaid.cyberchess",
+  // 🔴 ПУСТО С 07.10.2026, и это не откат вчерашней правки, а её следствие.
+  //
+  // Вчера сюда добавили строку «платно — Глубокий анализ движком Stockfish
+  // 17.1». Сегодняшний замер показал, что эта платная часть НЕ РАБОТАЕТ НИ У
+  // КОГО, включая оплативших: движок берёт нейросети по адресу /nnue, а на
+  // проде там 404 — каталога нет в сборке, переменная NEXT_PUBLIC_NNUE_BASE не
+  // задана (в выкаченном бандле осталось само выражение process.env...).
+  // Сети весят ~75 МБ, без них движок не поднимается; в коде движка это прямо
+  // записано как незакрытое.
+  //
+  // Нового обещания здесь НЕТ намеренно. Назвать платную часть CyberChess
+  // сейчас нечем: задачи, партия, задача дня и тренер бесплатны (замер:
+  // /api/cyberchess-puzzles/meta и /cyberchess-daily/puzzle → 200 без входа),
+  // а единственное закрытое не работает. Пустая запись означает «сказать
+  // нечего», и это честнее любой формулировки.
+  //
+  // ⚠️ Следствие, которое должен решать основатель: карточка снова называет
+  // цену без того, за что она. Выход не в тексте, а в продукте — либо
+  // захостить сети, либо не продавать CyberChess отдельно.
 };
 
 export default function PricingPage() {
@@ -2250,15 +2268,45 @@ export default function PricingPage() {
                     </Link>
                   </p>
                 )}
-                {calcTier !== "free" && calcTier !== "enterprise" && (
+                {/*
+                  🔴 07.10.2026: КНОПКА КАЛЬКУЛЯТОРА ПОКУПАЕТ ТОЛЬКО ГОЛУЮ СТУПЕНЬ.
+                  Она единственная передавала seats и promoCode в кассу, а сумма до
+                  Lemon Squeezy НЕ доезжает: LS списывает цену своего варианта.
+                  Замер на проде 07.10: ступень full за 3 места даёт итого 2331 против
+                  2250 за одно — страница обещала бы на $81 больше, чем спишется.
+                  Купить «молча одно место» тоже нельзя: человек выбрал три, и
+                  обещание всё равно разошлось бы. Поэтому при местах > 1 или
+                  промокоде кнопки нет, а есть честная строка со счётом — тем же
+                  приёмом, что у ступени enterprise ниже.
+                */}
+                {calcTier !== "free" && calcTier !== "enterprise" && (calcSeats > 1 || calcPromo) && (
+                  <Link
+                    href={keepChannel("/pricing/contact?topic=seats-invoice", channel)}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      marginTop: 16,
+                      padding: "12px 16px",
+                      fontSize: 15,
+                      fontWeight: 700,
+                      borderRadius: 10,
+                      border: "1px solid #0d9488",
+                      color: "#0f766e",
+                      background: "#f0fdfa",
+                      textAlign: "center",
+                      textDecoration: "none",
+                    }}
+                  >
+                    {tp("calc.invoiceOnly")}
+                  </Link>
+                )}
+                {calcTier !== "free" && calcTier !== "enterprise" && calcSeats <= 1 && !calcPromo && (
                   <button
                     disabled={checkingOut === calcTier || !продаётся(calcTier)}
                     onClick={() =>
-                      startCheckout({
-                        tierId: calcTier,
-                        seats: calcSeats,
-                        promoCode: calcPromo || undefined,
-                      })
+                      // Голая ступень: места и промокод сюда НЕ передаются, пока сумма
+                      // не доводится до кассы. Ветка выше показывает строку со счётом.
+                      startCheckout({ tierId: calcTier, seats: 1 })
                     }
                     style={{
                       width: "100%",

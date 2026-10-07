@@ -741,6 +741,23 @@ const VOICE_IDS: Record<string, string> = {
 // самая дорогая возможность модуля не имела потолка вовсе; 05.09 числа
 // уточнены (30/1000), потолок у pro поставлен намеренно — safety, не упаковка.
 // speech и translate заведены 02.09.2026 вместе со своими квотами.
+/*
+ * 🔴 ЯЗЫК ДЕНЕЖНЫХ ОТКАЗОВ — НЕ КОСМЕТИКА (07.10.2026).
+ *
+ * Сообщения о месячных пределах пишутся ЗДЕСЬ ПО-АНГЛИЙСКИ в форме
+ * «Monthly <что> limit reached», и это не вкусовщина. На фронте такой текст
+ * проходит русскую карту (lib/devhubServerError), превращается в «Месячная
+ * норма исчерпана: …», и ровно по этим словам поднимается несмываемая ПЛАШКА С
+ * КАССОЙ (showToast в devhub/[id]/page.tsx). Напишете отказ по-русски прямо
+ * здесь — он карту минует, плашка НЕ поднимется, и человек увидит тост на
+ * четыре секунды без кнопки покупки. Замер 07.10: так себя вели восемь мест
+ * (генерации, аудиоэффекты, клонирование голоса ×2, распознавание речи,
+ * перевод ×3) — то есть единственный денежный момент модуля не работал у пяти
+ * возможностей из девяти, и EN-читатель вдобавок видел русский текст.
+ *
+ * Сторож: frontend/src/app/devhub/__tests__/moneyRefusalRaisesCheckout.guard.test.ts
+ * перечисляет ВСЕ 402 этого файла и краснеет, если хоть один не поднимает кассу.
+ */
 const TIER_LIMITS: Record<StudioTier, Record<CapabilityKey, number>> = {
   free:       { video: 3,   image: 10,  tts: 10000,  music: 5,   deploy: 10, speech: 5,    translate: 50,   generate: 30 },
   // Втрое к гостевой норме и НИ ОДНОЙ платной возможности сверху: это плата за
@@ -2217,6 +2234,13 @@ export function __setMonthUsageForTest(userId: string, capability: CapabilityKey
   memUsage.set(`${userId}:${creditMonth()}:${capability}`, used);
 }
 
+/** Тестовый доступ к порогам потолка проектов Pages. */
+export const __потолокПроектовPagesForTest = {
+  предел: () => ПРЕДЕЛ_ПРОЕКТОВ_PAGES,
+  порогПредупреждения: () => ПОРОГ_ПРЕДУПРЕЖДЕНИЯ,
+  порогОтказаГостям: () => ПОРОГ_ОТКАЗА_ГОСТЯМ,
+};
+
 const MAX_SYNTAX_FIX_ATTEMPTS = 1;
 
 /** Cap how much existing-project context rides in the prompt — enough for the
@@ -3141,6 +3165,143 @@ devhubRouter.patch("/projects/:id", async (req, res) => {
 });
 
 // DELETE /api/devhub/projects/:id
+/**
+ * ПРОБНЫЙ САЙТ СНИМАЕТ СЕБЯ САМ.
+ *
+ * 🔴 ЗАМЕР 07.10.2026 по живому аккаунту Cloudflare (вход основателя): из 34
+ * проектов Pages **20 были нашими пробами**, 15 из них ещё отдавали публичные
+ * страницы. Каждый такой проект навсегда занимает один из слотов аккаунта, и
+ * когда слоты кончатся, публикация встанет у ВСЕХ, включая платных.
+ *
+ * ВАЖНО, ОТКУДА МУСОР: штатный смоук (scripts/devhub-prod-smoke.js) за собой
+ * УБИРАЕТ — он зовёт DELETE /projects/:id, а тот снимает и проект Pages. Среди
+ * 20 найденных не было ни одного `aevion-smoke-*`. Весь мусор оставили РУЧНЫЕ
+ * пробы окон: человек (и я в том числе) выкатывал проверку curl-ом и уходил.
+ * Значит правило нельзя чинить в скрипте — его чинит сервер.
+ *
+ * Поэтому: проект с пробным именем, принадлежащий ГОСТЮ, снимает свой сайт сам
+ * через `DEVHUB_PROBE_SITE_TTL_MINUTES` минут (по умолчанию 120). Снимается
+ * только САЙТ: запись проекта остаётся, она слотов Cloudflare не занимает и
+ * ничего не стоит, а удаление чужой работы — необратимо, и к нему мы не
+ * приближаемся без человека.
+ *
+ * ⚠️ ЧЕСТНАЯ ГРАНИЦА: таймер живёт в процессе. Перезапуск (а выкаток бывает
+ * несколько в сутки) его теряет, и такой сайт останется. То есть это уменьшает
+ * поток мусора, но не заменяет периодический обход — его стоит завести отдельно,
+ * и я этого здесь не делаю, чтобы не выдать половину за целое.
+ */
+const ПРОБНОЕ_ИМЯ = /^\s*(probe|smoke)[-_ ]/i;
+const СРОК_ПРОБНОГО_САЙТА_МС =
+  Math.max(1, Number(process.env.DEVHUB_PROBE_SITE_TTL_MINUTES ?? 120)) * 60_000;
+
+/** Пробный проект гостя: и имя помечено, и владелец — не вошедший человек. */
+export function пробныйГостевойПроект(p: { name: string; userId: string }): boolean {
+  return isGuestRequester(p.userId) && ПРОБНОЕ_ИМЯ.test(String(p.name ?? ""));
+}
+
+/**
+ * Снять опубликованный сайт проекта (Cloudflare Pages).
+ *
+ * ВЫНЕСЕНО ИЗ РУЧКИ УДАЛЕНИЯ 07.10.2026 без изменения поведения: тот же код
+ * понадобился второму вызывающему — самоуборке пробных сайтов. Второй способ
+ * снимать сайт заводить нельзя: у этого уже есть и правильный порядок (домены,
+ * потом проект — иначе Cloudflare отвечает 8000028), и чтение причины из тела, и
+ * сохранение адреса осиротевшего сайта. Каждое из трёх куплено отдельным разбором.
+ *
+ * Возвращает те же три величины, что раньше складывались в ответ ручки.
+ */
+async function снятьСайтPages(
+  project: DevHubProject,
+  откуда: string,
+): Promise<{ pagesRemoved?: boolean; pagesRemoveError?: string; orphanSiteUrl?: string }> {
+  let pagesRemoved: boolean | undefined;
+  let pagesRemoveError: string | undefined;
+  let orphanSiteUrl: string | undefined;
+  if (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) {
+    const имяСайта = имяPagesПроекта(project);
+    // Сначала домены, потом проект: обратный порядок Cloudflare отвергает с
+    // 8000028, и именно в этом порядке дело, а не в правах или имени.
+    const домены = await снятьДоменыPages(имяСайта);
+    try {
+      const r = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/pages/projects/${имяСайта}`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` } },
+      );
+      pagesRemoved = r.ok || r.status === 404;
+      if (!pagesRemoved) {
+        /*
+         * ПРИЧИНУ берём из тела, а не только из кода (30.09.2026).
+         *
+         * Прежнее сообщение «Cloudflare ответил 400» не говорит, что делать:
+         * 400 бывает и когда имя не то, и когда у токена нет права, и когда
+         * проект держат незавершённые сборки. Проверено ночной пробой — я
+         * получил ровно это сообщение и не смог назвать причину, хотя имя
+         * сайта совпадало.
+         */
+        let подробно = "";
+        try {
+          const тело = await r.text();
+          подробно = тело ? ` — ${тело.slice(0, 300)}` : "";
+        } catch {
+          подробно = " — тело ответа не прочиталось";
+        }
+        // Судьбу доменов называем рядом: без неё «Cloudflare ответил 400»
+        // снова не говорит, что делать.
+        const проДомены = домены.ошибка
+          ? ` | домены не сняты: ${домены.ошибка}`
+          : домены.осталось.length
+            ? ` | не снялись домены: ${домены.осталось.join(", ")}`
+            : домены.снято
+              ? ` | доменов снято: ${домены.снято}`
+              : "";
+        pagesRemoveError = `Cloudflare ответил ${r.status}${подробно}${проДомены}`;
+      }
+    } catch (e) {
+      pagesRemoved = false;
+      pagesRemoveError = e instanceof Error ? e.message : String(e);
+    }
+    if (pagesRemoved === false) {
+      /*
+       * НЕ ТЕРЯТЬ АДРЕС ОСИРОТЕВШЕГО САЙТА (30.09.2026).
+       *
+       * Дальше проект удаляется из базы. Если сайт снять не удалось, он остаётся
+       * отвечать 200 публично, а единственная ниточка к нему — имя, выведенное из
+       * записи, которой уже нет. Ровно так и накопился тот мусор, про который
+       * сказано выше: «уборку пришлось делать руками по списку».
+       *
+       * Поэтому адрес называется трижды: в ответе (вызывающий видит сразу), в
+       * сборщике ошибок (чтобы пришёл человек) и в журнале. Проверено ночью на
+       * себе: проект отдал 404, сайт продолжал отдавать 200 и 4231 знак.
+       */
+      orphanSiteUrl = `https://${имяСайта}.pages.dev`;
+      captureException(new Error(`devhub: pages project delete failed: ${pagesRemoveError}`), {
+        route: откуда,
+        projectId: project.id,
+        orphanSiteUrl,
+        имяСайта,
+      });
+      console.warn(
+        `[devhub] сайт остался жить: ${orphanSiteUrl} — снять не удалось: ${pagesRemoveError}`,
+      );
+    }
+  }
+  return { pagesRemoved, pagesRemoveError, orphanSiteUrl };
+}
+
+/** Отложенное снятие пробного сайта. Снимается САЙТ, запись проекта остаётся. */
+function scheduleProbeSiteCleanup(project: DevHubProject): void {
+  deferred(async () => {
+    const имя = имяPagesПроекта(project);
+    const r = await снятьСайтPages(project, "devhub/probe-site:self-clean");
+    // Молчать нельзя ни при удаче, ни при отказе: это наше же действие над
+    // публичным адресом, и по журналу должно быть видно, что оно произошло.
+    console.warn(
+      `[devhub] пробный сайт ${имя}: ` +
+        (r.pagesRemoved ? "снят сам по сроку" : `снять НЕ удалось — ${r.pagesRemoveError ?? "причина не названа"}`),
+    );
+  }, СРОК_ПРОБНОГО_САЙТА_МС);
+}
+
 devhubRouter.delete("/projects/:id", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
@@ -3217,77 +3378,10 @@ devhubRouter.delete("/projects/:id", async (req, res) => {
    * тот стоит денег и продолжает работать). Но и не молчим: поле в ответе и запись
    * в Sentry — иначе это был бы ровно тот молчаливый отказ, который выглядит успехом.
    */
-  let pagesRemoved: boolean | undefined;
-  let pagesRemoveError: string | undefined;
-  let orphanSiteUrl: string | undefined;
-  if (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) {
-    const имяСайта = имяPagesПроекта(project);
-    // Сначала домены, потом проект: обратный порядок Cloudflare отвергает с
-    // 8000028, и именно в этом порядке дело, а не в правах или имени.
-    const домены = await снятьДоменыPages(имяСайта);
-    try {
-      const r = await fetch(
-        `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/pages/projects/${имяСайта}`,
-        { method: "DELETE", headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` } },
-      );
-      pagesRemoved = r.ok || r.status === 404;
-      if (!pagesRemoved) {
-        /*
-         * ПРИЧИНУ берём из тела, а не только из кода (30.09.2026).
-         *
-         * Прежнее сообщение «Cloudflare ответил 400» не говорит, что делать:
-         * 400 бывает и когда имя не то, и когда у токена нет права, и когда
-         * проект держат незавершённые сборки. Проверено ночной пробой — я
-         * получил ровно это сообщение и не смог назвать причину, хотя имя
-         * сайта совпадало.
-         */
-        let подробно = "";
-        try {
-          const тело = await r.text();
-          подробно = тело ? ` — ${тело.slice(0, 300)}` : "";
-        } catch {
-          подробно = " — тело ответа не прочиталось";
-        }
-        // Судьбу доменов называем рядом: без неё «Cloudflare ответил 400»
-        // снова не говорит, что делать.
-        const проДомены = домены.ошибка
-          ? ` | домены не сняты: ${домены.ошибка}`
-          : домены.осталось.length
-            ? ` | не снялись домены: ${домены.осталось.join(", ")}`
-            : домены.снято
-              ? ` | доменов снято: ${домены.снято}`
-              : "";
-        pagesRemoveError = `Cloudflare ответил ${r.status}${подробно}${проДомены}`;
-      }
-    } catch (e) {
-      pagesRemoved = false;
-      pagesRemoveError = e instanceof Error ? e.message : String(e);
-    }
-    if (pagesRemoved === false) {
-      /*
-       * НЕ ТЕРЯТЬ АДРЕС ОСИРОТЕВШЕГО САЙТА (30.09.2026).
-       *
-       * Дальше проект удаляется из базы. Если сайт снять не удалось, он остаётся
-       * отвечать 200 публично, а единственная ниточка к нему — имя, выведенное из
-       * записи, которой уже нет. Ровно так и накопился тот мусор, про который
-       * сказано выше: «уборку пришлось делать руками по списку».
-       *
-       * Поэтому адрес называется трижды: в ответе (вызывающий видит сразу), в
-       * сборщике ошибок (чтобы пришёл человек) и в журнале. Проверено ночью на
-       * себе: проект отдал 404, сайт продолжал отдавать 200 и 4231 знак.
-       */
-      orphanSiteUrl = `https://${имяСайта}.pages.dev`;
-      captureException(new Error(`devhub: pages project delete failed: ${pagesRemoveError}`), {
-        route: "devhub/projects:delete",
-        projectId: project.id,
-        orphanSiteUrl,
-        имяСайта,
-      });
-      console.warn(
-        `[devhub/delete] сайт остался жить: ${orphanSiteUrl} — снять не удалось: ${pagesRemoveError}`,
-      );
-    }
-  }
+  const снятие = await снятьСайтPages(project, "devhub/projects:delete");
+  const pagesRemoved = снятие.pagesRemoved;
+  const pagesRemoveError = снятие.pagesRemoveError;
+  const orphanSiteUrl = снятие.orphanSiteUrl;
 
   try {
     await dbDeleteProject(req.params.id);
@@ -3609,7 +3703,7 @@ devhubRouter.post("/projects/:id/generate", dhCostlyLimit("dhgenerate"), async (
   const genCredit = await checkCredit(userId, "generate");
   if (!genCredit.allowed) {
     return res.status(402).json({
-      error: "Месячный лимит генераций исчерпан",
+      error: "Monthly generate limit reached",
       tier: genCredit.tier, used: genCredit.used, limit: genCredit.limit,
       upgrade: "/studio#upgrade",
     });
@@ -5972,7 +6066,7 @@ devhubRouter.post("/media/sfx", dhCostlyLimit("dhsfx"), async (req, res) => {
   const sfxCredit = await checkCredit(sfxUserId, "music");
   if (!sfxCredit.allowed) {
     return res.status(402).json({
-      error: "Месячный лимит аудиоэффектов исчерпан",
+      error: "Monthly audio effect limit reached",
       tier: sfxCredit.tier, used: sfxCredit.used, limit: sfxCredit.limit,
       upgrade: "/studio#upgrade",
     });
@@ -6181,7 +6275,7 @@ devhubRouter.post("/media/voice-clone", dhCostlyLimit("dhvoiceclone"), async (re
   const vcloneCredit = await checkCredit(vcloneUserId, "speech");
   if (!vcloneCredit.allowed) {
     return res.status(402).json({
-      error: "Месячный лимит клонирования голоса исчерпан",
+      error: "Monthly voice clone limit reached",
       tier: vcloneCredit.tier, used: vcloneCredit.used, limit: vcloneCredit.limit,
       upgrade: "/studio#upgrade",
     });
@@ -6231,7 +6325,7 @@ devhubRouter.post("/media/voice-clone/preview", dhCostlyLimit("dhvoiceclone"), a
   const vcprevCredit = await checkCredit(vcprevUserId, "speech");
   if (!vcprevCredit.allowed) {
     return res.status(402).json({
-      error: "Месячный лимит клонирования голоса исчерпан",
+      error: "Monthly voice clone limit reached",
       tier: vcprevCredit.tier, used: vcprevCredit.used, limit: vcprevCredit.limit,
       upgrade: "/studio#upgrade",
     });
@@ -6314,7 +6408,7 @@ devhubRouter.post("/media/stt", dhCostlyLimit("dhstt"), async (req, res) => {
   const sttCredit = await checkCredit(sttUserId, "speech");
   if (!sttCredit.allowed) {
     return res.status(402).json({
-      error: "Месячный лимит распознавания речи исчерпан",
+      error: "Monthly speech limit reached",
       tier: sttCredit.tier, used: sttCredit.used, limit: sttCredit.limit,
       upgrade: "/studio#upgrade",
     });
@@ -7479,7 +7573,7 @@ devhubRouter.post("/media/translate", dhCostlyLimit("dhtranslate"), async (req, 
   const trCredit = await checkCredit(trUserId, "translate");
   if (!trCredit.allowed) {
     return res.status(402).json({
-      error: "Месячный лимит перевода исчерпан",
+      error: "Monthly translate limit reached",
       tier: trCredit.tier, used: trCredit.used, limit: trCredit.limit,
       upgrade: "/studio#upgrade",
     });
@@ -7528,7 +7622,7 @@ devhubRouter.post("/projects/:id/files/translate", dhCostlyLimit("dhtranslate"),
   const ftrCredit = await checkCredit(userId, "translate", 1);
   if (!ftrCredit.allowed) {
     return res.status(402).json({
-      error: "Месячный лимит перевода исчерпан",
+      error: "Monthly translate limit reached",
       tier: ftrCredit.tier, used: ftrCredit.used, limit: ftrCredit.limit,
       upgrade: "/studio#upgrade",
     });
@@ -7730,7 +7824,7 @@ devhubRouter.post("/projects/:id/files/translate-bulk", dhCostlyLimit("dhtransla
   const ftrbCredit = await checkCredit(userId, "translate", paths.length * targetLangs.length);
   if (!ftrbCredit.allowed) {
     return res.status(402).json({
-      error: "Месячный лимит перевода исчерпан",
+      error: "Monthly translate limit reached",
       tier: ftrbCredit.tier, used: ftrbCredit.used, limit: ftrbCredit.limit,
       upgrade: "/studio#upgrade",
     });
@@ -8264,6 +8358,75 @@ devhubRouter.post("/projects/:id/deploy/vercel", async (req, res) => {
 //   5. Return live URL + domain
 // ═════════════════════════════════════════════════════════════════════════════
 
+/**
+ * Потолок ЧИСЛА проектов Cloudflare Pages на аккаунт.
+ *
+ * 🔴 ЗАЧЕМ. Каждый опубликованный проект DevHub — ОТДЕЛЬНЫЙ проект Pages
+ * (`aevion-<слаг>-<id>`, wrangler pages deploy) в ОДИН наш аккаунт. Проверено по
+ * коду 06.10.2026 при разборе нормы на адрес: потолок аккаунта наступает раньше
+ * любой нормы на гостя или на адрес, и когда он наступит, публикация встанет у
+ * ВСЕХ — включая платных.
+ *
+ * ⚠️ ЧИСЛО 100 — ДОКУМЕНТИРОВАННОЕ, А НЕ ЗАМЕРЕННОЕ. Я не могла спросить аккаунт:
+ * CLOUDFLARE_API_TOKEN в рабочей копии не задан. Поэтому предел берётся из
+ * переменной окружения, а 100 стоит умолчанием как осторожная оценка. Подтвердят
+ * в панели другое — меняется переменная, а не код.
+ *
+ * Пороги: при 80 занятых — предупреждение в журнал (чтобы узнать ДО аварии), при
+ * 95 — честный отказ ГОСТЯМ, а пять последних слотов остаются платным. Логика
+ * простая: бесплатная проба не должна съедать место у того, кто заплатил.
+ */
+const ПРЕДЕЛ_ПРОЕКТОВ_PAGES = Math.max(1, Number(process.env.CF_PAGES_PROJECT_LIMIT ?? 100));
+const ПОРОГ_ПРЕДУПРЕЖДЕНИЯ = Math.floor(ПРЕДЕЛ_ПРОЕКТОВ_PAGES * 0.8);
+const ПОРОГ_ОТКАЗА_ГОСТЯМ = Math.floor(ПРЕДЕЛ_ПРОЕКТОВ_PAGES * 0.95);
+
+/**
+ * Сколько проектов Pages мы уже заняли.
+ *
+ * Считаем СВОИ опубликованные проекты: у них заполнен deployUrl. Удаление
+ * проекта снимает и проект Pages (починка 2f7766b32), поэтому живые строки с
+ * адресом — это и есть занятые слоты.
+ *
+ * ЧЕСТНАЯ ГРАНИЦА: это ОЦЕНКА СНИЗУ. Если снятие проекта Pages когда-то не
+ * удалось, останется сирота, которой в нашей базе уже нет, — её мы не видим.
+ * Спросить аккаунт напрямую нечем (нет токена в этой копии), и выдавать оценку
+ * за точное число нельзя.
+ *
+ * Три исхода, а не два: число, ноль и НЕ ЗНАЮ (null) — последнее при отказе базы.
+ */
+/**
+ * Подмена подсчёта для сторожа.
+ *
+ * Иначе проверку границы пришлось бы покупать ста девяноста запросами (создать
+ * 95 проектов и каждому выставить адрес). Сторож проверяет РЕАКЦИЮ ручки на
+ * число, а сам подсчёт — отдельной проверкой на запасном пути.
+ */
+let подменаПодсчёта: (() => Promise<number | null>) | null = null;
+export function __setПодсчётПроектовForTest(f: (() => Promise<number | null>) | null): void {
+  подменаПодсчёта = f;
+}
+
+async function занятоПроектовPages(): Promise<number | null> {
+  if (подменаПодсчёта) return подменаПодсчёта();
+  if (!isDevHubDbReady()) {
+    let n = 0;
+    for (const p of memProjects.values()) if (p.deployUrl) n++;
+    return n;
+  }
+  try {
+    const r = await pool.query(
+      `SELECT COUNT(*)::int AS n
+         FROM "DevHubProject"
+        WHERE "deployUrl" IS NOT NULL AND "deployUrl" <> ''`,
+    );
+    return Number((r.rows[0] as { n: number } | undefined)?.n ?? 0);
+  } catch {
+    return null;
+  }
+}
+
+let предупреждалиОПотолке = false;
+
 devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
   const auth = verifyBearerOptional(req);
   const userId = requesterId(req, auth?.sub);
@@ -8283,6 +8446,64 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
       needs: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"],
       setupUrl: "https://dash.cloudflare.com/profile/api-tokens",
     });
+  }
+
+  /*
+   * ПОТОЛОК АККАУНТА — ТОЛЬКО ДЛЯ НОВОГО ПРОЕКТА PAGES.
+   *
+   * Повторная выкатка уже опубликованного проекта нового слота не занимает, и
+   * запрещать её было бы чистым вредом: человек не может обновить свой же сайт.
+   * Поэтому проверка висит на признаке «проекта Pages ещё нет» (deployUrl пуст),
+   * а не на самой выкатке.
+   */
+  /*
+   * ПРИЗНАК «ПРОЕКТ PAGES ЕЩЁ НЕ СОЗДАВАЛСЯ» — не только пустой deployUrl.
+   *
+   * Поймал прогоном: deployUrl ставится лишь ПОСЛЕ проверки отдачи
+   * (markDeploymentLive), то есть вторая выкатка вскоре после первой выглядела бы
+   * «новым проектом» и у гостя на пороге отбивалась бы — человек не смог бы
+   * обновить свой же сайт. Поэтому спрашиваем ещё и о прошлых выкатках: если они
+   * были, проект Pages уже существует и нового слота не занимает.
+   */
+  const прошлыеВыкатки = await dbListDeployments(project.id, 1).catch(() => [] as DevHubDeployment[]);
+  const проектPagesУжеЕсть = Boolean(project.deployUrl) || прошлыеВыкатки.length > 0;
+  if (!проектPagesУжеЕсть) {
+    const занято = await занятоПроектовPages();
+    if (занято === null) {
+      /*
+       * База не ответила. Пропускаем — и НЕ молча: заблокировать публикацию из-за
+       * сбоя чтения хуже, чем занять слот (тот же выбор, что в checkCredit, и по
+       * той же причине). Но след обязателен, иначе потолок однажды наступит без
+       * единой записи о том, что мы его не считали.
+       */
+      console.warn("[devhub] потолок проектов Pages не посчитан (база не ответила) — выкатка пропущена без проверки");
+    } else {
+      if (занято >= ПОРОГ_ПРЕДУПРЕЖДЕНИЯ && !предупреждалиОПотолке) {
+        предупреждалиОПотолке = true;
+        console.warn(
+          `[devhub] проектов Cloudflare Pages занято ${занято} из ${ПРЕДЕЛ_ПРОЕКТОВ_PAGES} ` +
+            `(порог предупреждения ${ПОРОГ_ПРЕДУПРЕЖДЕНИЯ}, отказ гостям с ${ПОРОГ_ОТКАЗА_ГОСТЯМ}). ` +
+            "Это оценка СНИЗУ по нашей базе: осиротевшие проекты в ней не видны.",
+        );
+        captureException(new Error("devhub: Cloudflare Pages project ceiling approaching"), {
+          route: "devhub/deploy/pages:ceiling", занято, предел: ПРЕДЕЛ_ПРОЕКТОВ_PAGES,
+        });
+      }
+      if (занято >= ПОРОГ_ОТКАЗА_ГОСТЯМ && isGuestRequester(userId)) {
+        // Честный отказ, а не 500 и не тишина: место кончилось у НАС, а не у человека.
+        return res.status(503).json({
+          error: "publishing_temporarily_unavailable",
+          message:
+            "Publishing is temporarily unavailable: our hosting account has run out of free site slots. " +
+            "Your files are saved — sign in or write to us and we will publish this project.",
+          detail: `occupied ${занято} of ${ПРЕДЕЛ_ПРОЕКТОВ_PAGES} project slots`,
+          // Адрес берём так же, как сосед по этому файлу (строка с frontendUrl):
+          // FRONTEND_URL в devhub.ts не объявлена, и заводить вторую константу
+          // для одного и того же значения — тот самый второй источник правды.
+          contactUrl: `${(process.env.FRONTEND_URL || "https://aevion.app").replace(/\/+$/, "")}/devhub/link`,
+        });
+      }
+    }
   }
 
   const pagesDeployCredit = await checkCredit(userId, "deploy");
@@ -8466,6 +8687,8 @@ devhubRouter.post("/projects/:id/deploy/pages", async (req, res) => {
     // 5. «Страница отвечает» — цепочкой окон, а не одним (см. scheduleServeVerification).
     // Загрузка прошла, а адрес молчит — это «ещё поднимается», пока не истекли все окна.
     scheduleServeVerification(deployment, project, pagesUrl, customDomain);
+    // Пробный сайт снимет себя сам — см. разбор у пробныйГостевойПроект.
+    if (пробныйГостевойПроект(project)) scheduleProbeSiteCleanup(project);
 
     // Домен судим по DNS, а не по HTTPS: разрешился CNAME — зона отработала;
     // готовность HTTPS (сертификат Pages) проверяет та же цепочка после того, как

@@ -1,6 +1,7 @@
 import { describe, test, expect, vi } from "vitest";
 import express from "express";
 import request from "supertest";
+import { svoyTurnir } from "./helpers/svoyTurnir";
 
 // Из турнира можно выйти. 19.08.2026.
 //
@@ -27,10 +28,23 @@ async function app() {
   return a;
 }
 
+/**
+ * Свободный турнир ЗАВОДИМ СВОЙ, а не ищем в выдаче.
+ *
+ * GET /list с 30.09 отдаёт только созданные людьми (толькоНастоящие) —
+ * заготовки скрыты, чтобы витрина не заявляла 534 участника при нуле живых.
+ * Проверяется здесь выход по билету, а не политика показа.
+ *
+ * Турнир один на файл: создание ограничено пятью за 10 минут с адреса.
+ */
+let турнирКэш: Record<string, any> | null = null;
 async function свободныйТурнир(a: express.Express) {
-  const r = await request(a).get("/api/cyberchess-tournaments/list");
-  const list = (r.body?.tournaments ?? []) as Array<Record<string, any>>;
-  return list.find((t) => t.status === "upcoming" && t.players < t.maxPlayers);
+  if (!турнирКэш) {
+    турнирКэш = await svoyTurnir((u, b) => request(a).post(u).send(b as object), { maxPlayers: 8 });
+  }
+  // Свежее состояние: места могли уйти предыдущей проверкой в этом же файле.
+  const д = await request(a).get(`/api/cyberchess-tournaments/${турнирКэш.id}`);
+  return (д.body?.tournament ?? д.body ?? турнирКэш) as Record<string, any>;
 }
 
 describe("выход из турнира", () => {

@@ -25,8 +25,14 @@ async function список() {
   const a = express();
   a.use(express.json());
   a.use("/api/cyberchess-tournaments", router);
-  const r = await request(a).get("/api/cyberchess-tournaments/list");
-  return (r.body?.tournaments ?? []) as Array<Record<string, any>>;
+  // 🔴 Образцы берём ИЗ КОДА, а не из витрины. GET /list с 30.09 их СКРЫВАЕТ
+  // (толькоНастоящие): до фильтра страница показывала 12 наших заготовок и
+  // заявляла 534 участника при нуле живых. Проверка же про сами образцы —
+  // не протухли ли их даты. Спрашивать надо у того, о чём утверждаешь, иначе
+  // предмета нет вовсе и проверка краснеет «0 больше 0».
+  const { buildSeedFixtures } = await import("../src/routes/cyberchessTournaments");
+  void a;
+  return buildSeedFixtures() as unknown as Array<Record<string, any>>;
 }
 
 describe("образцы не выглядят заброшенными", () => {

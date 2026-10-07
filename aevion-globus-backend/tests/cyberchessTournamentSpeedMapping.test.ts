@@ -1,6 +1,7 @@
 import { describe, test, expect, vi, beforeEach } from "vitest";
 import express from "express";
 import request from "supertest";
+import { svoyTurnir } from "./helpers/svoyTurnir";
 
 // Рамки ELO сверяются по ТОЙ скорости, в которой играют. 19.08.2026.
 //
@@ -53,9 +54,11 @@ beforeEach(() => { db.спрошенныеСкорости.length = 0; });
 describe("скорость турнира определяется по самому турниру", () => {
   test("у рапид-турнира спрашивается рапид, а не блиц", async () => {
     const a = await app();
-    const list = (await request(a).get("/api/cyberchess-tournaments/list")).body.tournaments as Array<Record<string, any>>;
-    const rapid = list.find((t) => t.status === "upcoming" && String(t.timeControl).toLowerCase() === "rapid" && t.players < t.maxPlayers);
-    expect(rapid, "не нашлось предстоящего рапид-турнира").toBeTruthy();
+    // Рапид-турнир ЗАВОДИМ СВОЙ: GET /list с 30.09 отдаёт только созданные
+    // людьми, заготовки скрыты, и искать в нём предмет стало бесполезно.
+    const rapid = await svoyTurnir((u, b) => request(a).post(u).send(b as object), {
+      timeControl: "rapid", maxPlayers: 8 });
+    expect(rapid, "рапид-турнир не создался").toBeTruthy();
 
     await request(a).post(`/api/cyberchess-tournaments/${rapid!.id}/register`)
       .send({ userId: "рапидист", displayName: "Рапидист" });
@@ -67,9 +70,11 @@ describe("скорость турнира определяется по само
 
   test("рейтинг вне рамок отвергается именно в своей скорости", async () => {
     const a = await app();
-    const list = (await request(a).get("/api/cyberchess-tournaments/list")).body.tournaments as Array<Record<string, any>>;
-    const rapid = list.find((t) => t.status === "upcoming" && String(t.timeControl).toLowerCase() === "rapid" && t.eloMin > 900 && t.players < t.maxPlayers);
-    if (!rapid) return; // нет подходящей заготовки — случай проверять нечем
+    // Прежде здесь стоял тихий пропуск «нет подходящей заготовки — проверять
+    // нечем». Со своим турниром случай проверяется ВСЕГДА: молчаливый пропуск
+    // и зелёный цвет при нулевом охвате — то же самое, что отсутствие проверки.
+    const rapid = await svoyTurnir((u, b) => request(a).post(u).send(b as object), {
+      timeControl: "rapid", eloMin: 1500, eloMax: 2500, maxPlayers: 8 });
     const r = await request(a).post(`/api/cyberchess-tournaments/${rapid.id}/register`)
       .send({ userId: "слабый-рапидист", displayName: "Слабый" });
     expect(r.status).toBe(403);

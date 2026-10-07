@@ -79,9 +79,21 @@ describe("пустой сохранённый список не подменяе
       freshApp.use(express.json());
       freshApp.use("/api/cyberchess-tournaments", fresh);
 
+      // 🔴 Спрашиваем ХРАНИЛИЩЕ, а не витрину. С 30.09 /list показывает только
+      // турниры людей (толькоНастоящие), и фикстуры из неё скрыты по замыслу —
+      // до фильтра страница показывала 12 заготовок и заявляла 534 участника
+      // при нуле живых. Проверка же про то, ЗАГРУЗИЛИСЬ ли фикстуры на чистой
+      // установке, а не про то, видны ли они людям.
+      const сост = await request(freshApp).get("/api/cyberchess-tournaments/_persistence");
+      expect(сост.status).toBe(200);
+      expect(сост.body.tournaments, "на чистой установке фикстуры не загрузились").toBeGreaterThan(0);
+
+      // И вторая сторона того же: загрузились — но людям не показываются.
+      // Без этой пары первая проверка не отличала бы «фикстуры есть в
+      // хранилище» от «фикстуры снова попали на витрину».
       const res = await request(freshApp).get("/api/cyberchess-tournaments/list");
       expect(res.status).toBe(200);
-      expect((res.body.tournaments as unknown[]).length).toBeGreaterThan(0);
+      expect(res.body.tournaments, "фикстуры снова видны людям").toEqual([]);
     } finally {
       process.env.CYBERCHESS_TOURNAMENTS_DIR = prevDir;
       realFs.rmSync(freshDir, { recursive: true, force: true });

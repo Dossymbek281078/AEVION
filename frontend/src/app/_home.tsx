@@ -7,7 +7,7 @@ import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 import { покупкиНаГлавной } from "@/lib/homeBuyLinks";
 import { BuyLink } from "@/components/BuyLink";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
-import { channelNow } from "@/lib/channelNow";
+import { channelNow, сыраяМеткаКанала } from "@/lib/channelNow";
 import { fetchPlanetStats, fetchRecentArtifacts } from "@/lib/planetData";
 import dynamic from "next/dynamic";
 import Globus3DPlaceholder from "./components/Globus3DPlaceholder";
@@ -293,8 +293,15 @@ const DEMO_NOTE =
   // перерисовки, которой не происходило. Покупка с YouTube приходила бы в
   // отчёт как «источник неизвестен» — ровно то, ради чего метки и заводились.
   const [канал, setКанал] = useState<string | null>(null);
-  useEffect(() => setКанал(channelNow()), []);
-  const ПОКУПКИ = useMemo(() => покупкиНаГлавной(канал), [канал]);
+  // Сырая метка — в состоянии, а не в рендере. Канал читают в useEffect именно потому,
+  // что window на сервере нет: прочитай метку при рендере — первый клиентский кадр
+  // разошёлся бы с серверным, и это гидратационное расхождение, а не «мелочь».
+  const [сыраяМетка, setСыраяМетка] = useState<string | null>(null);
+  useEffect(() => {
+    setКанал(channelNow());
+    setСыраяМетка(сыраяМеткаКанала());
+  }, []);
+  const ПОКУПКИ = useMemo(() => покупкиНаГлавной(канал, сыраяМетка), [канал, сыраяМетка]);
 
   return (
     <main style={{ padding: 0 }}>

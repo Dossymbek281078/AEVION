@@ -955,6 +955,67 @@ export function ступеньЗапроса(базовый: StudioTier, userId:
   return базовый === "free" && !isGuestRequester(userId) ? "registered" : базовый;
 }
 
+/**
+ * Во сколько раз месячная норма НА АДРЕС больше нормы одного гостя.
+ *
+ * 🔴 ЗАЧЕМ, замер 06.10.2026. Норма на адрес брала ТОТ ЖЕ предел, что у одного
+ * гостя (TIER_LIMITS.free), и применялась к каждой возможности. То есть целому
+ * адресу выдавался бюджет ОДНОГО посетителя: 30 генераций и 10 выкаток в месяц.
+ * Под CGNAT мобильного оператора за одним адресом тысячи абонентов — значит
+ * 31-й человек получал 402, ничего не сделав, и умирал ПЕРВЫЙ шаг воронки.
+ * Поймано на себе: свежий гость получил 402 «used 10, limit 10», потому что
+ * норму адреса израсходовали наши же замеры.
+ *
+ * Что эта норма охраняла, числами: гостевая генерация идёт на Gemini Flash и
+ * стоит по замерам 06.10 $0.0015–$0.0023 ($0.00149790, $0.0019995, $0.00202425).
+ * Предел «30 генераций на адрес» охранял примерно $0.06 в месяц.
+ *
+ * Коэффициенты назначены оркестратором 06.10 ПО ЦЕНЕ возможности: дешёвое
+ * открываем широко, дорогое держим узко. Темп в час не меняется — злоупотребление
+ * ловится им, а не месячным потолком.
+ *
+ * Неперечисленное остаётся как было (K=1) НАМЕРЕННО: tts считается символами, а
+ * не штуками, и его потолок трогать без отдельного замера нельзя.
+ */
+const K_АДРЕСА: Partial<Record<CapabilityKey, number>> = {
+  generate: 50,
+  translate: 50,
+  image: 10,
+  deploy: 10,
+  speech: 3,
+  music: 3,
+  video: 3,
+};
+
+/** Месячный предел НА АДРЕС для возможности. Экспортирован: сторож проверяет ЕГО, а не свою копию. */
+export function пределАдреса(capability: CapabilityKey): number {
+  const базовый = TIER_LIMITS.free[capability];
+  if (базовый === -1) return -1;
+  return базовый * (K_АДРЕСА[capability] ?? 1);
+}
+
+/**
+ * Хеш адреса для записи пары «гость + адрес».
+ *
+ * СЫРОЙ АДРЕС НЕ ХРАНИМ. И без соли не храним тоже: пространство IPv4 — четыре
+ * миллиарда значений, несолёный sha256 перебирается за минуты, то есть «хеш»
+ * был бы просто адресом в другой записи. Нет соли — пара не пишется вовсе, и об
+ * этом говорится в журнале один раз, а не молча.
+ */
+let солиНет = false;
+function хешАдреса(ip: string): string | null {
+  const соль = process.env.GUEST_IP_HASH_SALT?.trim();
+  if (!соль) {
+    if (!солиНет) {
+      солиНет = true;
+      console.warn("[devhub] GUEST_IP_HASH_SALT не задана — пара «гость + адрес» НЕ пишется; " +
+        "несолёный хеш адреса перебирается и хранить его нельзя");
+    }
+    return null;
+  }
+  return crypto.createHash("sha256").update(соль + "|" + ip).digest("hex").slice(0, 32);
+}
+
 async function checkCredit(userId: string, capability: CapabilityKey, amount = 1): Promise<CreditVerdict> {
   const базовый = await getUserTier(userId);
   const tier: StudioTier = ступеньЗапроса(базовый, userId);
@@ -971,7 +1032,8 @@ async function checkCredit(userId: string, capability: CapabilityKey, amount = 1
   }
   const ipKey = guestIpBudgetKey(userId);
   if (ipKey) {
-    const ipLimit = TIER_LIMITS.free[capability];
+    // Предел АДРЕСА, а не одного гостя: см. K_АДРЕСА выше.
+    const ipLimit = пределАдреса(capability);
     const ipUsed = await getMonthUsage(ipKey, month, capability);
     if (ipLimit !== -1 && ipUsed !== null && ipUsed + amount > ipLimit) {
       return { allowed: false, used: ipUsed, limit: ipLimit, tier: "free", usedKnown: true };
@@ -988,10 +1050,42 @@ function creditNote(verdict: CreditVerdict): { creditUnverified: true } | Record
   return verdict.usedKnown ? {} : { creditUnverified: true };
 }
 
+/**
+ * Запомнить, что гость обращался с этого адреса (адрес — только хешем).
+ *
+ * Нужна ровно для одного вопроса: сколько РАЗНЫХ гостей за одним адресом. Пока
+ * этой пары не было, месячный потолок на адрес нельзя было ни оценить, ни
+ * защитить: отказ выглядел одинаково и для злоупотребления, и для общей сети.
+ *
+ * Отказ записи НЕ роняет работу (она уже выполнена) и НЕ молчит.
+ */
+async function записатьПаруГостьАдрес(userId: string): Promise<void> {
+  const ip = requestScope.getStore()?.ip;
+  if (!ip) return;
+  const хеш = хешАдреса(ip);
+  if (!хеш) return;                     // нет соли — не храним, предупреждение уже было
+  if (!isDevHubDbReady()) return;       // без базы хранить негде; память тут не нужна
+  const month = creditMonth();
+  try {
+    await pool.query(`
+      INSERT INTO "DevHubGuestAddress" ("id","guestId","ipHash","month","seenCount","firstSeenAt","lastSeenAt")
+      VALUES ($1,$2,$3,$4,1,NOW(),NOW())
+      ON CONFLICT ("guestId","ipHash","month")
+      DO UPDATE SET "seenCount"="DevHubGuestAddress"."seenCount"+1, "lastSeenAt"=NOW()
+    `, [`${userId}-${хеш}-${month}`, userId, хеш, month]);
+  } catch (e) {
+    captureException(e, { route: "devhub/guest-address:record" });
+  }
+}
+
 async function debitCredit(userId: string, capability: CapabilityKey, amount = 1): Promise<void> {
   const ipKey = guestIpBudgetKey(userId);
   // Через обёртку: отказ списания по адресу должен быть виден так же, как по личности.
   if (ipKey) await debitQuietly(ipKey, capability, amount);
+  // Пара «гость + ХЕШ адреса»: без неё «один актор плодит метки» и «за адресом
+  // много живых людей» неотличимы, и на вопрос «кого мы заблокировали» ответить
+  // нечем. Замер 06.10 упёрся ровно в это: связи гостя с адресом в базе нет.
+  if (ipKey) await записатьПаруГостьАдрес(userId);
   const month = creditMonth();
   const tier = await getUserTier(userId);
   if (!isDevHubDbReady()) {
@@ -2110,6 +2204,17 @@ export function __указаниеПоСтекуForTest(stack: string, суще�
 /** Тестовый доступ к отложенной перепроверке домена. */
 export function __scheduleDomainRecheckForTest(customDomain: string, step = 0): void {
   scheduleDomainRecheck(customDomain, step);
+}
+
+/**
+ * Тестовый доступ: выставить расход за месяц.
+ *
+ * Нужен, чтобы сторож нормы на адрес не делал 1500 настоящих запросов. Он
+ * проверяет ГРАНИЦУ, и граница должна достигаться за один шаг, иначе проверка
+ * станет самой дорогой в наборе и её выключат.
+ */
+export function __setMonthUsageForTest(userId: string, capability: CapabilityKey, used: number): void {
+  memUsage.set(`${userId}:${creditMonth()}:${capability}`, used);
 }
 
 const MAX_SYNTAX_FIX_ATTEMPTS = 1;

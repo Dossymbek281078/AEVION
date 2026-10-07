@@ -89,6 +89,28 @@ function вспомнить(): string | undefined {
 }
 
 /** Разобранное имя канала или `null`. Адрес страницы старше памяти. */
+/**
+ * ВХОДЯЩАЯ метка `?c=` как есть, без нормализации.
+ *
+ * Нужна ровно для одного: внешняя касса должна увидеть НАЗВАНИЕ КАМПАНИИ. `channelNow`
+ * для этого не годится намеренно — он отдаёт канонический канал и роняет всё
+ * неизвестное в null, иначе один канал зажил бы под тремя именами. А рекламная метка
+ * составная («meta-book-<кампания>»), и в отчёте кассы нужна она целиком.
+ *
+ * В память НЕ кладём и в наши внутренние переходы НЕ подставляем: там по-прежнему
+ * канонический ключ.
+ */
+export function сыраяМеткаКанала(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const v = new URLSearchParams(window.location.search).get("c");
+    return v && v.trim() ? v.trim() : null;
+  } catch {
+    // Адрес не разобрался — это «не знаю», а не «метки нет»; ведём себя как без метки.
+    return null;
+  }
+}
+
 export function channelNow(): string | null {
   if (typeof window === "undefined") return null;
   const параметры = new URLSearchParams(window.location.search);

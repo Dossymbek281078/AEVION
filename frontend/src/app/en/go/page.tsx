@@ -67,6 +67,7 @@ function price(p: Product): string {
 function Offer({
   p,
   channel,
+  сыраяМетка,
   title,
   note,
   cta,
@@ -74,6 +75,8 @@ function Offer({
 }: {
   p: Product | undefined;
   channel: string | null;
+  /** Входящая метка как есть — её ждёт внешняя касса (канал приходит нормализованным). */
+  сыраяМетка?: string | null;
   title: string;
   note: string;
   cta: string;
@@ -101,14 +104,14 @@ function Offer({
   // checkout_start fires there, so a BuyLink here would count one purchase twice.
   if (p.billing === "term") {
     return (
-      <a href={withChannel(p.href, channel, "en-go")} style={styles.card}>
+      <a href={withChannel(p.href, channel, "en-go", сыраяМетка)} style={styles.card}>
         {body}
       </a>
     );
   }
   return (
     <BuyLink
-      href={withChannel(p.href, channel, "en-go")}
+      href={withChannel(p.href, channel, "en-go", сыраяМетка)}
       source="en-go"
       productId={p.id}
       priceUsd={p.priceUsd}
@@ -132,7 +135,9 @@ export default async function EnGoPage({
   // покупка приходит в отчёт как «источник неизвестен», и после всех роликов
   // нельзя сказать, сработали ли они. keepChannel — общий механизм каталога,
   // он же не даёт подставить нормализованное значение вместо короткого ключа.
-  const channel = channelFrom((await searchParams).c);
+  const сырое = (await searchParams).c;
+  const сыраяМетка = Array.isArray(сырое) ? сырое[0] : сырое;
+  const channel = channelFrom(сырое);
   const book = productById("orcfbo");
   const bookAudio = productById("lelzw");
   const bundle = productById("ghvzq");
@@ -181,6 +186,7 @@ export default async function EnGoPage({
         <section style={styles.section}>
           <h2 style={styles.h2}>Start here</h2>
           <Offer
+            сыраяМетка={сыраяМетка}
             p={book}
             channel={channel}
             title="Gratitude Forever Young"
@@ -189,6 +195,7 @@ export default async function EnGoPage({
             cta="Get it"
           />
           <Offer
+            сыраяМетка={сыраяМетка}
             p={bookAudio}
             channel={channel}
             title="Book and audiobook"
@@ -197,6 +204,7 @@ export default async function EnGoPage({
             cta="Get it"
           />
           <Offer
+            сыраяМетка={сыраяМетка}
             p={bundle}
             channel={channel}
             title="Everything in one pack"
@@ -209,6 +217,7 @@ export default async function EnGoPage({
         <section style={styles.section}>
           <h2 style={styles.h2}>Also in English</h2>
           <Offer
+            сыраяМетка={сыраяМетка}
             p={antiGrey}
             channel={channel}
             title="The Anti-Grey Protocol"
@@ -221,6 +230,7 @@ export default async function EnGoPage({
         <section style={styles.section}>
           <h2 style={styles.h2}>The whole platform</h2>
           <Offer
+            сыраяМетка={сыраяМетка}
             p={allAccess}
             channel={channel}
             title="AEVION subscription"

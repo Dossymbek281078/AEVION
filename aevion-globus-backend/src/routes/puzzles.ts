@@ -89,9 +89,27 @@ puzzlesRouter.get("/", async (req: Request, res: Response) => {
     const countR = await pool.query(`SELECT COUNT(*) FROM "ChessPuzzle" WHERE ${where}`, params);
     const total = Number(countR.rows[0].count);
     if (total === 0) return res.json({ puzzles: [], total: 0, returned: 0 });
+    /*
+     * 🔴 ПОРЯДОК ДОЛЖЕН БЫТЬ ОДНОЗНАЧНЫМ, иначе страницы по offset врут.
+     *
+     * Было `ORDER BY "rating" ASC` — сортировка по НЕУНИКАЛЬНОМУ полю. У задач с
+     * равным рейтингом порядок не определён, а равных рейтингов в банке очень
+     * много (замер 07.10: запрос полосы 1800–2000 вернул пять задач ровно по 1800).
+     * Postgres вправе отдавать такие строки в любом порядке между запросами, и
+     * тогда постраничный обход по offset ОДНОВРЕМЕННО пропускает и дублирует
+     * строки — молча.
+     *
+     * Как это вылезло: обход банка для сопоставления происхождения дважды прошёл
+     * целиком и дал РАЗНЫЕ числа — 2409 и 2394 сопоставленных задачи из 2491.
+     * Разница 15 строк при одном и том же детерминированном, казалось бы, обходе.
+     * Для случайной выборки (random=1) это было безразлично, поэтому дефект жил
+     * незаметно; для обхода он делает результат невоспроизводимым.
+     *
+     * Добавлен "id" ASC — первичный ключ, он уникален, и порядок становится полным.
+     */
     const safeOffset = random ? Math.floor(Math.random() * Math.max(1, total - nb)) : offset;
     params.push(nb, safeOffset);
-    const rows = await pool.query(`SELECT * FROM "ChessPuzzle" WHERE ${where} ORDER BY "rating" ASC LIMIT $${params.length - 1} OFFSET $${params.length}`, params);
+    const rows = await pool.query(`SELECT * FROM "ChessPuzzle" WHERE ${where} ORDER BY "rating" ASC, "id" ASC LIMIT $${params.length - 1} OFFSET $${params.length}`, params);
     const puzzles = rows.rows.map((p: any) => { const sol = (()=>{try{return JSON.parse(p.sol)}catch{return [p.sol]}})();
       // Подпись считается из РЕШЕНИЯ, а не берётся из базы: у Lichess любой
       // мат длиннее пяти помечен как mateIn5, и наш сев скопировал это в имя.

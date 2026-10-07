@@ -43,8 +43,15 @@ describe("сырой формат банка нормализуется", () => 
     //    и «задача дня» у каждого своя. Теперь она приходит с сервера
     //    (srvDaily) одним загрузчиком loadDailyPuzzle. Стережём то же
     //    СВОЙСТВО — что задачу дня тоже нормализуют, — но по новому месту.
-    expect(page).toContain("const loadDailyPuzzle=()=>{");
-    expect(page).toMatch(/loadDailyPuzzle=\(\)=>\{[\s\S]{0,400}?normalizePuzzle\(\{fen:srvDaily\.fen/);
+    // 🔴 ПЕРЕНАЦЕЛЕНО ВТОРИЧНО 07.10.2026. Здесь стояла ДОСЛОВНАЯ сигнатура
+    //    `const loadDailyPuzzle=()=>{`. У загрузчика появился параметр (откуда
+    //    пришли — нужно событию воронки), и проверка покраснела на совершенно
+    //    верной правке. Красное на верном опаснее отсутствия сторожа.
+    //    Свойство, которое стережём, не изменилось: задачу дня берут С СЕРВЕРА
+    //    и НОРМАЛИЗУЮТ. Привязка теперь к имени загрузчика, а не к его списку
+    //    параметров — список меняется, свойство нет.
+    expect(page).toMatch(/const loadDailyPuzzle=\(/);
+    expect(page).toMatch(/loadDailyPuzzle=\([^)]*\)=>\{[\s\S]{0,400}?normalizePuzzle\(\{fen:srvDaily\.fen/);
     // и старого локального источника задачи дня больше нет
     expect(page).not.toContain("normalizePuzzle(PUZZLES[dailyState.idx]");
     expect(page).toContain("const pz0=fPz[i]||PUZZLES[0];const pz=pz0?normalizePuzzle(pz0):pz0;");

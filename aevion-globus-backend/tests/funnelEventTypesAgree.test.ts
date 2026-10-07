@@ -31,16 +31,51 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const SERVER = resolve(HERE, "..", "src", "routes", "events.ts");
 const CLIENT = resolve(HERE, "..", "..", "frontend", "src", "lib", "track.ts");
 
+/*
+ * 🔴 КОММЕНТАРИИ ВЫРЕЗАЮТСЯ ДО РАЗБОРА, и это не косметика.
+ *
+ * Повод 07.10.2026. Оба разбора брали любое слово в кавычках внутри блока —
+ * включая слова из комментариев рядом. Последствия вышли в обе стороны сразу:
+ *
+ *   ЛОЖНОЕ КРАСНОЕ. Комментарий у нового типа объяснял, что кладётся в
+ *   meta.outcome: "win" | "loss" | "draw" | "unknown". Сторож зачислил все
+ *   четыре слова в типы событий сервера, не нашёл их у клиента и объявил
+ *   расхождение на совершенно верной правке. Красное на верном коде опаснее
+ *   отсутствия сторожа: к нему привыкают и перестают читать.
+ *
+ *   ЛОЖНОЕ ЗЕЛЁНОЕ, которое было бы хуже. Достаточно упомянуть имя типа в
+ *   комментарии с ОБЕИХ сторон — и списки «сходятся», хотя ни сервер его не
+ *   принимает, ни клиент не шлёт. Сторож, который читает рассказ О вещи вместо
+ *   вещи, доказывает согласие рассказов.
+ *
+ * И вторая причина того же класса: клиентский блок кончался на ПЕРВОЙ точке с
+ * запятой. Запятая с точкой в человеческом тексте комментария («Партия
+ * кончилась; meta.outcome — …») обрезала разбор посередине союза, и три
+ * последних типа стали невидимы — в том числе давно живущий ab_assigned.
+ * После вырезания комментариев первая точка с запятой снова принадлежит коду.
+ */
+function bezKommentariev(s: string): string {
+  const ПС = String.fromCharCode(10);
+  return s
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .split(ПС)
+    .map((l) => {
+      const i = l.indexOf("//");
+      return i >= 0 ? l.slice(0, i) : l;
+    })
+    .join(ПС);
+}
+
 /** Типы, которые сервер соглашается принять. */
-function serverTypes(): string[] {
-  const m = /ALLOWED_TYPES = new Set\(\[([\s\S]*?)\]\)/.exec(readFileSync(SERVER, "utf8"));
+function serverTypes(tekst?: string): string[] {
+  const m = /ALLOWED_TYPES = new Set\(\[([\s\S]*?)\]\)/.exec(bezKommentariev(tekst ?? readFileSync(SERVER, "utf8")));
   if (!m) return [];
   return [...new Set(m[1].match(/"[a-z_]+"/g)?.map((s) => s.slice(1, -1)) ?? [])].sort();
 }
 
 /** Типы, которые клиент умеет слать. */
-function clientTypes(): string[] {
-  const m = /export type EventType\s*=([\s\S]*?);/.exec(readFileSync(CLIENT, "utf8"));
+function clientTypes(tekst?: string): string[] {
+  const m = /export type EventType\s*=([\s\S]*?);/.exec(bezKommentariev(tekst ?? readFileSync(CLIENT, "utf8")));
   if (!m) return [];
   return [...new Set(m[1].match(/"[a-z_]+"/g)?.map((s) => s.slice(1, -1)) ?? [])].sort();
 }
@@ -54,6 +89,35 @@ describe("типы событий воронки одинаковы на сер�
     // в том числе если объявление переименуют и разбор перестанет попадать.
     expect(server.length, `сервер: ${server.join(", ")}`).toBeGreaterThanOrEqual(10);
     expect(client.length, `клиент: ${client.join(", ")}`).toBeGreaterThanOrEqual(10);
+  });
+
+  test("КОНТРОЛЬ: имя, упомянутое только в КОММЕНТАРИИ, типом не считается", () => {
+    // Без этого контроля достаточно было бы написать имя в комментарии с обеих
+    // сторон — и списки «сошлись» бы, не принимая и не отправляя ничего.
+    // Проба с заранее известным ответом: в обоих отрывках ровно один настоящий
+    // тип и одно имя, живущее только в прозе.
+    const сервер = serverTypes(
+      [
+        "export const ALLOWED_TYPES = new Set([",
+        '  // meta.outcome бывает "pridumannyj_tip" и больше ничего',
+        '  /* и блочный комментарий про "vtoroj_pridumannyj" тоже */',
+        '  "page_view",',
+        "]);",
+      ].join(String.fromCharCode(10)),
+    );
+    expect(сервер, "разбор сервера зачислил слово из комментария в типы").toEqual(["page_view"]);
+
+    const клиент = clientTypes(
+      [
+        "export type EventType =",
+        '  // пара к "pridumannyj_tip"; точка с запятой здесь намеренно',
+        '  | "page_view"',
+        '  | "cta_click";',
+      ].join(String.fromCharCode(10)),
+    );
+    // Заодно проверено, что точка с запятой В КОММЕНТАРИИ больше не обрезает
+    // разбор: иначе cta_click пропал бы, а именно так 07.10 и пропали три типа.
+    expect(клиент, "комментарий обрезал разбор или подсунул своё слово").toEqual(["cta_click", "page_view"]);
   });
 
   test("контроль: разбор берёт ИМЕННО эти списки, а не что попало", () => {

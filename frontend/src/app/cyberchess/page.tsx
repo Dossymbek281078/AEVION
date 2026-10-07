@@ -3,6 +3,7 @@ import { стримГоден } from "./ответНеГоден";
 import { лимитПровайдера, когдаВернётся as срокВозврата, тренерОтветил, пометкаОВыключенномРазборе, пометкаЗапаснойМодели, общаяОчередьАнонимов } from "./coachOutage";
 import { главныйВыдуманныйХод, дополнитьХодомДвижка, текстВместоОтвета } from "./проверьХодыОтвета";
 import { track } from "@/lib/track";
+import { ishodDlyaCPI, resheniePoKontsuPartii } from "./ishodPartii";
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, startTransition } from "react";
 
@@ -3978,14 +3979,13 @@ export default function CyberChessPage(){
       // Derive result from the user's perspective. `over` is a localized human
       // string ("Checkmate! You win!", "Checkmate — AI wins", "You resigned",
       // "Time out", "Draw agreed", "Stalemate", "⚡ Три шаха — победа!", …).
-      const overLow=over.toLowerCase();
-      const winHints=["you win","победа!","трофей","цель достигнута","ai timed out","сдался — вы победили"];
-      const lossHints=["ai wins","поражение","you resigned","time out","king взорван","ферзь пал"];
-      const drawHints=["draw","stalemate","ничья","repetition","insufficient","50-move"];
-      let cpiResult:"w"|"l"|"d"="d";
-      if(drawHints.some(h=>overLow.includes(h)))cpiResult="d";
-      else if(winHints.some(h=>overLow.includes(h)))cpiResult="w";
-      else if(lossHints.some(h=>overLow.includes(h)))cpiResult="l";
+      // Приметы исхода переехали в ishodPartii.ts: с 07.10.2026 их читает и
+      // событие воронки game_end, а две копии одного списка расходятся молча —
+      // одна партия считалась бы победой в рейтинге и ничьёй в воронке.
+      // Поведение здесь не меняется: ishodDlyaCPI повторяет прежний порядок
+      // (ничья → победа → поражение) и прежнее умолчание «неузнанное = ничья»,
+      // только теперь оно названо вслух, а не спрятано в начальном значении.
+      const cpiResult=ishodDlyaCPI(over);
       // Opening book hits: count user moves in first 20 plies with small CPL
       // (proxy until openingExplorer integration in F2-phase-2).
       const snap=metricsRef.current.snapshot();
@@ -3999,6 +3999,42 @@ export default function CyberChessPage(){
       showToast(`📊 CPI: ${Math.round(newState.cpi)} (${sign}${Math.round(last.delta)})`,"info");
     }catch{/* CPI is strictly optional — never break the game-end flow */}
   },[over,pCol,tc.ini,showToast]);
+
+  /* ── Воронка магнита: партия КОНЧИЛАСЬ ──
+     Отдельным эффектом, а не внутри расчёта CPI, хотя тот висит на том же
+     `over` и уже дедуплицирован. Причина: он выходит на `metricsRef.size()===0`
+     и на любом исключении внутри try — то есть партия без собранных метрик
+     (быстрая сдача, вариант без оценок) события бы не дала, и ступень молча
+     считала бы меньше, чем было. Своя дедупликация по тому же отпечатку.
+
+     Почему тут, а не на каждом конце партии: концов больше пятнадцати
+     (мат, пат, время, сдача, p2p, четыре варианта со своими условиями,
+     тренажёр финалов), и все они приходят ЧЕРЕЗ `sOver(...)` — это уже
+     записано выше, в разборе эффекта CPI. Одна точка вместо пятнадцати.
+
+     meta.outcome может быть "unknown" — см. ishodPartii.ts. Это не брак
+     отправителя: доля "unknown" в by-type и есть мера того, насколько
+     приметам можно верить. Молча записывать ничью вместо неузнанного нельзя. */
+  const otpravlenKonetsRef=useRef<string|null>(null);
+  useEffect(()=>{
+    // Решение вынесено в resheniePoKontsuPartii и проверяется вызовами с
+    // известным ответом (ishodPartii.test.ts). Здесь остаётся только отправка:
+    // сторож по исходнику умеет проверить место вызова, но не поведение —
+    // мутация «убрать защиту от повтора» прошла через него насквозь, пока
+    // условия стояли тут же, в эффекте.
+    const reshenie=resheniePoKontsuPartii({over,partiyaIgralas:partiyaIgralasRef.current,
+      otpechatokNachala:gameStartTimeRef.current,uzheOtpravleno:otpravlenKonetsRef.current});
+    if(!reshenie.otpravlyat)return;
+    otpravlenKonetsRef.current=reshenie.otpechatok;
+    track({type:"game_end",
+      meta:{app:"cyberchess",outcome:reshenie.outcome,
+        moves:Math.floor(hist.length/2),
+        mode:hotseat?"hotseat":(p2pMode?"p2p":"ai")}});
+    // hist в зависимостях намеренно: число ходов читается из состояния, а
+    // лишних отправок это не даёт — повторный заход отсекает отпечаток выше.
+    // Первая версия брала histRef.current, и такого ref в модуле НЕТ: правка
+    // собралась бы только потому, что tsc запустить забыли.
+  },[over,hist,hotseat,p2pMode]);
 
   /* ── Anti-cheat analysis on game-end ── */
   useEffect(()=>{
@@ -5461,6 +5497,29 @@ export default function CyberChessPage(){
     prevEvalCpForCpiRef.current=0;
     gameStartTimeRef.current=Date.now();
     partiyaIgralasRef.current=true; // это НАСТОЯЩАЯ партия, а не загруженная для просмотра
+    /* ── Воронка магнита: «сел за доску» ──
+       feature_use, а НЕ своё имя вроде game_start. Это совет окна 98 и он
+       верный: feature_use уже принимается сервером, уже считается ступенью
+       «попробовали» и уже попадает в разрезы по каналу, посту и странице
+       входа. Своё имя пришлось бы заводить в ступенях воронки отдельной
+       правкой, и до тех пор оно лежало бы в журнале, недоступное сводке, —
+       то есть выглядело бы как «никто не играет».
+
+       Почему ИМЕННО здесь, а не на каждой кнопке «играть»: newG — это
+       единственное место, где начинается настоящая партия (gameStartTimeRef
+       и partiyaIgralasRef ставятся тут же, строкой выше), а зовут её 20 мест.
+       Двадцать копий отправки — это девятнадцать шансов забыть про
+       двадцать первое. Загрузка партии для просмотра и открытие задачи здесь
+       НЕ проходят, и это правильно: разбор чужой партии — не своя игра.
+
+       Повторный вызов («🔁 Ещё партию») шлёт событие снова, и это не завышает
+       ступень: «попробовали» в воронке считается по СЕССИИ, а не по событиям. */
+    // path не передаём: track() подставляет его сам (единственная точка, через
+    // которую проходят все отправки). Своё поле было бы лишним и TypeScript
+    // отбил бы его как чужое — tsc нашёл это до прогона.
+    track({type:"feature_use",
+      meta:{feature:"chess_game_start",app:"cyberchess",variant:String(V),side:cl,
+        mode:hotseat?"hotseat":(p2pMode?"p2p":"ai")}});
     sMoveAnnotations({});sAnnotPicker(null);sMoveComments({});sCommentEditPly(null);
     // Reset Ghost Duel and P2P if they were active (new game started)
     if(ghostDuelMode){sGhostDuelMode(false);sGhostDuelConfig(null);sGhostDuelDivergePly(null)}
@@ -5549,15 +5608,123 @@ export default function CyberChessPage(){
       showToast(`🏰 ${eg.name} · цель: ${eg.goal==="Win"?"победа":"ничья"}`,"info");
     }catch{showToast("Не удалось загрузить эндшпиль","error")}
   };
-  const loadDailyPuzzle=()=>{
+  /* ── Открытие задачи дня, и отправка события ИЗНУТРИ ──
+     Повод 07.10.2026: окно 98 замерило daily_open за 04–06.10 — ноль во все три
+     дня, включая наши пробы. Причина не в приёме события (сервер его знает с
+     30.09) и не в выводе, а в месте отправки: track стоял на ОДНОЙ из двух
+     кнопок, открывающих задачу дня, и стоял ДО вызова. Отсюда два разных вранья
+     в разные стороны одновременно:
+       недосчёт — вторая кнопка (в панели задач) открывала задачу молча;
+       пересчёт — у первой событие уходило РАНЬШЕ трёх проверок ниже, так что
+         «задача не загрузилась» и «задача повреждена» считались открытием.
+     Теперь отправка одна и стоит ПОСЛЕ того, как задача действительно открылась.
+     Откуда пришли — остаётся видно в meta.surface, его передаёт вызывающий. */
+  /**
+   * Поставить СЕРВЕРНУЮ задачу на доску. Один набор присваиваний на двух
+   * потребителей: задачу дня и ссылку вида /cyberchess?puzzle=<id>.
+   *
+   * Зачем функция, а не копия десяти вызовов: копий такого открытия в модуле уже
+   * две (задача дня и выбор из тренажёра), и расходились они не в мелочах — одна
+   * показывала позицию ДО хода соперника, то есть задачу нельзя было решить.
+   * Третья копия ради ссылки добавила бы третий способ разойтись.
+   *
+   * @returns false, если позиция не разобралась. Вызывающий тогда молчит: о беде
+   *          человеку уже сказано здесь, а второе сообщение подряд читается как
+   *          две разные беды.
+   */
+  const postavitZadachuNaDosku=(pz:typeof PUZZLES[number],{dnevnaya}:{dnevnaya:boolean}):boolean=>{
+    sЭтоЗадачаДня(dnevnaya);
+    sTab("puzzles");
+    let g;try{g=new Chess(pz.fen)}catch{showToast("Задача повреждена, пропускаю","error");return false}
+    setGame(g);sBk(k=>k+1);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();startClock(0);
+    return true;
+  };
+  const loadDailyPuzzle=(surface:string="unknown")=>{
     if(srvDailyFailed){showToast("Задача дня не загрузилась — проверьте связь","error");return}
     if(!srvDaily){showToast("Задача дня ещё грузится…","info");return}
     const pz=normalizePuzzle({fen:srvDaily.fen,sol:srvDaily.sol,name:srvDaily.theme,r:srvDaily.rating,theme:srvDaily.theme}) as typeof PUZZLES[number];
-    sЭтоЗадачаДня(true);
-    sTab("puzzles");
-    let g;try{g=new Chess(pz.fen)}catch{showToast("Задача повреждена, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();startClock(0);
+    if(!postavitZadachuNaDosku(pz,{dnevnaya:true}))return;
     showToast(`☀ Задача дня · ${pz.r}`,"info");
+    track({type:"daily_open",source:"cyberchess/daily",meta:{surface,day:srvDaily.day}});
   };
+  /* ── Ссылка на КОНКРЕТНУЮ задачу: /cyberchess?puzzle=<id> ──
+     Зачем. Позвать человека «посмотри вот эту позицию» было нечем: любая ссылка
+     открывала случайную задачу из 500 000, то есть обещание ссылки не
+     исполнялось. Ролик, пост и разбор без этого не работают как вход.
+
+     🔴 Метка канала НЕ теряется. Адрес не перезаписываем вовсе: ?c= остаётся в
+     строке, и track() читает его оттуда сам. Переписывание истории здесь стёрло
+     бы метку, а это ровно та цифра, ради которой метки и заводились.
+
+     🔴 Неудача показывается НЕУДАЧЕЙ, и у каждого класса свой текст — иначе
+     «ссылка битая», «задачи нет» и «связи нет» выглядят одинаково, а человек
+     видит просто домашний экран и не понимает, что ссылка не сработала:
+       форма не похожа на идентификатор → ссылка испорчена;
+       404 → такой задачи в выборке нет (сервер в теле говорит, упирается ли
+         выборка в предел: 500 000 из 502 584, то есть «нет в выдаче» и «нет в
+         банке» — разные вещи);
+       503 ids_unavailable → банк сейчас отдаётся запасным пулом без
+         идентификаторов; задача существует, но найти её нечем;
+       иное → не открылась, причина у нас.
+     В любом случае раздел задач всё равно открывается: человек пришёл решать, и
+     оставить его на домашнем экране — худшее из решений. */
+  useEffect(()=>{
+    if(typeof window==="undefined")return;
+    let otmenen=false;
+    let id="";
+    try{id=new URLSearchParams(window.location.search).get("puzzle")||""}catch{return}
+    if(!id)return;
+    // Форма проверяется ДО запроса: тот же признак, что на сервере. Мусор из
+    // адреса не доходит до сети вовсе.
+    if(!/^[A-Za-z0-9_-]{1,64}$/.test(id)){
+      showToast("Ссылка на задачу испорчена — открываю раздел задач","error");
+      sTab("puzzles");
+      return;
+    }
+    (async()=>{
+      try{
+        const r=await fetch(`/api-backend/api/cyberchess-puzzles/${encodeURIComponent(id)}`);
+        if(otmenen)return;
+        if(!r.ok){
+          let prichina="";
+          try{prichina=String(((await r.json()) as {reason?:string})?.reason??"")}catch{}
+          if(r.status===404)showToast(`Задачи ${id} нет в выборке — открываю раздел задач`,"error");
+          else if(prichina==="ids_unavailable")showToast("Банк задач сейчас без идентификаторов — ссылка не ищется","error");
+          else showToast("Задача по ссылке не открылась — открываю раздел задач","error");
+          sTab("puzzles");
+          return;
+        }
+        const telo=await r.json() as {puzzle?:{fen?:string;sol?:string[];name?:string;r?:number;theme?:string;id?:string}};
+        const syraya=telo?.puzzle;
+        if(!syraya?.fen||!Array.isArray(syraya.sol)||syraya.sol.length===0){
+          // 200 с негодным телом — отдельный класс: ручка ответила, а открывать
+          // нечего. Молчать здесь нельзя, иначе это выглядит как «ссылка
+          // сработала, но задача пустая».
+          showToast("Задача по ссылке пришла неполной — открываю раздел задач","error");
+          sTab("puzzles");
+          return;
+        }
+        if(otmenen)return;
+        const pz=normalizePuzzle({fen:syraya.fen,sol:syraya.sol,name:syraya.name??syraya.theme??"Задача",
+          r:syraya.r??1200,theme:syraya.theme??"Тактика"}) as typeof PUZZLES[number];
+        if(!postavitZadachuNaDosku(pz,{dnevnaya:false}))return;
+        showToast(`🔗 Задача по ссылке · ${pz.r}`,"info");
+        // Своё событие не заводим: открытие задачи по ссылке — это та же
+        // ключевая возможность, и feature_use уже считается ступенью
+        // «попробовали» и разрезается по каналу и посту. Нужен именно разрез по
+        // каналу: ссылка и живёт в ролике или посте.
+        track({type:"feature_use",source:"cyberchess/link",meta:{feature:"puzzle_link_open",app:"cyberchess",puzzle:id}});
+      }catch{
+        if(otmenen)return;
+        showToast("Задача по ссылке не открылась — открываю раздел задач","error");
+        sTab("puzzles");
+      }
+    })();
+    return ()=>{otmenen=true};
+    // Один раз при открытии страницы: ссылка — это вход, а не состояние.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+
   const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Задачи ещё грузятся…","info");return}sЭтоЗадачаДня(false);const pz0=fPz[i]||PUZZLES[0];const pz=pz0?normalizePuzzle(pz0):pz0;if(!pz){showToast("Нет задач под этот фильтр","error");return}let g;try{g=new Chess(pz.fen)}catch{showToast("Задача повреждена, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(i);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
     // Set timer based on mode. В rush НЕ трогаем работающий дедлайн (ручной выбор пазла
     // посреди раша не должен обнулять часы).
@@ -6865,7 +7032,7 @@ export default function CyberChessPage(){
                   на ~580 пикселе, выше линии первого экрана, поэтому вход
                   ставится сюда. Отдельной кнопкой, а не четвёртой целью:
                   целей ровно три, и счётчик «0/3» врать не должен. */}
-              <button onClick={()=>{track({type:"daily_open",source:"cyberchess/goals",meta:{surface:"goals-row"}});loadDailyPuzzle();}} style={{
+              <button onClick={()=>{loadDailyPuzzle("goals-row");}} style={{
                 display:"inline-flex",alignItems:"center",gap:5,
                 padding:"4px 10px",borderRadius:RADIUS.full,
                 border:`1px solid ${CC.brand}`,
@@ -11193,7 +11360,7 @@ export default function CyberChessPage(){
                   // Тот же путь, что у плитки: вторая своя реализация здесь
                   // и была причиной того, что кнопка показывала позицию до
                   // хода соперника и не давала решить задачу.
-                  loadDailyPuzzle();
+                  loadDailyPuzzle("puzzles-panel");
                 }} className="cc-focus-ring" style={{padding:"8px 10px",borderRadius:RADIUS.sm,border:`1px solid ${CC.border}`,background:CC.surface1,fontSize:12,fontWeight:700,cursor:"pointer",color:CC.text,textAlign:"left"}}>☀ Задача дня</button>
 
                 {/* Random endgame study */}

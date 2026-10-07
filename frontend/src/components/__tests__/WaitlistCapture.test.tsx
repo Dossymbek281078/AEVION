@@ -19,10 +19,29 @@ import { WaitlistCapture } from "../WaitlistCapture";
 
 const ORIGINAL_FETCH = globalThis.fetch;
 
+/**
+ * Записываются только обращения К РУЧКЕ ПОДПИСКИ.
+ *
+ * Повод 07.10.2026: в компонент добавлена отправка события воронки (ступень
+ * «оставил адрес» была невидима — форма работала и не сообщала о себе ничего).
+ * Событие тоже уходит сетевым вызовом, и пять проверок этого файла покраснели на
+ * «ожидалось 1, получено 2», хотя подписка работала как прежде.
+ *
+ * Утверждения проверок верные («адрес и метка доезжают», «при отказе не уходит
+ * ничего»), а вот признак «всего сетевых вызовов один» к ним не относится:
+ * он считал ЛЮБОЙ вызов, в том числе посторонний. Поэтому отбор по адресу ручки —
+ * это наведение проверки на её собственный смысл, а не ослабление: при отказе
+ * `calls.length` по-прежнему обязан быть нулём, и подмена тела по-прежнему видна.
+ */
+const РУЧКА_ПОДПИСКИ = "/waitlist/subscribe";
+
 function stubFetch(status: number) {
   const calls: Array<{ url: string; body: unknown }> = [];
   const fn = vi.fn((url: string, init?: RequestInit) => {
-    calls.push({ url: String(url), body: init?.body ? JSON.parse(String(init.body)) : null });
+    const адрес = String(url);
+    if (адрес.includes(РУЧКА_ПОДПИСКИ)) {
+      calls.push({ url: адрес, body: init?.body ? JSON.parse(String(init.body)) : null });
+    }
     return Promise.resolve({ ok: status >= 200 && status < 300, status } as Response);
   });
   vi.stubGlobal("fetch", fn);

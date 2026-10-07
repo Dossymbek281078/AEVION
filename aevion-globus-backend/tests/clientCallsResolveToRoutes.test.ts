@@ -90,6 +90,24 @@ function walk(dir: string, ok: (f: string) => boolean, acc: string[] = []): stri
 
 const lastIdent = (s: string): string | null => /([A-Za-z_]\w*)\s*$/.exec(s.trim())?.[1] ?? null;
 
+/**
+ * Все имена-кандидаты в аргументах монтирования, а не только последнее.
+ *
+ * 🔴 06.10.2026. `lastIdent` брал идентификатор, стоящий В КОНЦЕ строки
+ * аргументов. Монтирование Мультичата выглядит так:
+ *
+ *     app.use("/api/multichat", гостевойСлой(multichatRouter, requireModule("…")));
+ *
+ * Строка аргументов кончается на «))», то есть идентификатора в конце нет
+ * вовсе — `lastIdent` возвращал null, монтирование не записывалось, и ВСЕ
+ * маршруты `multichatRouter` считались несуществующими. Сторож краснел на
+ * восьми живых адресах платного модуля и звал чинить то, что цело.
+ *
+ * Берём каждое имя из аргументов; дальше вызывающий сам отбирает те, что
+ * known routers. Обёртка любой глубины перестаёт прятать роутер.
+ */
+const identsIn = (s: string): string[] => [...s.matchAll(/([A-Za-z_]\w*)/g)].map((m) => m[1]);
+
 /** Все маршруты, которые сервер (или сам Next) действительно отдаёт. */
 const VERBS = new Map<string, Set<string>>();
 
@@ -140,9 +158,10 @@ function allRoutes(): string[] {
   };
 
   for (const m of src.get(idx)!.matchAll(/app\.use\(\s*"(\/api[a-zA-Z0-9\-/]*)"\s*,([\s\S]*?)\)\s*;/g)) {
-    const c = lastIdent(m[2]);
-    const key = c ? targets.get(idx)!.get(c) : undefined;
-    if (key) add(key, m[1]);
+    for (const c of identsIn(m[2])) {
+      const key = targets.get(idx)!.get(c);
+      if (key) add(key, m[1]);
+    }
   }
   for (const [f, s] of src) {
     for (const m of s.matchAll(/path:\s*"(\/api[a-zA-Z0-9\-/]*)"\s*,\s*router:\s*([A-Za-z_]\w*)/g)) {

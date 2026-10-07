@@ -350,6 +350,9 @@ export default function QSpaceClient() {
   const [фото, setФото] = useState<{ состояние: "нет" | "идёт" | "готово" | "отказ"; url: string | null; текст: string }>({ состояние: "нет", url: null, текст: "" });
   /** доступен ли канал: страница спрашивает сервер, а не догадывается */
   const [фотоДоступен, setФотоДоступен] = useState<boolean | null>(null);
+  // Причина недоступности словами. Пустая кнопка хуже отсутствующей, но
+  // молчаливое исчезновение кнопки — тоже плохо: человек видел её вчера.
+  const [фотоПричина, setФотоПричина] = useState<string | null>(null);
 
   // ---- начальная сцена ----------------------------------------------------
   useEffect(() => {
@@ -1711,7 +1714,13 @@ export default function QSpaceClient() {
     let жив = true;
     fetch(apiUrl("/api/qspace/photoreal/healthz"))
       .then((r) => r.json())
-      .then((j) => { if (жив) setФотоДоступен(Boolean(j?.configured)); })
+      .then((j) => {
+        if (!жив) return;
+        setФотоДоступен(Boolean(j?.configured));
+        // `note` приходит из того же ответа, что и `configured`: показываем
+        // ровно то, что сервер считает причиной, а не свою догадку.
+        setФотоПричина(j?.configured ? null : (typeof j?.note === "string" ? j.note : null));
+      })
       .catch(() => { if (жив) setФотоДоступен(false); });
     return () => { жив = false; };
   }, []);
@@ -2002,6 +2011,11 @@ export default function QSpaceClient() {
         </button>
         {/* Кнопка появляется, только если канал ЖИВ. Кнопка, за которой ничего
             нет, хуже её отсутствия: человек жмёт и уходит. */}
+        {фотоДоступен === false && фотоПричина && (
+          <span style={{ fontSize: 13, color: "#64748b", alignSelf: "center" }}>
+            {фотоПричина}
+          </span>
+        )}
         {фотоДоступен === true && (
           <button
             type="button" style={S.btn} onClick={фотореализм}

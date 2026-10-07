@@ -7414,6 +7414,8 @@ const ru: Record<string, string> = {
   "moduleChip.planetFrom": "вся планета от {price}/мес",
   "moduleChip.includedInPlanet": "Входит в подписку AEVION",
   "moduleChip.buy": "Купить",
+  "moduleChip.requestAccess": "Обсудить доступ",
+  "moduleChip.requestAccessTitle": "Отдельно пока не продаётся — напишите нам, подберём доступ",
 };
 
 export default ru;

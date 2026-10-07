@@ -117,4 +117,42 @@ describe("ModulePricingChip — цены лестницы сроков", () => {
     const el = screen.getByText(/CyberChess/);
     expect(el.getAttribute("translate")).toBe("no");
   });
+
+  /*
+   * 🔴 Слово на кнопке обязано совпадать с тем, что за ней.
+   * Замер на проде 07.10.2026: /qright показывал «Buy», ссылка вела на
+   * /pricing?app=qright#apps, а там по этому приложению только «Contact us»
+   * (среди шести кнопок «Buy» на странице цен QRight нет), и касса отвечает
+   * 400 invalid_app. Человек жал «Купить» и попадал в «напишите нам».
+   */
+  it("нечего купить (список продаваемых пуст) — кнопка зовёт обсудить, а не купить", async () => {
+    const app = STANDALONE_APPS.find((a) => a.slug === "qright") ?? STANDALONE_APPS[0];
+    гостьСоСписком([]);
+    render(<ModulePricingChip moduleId={app.moduleId} />);
+
+    await waitFor(() => {
+      expect(
+        screen.queryByText("Обсудить доступ"),
+        "купить нечего, а кнопка всё ещё обещает покупку",
+      ).not.toBeNull();
+    });
+    expect(
+      screen.queryByText("Купить"),
+      "«Купить» ведёт на контактную форму — это обещание, которого за кнопкой нет",
+    ).toBeNull();
+  });
+
+  it("КОНТРОЛЬ: продаваемый срок есть — кнопка снова «Купить»", async () => {
+    const app = STANDALONE_APPS.find((a) => a.slug === "qright") ?? STANDALONE_APPS[0];
+    гостьСоСписком([`app_${app.slug}_lite`]);
+    render(<ModulePricingChip moduleId={app.moduleId} />);
+
+    await waitFor(() => {
+      expect(
+        screen.queryByText("Купить"),
+        "продаётся, а кнопка не предлагает купить — проверка перекрыла лишнее",
+      ).not.toBeNull();
+    });
+    expect(screen.queryByText("Обсудить доступ")).toBeNull();
+  });
 });

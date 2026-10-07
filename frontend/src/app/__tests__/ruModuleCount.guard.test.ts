@@ -84,27 +84,27 @@ describe("русское число модулей согласовано со �
    * (это отдельное знание), но ЧИСЛО обязано быть тем же, что в реестре, —
    * расхождение цифры между языками видно покупателю без знания грамматики.
    */
-  it("казахский словарь несёт то же число, что реестр", async () => {
+  it("казахский словарь несёт то же число, что русский", async () => {
     const { MODULE_NODES } = await import("@/data/pitchFacts");
+    const счётное = (строка: string) =>
+      [...строка.matchAll(/\b(3[0-9]|4[0-9]|5[0-9])\b/g)].map((m) => Number(m[1]));
     let проверено = 0;
     for (const ф of ФРАЗЫ) {
       const метка = `"${ф.ключ}":`;
-      const i = KK.indexOf(метка);
-      if (i < 0) continue; // ключа в kk может не быть — это не дефект числа
-      const s = KK.slice(i, KK.indexOf(String.fromCharCode(10), i));
+      const iKK = KK.indexOf(метка);
+      if (iKK < 0) continue; // ключа в kk может не быть — это не дефект числа
+      const kk = KK.slice(iKK, KK.indexOf(String.fromCharCode(10), iKK));
+      const ru = строка(ф.ключ);
+      const вRU = счётное(ru);
+      if (вRU.length === 0) continue; // в русской строке числа нет — сравнивать нечего
       проверено += 1;
       expect(
-        s.includes(String(MODULE_NODES)),
-        `${ф.ключ}: в kk.ts нет числа ${MODULE_NODES}. Строка: ${s.slice(0, 160)}`,
-      ).toBe(true);
-      const чужие = [...s.matchAll(/(3[0-9]|4[0-9]|5[0-9])/g)]
-        .map((m) => Number(m[1]))
-        .filter((n) => n !== MODULE_NODES);
-      expect(
-        чужие,
-        `${ф.ключ}: в kk.ts рядом стоит отставшее число ${чужие.join(", ")}`,
-      ).toEqual([]);
+        счётное(kk),
+        `${ф.ключ}: в kk.ts число ${счётное(kk).join(", ") || "отсутствует"}, ` +
+          `в ru.ts ${вRU.join(", ")} (реестр ${MODULE_NODES}). Расхождение цифры между языками ` +
+          `видно покупателю без знания грамматики. Строка kk: ${kk.slice(0, 140)}`,
+      ).toEqual(вRU);
     }
-    expect(проверено, "ни один ключ не найден в kk.ts — сторож ослеп").toBeGreaterThan(0);
+    expect(проверено, "ни одного сравнимого ключа — сторож ослеп").toBeGreaterThan(0);
   });
 });

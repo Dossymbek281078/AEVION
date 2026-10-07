@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { PageTracking } from "@/components/PageTracking";
 import { channelFrom, keepChannel } from "@/lib/products";
 import ModulePricingChip from "@/components/ModulePricingChip";
+import { languagesFor } from "@/lib/hreflang";
 
 // /en/qskyway — английская посадочная QSkyway (6-й случай приёма языковой
 // маршрутизации; образцы /longevity, /go, /shop, /smeta-trainer, /qrenew).
@@ -16,7 +17,7 @@ export const metadata: Metadata = {
   title: "QSkyway — navigation layer for the urban sky",
   description:
     "Provider-independent 3D air corridors and rules for air taxis, live on real buildings in Astana, NYC, Tokyo, Singapore, Amsterdam, Berlin, Vienna and Zurich. Routed against what regulators actually publish; live METAR wind; every flight exportable as a signed justification document.",
-  alternates: { canonical: "https://aevion.app/en/qskyway" },
+  alternates: { canonical: "https://aevion.app/en/qskyway", languages: languagesFor("/en/qskyway") },
   openGraph: {
     title: "QSkyway — navigation layer for the urban sky",
     description:

@@ -5,6 +5,26 @@ import { fetchOrPaywall } from "@/lib/paywall";
 import { PaywallScreen } from "@/components/PaywallScreen";
 import SmetaTrainerPage from "./_client";
 
+import type { Metadata } from "next";
+import { языки } from "@/lib/hreflang";
+
+/*
+ * canonical и языковая пара — 06.10.2026, НА СТРАНИЦЕ, а не в макете.
+ *
+ * Сначала я положил их в smeta-trainer/layout.tsx — и сторож
+ * layoutCanonicalDoesNotHideChildren показал 383 уводящих canonical против
+ * известных 102. Причина: под этим макетом 349 дочерних страниц, и каждая
+ * унаследовала бы canonical раздела, то есть сказала бы поисковику «я копия
+ * /smeta-trainer». Метаданные СТРАНИЦЫ детям не достаются — поэтому место
+ * им здесь.
+ *
+ * Пара объявлена по замеру того же дня: /smeta-trainer — кириллицы 2260,
+ * латиницы 581; /en/smeta-trainer — кириллицы 9, латиницы 955; оба 200.
+ */
+export const metadata: Metadata = {
+  alternates: { canonical: "/smeta-trainer", languages: языки("/smeta-trainer") },
+};
+
 export default async function Page({
   searchParams,
 }: {

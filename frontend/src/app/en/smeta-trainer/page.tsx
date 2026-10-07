@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { PageTracking } from "@/components/PageTracking";
 import { channelFrom, keepChannel } from "@/lib/products";
+import { languagesFor } from "@/lib/hreflang";
 
 // /en/smeta-trainer — английская посадочная русскоязычного продукта.
 //
@@ -18,7 +19,7 @@ export const metadata: Metadata = {
   title: "Smeta Trainer — construction estimating for Kazakhstan (Russian-language)",
   description:
     "An AI trainer for Kazakhstan state construction estimating (НДЦС РК): a real ЭСН rate corpus, levels, exams and document forms. The product speaks Russian — the domain is Russian-language by nature.",
-  alternates: { canonical: "https://aevion.app/en/smeta-trainer" },
+  alternates: { canonical: "https://aevion.app/en/smeta-trainer", languages: languagesFor("/en/smeta-trainer") },
   openGraph: {
     title: "Smeta Trainer — construction estimating for Kazakhstan",
     description:

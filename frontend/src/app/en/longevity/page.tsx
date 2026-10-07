@@ -5,6 +5,7 @@ import { PageTracking } from "@/components/PageTracking";
 import { productById, channelFrom, withChannel } from "@/lib/products";
 import { LongevityTool } from "./_tool";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
+import { languagesFor } from "@/lib/hreflang";
 
 // /en/longevity — англоязычный разбор протокола, бесплатно и целиком.
 //
@@ -39,7 +40,7 @@ export const metadata: Metadata = {
     "evidence-based supplements",
     "NMN evidence",
   ],
-  alternates: { canonical: "https://aevion.app/en/longevity" },
+  alternates: { canonical: "https://aevion.app/en/longevity", languages: languagesFor("/en/longevity") },
   openGraph: {
     title: "The Longevity Protocol: measure, intervene, measure again",
     description:

@@ -71,11 +71,18 @@ describe("машинный код сервера не доезжает до эк
   });
 
   test("ни один код сервера не показывается человеку как есть", () => {
+    // 🔴 07.10.2026, приёмка: проверка шла ТОЛЬКО по "ru", и это был
+    // знаменатель в один язык из трёх. Замер показал, что EN-читатель видел
+    // `no_guest_id` и `publishing_temporarily_unavailable` как есть — то есть
+    // класс считался закрытым, пока оставался открытым у зарубежного
+    // покупателя. Теперь спрашиваем все три языка и называем, какой именно.
     const dozhali: string[] = [];
     for (const kod of kodySerwera()) {
       if (RAZBIRAET_EKRAN_SVYAZI.includes(kod)) continue;
-      const out = devhubServerError(kod, FALLBACK, "ru");
-      if (out.includes(kod)) dozhali.push(kod);
+      for (const lang of ["ru", "kk", "en"]) {
+        const out = devhubServerError(kod, FALLBACK, lang);
+        if (out.includes(kod)) dozhali.push(`${lang}: ${kod}`);
+      }
     }
     expect(
       dozhali,

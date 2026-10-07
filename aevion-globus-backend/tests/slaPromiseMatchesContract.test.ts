@@ -43,13 +43,17 @@ function claimedUptimes(text: string): number[] {
 
 describe("обещание SLA не выше опубликованного договора", () => {
   const contract = contractUptimes();
-  const max = Math.max(...contract);
+  const max = contract.length ? Math.max(...contract) : 0;
 
-  test("контроль: лестница договора вообще прочиталась", () => {
-    // Пустой разбор дал бы зелёный на любом обещании.
-    expect(contract.length, "в apiQuotas.ts не нашлось ни одного uptime").toBeGreaterThanOrEqual(3);
-    expect(max).toBeGreaterThan(90);
-    expect(max).toBeLessThan(100);
+  test("🔴 07.10.2026: в договоре НЕТ обещания доступности — и это проверяется", () => {
+    // Прежде здесь стоял контроль «лестница прочиталась, значений не меньше
+    // трёх». Он был верен, пока договор обещал 99 / 99.5 / 99.9. Обещание
+    // снято (прибора нет), поэтому проверяется обратное: числовых uptime в
+    // договоре не осталось, а поле на месте — интеграторы его разбирают.
+    expect(contract.length, "в договоре снова появилось числовое обещание доступности").toBe(0);
+    const src = readFileSync(QUOTAS, "utf8");
+    expect(src, "поле uptime удалено — интеграторы сломаются молча").toMatch(/uptime:\s*null/);
+    expect(src, "нет пояснения, почему числа нет").toMatch(/uptimeNote/);
   });
 
   test("витрина не обещает больше договора", () => {

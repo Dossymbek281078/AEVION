@@ -20,8 +20,14 @@ const CONTACT_EMAIL = "yahiin1978@gmail.com";
 
 export const apiQuotasRouter = Router();
 
-const QUOTAS_VERSION = "1.1.0";
-const PUBLISHED_AT = "2026-05-08";
+// 1.2.0 (07.10.2026): обещание доступности снято. Поле `uptime` НЕ удалено —
+// интеграторы его разбирают, и исчезнувший ключ сломал бы их молча; вместо
+// числа отдаётся null и отдельная пояснительная строка. Причина: за лестницей
+// 99 / 99.5 / 99.9 нет прибора — ни измерения доступности, ни страницы
+// состояния, ни механизма компенсации. Обещать то, чего не мерим, значит
+// брать обязательство, исполнение которого нечем показать.
+const QUOTAS_VERSION = "1.2.0";
+const PUBLISHED_AT = "2026-10-07";
 
 // Tiers MUST stay in sync with frontend/src/app/pricing/api-pricing/page.tsx
 // (VOLUME_TIERS const). Names and prices align with the public pricing page;
@@ -46,7 +52,7 @@ const TIERS = [
     priceUsdMonthly: 49,
     monthlyCalls: 100_000,
     rateLimit: { perMinute: 500 },
-    sla: { uptime: 99.0, supportResponseHours: 48, channel: "email" },
+    sla: { uptime: null, supportResponseHours: 48, channel: "email" },
     commercialUse: true,
     perCallDiscount: 0.15,
     keyLimit: 5,
@@ -58,7 +64,7 @@ const TIERS = [
     priceUsdMonthly: 249,
     monthlyCalls: 1_000_000,
     rateLimit: { perMinute: 2000 },
-    sla: { uptime: 99.5, supportResponseHours: 24, channel: "email+slack" },
+    sla: { uptime: null, supportResponseHours: 24, channel: "email+slack" },
     commercialUse: true,
     perCallDiscount: 0.30,
     keyLimit: 10,
@@ -70,7 +76,7 @@ const TIERS = [
     priceUsdMonthly: null,
     monthlyCalls: null,
     rateLimit: { perMinute: null },
-    sla: { uptime: 99.9, supportResponseHours: 4, channel: "dedicated-rep" },
+    sla: { uptime: null, supportResponseHours: 4, channel: "dedicated-rep" },
     commercialUse: true,
     perCallDiscount: 0.50,
     keyLimit: null,
@@ -142,6 +148,8 @@ apiQuotasRouter.get("/", (_req, res) => {
   res.json({
     version: QUOTAS_VERSION,
     publishedAt: PUBLISHED_AT,
+    // Почему поле есть, а числа нет — см. комментарий у QUOTAS_VERSION.
+    uptimeNote: "not guaranteed, no SLA at this time",
     docsUrl: "https://github.com/Dossymbek281078/AEVION/blob/main/docs/api/PUBLIC_API_QUOTAS.md",
     // Адрес, на который клиент API напишет, если упрётся в квоту. Стоял
     // api@aevion.app — у домена aevion.app НЕТ записи MX (перепроверено

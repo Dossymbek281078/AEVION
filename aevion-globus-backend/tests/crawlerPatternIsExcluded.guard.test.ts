@@ -85,6 +85,79 @@ describe("обходчик ссылок отсеян, люди целы", () => 
     expect(r.body.botsExcludedByCrawlPatternWhy).toMatch(/разным меткам/);
   });
 
+  it("🔴 обходчик, НАЖАВШИЙ «купить», тоже отсеян — вместе с его началом оплаты", async () => {
+    /*
+     * Нашло окно 99, 07.10.2026, живой замер: 8 «начал оплату» на /qmelanin с
+     * восьми разных роликов, у каждого ровно 2 визита, 0 до цен, 1 старт,
+     * `checkoutStartOurs` ноль. То есть восемь поддельных денежных шагов
+     * выглядели живыми покупателями — а это прямой путь к решению тратить
+     * деньги на канал, которого нет.
+     *
+     * Прежнее условие («ровно одно событие в сессии») обходчик обходил, как
+     * только нажимал ссылку покупки. Теперь из шаблона выпадает только сессия
+     * с признаком ВНИМАНИЯ, а нажатие от него не спасает.
+     */
+    const события: Array<Record<string, unknown>> = [];
+    for (let i = 0; i < 8; i += 1) {
+      события.push({
+        type: "page_view",
+        ts: вМинуту(10 - i * 0.5),
+        sid: `обход-куп-${i}`,
+        path: `/qmelanin?c=yt-rolik${i}`,
+        meta: { channel: "youtube", post: `rolik${i}` },
+      });
+      события.push({
+        type: "checkout_start",
+        ts: вМинуту(10 - i * 0.5),
+        sid: `обход-куп-${i}`,
+        path: "/qmelanin",
+        meta: { channel: "youtube", post: `rolik${i}`, app: "qmelanin" },
+      });
+    }
+    журнал(события);
+
+    const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");
+    expect(r.status).toBe(200);
+    expect(r.body.botsExcludedByCrawlPattern, "обходчик с нажатием не отсеян").toBe(16);
+    // Главное: поддельные денежные шаги НЕ попали в живые начала оплаты.
+    expect(r.body.byChannel.youtube, "канал появился только из-за обходчика").toBeUndefined();
+    expect(r.body.totalBySession.checkoutStart, "поддельные начала оплаты в живых").toBe(0);
+  });
+
+  it("🔴 КОНТРОЛЬ: сессия с признаком ЧТЕНИЯ не обходчик, даже внутри шаблона", async () => {
+    // Человеку нужен способ отличиться, иначе признак начнёт прятать людей.
+    // Этот способ — событие внимания: машина его не шлёт.
+    const события: Array<Record<string, unknown>> = [...обходНаДесятьМеток()];
+    события.push({
+      type: "page_view",
+      ts: вМинуту(6),
+      sid: "человек-читал",
+      path: "/qmelanin?c=yt-rolik3",
+      meta: { channel: "youtube" },
+    });
+    события.push({
+      type: "engaged",
+      ts: вМинуту(5),
+      sid: "человек-читал",
+      path: "/qmelanin",
+      meta: { channel: "youtube" },
+    });
+    события.push({
+      type: "checkout_start",
+      ts: вМинуту(5),
+      sid: "человек-читал",
+      path: "/qmelanin",
+      meta: { channel: "youtube", app: "qmelanin" },
+    });
+    журнал(события);
+
+    const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");
+    expect(r.body.botsExcludedByCrawlPattern).toBe(10);
+    expect(r.body.totalBySession.visits, "читавший человек отсеян как обходчик").toBe(1);
+    expect(r.body.totalBySession.engaged).toBe(1);
+    expect(r.body.totalBySession.checkoutStart, "живое начало оплаты потеряно").toBe(1);
+  });
+
   it("🔴 КОНТРОЛЬ: человек с ОДНИМ просмотром НЕ отсеян", async () => {
     // Самая опасная ошибка такого признака: отсеять тех, кто закрыл страницу
     // сразу. Их поведение совпадает с обходчиком по одному признаку — и только

@@ -741,6 +741,23 @@ const VOICE_IDS: Record<string, string> = {
 // самая дорогая возможность модуля не имела потолка вовсе; 05.09 числа
 // уточнены (30/1000), потолок у pro поставлен намеренно — safety, не упаковка.
 // speech и translate заведены 02.09.2026 вместе со своими квотами.
+/*
+ * 🔴 ЯЗЫК ДЕНЕЖНЫХ ОТКАЗОВ — НЕ КОСМЕТИКА (07.10.2026).
+ *
+ * Сообщения о месячных пределах пишутся ЗДЕСЬ ПО-АНГЛИЙСКИ в форме
+ * «Monthly <что> limit reached», и это не вкусовщина. На фронте такой текст
+ * проходит русскую карту (lib/devhubServerError), превращается в «Месячная
+ * норма исчерпана: …», и ровно по этим словам поднимается несмываемая ПЛАШКА С
+ * КАССОЙ (showToast в devhub/[id]/page.tsx). Напишете отказ по-русски прямо
+ * здесь — он карту минует, плашка НЕ поднимется, и человек увидит тост на
+ * четыре секунды без кнопки покупки. Замер 07.10: так себя вели восемь мест
+ * (генерации, аудиоэффекты, клонирование голоса ×2, распознавание речи,
+ * перевод ×3) — то есть единственный денежный момент модуля не работал у пяти
+ * возможностей из девяти, и EN-читатель вдобавок видел русский текст.
+ *
+ * Сторож: frontend/src/app/devhub/__tests__/moneyRefusalRaisesCheckout.guard.test.ts
+ * перечисляет ВСЕ 402 этого файла и краснеет, если хоть один не поднимает кассу.
+ */
 const TIER_LIMITS: Record<StudioTier, Record<CapabilityKey, number>> = {
   free:       { video: 3,   image: 10,  tts: 10000,  music: 5,   deploy: 10, speech: 5,    translate: 50,   generate: 30 },
   // Втрое к гостевой норме и НИ ОДНОЙ платной возможности сверху: это плата за
@@ -3616,7 +3633,7 @@ devhubRouter.post("/projects/:id/generate", dhCostlyLimit("dhgenerate"), async (
   const genCredit = await checkCredit(userId, "generate");
   if (!genCredit.allowed) {
     return res.status(402).json({
-      error: "Месячный лимит генераций исчерпан",
+      error: "Monthly generate limit reached",
       tier: genCredit.tier, used: genCredit.used, limit: genCredit.limit,
       upgrade: "/studio#upgrade",
     });
@@ -5979,7 +5996,7 @@ devhubRouter.post("/media/sfx", dhCostlyLimit("dhsfx"), async (req, res) => {
   const sfxCredit = await checkCredit(sfxUserId, "music");
   if (!sfxCredit.allowed) {
     return res.status(402).json({
-      error: "Месячный лимит аудиоэффектов исчерпан",
+      error: "Monthly audio effect limit reached",
       tier: sfxCredit.tier, used: sfxCredit.used, limit: sfxCredit.limit,
       upgrade: "/studio#upgrade",
     });
@@ -6188,7 +6205,7 @@ devhubRouter.post("/media/voice-clone", dhCostlyLimit("dhvoiceclone"), async (re
   const vcloneCredit = await checkCredit(vcloneUserId, "speech");
   if (!vcloneCredit.allowed) {
     return res.status(402).json({
-      error: "Месячный лимит клонирования голоса исчерпан",
+      error: "Monthly voice clone limit reached",
       tier: vcloneCredit.tier, used: vcloneCredit.used, limit: vcloneCredit.limit,
       upgrade: "/studio#upgrade",
     });
@@ -6238,7 +6255,7 @@ devhubRouter.post("/media/voice-clone/preview", dhCostlyLimit("dhvoiceclone"), a
   const vcprevCredit = await checkCredit(vcprevUserId, "speech");
   if (!vcprevCredit.allowed) {
     return res.status(402).json({
-      error: "Месячный лимит клонирования голоса исчерпан",
+      error: "Monthly voice clone limit reached",
       tier: vcprevCredit.tier, used: vcprevCredit.used, limit: vcprevCredit.limit,
       upgrade: "/studio#upgrade",
     });
@@ -6321,7 +6338,7 @@ devhubRouter.post("/media/stt", dhCostlyLimit("dhstt"), async (req, res) => {
   const sttCredit = await checkCredit(sttUserId, "speech");
   if (!sttCredit.allowed) {
     return res.status(402).json({
-      error: "Месячный лимит распознавания речи исчерпан",
+      error: "Monthly speech limit reached",
       tier: sttCredit.tier, used: sttCredit.used, limit: sttCredit.limit,
       upgrade: "/studio#upgrade",
     });
@@ -7486,7 +7503,7 @@ devhubRouter.post("/media/translate", dhCostlyLimit("dhtranslate"), async (req, 
   const trCredit = await checkCredit(trUserId, "translate");
   if (!trCredit.allowed) {
     return res.status(402).json({
-      error: "Месячный лимит перевода исчерпан",
+      error: "Monthly translate limit reached",
       tier: trCredit.tier, used: trCredit.used, limit: trCredit.limit,
       upgrade: "/studio#upgrade",
     });
@@ -7535,7 +7552,7 @@ devhubRouter.post("/projects/:id/files/translate", dhCostlyLimit("dhtranslate"),
   const ftrCredit = await checkCredit(userId, "translate", 1);
   if (!ftrCredit.allowed) {
     return res.status(402).json({
-      error: "Месячный лимит перевода исчерпан",
+      error: "Monthly translate limit reached",
       tier: ftrCredit.tier, used: ftrCredit.used, limit: ftrCredit.limit,
       upgrade: "/studio#upgrade",
     });
@@ -7737,7 +7754,7 @@ devhubRouter.post("/projects/:id/files/translate-bulk", dhCostlyLimit("dhtransla
   const ftrbCredit = await checkCredit(userId, "translate", paths.length * targetLangs.length);
   if (!ftrbCredit.allowed) {
     return res.status(402).json({
-      error: "Месячный лимит перевода исчерпан",
+      error: "Monthly translate limit reached",
       tier: ftrbCredit.tier, used: ftrbCredit.used, limit: ftrbCredit.limit,
       upgrade: "/studio#upgrade",
     });

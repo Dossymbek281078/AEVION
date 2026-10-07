@@ -218,6 +218,11 @@ const IMYA_NORMY: Record<string, string> = {
   translate: "перевод",
   generate: "генерации кода",
   generation: "генерации",
+  // 07.10.2026: бэкенд перестал писать эти два отказа по-русски (иначе они
+  // минуют карту и НЕ поднимают плашку кассы), и без этих двух строк
+  // русский читатель увидел бы «Месячная норма исчерпана: voice clone».
+  "voice clone": "клонирование голоса",
+  "audio effect": "аудиоэффекты",
 };
 
 /**
@@ -246,7 +251,11 @@ const KODY_EN: Record<string, string> = {
     "Storage is temporarily unavailable. Your data is intact — please try again in a minute.",
 };
 
-const INFRA = /[A-Z][A-Z0-9]{3,}_[A-Z0-9_]{2,}|in Railway|dash.cloudflare/;
+// Replicate добавлен 07.10.2026: сообщение «Video provider has no credit — top up
+// the Replicate account» ru и kk получали человеческим текстом (карта ниже), а
+// EN-покупатель читал имя нашего поставщика и предложение пополнить НАШ счёт.
+// Это написано для нас, а не для него, — тот же класс, что переменные окружения.
+const INFRA = /[A-Z][A-Z0-9]{3,}_[A-Z0-9_]{2,}|in Railway|dash.cloudflare|Replicate/;
 
 /**
  * @param raw   текст из поля `error` ответа сервера (может отсутствовать)

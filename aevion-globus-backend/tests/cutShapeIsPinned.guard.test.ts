@@ -25,6 +25,10 @@ describe("состав строк разреза закреплён руками
     expect(Object.keys(пустойКанал()).sort()).toEqual(
       [
         "checkoutStart",
+        // Начала оплаты без единого признака живого человека: не отсев, а
+        // названное число (07.10.2026). Добавлено осознанно — сторож состава
+        // покраснел и потребовал решения, для этого он и писался.
+        "checkoutStartNoSignal",
         "checkoutStartOurs",
         "checkoutStartSessions",
         "checkoutStartSessionsOurs",

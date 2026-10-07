@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 
+import { меткаДляПерехода } from "@/lib/shortEntry";
+
 import type { Metadata } from "next";
 
 // Метаданные обязательны у каждой публичной страницы (сторож pageMetadata), и у
@@ -35,8 +37,14 @@ export const metadata: Metadata = {
  * Исключение на ветвление есть ровно у /example, и оно оплачено поведенческим
  * сторожем (см. shortChannelUrls.guard).
  */
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
-export default function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ c?: string | string[] }>;
+}) {
+  const метка = меткаДляПерехода((await searchParams).c, "meta");
+  if (метка !== "meta") redirect(`/longevity?c=${метка}`);
   redirect("/longevity?c=meta");
 }

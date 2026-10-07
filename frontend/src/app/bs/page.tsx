@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 
+import { меткаДляПерехода } from "@/lib/shortEntry";
+
 import type { Metadata } from "next";
 
 // Метаданные обязательны у каждой публичной страницы (сторож pageMetadata), и
@@ -15,8 +17,14 @@ export const metadata: Metadata = {
 // а страницы-входа к ней не было — сторож everyChannelHasShortEntry краснел на
 // выкаченном коде, и ссылка из объявления дала бы 404. Устройство то же, что
 // у /ig: никакой логики, только перенаправление с меткой.
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
-export default function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ c?: string | string[] }>;
+}) {
+  const метка = меткаДляПерехода((await searchParams).c, "bs");
+  if (метка !== "bs") redirect(`/go?c=${метка}`);
   redirect("/go?c=bs");
 }

@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 
+import { меткаДляПерехода } from "@/lib/shortEntry";
+
 import type { Metadata } from "next";
 
 // Метаданные обязательны у каждой публичной страницы (сторож pageMetadata), и
@@ -26,8 +28,14 @@ export const metadata: Metadata = {
 // direct. То есть площадка работает, а по цифрам этого не видно.
 //
 // Никакой логики здесь нет и быть не должно — только перенаправление.
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
-export default function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ c?: string | string[] }>;
+}) {
+  const метка = меткаДляПерехода((await searchParams).c, "th");
+  if (метка !== "th") redirect(`/go?c=${метка}`);
   redirect("/go?c=th");
 }

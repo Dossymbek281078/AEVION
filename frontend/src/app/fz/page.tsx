@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 
+import { меткаДляПерехода } from "@/lib/shortEntry";
+
 import type { Metadata } from "next";
 
 // Метаданные обязательны у каждой публичной страницы (сторож pageMetadata), и
@@ -25,9 +27,13 @@ export const metadata: Metadata = {
 // делает Product Hunt.
 //
 // Особенность этой площадки: бесплатная очередь — рассмотрение до 30 дней; площадка просит обратную ссылку на себя с нашего сайта (решение основателя).
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
-export default function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ c?: string | string[] }>;
+}) {
   /*
    * Ведём на СТРАНИЦУ ПРОДУКТА, а не на общий вход, — так же, как /ph и /un: в
    * каталоге стоит карточка DevHub, и человек должен попасть на то, что он там
@@ -42,5 +48,7 @@ export default function Page() {
    * «начал генерацию» (событие feature_use), а публичная воронка его не отдаёт.
    * Если каталог даст ту же картину, вопрос будет не к перенаправлению.
    */
+  const метка = меткаДляПерехода((await searchParams).c, "fz");
+  if (метка !== "fz") redirect(`/en/devhub?c=${метка}`);
   redirect("/en/devhub?c=fz");
 }

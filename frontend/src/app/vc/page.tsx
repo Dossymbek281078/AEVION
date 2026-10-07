@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 
+import { меткаДляПерехода } from "@/lib/shortEntry";
+
 import type { Metadata } from "next";
 
 // Метаданные обязательны у каждой публичной страницы (сторож pageMetadata), и
@@ -23,11 +25,17 @@ export const metadata: Metadata = {
 // Вторая половина того же дефекта: метка в каталоге есть, а короткого адреса
 // нет — тогда ссылка из объявления даёт 404. Сторож
 // everyChannelHasShortEntry.test.ts поймал у меня именно это.
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
-export default function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ c?: string | string[] }>;
+}) {
   // Ведём на СТРАНИЦУ ПРОДУКТА, а не на общий вход: объявление — про DevHub,
   // и человек из него должен попасть туда, о чём объявление. Страница читает
   // ?c= (channelFrom) и доносит метку до кассы, как /go.
+  const метка = меткаДляПерехода((await searchParams).c, "vc");
+  if (метка !== "vc") redirect(`/devhub?c=${метка}`);
   redirect("/devhub?c=vc");
 }

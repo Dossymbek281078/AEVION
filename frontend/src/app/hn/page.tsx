@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 
+import { меткаДляПерехода } from "@/lib/shortEntry";
+
 import type { Metadata } from "next";
 
 // Метаданные обязательны у каждой публичной страницы (сторож pageMetadata), и
@@ -23,11 +25,17 @@ export const metadata: Metadata = {
 // Адрес ставится в тексте Show HN и в комментариях под ним. Он короткий (его набирают руками с телефона) и
 // сам доставляет метку. Никакой логики здесь нет и быть не должно — только
 // перенаправление.
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
-export default function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ c?: string | string[] }>;
+}) {
   // Ведём на СТРАНИЦУ ПРОДУКТА, а не на общий вход: объявление Show HN — про DevHub («describe an app in plain words»), и вести его надо на страницу DevHub, а не на общий вход «что почитать и попробовать».
   // Проверено 08.09.2026 — эта страница читает ?c= (channelFrom) и доносит
   // метку до кассы, как /go.
+  const метка = меткаДляПерехода((await searchParams).c, "hn");
+  if (метка !== "hn") redirect(`/en/devhub?c=${метка}`);
   redirect("/en/devhub?c=hn");
 }

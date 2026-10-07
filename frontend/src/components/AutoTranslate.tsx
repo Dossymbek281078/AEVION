@@ -510,6 +510,9 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
     // Set once the canary has been answered; set `serviceLies` when it was
     // answered wrongly, which stops every later flush.
     let canaryChecked = false;
+    // Сказать об отказе ОДИН раз за сессию: журнал, забитый одинаковыми
+    // записями, перестают читать (тот же довод, что у канарейки).
+    let degradedSaid = false;
     let serviceLies = false;
     // Serialize network flushes: only one /translate request in flight at a
     // time. Concurrent batches (observer + timer firing together) were
@@ -634,7 +637,30 @@ export function AutoTranslate({ children, observe = true }: { children: React.Re
           body: JSON.stringify({ target: lang, texts: withCanary }),
         });
         if (r.ok) {
-          const data = (await r.json()) as { translations?: string[] };
+          const data = (await r.json()) as {
+            translations?: string[];
+            degraded?: boolean;
+            reason?: string;
+          };
+          /*
+           * 🔴 Признак отказа ЧИТАЕТСЯ, а не выбрасывается (07.10.2026).
+           * Сервис возвращает `degraded: true` и причину, когда перевод не
+           * удался и назад пришли ИСХОДНЫЕ строки. Раньше это поле не читал
+           * никто: посетитель английской страницы видел русский текст, и
+           * ничто — ни экран, ни журнал — об этом не говорило.
+           * Канарейка ниже ловит другое: службу, которая ВЫДУМЫВАЕТ текст.
+           * Честный отказ она пропускает, потому что исходная строка
+           * возвращается неизменной, а это законный ответ для имён брендов.
+           */
+          if (data.degraded && !degradedSaid) {
+            degradedSaid = true;
+            console.warn(
+              `[AutoTranslate] translation degraded: the service returned source text ` +
+              `instead of "${lang}"${data.reason ? ` (${data.reason})` : ""}. ` +
+              `Visitors see untranslated captions until it recovers. ` +
+              `Check GET /api/i18n/health (status, deeplQuotaCooldown).`,
+            );
+          }
           let trs = data.translations || [];
           if (!canaryChecked) {
             canaryChecked = true;

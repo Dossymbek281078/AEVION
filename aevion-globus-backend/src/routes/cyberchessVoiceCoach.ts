@@ -37,6 +37,8 @@ import { createInMemoryRateLimiter } from '../lib/rateLimit/inMemoryWindow';
 import { clientIp, rateLimit } from '../lib/rateLimit';
 import { isAnonymousRequest } from '../lib/aiInputBudget';
 import { учестьДействие, отказПоНорме } from '../lib/freeActionQuota';
+import { проверитьElevenLabs, этоОк } from '../lib/providerSpendCheck';
+import { noteProviderFailure, noteProviderSuccess } from '../lib/providerHealth';
 import { createHash } from 'crypto';
 import { makeServiceCapture } from '../lib/sentry/platform';
 
@@ -521,6 +523,32 @@ router.post('/tts', anonVoiceTtsCeiling, async (req: Request, res: Response) => 
     });
   }
 
+  /*
+   * 🔴 06.10.2026: СПРАШИВАЕМ ДЕНЬГИ ДО ПЛАТНОГО ВЫЗОВА.
+   *
+   * Прежде коуч звал ElevenLabs слепо, а при отказе отвечал
+   * `elevenlabs_error` с кодом поставщика и `reason: upstream_error`. Снаружи это
+   * неотличимо от нашей поломки, и главное — мы платили за вызов, который заведомо
+   * не выполнится. У ElevenLabs остаток знаков виден в БЕСПЛАТНОЙ ручке подписки,
+   * и исчерпанный пакет приходит с HTTP 200: именно поэтому разбор там свой.
+   *
+   * Отказ даём 503 намеренно: кончившиеся знаки — НАША беда, а не ошибка запроса
+   * (§15: 4xx отвечает про запрос). И отмечаем в providerHealth, иначе возможность
+   * продолжала бы числиться живой, пока о неё не обожжётся человек.
+   */
+  const деньгиГолоса = await проверитьElevenLabs();
+  if (!этоОк(деньгиГолоса.состояние)) {
+    noteProviderFailure('audio_tts', деньгиГолоса.detail);
+    return res.status(503).json({
+      error: 'voice_unavailable',
+      state: деньгиГолоса.состояние,
+      reason: деньгиГолоса.detail,
+      message:
+        'Голос сейчас недоступен — это на нашей стороне, а не ошибка запроса. ' +
+        'Текст ответа тренера приходит обычным путём и без озвучки.',
+    });
+  }
+
   const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
   if (!text) {
     return res.status(400).json({ error: 'missing_text' });
@@ -570,6 +598,7 @@ router.post('/tts', anonVoiceTtsCeiling, async (req: Request, res: Response) => 
 
     if (!upstream.ok) {
       const errText = await upstream.text().catch(() => '');
+      noteProviderFailure('audio_tts', `HTTP ${upstream.status} от поставщика голоса`);
       return res.status(upstream.status).json({
         error: 'elevenlabs_error',
         status: upstream.status,
@@ -580,6 +609,9 @@ router.post('/tts', anonVoiceTtsCeiling, async (req: Request, res: Response) => 
     const arrayBuf = await upstream.arrayBuffer();
     const buf = Buffer.from(arrayBuf);
     cacheSet(cacheKey, buf);
+    // Замыкаем петлю в обе стороны: успех снимает отметку отказа, иначе одна
+    // осечка держала бы возможность «подпорченной» до перезапуска.
+    noteProviderSuccess('audio_tts');
 
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('X-Cache', 'MISS');
@@ -599,6 +631,14 @@ async function generateTtsDataUrl(text: string, voiceId: string): Promise<string
   const apiKey = process.env.ELEVENLABS_API_KEY;
   if (!apiKey) return null;
   if (!text) return null;
+
+  // Второе место, где мы платим за голос. Молчаливый null здесь законен (трансляция
+  // идёт и без озвучки), но ПЛАТИТЬ впустую нельзя, а отметка обязана остаться.
+  const деньги = await проверитьElevenLabs();
+  if (!этоОк(деньги.состояние)) {
+    noteProviderFailure('audio_tts', деньги.detail);
+    return null;
+  }
 
   // Hard cap so we don't burn quota on giant comments — broadcasts are short anyway.
   const trimmed = text.length > 300 ? text.slice(0, 300) : text;

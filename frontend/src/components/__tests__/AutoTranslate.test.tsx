@@ -75,3 +75,67 @@ describe("AutoTranslate — fragmented text nodes", () => {
     });
   });
 });
+
+/*
+ * 🔴 Отказ перевода обязан быть ВИДЕН. Замер 07.10.2026: сервис возвращал
+ * `degraded: true` и причину, а этот компонент — единственный, кто ручку
+ * вызывает, — поля не читал вовсе. Посетитель английской страницы видел
+ * русский текст, и об этом не говорило ничто.
+ *
+ * Канарейка рядом ловит ДРУГОЕ — службу, которая выдумывает текст. Честный
+ * отказ она пропускает: исходная строка возвращается неизменной, а это
+ * законный ответ для имён брендов.
+ */
+describe("AutoTranslate — отказ перевода не молчит", () => {
+  beforeEach(async () => {
+    await loadDict("ru");
+    localStorage.clear();
+    localStorage.setItem("aevion_lang_v1", "ru");
+    // Отвечаем так, как отвечает ПРОД при отказе: исходные строки назад,
+    // плюс признание. Канарейку возвращаем как есть, иначе сработает
+    // другая защита и мы проверим не то.
+    global.fetch = vi.fn().mockImplementation(async (_u: unknown, init: { body?: string }) => {
+      const тело = JSON.parse(String(init?.body ?? "{}")) as { texts?: string[] };
+      return {
+        ok: true,
+        json: async () => ({
+          translations: тело.texts ?? [],
+          degraded: true,
+          reason: "DeepL quota exceeded; Claude failed",
+        }),
+      };
+    }) as unknown as typeof fetch;
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("говорит об отказе один раз и называет, куда смотреть", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await act(async () =>
+      render(
+        <I18nProvider>
+          <AutoTranslate observe={false}>
+            <span>Untranslated phrase for the degraded guard</span>
+          </AutoTranslate>
+        </I18nProvider>,
+      ),
+    );
+
+    await waitFor(() => {
+      const про = warn.mock.calls.filter((c) => String(c[0]).includes("degraded"));
+      expect(про.length, "об отказе перевода не сказано НИЧЕГО").toBeGreaterThan(0);
+    });
+
+    const про = warn.mock.calls.filter((c) => String(c[0]).includes("degraded"));
+    // знаменатель — видно, сколько раз сказано и что именно
+    process.stderr.write(
+      `[сторож] сообщений об отказе: ${про.length}${String.fromCharCode(10)}`,
+    );
+    expect(про.length, "сказано больше одного раза — журнал забьётся и его перестанут читать").toBe(1);
+    const текст = String(про[0][0]);
+    expect(текст, "сообщение не называет причину").toContain("quota");
+    expect(текст, "сообщение не говорит, куда смотреть").toContain("/api/i18n/health");
+  });
+});

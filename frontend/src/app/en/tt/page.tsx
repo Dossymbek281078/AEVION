@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 
+import { меткаДляПерехода } from "@/lib/shortEntry";
+
 import type { Metadata } from "next";
 
 // Метаданные обязательны у каждой публичной страницы (сторож pageMetadata), и
@@ -16,8 +18,14 @@ export const metadata: Metadata = {
 // /en/tt — короткий адрес для подписи под АНГЛИЙСКИМ роликом в TikTok.
 // Тот же приём, что у русского /tt: метка канала доезжает даже когда адрес
 // набирают руками, а не переходят по ссылке из шапки профиля.
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
-export default function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ c?: string | string[] }>;
+}) {
+  const метка = меткаДляПерехода((await searchParams).c, "tt");
+  if (метка !== "tt") redirect(`/en/go?c=${метка}`);
   redirect("/en/go?c=tt");
 }

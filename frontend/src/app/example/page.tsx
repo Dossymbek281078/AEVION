@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { channelFrom, keepChannel } from "@/lib/products";
+import { меткаДляПерехода } from "@/lib/shortEntry";
 
 import type { Metadata } from "next";
 
@@ -19,9 +19,14 @@ export const metadata: Metadata = {
  * легли бы в канал «example», и ответ на вопрос «дал ли ролик людей» пропал бы.
  * Это ровно тот класс, что потеря ?c=post: 37 постов мерили воронку в никуда.
  *
- * Поэтому: годная входящая метка СОХРАНЯЕТСЯ (общий помощник keepChannel, он же
- * проверяет метку по каталогу CHANNELS), а «example» ставится только когда
- * метки нет или она неизвестна.
+ * Поэтому: годная входящая метка СОХРАНЯЕТСЯ, а «example» ставится только
+ * когда метки нет или она неизвестна.
+ *
+ * 🔴 ПОПРАВЛЕНО 07.10.2026: сохранять было НЕДОСТАТОЧНО. Первая починка вела
+ * метку парой channelFrom + keepChannel, а эта пара НОРМАЛИЗУЕТ её до канала:
+ * `yt-devhub-opishi` превращалась в `yt`, и ключ поста терялся так же тихо,
+ * как раньше терялся канал. Теперь метка несётся ЦЕЛИКОМ общим помощником —
+ * тем же, что у остальных 30 коротких входов.
  *
  * ⚠️ Нижний вызов перенаправления записан ЛИТЕРАЛОМ намеренно: сторож
  * everyChannelHasShortEntry ищет в файле первое такое вхождение и разбирает его
@@ -41,15 +46,7 @@ export default async function Page({
 }: {
   searchParams: Promise<{ c?: string | string[] }>;
 }) {
-  const параметры = await searchParams;
-  /*
-   * ДВА ШАГА, и порядок не произволен. `?c=yt` — это КЛЮЧ, а keepChannel ждёт
-   * ЗНАЧЕНИЕ канала («youtube»): channelParam внутри него ищет по значениям.
-   * Поэтому сперва channelFrom (ключ → значение, мусор → null), и только потом
-   * keepChannel. Поймал на себе: без первого шага keepChannel молча возвращал
-   * путь без метки, и проверка показала потерю «yt».
-   */
-  const канал = channelFrom(параметры.c);
-  if (канал) redirect(keepChannel("/devhub", канал));
+  const метка = меткаДляПерехода((await searchParams).c, "example");
+  if (метка !== "example") redirect(`/devhub?c=${метка}`);
   redirect("/devhub?c=example");
 }

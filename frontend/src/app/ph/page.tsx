@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 
+import { меткаДляПерехода } from "@/lib/shortEntry";
+
 import type { Metadata } from "next";
 
 // Метаданные обязательны у каждой публичной страницы (сторож pageMetadata), и
@@ -23,11 +25,17 @@ export const metadata: Metadata = {
 // Адрес ставится в карточке продукта и в первом комментарии. Он короткий (его набирают руками с телефона) и
 // сам доставляет метку. Никакой логики здесь нет и быть не должно — только
 // перенаправление.
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
-export default function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ c?: string | string[] }>;
+}) {
   // Ведём на СТРАНИЦУ ПРОДУКТА, а не на общий вход: карточка Product Hunt — тот же продукт («Describe it. Get a deployed project»).
   // Проверено 08.09.2026 — эта страница читает ?c= (channelFrom) и доносит
   // метку до кассы, как /go.
+  const метка = меткаДляПерехода((await searchParams).c, "ph");
+  if (метка !== "ph") redirect(`/en/devhub?c=${метка}`);
   redirect("/en/devhub?c=ph");
 }

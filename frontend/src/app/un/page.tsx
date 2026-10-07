@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 
+import { меткаДляПерехода } from "@/lib/shortEntry";
+
 import type { Metadata } from "next";
 
 // Метаданные обязательны у каждой публичной страницы (сторож pageMetadata), и
@@ -23,9 +25,13 @@ export const metadata: Metadata = {
 // Метка заведена с двух сторон: `?c=un` в нашей ссылке и `?ref=uneed` в
 // REF_ALIASES — на случай, если каталог допишет свой параметр сам, как это
 // делает Product Hunt.
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
-export default function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ c?: string | string[] }>;
+}) {
   /*
    * Ведём на СТРАНИЦУ ПРОДУКТА, а не на общий вход, — так же, как /ph: в
    * каталоге стоит карточка DevHub («Describe it. Get a deployed project»), и
@@ -39,5 +45,7 @@ export default function Page() {
    * каталожная публика смотрит, а не покупает, — и это решается предложением,
    * а не перенаправлением.
    */
+  const метка = меткаДляПерехода((await searchParams).c, "un");
+  if (метка !== "un") redirect(`/en/devhub?c=${метка}`);
   redirect("/en/devhub?c=un");
 }

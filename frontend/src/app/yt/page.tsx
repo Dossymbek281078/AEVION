@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 
+import { меткаДляПерехода } from "@/lib/shortEntry";
+
 import type { Metadata } from "next";
 
 // Метаданные обязательны у каждой публичной страницы (сторож pageMetadata), и
@@ -24,8 +26,14 @@ export const metadata: Metadata = {
 // Короткий адрес решает обе задачи разом: его проще набрать с телефона, и он
 // сам доставляет метку. Никакой логики здесь нет и быть не должно — только
 // перенаправление.
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
-export default function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ c?: string | string[] }>;
+}) {
+  const метка = меткаДляПерехода((await searchParams).c, "yt");
+  if (метка !== "yt") redirect(`/go?c=${метка}`);
   redirect("/go?c=yt");
 }

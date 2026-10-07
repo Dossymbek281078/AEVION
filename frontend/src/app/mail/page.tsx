@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 
+import { меткаДляПерехода } from "@/lib/shortEntry";
+
 import type { Metadata } from "next";
 
 // Метаданные обязательны у каждой публичной страницы (сторож pageMetadata), и
@@ -19,8 +21,14 @@ export const metadata: Metadata = {
 // Короткий адрес нужен именно письму: он читается человеком, коротко набирается
 // и сам доносит метку. Следующие волны ставят `aevion.app/mail` вместо голого
 // адреса. Прошедшие 30 писем разметить уже нельзя — канал отрабатывает один раз.
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
-export default function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ c?: string | string[] }>;
+}) {
+  const метка = меткаДляПерехода((await searchParams).c, "mail");
+  if (метка !== "mail") redirect(`/bureau?c=${метка}`);
   redirect("/bureau?c=mail");
 }

@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 
+import { меткаДляПерехода } from "@/lib/shortEntry";
+
 import type { Metadata } from "next";
 
 // Метаданные обязательны у каждой публичной страницы, а у перенаправления
@@ -24,12 +26,18 @@ export const metadata: Metadata = {
 // каталоге, то есть одной сущности под двумя именами.
 //
 // Никакой логики здесь нет и быть не должно: только перенаправление.
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
-export default function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ c?: string | string[] }>;
+}) {
   // Ведём на страницу продукта, а не на общий вход: в каталоге мы заявлены
   // как DevHub, и человек идёт смотреть именно его. Английская версия —
   // потому что каталог англоязычный. Страница читает ?c= (channelFrom) и
   // доносит метку до кассы.
+  const метка = меткаДляПерехода((await searchParams).c, "launchnest");
+  if (метка !== "launchnest") redirect(`/en/devhub?c=${метка}`);
   redirect("/en/devhub?c=launchnest");
 }

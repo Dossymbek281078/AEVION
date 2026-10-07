@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 
+import { меткаДляПерехода } from "@/lib/shortEntry";
+
 import type { Metadata } from "next";
 
 // Метаданные обязательны у каждой публичной страницы (сторож pageMetadata), и
@@ -19,8 +21,14 @@ export const metadata: Metadata = {
 //
 // Страница ничего не решает — только доносит СВОЮ метку до целевой страницы,
 // которая читает ?c= через channelFrom.
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
-export default function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ c?: string | string[] }>;
+}) {
+  const метка = меткаДляПерехода((await searchParams).c, "ads-multichat");
+  if (метка !== "ads-multichat") redirect(`/multichat-engine?c=${метка}`);
   redirect("/multichat-engine?c=ads-multichat");
 }

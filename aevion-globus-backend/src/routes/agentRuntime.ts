@@ -17,7 +17,7 @@ import { Router } from "express";
 import { runAgentLoop } from "../services/agentRuntime/loop";
 import type { ExecTool, ToolCall } from "../services/agentRuntime/loop";
 import { TOOL_SPECS, makeExecutor } from "../services/agentRuntime/tools";
-import { makeAnthropicCallModel } from "../services/agentRuntime/anthropicClient";
+import { makeAnthropicCallModel, причинаОтказаАгента } from "../services/agentRuntime/anthropicClient";
 import { parseMcpConfig, loadMcpBridge } from "../services/agentRuntime/mcpBridge";
 
 export const agentRuntimeRouter = Router();
@@ -146,7 +146,13 @@ agentRuntimeRouter.post("/run", generationLimit("agentruntime_run"), async (req,
       mcpServers: bridge ? bridge.servers : [],
     });
   } catch (e) {
-    res.status(502).json({ ok: false, error: (e as Error).message });
+    // Человеку — причина словами, нам — сырой текст поставщика. Прежде сюда
+    // уходило «Anthropic error 429: {...}»: чужая диагностика вместо ответа.
+    res.status(502).json({
+      ok: false,
+      error: причинаОтказаАгента(e),
+      detail: String((e as Error)?.message ?? "").slice(0, 200),
+    });
   }
 });
 
@@ -181,6 +187,12 @@ agentRuntimeRouter.get("/mcp-selftest", async (_req, res) => {
       sampleResult: sample,
     });
   } catch (e) {
-    res.status(502).json({ ok: false, error: (e as Error).message });
+    // Человеку — причина словами, нам — сырой текст поставщика. Прежде сюда
+    // уходило «Anthropic error 429: {...}»: чужая диагностика вместо ответа.
+    res.status(502).json({
+      ok: false,
+      error: причинаОтказаАгента(e),
+      detail: String((e as Error)?.message ?? "").slice(0, 200),
+    });
   }
 });

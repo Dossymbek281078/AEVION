@@ -69,13 +69,20 @@ describe("плашка называет то, что откроется", () => 
   });
 
   it.each([
-    ["src/app/devhub/page.tsx", "PRICE_PER_MONTH"],
-    ["src/app/devhub/[id]/page.tsx", "PRICE_PER_MONTH"],
+    ["src/app/devhub/page.tsx", "pricePerMonth"],
+    ["src/app/devhub/[id]/page.tsx", "pricePerMonth"],
   ])("%s берёт цену из данных, а не числом", (путь, имя) => {
     const код = readFileSync(join(process.cwd(), ...путь.split("/")), "utf8");
-    expect(код, `${путь}: цена в кнопке не вычисляется из таблицы цен`).toContain(
-      `const ${имя} = termPricePerMonth(STUDIO_PRO.priceUsd, СРОК_ПО_УМОЛЧАНИЮ)`,
+    /*
+     * Форма проверяется ПО СМЫСЛУ, а не дословно: 07.10 цена переехала из
+     * константы модуля в функцию, принимающую товар (STUDIO_PRO может быть
+     * undefined, и проверка типов справедливо требовала это учесть). Важно одно:
+     * цена считается termPricePerMonth от цены ИЗ КАТАЛОГА и общего срока.
+     */
+    expect(код, `${путь}: цена в кнопке не вычисляется из таблицы цен`).toMatch(
+      /termPricePerMonth\([^)]*priceUsd, СРОК_ПО_УМОЛЧАНИЮ\)/,
     );
+    expect(код, `${путь}: в разметке не видно расчёта цены`).toMatch(new RegExp(имя));
     // И прямое число в подписи — запрещено: оно разойдётся при смене цены.
     expect(код, `${путь}: в подписи кнопки стоит число вместо расчёта`).not.toMatch(
       /pro\.upgrade"\)\} — \{?`?\$\$?\{?\d/,

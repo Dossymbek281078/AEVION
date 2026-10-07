@@ -57,9 +57,24 @@ const STUDIO_PRO = productById("devhub");
    Покупатель читал одну ступень, а открывал другую. Сторож
    devhub/__tests__/moneyPanelNamesWhatOpens.guard.test.ts сверяет подпись с
    таблицей цен. */
-const PRICE_PER_MONTH = termPricePerMonth(STUDIO_PRO.priceUsd, СРОК_ПО_УМОЛЧАНИЮ);
+/* Цена и срок — ИЗ ДАННЫХ, а не из подписи. 07.10.2026: кнопка говорила
+   «Оформить Pro — $200/мес», а по данным «pro» это 6 месяцев с множителем 0.75,
+   то есть $150/мес и $900 всего; $200/мес — это Lite (1 мес), и именно Lite
+   открывается по ссылке.
+
+   🔴 ФУНКЦИИ, А НЕ КОНСТАНТЫ — поправка 07.10 по находке сборщика волны.
+   Первая редакция считала цену на уровне модуля от STUDIO_PRO.priceUsd, а
+   STUDIO_PRO — это productById(), которая МОЖЕТ вернуть undefined (запись
+   пропала из каталога). Проверка типов дала 4 ошибки TS18048, и это не
+   придирка: ветка рядом уже умеет жить без записи — она показывает
+   «pro.unavailable» вместо кнопки. Ноль подставлять нельзя (нарисуется
+   покупателю как «$0»), поэтому числа считаются ТАМ, где запись уже проверена:
+   функция принимает товар, и внутри ветви типы сходятся сами. */
+const pricePerMonth = (товар: { priceUsd: number }) =>
+  termPricePerMonth(товар.priceUsd, СРОК_ПО_УМОЛЧАНИЮ);
+const termTotalFor = (товар: { priceUsd: number }) =>
+  termTotal(товар.priceUsd, СРОК_ПО_УМОЛЧАНИЮ);
 const TERM_MONTHS_SHOWN = TERM_MONTHS[СРОК_ПО_УМОЛЧАНИЮ];
-const TERM_TOTAL_SHOWN = termTotal(STUDIO_PRO.priceUsd, СРОК_ПО_УМОЛЧАНИЮ);
 
 /** Вкладки рабочего окна. Список один — из него же берутся подписи. */
 const VKLADKI = ["chat", "visual", "agent", "templates", "github", "media", "env", "deployments", "settings"] as const;
@@ -6867,14 +6882,14 @@ if (/Месячная норма исчерпана|Месячный лимит[
                 whiteSpace: "nowrap",
               }}
             >
-              {tPro("pro.upgrade")} — ${PRICE_PER_MONTH}{tPro("pro.perMonth")}
+              {tPro("pro.upgrade")} — ${pricePerMonth(STUDIO_PRO)}{tPro("pro.perMonth")}
             </a>
           )}
           {/* Срок и итог рядом с кнопкой: без них «$150/мес» не говорит, за
               сколько месяцев спишут. Числа считаются из таблицы цен. */}
           {STUDIO_PRO && (
             <span style={{ fontSize: 11, color: "rgba(255,255,255,0.85)" }}>
-              {tPro("pro.termNote").replace("{m}", String(TERM_MONTHS_SHOWN)).replace("{t}", `$${TERM_TOTAL_SHOWN}`)}
+              {tPro("pro.termNote").replace("{m}", String(TERM_MONTHS_SHOWN)).replace("{t}", `$${termTotalFor(STUDIO_PRO)}`)}
             </span>
           )}
           <Link href="/devhub/link" style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, textDecoration: "underline", whiteSpace: "nowrap" }}>

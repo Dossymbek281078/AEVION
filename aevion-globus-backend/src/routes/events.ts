@@ -530,6 +530,8 @@ export interface РазрезВоронки {
     triedOurs: number;
     engaged: number;
     engagedOurs: number;
+    /** Начала оплаты без единого признака живого человека. См. byChannel. */
+    checkoutStartNoSignal: number;
   };
   /** Словами: какая единица у каждого числа в `total`. */
   totalUnits: string;
@@ -898,6 +900,7 @@ export function разрезВоронки(
     triedOurs: 0,
     engaged: 0,
     engagedOurs: 0,
+    checkoutStartNoSignal: 0,
   };
 
   /** Пара «канал + сессия»: чтобы визит считался один раз, как в итоге. */
@@ -1254,6 +1257,7 @@ export function разрезВоронки(
   for (const з of заходы.values()) {
     if (!з.начал) continue;
     if (!з.доЦен && !з.внимателен && з.путей.size <= 1) {
+      итог.checkoutStartNoSignal += 1;
       const кс = byChannel[з.канал];
       if (кс) кс.checkoutStartNoSignal += 1;
     }
@@ -2776,6 +2780,15 @@ eventsRouter.get("/day", (req, res) => {
       всего: и.checkoutStart,
       наши: и.checkoutStartOurs,
       живые: и.checkoutStart - и.checkoutStartOurs,
+      /*
+       * 🔴 РЯДОМ, А НЕ ОТДЕЛЬНО. Сколько из этих начал оплаты не имеют ни
+       * одного признака живого человека: не смотрели цены, не задержались, не
+       * открыли второй адрес. Повод 07.10.2026: два машинных начала у youtube
+       * в отчёте читались бы как два покупателя, а отсеять их я не вправе —
+       * доказать машину публичными данными нельзя. Поле стоит В ТОЙ ЖЕ строке,
+       * чтобы число нельзя было прочитать, не увидев оговорки.
+       */
+      безПризнаковЖизни: и.checkoutStartNoSignal,
     },
     /*
      * 🔴 День раньше появления механизма — `null`, а не ноль.

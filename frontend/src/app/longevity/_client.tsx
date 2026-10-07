@@ -218,6 +218,19 @@ export default function LongevityClient({
         <HealthDisclaimer />
 
         {/*
+          Ссылка-якорь в ПЕРВЫЙ экран, добавлена 07.10.2026.
+          Замер того дня (прод, Chrome 154, окно 390x844): кнопка бесплатного
+          плана лежит на y=2042 при высоте экрана 844, то есть на ТРЕТЬЕМ экране,
+          а на страницу ведут 11 роликов с обещанием бесплатного протокола.
+          Человек проходил два экрана платных предложений прежде чем увидеть то,
+          за чем пришёл. Порядок блоков (решение основателя 01.10: касса первой)
+          при этом НЕ меняется — меняется только видимость обещанного.
+        */}
+        <a href="#besplatno" style={styles.freeHint}>
+          Бесплатный протокол — ниже ↓
+        </a>
+
+        {/*
           Платное предложение в ПЕРВЫЙ экран — см. комментарий у КНИГА.
           Якорь `kniga` стоит на товаре за $9.99 намеренно: реклама ведёт на
           /longevity?c=ig-ad-bookN#kniga, а на странице четыре разные цены
@@ -290,7 +303,9 @@ export default function LongevityClient({
         </p>
 
         {/* Step 1+2: assessment */}
-        <section style={styles.card}>
+        {/* id ведёт сюда ссылка из первого экрана; offerAnchor даёт отступ,
+            иначе липкая шапка накрывает заголовок раздела. */}
+        <section id="besplatno" style={{ ...styles.card, ...styles.offerAnchor }}>
           <h2 style={styles.h2}>Шаг 1–2 · Твоя оценка и план</h2>
           <p style={styles.sub}>Введи, что знаешь (можно не всё), отметь противопоказания — получишь подсвеченные маркеры и персональный стек.</p>
           <div style={styles.grid}>
@@ -638,6 +653,10 @@ const styles: Record<string, React.CSSProperties> = {
    * строку счётчиков; проверено замером после правки, а не на глаз.
    */
   offerAnchor: { scrollMarginTop: 96 },
+  freeHint: {
+    display: "inline-block", marginTop: 12, color: "#5eead4",
+    textDecoration: "underline", fontSize: 15, fontWeight: 600,
+  } as React.CSSProperties,
   /*
    * Плотная карточка для ПЕРВОГО экрана. Не косметика — арифметика.
    *

@@ -86,13 +86,23 @@ export function SiteHeader() {
         border: 1px solid rgba(15,23,42,0.12); background: #fff; color: #0f172a;
       }
       .aev-hdr-menu > summary::-webkit-details-marker { display: none; }
+      /* 🔴 display панели ОБЯЗАН стоять под [open]. Закрытый <details> прячет
+         содержимое правилом СВОЕГО стиля (details:not([open]) > *:not(summary)),
+         а авторское правило сильнее браузерного — поэтому «display: grid» прямо
+         здесь не скрывалось никогда и держало меню раскрытым на телефоне.
+         Замер 07.10 на проде ee0b97cf9cf7, Playwright 390x844: 13 из 13 пунктов
+         с ненулевым прямоугольником, низ последнего y=464 — 464 из 844 первого
+         экрана съедало меню, которого человек не открывал. На 1024 утечки не
+         видно по другой причине: базовое .aev-hdr-menu { display: none } прячет
+         сам details, а медиазапрос ниже его показывает. */
       .aev-hdr-menu-panel {
         position: absolute; right: 12px; left: 12px; margin-top: 8px;
-        display: grid; grid-template-columns: 1fr 1fr; gap: 2px;
+        display: none; grid-template-columns: 1fr 1fr; gap: 2px;
         padding: 8px; border-radius: 14px; background: #fff;
         border: 1px solid rgba(15,23,42,0.12);
         box-shadow: 0 12px 30px rgba(15,23,42,0.14); z-index: 60;
       }
+      .aev-hdr-menu[open] > .aev-hdr-menu-panel { display: grid; }
       @media (max-width: 700px) {
         .aev-hdr-menu { display: block; }
         .aev-hdr-full { display: none !important; }

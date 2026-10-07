@@ -5,6 +5,15 @@ import { productById, channelFrom, channelFromRef, withChannel, keepChannel } fr
 import { fromPricePerMonth } from "@/lib/termPricing";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 
+/* Предел бесплатных выкаток. Число ДУБЛИРУЕТ бэкенд (TIER_LIMITS.free.deploy), и
+   это осознанный второй ответ: посадочная статическая, ручку состояния на ней
+   держать дороже, чем сторожа. Расхождение ловит
+   src/app/en/devhub/__tests__/freeCardPromisesALiveAddress.guard.test.ts — он
+   читает ТАБЛИЦУ ТАРИФОВ бэкенда и сверяет с отрисованным текстом карточки.
+   08.09.2026 такое же дублирование в /studio разошлось в обе стороны сразу
+   (Free обещал 100k знаков озвучки при пределе 10k) — потому и сторож. */
+const FREE_DEPLOYS_PER_MONTH = 10;
+
 // /en/devhub — англоязычная посадочная DevHub под западные каналы
 // (Show HN, Product Hunt, EN-письма).
 //
@@ -108,11 +117,23 @@ export default async function EnDevhubPage({
           <a href={keepChannel("/devhub", channel)} style={styles.card}>
             <div style={styles.cardKicker}>free · no account required</div>
             <div style={styles.cardTitle}>Open DevHub</div>
+            {/* 🔴 ТЕКСТ ЕДИНСТВЕННОЙ БЕСПЛАТНОЙ КНОПКИ, правка 07.10.2026.
+                Здесь стоял абзац про язык интерфейса на 123 знака — 46 % всего
+                текста карточки (замер: 265 знаков всего). То есть почти половина
+                самого дорогого места страницы отвечала на вопрос, который до
+                первой попытки не возникает, а СИЛЬНОЕ обещание заголовка
+                («Get a deployed project») в кнопку не попадало вовсе: гостю
+                обещали только генерацию.
+                Выкатка гостю действительно доступна — замер живого прода 06.10:
+                deploy → живой адрес отвечает 200. Предел ниже взят ИЗ КОДА
+                (TIER_LIMITS.free.deploy), и сторож freeCardPromisesALiveAddress
+                краснеет, если число разойдётся с бэкендом или если сюда вернётся
+                абзац про язык. */}
             <p style={styles.cardNote}>
               Guest mode with a real generation allowance. Your work transfers
-              to your account when you sign up. The interface follows your
-              browser language — English out of the box, with a switcher in
-              the header for Russian and Kazakh.
+              to your account when you sign up. Publishing is included: every
+              project gets a live address you can open and share — up to
+              {" "}{FREE_DEPLOYS_PER_MONTH} deploys a month on the free tier.
             </p>
             <div style={styles.cardFoot}>
               <span style={styles.cardPrice}>$0</span>

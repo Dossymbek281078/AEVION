@@ -5401,7 +5401,7 @@ const ru: Record<string, string> = {
   "primer.hidden": "Концепция скрыта.",
   "primer.investor.b1": "Client-side суверенитет: цели, recurring, подарки — всё на устройстве. Никакого vendor lock-in.",
   "primer.investor.b2": "Regulator-ready by design: QSign HMAC аудит, Shamir SSS 2-of-3, для v1 не нужна кредитная лицензия.",
-  "primer.investor.b3": "Trust Graph — растущий moat: каждый из 42 продуктов AEVION добавляет фактор Trust.",
+  "primer.investor.b3": "Trust Graph — растущий moat: каждый из 44 продуктов AEVION добавляет фактор Trust.",
   "primer.investor.headline": "Capital-light финтех с ecosystem moat",
   "primer.showAgain": "Показать снова",
   "primer.title.a": "Банк, который зарабатывает",

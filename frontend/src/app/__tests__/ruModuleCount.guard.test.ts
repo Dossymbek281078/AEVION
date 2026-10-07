@@ -20,6 +20,7 @@ import path from "node:path";
  */
 const FRONTEND_ROOT = path.resolve(__dirname, "../../..");
 const RU = readFileSync(path.join(FRONTEND_ROOT, "src/lib/i18n-lang/ru.ts"), "utf8");
+const KK = readFileSync(path.join(FRONTEND_ROOT, "src/lib/i18n-lang/kk.ts"), "utf8");
 
 /** Нужна ли после числа форма единственного числа. */
 function единственное(n: number): boolean {
@@ -33,6 +34,12 @@ const ФРАЗЫ: Array<{ ключ: string; ед: (n: number) => string; мн: (
   { ключ: "pricing.glossary.def.saas", ед: (n) => `SaaS с ${n} модулем`, мн: (n) => `SaaS с ${n} модулями` },
   { ключ: "pricing.roadmap.subtitle", ед: (n) => `по всем ${n} модулю`, мн: (n) => `по всем ${n} модулям` },
   { ключ: "primer.creator.b3", ед: (n) => `в ${n} модуле AEVION`, мн: (n) => `в ${n} модулях AEVION` },
+  // 🔴 07.10.2026: ключ выпал из списка и отстал молча — en говорил 44,
+  // ru и kk остались на 42. Нашло окно 89 с контролем на СОСЕДНЕМ ключе
+  // primer.creator.b3 (там 44 во всех трёх), то есть прибор был исправен,
+  // а список — нет. Поверхность инвесторская: русская версия противоречила
+  // английской на той странице, с которой идём к покупателям.
+  { ключ: "primer.investor.b3", ед: (n) => `каждый из ${n} продукта AEVION`, мн: (n) => `каждый из ${n} продуктов AEVION` },
   { ключ: "tip.trustTier", ед: (n) => `в ${n} модуле AEVION`, мн: (n) => `в ${n} модулях AEVION` },
 ];
 
@@ -69,5 +76,35 @@ describe("русское число модулей согласовано со �
         `${ф.ключ}: при ${MODULE_NODES} стоит неверная форма «${ф[лишняя](MODULE_NODES)}»`,
       ).toBe(false);
     }
+  });
+  /*
+   * 🔴 Знаменатель этого сторожа был ОДИН язык. Он читал только ru.ts, поэтому
+   * казахский отставал молча: у primer.investor.b3 en говорил 44, а ru и kk —
+   * 42, и покраснеть было нечему. Форму казахского слова здесь не проверяем
+   * (это отдельное знание), но ЧИСЛО обязано быть тем же, что в реестре, —
+   * расхождение цифры между языками видно покупателю без знания грамматики.
+   */
+  it("казахский словарь несёт то же число, что реестр", async () => {
+    const { MODULE_NODES } = await import("@/data/pitchFacts");
+    let проверено = 0;
+    for (const ф of ФРАЗЫ) {
+      const метка = `"${ф.ключ}":`;
+      const i = KK.indexOf(метка);
+      if (i < 0) continue; // ключа в kk может не быть — это не дефект числа
+      const s = KK.slice(i, KK.indexOf(String.fromCharCode(10), i));
+      проверено += 1;
+      expect(
+        s.includes(String(MODULE_NODES)),
+        `${ф.ключ}: в kk.ts нет числа ${MODULE_NODES}. Строка: ${s.slice(0, 160)}`,
+      ).toBe(true);
+      const чужие = [...s.matchAll(/(3[0-9]|4[0-9]|5[0-9])/g)]
+        .map((m) => Number(m[1]))
+        .filter((n) => n !== MODULE_NODES);
+      expect(
+        чужие,
+        `${ф.ключ}: в kk.ts рядом стоит отставшее число ${чужие.join(", ")}`,
+      ).toEqual([]);
+    }
+    expect(проверено, "ни один ключ не найден в kk.ts — сторож ослеп").toBeGreaterThan(0);
   });
 });

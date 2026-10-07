@@ -5401,7 +5401,7 @@ const kk: Record<string, string> = {
   "primer.hidden": "Концепция жасырылды.",
   "primer.investor.b1": "Client-side егемендік: мақсаттар, recurring, сыйлықтар — бәрі құрылғыда. Vendor lock-in жоқ.",
   "primer.investor.b2": "Regulator-ready by design: QSign HMAC аудит, Shamir SSS 2-of-3, v1 үшін несие лицензиясы қажет емес.",
-  "primer.investor.b3": "Trust Graph — өсіп келе жатқан moat: AEVION-ның 42 өнімінің әрқайсысы Trust факторын қосады.",
+  "primer.investor.b3": "Trust Graph — өсіп келе жатқан moat: AEVION-ның 44 өнімінің әрқайсысы Trust факторын қосады.",
   "primer.investor.headline": "Capital-light финтех ecosystem moat-пен",
   "primer.showAgain": "Қайта көрсету",
   "primer.title.a": "Сіздермен",

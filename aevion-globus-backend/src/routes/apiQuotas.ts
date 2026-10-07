@@ -52,7 +52,7 @@ const TIERS = [
     priceUsdMonthly: 49,
     monthlyCalls: 100_000,
     rateLimit: { perMinute: 500 },
-    sla: { uptime: null, supportResponseHours: 48, channel: "email" },
+    sla: { uptime: null, supportResponseHours: null, channel: "email" },
     commercialUse: true,
     perCallDiscount: 0.15,
     keyLimit: 5,
@@ -64,7 +64,7 @@ const TIERS = [
     priceUsdMonthly: 249,
     monthlyCalls: 1_000_000,
     rateLimit: { perMinute: 2000 },
-    sla: { uptime: null, supportResponseHours: 24, channel: "email+slack" },
+    sla: { uptime: null, supportResponseHours: null, channel: "email+slack" },
     commercialUse: true,
     perCallDiscount: 0.30,
     keyLimit: 10,
@@ -76,7 +76,7 @@ const TIERS = [
     priceUsdMonthly: null,
     monthlyCalls: null,
     rateLimit: { perMinute: null },
-    sla: { uptime: null, supportResponseHours: 4, channel: "dedicated-rep" },
+    sla: { uptime: null, supportResponseHours: null, channel: "dedicated-rep" },
     commercialUse: true,
     perCallDiscount: 0.50,
     keyLimit: null,
@@ -150,6 +150,11 @@ apiQuotasRouter.get("/", (_req, res) => {
     publishedAt: PUBLISHED_AT,
     // Почему поле есть, а числа нет — см. комментарий у QUOTAS_VERSION.
     uptimeNote: "not guaranteed, no SLA at this time",
+    // 07.10.2026: сроки ответа 48 / 24 / 4 часа сняты по той же причине, что и
+    // доступность, — ни очереди обращений, ни приоритета, ни замера за ними
+    // нет. Поле оставлено null, чтобы интеграторы не сломались на исчезнувшем
+    // ключе; обещание срока не даётся вовсе.
+    supportResponseNote: "no guaranteed response time",
     docsUrl: "https://github.com/Dossymbek281078/AEVION/blob/main/docs/api/PUBLIC_API_QUOTAS.md",
     // Адрес, на который клиент API напишет, если упрётся в квоту. Стоял
     // api@aevion.app — у домена aevion.app НЕТ записи MX (перепроверено

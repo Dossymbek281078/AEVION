@@ -1,0 +1,143 @@
+import { describe, test, expect, beforeEach, afterEach } from "vitest";
+
+/**
+ * Панель состояния обязана заметить, что ИМЯ модели у поставщика исчезло.
+ *
+ * Повод 07.10.2026: проверки отвечали «ключ годен, деньги есть» — правда, при
+ * которой модуль всё равно падал. Из трёх объявленных моделей Gemini жива
+ * была одна, из семи слагов OpenRouter — две, и `healthai` с явным
+ * `provider: "gemini"` не работал вовсе.
+ *
+ * Сеть подменена: проверяется НАША логика сравнения и то, какой ответ увидит
+ * человек. Живость самих моделей — отдельный инструмент с ключами.
+ */
+
+process.env.GEMINI_API_KEY = "test-gemini";
+process.env.ANTHROPIC_API_KEY = "test-anthropic";
+process.env.OPENAI_API_KEY = "test-openai";
+
+const { проверитьИменаМоделей, сброситьКэшИмёнМоделей } = await import("../src/lib/объявленныеМодели");
+const { getProviders } = await import("../src/services/qcoreai/providers");
+
+/** Что РЕАЛЬНО объявлено в реестре — тест не повторяет список своими словами. */
+function объявленные(id: string): string[] {
+  return getProviders().find((p) => p.id === id)?.models ?? [];
+}
+
+function сетьОтвечает(поставщикиИхМодели: Record<string, string[] | "ошибка">) {
+  global.fetch = (async (url: string) => {
+    const u = String(url);
+    const кто = u.includes("generativelanguage")
+      ? "gemini"
+      : u.includes("api.openai.com")
+        ? "openai"
+        : u.includes("api.anthropic.com")
+          ? "anthropic"
+          : "openrouter";
+    const знач = поставщикиИхМодели[кто];
+    if (!знач || знач === "ошибка") {
+      return { ok: false, status: 500, json: async () => ({}), text: async () => "{}" };
+    }
+    const тело =
+      кто === "gemini"
+        ? { models: знач.map((n) => ({ name: "models/" + n })) }
+        : { data: знач.map((id) => ({ id })) };
+    return { ok: true, status: 200, json: async () => тело, text: async () => JSON.stringify(тело) };
+  }) as unknown as typeof fetch;
+}
+
+/** Все четверо отвечают ровно тем, что мы объявили. */
+function всёНаМесте(): Record<string, string[]> {
+  return {
+    gemini: объявленные("gemini"),
+    openai: объявленные("openai"),
+    anthropic: объявленные("anthropic"),
+    openrouter: объявленные("openrouter"),
+  };
+}
+
+describe("панель замечает пропавшее имя модели", () => {
+  // Кэш живёт 6 часов, поэтому между проверками его сбрасывают с обеих
+  // сторон: иначе вторая проверка судила бы ответ, посчитанный в первой.
+  beforeEach(() => сброситьКэшИмёнМоделей());
+  afterEach(() => сброситьКэшИмёнМоделей());
+
+  test("контроль: всё на месте → ok и названо число проверенных имён", async () => {
+    сетьОтвечает(всёНаМесте());
+    const r = await проверитьИменаМоделей();
+    expect(r.ok, "исправное состояние названо поломкой: " + r.detail).toBe(true);
+    expect(r.detail).toMatch(/проверено имён: [1-9]/);
+    expect(r.detail, "граница силы ответа не названа").toMatch(/слабее/);
+  });
+
+  test("🔴 модель исчезла у поставщика → НЕ ok и имя названо", async () => {
+    const все = всёНаМесте();
+    const пропавшая = все.gemini[0];
+    все.gemini = все.gemini.slice(1);
+    сетьОтвечает(все);
+    const r = await проверитьИменаМоделей();
+    expect(r.ok, "пропажа имени прошла как «всё хорошо»").toBe(false);
+    expect(r.detail).toContain("gemini/" + пропавшая);
+  });
+
+  test("🔴 поставщик не ответил → НЕ ok, и это сказано отдельно от пропажи", async () => {
+    // «Не смог спросить» и «нашёл пропажу» — разные беды, и лечатся по-разному.
+    const все: Record<string, string[] | "ошибка"> = { ...всёНаМесте(), anthropic: "ошибка" };
+    сетьОтвечает(все);
+    const r = await проверитьИменаМоделей();
+    expect(r.ok).toBe(false);
+    expect(r.detail).toMatch(/не спрошены:.*anthropic/);
+    expect(r.detail, "ложно объявлено пропавшим то, о чём не спросили").not.toContain("anthropic/");
+  });
+
+  test("ответ кэшируется — заход на панель не ходит в сеть каждый раз", async () => {
+    let обращений = 0;
+    сетьОтвечает(всёНаМесте());
+    const настоящий = global.fetch;
+    global.fetch = (async (...a: unknown[]) => {
+      обращений += 1;
+      return (настоящий as (...x: unknown[]) => Promise<unknown>)(...a);
+    }) as unknown as typeof fetch;
+    await проверитьИменаМоделей();
+    const послеПервого = обращений;
+    await проверитьИменаМоделей();
+    expect(обращений, "второй заход снова пошёл в сеть").toBe(послеПервого);
+    expect(послеПервого, "в сеть не ходили вовсе — проверять нечего").toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Вторая половина, без которой первая проверяет ЗАМЫСЕЛ.
+ *
+ * Правило §0-СТОРОЖ-ДЕЛАЕТ-ЗАПРОС: проверка на ручку обязана дёрнуть ручку и
+ * прочитать ТЕЛО ответа. Выше проверена функция; если её забудут позвать из
+ * `/api/devhub/providers/health`, выше всё останется зелёным, а панель снова
+ * будет говорить «ключ годен» о модуле, который не работает.
+ */
+describe("ручка состояния действительно задаёт этот вопрос", () => {
+  beforeEach(() => сброситьКэшИмёнМоделей());
+  afterEach(() => сброситьКэшИмёнМоделей());
+
+  test("🔴 в ответе /providers/health есть проба models_declared", async () => {
+    const express = (await import("express")).default;
+    const request = (await import("supertest")).default;
+    const { devhubRouter } = await import("../src/routes/devhub");
+
+    const все = всёНаМесте();
+    const пропавшая = все.gemini[0];
+    все.gemini = все.gemini.slice(1);
+    сетьОтвечает(все);
+
+    const a = express();
+    a.use("/api/devhub", devhubRouter);
+    const r = await request(a).get("/api/devhub/providers/health");
+
+    expect(r.status, `ручка ответила ${r.status}`).toBe(200);
+    const проба = (r.body.checks || []).find(
+      (c: { name: string }) => c.name === "models_declared",
+    );
+    expect(проба, "пробы models_declared в ответе нет — панель этот вопрос не задаёт").toBeTruthy();
+    expect(проба.ok, "пропавшее имя модели прошло через панель как «всё хорошо»").toBe(false);
+    expect(String(проба.detail)).toContain("gemini/" + пропавшая);
+  });
+});

@@ -65,7 +65,7 @@ import { redactInfraDetails } from "../lib/safeErrorText";
 import { checkPublicUrl } from "../lib/publicUrlOnly";
 import { можноСлужитьСтатикой } from "../lib/staticServable";
 import { проверитьРасход, этоОк, запросOpenAI, запросAnthropic, запросGemini, разборElevenLabs, разборBrevo, запросBrevo } from "../lib/providerSpendCheck";
-import { проверитьИменаМоделей } from "../lib/объявленныеМодели";
+import { проверитьИменаМоделей, проверитьУмолчанияВызовом } from "../lib/объявленныеМодели";
 import { вставитьБейдж, нуженБейдж } from "../lib/aevionBadge";
 import { файлыВхода, нуженВход, УКАЗАНИЕ_ПРО_ВХОД } from "../lib/devhubAuthScaffold";
 import { сметаПродукта, РАСЦЕНКИ_ПРОДУКТА } from "../lib/pipelineQuote";
@@ -9652,6 +9652,12 @@ devhubRouter.get("/providers/health", async (_req, res) => {
     // числились в каталоге и отвечали 404 «недоступна новым пользователям».
     // Поэтому зелёный здесь слабее, чем кажется, и подпись об этом говорит.
     probe("models_declared", () => проверитьИменаМоделей()),
+    // Вторая проба того же семейства, и она ДРУГОЙ вопрос — сегодняшний урок
+    // в том, что две разные нужды, исполненные одним движением, передавливают
+    // одну из них. Разница измерена: `gemini-2.0-flash-001` ИСЧЕЗ из каталога
+    // (ловит проверка имён), а `gemini-2.5-pro` в каталоге ЕСТЬ и отвечает 404
+    // (ловит только вызов). Зовём ровно умолчания и ровно один токен.
+    probe("default_model_answers", () => проверитьУмолчанияВызовом()),
     probe("deepl", async () => {
       if (!process.env.DEEPL_API_KEY) return { ok: false, detail: "DEEPL_API_KEY not set" };
       const r = await fetch("https://api-free.deepl.com/v2/usage", {

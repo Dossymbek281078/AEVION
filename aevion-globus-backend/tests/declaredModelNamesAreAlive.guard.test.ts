@@ -141,3 +141,94 @@ describe("ручка состояния действительно задаёт 
     expect(String(проба.detail)).toContain("gemini/" + пропавшая);
   });
 });
+
+/**
+ * Третья проба и ТРЕТИЙ вопрос: отвечает ли умолчание на настоящий вызов.
+ *
+ * Держать это вместе с проверкой имён нельзя — разница измерена 07.10.2026:
+ * `gemini-2.0-flash-001` ИСЧЕЗ из каталога (ловит проверка имён), а
+ * `gemini-2.5-pro` в каталоге ЕСТЬ и отвечает 404 (ловит только вызов).
+ */
+describe("умолчание поставщика отвечает на настоящий вызов", () => {
+  beforeEach(async () => {
+    const m = await import("../src/lib/объявленныеМодели");
+    m.сброситьКэшВызоваУмолчаний();
+  });
+
+  function сетьОтвечаетНаВызов(отказать: string[]) {
+    global.fetch = (async (url: string, init?: RequestInit) => {
+      const тело = String(init?.body ?? "");
+      const плохая = отказать.some((м) => String(url).includes(м) || тело.includes(`"${м}"`));
+      return плохая
+        ? { ok: false, status: 404, json: async () => ({}), text: async () => "{}" }
+        : { ok: true, status: 200, json: async () => ({}), text: async () => "{}" };
+    }) as unknown as typeof fetch;
+  }
+
+  test("контроль: все умолчания отвечают → ok и названо число", async () => {
+    const { проверитьУмолчанияВызовом } = await import("../src/lib/объявленныеМодели");
+    сетьОтвечаетНаВызов([]);
+    const r = await проверитьУмолчанияВызовом();
+    expect(r.ok, "исправное состояние названо поломкой: " + r.detail).toBe(true);
+    expect(r.detail).toMatch(/проверено умолчаний вызовом: [1-9]/);
+  });
+
+  test("🔴 спрашивать некого → НЕ ok: «не знаю» не равно «всё хорошо»", async () => {
+    // Без этой проверки правило выродилось бы в «отказавших нет — значит
+    // хорошо», и проба, переставшая кого-либо звать, отвечала бы зелёным.
+    // Мутация «убрать `спрошено > 0`» ПРОХОДИЛА, пока этого теста не было.
+    const { проверитьУмолчанияВызовом } = await import("../src/lib/объявленныеМодели");
+    const было = {
+      g: process.env.GEMINI_API_KEY,
+      a: process.env.ANTHROPIC_API_KEY,
+      o: process.env.OPENAI_API_KEY,
+    };
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    сетьОтвечаетНаВызов([]);
+    try {
+      const r = await проверитьУмолчанияВызовом();
+      expect(r.ok, "ни одного поставщика не спросили, а ответ зелёный").toBe(false);
+      expect(r.detail).toContain("проверено умолчаний вызовом: 0");
+    } finally {
+      if (было.g) process.env.GEMINI_API_KEY = было.g;
+      if (было.a) process.env.ANTHROPIC_API_KEY = было.a;
+      if (было.o) process.env.OPENAI_API_KEY = было.o;
+    }
+  });
+
+  test("🔴 умолчание отвечает 404 → НЕ ok, имя и причина названы", async () => {
+    const { проверитьУмолчанияВызовом } = await import("../src/lib/объявленныеМодели");
+    const { getProviders } = await import("../src/services/qcoreai/providers");
+    const умолчание = getProviders().find((p) => p.id === "anthropic")!.defaultModel;
+    сетьОтвечаетНаВызов([умолчание]);
+    const r = await проверитьУмолчанияВызовом();
+    expect(r.ok, "мёртвое умолчание прошло как «всё хорошо»").toBe(false);
+    expect(r.detail).toContain(умолчание);
+    expect(r.detail).toContain("404");
+  });
+  test("🔴 ручка состояния действительно задаёт и ЭТОТ вопрос", async () => {
+    // Мутация «убрать пробу из ручки» ПРОХОДИЛА, пока проверка смотрела
+    // только на функцию: забытый вызов оставил бы её зелёной, а панель слепой.
+    const express = (await import("express")).default;
+    const request = (await import("supertest")).default;
+    const { devhubRouter } = await import("../src/routes/devhub");
+    const { getProviders } = await import("../src/services/qcoreai/providers");
+
+    const умолчание = getProviders().find((p) => p.id === "anthropic")!.defaultModel;
+    сетьОтвечаетНаВызов([умолчание]);
+
+    const a = express();
+    a.use("/api/devhub", devhubRouter);
+    const r = await request(a).get("/api/devhub/providers/health");
+
+    expect(r.status, `ручка ответила ${r.status}`).toBe(200);
+    const проба = (r.body.checks || []).find(
+      (c: { name: string }) => c.name === "default_model_answers",
+    );
+    expect(проба, "пробы default_model_answers в ответе нет — панель этот вопрос не задаёт").toBeTruthy();
+    expect(проба.ok, "мёртвое умолчание прошло через панель как «всё хорошо»").toBe(false);
+    expect(String(проба.detail)).toContain(умолчание);
+  });
+});

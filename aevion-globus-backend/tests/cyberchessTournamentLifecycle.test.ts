@@ -24,6 +24,7 @@ vi.hoisted(() => {
 
 import express from "express";
 import request from "supertest";
+import { svoyTurnir } from "./helpers/svoyTurnir";
 
 async function поднять() {
   const tour = await import("../src/routes/cyberchessTournaments");
@@ -42,9 +43,12 @@ describe("турнир проходит путь целиком", () => {
     // 1. Находим турнир с реальными игроками — только у них публикуются пары.
     const список = async () =>
       ((await request(a).get("/api/cyberchess-tournaments/list")).body?.tournaments ?? []) as any[];
-    const цель = (await список()).find(
-      (t) => t.status === "upcoming" && t.realPlayers && t.players < t.maxPlayers);
-    expect(цель, "нет предстоящего турнира с реальными игроками").toBeTruthy();
+    // Турнир ЗАВОДИМ СВОЙ. Прежде он искался в GET /list, а эта ручка с 30.09
+    // отдаёт только созданные людьми: наши заготовки она скрывает, чтобы
+    // витрина не заявляла 534 участника при нуле живых. Список стал пуст, и
+    // тест падал — хотя проверяет он жизненный цикл, а не политику показа.
+    const цель = await svoyTurnir((u, b) => request(a).post(u).send(b as object), { maxPlayers: 4, format: "swiss" });
+    expect(цель, "турнир не создался").toBeTruthy();
 
     // 2. Записываются двое.
     const билеты: Record<string, string> = {};

@@ -43,7 +43,7 @@ vi.mock("../src/services/qcoreai/providers", () => ({
 vi.mock("../src/lib/wranglerPagesDeploy", () => ({ deployViaWrangler: vi.fn() }));
 
 // eslint-disable-next-line import/first
-import { devhubRouter, __resetDevHubStore } from "../src/routes/devhub";
+import { devhubRouter, __resetDevHubStore, LLM_TRANSLATE_ORDER } from "../src/routes/devhub";
 // eslint-disable-next-line import/first
 import { __resetProviderHealth } from "../src/lib/providerHealth";
 
@@ -146,6 +146,24 @@ describe("перевод DevHub не умирает вместе с квотой
     expect(callProviderMock).not.toHaveBeenCalled();
   });
 
+  test("🔴 ПОЛИТИКА порядка записана здесь ДОСЛОВНО, и менять её — осознанное действие", () => {
+    // Мутации показали дыру в моей же правке: сторож, который выводит
+    // ожидание из охраняемой константы, не заметит её подмены — обе стороны
+    // съедут вместе. Поэтому политика проверяется литералами, а поведение
+    // (ниже) — выводится из константы. Две разные проверки, и каждая ловит
+    // своё: подмену политики и поломку перебора.
+    //
+    // Смысл политики денежный: первым идёт тот, у кого есть деньги
+    // (Gemini — бесплатный уровень), платный Anthropic — последним. На
+    // 07.10.2026 на счёте Anthropic $8.93, у OpenAI деньги кончились.
+    expect(LLM_TRANSLATE_ORDER[0], "первым в переводе больше не бесплатный").toBe("gemini");
+    expect(
+      LLM_TRANSLATE_ORDER[LLM_TRANSLATE_ORDER.length - 1],
+      "платный поставщик перестал быть последним",
+    ).toBe("anthropic");
+    expect(LLM_TRANSLATE_ORDER.indexOf("openai")).toBeGreaterThan(LLM_TRANSLATE_ORDER.indexOf("gemini"));
+  });
+
   test("6. первый запасной провайдер отказал (кредиты кончились) → берётся следующий, а не отказ", async () => {
     // 17.09.2026 на проде: DeepL 456 и тут же OpenAI 429 credit_balance_exhausted —
     // запасной путь из одного звена умер вместе с ним, хотя Gemini был настроен.
@@ -154,18 +172,38 @@ describe("перевод DevHub не умирает вместе с квотой
       { id: "gemini", configured: true, defaultModel: "gemini-test" },
       { id: "openai", configured: true, defaultModel: "gpt-test" },
     ];
+    // Замысел теста — «первый запасной отказал → берётся следующий», а НЕ
+    // «openai отказал». Поэтому роняем того, кто первый ПО ТОМУ ЖЕ списку,
+    // что использует код: иначе при смене порядка тест проверяет не то, что
+    // обещает (так и случилось 01.10, когда порядок перевернули).
+    const порядок = LLM_TRANSLATE_ORDER.filter((id) =>
+      providersState.list.some((p: { id: string }) => p.id === id),
+    );
+    const первый = порядок[0];
     callProviderMock.mockImplementation(async (id: string) => {
-      if (id === "openai") throw new Error("openai 429: You have no credits remaining (code credit_balance_exhausted)");
+      if (id === первый) throw new Error(`${id} 429: You have no credits remaining (code credit_balance_exhausted)`);
       return { reply: `Hallo Welt via ${id}`, model: "m", usage: {} };
     });
     fetchMock.mockResolvedValueOnce(QUOTA);
 
     const r = await translate(makeApp());
     expect(r.status).toBe(200);
-    // Порядок: openai (дешёвый) → gemini (бесплатный) — anthropic не первый.
-    expect(callProviderMock.mock.calls.map((c) => c[0])).toEqual(["openai", "gemini"]);
-    expect(r.body.provider).toBe("gemini");
-    expect(r.body.text).toBe("Hallo Welt via gemini");
+    // 🔴 07.10.2026. Здесь стояла пара литералов `["openai", "gemini"]`,
+    // записанная 17.09 под тогдашний порядок. 01.10 порядок перевернули
+    // (3601e099e, «запасной перевод идёт через Gemini»), сторожа не тронули —
+    // он краснел шесть дней, и этого никто не видел: имя файла не попадает в
+    // обычный отбор по словам, а полный набор бэкенда давно не гоняют.
+    //
+    // Теперь ожидание выводится из ТОГО ЖЕ списка, что и код. Берём из него
+    // настроенных в этом тесте и выбрасываем того, кто отказал по кредитам:
+    // должны быть вызваны ровно они и ровно в этом порядке.
+    const ожидаемые = порядок;
+    expect(ожидаемые.length, "список порядка не пересёкся с настроенными — проверять нечего").toBeGreaterThan(1);
+    expect(callProviderMock.mock.calls.map((c) => c[0])).toEqual(ожидаемые.slice(0, 2));
+    // Платный Anthropic в этом списке ПОСЛЕДНИЙ и до него дело не дошло.
+    expect(callProviderMock.mock.calls.map((c) => c[0])).not.toContain("anthropic");
+    expect(r.body.provider).toBe(ожидаемые[1]);
+    expect(r.body.text).toBe(`Hallo Welt via ${ожидаемые[1]}`);
   });
 
   test("5. ключа DeepL нет + LLM есть → перевод через LLM с причиной deepl_not_configured", async () => {

@@ -7438,7 +7438,21 @@ function deeplEndpoint(apiKey: string): string {
 // Anthropic остаётся в списке ПОСЛЕДНИМ намеренно: убрать его совсем значило бы
 // оставить перевод без последнего звена, а молчаливый отказ хуже дорогого
 // ответа. Он включается, только когда не ответил никто.
-const LLM_TRANSLATE_ORDER = ["gemini", "openai", "openrouter", "anthropic"];
+/**
+ * Порядок запасного перевода. ЭКСПОРТИРУЕТСЯ намеренно: сторож
+ * `translateFallsBackWhenDeeplIsOut` обязан проверять ТОТ ЖЕ список, а не
+ * свою копию.
+ *
+ * 🔴 Повод, 07.10.2026. 17.09 порядок был `openai → gemini`, и сторож записал
+ * его у себя парой литералов. 01.10 порядок перевернули (коммит 3601e099e,
+ * «запасной перевод идёт через Gemini»), сторожа не тронули — и он покраснел
+ * и остался красным на шесть дней. Никто не заметил: имя файла не попадает ни
+ * в один обычный отбор по словам, а полный набор бэкенда давно не гоняют.
+ *
+ * Теперь список один на двоих: перевернут порядок — сторож поедет следом, а
+ * не начнёт спорить с кодом.
+ */
+export const LLM_TRANSLATE_ORDER = ["gemini", "openai", "openrouter", "anthropic"];
 function llmTranslateCandidates(): Array<{ id: string; model: string }> {
   const configured = getProviders().filter((p) => p.configured && p.id !== "stub");
   const rank = (id: string) => { const i = LLM_TRANSLATE_ORDER.indexOf(id); return i === -1 ? LLM_TRANSLATE_ORDER.length : i; };

@@ -7,7 +7,10 @@ import { FunnelAdminClient } from "./_client";
  * но страница служебная, в выдаче ей не место.
  */
 export const metadata: Metadata = {
-  title: "Воронка — прибор | AEVION",
+  // Без хвоста «| AEVION»: шаблон раскладки добавляет бренд сам, и сторож
+  // titleSuffixNotDoubled краснеет на удвоении. Поймано полным прогоном фронта
+  // — своим сторожем страницы я этого увидеть не мог.
+  title: "Воронка — прибор",
   robots: { index: false, follow: false },
 };
 

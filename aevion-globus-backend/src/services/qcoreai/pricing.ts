@@ -28,7 +28,8 @@ const TABLE: Record<string, Record<string, UsdPer1M>> = {
   openai: {
     "gpt-4o": { input: 2.5, output: 10.0 },
     "gpt-4o-mini": { input: 0.15, output: 0.6 },
-    "gpt-4-turbo": { input: 10.0, output: 30.0 },
+    // `gpt-4-turbo` снят 07.10.2026: его нет в списке моделей OpenAI.
+    // Строку убираем вместе с именем — цена без модели считает несуществующее.
   },
   gemini: {
     // Free-tier (rate-limited) on Flash; paid list prices shown for reference.

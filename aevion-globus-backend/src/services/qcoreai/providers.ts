@@ -194,7 +194,14 @@ export function getProviders(): Provider[] {
     {
       id: "openai",
       name: "GPT (OpenAI)",
-      models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"],
+      // 🔴 07.10.2026, через минуты после выкатки: новая проба
+      // `models_declared` на проде сама нашла здесь мёртвое имя —
+      // `gpt-4-turbo` ОТСУТСТВУЕТ в списке моделей OpenAI («проверено имён:
+      // 15 у 4 поставщиков · НЕТ У ПОСТАВЩИКА: openai/gpt-4-turbo»).
+      // Замены не придумываю: ключ OpenAI без денег (429 insufficient_quota),
+      // проверить живым вызовом нечем, а имя, взятое по памяти, — это тот же
+      // мёртвый слаг, только новый. Останутся два проверенных.
+      models: ["gpt-4o", "gpt-4o-mini"],
       defaultModel: process.env.OPENAI_MODEL || "gpt-4o-mini",
       envKey: "OPENAI_API_KEY",
       configured: isConfigured("OPENAI_API_KEY"),

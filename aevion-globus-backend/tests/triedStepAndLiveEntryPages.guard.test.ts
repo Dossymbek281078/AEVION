@@ -108,6 +108,55 @@ describe("ступень «попробовали»", () => {
   });
 });
 
+describe("ступень «попробовали» в сводке дня", () => {
+  it("🔴 сводка дня несёт ступень отдельной строкой, с нашими и живыми", async () => {
+    /*
+     * Сводка дня — то самое число, которое идёт основателю в 21:00. Если
+     * ступени там нет, вопрос «попробовал ли кто-нибудь» снова некому задать:
+     * разрезы по каналам читает тот, кто спрашивает ручку, а отчёт собирается
+     * из сводки.
+     */
+    журнал([
+      { type: "page_view", ts: сейчас(), sid: "живой", path: "/devhub?c=ph", meta: { channel: "product-hunt" } },
+      { type: "feature_use", ts: сейчас(), sid: "живой", path: "/devhub", meta: { channel: "product-hunt" } },
+      { type: "page_view", ts: сейчас(), sid: "наш", path: "/devhub?c=probe-okno", meta: { channel: "probe-okno" } },
+      { type: "feature_use", ts: сейчас(), sid: "наш", path: "/devhub", meta: { channel: "probe-okno" } },
+      { type: "page_view", ts: сейчас(), sid: "смотрел", path: "/devhub?c=yt", meta: { channel: "youtube" } },
+    ]);
+    const { eventsRouter } = await import("../src/routes/events");
+    const app = express();
+    app.use("/api/pricing/events", eventsRouter);
+    const день = new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const r = await request(app).get(`/api/pricing/events/day?date=${день}`);
+    expect(r.status).toBe(200);
+    expect(Object.keys(r.body), "ступень посчитана, но не отдана").toContain("попробовали");
+    expect(r.body.попробовали).toEqual({ всего: 2, наши: 1, живые: 1 });
+    // Контроль соседних строк: тот, кто только смотрел, в ступень не попал.
+    expect(r.body.визиты.всего).toBe(3);
+  });
+
+  it("итог воронки тоже знает ступень — два читателя одного числа", async () => {
+    журнал([
+      { type: "page_view", ts: сейчас(), sid: "ж", path: "/devhub?c=ph", meta: { channel: "product-hunt" } },
+      { type: "feature_use", ts: сейчас(), sid: "ж", path: "/devhub", meta: { channel: "product-hunt" } },
+    ]);
+    const r = await воронка();
+    /*
+     * 🔴 Ступень живёт в `totalBySession`, а НЕ в `total`, и я на этом
+     * оступился, когда писал тест: у воронки `total` — свой объект, собранный
+     * из суточных уникальных сессий, другой оси. Два разных итога под одним
+     * именем — тот же класс, из-за которого вчера разъехались 438 и 431.
+     * Теперь у каждого своё имя и своя подпись единицы.
+     */
+    expect(r.body.totalBySession.tried).toBe(1);
+    expect(r.body.totalBySession.triedOurs).toBe(0);
+    expect(r.body.totalBySessionUnits).toMatch(/уникальные сессии за всё окно/);
+    // И совпадение с разрезом: сумма по каналам тут равна итогу, потому что
+    // канал один — на большем числе каналов они законно расходятся.
+    expect(r.body.byChannel["product-hunt"].tried).toBe(1);
+  });
+});
+
 describe("страница входа с живой сессией — своя строка", () => {
   it("🔴 страница с ОДНОЙ живой сессией не сворачивается в «прочие»", async () => {
     /*

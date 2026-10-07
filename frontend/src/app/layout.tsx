@@ -6,6 +6,7 @@ import { MODULE_NODES } from "@/data/pitchFacts";
 import "./globals.css";
 import { DevHubGuestIdentity } from "@/components/DevHubGuestIdentity";
 import { BUILD_STAMP } from "@/lib/buildStamp";
+import { скриптПредзагрузкиСловаря } from "@/lib/dictPreloadScript";
 
 /*
   Словарь языка посетителя начинает качаться с ПЕРВОГО БАЙТА HTML.
@@ -23,24 +24,6 @@ import { BUILD_STAMP } from "@/lib/buildStamp";
   отказ здесь безвреден: провайдер тогда качает словарь сам, как раньше.
   Адрес версионирован коммитом сборки — кэш вечный, выкатка = новый адрес.
 */
-const DICT_PRELOAD_SCRIPT =
-  // 29.09.2026: АДРЕС ПЕРВЫМ. До этого скрипт брал сохранённый выбор и куку, а
-  // путь /en/... не смотрел вовсе — и качал русский словарь для человека, которому
-  // прислали английскую ссылку. Он же и рисовал русское меню с первой секунды:
-  // словарь приезжал раньше, чем React успевал что-то решить.
-  "try{var L=null;try{var P=(location.pathname||'').split('/')[1]||'';" +
-  "if(P.length===2){var pl=P.toLowerCase();if(pl==='ru'||pl==='kk'||pl==='en')L=pl}}catch(e){}" +
-  "if(!L){try{L=localStorage.getItem('aevion_lang_v1')}catch(e){}}" +
-  "if(!L){var c=document.cookie.split('; ');for(var i=0;i<c.length;i++){var p=c[i].split('=');" +
-  "if(p[0]==='aevion_lang_v1'){L=decodeURIComponent(p[1]||'');break}}}" +
-  "if(!L){var n=(navigator.language||'en').toLowerCase();" +
-  "var m=['kk','kz','ru','de','fr','es','zh','ja','ar','pt','tr'];" +
-  "for(var j=0;j<m.length;j++){if(n.indexOf(m[j])===0){L=m[j]==='kz'?'kk':m[j];break}}}" +
-  "var ok={ru:1,kk:1,de:1,fr:1,es:1,zh:1,ja:1,ar:1,pt:1,tr:1};" +
-  "if(L&&ok[L]){window.__aevionDict={lang:L,promise:fetch('/i18n/'+L+'?v=" +
-  encodeURIComponent(BUILD_STAMP.commit) +
-  "').then(function(r){return r.ok?r.json():null}).catch(function(){return null})}}}catch(e){}";
-
 const SITE = getSiteUrl();
 
 export const viewport: Viewport = {
@@ -190,7 +173,7 @@ export default function RootLayout({
           своей догадкой. Выбор всегда старше догадки.
         */}
         <script dangerouslySetInnerHTML={{ __html: "try{var S=0,D=document.documentElement;try{var P=(location.pathname||'').split('/')[1]||'',p=P.length===2?P.toLowerCase():'';if(p==='ru'||p==='kk'||p==='en'){D.lang=p;S=1;if(D.setAttribute)D.setAttribute('data-lang-src','path')}}catch(e){}if(!S){var c=document.cookie.split('; ');for(var i=0;i<c.length;i++){var q=c[i].split('=');if(q[0]==='aevion_lang_v1'){var l=decodeURIComponent(q[1]||'');if(l==='ru'||l==='kk'||l==='en'){D.lang=l;if(D.setAttribute)D.setAttribute('data-lang-src','cookie')}break}}}}catch(e){}" }} />
-        <script dangerouslySetInnerHTML={{ __html: DICT_PRELOAD_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: скриптПредзагрузкиСловаря(BUILD_STAMP.commit) }} />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}

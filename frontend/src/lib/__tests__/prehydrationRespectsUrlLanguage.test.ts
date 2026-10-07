@@ -18,7 +18,15 @@ import { join } from "node:path";
  * поведенчески их в этом наборе не запустить. Зато можно закрепить порядок ИСТОЧНИКОВ
  * — а это ровно то, что сломалось.
  */
-const layout = readFileSync(join(__dirname, "..", "..", "app", "layout.tsx"), "utf8");
+// 07.10.2026: скриптов здесь ДВА, и живут они теперь в разных файлах.
+// Предзагрузка словаря уехала в lib/dictPreloadScript.ts — её понадобилось
+// ИСПОЛНЯТЬ в стороже, а импорт макета падал на шрифтах (TypeError: Geist is
+// not a function). Установка lang осталась в макете. Ищем в обоих, иначе
+// сторож проверял бы половину и был бы зелёным на другой половине.
+const layout =
+  readFileSync(join(__dirname, "..", "dictPreloadScript.ts"), "utf8") +
+  " /* граница файлов */ " +
+  readFileSync(join(__dirname, "..", "..", "app", "layout.tsx"), "utf8");
 
 /** Кусок исходника между двумя метками — чтобы судить о КАЖДОМ скрипте отдельно. */
 function кусок(от: string, длина = 1200): string {
@@ -28,7 +36,7 @@ function кусок(от: string, длина = 1200): string {
 }
 
 describe("предзагрузка словаря", () => {
-  const скрипт = кусок("const DICT_PRELOAD_SCRIPT");
+  const скрипт = кусок("export function скриптПредзагрузкиСловаря", 6000);
 
   it("сначала смотрит адрес, потом сохранённый выбор", () => {
     const iПуть = скрипт.indexOf("location.pathname");

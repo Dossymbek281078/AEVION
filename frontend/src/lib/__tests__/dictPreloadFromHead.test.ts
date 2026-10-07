@@ -61,15 +61,30 @@ describe("предзагрузка словаря из <head>", () => {
 
   it("макет: скрипт предзагрузки стоит в HTML и версионирован коммитом сборки", () => {
     const layout = readFileSync(join(HERE, "..", "..", "app", "layout.tsx"), "utf8");
-    expect(layout).toContain("__html: DICT_PRELOAD_SCRIPT");
-    expect(layout).toContain("fetch('/i18n/'+L+'?v=");
-    expect(layout).toContain("BUILD_STAMP.commit");
-    // порядок источников тот же, что у провайдера
-    const iStorage = layout.indexOf("localStorage.getItem('aevion_lang_v1')");
-    const iCookie = layout.indexOf("document.cookie.split('; ')", iStorage);
-    const iNav = layout.indexOf("navigator.language", iCookie);
+    const скрипт = readFileSync(join(HERE, "..", "dictPreloadScript.ts"), "utf8");
+    // Скрипт переехал в свой модуль 07.10.2026, чтобы его можно было исполнять
+    // в стороже; макет обязан по-прежнему ставить его в HTML и версионировать.
+    expect(layout).toContain("__html: скриптПредзагрузкиСловаря(BUILD_STAMP.commit)");
+    expect(скрипт).toContain("fetch('/i18n/'+L+'?v=");
+    expect(скрипт).toContain("отпечатокСборки");
+    // 🔴 ПОРЯДОК ИСПРАВЛЕН 07.10.2026: КУКА РАНЬШЕ ХРАНИЛИЩА.
+    //
+    // Здесь закреплялось обратное — сперва localStorage, потом кука, — и рядом
+    // стояла подпись «порядок источников тот же, что у провайдера». Подпись
+    // была неверна: провайдер (src/lib/i18n.tsx) читает куку ПЕРВОЙ и прямо
+    // пишет «кука переживает чистку storage и приходит с других вкладок —
+    // выбор старше догадки». То есть сторож закреплял дефект и называл его
+    // согласованностью.
+    //
+    // Цена дефекта, замерена браузером на проде 07.10: заход на /en/... даёт
+    // 308 и ставит куку en на сервере (middleware.ts:125), хранилище остаётся
+    // ru — и главная выходила русской при английской куке. Проверено прямо на
+    // живой странице: прежний порядок выбирал ru, новый выбирает en.
+    const iCookie = скрипт.indexOf("document.cookie.split('; ')");
+    const iStorage = скрипт.indexOf("localStorage.getItem('aevion_lang_v1')", iCookie);
+    const iNav = скрипт.indexOf("navigator.language", iStorage);
     expect(iStorage).toBeGreaterThan(-1);
-    expect(iCookie).toBeGreaterThan(iStorage);
-    expect(iNav).toBeGreaterThan(iCookie);
+    expect(iStorage, 'хранилище должно читаться ПОСЛЕ куки').toBeGreaterThan(iCookie);
+    expect(iNav, 'язык браузера — последний запасной путь').toBeGreaterThan(iStorage);
   });
 });

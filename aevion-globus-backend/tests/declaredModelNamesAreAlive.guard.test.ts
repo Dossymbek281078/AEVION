@@ -17,6 +17,25 @@ process.env.ANTHROPIC_API_KEY = "test-anthropic";
 process.env.OPENAI_API_KEY = "test-openai";
 process.env.OPENROUTER_API_KEY = "test-openrouter";
 
+/**
+ * Сеть закрыта НА УРОВНЕ ФАЙЛА, до любого импорта роутера.
+ *
+ * Повод 08.10.2026: в прогоне из пяти файлов эта проверка упала, провисев
+ * 46 секунд, а в одиночку и втроём проходила. 46 секунд — это не логика, это
+ * настоящие сетевые таймауты: `/providers/health` опрашивает brevo, replicate,
+ * cloudflare, vercel, elevenlabs, deepl и github, и под параллельной нагрузкой
+ * часть вызовов успевала уйти ДО того, как тест подменял `global.fetch`.
+ *
+ * Мигающий сторож хуже отсутствующего: его падение перестают читать. Поэтому
+ * умолчание — отказ, а каждый тест разрешает ровно то, что ему нужно.
+ */
+global.fetch = (async () => ({
+  ok: false,
+  status: 599,
+  json: async () => ({}),
+  text: async () => "{}",
+})) as unknown as typeof fetch;
+
 const { проверитьИменаМоделей, сброситьКэшИмёнМоделей } = await import("../src/lib/объявленныеМодели");
 const { getProviders } = await import("../src/services/qcoreai/providers");
 

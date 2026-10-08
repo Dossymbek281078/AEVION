@@ -221,6 +221,13 @@ export default async function EnLongevityPage({
             &nbsp; <Grade ev="C" /> weak or preliminary &nbsp; <Grade ev="E" />{" "}
             no demonstrated effect on human longevity
           </p>
+          {/* First-screen one-tap: measured 07.10 the tool's example button sat
+              far below the fold, so a visitor from the video never reached it.
+              This anchor scrolls to the tool (id="try-example") and the tool
+              fills the example on that hash. Paid/free order is untouched. */}
+          <a href="#try-example" style={styles.exampleCta}>
+            See it on an example — one tap ↓
+          </a>
         </header>
 
         <section style={styles.section}>
@@ -402,6 +409,7 @@ const styles: Record<string, React.CSSProperties> = {
   // height published as --aevion-install-h): without it, on a phone the pill
   // covered the lower form and the submit button. Mirrors RU /longevity.
   page: { minHeight: "100vh", background: PAPER, color: INK, padding: "32px 18px 56px", paddingBottom: "calc(56px + var(--aevion-install-h, 0px))" },
+  exampleCta: { display: "inline-block", marginTop: 14, background: INK, color: "#fff", borderRadius: 8, padding: "10px 18px", fontSize: 14.5, fontWeight: 600, textDecoration: "none" },
   wrap: { maxWidth: 640, margin: "0 auto" },
   head: { borderBottom: `2px solid ${INK}`, paddingBottom: 18 },
   brand: { fontFamily: "monospace", fontSize: 13, letterSpacing: "0.3em", fontWeight: 700, color: GOLD },

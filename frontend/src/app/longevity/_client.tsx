@@ -229,6 +229,26 @@ export default function LongevityClient({
         <a href="#besplatno" style={styles.freeHint}>
           Бесплатный протокол — ниже ↓
         </a>
+        {/* Один тап в ПЕРВОМ экране. Замер 07.10 (390×844): кнопка «Показать на
+            примере» внутри формы была на y≈2275 — гость из ролика до неё не
+            доходил. Эта кнопка стоит рядом со ссылкой-подсказкой (y≈475):
+            заполняет форму примером, считает и прокручивает к бесплатному разбору.
+            Порядок платного/бесплатного (решение 01.10) НЕ меняется — книга
+            остаётся ниже этой ссылки, поднимается только кнопка-CTA. */}
+        <button
+          type="button"
+          onClick={() => {
+            const пример = Object.fromEntries(ASSESS_FIELDS.map((f) => [f.key, f.placeholder]));
+            setVals(пример);
+            void runAssess(пример);
+            if (typeof document !== "undefined") {
+              document.getElementById("besplatno")?.scrollIntoView({ behavior: "smooth" });
+            }
+          }}
+          style={styles.freeExampleCta}
+        >
+          Показать на примере — за один тап ↓
+        </button>
 
         {/*
           Платное предложение в ПЕРВЫЙ экран — см. комментарий у КНИГА.
@@ -686,6 +706,12 @@ const styles: Record<string, React.CSSProperties> = {
   freeHint: {
     display: "inline-block", marginTop: 12, color: "#5eead4",
     textDecoration: "underline", fontSize: 15, fontWeight: 600,
+  } as React.CSSProperties,
+  freeExampleCta: {
+    display: "block", marginTop: 10,
+    background: "#35c9b3", color: "#04120f", border: "none",
+    borderRadius: 10, padding: "11px 18px", fontSize: 15, fontWeight: 700,
+    cursor: "pointer",
   } as React.CSSProperties,
   /*
    * Плотная карточка для ПЕРВОГО экрана. Не косметика — арифметика.

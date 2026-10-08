@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 import { покупкиНаГлавной } from "@/lib/homeBuyLinks";
 import { BuyLink } from "@/components/BuyLink";
+import { useI18n } from "@/lib/i18n";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 import { channelNow, сыраяМеткаКанала } from "@/lib/channelNow";
 import { fetchPlanetStats, fetchRecentArtifacts } from "@/lib/planetData";
@@ -83,6 +84,15 @@ const btnGhost: CSSProperties = {
 };
 
 export default function HomePage() {
+  // 08.10.2026. Заголовок берётся ИЗ СЛОВАРЯ, а не литералом.
+  // Замер на проде в чистом контексте ru-RU (без куки, newContext locale ru-RU):
+  //   1123мс — страница переведена на 653 знака, H1 ещё английский
+  //   2608мс — переведено 3057 знаков, H1 ВСЁ ЕЩЁ английский
+  //   5450мс — H1 наконец по-русски
+  // То есть русский гость пять секунд читал английский заголовок, когда
+  // остальная страница уже была русской. Литерал переводит слой перевода, и
+  // до заголовка он доходит последним; словарь отдаёт строку сразу.
+  const { t } = useI18n();
   /** Только после mount: избегаем гонок ref/layout и проблем с отдельным async-чанком `dynamic()`. */
   const [globeClient, setGlobeClient] = useState(false);
   useEffect(() => {
@@ -376,7 +386,7 @@ const DEMO_NOTE =
               letterSpacing: "-0.03em",
             }}
           >
-            Describe it in a sentence — get a working site
+            {t("home.title")}
           </h1>
           <p
             style={{

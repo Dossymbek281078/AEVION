@@ -4,6 +4,7 @@ import { лимитПровайдера, когдаВернётся as срок�
 import { главныйВыдуманныйХод, дополнитьХодомДвижка, текстВместоОтвета } from "./проверьХодыОтвета";
 import { track } from "@/lib/track";
 import { ishodDlyaCPI, resheniePoKontsuPartii } from "./ishodPartii";
+import { reshenieVozvrata } from "./ssylkaZadachi";
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, startTransition } from "react";
 
@@ -5741,6 +5742,32 @@ export default function CyberChessPage(){
         const pz=normalizePuzzle({fen:syraya.fen,sol:syraya.sol,name:syraya.name??syraya.theme??"Задача",
           r:syraya.r??1200,theme:syraya.theme??"Тактика"}) as typeof PUZZLES[number];
         if(!postavitZadachuNaDosku(pz,{dnevnaya:false}))return;
+        /*
+         * 🔴 ЗАДАЧА ПО ССЫЛКЕ ВОССТАНАВЛИВАЕТ СЕБЯ. Это оборонительная мера, и я
+         * называю её так, а не «починкой причины».
+         *
+         * Что было: 07.10 я нашёл один путь подмены (установка задачи меняет
+         * вкладку, вкладка входит в ключ выборки, эффект подбирает случайную) и
+         * закрыл его одноразовым пропуском. Проверка на проде 08.10 показала, что
+         * этого НЕ ХВАТИЛО: ссылка по-прежнему открывает чужую задачу — ждали
+         * ★678, на экране ★1882; ждали ★877, на экране ★1152. Числа каждый раз
+         * разные, то есть подменяет случайный подбор, но КАКОЙ ИМЕННО из
+         * установщиков успевает это сделать после моего пропуска, я не нашёл: их
+         * в модуле больше десяти, и воспроизвести порядок без наблюдения на живой
+         * странице не удалось.
+         *
+         * Поэтому защита не от конкретного писателя, а от любого: пока адрес
+         * просит задачу, а на доске стоит другая, задача возвращается на место.
+         * Попытки ОГРАНИЧЕНЫ — три раза в пределах восьми секунд от применения:
+         * столько длится загрузка банка (мелкий срез, затем 500 тысяч через 2–3 с),
+         * то есть окно, в котором ключ выборки и дёргается. Без ограничения это
+         * превратилось бы в войну эффектов: человек нажал «другая задача», а она
+         * возвращается — лечение хуже болезни.
+         *
+         * Что это НЕ заменяет: поиск настоящей причины. Когда писатель найдётся,
+         * восстановление надо снять, а не оставлять «на всякий случай».
+         */
+        ссылкаЦельРеф.current={fen:pz.fen,попытки:0,доМс:Date.now()+8000};
         showToast(`🔗 Задача по ссылке · ${pz.r}`,"info");
         // Своё событие не заводим: открытие задачи по ссылке — это та же
         // ключевая возможность, и feature_use уже считается ступенью
@@ -5757,6 +5784,26 @@ export default function CyberChessPage(){
     // Один раз при открытии страницы: ссылка — это вход, а не состояние.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
+
+  /** Что просил адрес, сколько раз возвращали и до какого момента возвращать. */
+  const ссылкаЦельРеф=useRef<{fen:string;попытки:number;доМс:number}|null>(null);
+  useEffect(()=>{
+    const ц=ссылкаЦельРеф.current;
+    const найдена=ц?PUZZLES.find(x=>x.fen===ц.fen):undefined;
+    // Решение вынесено в reshenieVozvrata и проверяется вызовами с известным
+    // ответом (ssylkaZadachi.test.ts): эффект на странице из 16 тысяч строк так не
+    // проверить, а вторую непроверенную починку ссылки отдавать нельзя.
+    const р=reshenieVozvrata(ц,pzCurrent?pzCurrent.fen:null,Date.now(),!!найдена);
+    if(р.действие==="сдаться"){
+      ссылкаЦельРеф.current=null;
+      // Молчать нельзя: человек видит чужую задачу и не знает почему.
+      if(р.причина==="запрошенной задачи нет в текущем пуле")showToast("Задача по ссылке не подходит под текущие фильтры","info");
+      return;
+    }
+    if(р.действие!=="вернуть"||!ц||!найдена)return;
+    ц.попытки++;
+    postavitZadachuNaDosku(normalizePuzzle(найдена) as typeof PUZZLES[number],{dnevnaya:false});
+  },[pzCurrent,postavitZadachuNaDosku,showToast]);
 
   const ldPz=(i:number)=>{if(!PUZZLES.length){showToast("Задачи ещё грузятся…","info");return}sЭтоЗадачаДня(false);const pz0=fPz[i]||PUZZLES[0];const pz=pz0?normalizePuzzle(pz0):pz0;if(!pz){showToast("Нет задач под этот фильтр","error");return}let g;try{g=new Chess(pz.fen)}catch{showToast("Задача повреждена, пропускаю","error");return}setGame(g);sBk(k=>k+1);sPzI(i);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();
     // Set timer based on mode. В rush НЕ трогаем работающий дедлайн (ручной выбор пазла

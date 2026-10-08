@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { keepChannel } from "@/lib/products";
 
 /**
@@ -69,6 +69,21 @@ export function LongevityTool({ channel = null }: { channel?: string | null }) {
   const [vals, setVals] = useState<Record<string, string>>({});
   const [checked, setChecked] = useState(false);
 
+  // The first screen links here with href="#try-example" (page.tsx). Arriving
+  // with that hash fills the example and computes in one tap, so a visitor from
+  // the video doesn't type 11 labs. The anchor itself scrolls here (id below).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const apply = () => {
+      if (window.location.hash !== "#try-example") return;
+      setVals(Object.fromEntries(FIELDS.map((f) => [f.key, f.placeholder])));
+      setChecked(true);
+    };
+    apply();
+    window.addEventListener("hashchange", apply);
+    return () => window.removeEventListener("hashchange", apply);
+  }, []);
+
   // Считаем только по заполненным полям. Пустое поле — это «не знаю», а не
   // «в норме»: молчаливое превращение пропуска в норму и есть тот способ,
   // которым отчёт становится успокаивающим и неверным.
@@ -85,7 +100,7 @@ export function LongevityTool({ channel = null }: { channel?: string | null }) {
   const off = results.filter((r) => r.state !== "ok");
 
   return (
-    <div style={styles.box}>
+    <div id="try-example" style={{ ...styles.box, scrollMarginTop: 16 }}>
       <div style={styles.grid}>
         {FIELDS.map((f) => (
           <label key={f.key} style={styles.row}>

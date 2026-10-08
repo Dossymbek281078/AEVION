@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { readFileSync } from "node:fs";
@@ -36,5 +36,33 @@ describe("en /longevity: one tap + install-bar reserve", () => {
     expect(m, "styles.page not found").toBeTruthy();
     // Without this reserve (revert paddingBottom) the pill covers the submit button on a phone.
     expect(m![0]).toContain("--aevion-install-h");
+  });
+});
+
+/**
+ * Wave 30: the example action must be reachable in the FIRST screen. The in-tool
+ * button sat far below the fold (measured 07.10). The page header now links to the
+ * tool with href="#try-example"; arriving with that hash autofills the tool (one tap).
+ */
+describe("en /longevity: first-screen example CTA (wave 30)", () => {
+  afterEach(() => { try { window.location.hash = ""; } catch {} });
+
+  it("arriving with #try-example autofills the tool (all 11 computed)", async () => {
+    window.location.hash = "#try-example";
+    render(<LongevityTool />);
+    // All 11 placeholders filled on the hash → the denominator names 11.
+    expect(await screen.findByText(/11 values you entered/i)).toBeTruthy();
+  });
+
+  it("header anchors to the tool in the first screen; tool has the scroll target", () => {
+    const page = readFileSync(join(__dirname, "..", "page.tsx"), "utf8");
+    const tool = readFileSync(join(__dirname, "..", "_tool.tsx"), "utf8");
+    const anchor = page.indexOf('href="#try-example"');
+    const firstSection = page.indexOf("<section");
+    expect(anchor, "no #try-example anchor in header").toBeGreaterThan(-1);
+    // The CTA sits in the header, above the first <section> — i.e. the first screen.
+    expect(anchor).toBeLessThan(firstSection);
+    // The scroll target / autofill trigger exists in the tool.
+    expect(tool).toContain('id="try-example"');
   });
 });

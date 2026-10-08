@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { DISALLOWED_PATHS, robotsLine } from "@/app/robots";
+import { DISALLOWED_PATHS, robotsLine } from "@/app/robotsRules";
 
 /**
  * 🔴 Персональные страницы оплаты не должны попадать в поиск, а публичная

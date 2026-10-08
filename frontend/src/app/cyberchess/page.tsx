@@ -1078,6 +1078,40 @@ export function уженеПредлагать(
   }
 }
 
+/**
+ * По какому поводу предлагать адрес — и предлагать ли вообще.
+ *
+ * 🔴 ПОВОД (замер на проде 08.10.2026 за 14 дней). Единственное АВТОМАТИЧЕСКОЕ
+ * предложение адреса в магните стояло за концом партии: эффект на `over`. За те
+ * же 14 дней `game_end` равен нулю — значит предложение увидел ноль человек, и
+ * `waitlist_submit` тоже ноль, при 42 живых заходах на /cyberchess. То есть сбор
+ * адресов на магните был заперт за условием, которого никто не достигает.
+ *
+ * Задача дня — ровно то, чем магнит зовёт: тридцать секунд и одна позиция. Её
+ * зачтённое сервером решение и есть достижение, в момент которого уместно
+ * спросить адрес.
+ *
+ * Возвращает ярлык повода (он же попадёт в `source` подписки, чтобы в воронке
+ * было видно, какой путь приносит адреса) либо null.
+ *
+ * Чистая функция и экспортируется намеренно: внутри страницы на 16 тысяч строк
+ * это условие вызовами с известным ответом не проверить, а проверять надо —
+ * прошлое условие молча не срабатывало месяц.
+ */
+export function povodPredlozhitAdres(
+  { партияОкончена, задачаДняЗачтена }: { партияОкончена: boolean; задачаДняЗачтена: boolean },
+  хранилище: Pick<Storage, "getItem"> | undefined = typeof localStorage === "undefined" ? undefined : localStorage,
+): "daily-solved" | "game-over" | null {
+  // Второй раз не предлагаем. Нечитаемое хранилище считается «не предлагали»
+  // (см. разбор у `уженеПредлагать`: падать надо в сторону работы).
+  if (уженеПредлагать(хранилище)) return null;
+  // Задача дня впереди партии: она происходит раньше и чаще, а предложить надо
+  // один раз. Если однажды случится и то и другое — поводом будет задача.
+  if (задачаДняЗачтена) return "daily-solved";
+  if (партияОкончена) return "game-over";
+  return null;
+}
+
 export default function CyberChessPage(){
   const{showToast}=useToast();
   // Workspace preset (Focus / Standard / Stream / Study / Coach), keys 1..5.
@@ -1933,6 +1967,10 @@ export default function CyberChessPage(){
   // уже получена, и всегда доступно из меню «Ещё». Метка cyberchess-app попадает в рассылку
   // запуска: matchesModule («равна cyberchess или начинается с cyberchess-»).
   const[showWaitlist,sShowWaitlist]=useState(false);
+  /* Ярлык повода уезжает в `source` подписки: по нему в воронке видно, какой путь
+     приносит адреса. До 08.10.2026 повод был один и источник фиксированный
+     («cyberchess-app»), поэтому различить было нечего. */
+  const[поводПодписки,sПоводПодписки]=useState<"daily-solved"|"game-over">("game-over");
   const предлагалиПодпискуRef=useRef(false);
   useEffect(()=>{
     if(!over||предлагалиПодпискуRef.current)return;
@@ -1946,8 +1984,8 @@ export default function CyberChessPage(){
     // Отметка нужна ровно для одного: не предлагать второй раз. Не сумели
     // её прочитать — предлагаем; худшее последствие — предложить дважды,
     // а не потерять адрес совсем. Падать надо в сторону работы.
-    if (уженеПредлагать()) return;
-    const t=setTimeout(()=>{sShowWaitlist(true);try{localStorage.setItem("aevion_chess_waitlist_seen","1")}catch{}},2200);
+    if (povodPredlozhitAdres({партияОкончена:true,задачаДняЗачтена:false}) !== "game-over") return;
+    const t=setTimeout(()=>{sПоводПодписки("game-over");sShowWaitlist(true);try{localStorage.setItem("aevion_chess_waitlist_seen","1")}catch{}},2200);
     return()=>clearTimeout(t);
   },[over]);
   const[showClockDrill,sShowClockDrill]=useState(false);
@@ -3104,6 +3142,15 @@ export default function CyberChessPage(){
           // daily_open, который шлёт плитка целей. Внутри ветки r.ok намеренно:
           // считаем то, что признал СЕРВЕР, иначе число разойдётся с таблицей.
           track({type:"daily_solved",source:"cyberchess/board",meta:{surface:"board",day:srv.day}});
+          /* Адрес спрашиваем здесь, а не только после партии: см. разбор у
+             povodPredlozhitAdres — за 14 дней конца партии не достиг никто, и
+             предложение адреса увидел ноль человек. Внутри ветки r.ok намеренно:
+             спрашиваем после того, что сервер ПРИЗНАЛ решением, иначе предложение
+             прилетит к человеку, которому только что сказали «не засчитано». */
+          if(povodPredlozhitAdres({партияОкончена:false,задачаДняЗачтена:true})==="daily-solved"){
+            предлагалиПодпискуRef.current=true;
+            setTimeout(()=>{sПоводПодписки("daily-solved");sShowWaitlist(true);try{localStorage.setItem("aevion_chess_waitlist_seen","1")}catch{}},1400);
+          }
         }
       }catch{
         // Награду человек уже получил; молчать про недоставленное решение
@@ -14474,7 +14521,7 @@ ${question.trim()}`;
     {/* Chessy Explainer */}
     <Modal open={showWaitlist} onClose={()=>sShowWaitlist(false)} size="md" title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>✉ Написать вам о запуске</span>}>
       <WaitlistCapture
-        source="cyberchess-app"
+        source={"cyberchess-"+поводПодписки}
         tone="light"
         title={cc.t("wl.launch.title") + (daysUntilLaunch(CHESS_LAUNCH_UTC) >= 0
           ? " — " + new Intl.DateTimeFormat(cc.locale, { day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(CHESS_LAUNCH_UTC))

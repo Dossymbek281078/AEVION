@@ -232,3 +232,36 @@ describe("сумма продажи оставляет след, когда го
     expect(log, "обычная покупка помечена как подделка").not.toContain("подделки");
   });
 });
+  /*
+   * 🔴 Вторая половина починки от 08.10.2026 (первая — в провайдере,
+   * tests/emptySaleIdIsForgeryNotOurFault). Вердикт «not_found» обязан
+   * ОТКАЗЫВАТЬ, а не выдавать: именно на него теперь попадает поддельный
+   * пинг без sale_id. Повод — Sentry AEVION-BACKEND-1E 22:07 08.10.
+   */
+  test("вердикт not_found — отказ 401 и выдачи НЕ происходит", async () => {
+    const s = nextSale();
+    ping(s, "pentest.aevion.qa@gmail.com", "aevion");
+    verifyDetailed.mockResolvedValue({ verdict: "not_found", sale: null });
+
+    const r = await request(app()).post("/webhook").send({});
+
+    expect(r.status, "поддельная продажа не отвергнута").toBe(401);
+    expect(
+      provisionSubscription,
+      "доступ ВЫДАН на неподтверждённой продаже — это и есть разбираемая дыра",
+    ).not.toHaveBeenCalled();
+  });
+
+  test("КОНТРОЛЬ: подтверждённая продажа по-прежнему выдаёт доступ", async () => {
+    const s = nextSale();
+    ping(s, "buyer@example.com", "prod-1");
+    verifyDetailed.mockResolvedValue({
+      verdict: "confirmed",
+      sale: { purchase_email: "buyer@example.com", product_id: "prod-1" },
+    });
+
+    const r = await request(app()).post("/webhook").send({});
+
+    expect(r.status, "настоящий покупатель получил отказ — починка зашла слишком далеко").not.toBe(401);
+  });
+

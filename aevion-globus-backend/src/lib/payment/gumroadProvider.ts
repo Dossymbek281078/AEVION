@@ -278,7 +278,30 @@ export async function verifyGumroadSale(saleId: string): Promise<SaleVerdict> {
 async function verifyGumroadSaleImpl(
   saleId: string,
 ): Promise<{ verdict: SaleVerdict; sale: Record<string, unknown> | null }> {
-  if (!saleId) return { verdict: "unverifiable", sale: null };
+  /*
+   * 🔴 ПУСТОЙ ИДЕНТИФИКАТОР — ЭТО ПРИЗНАК ПОДДЕЛКИ, А НЕ НАША ПОМЕХА.
+   *
+   * Здесь возвращалось "unverifiable", а вызывающий на этом вердикте доступ
+   * ВЫДАЁТ (gumroadWebhook.ts, ветка "unverifiable" — намеренно, чтобы не
+   * наказывать настоящего покупателя за наш недоступный API). Вместе это
+   * давало открытый замок:
+   *   gumroadWebhook.ts:477  saleId = raw.sale_id ?? raw.id ?? eventId ?? ""
+   *   -> пинг без этих полей даёт ПУСТУЮ строку
+   *   -> здесь "unverifiable"
+   *   -> доступ выдан
+   * Подписи у Gumroad на проде НЕТ (замер 02.09.2026: пустое тело получает
+   * 200, остальные три кассы отвечают 401), поэтому сверка продажи —
+   * единственный замок, и он открывался ОТСУТСТВИЕМ поля в запросе.
+   * Повод: Sentry AEVION-BACKEND-1E, 22:07 08.10 — «unverifiable_provisioned»
+   * вместе с «неизвестный товар Gumroad: permalink=aevion».
+   *
+   * Два разных «не смогли проверить» теперь различены:
+   *   нет токена / API кассы недоступен -> "unverifiable" (открываем: вина наша)
+   *   в пинге нет идентификатора продажи -> "not_found" (отказ: проверять нечего)
+   * Настоящий покупатель приходит с sale_id и при недоступном API проходит
+   * как раньше — это закреплено отдельным контролем в стороже.
+   */
+  if (!saleId) return { verdict: "not_found", sale: null };
   const token = process.env.GUMROAD_ACCESS_TOKEN;
   if (!token) return { verdict: "unverifiable", sale: null };
 

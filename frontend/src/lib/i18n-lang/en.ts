@@ -4045,7 +4045,7 @@ const en: Record<string, string> = {
   "home.cta.music": "Music Awards",
   "home.cta.qright": "QRight Registry",
   "home.subtitle": "A unified environment for investment and partnership evaluation: identity, object registry, cryptographic signature, authorship & prior-art bureau, and compliance layer — on an interactive ecosystem map with 44 product nodes and open APIs.",
-  "home.title": "Trust infrastructure for digital assets and intellectual property",
+  "home.title": "Describe it in a sentence — get a working site",
   "inbox.advance.cta": "Manage advance",
   "inbox.advance.hint": "Principal {principal} · auto-repay sweeps incoming transfers",
   "inbox.advance.title": "Salary advance outstanding",

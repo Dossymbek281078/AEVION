@@ -397,13 +397,13 @@ const DEMO_NOTE =
               margin: 0,
             }}
           >
-            DevHub writes the code, shows a live preview and publishes to a real
-            subdomain. No GitHub, no cloud account, no sign-up for the first project.
+            {t("home.subtitle")}
             <br />
+            {/* Вторая строка: что есть компания. Я чуть не потерял её при
+                переносе текстов в словарь — поймал на вычитке дифа. Она верна
+                и описывает нас, просто это не то, за чем человек пришёл. */}
             <span style={{ opacity: 0.72, fontSize: "0.92em" }}>
-              AEVION is trust infrastructure for digital assets and intellectual
-              property: identity, IP registration, signatures, authorship bureau and
-              compliance across <strong>{MODULE_NODES} product nodes</strong>.
+              {t("home.company", { n: MODULE_NODES })}
             </span>
           </p>
           {/* 07.10.2026, набросок по заданию оркестратора.
@@ -417,7 +417,7 @@ const DEMO_NOTE =
               является, пока семь кнопок стоят тем же рядом. */}
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", marginTop: 28 }}>
             <Link href="/devhub" style={btnPrimary}>
-              Open DevHub — free, no account
+              {t("home.cta.devhub")}
             </Link>
             <Link
               href="/auth"
@@ -429,7 +429,7 @@ const DEMO_NOTE =
                 fontWeight: 600,
               }}
             >
-              or start with identity (Auth)
+              {t("home.cta.auth")}
             </Link>
           </div>
           {/* 07.10.2026, набросок. Баннер QVenture стоял ПЕРВЫМ элементом экрана и

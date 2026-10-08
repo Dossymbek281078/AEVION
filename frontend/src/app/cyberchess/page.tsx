@@ -1112,6 +1112,22 @@ export function povodPredlozhitAdres(
   return null;
 }
 
+/**
+ * Что отправлять серверу как решение задачи дня.
+ *
+ * Отдельной экспортируемой функцией, потому что внутри страницы на 16 тысяч строк
+ * этот выбор вызовами с известным ответом не проверить, а он уже стоил нам
+ * молчаливого 400 на каждом решении (разбор — у otpravitDaily).
+ *
+ * Правило: отправляем каноническое решение (с ходом соперника). Если его нет —
+ * отправляем показанное, но это худший случай: сервер, скорее всего, откажет, и
+ * отказ человек увидит. Молча не отправлять нельзя — тогда решивший человек не
+ * попадёт в таблицу и не узнает почему.
+ */
+export function kanonicheskoeReshenie(srv:{sol:string[];solRaw?:string[]}):string[]{
+  return (srv.solRaw&&srv.solRaw.length)?srv.solRaw:srv.sol;
+}
+
 export default function CyberChessPage(){
   const{showToast}=useToast();
   // Workspace preset (Focus / Standard / Stream / Study / Coach), keys 1..5.
@@ -2165,7 +2181,10 @@ export default function CyberChessPage(){
   // таблица лидеров. Раньше модуль считал свою, из загруженного набора:
   // человек решал одну задачу, а в таблице участвовала другая (28.08.2026,
   // сервер отдавал li_0m2HH из банка 502 584, телефон выбирал из 400).
-  type SrvDaily={day:string;id:string;fen:string;sol:string[];rating:number;theme:string};
+  /* solRaw — решение РОВНО в том виде, в каком его знает сервер, вместе с первым
+     ходом соперника. Нужно при отправке: /solve требует полного совпадения,
+     включая длину. Разбор — у otpravitDaily ниже. */
+  type SrvDaily={day:string;id:string;fen:string;sol:string[];solRaw:string[];rating:number;theme:string};
   // Метка канала из адреса: человек приходит на /cyberchess?c=ig из рекламы, и
   // ссылка на страницу запуска обязана её донести. Иначе подписка пометится
   // просто «cyberchess», и на вопрос «какой ролик привёл» ответа не будет —
@@ -3106,6 +3125,7 @@ export default function CyberChessPage(){
         if(p&&typeof p.fen==="string"&&Array.isArray(p.sol)){
           const npd=normalizePuzzle({fen:String(p.fen),sol:(p.sol as string[])||[],name:"",r:0,theme:""});
           sSrvDaily({day:String(d.day||""),id:String(p.id||""),fen:npd.fen,sol:npd.sol,
+                     solRaw:((p.sol as string[])||[]).map(String),
                      rating:Number(p.rating)||0,theme:String(p.theme||"")});
           sSrvDailyFailed(false);
         }else{sSrvDailyFailed(true)}
@@ -3121,12 +3141,32 @@ export default function CyberChessPage(){
   // Отправить решение задачи дня на сервер. Без userId сервер считает игрока
   // анонимом и в таблицу НЕ заносит — проверено на странице /cyberchess/daily,
   // берём оттуда же личность, а не заводим четвёртую.
-  const otpravitDaily=useCallback((srv:{day:string;sol:string[]})=>{
+  /*
+   * 🔴 На сервер уходит КАНОНИЧЕСКОЕ решение (solRaw), а не показанное игроку.
+   *
+   * Замер 08.10.2026 на живом проде, перехваченное тело запроса: ручка задачи дня
+   * отдала решение из шести ходов ["a5a6","e2f2","h2g1","f2g2","g1f1","e4g3"], а
+   * страница отправила пять — без первого хода соперника a5a6, — и сервер ответил
+   * 400. Ходы при этом ПРИМЕНЯЛИСЬ (клетка-источник пустела, цель занималась,
+   * занятых клеток 12 — ровно столько в FEN). То есть человек решал задачу
+   * правильно, а мы отвечали ему «решение не попало в таблицу лидеров».
+   *
+   * Причина: в состояние кладётся нормализованное решение (npd.sol), у которого
+   * первого хода соперника нет по устройству normalizePuzzle, а /solve требует
+   * полного совпадения с каноническим, включая ДЛИНУ. На отдельной странице
+   * /cyberchess/daily это уже учтено — там для отправки держат solRaw и рядом
+   * стоит предупреждение ровно про этот случай. На главной доске не учитывалось.
+   *
+   * Последствие было не только в таблице: daily_solved не уходил никогда с этого
+   * пути, а предложение адреса после решённой задачи дня висит на r.ok этого
+   * запроса — то есть адрес не предлагали никому.
+   */
+  const otpravitDaily=useCallback((srv:{day:string;sol:string[];solRaw?:string[]})=>{
     (async()=>{
       try{
         const r=await fetch("/api-backend/api/cyberchess-daily/solve",{
           method:"POST",headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({day:srv.day,moves:srv.sol,timeMs:0,hintsUsed:0,
+          body:JSON.stringify({day:srv.day,moves:kanonicheskoeReshenie(srv),timeMs:0,hintsUsed:0,
             userId:tournamentUserId(),name:tournamentDisplayName()||undefined}),
         });
         // ОТКАЗ СЕРВЕРА (400 wrong_day после UTC-полуночи на открытой вкладке, 429,

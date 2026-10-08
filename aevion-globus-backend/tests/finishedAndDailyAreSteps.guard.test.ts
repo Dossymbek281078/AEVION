@@ -20,6 +20,15 @@ import request from "supertest";
  * повтор события в одной сессии (дедуп), событие от НАШЕГО окна (вычитание),
  * и тело обеих ручек — разрез посчитал ещё не значит сводка отдала.
  *
+
+ * ⚠️ ФИКСТУРЫ НЕСУТ `meta.moves`, и это осознанная правка 08.10.2026: порог
+ * «партия доиграна от одного хода» появился после этого сторожа. События
+ * `game_end` БЕЗ числа ходов больше не считаются доигранными — они идут
+ * отдельным числом `finishedWithoutMoves` (его проверяет
+ * `movesThresholdAndClicks`). Прежние фикстуры без `moves` покраснели на
+ * ВЕРНОЙ правке, и это правильная краснота: определение сменилось, значит
+ * сторож обязан был потребовать решения.
+ *
  * ⚠️ Импорты модуля только `await import` внутри теста: путь к журналу читается
  * ПРИ ИМПОРТЕ (сторож, нарушивший это, был зелёным на чужом журнале).
  */
@@ -67,7 +76,7 @@ function шахматист(sid: string, extra: Array<Record<string, unknown>> =
 describe("ступени «доиграл» и «задача дня»", () => {
   it("🔴 доигравший виден в канале, странице входа и сводке", async () => {
     журнал([
-      ...шахматист("доиграл", [{ type: "game_end" }]),
+      ...шахматист("доиграл", [{ type: "game_end", meta: { channel: "youtube", moves: 24 } }]),
       ...шахматист("ушёл"), // начал и не закончил
     ]);
     const app = await приложение();
@@ -84,7 +93,9 @@ describe("ступени «доиграл» и «задача дня»", () => {
 
     const сводка = await request(app).get(`/api/pricing/events/day?date=${деньАлматы()}`);
     expect(Object.keys(сводка.body), "сводка не отдала ступень").toContain("доиграли");
-    expect(сводка.body.доиграли).toEqual({ всего: 1, наши: 0, живые: 1 });
+    // Состав строки вырос: рядом с «доиграли» теперь стоит число событий БЕЗ
+    // числа ходов — иначе «0 доиграли» нельзя отличить от «не было данных».
+    expect(сводка.body.доиграли).toEqual({ всего: 1, наши: 0, живые: 1, безЧислаХодов: 0 });
   });
 
   it("🔴 ПОВТОР события в одной сессии даёт ОДНОГО доигравшего", async () => {
@@ -94,7 +105,7 @@ describe("ступени «доиграл» и «задача дня»", () => {
      * два: иначе «доиграли» легко обгонит «начали партию», и строка станет
      * бессмыслицей.
      */
-    журнал(шахматист("дважды", [{ type: "game_end" }, { type: "game_end" }]));
+    журнал(шахматист("дважды", [{ type: "game_end", meta: { channel: "youtube", moves: 24 } }, { type: "game_end", meta: { channel: "youtube", moves: 24 } }]));
     const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");
     expect(r.body.byChannel.youtube.finished, "повтор посчитан дважды").toBe(1);
     expect(r.body.byEntryPage["youtube|/cyberchess"].доиграли).toBe(1);
@@ -106,7 +117,7 @@ describe("ступени «доиграл» и «задача дня»", () => {
     журнал([
       { type: "page_view", ts: сейчас(), sid: "наш", path: "/cyberchess?c=probe-okno", meta: { channel: "probe-okno" } },
       { type: "feature_use", ts: сейчас(), sid: "наш", path: "/cyberchess", meta: { channel: "probe-okno" } },
-      { type: "game_end", ts: сейчас(), sid: "наш", path: "/cyberchess", meta: { channel: "probe-okno" } },
+      { type: "game_end", ts: сейчас(), sid: "наш", path: "/cyberchess", meta: { channel: "probe-okno", moves: 11 } },
       { type: "daily_open", ts: сейчас(), sid: "наш", path: "/cyberchess", meta: { channel: "probe-okno" } },
     ]);
     const app = await приложение();
@@ -126,7 +137,7 @@ describe("ступени «доиграл» и «задача дня»", () => {
     // Это и есть вопрос возврата на второй день: механизм отдельный, и мерить
     // его надо отдельно, иначе «доиграл» и «вернулся» склеятся в одно число.
     журнал([
-      ...шахматист("доиграл-без-задачи", [{ type: "game_end" }]),
+      ...шахматист("доиграл-без-задачи", [{ type: "game_end", meta: { channel: "youtube", moves: 24 } }]),
       ...шахматист("задача-без-партии", [{ type: "daily_open" }]),
     ]);
     const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");

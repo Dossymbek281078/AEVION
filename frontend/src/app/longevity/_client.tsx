@@ -160,7 +160,7 @@ export default function LongevityClient({
     return out;
   }
 
-  async function runAssess() {
+  async function runAssess(valsOverride?: Record<string, string>) {
     setAssessLoading(true);
     setAssessErr(null);
     try {
@@ -169,7 +169,7 @@ export default function LongevityClient({
       const res = await fetch(apiUrl("/api/longevity/assess"), {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ values: numBody(vals), flags: activeFlags }),
+        body: JSON.stringify({ values: numBody(valsOverride ?? vals), flags: activeFlags }),
       });
       if (!res.ok) throw new Error(`Сервер вернул ${res.status}`);
       setAssess((await res.json()) as AssessResp);
@@ -333,9 +333,27 @@ export default function LongevityClient({
               </label>
             ))}
           </div>
-          <button onClick={runAssess} disabled={assessLoading} style={styles.btn}>
-            {assessLoading ? "Считаю…" : "Собрать план"}
-          </button>
+          {/* Один тап без набора: YouTube-гость видит, как работает движок, на
+              примере (значения = плейсхолдеры полей), не вводя 8 анализов. Повод:
+              06–07.10 на /longevity 14 живых зашли, попробовали 0 — первый экран
+              требовал ручной ввод прежде любого результата. onClick главной кнопки
+              обёрнут в () => runAssess(), иначе объект события уедет в valsOverride. */}
+          <div style={styles.actions}>
+            <button
+              onClick={() => {
+                const пример = Object.fromEntries(ASSESS_FIELDS.map((f) => [f.key, f.placeholder]));
+                setVals(пример);
+                void runAssess(пример);
+              }}
+              disabled={assessLoading}
+              style={styles.btnGhost}
+            >
+              Показать на примере
+            </button>
+            <button onClick={() => runAssess()} disabled={assessLoading} style={styles.btn}>
+              {assessLoading ? "Считаю…" : "Собрать план"}
+            </button>
+          </div>
           {assessErr && <p style={styles.error}>{assessErr}</p>}
 
           {assess && (
@@ -592,7 +610,10 @@ export default function LongevityClient({
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  page: { minHeight: "100vh", background: "#070b14", color: "#e8eef6", padding: "48px 20px" },
+  // paddingBottom резервирует место под фиксированную пилюлю InstallPrompt
+  // (position:fixed, bottom-right, высоту публикует в --aevion-install-h): без
+  // этого на телефоне (390×844) она закрывала нижние поля и кнопку «Собрать план».
+  page: { minHeight: "100vh", background: "#070b14", color: "#e8eef6", padding: "48px 20px", paddingBottom: "calc(48px + var(--aevion-install-h, 0px))" },
   wrap: { maxWidth: 880, margin: "0 auto" },
   eyebrow: { fontFamily: "monospace", fontSize: 13, letterSpacing: "0.16em", textTransform: "uppercase", color: "#35c9b3" },
   h1: { fontSize: 32, margin: "10px 0 0", fontWeight: 700, lineHeight: 1.2 },
@@ -608,6 +629,8 @@ const styles: Record<string, React.CSSProperties> = {
   flags: { display: "flex", flexWrap: "wrap", gap: 10, marginTop: 16 },
   flagChip: { display: "flex", alignItems: "center", gap: 6, fontSize: 15, color: "#c3d0e0", background: "#0a101c", border: "1px solid #24344f", borderRadius: 8, padding: "6px 11px", cursor: "pointer" },
   btn: { marginTop: 20, background: "#35c9b3", color: "#04120f", border: "none", borderRadius: 10, padding: "12px 22px", fontSize: 15, fontWeight: 600, cursor: "pointer" },
+  actions: { display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" },
+  btnGhost: { marginTop: 20, background: "transparent", color: "#35c9b3", border: "1px solid #35c9b3", borderRadius: 10, padding: "12px 22px", fontSize: 15, fontWeight: 600, cursor: "pointer" },
   error: { color: "#e0787f", marginTop: 12 },
   result: { marginTop: 20 },
   blockTitle: { fontSize: 13, textTransform: "uppercase", letterSpacing: "0.08em", color: "#6c7d92", margin: "18px 0 10px" },

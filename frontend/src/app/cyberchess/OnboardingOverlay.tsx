@@ -40,6 +40,22 @@ type Palette = {
 type Props = {
   onComplete: (choice: OnboardingChoice) => void;
   onSkip?: () => void;
+  /**
+   * Открыть задачу дня прямо отсюда, одним нажатием.
+   *
+   * Повод 08.10.2026, замер на проде за 14 дней: на /cyberchess пришло 42 живых
+   * сессии, «внимание» дали 6, а задачу дня открыл НОЛЬ человек и партию не
+   * закончил никто. Цепочка событий при этом жива (проверено проходом пути
+   * человека: daily_open ушёл и на сервере виден). Разница в том, что до кнопки
+   * «Задача дня» надо сперва убрать это окно: мой кликер — машина, которая не
+   * сомневается — не смог нажать её за 8 секунд, пока явно не нажал
+   * «Пропустить». Значит первый экран магнита обязан САМ давать вход в игру.
+   *
+   * Передаётся ТОЛЬКО когда задача дня уже загружена: кнопка, которая покажет
+   * «ещё грузится» и закроет окно, оставит человека на пустой доске — это хуже
+   * отсутствия кнопки.
+   */
+  onDaily?: () => void;
   /** App colour theme — the overlay adapts so the very first screen a visitor
       sees is consistent with the app behind it. Defaults to dark. */
   mode?: "light" | "dark";
@@ -104,7 +120,7 @@ const INTENTS: Array<{
   { intent: "puzzles", icon: "⚡", title: "Задачи", hint: "Тысячи задач под твой уровень" },
 ];
 
-export default function OnboardingOverlay({ onComplete, onSkip, mode = "dark" }: Props) {
+export default function OnboardingOverlay({ onComplete, onSkip, onDaily, mode = "dark" }: Props) {
   const p = makePalette(mode);
   const oknoRef = useRef<HTMLDivElement>(null);
 
@@ -162,6 +178,11 @@ export default function OnboardingOverlay({ onComplete, onSkip, mode = "dark" }:
   function pick(intent: "play" | "learn" | "puzzles") {
     markOnboardingDone();
     onComplete({ intent });
+  }
+
+  function handleDaily() {
+    markOnboardingDone();
+    onDaily?.();
   }
 
   function handleSkip() {
@@ -248,6 +269,34 @@ export default function OnboardingOverlay({ onComplete, onSkip, mode = "dark" }:
           <br />
           <span translate="no" className="notranslate" style={{ color: p.accent, fontWeight: 700 }}>+50 Chessy</span> уже на счёте.
         </p>
+
+        {onDaily && (
+          <button
+            type="button"
+            onClick={handleDaily}
+            data-cc-daily-entry="onboarding"
+            style={{
+              display: "block",
+              width: "100%",
+              marginBottom: 14,
+              padding: "16px 18px",
+              background: p.accentGrad,
+              border: "none",
+              borderRadius: 14,
+              color: "#fff",
+              fontSize: 18,
+              fontWeight: 800,
+              cursor: "pointer",
+              fontFamily: FONT,
+              lineHeight: 1.3,
+            }}
+          >
+            ☀ Решить задачу дня
+            <span style={{ display: "block", fontSize: 14, fontWeight: 600, opacity: 0.9, marginTop: 4 }}>
+              одна задача, 30 секунд — и сразу понятно, нравится ли
+            </span>
+          </button>
+        )}
 
         <div
           style={{

@@ -108,9 +108,25 @@ export function LongevityTool({ channel = null }: { channel?: string | null }) {
         ))}
       </div>
 
-      <button type="button" onClick={() => setChecked(true)} style={styles.button}>
-        Check my numbers
-      </button>
+      {/* One tap, no typing: a visitor sees the tool work on an example (values =
+          field placeholders) instead of entering 11 labs first. 06–07.10:
+          /longevity drew live YouTube visitors, 0 tried — the first screen
+          demanded manual entry before any result. Mirrors the RU /longevity fix. */}
+      <div style={styles.actions}>
+        <button
+          type="button"
+          onClick={() => {
+            setVals(Object.fromEntries(FIELDS.map((f) => [f.key, f.placeholder])));
+            setChecked(true);
+          }}
+          style={styles.buttonGhost}
+        >
+          Show an example
+        </button>
+        <button type="button" onClick={() => setChecked(true)} style={styles.button}>
+          Check my numbers
+        </button>
+      </div>
 
       {checked && filled.length === 0 && (
         <p style={styles.note}>
@@ -191,6 +207,18 @@ const styles: Record<string, React.CSSProperties> = {
     border: `1px solid ${INK}`,
     background: INK,
     color: "#fff",
+    borderRadius: 8,
+    padding: "10px 18px",
+    fontSize: 14.5,
+    fontWeight: 600,
+    cursor: "pointer",
+  },
+  actions: { display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" },
+  buttonGhost: {
+    marginTop: 16,
+    border: `1px solid ${INK}`,
+    background: "transparent",
+    color: INK,
     borderRadius: 8,
     padding: "10px 18px",
     fontSize: 14.5,

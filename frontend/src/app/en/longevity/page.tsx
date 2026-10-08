@@ -398,7 +398,10 @@ export default async function EnLongevityPage({
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  page: { minHeight: "100vh", background: PAPER, color: INK, padding: "32px 18px 56px" },
+  // paddingBottom reserves room for the fixed InstallPrompt pill (bottom-right,
+  // height published as --aevion-install-h): without it, on a phone the pill
+  // covered the lower form and the submit button. Mirrors RU /longevity.
+  page: { minHeight: "100vh", background: PAPER, color: INK, padding: "32px 18px 56px", paddingBottom: "calc(56px + var(--aevion-install-h, 0px))" },
   wrap: { maxWidth: 640, margin: "0 auto" },
   head: { borderBottom: `2px solid ${INK}`, paddingBottom: 18 },
   brand: { fontFamily: "monospace", fontSize: 13, letterSpacing: "0.3em", fontWeight: 700, color: GOLD },

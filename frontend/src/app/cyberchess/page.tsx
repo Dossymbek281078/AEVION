@@ -13148,6 +13148,28 @@ ${question.trim()}`;
     {/* First-time onboarding — 3-step color/AI/time choice (runs BEFORE the tour) */}
     {showOnboarding&&<OnboardingOverlay
       mode={themeMode}
+      /*
+       * Вход в задачу дня ПРЯМО из приветственного окна.
+       *
+       * Замер 08.10.2026 на проде за 14 дней: 42 живых входа на /cyberchess,
+       * «внимание» 6, задачу дня открыл НОЛЬ, партию не закончил никто
+       * (daily_open 0, game_end 0, waitlist_submit 0 при page_view 3042).
+       * Отправка событий при этом исправна — проверено проходом пути человека:
+       * daily_open ушёл со страницы и на сервере виден (всего=1, наши=1).
+       * Мешало другое: до кнопки «☀ Задача дня» надо сперва убрать это окно, а
+       * мой кликер не смог нажать её за 8 секунд, пока не нажал «Пропустить».
+       *
+       * Передаём обработчик ТОЛЬКО когда задача дня готова. Иначе
+       * loadDailyPuzzle закроет окно и скажет «ещё грузится» — человек окажется
+       * на пустой доске, а это хуже отсутствия кнопки (правило «отказ
+       * показывается отказом»).
+       */
+      onDaily={(srvDaily&&!srvDailyFailed)?()=>{
+        markOnboardingDone();
+        sShowOnboarding(false);
+        firstRunRef.current=false;
+        loadDailyPuzzle("onboarding");
+      }:undefined}
       onComplete={(choice:OnboardingChoice)=>{
         try{localStorage.setItem("aevion_onboarding_choice_v1",JSON.stringify(choice))}catch{}
         markOnboardingDone();

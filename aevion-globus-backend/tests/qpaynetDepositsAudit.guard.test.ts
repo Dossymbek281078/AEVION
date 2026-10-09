@@ -146,8 +146,7 @@ describe("QPayNet: разбор зачислений считает верно �
     for (const s of свои) {
       expect(s.includes("qpaynet_deposit_checkouts")).toBe(true);
       expect(s.includes("c.tx_id = t.id")).toBe(true);
-      expect(s.includes("status = ")).toBe(true);
-      expect(s.includes("paid")).toBe(true);
+      expect(s.includes("c.status = " + "'paid'")).toBe(true);
       // по описанию судить нельзя: его пишет сам отправитель запроса
       expect(s.toLowerCase().includes("description")).toBe(false);
     }

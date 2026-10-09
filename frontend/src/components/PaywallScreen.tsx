@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { KeepChannelLink } from "./KeepChannelLink";
-import { tierLabel, type PaywallPayload, type CanonicalTier } from "@/lib/paywall";
+import { tierLabel, требуемоеСловами, type PaywallPayload, type CanonicalTier } from "@/lib/paywall";
 import { WaitlistIfMissing } from "./FooterWaitlist";
 
 /**
@@ -85,7 +85,9 @@ export function PaywallScreen({ payload, backHref = "/", backLabel = "← На �
         </div>
 
         <h1 style={{ fontSize: 28, fontWeight: 900, margin: "0 0 12px", lineHeight: 1.15 }}>
-          Модуль «{module}» доступен на старших тарифах
+          {requiredTiers.includes("full")
+            ? `Модуль «${module}» входит в любую платную подписку`
+            : `Модуль «${module}» доступен на старших тарифах`}
         </h1>
 
         <p style={{ fontSize: 14, color: "#475569", margin: "0 0 24px", lineHeight: 1.5 }}>
@@ -103,27 +105,22 @@ export function PaywallScreen({ payload, backHref = "/", backLabel = "← На �
           }}
           aria-label="Доступные тарифы"
         >
-          {requiredTiers.map((t) => {
-            const color = TIER_ACCENT[t] ?? "#94a3b8";
-            return (
-              <span
-                key={t}
-                style={{
-                  padding: "6px 14px",
-                  background: `${color}22`,
-                  border: `1px solid ${color}66`,
-                  color,
-                  borderRadius: 999,
-                  fontSize: 12,
-                  fontWeight: 800,
-                  letterSpacing: "0.04em",
-                  textTransform: "uppercase",
-                }}
-              >
-                {tierLabel(t)}
-              </span>
-            );
-          })}
+          {/* Одна фраза вместо ярлыков: «FULL» в лестнице сроков значит 9 месяцев,
+              а требование — «любой платный». Разбор в lib/paywall.ts. */}
+          <span
+            style={{
+              padding: "6px 14px",
+              background: `${accent}22`,
+              border: `1px solid ${accent}66`,
+              color: accent,
+              borderRadius: 999,
+              fontSize: 12,
+              fontWeight: 800,
+              letterSpacing: "0.04em",
+            }}
+          >
+            {требуемоеСловами(requiredTiers)}
+          </span>
         </div>
 
         {/*

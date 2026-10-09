@@ -184,9 +184,31 @@ export function tierLabel(t: CanonicalTier): string {
   return Object.prototype.hasOwnProperty.call(TIER_LABELS, t) ? TIER_LABELS[t] : String(t);
 }
 
-/** Pretty tier list for display, e.g. ["full"] → "Full" (free is dropped). */
+/**
+ * 🔴 Канонический «full» — это НЕ девятимесячный тариф Full из лестницы сроков.
+ *
+ * `planGate.normalizeTier` схлопывает lite/medium/pro/full/max/business в один
+ * канонический «full», то есть «любой платный срок». Ручка отдаёт
+ * requiredTiers: ["full","enterprise"], а экран печатал это дословно — гость
+ * читал «FULL / ENTERPRISE» и понимал, что нужен план на 9 месяцев, хотя
+ * доступ открывает Lite за один. Замер 08.10.2026 на проде, все четыре
+ * закрытых модуля (qnews, qai, qlearn, qfusionai) отдают ровно этот список.
+ *
+ * Поэтому требование переводится в человеческую фразу, а не в ярлык тарифа.
+ * Подпись ТЕКУЩЕГО плана (tierLabel) остаётся как была: там «Free» верно.
+ */
+export function требуемоеСловами(tiers: CanonicalTier[]): string {
+  const платные = tiers.filter((t) => t !== "free");
+  // Только free в списке — платить не за что; прежний контракт (пустая строка)
+  // сохранён: его закрепил существующий тест, и он поймал мою ошибку.
+  if (!платные.length) return "";
+  if (платные.includes("full")) return "любой платный тариф, от Lite";
+  return платные.map(tierLabel).join(" / ");
+}
+
+/** Pretty tier list for display. С 08.10.2026 — человеческая фраза, см. выше. */
 export function formatTiers(tiers: CanonicalTier[]): string {
-  return tiers.filter((t) => t !== "free").map(tierLabel).join(" / ");
+  return требуемоеСловами(tiers);
 }
 
 /* ───── Global fetch interceptor → window event ─────────────────────────────

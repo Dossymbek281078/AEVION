@@ -776,11 +776,44 @@ async function callGemini(messages: ChatMessage[], model: string, temperature: n
     },
   };
   if (systemMsg) body.systemInstruction = { parts: [{ text: systemMsg.content }] };
-  const r = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
-  );
-  const data = (await r.json()) as any;
+
+  const адрес = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+  const послать = (тело: any) =>
+    fetch(адрес, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(тело) });
+
+  let r = await послать(body);
+  let data = (await r.json()) as any;
+
+  /*
+   * 🔴 09.10.2026. Не всякая модель принимает `thinkingConfig`, и отказ
+   * выглядит как поломка МОДЕЛИ, хотя сломана НАША ФОРМА ЗАПРОСА.
+   *
+   * Замер того дня, один ключ, один и тот же запрос:
+   *   gemini-3.5-flash-lite  без thinkingConfig → 200
+   *   gemini-3.5-flash-lite  с  thinkingConfig → 400 «invalid argument»
+   *   gemini-2.5-flash / 3.8-flash — 200 в обоих случаях
+   *
+   * Модель объявлена у нас ЗАПАСОМ. То есть в день, когда основной поставщик
+   * откажет, запас упал бы с 400 — и по журналу это читалось бы как «модель
+   * мертва». Нашла проба `default_model_answers` на проде через час после
+   * выкатки волны 32.
+   *
+   * Повторяем БЕЗ размышления, а не ведём список «кто не умеет»: список
+   * устаревает молча (в тот же день два имени Gemini исчезли у поставщика),
+   * а поведение отвечает за себя само. Цена несимметрична: лишний повтор —
+   * один вызов, непринятый запрос — отказ модуля.
+   */
+  const былоРазмышление = Boolean((body.generationConfig as any)?.thinkingConfig);
+  const ЭтоПроФормуЗапроса =
+    r.status === 400 && /invalid argument|unknown name|not supported/i.test(String(data?.error?.message || ""));
+  if (!r.ok && былоРазмышление && ЭтоПроФормуЗапроса) {
+    const безРазмышления = { ...body, generationConfig: { ...(body.generationConfig as any) } };
+    delete (безРазмышления.generationConfig as any).thinkingConfig;
+    console.warn(`[providers] ${model}: не принял thinkingConfig, повторяю без него`);
+    r = await послать(безРазмышления);
+    data = (await r.json()) as any;
+  }
+
   if (!r.ok) throw new Error(data?.error?.message || `Gemini ${r.status}`);
   const reply = data.candidates?.[0]?.content?.parts?.map((p: any) => p.text || "").join("") || "";
   return { reply, model, usage: data.usageMetadata || null };

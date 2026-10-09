@@ -76,6 +76,53 @@ describe("порог ходов решается в разрезе", () => {
     expect(r.body.byChannel.youtube.finishedWithoutMoves, "число есть, значит это не «без числа»").toBe(0);
   });
 
+  it("🔴 ОДИН ПОЛУХОД — доиграна: порог стоит на plies, а не на парах", async () => {
+    /*
+     * Поправка окна шахмат 08.10.2026, снявшая мой дефект: `moves` в событии
+     * считается ПАРАМИ (`floor(hist.length/2)`), поэтому партия из одного хода
+     * давала `moves = 0`, и мой прежний порог `moves >= 1` отбрасывал её как
+     * «не партию» — хотя человек играл. Это решающий случай всей правки.
+     */
+    журнал(
+      партия("один-полуход", {
+        type: "game_end",
+        meta: { channel: "youtube", plies: 1, moves: 0 },
+      }),
+    );
+    const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");
+    expect(r.body.byChannel.youtube.finished, "партия из одного полухода отброшена").toBe(1);
+    expect(r.body.byChannel.youtube.finishedWithoutMoves).toBe(0);
+  });
+
+  it("🔴 ноль полуходов — не партия, даже если поле есть", async () => {
+    журнал(
+      партия("сдался-до-хода", {
+        type: "game_end",
+        meta: { channel: "youtube", plies: 0, moves: 0 },
+      }),
+    );
+    const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");
+    expect(r.body.byChannel.youtube.finished).toBe(0);
+    expect(r.body.byChannel.youtube.finishedWithoutMoves).toBe(0);
+  });
+
+  it("старое событие БЕЗ plies читается грубой мерой и не теряется", async () => {
+    // События, записанные до правки фронта, несут только пары ходов. Запасной
+    // путь обязан их прочитать: пара ходов — заведомо не меньше одного полухода.
+    журнал(партия("старое", { type: "game_end", meta: { channel: "youtube", moves: 12 } }));
+    const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");
+    expect(r.body.byChannel.youtube.finished).toBe(1);
+  });
+
+  it("КОНТРОЛЬ: plies строкой — это «без числа», а не полуход", async () => {
+    журнал(
+      партия("строкой", { type: "game_end", meta: { channel: "youtube", plies: "1" } }),
+    );
+    const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");
+    expect(r.body.byChannel.youtube.finished).toBe(0);
+    expect(r.body.byChannel.youtube.finishedWithoutMoves).toBe(1);
+  });
+
   it("🔴 партия из одного хода доиграна — порог именно такой", async () => {
     журнал(партия("один-ход", { type: "game_end", meta: { channel: "youtube", moves: 1 } }));
     const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");

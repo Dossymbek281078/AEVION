@@ -8,6 +8,7 @@ import {
 } from "../services/qcoreai/providers";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { getPool } from "../lib/dbPool";
+import { verifyBearerOptional } from "../lib/authJwt";
 import { rateLimit } from "../lib/rateLimit";
 import { safeErrorText } from "../lib/safeError";
 
@@ -38,6 +39,8 @@ interface QaiSession {
   personaId: string | null;
   createdAt: string;
   ip: string;
+  /** Владелец: user:<sub> для вошедшего, guest:<uuid> из подписанной cookie. */
+  owner: string;
 }
 
 // ── Session store: Postgres-persisted (survives restart) + in-memory fallback ──
@@ -60,11 +63,18 @@ async function ensureQaiTables(): Promise<void> {
         title       TEXT,
         persona_id  TEXT,
         ip          TEXT NOT NULL DEFAULT '',
+        owner       TEXT NOT NULL DEFAULT '',
         messages    JSONB NOT NULL DEFAULT '[]'::jsonb,
         created_at  TEXT NOT NULL,
         updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
       CREATE INDEX IF NOT EXISTS idx_qai_sessions_ip ON qai_sessions (ip, updated_at DESC);
+    `);
+    // CREATE TABLE IF NOT EXISTS столбец к СУЩЕСТВУЮЩЕЙ таблице не добавляет:
+    // без этого ALTER правка молча работала бы только на чистой базе.
+    await getPool().query(`
+      ALTER TABLE qai_sessions ADD COLUMN IF NOT EXISTS owner TEXT NOT NULL DEFAULT '';
+      CREATE INDEX IF NOT EXISTS idx_qai_sessions_owner ON qai_sessions (owner, updated_at DESC);
     `);
     qaiTablesReady = true;
     qaiDbAvailable = true;
@@ -89,6 +99,7 @@ function rowToSession(r: Record<string, unknown>): QaiSession {
     personaId: r.persona_id == null ? null : String(r.persona_id),
     createdAt: String(r.created_at),
     ip: String(r.ip ?? ""),
+    owner: String(r.owner ?? ""),
   };
 }
 
@@ -166,14 +177,14 @@ async function saveSession(s: QaiSession): Promise<void> {
   if (qaiDbAvailable) {
     try {
       await getPool().query(
-        `INSERT INTO qai_sessions (id, title, persona_id, ip, messages, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5::jsonb, $6, NOW())
+        `INSERT INTO qai_sessions (id, title, persona_id, ip, owner, messages, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, NOW())
          ON CONFLICT (id) DO UPDATE
            SET title = EXCLUDED.title,
                persona_id = EXCLUDED.persona_id,
                messages = EXCLUDED.messages,
                updated_at = NOW()`,
-        [s.id, s.title, s.personaId, s.ip, JSON.stringify(s.messages), s.createdAt],
+        [s.id, s.title, s.personaId, s.ip, s.owner, JSON.stringify(s.messages), s.createdAt],
       );
     } catch (err) {
       console.warn("[qai] saveSession failed (kept in memory):", err instanceof Error ? err.message : err);
@@ -181,20 +192,23 @@ async function saveSession(s: QaiSession): Promise<void> {
   }
 }
 
-async function listSessionsByIp(ip: string): Promise<QaiSession[]> {
+async function listSessionsByOwner(owner: string): Promise<QaiSession[]> {
+  // Пустой владелец — это «не установлен», а не «совпадает с пустыми»: иначе
+  // старые записи (owner='') стали бы общими для всех, кто не вошёл.
+  if (!owner) return [];
   await ensureQaiTables();
   if (qaiDbAvailable) {
     try {
       const r = await getPool().query(
-        `SELECT id, title, persona_id, ip, messages, created_at FROM qai_sessions WHERE ip = $1 ORDER BY updated_at DESC LIMIT 100`,
-        [ip],
+        `SELECT id, title, persona_id, ip, owner, messages, created_at FROM qai_sessions WHERE owner = $1 ORDER BY updated_at DESC LIMIT 100`,
+        [owner],
       );
       return r.rows.map((row: Record<string, unknown>) => rowToSession(row));
     } catch (err) {
-      console.warn("[qai] listSessionsByIp failed:", err instanceof Error ? err.message : err);
+      console.warn("[qai] listSessionsByOwner failed:", err instanceof Error ? err.message : err);
     }
   }
-  return Array.from(memSessions.values()).filter((s) => s.ip === ip);
+  return Array.from(memSessions.values()).filter((s) => s.owner === owner);
 }
 
 async function deleteSessionStore(id: string): Promise<void> {
@@ -220,6 +234,67 @@ async function countSessions(): Promise<number> {
   return memSessions.size;
 }
 
+// ── Владелец сессии ──────────────────────────────────────────────────────────
+// 🔴 Раньше принадлежность переписки определял АДРЕС (x-forwarded-for). Адрес
+// приходит в запросе от клиента, а за NAT (офис, кафе, мобильный оператор) он
+// один у множества людей — то есть чужую переписку было видно без входа.
+// Теперь владелец — вход, а без входа подписанная СЕРВЕРОМ метка гостя в
+// httpOnly-cookie. Адрес остался только для ограничения темпа.
+const GUEST_COOKIE = "qai_guest";
+const GUEST_TTL_MS = 180 * 24 * 60 * 60 * 1000;
+
+function guestSecret(): string {
+  return process.env.AUTH_JWT_SECRET ?? "";
+}
+
+function signGuest(id: string): string {
+  return crypto.createHmac("sha256", guestSecret()).update(id).digest("hex").slice(0, 32);
+}
+
+function readGuestCookie(req: Request): string | null {
+  const raw = req.headers.cookie;
+  if (!raw || !guestSecret()) return null;
+  for (const part of raw.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq < 0 || part.slice(0, eq).trim() !== GUEST_COOKIE) continue;
+    const value = decodeURIComponent(part.slice(eq + 1).trim());
+    const dot = value.lastIndexOf(".");
+    if (dot <= 0) return null;
+    const id = value.slice(0, dot);
+    const подпись = Buffer.from(value.slice(dot + 1));
+    const ожидаемая = Buffer.from(signGuest(id));
+    // timingSafeEqual падает на разной длине — сравниваем её отдельно.
+    if (подпись.length !== ожидаемая.length) return null;
+    return crypto.timingSafeEqual(подпись, ожидаемая) ? id : null;
+  }
+  return null;
+}
+
+/**
+ * Владелец запроса. Пустая строка значит «установить не удалось», и ручки
+ * обязаны вести себя как при чужой сессии, а не пропускать (§14: пропуск ведёт
+ * к утечке наружу — значит закрываемся).
+ * Cookie ставится, только пока заголовки не ушли: у SSE звать ДО flushHeaders.
+ */
+function getOwner(req: Request, res: Response): string {
+  const auth = verifyBearerOptional(req);
+  const sub = auth?.sub ?? auth?.email;
+  if (sub) return `user:${sub}`;
+  const прежний = readGuestCookie(req);
+  if (прежний) return `guest:${прежний}`;
+  if (!guestSecret()) return "";
+  const id = crypto.randomUUID();
+  if (!res.headersSent) {
+    res.cookie(GUEST_COOKIE, `${id}.${signGuest(id)}`, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: GUEST_TTL_MS,
+      path: "/api/qai",
+    });
+  }
+  return `guest:${id}`;
+}
 function getIp(req: Request): string {
   const fwd = req.headers["x-forwarded-for"];
   const raw = Array.isArray(fwd) ? fwd[0] : fwd;
@@ -227,12 +302,15 @@ function getIp(req: Request): string {
   return req.socket?.remoteAddress || "anonymous";
 }
 
-async function getOrCreateSession(sessionId: string | undefined, ip: string): Promise<QaiSession> {
+async function getOrCreateSession(sessionId: string | undefined, ip: string, owner: string): Promise<QaiSession | null> {
+  if (!owner) return null;
   if (sessionId) {
     const existing = await loadSession(sessionId);
-    if (existing) return existing;
+    // Продолжать можно только СВОЮ переписку: иначе чужая история попала бы в
+    // контекст ответа — та же утечка, только через чат, а не через чтение.
+    if (existing) return existing.owner === owner ? existing : null;
   }
-  const s: QaiSession = { id: crypto.randomUUID(), title: null, messages: [], personaId: null, createdAt: new Date().toISOString(), ip };
+  const s: QaiSession = { id: crypto.randomUUID(), title: null, messages: [], personaId: null, createdAt: new Date().toISOString(), ip, owner };
   memSessions.set(s.id, s);
   return s;
 }
@@ -263,7 +341,12 @@ qaiRouter.post("/chat", qaiAiLimit, async (req: Request, res: Response) => {
   }
 
   const ip = getIp(req);
-  const session = await getOrCreateSession(sessionId, ip);
+  const owner = getOwner(req, res);
+  const session = await getOrCreateSession(sessionId, ip, owner);
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
 
   // Store personaId in session if provided
   if (personaId) session.personaId = personaId;
@@ -341,6 +424,10 @@ qaiRouter.post("/chat/stream", qaiAiLimit, async (req: Request, res: Response) =
     return;
   }
 
+  // Владельца берём ДО flushHeaders: после отправки заголовков cookie гостя
+  // уже не поставить, и он потерял бы доступ к своей же переписке.
+  const owner = getOwner(req, res);
+
   // SSE headers
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
@@ -350,7 +437,13 @@ qaiRouter.post("/chat/stream", qaiAiLimit, async (req: Request, res: Response) =
   res.flushHeaders();
 
   const ip = getIp(req);
-  const session = await getOrCreateSession(sessionId, ip);
+  const session = await getOrCreateSession(sessionId, ip, owner);
+  if (!session) {
+    // Заголовки уже ушли — отказ сообщаем тем же событием, что и прочие ошибки.
+    res.write(`data: ${JSON.stringify({ type: "error", message: "Session not found" })}\n\n`);
+    res.end();
+    return;
+  }
 
   // Apply persona to session if provided
   if (personaId) session.personaId = personaId;
@@ -437,8 +530,8 @@ qaiRouter.post("/chat/stream", qaiAiLimit, async (req: Request, res: Response) =
 
 // GET /api/qai/sessions — list sessions for this IP
 qaiRouter.get("/sessions", async (req: Request, res: Response) => {
-  const ip = getIp(req);
-  const result = (await listSessionsByIp(ip))
+  const owner = getOwner(req, res);
+  const result = (await listSessionsByOwner(owner))
     .map((s) => ({
       id: s.id,
       title: s.title,
@@ -454,7 +547,7 @@ qaiRouter.get("/sessions", async (req: Request, res: Response) => {
 
 // GET /api/qai/sessions/:id/export — export session as markdown
 qaiRouter.get("/sessions/:id/export", async (req: Request, res: Response) => {
-  const ip = getIp(req);
+  const owner = getOwner(req, res);
   const sid = String(req.params.id);
   const session = await loadSessionOrReply(sid, res);
   if (!session) {
@@ -463,8 +556,9 @@ qaiRouter.get("/sessions/:id/export", async (req: Request, res: Response) => {
     if (!res.headersSent) res.status(404).json({ error: "Session not found" });
     return;
   }
-  if (session.ip !== ip) {
-    res.status(403).json({ error: "Forbidden" });
+  // 404, а не 403: «нет доступа» подтверждало бы, что такая переписка есть.
+  if (session.owner !== owner) {
+    res.status(404).json({ error: "Session not found" });
     return;
   }
 
@@ -487,7 +581,7 @@ qaiRouter.get("/sessions/:id/export", async (req: Request, res: Response) => {
 
 // POST /api/qai/sessions/:id/title — rename session
 qaiRouter.post("/sessions/:id/title", async (req: Request, res: Response) => {
-  const ip = getIp(req);
+  const owner = getOwner(req, res);
   const sid = String(req.params.id);
   const session = await loadSessionOrReply(sid, res);
   if (!session) {
@@ -496,8 +590,9 @@ qaiRouter.post("/sessions/:id/title", async (req: Request, res: Response) => {
     if (!res.headersSent) res.status(404).json({ error: "Session not found" });
     return;
   }
-  if (session.ip !== ip) {
-    res.status(403).json({ error: "Forbidden" });
+  // 404, а не 403: «нет доступа» подтверждало бы, что такая переписка есть.
+  if (session.owner !== owner) {
+    res.status(404).json({ error: "Session not found" });
     return;
   }
   const { title } = req.body as { title?: string };
@@ -512,7 +607,7 @@ qaiRouter.post("/sessions/:id/title", async (req: Request, res: Response) => {
 
 // DELETE /api/qai/sessions/:id — clear history
 qaiRouter.delete("/sessions/:id", async (req: Request, res: Response) => {
-  const ip = getIp(req);
+  const owner = getOwner(req, res);
   const sid = String(req.params.id);
   const session = await loadSessionOrReply(sid, res);
   if (!session) {
@@ -521,8 +616,9 @@ qaiRouter.delete("/sessions/:id", async (req: Request, res: Response) => {
     if (!res.headersSent) res.status(404).json({ error: "Session not found" });
     return;
   }
-  if (session.ip !== ip) {
-    res.status(403).json({ error: "Forbidden" });
+  // 404, а не 403: «нет доступа» подтверждало бы, что такая переписка есть.
+  if (session.owner !== owner) {
+    res.status(404).json({ error: "Session not found" });
     return;
   }
   await deleteSessionStore(sid);
@@ -536,12 +632,12 @@ qaiRouter.get("/personas", (_req: Request, res: Response) => {
 
 // GET /api/qai/sessions/:id — session info
 qaiRouter.get("/sessions/:id", async (req: Request, res: Response) => {
-  const ip = getIp(req);
+  const owner = getOwner(req, res);
   const sid = String(req.params.id);
   const session = await loadSessionOrReply(sid, res);
   // Помощник мог уже ответить 503 — второй ответ уронил бы обработчик.
   if (!session) { if (!res.headersSent) res.status(404).json({ error: "Session not found" }); return; }
-  if (session.ip !== ip) { res.status(403).json({ error: "Forbidden" }); return; }
+  if (session.owner !== owner) { res.status(404).json({ error: "Session not found" }); return; }
   const lastMsg = session.messages[session.messages.length - 1];
   res.json({
     id: session.id,

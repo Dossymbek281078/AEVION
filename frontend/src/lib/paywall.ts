@@ -48,7 +48,13 @@ export class PaywallError extends Error {
   }
 }
 
-function isPaywallPayload(x: unknown): x is PaywallPayload {
+/**
+ * Признак тела стены. Экспортирован 09.10.2026: страницам, которые НЕ могут
+ * пользоваться `fetchOrPaywall` (он всё, кроме 402, превращает в «страница
+ * без данных» и тем откатывает различение 503 от пустоты), нужен тот же
+ * разбор. Второй копии правила заводить нельзя — она разойдётся с этой.
+ */
+export function isPaywallPayload(x: unknown): x is PaywallPayload {
   if (!x || typeof x !== "object") return false;
   const o = x as Record<string, unknown>;
   return (

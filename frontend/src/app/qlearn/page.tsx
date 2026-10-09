@@ -8,6 +8,8 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { catalogWithToken } from "@/lib/aevionCatalog";
 import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
+import { PaywallScreen } from "@/components/PaywallScreen";
+import { isPaywallPayload, type PaywallPayload } from "@/lib/paywall";
 import ModulePricingChip from "@/components/ModulePricingChip";
 
 interface Course {
@@ -361,6 +363,21 @@ export default function QLearnPage() {
   const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([]);
   const [showBookmarks, setShowBookmarks] = useState(false);
   const [openCourseId, setOpenCourseId] = useState<string | null>(null);
+  /*
+   * 🔴 Платная стена — это НЕ поломка каталога (09.10.2026).
+   * Было: на 402 читалось поле `warning`, которого в теле стены нет (там
+   * `message`), и гость видел «Каталог не загрузился. Это не значит, что
+   * курсов нет…». Человеку, готовому заплатить, сообщали о сбое вместо
+   * предложения купить. Замер: /api/qlearn/courses у гостя -> 402
+   * upgrade_required; модуль закрыт ПО ЗАМЫСЛУ (moduleAccess: продаётся
+   * false, стена true — «открывается только планетой»).
+   *
+   * Общий помощник `fetchOrPaywall` здесь НЕ подходит намеренно: он всё,
+   * кроме 402, превращает в «страница без данных», и это откатило бы
+   * починку от 21.08.2026, из-за которой отказ хранилища (503) перестал
+   * выглядеть пустым каталогом. Поэтому добавлена только ветка 402.
+   */
+  const [paywall, setPaywall] = useState<PaywallPayload | null>(null);
 
   const fetchCourses = useCallback(async () => {
     setLoading(true);
@@ -373,6 +390,13 @@ export default function QLearnPage() {
       // Отказ хранилища и пустой каталог — РАЗНЫЕ новости, а `|| []` и
       // `catch { setCourses([]) }` превращали первое во второе: обе ветки
       // вели к «курсов нет». С 21.08.2026 бэкенд отвечает 503 с объяснением.
+      if (res.status === 402 && isPaywallPayload(data)) {
+        // Стена, а не сбой: у неё свой экран, он же на 16 других страницах.
+        setPaywall(data);
+        setCourses([]);
+        setLoadError(null);
+        return;
+      }
       if (!res.ok) {
         setLoadError(
           typeof data?.warning === "string"
@@ -515,6 +539,14 @@ export default function QLearnPage() {
       setCreating(false);
     }
   };
+
+  /*
+   * Ранний выход: модуль закрыт стеной — показываем ЕЁ экран, а не
+   * каталог с сообщением о сбое. Так же устроены 16 других страниц.
+   */
+  if (paywall) {
+    return <PaywallScreen payload={paywall} backHref="/modules" />;
+  }
 
   return (
     <>

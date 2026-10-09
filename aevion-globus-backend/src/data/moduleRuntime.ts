@@ -320,6 +320,41 @@ export const MODULE_RUNTIME: Record<string, ModuleRuntimeMeta> = {
     apiHints: ["/api/qpaynet/health", "/api/qpaynet/stats", "/api/qpaynet/*"],
     hint: "Встраиваемые платежи · 67 endpoints · Postgres (27 кошельков, шифрование, Stripe webhooks)",
   },
+
+  // 🔴 09.10.2026: этих трёх в карте НЕ БЫЛО ВОВСЕ, и они молча падали в
+  // DEFAULT_META — то есть `/api/globus/projects` отдавал им
+  // `primaryPath: null` и `tier: "portal_only"`. Снаружи это читается как
+  // «приложения нет», хотя все три страницы живые.
+  //
+  // Причина — не недосмотр одного дня: шапка файла обещает «полное покрытие
+  // 39 узлов», а в `projects.ts` их 45. Карта перестала поспевать за
+  // реестром, и промах был невидим, потому что DEFAULT_META отвечает за
+  // пропущенных молча. Сторож `everyLiveModuleHasAWorkingPath` закрывает
+  // именно это: знаменатель 45 и живой 200 на каждый путь.
+  //
+  // Замер 09.10 (curl + чистый браузер, ru-RU, метка ?c=probe-user-cc):
+  //   /qmelanin → 200, «Протокол против седины», цены и кнопка «Купить»
+  //   /qrenew   → 200, «Программа клеточного обновления», калькулятор
+  //   /qreal    → 200, «QReal Studio», два встроенных ролика сравнения
+  // Ни на одной нет признаков страницы «не найдено».
+  qmelanin: {
+    tier: "mvp_live",
+    primaryPath: "/qmelanin",
+    apiHints: ["/api/qmelanin"],
+    hint: "Пигмент и седина: протокол, анализы, баланс цинк/медь",
+  },
+  qrenew: {
+    tier: "mvp_live",
+    primaryPath: "/qrenew",
+    apiHints: ["/api/qrenew"],
+    hint: "Биологический возраст по анализам крови · калькулятор на странице",
+  },
+  qreal: {
+    tier: "mvp_live",
+    primaryPath: "/qreal",
+    apiHints: ["/api/qreal/health", "/api/qreal/engines", "/api/qreal/*"],
+    hint: "QReal Studio: видео без съёмки · сравнение движков на странице",
+  },
 };
 
 const DEFAULT_META: ModuleRuntimeMeta = {

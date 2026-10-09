@@ -32,8 +32,18 @@ describe("состав строк разреза закреплён руками
         "checkoutStartOurs",
         "checkoutStartSessions",
         "checkoutStartSessionsOurs",
+        "dailyOpened",
+        "dailyOpenedOurs",
         "engaged",
         "engagedOurs",
+        // Конец того, что начали: ступень «доиграл партию» (08.10.2026).
+        // Добавлено осознанно — сторож состава покраснел и потребовал решения.
+        "clicked",
+        "clickedOurs",
+        "finished",
+        "finishedOurs",
+        // `game_end` без числа ходов: названное число вместо тихого выбора.
+        "finishedWithoutMoves",
         "paid",
         "paidOurs",
         "pricing",
@@ -58,6 +68,12 @@ describe("состав строк разреза закреплён руками
       [
         "внимание",
         "вниманиеНаших",
+        "доиграли",
+        "доигралиНаших",
+        "нажали",
+        "нажалиНаших",
+        "задачаДня",
+        "задачаДняНаших",
         "доЦен",
         "доЦенНаших",
         "началиОплату",

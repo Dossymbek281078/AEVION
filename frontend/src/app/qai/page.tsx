@@ -5,6 +5,8 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { getAuthHeaders } from "@/lib/auth";
+import { PaywallScreen } from "@/components/PaywallScreen";
+import { isPaywallPayload, type PaywallPayload } from "@/lib/paywall";
 
 interface Message {
   role: "user" | "assistant";
@@ -212,6 +214,15 @@ export default function QAIPage() {
   const [streaming, setStreaming] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  /*
+   * 🔴 Отказ стены больше не выбрасывается молча (09.10.2026).
+   * Было: `fetch(...).then(r => r.ok ? r.json() : null)` и пустой
+   * `.catch(() => {})` — тело 402 терялось, оставалась заглушка, и гость
+   * видел шапку и пустоту без единого слова о причине. Замер 08.10:
+   * /api/qai/personas у гостя -> 402 upgrade_required; модуль закрыт ПО
+   * ЗАМЫСЛУ (moduleAccess: продаётся false, стена true).
+   */
+  const [paywall, setPaywall] = useState<PaywallPayload | null>(null);
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
   const [personas, setPersonas] = useState<Persona[]>(FALLBACK_PERSONAS);
   const [activePersona, setActivePersona] = useState<string>("assistant");
@@ -226,14 +237,20 @@ export default function QAIPage() {
   useEffect(() => {
     // Personas — fetch best-effort
     fetch(apiUrl("/api/qai/personas"), { headers: getAuthHeaders() })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data?.personas && Array.isArray(data.personas)) {
-          setPersonas(data.personas);
+      .then(async (r) => ({ статус: r.status, тело: await r.json().catch(() => null) }))
+      .then(({ статус, тело }) => {
+        // Стена — не «нет данных»: у неё свой экран, как на 16 других страницах.
+        if (статус === 402 && isPaywallPayload(тело)) {
+          setPaywall(тело);
+          return;
+        }
+        if (тело?.personas && Array.isArray(тело.personas)) {
+          setPersonas(тело.personas);
         }
       })
       .catch(() => {
-        // keep fallback
+        // Сеть не ответила — оставляем заглушку, как было: это НЕ стена,
+        // и выдавать сбой за предложение купить нельзя.
       });
 
     const stored = localStorage.getItem("qai_session_id");
@@ -474,6 +491,11 @@ export default function QAIPage() {
   };
 
   const activePersonaObj = personas.find((p) => p.id === activePersona) ?? personas[0];
+
+  /* Модуль закрыт стеной — показываем ЕЁ экран, а не пустой разговор. */
+  if (paywall) {
+    return <PaywallScreen payload={paywall} backHref="/modules" />;
+  }
 
   return (
     <>

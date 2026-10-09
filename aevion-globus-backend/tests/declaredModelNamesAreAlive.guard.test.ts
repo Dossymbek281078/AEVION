@@ -17,6 +17,25 @@ process.env.ANTHROPIC_API_KEY = "test-anthropic";
 process.env.OPENAI_API_KEY = "test-openai";
 process.env.OPENROUTER_API_KEY = "test-openrouter";
 
+/**
+ * Сеть закрыта НА УРОВНЕ ФАЙЛА, до любого импорта роутера.
+ *
+ * Повод 08.10.2026: в прогоне из пяти файлов эта проверка упала, провисев
+ * 46 секунд, а в одиночку и втроём проходила. 46 секунд — это не логика, это
+ * настоящие сетевые таймауты: `/providers/health` опрашивает brevo, replicate,
+ * cloudflare, vercel, elevenlabs, deepl и github, и под параллельной нагрузкой
+ * часть вызовов успевала уйти ДО того, как тест подменял `global.fetch`.
+ *
+ * Мигающий сторож хуже отсутствующего: его падение перестают читать. Поэтому
+ * умолчание — отказ, а каждый тест разрешает ровно то, что ему нужно.
+ */
+global.fetch = (async () => ({
+  ok: false,
+  status: 599,
+  json: async () => ({}),
+  text: async () => "{}",
+})) as unknown as typeof fetch;
+
 const { проверитьИменаМоделей, сброситьКэшИмёнМоделей } = await import("../src/lib/объявленныеМодели");
 const { getProviders } = await import("../src/services/qcoreai/providers");
 
@@ -156,12 +175,12 @@ describe("умолчание поставщика отвечает на наст
     m.сброситьКэшВызоваУмолчаний();
   });
 
-  function сетьОтвечаетНаВызов(отказать: string[]) {
+  function сетьОтвечаетНаВызов(отказать: string[], код = 404) {
     global.fetch = (async (url: string, init?: RequestInit) => {
       const тело = String(init?.body ?? "");
       const плохая = отказать.some((м) => String(url).includes(м) || тело.includes(`"${м}"`));
       return плохая
-        ? { ok: false, status: 404, json: async () => ({}), text: async () => "{}" }
+        ? { ok: false, status: код, json: async () => ({}), text: async () => "{}" }
         : { ok: true, status: 200, json: async () => ({}), text: async () => "{}" };
     }) as unknown as typeof fetch;
   }
@@ -171,7 +190,7 @@ describe("умолчание поставщика отвечает на наст
     сетьОтвечаетНаВызов([]);
     const r = await проверитьУмолчанияВызовом();
     expect(r.ok, "исправное состояние названо поломкой: " + r.detail).toBe(true);
-    expect(r.detail).toMatch(/проверено умолчаний вызовом: [1-9]/);
+    expect(r.detail).toMatch(/проверено имён вызовом: [1-9]/);
   });
 
   test("🔴 спрашивать некого → НЕ ok: «не знаю» не равно «всё хорошо»", async () => {
@@ -193,7 +212,7 @@ describe("умолчание поставщика отвечает на наст
     try {
       const r = await проверитьУмолчанияВызовом();
       expect(r.ok, "ни одного поставщика не спросили, а ответ зелёный").toBe(false);
-      expect(r.detail).toContain("проверено умолчаний вызовом: 0");
+      expect(r.detail).toContain("проверено имён вызовом: 0");
     } finally {
       if (было.g) process.env.GEMINI_API_KEY = было.g;
       if (было.a) process.env.ANTHROPIC_API_KEY = было.a;
@@ -224,6 +243,72 @@ describe("умолчание поставщика отвечает на наст
     const r = await проверитьУмолчанияВызовом();
     expect(r.ok, "мёртвое умолчание OpenRouter прошло как «всё хорошо»").toBe(false);
     expect(r.detail, "OpenRouter не зовётся вызовом — последнее звено не проверено").toContain(умолчание);
+  });
+
+  test("🔴 у Gemini и OpenRouter зовётся ВЕСЬ список, а не одно умолчание", async () => {
+    // Повод 08.10.2026: сильная проверка по всему списку была ручной, и ключ
+    // для неё брался через буфер обмена — общий ресурс. Буфер подсунул чужой
+    // телефон, и прибор объявил три ЖИВЫЕ модели мёртвыми. Пока шаг ручной,
+    // этот источник ошибки возвращается на каждой волне.
+    const { проверитьУмолчанияВызовом } = await import("../src/lib/объявленныеМодели");
+    const { getProviders } = await import("../src/services/qcoreai/providers");
+    const п = getProviders();
+    const ожидается =
+      (п.find((x) => x.id === "gemini")?.models.length ?? 0) +
+      (п.find((x) => x.id === "openrouter")?.models.length ?? 0) +
+      2; // anthropic и openai — по одному умолчанию, их список не зовём (деньги)
+    сетьОтвечаетНаВызов([]);
+    const r = await проверитьУмолчанияВызовом();
+    expect(r.detail, "знаменатель не напечатан").toMatch(/проверено имён вызовом: \d+/);
+    const вызвано = Number(/проверено имён вызовом: (\d+)/.exec(r.detail)?.[1] ?? 0);
+    expect(
+      вызвано,
+      `вызвано ${вызвано}, а объявлено к вызову ${ожидается} — кто-то из поставщиков проверяется умолчанием вместо списка`,
+    ).toBe(ожидается);
+  });
+
+  test("🔴 несуществующее имя в списке Gemini краснит пробу", async () => {
+    // Мутация оркестратора: объявить модель, которой нет. Без этого случая
+    // расширение списка было бы украшением — число растёт, находки нет.
+    const { проверитьУмолчанияВызовом } = await import("../src/lib/объявленныеМодели");
+    const { getProviders } = await import("../src/services/qcoreai/providers");
+    const последняя = getProviders().find((x) => x.id === "gemini")!.models.at(-1)!;
+    сетьОтвечаетНаВызов([последняя]);
+    const r = await проверитьУмолчанияВызовом();
+    expect(r.ok, "мёртвое имя в списке прошло как «всё хорошо»").toBe(false);
+    expect(r.detail).toContain("gemini/" + последняя);
+  });
+
+  test("контроль: у БЕСПЛАТНОЙ модели 429 — это «занято», а не поломка", async () => {
+    // Иначе проверка краснела бы при исправной системе: отказ по частоте у
+    // бесплатных слагов — обычное состояние, а не находка. У платной тот же
+    // 429 означает «кончились деньги» и находкой остаётся.
+    const { проверитьУмолчанияВызовом } = await import("../src/lib/объявленныеМодели");
+    const { getProviders } = await import("../src/services/qcoreai/providers");
+    const слаг = getProviders().find((x) => x.id === "openrouter")!.defaultModel;
+    сетьОтвечаетНаВызов([слаг], 429);
+    const r = await проверитьУмолчанияВызовом();
+    expect(r.detail, "занятость бесплатной модели не названа").toContain("занято по частоте");
+    expect(r.ok, "занятая бесплатная модель покрасила пробу — это ложная тревога").toBe(true);
+  });
+
+  test("🔴 у ПЛАТНОЙ модели 429 — это находка, а не «занято»", async () => {
+    // Живой случай на проде: openai отвечает 429 на любое имя, потому что
+    // кончились деньги. Если мерить занятость без различия «бесплатный /
+    // платный», этот отказ уедет в «занято» и исчезнет из находок — то есть
+    // мы перестанем видеть, что звено цепочки не работает.
+    // Мутация «снять условие п.free» ПРОХОДИЛА, пока этого случая не было.
+    const { проверитьУмолчанияВызовом } = await import("../src/lib/объявленныеМодели");
+    const { getProviders } = await import("../src/services/qcoreai/providers");
+    const платная = getProviders().find((x) => x.id === "openai")!;
+    expect(платная.free, "предпосылка теста неверна: openai считается бесплатным").toBe(false);
+    сетьОтвечаетНаВызов([платная.defaultModel], 429);
+    const r = await проверитьУмолчанияВызовом();
+    expect(r.ok, "отказ платного по деньгам прошёл как «всё хорошо»").toBe(false);
+    expect(r.detail).toContain("openai/" + платная.defaultModel);
+    expect(r.detail, "отказ по деньгам записан в «занято»").not.toMatch(
+      new RegExp("занято по частоте[^·]*openai"),
+    );
   });
 
   test("🔴 ручка состояния действительно задаёт и ЭТОТ вопрос", async () => {

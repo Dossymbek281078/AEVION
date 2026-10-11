@@ -533,6 +533,6 @@
     "base": "/api/mcp-demo",
     "url": "/api/mcp-demo",
     "method": "POST",
-    "expect": 202
+    "expect": 401
   }
 ]

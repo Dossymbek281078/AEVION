@@ -76,6 +76,30 @@ function SuccessInner() {
   const sessionId = sp.get("session_id");
   // Gumroad redirects back with ?sale_id=...; keep _ptxn as a legacy fallback.
   const saleId = sp.get("sale_id") ?? sp.get("_ptxn");
+  /*
+   * 🔴 НАШ номер платежа — тот, который кладёт НАШ ЖЕ бэкенд.
+   *
+   * Замер прода 12.10.2026 живым браузером (окно user-d7). Сборщик адреса
+   * возврата buildSuccessUrl (aevion-globus-backend/src/lib/payment/successUrl.ts,
+   * один на всех провайдеров) кладёт параметр `intentId`. Страница читала
+   * только `session_id` и `sale_id` — то есть НАШ номер не читала вовсе.
+   * Последствие на живом проде, два захода подряд, разница ровно в имени
+   * параметра:
+   *
+   *   ?provider=lemonsqueezy&intentId=…&total=20000 → «Проверяем, была ли
+   *     оплата» и «В адресе нет номера платежа, поэтому подтвердить оплату мы
+   *     не можем… Если оплата не прошла, деньги не списаны»;
+   *   ?provider=lemonsqueezy&session_id=…&total=20000 → «Оплата принята —
+   *     проверяем доступ», «Деньги получены».
+   *
+   * Первое человек читает сразу после списания 200 $ — и идёт не пользоваться
+   * покупкой, а требовать возврат. Выдача при этом проходит: ручка
+   * /api/pricing/checkout/status ищет ровно по этому номеру
+   * (bureauIntentId в provisioning.ts), её просто никто не спрашивал.
+   */
+  const номерИзАдреса = sp.get("intentId");
+  /** Номер платежа под любым именем, которое присылает касса или наш бэкенд. */
+  const номерПлатежа = sessionId ?? saleId ?? номерИзАдреса;
   // Кто именно принял платёж. Раньше здесь стояло `?? "gumroad"`, и страница
   // писала «квитанция от Gumroad», «управление подпиской в аккаунте Gumroad»
   // ВСЕМ — включая тех, кто заплатил через Lemon Squeezy (сейчас это основной
@@ -162,7 +186,7 @@ function SuccessInner() {
    */
   const следОплаты = естьСледОплаты({
     provider,
-    ref: saleId ?? sessionId,
+    ref: номерПлатежа,
     total: totalUsd,
     stub,
   });
@@ -197,7 +221,7 @@ function SuccessInner() {
    * бы в замыкание эффекта аккаунта старым значением.
    */
   const платёжПодтверждён = useRef(false);
-  const intentId = sessionId ?? saleId;
+  const intentId = номерПлатежа;
 
   useEffect(() => {
     if (!intentId) return;
@@ -318,7 +342,7 @@ function SuccessInner() {
           provider={provider ?? "unknown"}
           tier={tier ?? undefined}
           value={totalUsd ?? undefined}
-          meta={{ termMonths, sessionId: sessionId ?? saleId ?? null, stub }}
+          meta={{ termMonths, sessionId: номерПлатежа ?? null, stub }}
         />
       )}
       <div style={{ marginBottom: 16 }}>
@@ -442,9 +466,9 @@ function SuccessInner() {
         )}
 
         {/* Transaction ID */}
-        {(saleId || sessionId) && (
+        {номерПлатежа && (
           <p style={{ fontSize: 11, opacity: 0.6, margin: "0 0 20px" }}>
-            {processor ?? "Session"}: <code style={{ fontFamily: "monospace" }}>{saleId ?? sessionId}</code>
+            {processor ?? "Session"}: <code style={{ fontFamily: "monospace" }}>{номерПлатежа}</code>
           </p>
         )}
 

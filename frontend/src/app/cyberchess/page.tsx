@@ -296,7 +296,7 @@ function ruResult(o: string | null): string {
     .replace("50-move draw", "Ничья по правилу 50 ходов");
 }
 
-type Puzzle = {fen:string;sol:string[];name:string;r:number;theme:string;phase?:"Opening"|"Middlegame"|"Endgame";side?:"w"|"b";goal?:"Mate"|"Best move";mateIn?:number};
+type Puzzle = {fen:string;sol:string[];name:string;r:number;theme:string;id?:string;phase?:"Opening"|"Middlegame"|"Endgame";side?:"w"|"b";goal?:"Mate"|"Best move";mateIn?:number};
 
 /* ═══ Stockfish with MultiPV ═══ */
 type PVLine = {pv:number;cp:number;mate:number;depth:number;moves:string[]};
@@ -1333,13 +1333,67 @@ export function etoGranitsaProgressa(полуходов: number): boolean {
   return (ГРАНИЦЫ_ПРОГРЕССА as readonly number[]).includes(полуходов);
 }
 
+/**
+ * Неверный ход в задаче. Отдельное событие, потому что `game_progress` на
+ * первом рубеже уходит И на верный, и на неверный ход — замер 12.10 на проде:
+ * «ткнул не туда и ушёл» был в разрезе неотличим от «начал решать».
+ *
+ * `попытка` — какая это по счёту ошибка на ЭТОЙ задаче (не на сессии): по ней
+ * видно, сдаются после первой или бьются до третьей.
+ */
+export function soobschitONevernomHode(
+  pz: { id?: string; fen?: string; r?: number; theme?: string } | null | undefined,
+  попытка: number,
+): void {
+  try {
+    track({ type: "puzzle_wrong_move", source: "cyberchess/puzzle",
+      meta: { app: "cyberchess", id: String(pz?.id ?? ""), fen: String(pz?.fen ?? ""),
+        rating: Number(pz?.r ?? 0), theme: String(pz?.theme ?? ""), попытка } });
+  } catch { /* учёт не обязан ронять решение задачи */ }
+}
+
+/**
+ * Подсказка в задаче. Шлётся только когда подсказка РЕАЛЬНО получена (списание
+ * прошло): иначе событие говорило бы о том, чего человек не увидел.
+ */
+export function soobschitOPodskazke(
+  pz: { id?: string; fen?: string; r?: number } | null | undefined,
+  ошибокДоЭтого: number,
+): void {
+  try {
+    track({ type: "puzzle_hint", source: "cyberchess/puzzle",
+      meta: { app: "cyberchess", id: String(pz?.id ?? ""), fen: String(pz?.fen ?? ""),
+        rating: Number(pz?.r ?? 0), ошибокДоЭтого } });
+  } catch { /* то же: подсказка важнее учёта */ }
+}
+
+/**
+ * Надо ли сообщить об уходе ИЗ ЗАДАЧИ. Правило то же, что у партии: уходом
+ * считается только брошенная попытка — человек задачу открыл, что-то сделал и
+ * ушёл, не решив. Открыл и закрыл, ничего не тронув, — не уход, а просмотр.
+ */
+export function nuzhnoLiSoobschitOUhodeIzZadachi(
+  { задачаОткрыта, решена, былаПопытка, ужеСообщили }:
+  { задачаОткрыта: boolean; решена: boolean; былаПопытка: boolean; ужеСообщили: boolean },
+): boolean {
+  if (ужеСообщили) return false;      // один раз на сессию задачи
+  if (!задачаОткрыта) return false;
+  if (решена) return false;           // решил и ушёл — это успех, не уход
+  return былаПопытка;
+}
+
 export function soobschitORescheniiZadachi(
-  pz: { id?: string; r?: number; theme?: string } | null | undefined,
+  pz: { id?: string; fen?: string; r?: number; theme?: string } | null | undefined,
   этоЗадачаДня: boolean,
 ): void {
+  /* 🔴 ОПОЗНАВАТЕЛЬ ЧЕСТНЫЙ. Было `String(pz?.id ?? "нет id")`, и замер 12.10
+     показал, что на проде уезжало именно «нет id»: у зашитых задач поля id нет
+     вовсе, а у задач из банка оно терялось при сборке объекта. Теперь id едет,
+     когда он есть, и рядом ВСЕГДА едет fen — он опознаёт позицию однозначно,
+     даже когда id неизвестен. */
   track({ type: "puzzle_solved", source: "cyberchess/board",
-    meta: { app: "cyberchess", id: String(pz?.id ?? "нет id"), rating: Number(pz?.r ?? 0),
-      theme: String(pz?.theme ?? ""), daily: этоЗадачаДня } });
+    meta: { app: "cyberchess", id: String(pz?.id ?? ""), fen: String(pz?.fen ?? ""),
+      rating: Number(pz?.r ?? 0), theme: String(pz?.theme ?? ""), daily: этоЗадачаДня } });
 }
 
 /**
@@ -1636,6 +1690,24 @@ export default function CyberChessPage(){
   const ccBuyLabel=(ccBuyProduct?.format||"").replace(/^приложение · /,"")||"купить";
   const [ccBuyHref,sCcBuyHref]=useState<string>(ccBuyProduct?.href||"/pricing#apps");
   useEffect(()=>{try{sCcBuyHref(keepChannel(ccBuyProduct?.href||"/pricing#apps",channelNow()))}catch{}},[ccBuyProduct?.href]);
+  /*
+   * 🔴 Насколько уменьшить доску, чтобы ПОД НЕЙ поместилась прилипшая строка
+   * адреса. Считается ПО ЗАМЕРУ, а не константой, и только на узких экранах,
+   * где есть нижняя панель.
+   *
+   * Повод — замер приёмки (user-37) и мой на волне 46 по пяти парам окна:
+   *   390×844  свободно под доской  93 → строка прилипает, всё достижимо;
+   *   540×900  свободно  51 → не хватает 25, строка осталась в потоке, и центр
+   *            её крестика попал в кнопку «Играть» нижней панели: тап начинал
+   *            НОВУЮ ПАРТИЮ вместо закрытия предложения;
+   *   768×1024 свободно −25 → не хватает 101, «Получать» и крестик за кадром.
+   * Панель при этом ровно 70 px — её константа в расчёте верна (сверено).
+   *
+   * Поэтому недостачу закрываем доской: магнит стоит 76 px её размера. Рост
+   * только в одну сторону и с потолком 160 px, иначе доска и зазор начали бы
+   * гоняться друг за другом.
+   */
+  const[зазорПодСтроку,sЗазорПодСтроку]=useState(0);
   const isMobileLayout=vwPx<769;
   // 🔴 01.10.2026: НА ТЕЛЕФОНЕ РАЗДЕЛ «КОУЧ» ОБЯЗАН ОТКРЫВАТЬ ШТОРКУ.
   //
@@ -1697,7 +1769,7 @@ export default function CyberChessPage(){
     ?{flexWrap:"nowrap",overflowX:"auto",scrollbarWidth:"none"}
     :{flexWrap:"wrap",overflowX:"visible"};
   const desktopVReserve=Math.max(250,boardTopPx>0?boardTopPx+(lowDesktop?186:150):0);
-  const boardPx=Math.max(isMobileLayout?200:280,Math.min(boardPxRaw,vhPx-(vwPx>=769?desktopVReserve:290),vwPx-hReserve-dockReserve));
+  const boardPx=Math.max(isMobileLayout?200:280,Math.min(boardPxRaw,vhPx-(vwPx>=769?desktopVReserve:290)-зазорПодСтроку,vwPx-hReserve-dockReserve));
   const bw=boardPx+"px";
   // ── Ultra-wide fill: доска упирается в ВЫСОТУ (квадрат), а экраны 16:9 широкие —
   // остаётся горизонтальный простор, из-за которого группа [рейл+доска+панель] висела
@@ -2367,6 +2439,9 @@ export default function CyberChessPage(){
      либо замер после отрисовки показал, что строка задевает клетки. Одна
      сторона: запретили — больше не пробуем, иначе строка будет мигать. */
   const прилипаниеЗапрещеноRef=useRef(false);
+  /* Про уход из ЗАДАЧИ сообщаем один раз на сессию задачи — как и про уход из
+     партии. Сбрасывается сменой задачи (эффект ниже). */
+  const soobschilUhodIzZadachiRef=useRef(false);
   /* 🔴 ИЗМЕРЕННАЯ высота прилипшей строки. Пока её нет, решение принимается по
      потолку `ВЫСОТА_СЖАТОЙ_СТРОКИ`; как только строка один раз отрисовалась
      прилипшей — все дальнейшие решения (поворот экрана, смена размера окна,
@@ -4274,10 +4349,13 @@ export default function CyberChessPage(){
         return true;
       }else{
         sPzAttempt("wrong");sPzFailedCount(c=>c+1);snd("capture");resetPzStreak();
+        /* Событие о неверном ходе — здесь, где ошибка и признаётся ошибкой.
+           Номер попытки берём ниже, когда счётчик по этой задаче уже увеличен. */
         // Track wrong attempts for THIS puzzle (reset on puzzle change via fen key).
         const wt=pzWrongTriesRef.current;
         if(wt.fen!==pzCurrent.fen){wt.fen=pzCurrent.fen;wt.n=0;}
         wt.n+=1;
+        soobschitONevernomHode(pzCurrent,wt.n);
         if(pzTimerIntervalRef.current){clearInterval(pzTimerIntervalRef.current);pzTimerIntervalRef.current=null;}
         if(pzCurrent?.theme)addThemeResult(pzCurrent.theme,false);
         if(pzMode==="rush"){
@@ -4571,6 +4649,27 @@ export default function CyberChessPage(){
   },[strokaAdresa,строкаПрилипла,vwPx,vhPx,on,over,setup,tab,измереннаяВысотаСтроки]);
 
   /*
+   * 🔴 Недостача места под доской закрывается УМЕНЬШЕНИЕМ ДОСКИ, а не отказом
+   * от прилипания. Отказ оставлял магнит в потоке под нижней панелью: на
+   * 540×900 центр крестика попадал в кнопку «Играть» (тап начинал новую
+   * партию), на 768×1024 и кнопка, и крестик уходили за кадр. Прямая потеря
+   * адресов, и чинится она тем же способом, которым лечилась доска, — замером.
+   */
+  useEffect(()=>{
+    if(!strokaAdresa||строкаПрилипла)return;
+    if(vwPx>=769)return;                     // панели нет, место и так есть
+    if(прилипаниеЗапрещеноRef.current)return;
+    const низД=низДоскиВКадре();
+    if(низД===null)return;
+    const высота=измереннаяВысотаСтроки??ВЫСОТА_СЖАТОЙ_СТРОКИ;
+    const м=hvataetMestaPodDoskoy({низДоски:низД,высотаОкна:vhPx,ширинаОкна:vwPx,
+      высотаСтроки:высота,идётПартия:on&&!over&&!setup&&tab==="play"});
+    if(м.хватает)return;
+    const нужно=Math.min(160,зазорПодСтроку+(высота+ЗАЗОР_ПРИЛИПШИХ-м.свободно));
+    if(нужно>зазорПодСтроку)sЗазорПодСтроку(нужно);
+  },[strokaAdresa,строкаПрилипла,vwPx,vhPx,on,over,setup,tab,измереннаяВысотаСтроки,зазорПодСтроку]);
+
+  /*
    * 🔴 ПРОВЕРКА ПОСЛЕ ОТРИСОВКИ, а не вера в константу. Решение выше принято по
    * ожидаемой высоте сжатой строки; здесь мерится настоящая и, если она всё-таки
    * задевает доску, прилипание снимается навсегда для этой сессии. Именно этого
@@ -4609,11 +4708,31 @@ export default function CyberChessPage(){
         meta:{app:"cyberchess",...chislaRubezha(hist.length,pzFailedCount),aiLevel:lv.name,aiElo:lv.elo,
           mode:hotseat?"hotseat":(p2pMode?"p2p":"ai")}});
     };
-    const наСкрытие=()=>{if(document.visibilityState==="hidden")соoбщить()};
-    window.addEventListener("pagehide",соoбщить);
+    /*
+     * 🔴 Уход ИЗ ЗАДАЧИ — отдельное событие рядом с уходом из партии. Замер
+     * 12.10: внутри задачи воронка не видела ухода вовсе, поэтому «бросил на
+     * втором ходу» и «решил и ушёл» выглядели одинаково — никак.
+     * Условие в чистой функции (nuzhnoLiSoobschitOUhodeIzZadachi), отправка
+     * здесь: sendBeacon переживает выгрузку страницы, обычный fetch нет.
+     */
+    const сообщитьОЗадаче=()=>{
+      const былаПопытка=(pzWrongTriesRef.current.fen===pzCurrent?.fen&&pzWrongTriesRef.current.n>0)||hist.length>=1;
+      if(!nuzhnoLiSoobschitOUhodeIzZadachi({задачаОткрыта:tab==="puzzles"&&!!pzCurrent,
+        решена:pzAttempt==="correct",былаПопытка,ужеСообщили:soobschilUhodIzZadachiRef.current}))return;
+      soobschilUhodIzZadachiRef.current=true;
+      try{
+        track({type:"puzzle_abandon",source:"cyberchess/puzzle",
+          meta:{app:"cyberchess",id:String(pzCurrent?.id??""),fen:String(pzCurrent?.fen??""),rating:Number(pzCurrent?.r??0),
+            ошибок:pzWrongTriesRef.current.fen===pzCurrent?.fen?pzWrongTriesRef.current.n:0,
+            полуходов:hist.length,подсказка:pzAttempt==="shown"}});
+      }catch{/* уход — последнее, что можно уронить */}
+    };
+    const наСкрытие=()=>{if(document.visibilityState==="hidden"){соoбщить();сообщитьОЗадаче()}};
+    const наУход=()=>{соoбщить();сообщитьОЗадаче()};
+    window.addEventListener("pagehide",наУход);
     document.addEventListener("visibilitychange",наСкрытие);
-    return()=>{window.removeEventListener("pagehide",соoбщить);document.removeEventListener("visibilitychange",наСкрытие)};
-  },[on,over,hist,lv,hotseat,p2pMode]);
+    return()=>{window.removeEventListener("pagehide",наУход);document.removeEventListener("visibilitychange",наСкрытие)};
+  },[on,over,hist,lv,hotseat,p2pMode,tab,pzCurrent,pzAttempt]);
   useEffect(()=>{
     // Решение вынесено в resheniePoKontsuPartii и проверяется вызовами с
     // известным ответом (ishodPartii.test.ts). Здесь остаётся только отправка:
@@ -6338,8 +6457,13 @@ export default function CyberChessPage(){
           return;
         }
         if(otmenen)return;
-        const pz=normalizePuzzle({fen:syraya.fen,sol:syraya.sol,name:syraya.name??syraya.theme??"Задача",
-          r:syraya.r??1200,theme:syraya.theme??"Тактика"}) as typeof PUZZLES[number];
+        /* 🔴 id банка ДОНОСИМ до объекта задачи. Замер 12.10 на проде: событие
+           `puzzle_solved` уходило с `id: "нет id"` — то есть мы знали, что
+           задачу решили, но не знали какую, и связать решение с роликом было
+           нечем. Тип `Puzzle` носит id как необязательный: у зашитых задач его
+           нет, у задач из банка есть. */
+        const pz={...(normalizePuzzle({fen:syraya.fen,sol:syraya.sol,name:syraya.name??syraya.theme??"Задача",
+          r:syraya.r??1200,theme:syraya.theme??"Тактика"}) as typeof PUZZLES[number]),id:syraya.id??id};
         if(!postavitZadachuNaDosku(pz,{dnevnaya:false}))return;
         showToast(`🔗 Задача по ссылке · ${pz.r}`,"info");
         // Своё событие не заводим: открытие задачи по ссылке — это та же
@@ -6560,7 +6684,10 @@ export default function CyberChessPage(){
       // DOM paint via paintPzTimeLeft, no re-render.
       if(rem<=0){
         sPzTimeLeft(0);
-        if(pzMode!=="rush"){sPzFailedCount(c=>c+1);sPzAttempt("wrong");resetPzStreak();}
+        if(pzMode!=="rush"){sPzFailedCount(c=>c+1);sPzAttempt("wrong");resetPzStreak();
+          /* Вторая ветвь того же класса: ошибка вне режима rush. Обе ветви шлют
+             событие — иначе разрез считал бы только половину ошибок. */
+          soobschitONevernomHode(pzCurrent,(pzWrongTriesRef.current.fen===pzCurrent?.fen?pzWrongTriesRef.current.n:0)+1);}
       }
     };
     tick();
@@ -9572,7 +9699,23 @@ export default function CyberChessPage(){
                  bottom:`calc(env(safe-area-inset-bottom) + ${
                    ВЫСОТА_НИЖНЕЙ_ПАНЕЛИ+ЗАЗОР_ПРИЛИПШИХ
                    +((on&&!over&&!setup&&tab==="play")?ВЫСОТА_РЯДА_КНОПОК+ЗАЗОР_ПРИЛИПШИХ:0)}px)`}
-              : {position:"relative" as const,marginTop:SPACE[2]}),
+              : {position:"relative" as const,marginTop:SPACE[2],
+                 /*
+                  * 🔴 Запас снизу под НИЖНЮЮ ПАНЕЛЬ, когда строка осталась в
+                  * потоке на узком экране. Замер приёмки (user-37) на волне 45,
+                  * 390×844: строка в потоке на y 852–958 при странице 1210, и
+                  * кнопка «Получать» попадала под `div.cc-bottom-nav` — центр
+                  * отдавал кнопку «Задачи» панели, а центр крестика — кнопку
+                  * «Играть», то есть тап по крестику НАЧИНАЛ НОВУЮ ПАРТИЮ
+                  * вместо закрытия предложения. Это хуже недоступности.
+                  *
+                  * Запас делает страницу выше ровно на панель с зазором, и
+                  * человек может прокрутить строку ВЫШЕ панели; без него строка
+                  * у самого низа страницы остаётся под панелью навсегда.
+                  * Панель живёт только до 769 px — выше `globals.css` её
+                  * скрывает, и запас там не нужен.
+                  */
+                 ...(vwPx<769?{marginBottom:ВЫСОТА_НИЖНЕЙ_ПАНЕЛИ+ЗАЗОР_ПРИЛИПШИХ}:null)}),
             padding:строкаПрилипла?2:SPACE[2],borderRadius:RADIUS.md,
             border:`1px solid ${CC.border}`,background:CC.surface1,
             /* Тень — признак того, что полоса лежит НАД содержимым. */
@@ -11711,7 +11854,8 @@ export default function CyberChessPage(){
                   <input ref={pzFileInputRef} type="file" accept=".fen,.pgn,.txt" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(f)loadPzFile(f);e.target.value="";}}/>
                   {pzAttempt==="wrong"&&<Btn size="md" variant="secondary" icon={<Icon.Undo width={12} height={12}/>} onClick={()=>{const g=new Chess(pzCurrent.fen);setGame(g);sBk(k=>k+1);sPzAttempt("idle");sLm(null);sHist([]);sFenHist([pzCurrent.fen]);}}>Заново</Btn>}
                   {pzAttempt!=="correct"&&pzMode!=="rush"&&<Btn size="md" variant="secondary" icon={<Icon.Play width={12} height={12}/>} onClick={playPuzzleSolution} title="Проиграть решение на доске">Решение</Btn>}
-                  {pzAttempt!=="correct"&&pzAttempt!=="shown"&&<Btn size="md" variant="gold" icon={<Icon.Lightbulb width={12} height={12}/>} onClick={()=>{if(!spendChessy(5,"подсказка"))return;sPzAttempt("shown")}}>Подсказка · 5</Btn>}
+                  {pzAttempt!=="correct"&&pzAttempt!=="shown"&&<Btn size="md" variant="gold" icon={<Icon.Lightbulb width={12} height={12}/>} onClick={()=>{if(!spendChessy(5,"подсказка"))return;sPzAttempt("shown");
+                    soobschitOPodskazke(pzCurrent,pzWrongTriesRef.current.fen===pzCurrent?.fen?pzWrongTriesRef.current.n:0)}}>Подсказка · 5</Btn>}
                   {/* 🔴 ВХОД К ТРЕНЕРУ ПРЯМО ОТСЮДА. Во вкладке «Задачи» кнопки коуча
                       не было вовсе: панель тренера живёт в своей вкладке, и человек,
                       застрявший на задаче, не мог спросить о НЕЙ. А это ровно тот

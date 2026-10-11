@@ -12,6 +12,7 @@
  */
 
 import express, { Router, Request, Response } from "express";
+import { учестьДействие, отказПоНорме } from "../lib/freeActionQuota";
 import crypto from "node:crypto";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { rateLimit } from "../lib/rateLimit";
@@ -494,6 +495,27 @@ qventureRouter.post("/analyze", analyzeLimiter, async (req: Request, res: Respon
     const priorAnalysis = await getByDedupe(dedupe);
     if (priorAnalysis && (priorAnalysis.result?.rubricVersion ?? 0) >= RUBRIC_VERSION) {
       return res.json({ ok: true, data: redactInput(priorAnalysis), deduped: true });
+    }
+
+    /*
+     * Бесплатная норма РАЗБОРОВ в месяц, дальше платно. Просмотр галереи и
+     * чужих разборов остаётся бесплатным всегда: человек приходит убедиться,
+     * что механизм работает, и только потом считает своё.
+     *
+     * Механизм спит, пока "qventure_analyze" не назван в PAID_ACTIONS, — до
+     * слова основателя поведение не меняется ни на шаг.
+     *
+     * Место выбрано не случайно, два соображения:
+     *  • ПОСЛЕ разбора ввода: `учестьДействие` считает действие сразу (SQL
+     *    `count + 1` в той же строке), поэтому проверка до валидации съедала бы
+     *    бесплатную попытку за опечатку в теле запроса;
+     *  • ПОСЛЕ ответа по готовому разбору (`deduped: true`): повторный запрос
+     *    того же плана не делает новой работы и нормы тратить не должен.
+     */
+    const норма = await учестьДействие(req, "qventure_analyze");
+    if (норма.заблокировано) {
+      отказПоНорме(res, "qventure", норма);
+      return;
     }
 
     const engineResult = analyze(input);

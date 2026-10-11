@@ -10,6 +10,7 @@ import { fixDoubledScheme } from "@/lib/urls";
 import { diffLines } from "@/lib/lineDiff";
 import { shouldOfferDbHint, shouldOfferDeployHint, shouldOfferManifestHint } from "@/lib/devhubHints";
 import { buildReactPreviewSrcdoc, isClientPreviewStack } from "@/lib/reactPreview";
+import { pickEntryFile, hasRenderableHtml } from "@/lib/devhubEntryFile";
 import { indexCapabilities, isCapabilityBlocked, isCapabilityConfirmed, capabilityHint, каналВыкатки, type CapabilityIndex } from "@/lib/devhubCapabilities";
 import { assetSnippet, appendSnippet, type AssetKind } from "@/lib/devhubAssetSnippet";
 import { newFilePathError, renamePathError, normalizeFilePath } from "@/lib/devhubFilePaths";
@@ -1856,6 +1857,24 @@ if (/Месячная норма исчерпана|Месячный лимит[
       const listData = await listR.json();
       applyFileList(listData);
       setAiPrompt("");
+      // After generation, don't strand the guest on the "Выберите файл"
+      // placeholder (applyFileList refreshes the tree but selects nothing): open
+      // the entry file, and for a stack the IDE can render without a deploy show
+      // the live preview ("Правка на экране") — the "покажет живое превью" the
+      // entry page promises, no dead pages.dev address needed.
+      const genFiles: FileItem[] = Array.isArray((listData as { files?: FileItem[] } | null)?.files)
+        ? (listData as { files: FileItem[] }).files
+        : [];
+      if (genFiles.length > 0) {
+        const entry = pickEntryFile(genFiles);
+        if (entry && !selectedFile) {
+          setSelectedFile(entry);
+          setEditorContent(entry.content);
+        }
+        if (hasRenderableHtml(genFiles) && (project.stack === "static" || isClientPreviewStack(project.stack))) {
+          setActiveTab("visual");
+        }
+      }
     } catch (e: any) {
       // Отмена во время запасного запроса приходит английским AbortError —
       // подменяем тем же честным текстом, что и при отмене стрима.

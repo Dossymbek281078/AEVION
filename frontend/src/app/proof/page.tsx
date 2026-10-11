@@ -58,6 +58,25 @@ const MEASURED = "2026-10-11";
  */
 const VERIFIER = "/aevion-verify.zip";
 
+/*
+ * Адрес для ответа тому, у кого нашего письма нет: ссылку чаще всего
+ * ПЕРЕСЫЛАЮТ, и до 11.10 такой читатель упирался в «reply to the letter».
+ *
+ * Почему именно этот адрес, и что про него измерено (подробно —
+ * `07-Заявки-и-инвесторы/2026-10-02-ДАННЫЕ-ДЛЯ-ИИ/11-АДРЕС-для-ответа-замер.md`):
+ * у домена есть MX (improvmx), почтовый сервер отвечает «250 Recipient
+ * accepted» на этот ящик, а пересылка доказана одиннадцатью письмами ПОСТОРОННИХ
+ * отправителей на пять произвольных ящиков домена за 60 дней. Чего НЕ измерено:
+ * письма, пришедшего именно на `data@`, никто не видел — туда ещё не писали, а
+ * проверить его письмом из нашего же Gmail нельзя в принципе (домен пересылает
+ * в тот самый ящик, а Gmail отбрасывает копию своего отправленного письма).
+ *
+ * Сторож материалов не даёт опубликовать наш адрес без датированной строки
+ * «доставка подтверждена ДД.ММ.ГГГГ» в материалах — именно чтобы это не
+ * держалось на чьей-то памяти.
+ */
+const CONTACT = "data@aevion.app";
+
 const Row = ({ children }: { children: React.ReactNode }) => (
   <li style={{ marginBottom: 8 }}>{children}</li>
 );
@@ -275,9 +294,12 @@ node demo-local.mjs                                   # sign 3 files, alter one 
           </b>{" "}
           — 8 files, no dependencies, including the failing control. Nothing is asked of you
           first: no form, no account, no reply. You do not need anything from us to read it,
-          and you do not need us to run it. If it convinces you, reply to our letter — or,
-          if the link reached you second-hand, ask whoever forwarded it for the thread. If
-          it does not convince you, you have lost five minutes and we have learned
+          and you do not need us to run it. If it convinces you, reply to our letter or
+          write to{" "}
+          <a href={`mailto:${CONTACT}`} style={{ color: "#1d4ed8", fontWeight: 700 }}>
+            {CONTACT}
+          </a>
+          . If it does not convince you, you have lost five minutes and we have learned
           something.
         </div>
       </ProductPageShell>

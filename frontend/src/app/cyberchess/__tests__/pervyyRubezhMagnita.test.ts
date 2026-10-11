@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { nuzhnoLiPokazatStrokuAdresa, nuzhnoLiSoobschitOUhode } from "../page";
+import { nuzhnoLiPokazatStrokuAdresa, nuzhnoLiSoobschitOUhode, etoGranitsaProgressa, ГРАНИЦЫ_ПРОГРЕССА } from "../page";
 
 /*
  * 🔴 Два решения первого рубежа магнита, оба проверяются вызовами с известным
@@ -78,5 +78,28 @@ describe("сообщение об уходе из незавершённой п�
     const строка = nuzhnoLiPokazatStrokuAdresa({ ...базаСтроки, ужеПредлагали: true });
     const уход = nuzhnoLiSoobschitOUhode(базаУхода);
     expect([строка, уход]).toEqual([false, true]);
+  });
+});
+
+describe("прогресс партии по границам корзин", () => {
+  test("🔴 событие шлётся РОВНО на границах, а не на каждом ходу", () => {
+    // Разрез окна 85 кладёт сессию в корзину, поэтому важны границы 1, 3, 11,
+    // 21, 41; сто событий за партию ничего не добавили бы и утопили ручку.
+    const границы = [1, 3, 11, 21, 41];
+    for (const п of границы) expect(etoGranitsaProgressa(п), `полуходов ${п}`).toBe(true);
+    for (const п of [0, 2, 4, 10, 12, 20, 22, 40, 42, 99]) {
+      expect(etoGranitsaProgressa(п), `полуходов ${п} — не граница`).toBe(false);
+    }
+  });
+
+  test("КОНТРОЛЬ: границ ровно пять и они совпадают с корзинами разреза", () => {
+    // Если список разойдётся с корзинами 0 / 1–2 / 3–10 / 11–20 / 21–40 / 41+,
+    // гистограмма «на каком ходу уходят» потеряет разрешение молча.
+    expect([...ГРАНИЦЫ_ПРОГРЕССА]).toEqual([1, 3, 11, 21, 41]);
+  });
+
+  test("КОНТРОЛЬ прибора: функция различает границу и не-границу", () => {
+    const ответы = new Set([etoGranitsaProgressa(3), etoGranitsaProgressa(4)]);
+    expect(ответы.size, "функция ответила одинаково на границу и не-границу").toBe(2);
   });
 });

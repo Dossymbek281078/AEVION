@@ -1682,6 +1682,8 @@ export const ALLOWED_TYPES = new Set([
   "waitlist_offer_shown",
   // Задача решена (любая, не только задача дня).
   "puzzle_solved",
+  // Прогресс партии (границы корзин), meta.plies числом.
+  "game_progress",
   "ab_assigned",
 ]);
 

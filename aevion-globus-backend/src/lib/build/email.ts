@@ -12,6 +12,7 @@
  *   SMTP_FROM="AEVION QBuild <you@gmail.com>"
  */
 import nodemailer from "nodemailer";
+import { записатьИсход } from "./emailOutcomes";
 import { noteEmailSent } from "../brevoQuota";
 
 function getTransport() {
@@ -63,6 +64,7 @@ async function sendViaResend(to: string, subject: string, html: string): Promise
     if (!r.ok) {
       // Тело не печатаем: в ответе провайдера бывает адрес получателя.
       console.warn("[build/email] resend rejected:", r.status);
+      записатьИсход(false, "resend", `HTTP ${r.status}`);
       return false;
     }
     // Здесь, в отличие от прямых вызовов в routes/build/*, ответ провайдера
@@ -72,9 +74,11 @@ async function sendViaResend(to: string, subject: string, html: string): Promise
     // сервер со своей квотой или без неё вовсе, и тревога о чужом потолке
     // хуже отсутствия тревоги — к вечно красному сторожу перестают ходить.
     noteEmailSent();
+    записатьИсход(true, "resend");
     return true;
   } catch (e) {
     console.warn("[build/email] resend failed:", (e as Error).message);
+    записатьИсход(false, "resend", (e as Error).message);
     return false;
   }
 }
@@ -110,12 +114,20 @@ export async function send(to: string, subject: string, html: string): Promise<b
         `[build/email] письмо «${subject}» для ${to} НЕ отправлено: ни SMTP, ни Resend не настроены. ` +
           "Задайте SMTP_HOST, SMTP_USER и SMTP_PASS либо RESEND_API_KEY.",
       );
+      // Если ключ Resend задан, отказ уже записан внутри sendViaResend с его
+      // причиной — второй записи здесь не делаем, иначе один сорвавшийся
+      // отправка считалась бы дважды.
+      if (!process.env.RESEND_API_KEY?.trim()) {
+        записатьИсход(false, "нет", "ни SMTP, ни Resend не настроены");
+      }
       return false;
     }
     await transport.sendMail({ from: FROM, to, subject, html });
+    записатьИсход(true, "smtp");
     return true;
   } catch (e) {
     console.warn("[build/email] send failed:", (e as Error).message);
+    записатьИсход(false, "smtp", (e as Error).message);
     // SMTP есть, но сорвался — пробуем второй транспорт, если он настроен.
     return sendViaResend(to, subject, html);
   }

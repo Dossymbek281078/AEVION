@@ -297,6 +297,33 @@ describe("подозрение «пара на метку»", () => {
     expect(r.body.sessionsSuspectedPairPatternTags).toContain("komm-puzzle");
   });
 
+  it("🔴 РАЗНЫЕ строки браузера — не подозрение, и это видно числом", async () => {
+    /*
+     * Третье условие признака, которое просило окно 91 и которое само проверить
+     * не смогло: публичной ручки со строкой браузера нет и не будет (рядом живёт
+     * сторож publicFunnelHasNoPersonalData). Внутри она есть, поэтому условие
+     * проверяется тут. Оно только СУЖАЕТ признак: пара с разными браузерами под
+     * подозрение не идёт, и число таких пар отдаётся отдельно — иначе нельзя
+     * узнать, работает ли условие или просто ничего не отсекает.
+     */
+    const другой = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) AppleWebKit/605.1.15 Safari/604.1";
+    writeFileSync(
+      файл,
+      [
+        { ua: UA, ...соб("бр1", "page_view", "komm-raznye", минутуНазад(3)) },
+        { ua: другой, ...соб("бр2", "page_view", "komm-raznye", минутуНазад(2)) },
+      ]
+        .map((о) => JSON.stringify(о))
+        .join(String.fromCharCode(10)) + String.fromCharCode(10),
+    );
+    const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");
+    expect(r.body.sessionsSuspectedPairPattern, "пара с разными браузерами зачтена машиной").toBe(0);
+    expect(
+      r.body.sessionsSuspectedPairPatternRejectedDifferentUA,
+      "условие по браузеру не названо числом — нельзя узнать, работает ли оно",
+    ).toBe(1);
+  });
+
   it("КОНТРОЛЬ: ОДНА сессия на метку — не подозрение", async () => {
     журнал([соб("один", "page_view", "komm-odin", минутуНазад(3))]);
     const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");

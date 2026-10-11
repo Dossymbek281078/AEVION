@@ -70,7 +70,28 @@ describe("состав строк разреза закреплён руками
 
   it("🔴 строка поста: ровно эти поля", () => {
     expect(Object.keys(пустойПост()).sort()).toEqual(
-      ["checkoutStart", "paid", "pricing", "pricingOurs", "tried", "triedOurs", "visits", "visitsOurs"].sort(),
+      // Четыре человеческие ступени добавлены 11.10.2026: визиты по метке
+      // ролика людей от машин НЕ отличают (замер окна 91: 19 меток ровно по 2
+      // визита), а `tried` человеческим шагом не является — его шлёт автомат
+      // при заходе по `?puzzle=` (окно 37). Сторож покраснел законно.
+      [
+        "checkoutStart",
+        "paid",
+        "pricing",
+        "pricingOurs",
+        "tried",
+        "triedOurs",
+        "visits",
+        "visitsOurs",
+        "engaged",
+        "engagedOurs",
+        "progressed",
+        "progressedOurs",
+        "puzzleSolved",
+        "puzzleSolvedOurs",
+        "waitlistSubmitted",
+        "waitlistSubmittedOurs",
+      ].sort(),
     );
   });
 

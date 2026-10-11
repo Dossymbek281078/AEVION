@@ -131,6 +131,39 @@ describe("страница воронки показывает всё, что о
     expect(выдуманный?.textContent).toMatch(/НЕ ОПИСАНА/);
   });
 
+  it("🔴 итог без «наших» рисуется словом «неизвестно», а НЕ нулём", async () => {
+    /*
+     * Настоящий дефект этой страницы, найденный 11.10.2026 при добавлении полей
+     * visitsOurs/pricingOurs в итог ручки: до того дня ручка их не отдавала, а
+     * страница печатала «наши 0» и «живые = всего». То есть НАШИ ПРОБЫ
+     * показывались живыми людьми — на странице, которую собирались читать для
+     * инвесторских материалов. Ноль вместо «неизвестно» здесь дороже отказа:
+     * отказ видно, подмену нет.
+     */
+    подменитьРучку({
+      ...ОТВЕТ,
+      total: { visits: 100, pricing: 20, checkoutStart: 4, checkoutStartOurs: 3, paid: 0, paidOurs: 0 },
+    });
+    const { container } = render(<FunnelAdminClient />);
+    await waitFor(() => {
+      expect(screen.getByText(/Итог за окно/)).toBeTruthy();
+    });
+    const итог = Array.from(container.querySelectorAll("tbody tr")).find((tr) =>
+      tr.textContent?.includes("визиты"),
+    );
+    expect(итог?.textContent, "страница назвала наших нулём, не имея числа").not.toMatch(/наши 0/);
+    expect(итог?.textContent).toMatch(/наши неизвестно/);
+    expect(итог?.textContent, "живые посчитаны вычитанием несуществующего числа").toMatch(
+      /живые неизвестно/,
+    );
+    // КОНТРОЛЬ: когда число ЕСТЬ, страница по-прежнему считает, а не отмалчивается.
+    const оплаты = Array.from(container.querySelectorAll("tbody tr")).find((tr) =>
+      tr.textContent?.includes("оплаты (касса)"),
+    );
+    expect(оплаты?.textContent).toMatch(/наши 0/);
+    expect(оплаты?.textContent).toMatch(/живые 0/);
+  });
+
   it("🔴 отказ ручки рисуется словами, а НЕ нулями", async () => {
     // Самая дорогая ошибка панели: ноль читается как «людей не было», тогда
     // как правда — «не спросили».

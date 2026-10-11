@@ -55,8 +55,8 @@ async function run() {
 
   // 4. Deposit money
   r = await req("POST", "/api/qpaynet/deposit", { walletId, amount: 5000 }, token);
-  if (r.status === 200 && r.body?.txId) ok("POST /qpaynet/deposit", `txId=${r.body.txId.slice(0, 8)}`);
-  else fail("POST /qpaynet/deposit", `${r.status}`);
+  if (r.status === 403 && r.body?.error === "funding_not_connected") ok("POST /qpaynet/deposit → 403", "приём денег не подключён");
+  else fail("POST /qpaynet/deposit", `ожидался 403 funding_not_connected, получено ${r.status}`);
 
   // Give the fire-and-forget VeilNetX/Z-Tide writes a moment to land.
   await sleep(300);

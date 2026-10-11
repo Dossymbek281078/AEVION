@@ -48,7 +48,34 @@ export const metadata: Metadata = {
  * русском экране (0 -> 2). Тот же класс уже ломал quantum-shield 29.09.
  * Страница целиком англоязычная: имена оставляем латиницей.
  */
-const MEASURED = "2026-10-08";
+const MEASURED = "2026-10-11";
+
+/*
+ * Адрес архива проверяльщика. Лежит статикой в frontend/public, поэтому
+ * скачивается без ответа на письмо, без формы и без аккаунта — ровно тот шаг,
+ * который до 11.10 требовал, чтобы занятый инженер ответил на холодное письмо.
+ * Имя файла в двух местах (здесь и в public) держит сторож страницы.
+ */
+const VERIFIER = "/aevion-verify.zip";
+
+/*
+ * Адрес для ответа тому, у кого нашего письма нет: ссылку чаще всего
+ * ПЕРЕСЫЛАЮТ, и до 11.10 такой читатель упирался в «reply to the letter».
+ *
+ * Почему именно этот адрес, и что про него измерено (подробно —
+ * `07-Заявки-и-инвесторы/2026-10-02-ДАННЫЕ-ДЛЯ-ИИ/11-АДРЕС-для-ответа-замер.md`):
+ * у домена есть MX (improvmx), почтовый сервер отвечает «250 Recipient
+ * accepted» на этот ящик, а пересылка доказана одиннадцатью письмами ПОСТОРОННИХ
+ * отправителей на пять произвольных ящиков домена за 60 дней. Чего НЕ измерено:
+ * письма, пришедшего именно на `data@`, никто не видел — туда ещё не писали, а
+ * проверить его письмом из нашего же Gmail нельзя в принципе (домен пересылает
+ * в тот самый ящик, а Gmail отбрасывает копию своего отправленного письма).
+ *
+ * Сторож материалов не даёт опубликовать наш адрес без датированной строки
+ * «доставка подтверждена ДД.ММ.ГГГГ» в материалах — именно чтобы это не
+ * держалось на чьей-то памяти.
+ */
+const CONTACT = "data@aevion.app";
 
 const Row = ({ children }: { children: React.ReactNode }) => (
   <li style={{ marginBottom: 8 }}>{children}</li>
@@ -72,9 +99,24 @@ export default function ProofPage() {
         >
           Provenance for the data you license
         </h1>
+        {/*
+         * ПОВОД 11.10. Здесь стояло «You received a letter from us» — страница
+         * предполагала письмо. Но самый вероятный путь к решающему человеку —
+         * ПЕРЕСЫЛКА: инженер, которому мы написали, отправляет ссылку юристу
+         * или в закупки, и тот открывает страницу без всякого письма. Для него
+         * первая фраза была неверной, а дальше страница трижды отсылала «reply
+         * to the letter» — к письму, которого у него нет. Плюс страница лежит
+         * в карте сайта (проверено: 731 адрес, /proof среди них), то есть
+         * приходят и из поиска.
+         *
+         * Теперь письмо упомянуто как ОДИН из путей, а не как условие, и прямо
+         * сказано: чтобы нас проверить, связываться с нами не нужно вообще.
+         */}
         <p style={{ color: "#475569", fontSize: 16, lineHeight: 1.6, marginBottom: 26 }}>
-          You received a letter from us. This page is its continuation, not a storefront:
-          what is verifiable, what is not, and how to check both yourself — before any
+          If you arrived from our letter, this page is its continuation. If someone
+          forwarded you the link, you have not missed anything: everything needed to judge
+          us is on this page and in the archive below, and none of it requires contacting
+          us. What is verifiable, what is not, and how to check both yourself — before any
           conversation about money.
         </p>
 
@@ -103,7 +145,11 @@ export default function ProofPage() {
         <p style={{ color: "#475569", fontSize: 15, lineHeight: 1.7, marginBottom: 12 }}>
           The verifier is 8 files, no dependencies, Node&nbsp;18+. It deliberately ignores
           the validity flags our own API returns and recomputes everything with Node&apos;s
-          built-in crypto.
+          built-in crypto.{" "}
+          <a href={VERIFIER} style={{ color: "#1d4ed8", fontWeight: 700 }}>
+            Download it
+          </a>{" "}
+          — no form, no account, no reply to us required.
         </p>
         <pre
           style={{
@@ -241,9 +287,20 @@ node demo-local.mjs                                   # sign 3 files, alter one 
             color: "#334155",
           }}
         >
-          <b>Want the verifier?</b> Reply to the letter and we send the archive — 8 files,
-          no dependencies, including the failing control. You do not need anything from us
-          to read it, and you do not need us to run it.
+          <b>
+            <a href={VERIFIER} style={{ color: "#1d4ed8" }}>
+              Download the verifier
+            </a>
+          </b>{" "}
+          — 8 files, no dependencies, including the failing control. Nothing is asked of you
+          first: no form, no account, no reply. You do not need anything from us to read it,
+          and you do not need us to run it. If it convinces you, reply to our letter or
+          write to{" "}
+          <a href={`mailto:${CONTACT}`} style={{ color: "#1d4ed8", fontWeight: 700 }}>
+            {CONTACT}
+          </a>
+          . If it does not convince you, you have lost five minutes and we have learned
+          something.
         </div>
       </ProductPageShell>
     </main>

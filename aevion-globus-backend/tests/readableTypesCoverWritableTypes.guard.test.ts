@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import express from "express";
 import request from "supertest";
+import { сегодняАлматы } from "./helpers/суткиАлматы";
 
 /*
  * 🔴 Утверждение: про каждый тип события, который мы ПРИНИМАЕМ на запись,
@@ -47,7 +48,7 @@ describe("читающая ручка знает всё, что принимае
         .expect(204);
     }
 
-    const день = new Date().toISOString().slice(0, 10);
+    const день = сегодняАлматы();
     const r = await request(app).get(
       `/api/pricing/events/by-type?types=cta_click,feature_use&day=${день}`,
     );

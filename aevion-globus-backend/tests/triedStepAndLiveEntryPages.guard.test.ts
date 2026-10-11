@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import express from "express";
 import request from "supertest";
+import { сегодняАлматы } from "./helpers/суткиАлматы";
 
 /*
  * Две правки одного дня, обе по слову оркестратора 07.10.2026.
@@ -126,7 +127,7 @@ describe("ступень «попробовали» в сводке дня", () 
     const { eventsRouter } = await import("../src/routes/events");
     const app = express();
     app.use("/api/pricing/events", eventsRouter);
-    const день = new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const день = сегодняАлматы();
     const r = await request(app).get(`/api/pricing/events/day?date=${день}`);
     expect(r.status).toBe(200);
     expect(Object.keys(r.body), "ступень посчитана, но не отдана").toContain("попробовали");

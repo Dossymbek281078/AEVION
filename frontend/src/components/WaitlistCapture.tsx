@@ -261,7 +261,7 @@ export function WaitlistCapture({
     <form
       onSubmit={submit}
       style={{
-        padding: compact ? "6px 8px" : "24px 20px",
+        padding: compact ? "4px 8px" : "24px 20px",
         borderRadius: compact ? 12 : 16,
         background: dark ? "linear-gradient(135deg, #0f172a, #1e293b)" : "#fff",
         border: dark ? "1px solid rgba(212,175,55,0.35)" : "1px solid rgba(15,23,42,0.12)",
@@ -313,7 +313,7 @@ export function WaitlistCapture({
           style={{
             flex: compact ? "1 1 120px" : "1 1 260px",
             minWidth: 0,
-            padding: compact ? "7px 10px" : "12px 14px",
+            padding: compact ? "5px 9px" : "12px 14px",
             fontSize: 16, // 16px — иначе Safari на телефоне зумит форму при фокусе
             borderRadius: 10,
             border: dark ? "1px solid rgba(226,232,240,0.25)" : "1px solid rgba(15,23,42,0.18)",
@@ -325,7 +325,7 @@ export function WaitlistCapture({
           type="submit"
           disabled={status === "sending"}
           style={{
-            padding: compact ? "7px 12px" : "12px 20px",
+            padding: compact ? "5px 11px" : "12px 20px",
             fontSize: compact ? 14 : 15,
             fontWeight: 800,
             borderRadius: 10,
@@ -362,7 +362,17 @@ export function WaitlistCapture({
         // на что человек подписывается («письмо на запуск», «отписка одной ссылкой»).
         // Мельче только надзаголовки в 11px, но те — три слова заглавными, их читают
         // взглядом, а не построчно. Мелкое условие подписки — плохая мелочь.
-        <p style={{ margin: "12px 0 0", fontSize: 13.5, lineHeight: 1.55, color: muted }}>{promise ?? copy.promise}</p>
+        <p style={{
+          /* 🔴 Сжатый вид НЕ прячет обещание: человек должен видеть, на что
+             подписывается, и что отписка в одно нажатие (это требование, не
+             оформление). Замер 11.10 на проде: в сжатой прилипшей строке этот
+             абзац стоил 33 px из 97 — больше, чем ряд поля с кнопкой. Поэтому
+             он остаётся, но мельче и без большого отступа. */
+          margin: compact ? "2px 0 0" : "12px 0 0",
+          fontSize: compact ? 11.5 : 13.5,
+          lineHeight: compact ? 1.25 : 1.55,
+          color: muted,
+        }}>{promise ?? copy.promise}</p>
       ) : null}
     </form>
   );

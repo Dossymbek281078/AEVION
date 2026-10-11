@@ -179,6 +179,34 @@ export default function FusionPlayground({ onResult }: Props) {
         )}
       </div>
 
+      {/* Честное предупреждение ДО кнопки «Запустить»: действие платное —
+          ручка /api/qfusionai/route отдаёт гостю 402 (qfusionai в PAYWALL_MODULES).
+          Ставится НАД кнопкой, чтобы человек знал цену до нажатия, а не узнавал
+          из модалки после. Сторожа: __tests__/paidNoticeBeforeRunButton.test.tsx
+          (уведомление есть) + backend qfusionaiRouteGatesGuestWhenPaywalled.guard
+          (ручка и правда 402 гостю — то есть «платно» не ложь). */}
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        flexWrap: "wrap",
+        background: "#1a1400",
+        border: "1px solid #ffcc0044",
+        borderRadius: 7,
+        padding: "8px 12px",
+        color: "#ffcc00",
+        fontSize: 12,
+        fontFamily: "monospace",
+      }}>
+        <span>Платно — входит в подписку AEVION.</span>
+        <a
+          href="/pricing?c=qfusionai"
+          style={{ color: "#ffcc00", textDecoration: "underline", fontWeight: 700 }}
+        >
+          Тарифы →
+        </a>
+      </div>
+
       {/* Footer: char count + run button */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <span style={{ color: "#334433", fontSize: 11, fontFamily: "monospace" }}>

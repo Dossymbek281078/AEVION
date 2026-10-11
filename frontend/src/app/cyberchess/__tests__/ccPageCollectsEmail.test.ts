@@ -3,7 +3,7 @@
 // (замер: из 11 посадочных адрес не собирала одна — /cyberchess).
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { уженеПредлагать } from "../page";
+import { уженеПредлагать, povodPredlozhitAdres, nuzhnoLiPokazatStrokuAdresa } from "../page";
 import { join } from "node:path";
 
 const page = readFileSync(join(__dirname, "..", "page.tsx"), "utf8");
@@ -24,12 +24,33 @@ function безКомментариев(src: string): string {
 const кодСтраницы = безКомментариев(page);
 
 describe("страница шахмат принимает адрес", () => {
-  it("форма подключена и помечена меткой, которую примет рассылка запуска", () => {
+  it("ВСЕ точки сбора адреса помечены меткой, которую примет рассылка запуска", () => {
+    /*
+     * 🔴 ПЕРЕНАЦЕЛЕНО 11.10.2026. Здесь ждали дословного `source="cyberchess-app"`.
+     * Точек сбора стало больше одной (окно после партии, строка под доской после
+     * первого хода), и у одной из них метка собирается выражением. Сторож краснел
+     * на ВЕРНОЙ правке — тот самый класс «краснеет на починке и зеленеет на лжи».
+     *
+     * Проверяем СВОЙСТВО со знаменателем: сколько точек сбора, столько и меток, и
+     * каждая попадает в отбор рассылки шахмат. Правило отбора живёт на сервере
+     * (`matchesModule` в lib/launchAnnounce.ts): метка равна `cyberchess` или
+     * начинается с `cyberchess-`. Проверено поведением вызовом самой функции
+     * 11.10: `cyberchess-first-move` ПОПАДАЕТ, `chess-app` и `cyberchessXfirst` —
+     * нет.
+     */
     expect(page).toContain('import WaitlistCapture from "@/components/WaitlistCapture";');
-    expect(page).toContain('source="cyberchess-app"');
-    // правило отбора рассылки: метка равна cyberchess или начинается с cyberchess-
-    expect("cyberchess-app".startsWith("cyberchess-")).toBe(true);
-    expect("chess-app".startsWith("cyberchess-")).toBe(false); // контроль: чужая метка не прошла бы
+    const точки = (кодСтраницы.match(/<WaitlistCapture/g) ?? []).length;
+    const метки = [...кодСтраницы.matchAll(/source=(?:"([^"]+)"|\{"([^"]+)"\s*\+)/g)]
+      .map((m) => m[1] ?? m[2]).filter(Boolean);
+    expect(точки, `точек сбора адреса на странице: ${точки}`).toBeGreaterThanOrEqual(2);
+    expect(метки.length, `меток ${метки.length} при ${точки} точках сбора — у какой-то метки нет`).toBe(точки);
+    const вОтбор = (м: string) => м === "cyberchess" || м.startsWith("cyberchess-");
+    const чужие = метки.filter((м) => !вОтбор(м));
+    expect(чужие.length, `метки вне отбора рассылки: ${чужие.join(", ")}`).toBe(0);
+    // Контроли: правило отбора различает, а не пропускает всё.
+    expect(вОтбор("cyberchess-first-move")).toBe(true);
+    expect(вОтбор("chess-app")).toBe(false);
+    expect(вОтбор("cyberchessXfirst")).toBe(false);
   });
   it("окно доступно из меню «Ещё» с любой ширины", () => {
     const i = page.indexOf('lbl:"Написать мне о запуске"');
@@ -39,14 +60,30 @@ describe("страница шахмат принимает адрес", () => {
     const mobileBlockEnd = page.indexOf("] : []),", mobileBlockStart);
     expect(i > mobileBlockEnd).toBe(true);
   });
-  it("автопоказ — один раз после законченной партии, с запоминанием", () => {
-    expect(кодСтраницы).toContain('if(!over||предлагалиПодпискуRef.current)return;');
+  it("автопоказ — один раз, по достижимому поводу, с запоминанием", () => {
+    /*
+     * 🔴 ПЕРЕНАЦЕЛЕНО 11.10.2026, второй раз. Прежде ждали дословного
+     * `if (уженеПредлагать())`; условие переехало в чистые функции, и сторож
+     * снова покраснел на верной правке. Теперь спрашиваем ПОВЕДЕНИЕ этих
+     * функций, а дословной строкой осталась только запись отметки — она и
+     * есть «запоминание».
+     *
+     * Почему поводов стало два: за 14 дней по 585 сессиям «доиграли» 3 (все
+     * наши) и «задача дня решена» 2 (обе наши), а «попробовали» у живых 12 —
+     * прежний повод (конец партии) живому человеку недостижим.
+     */
     expect(кодСтраницы).toContain('localStorage.setItem("aevion_chess_waitlist_seen","1")');
-    // 🔴 ПЕРЕНАЦЕЛЕНО 30.09.2026. Здесь ждали дословного
-    // `localStorage.getItem(...)==="1"`. Чтение переехало в помощник
-    // `уженеПредлагать`, и сторож покраснел на ВЕРНОЙ правке: она чинила
-    // приватное окно, где localStorage бросает. Теперь спрашиваем поведение.
-    expect(кодСтраницы).toContain("если (уженеПредлагать())".replace("если ", "if "));
+    // Повод «партия закончилась» жив.
+    expect(povodPredlozhitAdres({ партияОкончена: true, задачаДняЗачтена: false }, { getItem: () => null }))
+      .toBe("game-over");
+    // Повод «первый ход» достижим живому человеку.
+    expect(nuzhnoLiPokazatStrokuAdresa({ партияИдёт: true, завершена: false, полуходов: 1,
+      ужеПоказывали: false, ужеПредлагали: false })).toBe(true);
+    // Один раз: отметка прочитана — больше не предлагаем ни по какому поводу.
+    expect(povodPredlozhitAdres({ партияОкончена: true, задачаДняЗачтена: true }, { getItem: () => "1" }))
+      .toBeNull();
+    expect(nuzhnoLiPokazatStrokuAdresa({ партияИдёт: true, завершена: false, полуходов: 5,
+      ужеПоказывали: false, ужеПредлагали: true })).toBe(false);
   });
 
   it("🔴 хранилище недоступно — адрес всё равно предлагаем", () => {

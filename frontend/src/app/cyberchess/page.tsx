@@ -7655,7 +7655,12 @@ export default function CyberChessPage(){
                 <button onClick={()=>{sTab("puzzles");if(PUZZLES.length)ldPz(Math.floor(Math.random()*PUZZLES.length))}}
                   className="cc-focus-ring"
                   style={{padding:"6px 12px",borderRadius:RADIUS.full,
-                    border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,
+                    /* Фон прежний: приёмка 11.10 прочитала строку без нареканий именно на
+               нём. CC.surface1 здесь не годится — это тёмная панель (#262421), а
+               форма внутри идёт со светлым тоном; я подставил его по невнимательности
+               и вернул, не дожидаясь, пока это заметят на кадре. Но при «висящей»
+               строке фон обязан быть НЕПРОЗРАЧНЫМ, иначе сквозь неё видно доску. */
+            border:`1px solid ${CC.border}`,background:vwPx<769?"#eef7f2":"rgba(5,150,105,0.06)",color:CC.text,
                     fontSize:12,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
                   ◆ Решить задачу <span style={{color:CC.textMute,fontWeight:600,fontSize:11}}>{pzCountLabel}</span>
                 </button>
@@ -9233,8 +9238,33 @@ export default function CyberChessPage(){
               доходят (первый ход). Не модальное окно: прерывать партию нельзя.
               ⚠️ Она сдвигает полосу «Сдаться · Ничья · Отменить · Подсказка» вниз;
               приёмка меряет в КАДРЕ и строку, и эту полосу на 390/540/768/1024. */}
-          {strokaAdresa&&!over&&<div style={{marginTop:SPACE[2],padding:SPACE[2],borderRadius:RADIUS.md,
-            border:`1px solid ${CC.border}`,background:"rgba(5,150,105,0.06)",position:"relative"}}>
+          {strokaAdresa&&!over&&<div style={{
+            /*
+             * 🔴 НА ТЕЛЕФОНЕ строка висит НАД нижней панелью, а не в потоке.
+             *
+             * Приёмка user-37 на проде 11.10 (прямоугольник против окна +
+             * elementFromPoint, четыре ширины): в потоке под доской строка
+             * начиналась на y=770 при окне 844, поле и кнопка «Получать» были за
+             * кадром, и видимые 40–75 px её верха накрывала нижняя панель
+             * `cc-bottom-nav` — playwright прямо отказался нажать крестик:
+             * «button aria-label="Профиль" … intercepts pointer events».
+             * Нужно было прокрутить 154–209 px. Предложение, которое надо
+             * прокручивать, человек не видит, а значит его нет.
+             *
+             * Панель живёт только до 769 px (globals.css скрывает её выше), и на
+             * столе строка в потоке была достижима (1024: все части «СВОИ»).
+             * Поэтому поведение разное по ширине, а не одно на всех.
+             *
+             * ⚠️ Отступ снизу 72 px — ОЦЕНКА высоты панели, её точное значение я
+             * не мерил: высота зависит от содержимого кнопок. Проверяет кадром
+             * приёмка; если промах, число правится здесь одной строкой.
+             */
+            ...(vwPx<769
+              ? {position:"fixed" as const,left:8,right:8,bottom:"calc(env(safe-area-inset-bottom) + 72px)",zIndex:101}
+              : {position:"relative" as const,marginTop:SPACE[2]}),
+            padding:SPACE[2],borderRadius:RADIUS.md,
+            border:`1px solid ${CC.border}`,background:CC.surface1,
+            boxShadow:vwPx<769?"0 6px 20px rgba(0,0,0,0.18)":undefined}}>
             <button type="button" aria-label="Закрыть предложение" onClick={()=>sStrokaAdresa(false)}
               style={{position:"absolute",top:4,right:6,background:"transparent",border:"none",
                 color:CC.textDim,fontSize:16,lineHeight:1,cursor:"pointer",padding:4}}>×</button>

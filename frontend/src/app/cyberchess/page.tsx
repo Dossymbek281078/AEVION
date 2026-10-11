@@ -4420,7 +4420,12 @@ export default function CyberChessPage(){
       ужеПоказывали:strokaAdresaPokazanaRef.current,ужеПредлагали:уженеПредлагать()}))return;
     strokaAdresaPokazanaRef.current=true;
     sStrokaAdresa(true);
-    track({type:"waitlist_offer_shown",source:"cyberchess/board",meta:{surface:"first-move",plies:hist.length}});
+    /* Числа рубежа те же, что у остальных событий: замер на проде волны 41
+       показал `plies: 0` у показа при `plies: 1` у прогресса в той же сессии —
+       разрез берёт максимум, так что вреда не было, но два разных ответа на
+       один вопрос в одном журнале рано или поздно прочтут как противоречие. */
+    track({type:"waitlist_offer_shown",source:"cyberchess/board",
+      meta:{surface:"first-move",...chislaRubezha(hist.length,pzFailedCount)}});
   },[on,over,hist.length,pzFailedCount]);
 
   /* Поместилась ли строка в кадр. Одностороннее решение: только «в поток ->

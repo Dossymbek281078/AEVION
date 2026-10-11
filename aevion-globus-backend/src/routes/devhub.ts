@@ -1457,6 +1457,7 @@ export function __resetDevHubStore() {
   memSnippets.clear();
   memUsage.clear();
   memTiers.clear();
+  __resetReconcileStateForTest();
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -8887,6 +8888,122 @@ devhubRouter.post("/projects/:id/deployments/:deployId/recheck", async (req, res
   d.deployUrl = projectUrl;
   await markDeploymentLive(d, project, projectUrl, customDomain);
   return res.json({ ok: true, serves: true, status: "live", deployUrl: projectUrl, customDomain });
+});
+
+// ── Keeping a "live" project honest when its address later goes away ─────────
+//
+// Замер на проде 11→12.10.2026 (путь гостя): статик-проект прошёл проверку
+// (2xx → markDeploymentLive поставил status="live"), а через минуты его адрес
+// *.pages.dev ушёл в NXDOMAIN. Карточка продолжала показывать «Живой» на
+// мёртвом адресе: ПОВЫШЕНИЕ до live было, а ПОНИЖЕНИЯ не было нигде (ручка
+// recheck при serves=false возвращала status БЕЗ изменения). Это чинит экран
+// при любой причине смерти адреса.
+//
+// Осторожно с ложным понижением: одна неудачная проверка может быть сетевым
+// сбоем У НАС, а не мёртвым адресом. Поэтому понижаем сразу только при
+// ОДНОЗНАЧНОЙ смерти — NXDOMAIN или 404; таймаут/5xx/временный DNS понижают
+// лишь со ВТОРОГО отказа подряд. И не чаще раза в минуту на проект, чтобы
+// список не долбил Cloudflare.
+type ServeVerdict = "ok" | "nxdomain" | "gone404" | "ambiguous";
+
+/** Why an address does or does not serve. Returns a DEFINITIVE-dead verdict
+ * (nxdomain/gone404) when it sees one, else "ambiguous" for anything that could
+ * be a transient on our side (timeout, 5xx, temporary DNS, refused). One fetch
+ * per call by default — the "two in a row" debounce lives in the caller. */
+export async function classifyDeploymentServe(url: string, timeoutMs = 4000, attempts = 1): Promise<{ alive: boolean; verdict: ServeVerdict }> {
+  let sawGone = false, sawNxdomain = false;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+      let res: Response;
+      try { res = await fetch(url, { method: "GET", redirect: "follow", signal: ctrl.signal }); }
+      finally { clearTimeout(timer); }
+      if (res.ok) return { alive: true, verdict: "ok" };
+      if (res.status === 404) sawGone = true;
+      // 5xx / other non-2xx (warm-up, auth, our proxy) — ambiguous, not "gone".
+    } catch (e) {
+      const code = String((e as { cause?: { code?: string } })?.cause?.code ?? (e as { code?: string })?.code ?? "");
+      if (code === "ENOTFOUND") sawNxdomain = true;
+      // EAI_AGAIN (temporary DNS), ETIMEDOUT/aborts, ECONNREFUSED/RESET → ambiguous.
+    }
+    if (i < attempts - 1) await new Promise((r) => setTimeout(r, 300));
+  }
+  if (sawNxdomain) return { alive: false, verdict: "nxdomain" };
+  if (sawGone) return { alive: false, verdict: "gone404" };
+  return { alive: false, verdict: "ambiguous" };
+}
+
+const RECONCILE_RATE_MS_DEFAULT = 60_000;      // не чаще раза в минуту на проект
+const RECONCILE_FAIL_THRESHOLD = 2;            // неоднозначный отказ понижает со 2-го подряд
+let reconcileRateMs = RECONCILE_RATE_MS_DEFAULT;
+const reconcileState = new Map<string, { ambiguousFails: number; lastCheckAt: number }>();
+
+export function __resetReconcileStateForTest(): void { reconcileState.clear(); reconcileRateMs = RECONCILE_RATE_MS_DEFAULT; }
+export function __setReconcileRateMsForTest(ms: number): void { reconcileRateMs = ms; }
+
+/** Re-check a LIVE project's address and downgrade it to "error" when the
+ * address is really gone, so the card never shows «Живой» over a dead URL.
+ * Downgrades on NXDOMAIN/404 at once, on ambiguous failures only after two in a
+ * row; rate-limited per project. No-op for non-live projects. */
+async function reconcileLiveProject(project: DevHubProject): Promise<{ status: string; checked: boolean; alive: boolean | null; verdict: ServeVerdict | null; reason: string | null }> {
+  if (project.status !== "live" || !project.deployUrl) {
+    return { status: project.status, checked: false, alive: null, verdict: null, reason: null };
+  }
+  const st = reconcileState.get(project.id) ?? { ambiguousFails: 0, lastCheckAt: 0 };
+  if (Date.now() - st.lastCheckAt < reconcileRateMs) {
+    return { status: project.status, checked: false, alive: null, verdict: null, reason: null };
+  }
+  const { alive, verdict } = await classifyDeploymentServe(project.deployUrl);
+  st.lastCheckAt = Date.now();
+  if (alive) {
+    st.ambiguousFails = 0;
+    reconcileState.set(project.id, st);
+    return { status: "live", checked: true, alive: true, verdict, reason: null };
+  }
+  let downgrade: boolean;
+  if (verdict === "nxdomain" || verdict === "gone404") {
+    downgrade = true;                                 // однозначно мёртв — сразу
+  } else {
+    st.ambiguousFails += 1;                           // неоднозначно — со 2-го подряд
+    downgrade = st.ambiguousFails >= RECONCILE_FAIL_THRESHOLD;
+  }
+  if (!downgrade) {
+    reconcileState.set(project.id, st);
+    return { status: "live", checked: true, alive: false, verdict, reason: null };
+  }
+  st.ambiguousFails = 0;
+  reconcileState.set(project.id, st);
+  const reason = verdict === "nxdomain" ? "address does not resolve (NXDOMAIN)"
+    : verdict === "gone404" ? "address answers 404"
+    : "address unreachable twice in a row";
+  project.status = "error";
+  project.updatedAt = now();
+  try { await dbSaveProject(project); } catch { memProjects.set(project.id, project); }
+  return { status: "error", checked: true, alive: false, verdict, reason };
+}
+
+// Перепроверка ЖИВУЧЕСТИ проекта по требованию (без deployId): фронт зовёт её
+// для проектов со статусом "live" на заходе в список/окно, ограниченно по
+// частоте. Повысить до live она НЕ может (это делает выкатка через проверку
+// 2xx) — только ПОНИЗИТЬ умерший адрес, чтобы «Живой» не врал.
+devhubRouter.post("/projects/:id/recheck", async (req, res) => {
+  const auth = verifyBearerOptional(req);
+  const userId = requesterId(req, auth?.sub);
+  const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
+  if (!project) return;
+  const r = await reconcileLiveProject(project);
+  return res.json({
+    ok: true,
+    status: r.status,
+    checked: r.checked,
+    serves: r.alive,
+    verdict: r.verdict,
+    deployUrl: project.deployUrl,
+    ...(r.status === "error" && r.reason
+      ? { message: `Site is no longer reachable (${r.reason}) — republish to put it back online.` }
+      : {}),
+  });
 });
 
 // ═════════════════════════════════════════════════════════════════════════════

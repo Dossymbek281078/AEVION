@@ -9274,6 +9274,13 @@ export default function CyberChessPage(){
               title="Задача дня — на почту"
               description=""
               buttonLabel="Получать"
+              onSubscribed={()=>{
+                /* Подписался — больше не предлагаем ни этой строкой, ни окном в
+                   конце партии. Отметка та же, что у прежнего повода. */
+                try{localStorage.setItem("aevion_chess_waitlist_seen","1")}catch{}
+                предлагалиПодпискуRef.current=true;
+                sStrokaAdresa(false);
+              }}
             />
           </div>}
 

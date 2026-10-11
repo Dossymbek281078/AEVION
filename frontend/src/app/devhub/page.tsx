@@ -338,6 +338,43 @@ export default function DevHubPage() {
 
   useEffect(() => { fetchProjects(); }, [fetchProjects]);
 
+  // Держим карточку честной: проект, помеченный «Живой», может позже потерять
+  // адрес (замер на проде 11→12.10 — *.pages.dev ушёл в NXDOMAIN, а карточка
+  // продолжала показывать «Живой»). Перепроверяем только «живые» проекты и
+  // только изредка (сервер тоже ограничивает частоту и сам решает, понижать ли:
+  // NXDOMAIN/404 — сразу, таймаут/5xx — лишь со 2-го отказа подряд). Понижение
+  // отражаем в списке, чтобы бейдж не врал. Повысить обратно может только
+  // выкатка — здесь мы ничего не «оживляем».
+  const recheckingRef = useRef(false);
+  useEffect(() => {
+    const live = projects.filter((p) => p.status === "live" && p.deployUrl);
+    if (live.length === 0 || recheckingRef.current) return;
+    const THROTTLE_MS = 10 * 60 * 1000;
+    const due = live.filter((p) => {
+      try { return Date.now() - Number(localStorage.getItem(`devhub_recheck_${p.id}`) || 0) > THROTTLE_MS; }
+      catch { return true; }
+    });
+    if (due.length === 0) return;
+    recheckingRef.current = true;
+    (async () => {
+      try {
+        for (const p of due) {
+          try { localStorage.setItem(`devhub_recheck_${p.id}`, String(Date.now())); } catch { /* private mode */ }
+          try {
+            const r = await fetch(apiUrl(`/api/devhub/projects/${p.id}/recheck`), { method: "POST" });
+            if (!r.ok) continue;
+            const d = await r.json();
+            if (d && typeof d.status === "string" && d.status !== p.status) {
+              setProjects((ps) => ps.map((x) => (x.id === p.id ? { ...x, status: d.status as ProjectStatus } : x)));
+            }
+          } catch { /* сетевой сбой — оставляем как есть, попробуем в следующее окно */ }
+        }
+      } finally {
+        recheckingRef.current = false;
+      }
+    })();
+  }, [projects]);
+
   // Перенос гостевой работы в аккаунт идёт ПАРАЛЛЕЛЬНО первой загрузке списка
   // (оба из useEffect на монтировании), поэтому список успевает уехать пустым.
   // Дождаться переноса синхронно нельзя — он в соседнем компоненте; поэтому он

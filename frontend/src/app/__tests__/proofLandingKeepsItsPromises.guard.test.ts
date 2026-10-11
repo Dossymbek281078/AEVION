@@ -25,6 +25,7 @@
 import { describe, it, expect } from "vitest";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
+import { inflateRawSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
 
 const КОРЕНЬ = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -222,5 +223,65 @@ describe("/proof — продолжение письма, а не витрина
     expect(/^"use client"/m.test(текст), "страница стала клиентской — её не увидит ни краулер, ни предпросмотр").toBe(
       false,
     );
+  });
+  it("README ВНУТРИ архива не противоречит себе про образец", () => {
+    /*
+     * ПОВОД 12.10.2026. Пять «живых производственных подписей» образца
+     * подписывают payload {"idem":"test","n":1} — проверено по ПЯТИ записям из
+     * пяти через /api/qsign/v2/<id>/public, не по одной. README это честно
+     * объясняет отдельным разделом, но ПЕРВАЯ строка файла называла образец
+     * «a real delivery», а читают первую строку, а не оговорку 150 строками
+     * ниже (на этом классе я уже горел: оговорка противоречила вердикту).
+     *
+     * Сторож смотрит ВНУТРЬ архива, потому что покупатель получает архив, а не
+     * файлы репозитория: правка исходника без пересборки zip оставила бы на
+     * проде прежний текст при зелёных тестах.
+     */
+    const b = readFileSync(АРХИВ);
+    /** Читаем ЦЕНТРАЛЬНЫЙ каталог: в локальном заголовке размеры бывают нулевыми. */
+    function изАрхива(имя: string): string {
+      let eocd = -1;
+      for (let i = b.length - 22; i >= 0; i--) {
+        if (b[i] === 0x50 && b[i + 1] === 0x4b && b[i + 2] === 0x05 && b[i + 3] === 0x06) {
+          eocd = i;
+          break;
+        }
+      }
+      expect(eocd, "в архиве нет записи конца каталога").toBeGreaterThan(-1);
+      let p = b.readUInt32LE(eocd + 16);
+      const всего = b.readUInt16LE(eocd + 10);
+      for (let k = 0; k < всего; k++) {
+        const nameLen = b.readUInt16LE(p + 28);
+        const extraLen = b.readUInt16LE(p + 30);
+        const commentLen = b.readUInt16LE(p + 32);
+        const имяЗаписи = b.subarray(p + 46, p + 46 + nameLen).toString("utf8");
+        if (имяЗаписи === имя) {
+          const метод = b.readUInt16LE(p + 10);
+          const сжато = b.readUInt32LE(p + 20);
+          const смещение = b.readUInt32LE(p + 42);
+          const nl = b.readUInt16LE(смещение + 26);
+          const el = b.readUInt16LE(смещение + 28);
+          const начало = смещение + 30 + nl + el;
+          const данные = b.subarray(начало, начало + сжато);
+          return метод === 0 ? данные.toString("utf8") : inflateRawSync(данные).toString("utf8");
+        }
+        p += 46 + nameLen + extraLen + commentLen;
+      }
+      throw new Error(`в архиве нет файла ${имя}`);
+    }
+
+    const readme = изАрхива("README.md");
+    // Контроль прибора: распаковка обязана дать осмысленный текст, иначе запреты ниже пусты.
+    expect(readme.length, "README.md не распаковался").toBeGreaterThan(1000);
+    expect(/verify-aevion\.mjs/.test(readme), "распакован не тот файл").toBe(true);
+
+    expect(
+      /manifest-sample\.json[^\n]*a real delivery/i.test(readme),
+      "первая строка README снова называет образец настоящей поставкой",
+    ).toBe(false);
+    expect(
+      /live records,?\s*not a (?:file )?delivery/i.test(readme),
+      "из README исчезла оговорка, что образец — не поставка файлов",
+    ).toBe(true);
   });
 });

@@ -80,6 +80,7 @@ beforeEach(() => {
   счётКошельков = 0;
   delete process.env.QPAYNET_FUNDING_PROVIDER;
   delete process.env.QPAYNET_MAX_WALLETS;
+  delete process.env.QPAYNET_ADMIN_EMAILS;
   if (ИСХОДНЫЙ_NODE_ENV === undefined) delete process.env.NODE_ENV;
   else process.env.NODE_ENV = ИСХОДНЫЙ_NODE_ENV;
   vi.resetModules();
@@ -143,6 +144,49 @@ describe("QPayNet: пределы, которые печатает ручка с
   });
 });
 
+describe("QPayNet: пустой список админов в production НЕ делает админом любого вошедшего", () => {
+  /*
+   * 🔴 Найдено мутацией 11.10. Ветвь `if (NODE_ENV === "production") return false`
+   * внутри isAdmin() была закрыта ТОЛЬКО тестом-копией: tests/qpaynetAdminGate.test.ts
+   * объявляет свою функцию isAdmin и проверяет её, а не ту, что в проде. Её шапка
+   * говорит прямо: «The duplication is intentional today because qpaynet.ts is a
+   * 4000-line module and exporting isAdmin would broaden its public surface» — и
+   * обещает «if anyone changes the impl in qpaynet.ts these tests will fail».
+   * Замер: я заменил эту строку в src/routes/qpaynet.ts на `if (false) return false;`
+   * — qpaynetAdminGate дал 6 из 6 ЗЕЛЁНЫХ, qpaynetDepositsAudit тоже зелёный.
+   * То есть у прав администратора (KYC, отказ выплат) не было ни одного сторожа,
+   * который делает ЗАПРОС. Этот — делает, и копию ничью не правит.
+   */
+  const ПУТЬ = "/api/qpaynet/admin/deposits/audit";
+
+  it("🔴 список не задан + production -> 403, а не доступ", async () => {
+    process.env.NODE_ENV = "production";
+    delete process.env.QPAYNET_ADMIN_EMAILS;
+    const r = await request(await приложение())
+      .get(ПУТЬ)
+      .set("Authorization", "Bearer " + токен());
+    expect(r.status).toBe(403);
+  });
+
+  it("ОТРИЦАТЕЛЬНЫЙ КОНТРОЛЬ: вне production тот же пустой список даёт доступ (403 не всегда)", async () => {
+    process.env.NODE_ENV = "test";
+    delete process.env.QPAYNET_ADMIN_EMAILS;
+    const r = await request(await приложение())
+      .get(ПУТЬ)
+      .set("Authorization", "Bearer " + токен());
+    expect(r.status).not.toBe(403);
+  });
+
+  it("ОТРИЦАТЕЛЬНЫЙ КОНТРОЛЬ: список задан и чужая почта -> 403 даже вне production", async () => {
+    process.env.NODE_ENV = "test";
+    process.env.QPAYNET_ADMIN_EMAILS = "boss@aevion.app";
+    const r = await request(await приложение())
+      .get(ПУТЬ)
+      .set("Authorization", "Bearer " + токен());
+    expect(r.status).toBe(403);
+  });
+});
+
 describe("ТЕКСТОВАЯ половина: ручка состояния действительно называет оба предела", () => {
   const источник = () => readFileSync("src/index.ts", "utf8");
 
@@ -156,6 +200,7 @@ describe("ТЕКСТОВАЯ половина: ручка состояния д�
     const s = источник();
     expect(s).toContain("qpaynetFundingConnected: приёмДенегПодключён(),");
     expect(s).toContain("qpaynetMaxWallets: MAX_WALLETS_PER_OWNER,");
+    expect(s).toContain("qpaynetAdminEmailsSet:");
     // своя копия правила — именно то, чего нельзя: тогда /health говорил бы
     // про себя, а не про ручки
     expect(s).not.toContain('qpaynetFundingConnected: process.env.QPAYNET_FUNDING_PROVIDER');

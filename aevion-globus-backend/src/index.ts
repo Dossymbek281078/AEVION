@@ -463,6 +463,10 @@ app.get("/api/health/deep", async (_req, res) => {
         // Берём ТОТ ЖЕ источник, что и сами ручки, а не свою копию правила.
         qpaynetFundingConnected: приёмДенегПодключён(),
         qpaynetMaxWallets: MAX_WALLETS_PER_OWNER,
+        // Пустой список админов вне production делает админом ЛЮБОГО вошедшего
+        // (KYC, отказ выплат). Печатаем только ФАКТ заданности, не значение —
+        // ровно так, как рядом сделано для metricsTokenSet.
+        qpaynetAdminEmailsSet: !!(process.env.QPAYNET_ADMIN_EMAILS ?? "").trim(),
       },
     });
   } catch (err) {

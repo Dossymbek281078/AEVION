@@ -904,6 +904,15 @@ export interface РазрезВоронки {
       puzzleSolvedOurs: number;
       waitlistSubmitted: number;
       waitlistSubmittedOurs: number;
+      /**
+       * 🔴 ЗНАМЕНАТЕЛЬ К ПОДПИСКАМ (просьба окна 16, 11.10.2026). Без него
+       * «ноль подписок» не отличить от «ноль показов», а это РАЗНЫЕ выводы:
+       * предложение видели и не оставили адрес (плохой текст, плохой момент)
+       * либо не видели вовсе (не дошли до рубежа). Нуль без знаменателя
+       * трактовать нельзя — и окно 16 прямо сказало, что не будет.
+       */
+      offerShown: number;
+      offerShownOurs: number;
       engaged: number;
       engagedOurs: number;
     }
@@ -1095,6 +1104,8 @@ export function пустойПост(): РазрезВоронки["byPost"][str
     puzzleSolvedOurs: 0,
     waitlistSubmitted: 0,
     waitlistSubmittedOurs: 0,
+    offerShown: 0,
+    offerShownOurs: 0,
     engaged: 0,
     engagedOurs: 0,
   };
@@ -1695,6 +1706,12 @@ export function разрезВоронки(
       if (кпа) {
         кпа.offerShown += 1;
         if (з.наш) кпа.offerShownOurs += 1;
+      }
+      // И посту: знаменатель к подпискам нужен именно по метке ролика.
+      const ппоказ = з.ключПоста ? byPost[з.ключПоста] : null;
+      if (ппоказ) {
+        ппоказ.offerShown += 1;
+        if (з.наш) ппоказ.offerShownOurs += 1;
       }
     }
     if (з.оставилАдрес) {

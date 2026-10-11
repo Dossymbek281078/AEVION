@@ -967,13 +967,13 @@ qpaynetRouter.post("/wallets/:id/close", async (req, res) => {
  * кода нет, значение игнорируется в продакшне намеренно — иначе мы бы сами
  * оставили дыру с выключателем.
  */
-function приёмДенегПодключён(): boolean {
+export function приёмДенегПодключён(): boolean {
   if (process.env.NODE_ENV === "production") return false;
   return process.env.QPAYNET_FUNDING_PROVIDER === "connected";
 }
 
 /** Сколько кошельков может завести один владелец. */
-const MAX_WALLETS_PER_OWNER = parseInt(process.env.QPAYNET_MAX_WALLETS ?? "5", 10);
+export const MAX_WALLETS_PER_OWNER = parseInt(process.env.QPAYNET_MAX_WALLETS ?? "5", 10);
 
 qpaynetRouter.post("/deposit", moneyLimiter, async (req, res) => {
   await ensureTables();

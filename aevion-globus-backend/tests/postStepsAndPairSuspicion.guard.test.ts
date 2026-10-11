@@ -174,6 +174,79 @@ describe("ступени человека в разрезе постов", () =>
   });
 });
 
+describe("проверочный заход окна с меткой ролика", () => {
+  it("🔴 метка поста СОХРАНЯЕТСЯ, а сессия считается нашей — через ?probe=", async () => {
+    /*
+     * Развилка окна 16 (11.10.2026): чтобы проверить byPost живым заходом, метка
+     * должна нести ПОСТ (?c=yt-chess-probe16 → канал youtube, пост chess-probe16),
+     * но под «нашу метку» такая строка не подходит — и проверочный заход лёг бы
+     * живым человеком, ровно как те числа, которые мы сегодня отменяли.
+     *
+     * Расширять правило «наша метка» НЕ НУЖНО: у нас уже есть ВТОРАЯ примета,
+     * независимая от канала, — параметр ?probe=<окно> (и флаг probe в теле). Она
+     * специально сделана отдельной, чтобы один признак не отвечал на два
+     * вопроса. Значит проверочный заход выглядит так:
+     *     /cyberchess?puzzle=<id>&c=yt-chess-probe16&probe=16
+     * канал и пост сохраняются, сессия помечена нашей, числа не портятся.
+     *
+     * Этот сторож закрепляет поведение: иначе следующее окно снова придёт с той
+     * же развилкой, а я снова буду вспоминать, почему расширять метку не надо.
+     */
+    журнал([
+      {
+        type: "page_view",
+        ts: сейчас(),
+        sid: "окно16",
+        path: "/cyberchess?puzzle=abc&c=yt-chess-probe16&probe=16",
+        meta: { channel: "youtube", post: "chess-probe16" },
+      },
+      {
+        type: "game_progress",
+        ts: сейчас(),
+        sid: "окно16",
+        path: "/cyberchess",
+        meta: { channel: "youtube", post: "chess-probe16", plies: 1 },
+      },
+      // Живой человек по той же метке — чтобы было видно, что вычитание работает.
+      соб("живой", "page_view", "chess-probe16"),
+      соб("живой", "game_progress", "chess-probe16"),
+    ]);
+    const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");
+    const п = r.body.byPost["youtube/chess-probe16"];
+    expect(п, "строки поста нет — метка с постом не сохранилась").toBeTruthy();
+    expect(п.visits).toBe(2);
+    expect(п.visitsOurs, "заход окна не зачтён нашим").toBe(1);
+    expect(п.progressed).toBe(2);
+    expect(п.progressedOurs, "ход окна не зачтён нашим").toBe(1);
+    expect(п.progressed - п.progressedOurs, "живых ходов вышло не столько").toBe(1);
+  });
+
+  it("КОНТРОЛЬ: без ?probe= тот же заход считается ЖИВЫМ", async () => {
+    // Это и есть доказательство, что пометку делает параметр, а не имя метки:
+    // ровно та же строка метки без probe= даёт живого человека.
+    журнал([
+      {
+        type: "page_view",
+        ts: сейчас(),
+        sid: "безпробы",
+        path: "/cyberchess?puzzle=abc&c=yt-chess-probe16",
+        meta: { channel: "youtube", post: "chess-probe16" },
+      },
+      {
+        type: "game_progress",
+        ts: сейчас(),
+        sid: "безпробы",
+        path: "/cyberchess",
+        meta: { channel: "youtube", post: "chess-probe16", plies: 1 },
+      },
+    ]);
+    const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");
+    const п = r.body.byPost["youtube/chess-probe16"];
+    expect(п.visitsOurs).toBe(0);
+    expect(п.progressedOurs).toBe(0);
+  });
+});
+
 describe("подозрение «пара на метку»", () => {
   it("🔴 пара сессий без действий замечена и МЕТКА НАЗВАНА", async () => {
     журнал([

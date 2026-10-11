@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import express from "express";
 import request from "supertest";
+import { сегодняАлматы } from "./helpers/суткиАлматы";
 
 /*
  * 🔴 Внешний обходчик ссылок отсеивается — и НИ ОДИН живой человек вместе с ним.
@@ -220,7 +221,7 @@ describe("обходчик ссылок отсеян, люди целы", () => 
      * спрашивал только воронку. Признак, поставленный в двух местах, обязан
      * проверяться в двух местах — иначе половина защиты живёт на честном слове.
      */
-    const день = new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const день = сегодняАлматы();
     const d = await request(await приложение()).get(`/api/pricing/events/day?date=${день}`);
     expect(d.status).toBe(200);
     expect(d.body.отсеяноПоШаблонуОбхода, "сводка дня объявила наши пробы обходчиком").toBe(0);
@@ -268,7 +269,7 @@ describe("обходчик ссылок отсеян, люди целы", () => 
 
   it("сводка дня считает тот же признак, а не молчит", async () => {
     журнал(обходНаДесятьМеток());
-    const день = new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const день = сегодняАлматы();
     const r = await request(await приложение()).get(`/api/pricing/events/day?date=${день}`);
     expect(r.status).toBe(200);
     expect(r.body.отсеяноПоШаблонуОбхода, "признак работает в одной ручке и молчит в другой").toBe(
@@ -315,7 +316,7 @@ describe("обходчик ссылок отсеян, люди целы", () => 
      * разрезов по каналам. Проверяется тело ответа второй ручки, потому что
      * «посчитал» и «отдал» — разные утверждения.
      */
-    const день = new Date().toISOString().slice(0, 10);
+    const день = сегодняАлматы();
     const сводка = await request(await приложение()).get(
       `/api/pricing/events/day?date=${день}`,
     );

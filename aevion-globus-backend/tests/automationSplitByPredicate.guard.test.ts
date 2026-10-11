@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import express from "express";
 import request from "supertest";
+import { сегодняАлматы } from "./helpers/суткиАлматы";
 
 /*
  * Отсев автоматики считается ДВУМЯ числами, и каждое проверяется отдельно.
@@ -64,7 +65,7 @@ describe("две приметы автоматики названы по отд�
   });
 
   it("🔴 сводка дня отдаёт те же два числа", async () => {
-    const день = new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const день = сегодняАлматы();
     const r = await request(await приложение()).get(`/api/pricing/events/day?date=${день}`);
     expect(r.status).toBe(200);
     expect(r.body.отсеяноПоВебдрайверу).toBe(2);

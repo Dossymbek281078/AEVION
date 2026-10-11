@@ -4,6 +4,7 @@ import request from "supertest";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { сегодняАлматы } from "./helpers/суткиАлматы";
 
 /**
  * Сторож: счётчик событий по типам считает ДЕНЬ и отделяет НАШИ заходы.
@@ -116,7 +117,7 @@ describe("счётчик событий по типам", () => {
     expect(приём.status, "сервер не принял daily_solved — имя не попало в ALLOWED_TYPES").toBe(204);
 
     const о = await request(приложение()).get(
-      `/api/pricing/events/by-type?day=${new Date().toISOString().slice(0, 10)}&types=daily_solved`,
+      `/api/pricing/events/by-type?day=${сегодняАлматы()}&types=daily_solved`,
     );
     expect(о.status).toBe(200);
     expect(о.body.поТипу.daily_solved, "типа нет в списке счётчика").toBeTruthy();
@@ -135,6 +136,6 @@ describe("счётчик событий по типам", () => {
 
   test("день по умолчанию — сегодняшний, а не вчерашний", async () => {
     const о = await request(приложение()).get("/api/pricing/events/by-type");
-    expect(о.body.день).toBe(new Date().toISOString().slice(0, 10));
+    expect(о.body.день).toBe(сегодняАлматы());
   });
 });

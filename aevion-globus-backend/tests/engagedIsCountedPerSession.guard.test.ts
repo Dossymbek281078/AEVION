@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import express from "express";
 import request from "supertest";
+import { сегодняАлматы } from "./helpers/суткиАлматы";
 
 /*
  * 🔴 ПРИЗНАК ЧЕЛОВЕКА: доля «похоже на чтение» среди живых заходов.
@@ -120,7 +121,7 @@ describe("внимание считается по сессиям и прихо�
     const { eventsRouter } = await import("../src/routes/events");
     const app = express();
     app.use("/api/pricing/events", eventsRouter);
-    const день = new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const день = сегодняАлматы();
     const r = await request(app).get(`/api/pricing/events/day?date=${день}`);
     expect(Object.keys(r.body), "строка посчитана, но не отдана").toContain("внимание");
     expect(r.body.внимание).toEqual({ всего: 1, наши: 0, живые: 1 });
@@ -131,7 +132,7 @@ describe("внимание считается по сессиям и прихо�
     const { eventsRouter } = await import("../src/routes/events");
     const app = express();
     app.use("/api/pricing/events", eventsRouter);
-    const день = new Date().toISOString().slice(0, 10);
+    const день = сегодняАлматы();
     const r = await request(app).get(`/api/pricing/events/by-type?day=${день}&types=engaged`);
     expect(r.status, "ручка не знает типа, который сама принимает").toBe(200);
     expect(r.body.поТипу.engaged.всего).toBe(1);

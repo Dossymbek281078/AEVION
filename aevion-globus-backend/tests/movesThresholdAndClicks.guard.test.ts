@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import express from "express";
 import request from "supertest";
+import { сегодняАлматы } from "./helpers/суткиАлматы";
 
 /*
  * 🔴 ДВА РЕШЕНИЯ, КОТОРЫЕ ДОЛЖНЫ ЖИТЬ В ОДНОМ МЕСТЕ.
@@ -32,7 +33,7 @@ process.env.EVENTS_FILE = файл;
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36";
 const сейчас = () => new Date().toISOString();
-const день = () => new Date().toISOString().slice(0, 10);
+const день = () => сегодняАлматы();
 
 function журнал(события: Array<Record<string, unknown>>) {
   writeFileSync(файл, события.map((о) => JSON.stringify({ ua: UA, ...о })).join("\n") + "\n");

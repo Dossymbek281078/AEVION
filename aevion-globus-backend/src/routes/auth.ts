@@ -365,6 +365,27 @@ authRouter.post("/register", async (req, res) => {
       });
     }
 
+    /*
+     * 🔴 Адрес хранится в НИЖНЕМ регистре (12.10.2026, окно user-d7).
+     *
+     * Столбец объявлен `"email" TEXT NOT NULL UNIQUE` — в Postgres это
+     * сравнение регистрозависимое. Значит без нормализации возможны ДВА
+     * аккаунта на один адрес (`John@Mail.com` и `john@mail.com`), а вход
+     * вторым написанием отвечает «invalid credentials» заплатившему
+     * человеку: права по оплате регистр переживают (поиск подписки
+     * нормализует обе стороны), а вход в аккаунт — нет.
+     */
+    const emailNorm = String(email).trim().toLowerCase();
+    const занят = await pool.query(
+      `SELECT 1 FROM "AEVIONUser" WHERE LOWER("email")=$1 LIMIT 1`,
+      [emailNorm]
+    );
+    if ((занят.rows?.length ?? 0) > 0) {
+      // Тот же ответ, что у нарушения UNIQUE ниже: человеку важно «такая
+      // почта уже есть», а не в каком она регистре.
+      return res.status(409).json({ error: "email already exists" });
+    }
+
     const passwordHash = await bcrypt.hash(password, 10);
 
     // MVP heuristic: if first user, make ADMIN. Otherwise USER.
@@ -377,17 +398,19 @@ authRouter.post("/register", async (req, res) => {
     await pool.query(
       `INSERT INTO "AEVIONUser" ("id","email","passwordHash","name","role")
        VALUES ($1,$2,$3,$4,$5)`,
-      [id, email, passwordHash, name, role]
+      [id, emailNorm, passwordHash, name, role]
     );
 
     const sid = await createSession(id, req);
-    const token = signToken({ sub: id, email, role, sid });
+    const token = signToken({ sub: id, email: emailNorm, role, sid });
     recordAuthAudit(id, "register", req, { sid });
 
     res.status(201).json({
       token,
       sessionId: sid,
-      user: { id, email, name, role },
+      // Отдаём ТОТ адрес, который записан: иначе экран показал бы одно, а
+      // войти пришлось бы другим.
+      user: { id, email: emailNorm, name, role },
     });
   } catch (err: any) {
     if (err?.code === "23505") {
@@ -414,7 +437,40 @@ authRouter.post("/login", loginIpRateLimit, async (req, res) => {
       [email]
     );
 
-    const user = r.rows?.[0] as any;
+    let user = r.rows?.[0] as any;
+    /*
+     * 🔴 Запасной поиск по нижнему регистру (12.10.2026, окно user-d7).
+     *
+     * Старые строки писались как введено, поэтому точное совпадение остаётся
+     * ПЕРВЫМ: оно не меняет поведение ни одному существующему аккаунту.
+     * Промах — ищем без учёта регистра и принимаем ответ ТОЛЬКО если строка
+     * ровно одна: при двух аккаунтах, различающихся регистром, выбор «какой
+     * настоящий» — не решение кода, и мы отвечаем прежним отказом.
+     *
+     * В журнал идёт счёт и домен, без адреса целиком: запись об этом случае
+     * нужна нам, а не тому, кто читает журнал прода.
+     */
+    if (!user) {
+      const поРегистру = await pool.query(
+        `SELECT "id","email","name","role","passwordHash","deletedAt",
+                COALESCE("tokenVersion", 0) AS "tokenVersion"
+         FROM "AEVIONUser" WHERE LOWER("email")=LOWER($1)`,
+        [email]
+      );
+      const строк = поРегистру.rows?.length ?? 0;
+      if (строк === 1) {
+        user = поРегистру.rows[0] as any;
+      } else if (строк > 1) {
+        // Домен в нижнем регистре: иначе одна и та же запись в журнале
+        // пишется то «@mail.com», то «@MAIL.COM», и греп находит половину.
+        const домен = (String(email).split("@")[1] ?? "?").toLowerCase();
+        console.warn(
+          `[auth] email-case-duplicate: аккаунтов ${строк} на один адрес @${домен} — вход отклонён`
+        );
+        recordAuthAudit(null, "login.failed", req, { email, reason: "email_case_duplicate" });
+        return res.status(401).json({ error: "invalid credentials" });
+      }
+    }
     if (!user || user.deletedAt) {
       recordAuthAudit(null, "login.failed", req, { email, reason: "no_user" });
       return res.status(401).json({ error: "invalid credentials" });

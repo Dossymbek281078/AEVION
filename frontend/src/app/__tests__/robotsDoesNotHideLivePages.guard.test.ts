@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import robots, { DISALLOWED_PATHS, robotsLine } from "../robots";
+import { текстRobots, DISALLOWED_PATHS, robotsLine } from "../robotsRules";
 import { isBlockedForCrawlers } from "../sitemap";
 
 /**
@@ -115,9 +115,11 @@ describe("robots и карта сайта не прячут живые стра�
   test("выданный robots.txt не содержит голого короткого входа", () => {
     // Проверяем ВЫДАЧУ, а не список: между списком и файлом стоит преобразование,
     // и первая редакция сторожа этого не видела.
-    const выдача = robots();
-    const правило = Array.isArray(выдача.rules) ? выдача.rules[0] : выдача.rules;
-    const запреты = (правило?.disallow ?? []) as string[];
+    // 07.10.2026: читаем выданный ТЕКСТ — robots.txt теперь собирается строкой.
+    const запреты = текстRobots("https://aevion.app")
+      .split(String.fromCharCode(10))
+      .filter((s) => s.startsWith("Disallow:"))
+      .map((s) => s.slice("Disallow:".length).trim());
     expect(запреты.length, "список запретов в выдаче пуст").toBeGreaterThan(10);
     expect(
       запреты.includes("/qr"),

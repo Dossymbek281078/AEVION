@@ -1078,6 +1078,56 @@ export function уженеПредлагать(
   }
 }
 
+/**
+ * По какому поводу предлагать адрес — и предлагать ли вообще.
+ *
+ * 🔴 ПОВОД (замер на проде 08.10.2026 за 14 дней). Единственное АВТОМАТИЧЕСКОЕ
+ * предложение адреса в магните стояло за концом партии: эффект на `over`. За те
+ * же 14 дней `game_end` равен нулю — значит предложение увидел ноль человек, и
+ * `waitlist_submit` тоже ноль, при 42 живых заходах на /cyberchess. То есть сбор
+ * адресов на магните был заперт за условием, которого никто не достигает.
+ *
+ * Задача дня — ровно то, чем магнит зовёт: тридцать секунд и одна позиция. Её
+ * зачтённое сервером решение и есть достижение, в момент которого уместно
+ * спросить адрес.
+ *
+ * Возвращает ярлык повода (он же попадёт в `source` подписки, чтобы в воронке
+ * было видно, какой путь приносит адреса) либо null.
+ *
+ * Чистая функция и экспортируется намеренно: внутри страницы на 16 тысяч строк
+ * это условие вызовами с известным ответом не проверить, а проверять надо —
+ * прошлое условие молча не срабатывало месяц.
+ */
+export function povodPredlozhitAdres(
+  { партияОкончена, задачаДняЗачтена }: { партияОкончена: boolean; задачаДняЗачтена: boolean },
+  хранилище: Pick<Storage, "getItem"> | undefined = typeof localStorage === "undefined" ? undefined : localStorage,
+): "daily-solved" | "game-over" | null {
+  // Второй раз не предлагаем. Нечитаемое хранилище считается «не предлагали»
+  // (см. разбор у `уженеПредлагать`: падать надо в сторону работы).
+  if (уженеПредлагать(хранилище)) return null;
+  // Задача дня впереди партии: она происходит раньше и чаще, а предложить надо
+  // один раз. Если однажды случится и то и другое — поводом будет задача.
+  if (задачаДняЗачтена) return "daily-solved";
+  if (партияОкончена) return "game-over";
+  return null;
+}
+
+/**
+ * Что отправлять серверу как решение задачи дня.
+ *
+ * Отдельной экспортируемой функцией, потому что внутри страницы на 16 тысяч строк
+ * этот выбор вызовами с известным ответом не проверить, а он уже стоил нам
+ * молчаливого 400 на каждом решении (разбор — у otpravitDaily).
+ *
+ * Правило: отправляем каноническое решение (с ходом соперника). Если его нет —
+ * отправляем показанное, но это худший случай: сервер, скорее всего, откажет, и
+ * отказ человек увидит. Молча не отправлять нельзя — тогда решивший человек не
+ * попадёт в таблицу и не узнает почему.
+ */
+export function kanonicheskoeReshenie(srv:{sol:string[];solRaw?:string[]}):string[]{
+  return (srv.solRaw&&srv.solRaw.length)?srv.solRaw:srv.sol;
+}
+
 export default function CyberChessPage(){
   const{showToast}=useToast();
   // Workspace preset (Focus / Standard / Stream / Study / Coach), keys 1..5.
@@ -1933,6 +1983,10 @@ export default function CyberChessPage(){
   // уже получена, и всегда доступно из меню «Ещё». Метка cyberchess-app попадает в рассылку
   // запуска: matchesModule («равна cyberchess или начинается с cyberchess-»).
   const[showWaitlist,sShowWaitlist]=useState(false);
+  /* Ярлык повода уезжает в `source` подписки: по нему в воронке видно, какой путь
+     приносит адреса. До 08.10.2026 повод был один и источник фиксированный
+     («cyberchess-app»), поэтому различить было нечего. */
+  const[поводПодписки,sПоводПодписки]=useState<"daily-solved"|"game-over">("game-over");
   const предлагалиПодпискуRef=useRef(false);
   useEffect(()=>{
     if(!over||предлагалиПодпискуRef.current)return;
@@ -1946,8 +2000,8 @@ export default function CyberChessPage(){
     // Отметка нужна ровно для одного: не предлагать второй раз. Не сумели
     // её прочитать — предлагаем; худшее последствие — предложить дважды,
     // а не потерять адрес совсем. Падать надо в сторону работы.
-    if (уженеПредлагать()) return;
-    const t=setTimeout(()=>{sShowWaitlist(true);try{localStorage.setItem("aevion_chess_waitlist_seen","1")}catch{}},2200);
+    if (povodPredlozhitAdres({партияОкончена:true,задачаДняЗачтена:false}) !== "game-over") return;
+    const t=setTimeout(()=>{sПоводПодписки("game-over");sShowWaitlist(true);try{localStorage.setItem("aevion_chess_waitlist_seen","1")}catch{}},2200);
     return()=>clearTimeout(t);
   },[over]);
   const[showClockDrill,sShowClockDrill]=useState(false);
@@ -2127,7 +2181,10 @@ export default function CyberChessPage(){
   // таблица лидеров. Раньше модуль считал свою, из загруженного набора:
   // человек решал одну задачу, а в таблице участвовала другая (28.08.2026,
   // сервер отдавал li_0m2HH из банка 502 584, телефон выбирал из 400).
-  type SrvDaily={day:string;id:string;fen:string;sol:string[];rating:number;theme:string};
+  /* solRaw — решение РОВНО в том виде, в каком его знает сервер, вместе с первым
+     ходом соперника. Нужно при отправке: /solve требует полного совпадения,
+     включая длину. Разбор — у otpravitDaily ниже. */
+  type SrvDaily={day:string;id:string;fen:string;sol:string[];solRaw:string[];rating:number;theme:string};
   // Метка канала из адреса: человек приходит на /cyberchess?c=ig из рекламы, и
   // ссылка на страницу запуска обязана её донести. Иначе подписка пометится
   // просто «cyberchess», и на вопрос «какой ролик привёл» ответа не будет —
@@ -3068,6 +3125,7 @@ export default function CyberChessPage(){
         if(p&&typeof p.fen==="string"&&Array.isArray(p.sol)){
           const npd=normalizePuzzle({fen:String(p.fen),sol:(p.sol as string[])||[],name:"",r:0,theme:""});
           sSrvDaily({day:String(d.day||""),id:String(p.id||""),fen:npd.fen,sol:npd.sol,
+                     solRaw:((p.sol as string[])||[]).map(String),
                      rating:Number(p.rating)||0,theme:String(p.theme||"")});
           sSrvDailyFailed(false);
         }else{sSrvDailyFailed(true)}
@@ -3083,12 +3141,32 @@ export default function CyberChessPage(){
   // Отправить решение задачи дня на сервер. Без userId сервер считает игрока
   // анонимом и в таблицу НЕ заносит — проверено на странице /cyberchess/daily,
   // берём оттуда же личность, а не заводим четвёртую.
-  const otpravitDaily=useCallback((srv:{day:string;sol:string[]})=>{
+  /*
+   * 🔴 На сервер уходит КАНОНИЧЕСКОЕ решение (solRaw), а не показанное игроку.
+   *
+   * Замер 08.10.2026 на живом проде, перехваченное тело запроса: ручка задачи дня
+   * отдала решение из шести ходов ["a5a6","e2f2","h2g1","f2g2","g1f1","e4g3"], а
+   * страница отправила пять — без первого хода соперника a5a6, — и сервер ответил
+   * 400. Ходы при этом ПРИМЕНЯЛИСЬ (клетка-источник пустела, цель занималась,
+   * занятых клеток 12 — ровно столько в FEN). То есть человек решал задачу
+   * правильно, а мы отвечали ему «решение не попало в таблицу лидеров».
+   *
+   * Причина: в состояние кладётся нормализованное решение (npd.sol), у которого
+   * первого хода соперника нет по устройству normalizePuzzle, а /solve требует
+   * полного совпадения с каноническим, включая ДЛИНУ. На отдельной странице
+   * /cyberchess/daily это уже учтено — там для отправки держат solRaw и рядом
+   * стоит предупреждение ровно про этот случай. На главной доске не учитывалось.
+   *
+   * Последствие было не только в таблице: daily_solved не уходил никогда с этого
+   * пути, а предложение адреса после решённой задачи дня висит на r.ok этого
+   * запроса — то есть адрес не предлагали никому.
+   */
+  const otpravitDaily=useCallback((srv:{day:string;sol:string[];solRaw?:string[]})=>{
     (async()=>{
       try{
         const r=await fetch("/api-backend/api/cyberchess-daily/solve",{
           method:"POST",headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({day:srv.day,moves:srv.sol,timeMs:0,hintsUsed:0,
+          body:JSON.stringify({day:srv.day,moves:kanonicheskoeReshenie(srv),timeMs:0,hintsUsed:0,
             userId:tournamentUserId(),name:tournamentDisplayName()||undefined}),
         });
         // ОТКАЗ СЕРВЕРА (400 wrong_day после UTC-полуночи на открытой вкладке, 429,
@@ -3104,6 +3182,15 @@ export default function CyberChessPage(){
           // daily_open, который шлёт плитка целей. Внутри ветки r.ok намеренно:
           // считаем то, что признал СЕРВЕР, иначе число разойдётся с таблицей.
           track({type:"daily_solved",source:"cyberchess/board",meta:{surface:"board",day:srv.day}});
+          /* Адрес спрашиваем здесь, а не только после партии: см. разбор у
+             povodPredlozhitAdres — за 14 дней конца партии не достиг никто, и
+             предложение адреса увидел ноль человек. Внутри ветки r.ok намеренно:
+             спрашиваем после того, что сервер ПРИЗНАЛ решением, иначе предложение
+             прилетит к человеку, которому только что сказали «не засчитано». */
+          if(povodPredlozhitAdres({партияОкончена:false,задачаДняЗачтена:true})==="daily-solved"){
+            предлагалиПодпискуRef.current=true;
+            setTimeout(()=>{sПоводПодписки("daily-solved");sShowWaitlist(true);try{localStorage.setItem("aevion_chess_waitlist_seen","1")}catch{}},1400);
+          }
         }
       }catch{
         // Награду человек уже получил; молчать про недоставленное решение
@@ -13148,6 +13235,28 @@ ${question.trim()}`;
     {/* First-time onboarding — 3-step color/AI/time choice (runs BEFORE the tour) */}
     {showOnboarding&&<OnboardingOverlay
       mode={themeMode}
+      /*
+       * Вход в задачу дня ПРЯМО из приветственного окна.
+       *
+       * Замер 08.10.2026 на проде за 14 дней: 42 живых входа на /cyberchess,
+       * «внимание» 6, задачу дня открыл НОЛЬ, партию не закончил никто
+       * (daily_open 0, game_end 0, waitlist_submit 0 при page_view 3042).
+       * Отправка событий при этом исправна — проверено проходом пути человека:
+       * daily_open ушёл со страницы и на сервере виден (всего=1, наши=1).
+       * Мешало другое: до кнопки «☀ Задача дня» надо сперва убрать это окно, а
+       * мой кликер не смог нажать её за 8 секунд, пока не нажал «Пропустить».
+       *
+       * Передаём обработчик ТОЛЬКО когда задача дня готова. Иначе
+       * loadDailyPuzzle закроет окно и скажет «ещё грузится» — человек окажется
+       * на пустой доске, а это хуже отсутствия кнопки (правило «отказ
+       * показывается отказом»).
+       */
+      onDaily={(srvDaily&&!srvDailyFailed)?()=>{
+        markOnboardingDone();
+        sShowOnboarding(false);
+        firstRunRef.current=false;
+        loadDailyPuzzle("onboarding");
+      }:undefined}
       onComplete={(choice:OnboardingChoice)=>{
         try{localStorage.setItem("aevion_onboarding_choice_v1",JSON.stringify(choice))}catch{}
         markOnboardingDone();
@@ -14452,7 +14561,7 @@ ${question.trim()}`;
     {/* Chessy Explainer */}
     <Modal open={showWaitlist} onClose={()=>sShowWaitlist(false)} size="md" title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>✉ Написать вам о запуске</span>}>
       <WaitlistCapture
-        source="cyberchess-app"
+        source={"cyberchess-"+поводПодписки}
         tone="light"
         title={cc.t("wl.launch.title") + (daysUntilLaunch(CHESS_LAUNCH_UTC) >= 0
           ? " — " + new Intl.DateTimeFormat(cc.locale, { day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(CHESS_LAUNCH_UTC))

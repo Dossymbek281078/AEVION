@@ -38,6 +38,16 @@ export type WaitlistCaptureProps = {
   /** Тёмная плашка для светлых страниц, светлая — для тёмных секций. */
   tone?: "dark" | "light";
   /**
+   * Сжатый вид: одна линия «поле + кнопка», без заголовка и описания в кадре.
+   *
+   * Нужен там, где карточка лежит НАД содержимым (прилипшая строка под доской
+   * в шахматах). Замер 11.10.2026 на проде: полная карточка занимала 200 px, на
+   * 390×844 — 277 px, и накрывала от 16 до 40 клеток доски из 64. Заголовок при
+   * этом не пропадает — он остаётся в разметке скрытым для глаза, чтобы форма
+   * не осталась без названия для скринридера.
+   */
+  compact?: boolean;
+  /**
    * Зовётся ОДИН раз, когда подписка действительно легла в базу.
    *
    * Повод 11.10.2026 (приёмка user-37): человек оставил адрес строкой под
@@ -119,6 +129,7 @@ export function WaitlistCapture({
   promise,
   buttonLabel,
   tone = "dark",
+  compact = false,
   onSubscribed,
   lang,
   doneText,
@@ -250,21 +261,31 @@ export function WaitlistCapture({
     <form
       onSubmit={submit}
       style={{
-        padding: "24px 20px",
-        borderRadius: 16,
+        padding: compact ? "6px 8px" : "24px 20px",
+        borderRadius: compact ? 12 : 16,
         background: dark ? "linear-gradient(135deg, #0f172a, #1e293b)" : "#fff",
         border: dark ? "1px solid rgba(212,175,55,0.35)" : "1px solid rgba(15,23,42,0.12)",
         color: fg,
       }}
     >
-      <h2 style={{ fontSize: 22, fontWeight: 900, margin: "0 0 8px", letterSpacing: "-0.02em", color: fg }}>
+      <h2
+        style={
+          compact
+            ? /* Скрыто от глаза, но читается скринридером: форма без названия —
+                 это форма, про которую непонятно, что она делает. */
+              { position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap", margin: -1, padding: 0, border: 0 }
+            : { fontSize: 22, fontWeight: 900, margin: "0 0 8px", letterSpacing: "-0.02em", color: fg }
+        }
+      >
         {title ?? copy.title}
       </h2>
-      <p style={{ fontSize: 14, lineHeight: 1.55, margin: "0 0 16px", color: muted, maxWidth: 620 }}>
-        {description ?? copy.description}
-      </p>
+      {compact ? null : (
+        <p style={{ fontSize: 14, lineHeight: 1.55, margin: "0 0 16px", color: muted, maxWidth: 620 }}>
+          {description ?? copy.description}
+        </p>
+      )}
 
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
+      <div style={{ display: "flex", gap: compact ? 6 : 10, flexWrap: compact ? "nowrap" : "wrap", alignItems: compact ? "center" : "flex-start", paddingLeft: compact ? 18 : 0 }}>
         <label htmlFor={`waitlist-email-${source}`} style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>
           {copy.emailLabel}
         </label>
@@ -290,9 +311,9 @@ export function WaitlistCapture({
           aria-invalid={status === "error"}
           aria-describedby={message ? `waitlist-msg-${source}` : undefined}
           style={{
-            flex: "1 1 260px",
+            flex: compact ? "1 1 120px" : "1 1 260px",
             minWidth: 0,
-            padding: "12px 14px",
+            padding: compact ? "7px 10px" : "12px 14px",
             fontSize: 16, // 16px — иначе Safari на телефоне зумит форму при фокусе
             borderRadius: 10,
             border: dark ? "1px solid rgba(226,232,240,0.25)" : "1px solid rgba(15,23,42,0.18)",
@@ -304,8 +325,8 @@ export function WaitlistCapture({
           type="submit"
           disabled={status === "sending"}
           style={{
-            padding: "12px 20px",
-            fontSize: 15,
+            padding: compact ? "7px 12px" : "12px 20px",
+            fontSize: compact ? 14 : 15,
             fontWeight: 800,
             borderRadius: 10,
             border: "none",
@@ -325,8 +346,8 @@ export function WaitlistCapture({
           role="status"
           aria-live="polite"
           style={{
-            margin: "12px 0 0",
-            fontSize: 14,
+            margin: compact ? "4px 0 0" : "12px 0 0",
+            fontSize: compact ? 13 : 14,
             fontWeight: 600,
             color: status === "done" ? (dark ? "#4ade80" : "#15803d") : dark ? "#fca5a5" : "#b91c1c",
           }}

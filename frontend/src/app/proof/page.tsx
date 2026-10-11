@@ -48,7 +48,15 @@ export const metadata: Metadata = {
  * русском экране (0 -> 2). Тот же класс уже ломал quantum-shield 29.09.
  * Страница целиком англоязычная: имена оставляем латиницей.
  */
-const MEASURED = "2026-10-08";
+const MEASURED = "2026-10-11";
+
+/*
+ * Адрес архива проверяльщика. Лежит статикой в frontend/public, поэтому
+ * скачивается без ответа на письмо, без формы и без аккаунта — ровно тот шаг,
+ * который до 11.10 требовал, чтобы занятый инженер ответил на холодное письмо.
+ * Имя файла в двух местах (здесь и в public) держит сторож страницы.
+ */
+const VERIFIER = "/aevion-verify.zip";
 
 const Row = ({ children }: { children: React.ReactNode }) => (
   <li style={{ marginBottom: 8 }}>{children}</li>
@@ -103,7 +111,11 @@ export default function ProofPage() {
         <p style={{ color: "#475569", fontSize: 15, lineHeight: 1.7, marginBottom: 12 }}>
           The verifier is 8 files, no dependencies, Node&nbsp;18+. It deliberately ignores
           the validity flags our own API returns and recomputes everything with Node&apos;s
-          built-in crypto.
+          built-in crypto.{" "}
+          <a href={VERIFIER} style={{ color: "#1d4ed8", fontWeight: 700 }}>
+            Download it
+          </a>{" "}
+          — no form, no account, no reply to us required.
         </p>
         <pre
           style={{
@@ -241,9 +253,15 @@ node demo-local.mjs                                   # sign 3 files, alter one 
             color: "#334155",
           }}
         >
-          <b>Want the verifier?</b> Reply to the letter and we send the archive — 8 files,
-          no dependencies, including the failing control. You do not need anything from us
-          to read it, and you do not need us to run it.
+          <b>
+            <a href={VERIFIER} style={{ color: "#1d4ed8" }}>
+              Download the verifier
+            </a>
+          </b>{" "}
+          — 8 files, no dependencies, including the failing control. Nothing is asked of you
+          first: no form, no account, no reply. You do not need anything from us to read it,
+          and you do not need us to run it. If it convinces you, reply to the letter; if it
+          does not, you have lost five minutes and we have learned something.
         </div>
       </ProductPageShell>
     </main>

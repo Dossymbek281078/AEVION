@@ -8,7 +8,6 @@ import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
 import { catalogWithToken } from "@/lib/aevionCatalog";
 import { PaddleUpgradeButton } from "@/components/PaddleUpgradeButton";
-import { PaywallScreen } from "@/components/PaywallScreen";
 import { isPaywallPayload, type PaywallPayload } from "@/lib/paywall";
 import ModulePricingChip from "@/components/ModulePricingChip";
 
@@ -377,7 +376,7 @@ export default function QLearnPage() {
    * починку от 21.08.2026, из-за которой отказ хранилища (503) перестал
    * выглядеть пустым каталогом. Поэтому добавлена только ветка 402.
    */
-  const [paywall, setPaywall] = useState<PaywallPayload | null>(null);
+  const [подпискаНужна, setПодпискаНужна] = useState<PaywallPayload | null>(null);
 
   const fetchCourses = useCallback(async () => {
     setLoading(true);
@@ -392,7 +391,7 @@ export default function QLearnPage() {
       // вели к «курсов нет». С 21.08.2026 бэкенд отвечает 503 с объяснением.
       if (res.status === 402 && isPaywallPayload(data)) {
         // Стена, а не сбой: у неё свой экран, он же на 16 других страницах.
-        setPaywall(data);
+        setПодпискаНужна(data);
         setCourses([]);
         setLoadError(null);
         return;
@@ -539,14 +538,6 @@ export default function QLearnPage() {
       setCreating(false);
     }
   };
-
-  /*
-   * Ранний выход: модуль закрыт стеной — показываем ЕЁ экран, а не
-   * каталог с сообщением о сбое. Так же устроены 16 других страниц.
-   */
-  if (paywall) {
-    return <PaywallScreen payload={paywall} backHref="/modules" />;
-  }
 
   return (
     <>
@@ -914,6 +905,37 @@ export default function QLearnPage() {
           {loading ? (
             <div style={{ textAlign: "center", color: "#94a3b8", padding: "60px 0", fontSize: 15 }}>
               Loading courses...
+            </div>
+          ) : подпискаНужна ? (
+            /*
+             * 🔴 Стена — не поломка. Замер 09.10.2026, чистый гость, 390x844:
+             * страница показывала «Каталог не загрузился» (заголовок зашит в
+             * разметку, role="alert"), хотя каталог исправен и закрыт ПО
+             * ЗАМЫСЛУ. Человеку, готовому заплатить, сообщали о сбое.
+             *
+             * Экран стены целиком здесь НЕ ставится намеренно: замер того же
+             * дня показал, что у страницы ЕСТЬ превью — разделы курсов,
+             * описание и цена подписки (1343 знака видимого текста). Заменив
+             * её стеной, мы бы снесли превью и сделали беднее, чем было.
+             */
+            <div style={{ textAlign: "center", color: "#334155", padding: "48px 20px" }}>
+              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>
+                Курсы входят в подписку AEVION
+              </div>
+              <div style={{ fontSize: 14, lineHeight: 1.55, maxWidth: 520, margin: "0 auto" }}>
+                Каталог открыт для подписчиков. Если вы уже оплатили — войдите
+                под почтой, которой платили.
+              </div>
+              <div style={{ marginTop: 16, display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+                <a href={подпискаНужна.upgradeUrl} style={{ color: "#0d9488", fontWeight: 700 }}>
+                  Посмотреть тарифы
+                </a>
+                {подпискаНужна.loginUrl && (
+                  <a href={подпискаНужна.loginUrl} style={{ color: "#64748b" }}>
+                    Войти
+                  </a>
+                )}
+              </div>
             </div>
           ) : loadError ? (
             // Отдельное состояние, а не «курсов нет»: пустой каталог при живой

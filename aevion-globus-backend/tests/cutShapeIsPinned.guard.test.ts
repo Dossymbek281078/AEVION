@@ -66,6 +66,10 @@ describe("состав строк разреза закреплён руками
         "hintTakenOurs",
         "abandonedPuzzle",
         "abandonedPuzzleOurs",
+        // 12.10.2026: названное число вместо тихого уменьшения `progressed`
+        // (неверная попытка больше не считается ходом; замер окна 37).
+        "attemptWithoutMove",
+        "attemptWithoutMoveOurs",
         // Конец того, что начали: ступень «доиграл партию» (08.10.2026).
         // Добавлено осознанно — сторож состава покраснел и потребовал решения.
         "clicked",
@@ -127,6 +131,10 @@ describe("состав строк разреза закреплён руками
         "hintTakenOurs",
         "abandonedPuzzle",
         "abandonedPuzzleOurs",
+        // 12.10.2026: названное число вместо тихого уменьшения `progressed`
+        // (неверная попытка больше не считается ходом; замер окна 37).
+        "attemptWithoutMove",
+        "attemptWithoutMoveOurs",
       ].sort(),
     );
   });

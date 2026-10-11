@@ -82,12 +82,15 @@ async function run() {
   const walletId = r.body.id;
 
   r = await req("POST", "/api/qpaynet/deposit", { walletId, amount: 5000 }, token);
-  if (r.status === 200 && r.body?.txId) ok("POST /qpaynet/deposit");
-  else fail("deposit", `${r.status}`);
+  if (r.status === 403 && r.body?.error === "funding_not_connected") ok("POST /qpaynet/deposit → 403");
+  else fail("deposit", `ожидался 403 funding_not_connected, получено ${r.status}`);
 
   await sleep(400);
-  if (await ledgerHasNew("qpaynet", "deposit", paySeqBefore)) ok("VeilNetX: new qpaynet/deposit entry");
-  else fail("deposit ledger trace", `no deposit entry with seq > ${paySeqBefore}`);
+  // 09.10.2026: зачисление отвергается (403), значит следа в журнале быть НЕ
+  // должно. Проверка перевёрнута: запись при отказе означала бы, что модуль
+  // пишет в журнал событие, которого не было.
+  if (!(await ledgerHasNew("qpaynet", "deposit", paySeqBefore))) ok("VeilNetX: следа отвергнутого зачисления нет");
+  else fail("deposit ledger trace", "отвергнутое зачисление оставило запись в журнале");
 
   // 2. qpaynet/withdrawal emission — both VeilNetX (kind=withdrawal) AND Z-Tide (qpaynet-payout +3)
   r = await req("POST", "/api/qpaynet/withdraw", { walletId, amount: 1000 }, token);

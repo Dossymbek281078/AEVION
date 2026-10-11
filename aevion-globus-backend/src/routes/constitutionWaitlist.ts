@@ -599,7 +599,10 @@ export async function sendWeeklyDigest(): Promise<{ sent: number; skipped: numbe
     if (!topArtifacts.length) return { sent: 0, skipped: 1 };
 
     // 2. Get waitlist subscribers
-    let subscribers: Array<{ email: string; source?: string }> = Array.from(memList.values());
+    // `channel` может быть null: так он лежит и в таблице (ALTER добавил его
+    // позже), и в записях памяти. Проверка типов это поймала до коммита.
+    let subscribers: Array<{ email: string; source?: string; channel?: string | null }> =
+      Array.from(memList.values());
     if (dbAvailable) {
       try {
         const pool = getPool();
@@ -609,8 +612,23 @@ export async function sendWeeklyDigest(): Promise<{ sent: number; skipped: numbe
         //   похожеНаПробу({title: "probe-brevo-0610"})               → true
         // То есть наша же проба прошла бы в рассылку, а исключение выглядело
         // бы работающим.
-        const r = await pool.query(`SELECT "email","source" FROM constitution_waitlist ORDER BY "createdAt" ASC LIMIT 5000`);
-        subscribers = r.rows.map((x: Record<string, unknown>) => ({ email: String(x.email), source: String(x.source ?? "") }));
+        /* 🔴 CHANNEL ЧИТАЕТСЯ ВМЕСТЕ С АДРЕСОМ И ИСТОЧНИКОМ — замер 09.10.2026.
+         *
+         * Исключение проб ниже работало по двум полям: адресу и `source`. Но наши
+         * пробы метятся ПО ПРАВИЛУ каналом: заход делается с `?c=probe-<окно>`
+         * (0-НАШИ-ЗАХОДЫ-С-МЕТКОЙ), форма кладёт это в `channel`, а `source`
+         * остаётся обычным именем страницы. То есть проба, сделанная КАК ПОЛОЖЕНО,
+         * проходила признак и получила бы письмо — а именно необратимость такой
+         * пробы и была поводом задачи.
+         *
+         * Поле в таблице есть с мая (ALTER выше), соседний запрос на строке 394 его
+         * уже читает — не читала только рассылка. */
+        const r = await pool.query(`SELECT "email","source","channel" FROM constitution_waitlist ORDER BY "createdAt" ASC LIMIT 5000`);
+        subscribers = r.rows.map((x: Record<string, unknown>) => ({
+          email: String(x.email),
+          source: String(x.source ?? ""),
+          channel: x.channel == null ? "" : String(x.channel),
+        }));
       } catch (dbErr) {
         // Раньше при сбое базы дайджест уходил по списку из ПАМЯТИ — в проде
         // это почти пустой список, — и функция рапортовала об успехе. То есть
@@ -644,12 +662,17 @@ export async function sendWeeklyDigest(): Promise<{ sent: number; skipped: numbe
     //
     // Признак общий (`lib/probeRows`): он требует разделителя после слова, поэтому
     // `smoke-c2@…` и `probe-chess@…` отсекаются, а живой `test@company.com` — нет.
-    const пробныеАдреса = subscribers.filter((s) => похожеНаПробу({ ref: s.email, title: s.source }));
+    /* Один предикат, ТРИ поля. Второй вызов — не второй механизм: `похожеНаПробу`
+       принимает два поля, а у записи листа их три (адрес, источник, канал), и
+       канал — то самое место, куда правило велит класть метку нашей пробы. */
+    const нашаПроба = (s: { email: string; source?: string; channel?: string | null }) =>
+      похожеНаПробу({ ref: s.email, title: s.source }) || похожеНаПробу({ title: s.channel });
+    const пробныеАдреса = subscribers.filter(нашаПроба);
     if (пробныеАдреса.length) {
-      subscribers = subscribers.filter((s) => !похожеНаПробу({ ref: s.email, title: s.source }));
+      subscribers = subscribers.filter((s) => !нашаПроба(s));
       console.warn(
         `[waitlist] из рассылки исключены наши пробные адреса (${пробныеАдреса.length}): ` +
-          пробныеАдреса.map((s) => s.email).join(", "),
+          пробныеАдреса.map((s) => `${s.email} (source=${s.source ?? ""}, channel=${s.channel ?? ""})`).join(", "),
       );
     }
     if (!subscribers.length) return { sent: 0, skipped: 0 };

@@ -777,6 +777,30 @@ qpaynetRouter.post("/wallets", async (req, res) => {
   const id = randomUUID();
   const ownerId = auth.sub ?? auth.email ?? "anon";
 
+  /*
+   * 🔴 ПРЕДЕЛ ЧИСЛА КОШЕЛЬКОВ, 09.10.2026.
+   *
+   * Суточный предел зачисления считался НА КОШЕЛЁК, а кошельков заводилось
+   * сколько угодно — то есть предела не было вовсе: сто кошельков давали сто
+   * пределов. Дыру закрывают обе правки вместе; эта остаётся нужной и после
+   * того, как появится настоящий приём денег, потому что иначе любой лимит
+   * «на кошелёк» обходится их количеством.
+   *
+   * Закрытые кошельки не считаем: человек вправе завести новый взамен
+   * закрытого, иначе предел превращается в пожизненный счётчик.
+   */
+  const своих = await pool.query(
+    "SELECT COUNT(*)::int AS n FROM qpaynet_wallets WHERE owner_id=$1 AND status='active'",
+    [ownerId],
+  );
+  if ((своих.rows[0]?.n ?? 0) >= MAX_WALLETS_PER_OWNER) {
+    return res.status(403).json({
+      error: "wallet_limit_reached",
+      limit: MAX_WALLETS_PER_OWNER,
+      message: `Больше ${MAX_WALLETS_PER_OWNER} активных кошельков на одного владельца не заводим.`,
+    });
+  }
+
   await pool.query(
     "INSERT INTO qpaynet_wallets (id, owner_id, name, currency, metadata) VALUES ($1,$2,$3,$4,$5::jsonb)",
     [id, ownerId, name.slice(0, 80), currency.toUpperCase().slice(0, 3), metadataJson],
@@ -928,10 +952,54 @@ qpaynetRouter.post("/wallets/:id/close", async (req, res) => {
 
 // ── Deposit ───────────────────────────────────────────────────────────────────
 
+/**
+ * Признак: подключён ли НАСТОЯЩИЙ приём денег.
+ *
+ * Сегодня — нет, и это установлено замером, а не предположением. Зачисление
+ * увеличивало баланс без единого обращения к платёжному провайдеру, а в
+ * журнал писало заглушку `external:funding`. Вывод устроен зеркально: баланс
+ * уменьшается, в журнал идёт `external:payout`, вызова выплаты нет. То есть
+ * деньги рождались из ничего и в ничто уходили.
+ *
+ * Переменная заведена НЕ как выключатель «разрешить фальшивые зачисления», а
+ * как признак того, что интеграция появилась: включать её можно только вместе
+ * с кодом, который проверяет подтверждение платежа у провайдера. Пока такого
+ * кода нет, значение игнорируется в продакшне намеренно — иначе мы бы сами
+ * оставили дыру с выключателем.
+ */
+function приёмДенегПодключён(): boolean {
+  if (process.env.NODE_ENV === "production") return false;
+  return process.env.QPAYNET_FUNDING_PROVIDER === "connected";
+}
+
+/** Сколько кошельков может завести один владелец. */
+const MAX_WALLETS_PER_OWNER = parseInt(process.env.QPAYNET_MAX_WALLETS ?? "5", 10);
+
 qpaynetRouter.post("/deposit", moneyLimiter, async (req, res) => {
   await ensureTables();
   const auth = verifyBearerOptional(req);
   if (!auth) return res.status(401).json({ error: "auth_required" });
+  /*
+   * 🔴 ЗАЧИСЛЕНИЕ БЕЗ ИСТОЧНИКА ДЕНЕГ ЗАКРЫТО 09.10.2026.
+   *
+   * Что было: любой вошедший увеличивал свой баланс на сумму до
+   * QPAYNET_DAILY_DEPOSIT_CAP (по умолчанию 500 000 ₸) в сутки НА КОШЕЛЁК, а
+   * кошельков можно было завести сколько угодно — ограничения не было вовсе.
+   * Замер прода 09.10 (только чтение, ручка /stats): 41 активный кошелёк,
+   * 82 операции, 295 010 ₸ «зачислений», которых никто не платил.
+   *
+   * Отвечаем 403, а не 400 и не 404: запрос составлен верно и адрес
+   * существует — отказывает СИСТЕМА, потому что принимать деньги ей нечем.
+   * Текст ошибки говорит это прямо, чтобы снаружи не искали ошибку у себя.
+   */
+  if (!приёмДенегПодключён()) {
+    return res.status(403).json({
+      error: "funding_not_connected",
+      message:
+        "Пополнение кошелька не подключено: у платформы нет приёма платежей. " +
+        "Зачисление без подтверждённого платежа провайдера больше не выполняется.",
+    });
+  }
 
   const parsed = validateOr400(req, res, {
     walletId: "uuid",
@@ -2774,6 +2842,95 @@ qpaynetRouter.get("/admin/reconcile", async (req, res) => {
 //
 // Use cases: fraud investigation, chargeback reversal pending, KYC dispute,
 // court order, user-requested security hold.
+
+/**
+ * GET /api/qpaynet/admin/deposits/audit — РАЗБОР ЗАЧИСЛЕНИЙ, ТОЛЬКО ЧТЕНИЕ.
+ *
+ * Зачем. 09.10.2026 выяснилось, что зачисление шло двумя путями: настоящим —
+ * после подтверждённой оплаты Stripe, и в обход — простым увеличением
+ * баланса. Второй закрыт (403 funding_not_connected), но уже начисленное
+ * осталось: на проде 295 010 ₸ зачислений, и какая часть из них настоящая,
+ * снаружи не видно. /stats даёт общую сумму, /admin/reconcile складывает все
+ * зачисления в одну строку — ни одна ручка этот вопрос не закрывает.
+ *
+ * 🔴 ПРИЗНАК «НАСТОЯЩЕГО» — ОПЛАЧЕННАЯ СЕССИЯ, А НЕ ОПИСАНИЕ. Оба пути пишут
+ * операцию одного типа `deposit`; настоящий отличался описанием «Пополнение
+ * картой…», но описание задаёт САМ ОТПРАВИТЕЛЬ запроса — любой мог написать
+ * тот же текст и стать в отчёте неотличимым. Поэтому считаем по ссылке из
+ * `qpaynet_deposit_checkouts` (status='paid', tx_id = идентификатор операции).
+ *
+ * Ручка НИЧЕГО НЕ МЕНЯЕТ: только SELECT. Решение «обнулить / пометить /
+ * оставить» принимает человек по этим числам, а не код.
+ */
+qpaynetRouter.get("/admin/deposits/audit", async (req, res) => {
+  await ensureTables();
+  const auth = verifyBearerOptional(req);
+  if (!auth) return res.status(401).json({ error: "auth_required" });
+  if (!isAdmin(auth.email)) return res.status(403).json({ error: "not_admin" });
+
+  const pool = getPool();
+  try {
+    const итог = await pool.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE c.id IS NOT NULL)                          AS paid_count,
+        COALESCE(SUM(t.amount) FILTER (WHERE c.id IS NOT NULL), 0)        AS paid_tiin,
+        COUNT(*) FILTER (WHERE c.id IS NULL)                              AS no_session_count,
+        COALESCE(SUM(t.amount) FILTER (WHERE c.id IS NULL), 0)            AS no_session_tiin,
+        COUNT(*)                                                          AS all_count,
+        COALESCE(SUM(t.amount), 0)                                        AS all_tiin
+      FROM qpaynet_transactions t
+      LEFT JOIN qpaynet_deposit_checkouts c
+             ON c.tx_id = t.id AND c.status = 'paid'
+      WHERE t.type = 'deposit'
+    `);
+    const поКошелькам = await pool.query(`
+      SELECT w.owner_id, t.wallet_id,
+             COUNT(*)::int AS ops, COALESCE(SUM(t.amount), 0) AS tiin,
+             MIN(t.created_at) AS first_at, MAX(t.created_at) AS last_at
+      FROM qpaynet_transactions t
+      JOIN qpaynet_wallets w ON w.id = t.wallet_id
+      LEFT JOIN qpaynet_deposit_checkouts c ON c.tx_id = t.id AND c.status = 'paid'
+      WHERE t.type = 'deposit' AND c.id IS NULL
+      GROUP BY w.owner_id, t.wallet_id
+      ORDER BY SUM(t.amount) DESC
+      LIMIT 200
+    `);
+    const r = итог.rows[0] ?? {};
+    const вТенге = (v: unknown): number => {
+      if (v === null || v === undefined) return 0;
+      const s = String(v).trim();
+      const целое = s.includes(".") ? s.slice(0, s.indexOf(".")) : s;
+      if (!/^-?\d+$/.test(целое)) return 0;
+      return fromTiin(BigInt(целое));
+    };
+    const оплачено = вТенге(r.paid_tiin);
+    const безСессии = вТенге(r.no_session_tiin);
+    const всего = вТенге(r.all_tiin);
+    res.json({
+      оплаченныеЧерезПровайдера: { операций: Number(r.paid_count ?? 0), суммаKzt: оплачено },
+      безПодтверждённойОплаты: { операций: Number(r.no_session_count ?? 0), суммаKzt: безСессии },
+      // Контроль прибора: обе половины обязаны дать общую сумму, и она обязана
+      // совпасть с totalDepositedKzt из /stats. Не сошлось — верить разбору
+      // нельзя, он считает не то.
+      контроль: {
+        всегоЗачисленийKzt: всего,
+        операций: Number(r.all_count ?? 0),
+        половиныСходятся: Math.abs(оплачено + безСессии - всего) < 0.005,
+      },
+      безПодтверждённойОплатыПоКошелькам: поКошелькам.rows.map((x: Record<string, unknown>) => ({
+        владелец: x.owner_id,
+        кошелёк: x.wallet_id,
+        операций: Number(x.ops ?? 0),
+        суммаKzt: вТенге(x.tiin),
+        первая: x.first_at,
+        последняя: x.last_at,
+      })),
+    });
+  } catch (err) {
+    console.error("[qpaynet] deposits audit failed", err);
+    res.status(500).json({ error: "internal_error" });
+  }
+});
 
 qpaynetRouter.post("/admin/wallets/:id/freeze", async (req, res) => {
   await ensureTables();

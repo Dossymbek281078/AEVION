@@ -70,20 +70,25 @@ async function run() {
 
   // 5. Deposit
   console.log("\n3. Deposit");
+  // 09.10.2026: зачисление без подтверждённого платежа ЗАКРЫТО (403).
+  // Проверки ниже перевёрнуты намеренно: успехом считается ОТКАЗ. Раньше этот
+  // шаг ждал 200 и создавал 10 000 ₸ из ничего — ровно та дыра, из-за которой
+  // на проде оказалось 295 010 ₸ «зачислений», которых никто не платил.
+  // Настоящий путь (/deposit/checkout через Stripe) не тронут.
   const dep = await req("POST", "/api/qpaynet/deposit", { walletId, amount: 10000, description: "Smoke deposit" }, auth);
-  assert("POST /api/qpaynet/deposit → 200", dep.status === 200);
-  assert("newBalance is 10000", dep.body.newBalance === 10000);
+  assert("POST /api/qpaynet/deposit → 403 (приём денег не подключён)", dep.status === 403);
+  assert("ошибка названа: funding_not_connected", dep.body.error === "funding_not_connected");
 
   // 6. Check updated balance
   const updW = await req("GET", `/api/qpaynet/wallets/${walletId}`, null, auth);
-  assert("balance updated to 10000", updW.body.balance === 10000);
+  assert("баланс остался нулевым после отказа", Number(updW.body.balance) === 0);
 
   // 7. Withdraw
   console.log("\n4. Withdraw");
   const wd = await req("POST", "/api/qpaynet/withdraw", { walletId, amount: 1000, description: "Smoke withdraw" }, auth);
-  assert("POST /api/qpaynet/withdraw → 200", wd.status === 200);
-  assert("fee is 1 (0.1%)", wd.body.fee === 1);
-  assert("newBalance is 8999", wd.body.newBalance === 8999);
+  assert("POST /api/qpaynet/withdraw → 400 (нечего выводить)", wd.status === 400);
+  assert("ошибка названа: insufficient_balance", wd.body.error === "insufficient_balance");
+  // (шага «остаток 8999» больше нет: денег на кошельке не появляется)
 
   // 8. Transaction history
   console.log("\n5. Transactions");

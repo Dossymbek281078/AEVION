@@ -247,6 +247,101 @@ describe("проверочный заход окна с меткой ролик�
   });
 });
 
+describe("происхождение канала и поста", () => {
+  it("🔴 метка ТОЛЬКО в адресе: «наше» ставится, а канала и поста НЕТ", async () => {
+    /*
+     * Замер окна 16 на проде 11.10.2026: их первая проба шла прямым POST с
+     * верным адресом (c=yt-chess-probe16 и probe=16 в пути), но БЕЗ meta — и
+     * легла в канал direct, в byPost её не было вовсе. То есть общее правило
+     * «при прямом POST писать метку в path» помечает пробу нашей, но отправляет
+     * её ровно в «прямые заходы», от которых правило и защищало.
+     *
+     * ⚠️ Сторож закрепляет ПОВЕДЕНИЕ, а не дефект. Чинить разбором метки на
+     * сервере нельзя: каталог каналов живёт на фронте (lib/products.ts), и его
+     * вторая копия здесь стала бы вторым источником правды — они расходятся при
+     * первой правке. Правильное исправление у отправителя: meta {channel, post}.
+     * Если кто-то решит «починить» это на сервере, сторож покраснеет и заставит
+     * прочитать причину.
+     */
+    журнал([
+      { type: "page_view", ts: сейчас(), sid: "безмета", path: "/cyberchess?c=yt-chess-probe16&probe=16" },
+      { type: "game_progress", ts: сейчас(), sid: "безмета", path: "/cyberchess", meta: { plies: 1 } },
+    ]);
+    const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");
+    expect(Object.keys(r.body.byPost), "пост появился без meta.post").toEqual([]);
+    const прямые = r.body.byChannel.direct;
+    expect(прямые, "строки канала direct нет").toBeTruthy();
+    expect(прямые.visits).toBe(1);
+    expect(прямые.visitsOurs, "примета probe= в пути перестала работать").toBe(1);
+    // И ответ сам объясняет это читателю, а не оставляет догадываться.
+    expect(r.body.byPostAttributionNote).toMatch(/meta/);
+    expect(r.body.byPostAttributionNote).toMatch(/webdriver/);
+  });
+
+  it("🔴 с meta {channel, post} та же проба попадает в byPost", async () => {
+    // Контроль к предыдущему: разница РОВНО в наличии meta, и ни в чём больше.
+    журнал([
+      {
+        type: "page_view",
+        ts: сейчас(),
+        sid: "сметой",
+        path: "/cyberchess?c=yt-chess-probe16&probe=16",
+        meta: { channel: "youtube", post: "chess-probe16" },
+      },
+      {
+        type: "game_progress",
+        ts: сейчас(),
+        sid: "сметой",
+        path: "/cyberchess",
+        meta: { channel: "youtube", post: "chess-probe16", plies: 1 },
+      },
+    ]);
+    const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");
+    const п = r.body.byPost["youtube/chess-probe16"];
+    expect(п, "строки поста нет при наличии meta").toBeTruthy();
+    expect(п.visitsOurs).toBe(1);
+    expect(п.progressedOurs).toBe(1);
+  });
+
+  it("🔴 сессия с webdriver:true в разрез НЕ попадает — браузерная проба невидима", async () => {
+    /*
+     * Второе наблюдение окна 16, и оно ломает способ ПРИЁМКИ, а не продукт:
+     * настоящий playwright-заход по правильному адресу не даёт строки НИКОГДА,
+     * потому что клиент ставит в тело webdriver:true, а воронка такие сессии
+     * отсеивает до разрезов. Значит проверять разрез постов браузером нельзя —
+     * только прямым POST с meta или живыми людьми. Закрепляю, чтобы не
+     * предложить снова «прогоните браузером и покажите строку».
+     */
+    журнал([
+      {
+        type: "page_view",
+        ts: сейчас(),
+        sid: "playwright",
+        path: "/cyberchess?c=yt-chess-probe16&probe=16",
+        webdriver: true,
+        meta: { channel: "youtube", post: "chess-probe16" },
+      },
+      {
+        type: "game_progress",
+        ts: сейчас(),
+        sid: "playwright",
+        path: "/cyberchess",
+        webdriver: true,
+        meta: { channel: "youtube", post: "chess-probe16", plies: 1 },
+      },
+    ]);
+    const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");
+    expect(
+      r.body.byPost["youtube/chess-probe16"],
+      "управляемый браузер попал в разрез",
+    ).toBeUndefined();
+    expect(
+      r.body.botsExcludedByWebdriver,
+      "отсев по признаку управления не сработал",
+    ).toBeGreaterThanOrEqual(1);
+  });
+});
+
 describe("подозрение «пара на метку»", () => {
   it("🔴 пара сессий без действий замечена и МЕТКА НАЗВАНА", async () => {
     журнал([
@@ -322,6 +417,59 @@ describe("подозрение «пара на метку»", () => {
       r.body.sessionsSuspectedPairPatternRejectedDifferentUA,
       "условие по браузеру не названо числом — нельзя узнать, работает ли оно",
     ).toBe(1);
+  });
+
+  it("🔴 ВНИМАНИЕ от подозрения НЕ спасает — обходчик умеет ждать 10 секунд", async () => {
+    /*
+     * Поправка по замеру окна 91 (11.10.2026, ролик выложен в 21:17): у метки
+     * ОПИСАНИЯ через 20 минут было 2 визита, engaged 1 и НОЛЬ человеческих
+     * шагов. То есть обходчик подождал десять секунд — ровно то, о чём
+     * предупреждает комментарий у самого признака внимания в events.ts.
+     *
+     * Раньше engaged стоял у меня в наборе «шагов человека», и такая пара под
+     * подозрение не шла: признак был слеп на том самом случае, ради которого
+     * написан. Цена исправления названа рядом числом
+     * (sessionsSuspectedPairPatternWithEngaged): пара живых людей, прочитавших
+     * страницу и ушедших, тоже попадёт в подозрение, и по этому числу видно,
+     * сколько их. Отсев по-прежнему не включён.
+     */
+    журнал([
+      соб("вн1", "page_view", "chess-mat3-075iw", минутуНазад(18)),
+      соб("вн1", "engaged", "chess-mat3-075iw", минутуНазад(18)),
+      соб("вн2", "page_view", "chess-mat3-075iw", минутуНазад(17)),
+      соб("вн2", "engaged", "chess-mat3-075iw", минутуНазад(17)),
+    ]);
+    const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");
+    expect(
+      r.body.sessionsSuspectedPairPattern,
+      "внимание снова спасает от подозрения — признак слеп к обходчику, ждущему 10 с",
+    ).toBe(2);
+    expect(
+      r.body.sessionsSuspectedPairPatternWithEngaged,
+      "цена отсева не названа числом",
+    ).toBe(2);
+    expect(r.body.sessionsSuspectedPairPatternTags).toContain("chess-mat3-075iw");
+  });
+
+  it("🔴 КОНТРОЛЬ: человеческий ШАГ от подозрения спасает, внимание — нет", async () => {
+    // Разница ровно в одном событии: это и есть проверяемый признак.
+    журнал([
+      соб("ш1", "page_view", "chess-s-shagom", минутуНазад(18)),
+      соб("ш1", "puzzle_solved", "chess-s-shagom", минутуНазад(18)),
+      соб("ш2", "page_view", "chess-s-shagom", минутуНазад(17)),
+    ]);
+    const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");
+    expect(r.body.sessionsSuspectedPairPattern).toBe(0);
+    expect(r.body.sessionsSuspectedPairPatternWithEngaged).toBe(0);
+  });
+
+  it("🔴 оговорка про внимание стоит в ОТВЕТЕ, а не только в исходнике", async () => {
+    // Просьба окна 91: её прочтёт тот, кто берёт поле, а не тот, кто читает код.
+    журнал([соб("с", "page_view", "chess-lyuboy", минутуНазад(5))]);
+    const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");
+    expect(typeof r.body.engagedNote, "оговорки про внимание нет в ответе").toBe("string");
+    expect(r.body.engagedNote).toMatch(/НЕ доказывает человека/);
+    expect(r.body.engagedNote, "не названо, что доказывает человека").toMatch(/puzzleSolved/);
   });
 
   it("КОНТРОЛЬ: ОДНА сессия на метку — не подозрение", async () => {

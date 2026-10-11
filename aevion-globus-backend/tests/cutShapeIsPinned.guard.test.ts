@@ -91,6 +91,10 @@ describe("состав строк разреза закреплён руками
         "puzzleSolvedOurs",
         "waitlistSubmitted",
         "waitlistSubmittedOurs",
+        // Знаменатель к подпискам (просьба окна 16): «ноль подписок» без него
+        // не отличить от «ноль показов» — это разные выводы.
+        "offerShown",
+        "offerShownOurs",
       ].sort(),
     );
   });

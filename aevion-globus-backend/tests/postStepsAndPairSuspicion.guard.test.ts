@@ -118,6 +118,47 @@ describe("ступени человека в разрезе постов", () =>
     expect(п.waitlistSubmitted).toBe(0);
   });
 
+  it("🔴 «ноль подписок» отличается от «ноль показов» — знаменатель по метке", async () => {
+    /*
+     * Просьба окна 16 и его довод: без показов нуль подписок трактовать нельзя.
+     * Три метки в одном наборе: у первой форму видели и адрес не оставили, у
+     * второй оставили, у третьей форму не видели вовсе. Прежде первая и третья
+     * давали одинаковое «0 подписок» — и это были РАЗНЫЕ ответы.
+     */
+    журнал([
+      соб("видел", "page_view", "komm-pokaz"),
+      соб("видел", "waitlist_offer_shown", "komm-pokaz"),
+      соб("оставил", "page_view", "komm-podpiska"),
+      соб("оставил", "waitlist_offer_shown", "komm-podpiska"),
+      соб("оставил", "waitlist_submit", "komm-podpiska"),
+      соб("не-видел", "page_view", "komm-bez-pokaza"),
+      // Наша проба, которой форму тоже показали: мутация «не считать наших у
+      // показов» без этого случая выживала — наш прогон шёл бы в живые.
+      {
+        type: "page_view",
+        ts: сейчас(),
+        sid: "наш",
+        path: "/cyberchess?c=yt&probe=okno",
+        meta: { channel: "youtube", post: "komm-pokaz" },
+      },
+      соб("наш", "waitlist_offer_shown", "komm-pokaz"),
+    ]);
+    const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");
+    const видели = r.body.byPost["youtube/komm-pokaz"];
+    const оставили = r.body.byPost["youtube/komm-podpiska"];
+    const безПоказа = r.body.byPost["youtube/komm-bez-pokaza"];
+    expect(видели.offerShown, "показ формы не посчитан по метке").toBe(2);
+    expect(видели.offerShownOurs, "наша проба у показов не отделена").toBe(1);
+    expect(видели.offerShown - видели.offerShownOurs, "живых показов вышло не столько").toBe(1);
+    expect(видели.waitlistSubmitted).toBe(0);
+    expect(оставили.offerShown).toBe(1);
+    expect(оставили.waitlistSubmitted).toBe(1);
+    expect(безПоказа.offerShown).toBe(0);
+    expect(безПоказа.waitlistSubmitted).toBe(0);
+    // Решающее: нуль подписок у первой метки и у третьей — РАЗНЫЕ случаи.
+    expect(видели.offerShown, "два нуля остались неразличимы").not.toBe(безПоказа.offerShown);
+  });
+
   it("единица — сессия: два решения одного человека это один", async () => {
     журнал([
       соб("один", "page_view", "komm-36ij9"),

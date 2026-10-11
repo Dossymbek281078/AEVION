@@ -12,6 +12,7 @@
  * webhook.
  */
 import { Router, type Request, type Response } from "express";
+import { учестьДействие, отказПоНорме } from "../lib/freeActionQuota";
 import { BUREAU_VERIFIED_REFERENCE } from "../data/lemonSqueezyVariants";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
@@ -617,6 +618,21 @@ bureauRouter.post("/verify/start", bureauAnonWriteRateLimit, async (req, res) =>
       });
     }
 
+
+    /*
+     * Бесплатная норма НАЧАТЫХ ПРОВЕРОК в месяц, дальше платно. Просмотр
+     * реестра и проверка чужого сертификата бесплатны всегда.
+     *
+     * Механизм спит, пока "bureau_verify" не назван в PAID_ACTIONS: до слова
+     * основателя поведение не меняется. Проверка стоит ПОСЛЕ требования имени
+     * (строкой выше) — `учестьДействие` считает сразу, и до валидации пустое
+     * тело съедало бы бесплатную попытку.
+     */
+    const норма = await учестьДействие(req, "bureau_verify");
+    if (норма.заблокировано) {
+      отказПоНорме(res, "bureau", норма);
+      return;
+    }
 
     await ensureBureauTables();
     const user = await resolveUser(req);

@@ -232,3 +232,44 @@ describe("подписка сообщает канал привлечения", 
     expect(Object.keys(calls[0].body as object)).not.toContain("channel");
   });
 });
+
+describe("отметка «уже подписался»", () => {
+  /*
+   * 🔴 ПОВОД 11.10.2026, приёмка user-37 на проде: человек оставил адрес строкой
+   * под доской, подписка легла в базу (201, storage postgres, письмо пришло), а
+   * страница об этом не узнала — и в конце партии предлагала то же самое
+   * модальным окном. Форма знала об успехе, страница нет.
+   */
+  test("🔴 при успешной подписке зовёт onSubscribed ровно один раз", async () => {
+    const вызовы: number[] = [];
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ ok: true, storage: "postgres" }), { status: 201 })));
+    render(<WaitlistCapture source="probe-test" onSubscribed={() => вызовы.push(1)} />);
+    await userEvent.type(screen.getByRole("textbox"), "probe-61@aevion.app");
+    await userEvent.click(screen.getByRole("button"));
+    await waitFor(() => expect(вызовы.length, `вызовов onSubscribed: ${вызовы.length}`).toBe(1));
+  });
+
+  test("🔴 КОНТРОЛЬ: при отказе ручки НЕ зовёт", async () => {
+    // Иначе отметка встанет человеку, который так и не подписался, и второго
+    // предложения он уже не увидит — потеря адреса, которую нечем заметить.
+    const вызовы: number[] = [];
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "nope" }), { status: 500 })));
+    render(<WaitlistCapture source="probe-test" onSubscribed={() => вызовы.push(1)} />);
+    await userEvent.type(screen.getByRole("textbox"), "probe-61@aevion.app");
+    await userEvent.click(screen.getByRole("button"));
+    await waitFor(() => expect(screen.getByRole("button")).toBeTruthy());
+    expect(вызовы.length, "позвали на отказе").toBe(0);
+  });
+
+  test("🔴 КОНТРОЛЬ: при непостоянном хранилище НЕ зовёт", async () => {
+    // storage !== postgres показывается человеку как отказ — значит и отметку
+    // ставить нельзя: адрес не сохранён.
+    const вызовы: number[] = [];
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ ok: true, storage: "memory" }), { status: 201 })));
+    render(<WaitlistCapture source="probe-test" onSubscribed={() => вызовы.push(1)} />);
+    await userEvent.type(screen.getByRole("textbox"), "probe-61@aevion.app");
+    await userEvent.click(screen.getByRole("button"));
+    await waitFor(() => expect(screen.getByRole("button")).toBeTruthy());
+    expect(вызовы.length, "позвали при хранилище в памяти").toBe(0);
+  });
+});

@@ -25,12 +25,44 @@ export const qsignRouter = Router();
 
 const MAX_PAYLOAD_BYTES = 256 * 1024; // 256 KB — enough for invoices/receipts
 
+/**
+ * Разделение домена подписи. Читать до любой правки ниже.
+ *
+ * Замер 11.10.2026: /sign открыт анониму (200 на проде, и через прокси сайта
+ * тоже — им пользуются кнопки /constitution), а подписывал он РОВНО
+ * `JSON.stringify(тело)` тем же секретом, которым routes/pipeline.ts:84-95
+ * подписывает сертификат QRight по четырём полям objectId/title/contentHash/
+ * signedAt. Ключ там тот же: HMAC_KEY_VERSION не задан (по умолчанию 1),
+ * QSIGN_SECRET_V1 не задан, и config/qright.ts:60-69 законно откатывается на
+ * legacy QSIGN_SECRET. То есть любой желающий получал от нас подпись строки
+ * той же формы, что подписывает наш сертификат.
+ *
+ * Префикс делает подписываемую строку непересекающейся с любой другой: подпись
+ * v1 больше не годится ни для чего, кроме v1. Пара /sign + /verify остаётся
+ * согласованной (обе зовут эту функцию), поэтому публичный поток цел и форма
+ * ответа не меняется — обещания /bank/api и /developers в силе.
+ *
+ * Про «цену» правки: оркестратор принял её, считая, что выданные подписи нигде
+ * не хранятся. Замер 11.10 говорит иначе — frontend/src/app/bank/_lib/
+ * signatures.ts держит пары (payload, signature) в localStorage
+ * «aevion_bank_signatures_v1» ИМЕННО чтобы посетитель мог перепроверить их
+ * когда угодно, а /bank/settings это обещает словами. Строгая проверка
+ * показала бы человеку его собственные старые чеки как подделанные.
+ * Поэтому ПОДПИСЫВАЕМ строго по домену, а ПРОВЕРЯЕМ и домен, и прежнюю форму:
+ * выдать подпись без домена больше нельзя (дыра закрыта — она была именно в
+ * выдаче), а старый чек по-прежнему сходится. Снять прежнюю форму можно после
+ * заката v1 (31.12.2026).
+ */
+const ДОМЕН_V1 = "qsign-v1:";
+
 function signPayload(payload: unknown): string {
-  const raw = JSON.stringify(payload);
-  if (raw.length > MAX_PAYLOAD_BYTES) {
+  const json = JSON.stringify(payload);
+  // Предел считается по ТЕЛУ, а не по строке с префиксом: обещанные 256 КБ
+  // должны остаться ровно про тело запроса.
+  if (json.length > MAX_PAYLOAD_BYTES) {
     throw new Error(`payload too large (max ${MAX_PAYLOAD_BYTES} bytes)`);
   }
-  return crypto.createHmac("sha256", getQSignSecret()).update(raw).digest("hex");
+  return crypto.createHmac("sha256", getQSignSecret()).update(ДОМЕН_V1 + json).digest("hex");
 }
 
 /**
@@ -38,6 +70,11 @@ function signPayload(payload: unknown): string {
  * on length mismatch (timingSafeEqual itself throws on mismatch). Prevents
  * the trivial timing oracle that `===` exposes.
  */
+/** Подпись в прежней форме — только для проверки старых чеков, не для выдачи. */
+function legacySignPayload(payload: unknown): string {
+  return crypto.createHmac("sha256", getQSignSecret()).update(JSON.stringify(payload)).digest("hex");
+}
+
 function timingSafeEqHex(a: string, b: string): boolean {
   if (typeof a !== "string" || typeof b !== "string") return false;
   if (a.length !== b.length) return false;
@@ -107,7 +144,12 @@ qsignRouter.post(
         return res.status(400).json({ error: "payload and signature are required" });
       }
       const expected = signPayload(payload);
-      const valid = timingSafeEqHex(expected, signature);
+      // Прежняя форма (без домена) принимается только ПРИ ПРОВЕРКЕ — ради чеков,
+      // выданных до 11.10.2026 и лежащих у посетителя в браузере. Выдать такую
+      // подпись больше нельзя: signPayload всегда ставит домен.
+      const expectedLegacy = legacySignPayload(payload);
+      const valid =
+        timingSafeEqHex(expected, signature) || timingSafeEqHex(expectedLegacy, signature);
       // Never echo `expected` — that's a forgery oracle. Just yes/no + algo.
       res.json({ valid, algo: "HMAC-SHA256" });
     } catch (e: unknown) {

@@ -15,19 +15,27 @@ const { db } = vi.hoisted(() => {
   // `sol` в базе — ТЕКСТ с JSON-массивом внутри, а не массив и не голая строка.
   // Прежний мок отдавал "a1b1", формы, которой в базе не существует, и потому
   // тест был зелёным на коде, который резал настоящее значение по запятым.
-  return { db: { total: 500000, fail: false, offsets: [] as number[], solRaw: '["a1b1","b1c1"]' } };
+  /* `вДиапазоне` — сколько задач попадает в диапазон новичка. Число НАМЕРЕННО
+     отличается от `total`: иначе заглушка не отличит выбор из банка от выбора из
+     диапазона, и сторож будет зелёным при любом поведении (находка user-37
+     11.10: поле choiceTotal отдавало весь банк, а сторож это охранял). */
+  return { db: { total: 500000, вДиапазоне: 76000, fail: false, offsets: [] as number[], solRaw: '["a1b1","b1c1"]' } };
 });
 
 vi.mock("../src/lib/dbPool", () => ({
   getPool: () => ({
     query: async (text: string, params: unknown[] = []) => {
       if (db.fail) throw new Error("connection terminated unexpectedly");
-      if (/count\(\*\)/i.test(text)) return { rows: [{ n: db.total }], rowCount: 1 };
+      if (/count\(\*\)/i.test(text)) return { rows: [{ n: /BETWEEN/i.test(text) ? db.вДиапазоне : db.total }], rowCount: 1 };
       if (/FROM "ChessPuzzle"/i.test(text)) {
-        const off = Number(params[0]);
+        // Смещение не всегда первый параметр: у выборки с диапазоном это $3.
+        const off = Number(/BETWEEN/i.test(text) ? params[2] : params[0]);
+        // Рейтинг обязан попадать в запрошенный диапазон — иначе заглушка
+        // описывает базу, которой не бывает, и проверка перестаёт что-либо значить.
+        const рейтингСтроки = /BETWEEN/i.test(text) ? Number(params[0]) + 50 : 1500;
         db.offsets.push(off);
         return {
-          rows: [{ id: `bank_${off}`, fen: "8/8/8/8/8/8/8/K6k w - - 0 1", sol: db.solRaw, name: "Тактика", rating: 1500, theme: "Пешечный эндшпиль" }],
+          rows: [{ id: `bank_${off}`, fen: "8/8/8/8/8/8/8/K6k w - - 0 1", sol: db.solRaw, name: "Тактика", rating: рейтингСтроки, theme: "Пешечный эндшпиль" }],
           rowCount: 1,
         };
       }
@@ -65,7 +73,13 @@ describe("задача дня из банка", () => {
     // /api/cyberchess-puzzles/meta тем же именем зовёт обслуживаемую выборку.
     // Теперь каждое поле называет измеренное.
     expect(res.body.bankTotal, "банк — под своим именем").toBe(500000);
-    expect(res.body.choiceTotal, "из скольких выбирали сегодня").toBe(500000);
+    /* 🔴 ПЕРЕНАЦЕЛЕНО 11.10.2026. Здесь стояло 500000 — ВЕСЬ банк, с подписью
+       «из скольких выбирали сегодня». С этого дня выбор идёт из диапазона
+       новичка, и поле обязано называть именно его; прежнее утверждение было
+       зелёным и охраняло неверное число (нашла приёмка user-37). */
+    expect(res.body.choiceTotal, "из скольких выбирали сегодня").toBe(db.вДиапазоне);
+    expect(res.body.bankTotal, "банк целиком — отдельное число").toBe(db.total);
+    expect(res.body.choiceTotal).not.toBe(res.body.bankTotal);
     expect(res.body.poolSize, "локального запаса тут не было — банк ответил").toBeNull();
   });
 
@@ -83,7 +97,7 @@ describe("задача дня из банка", () => {
   test("тема и рейтинг приходят из записи банка, а не выдуманы", async () => {
     const res = await request(app).get("/api/cyberchess-daily/puzzle");
     expect(res.body.puzzle.theme).toBe("Пешечный эндшпиль");
-    expect(res.body.puzzle.rating).toBe(1500);
+    expect(res.body.puzzle.rating, "рейтинг выбранной задачи — из диапазона").toBe(850);
   });
 
   test("один и тот же день — одна и та же задача", async () => {

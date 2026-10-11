@@ -652,6 +652,21 @@ export function dayOffsetHash(day: string, total: number): number {
 /** Кэш на сутки: один запрос к базе в день, а не на каждого игрока. */
 let bankPuzzleCache: { day: string; puzzle: Puzzle | null } | null = null;
 let bankTotalCache: { at: number; total: number } | null = null;
+/**
+ * 🔴 ДИАПАЗОН СЛОЖНОСТИ ЗАДАЧИ ДНЯ — решение оркестратора 11.10.2026.
+ *
+ * Повод, замер окна 3d на живой ручке: задача дня 11.10 имела рейтинг **2269**
+ * при том, что рейтинг игрока по умолчанию 800. Выбор шёл по всему банку
+ * (`ORDER BY id OFFSET <хеш дня>`), то есть сложность была неуправляемой by
+ * design — какая выпадет, от 1100 до 2800+. Рядом число окна воронки: за 7 дней
+ * 10 живых начали партию и НОЛЬ доиграли.
+ *
+ * Детерминизм «одна задача на день для всех» сохраняется: хеш дня тот же,
+ * меняется только совокупность, по которой берётся смещение.
+ */
+export const ДИАПАЗОН_ЗАДАЧИ_ДНЯ = { мин: 800, макс: 1200 } as const;
+/** Счёт задач В ДИАПАЗОНЕ — отдельно от общего: смещение считается по нему. */
+let poolRangeTotalCache: { at: number; total: number } | null = null;
 const BANK_TOTAL_TTL_MS = 6 * 60 * 60 * 1000;
 
 
@@ -704,11 +719,43 @@ async function dailyFromBank(day: string, useCache = true): Promise<Puzzle | nul
       bankTotalCache = { at: Date.now(), total: n };
     }
 
-    const offset = dayOffsetHash(day, bankTotalCache.total);
-    const r = await pool.query(
-      `SELECT "id","fen","sol","name","rating","theme" FROM "ChessPuzzle" ORDER BY "id" OFFSET $1 LIMIT 1`,
-      [offset],
-    );
+    /*
+     * Смещение считается по ДИАПАЗОННОЙ совокупности, а не по всему банку:
+     * иначе задача дня выпадает любой сложности (замер 11.10: 2269 при игроке
+     * 800). `ORDER BY "id"` устойчив, потому что id уникален — упорядочивание по
+     * неуникальной колонке с OFFSET молча пропускает и дублирует строки.
+     */
+    if (!poolRangeTotalCache || Date.now() - poolRangeTotalCache.at > BANK_TOTAL_TTL_MS) {
+      const cr = await pool.query(
+        'SELECT count(*)::int AS n FROM "ChessPuzzle" WHERE "rating" BETWEEN $1 AND $2',
+        [ДИАПАЗОН_ЗАДАЧИ_ДНЯ.мин, ДИАПАЗОН_ЗАДАЧИ_ДНЯ.макс],
+      );
+      const nr = Number(cr.rows?.[0]?.n ?? 0);
+      poolRangeTotalCache = { at: Date.now(), total: Number.isFinite(nr) && nr > 0 ? nr : 0 };
+    }
+    /*
+     * Диапазон пуст — берём весь банк, но НЕ молча: в журнал уходит строка.
+     * Молчаливый откат к прежнему поведению выглядел бы как исправная работа, а
+     * человек снова получил бы задачу на 2269.
+     */
+    const вДиапазоне = poolRangeTotalCache.total > 0;
+    if (!вДиапазоне) {
+      console.error(
+        `[cyberchess-daily] в диапазоне ${ДИАПАЗОН_ЗАДАЧИ_ДНЯ.мин}–${ДИАПАЗОН_ЗАДАЧИ_ДНЯ.макс} задач нет, беру весь банк`,
+      );
+    }
+    const всего = вДиапазоне ? poolRangeTotalCache.total : bankTotalCache.total;
+    const offset = dayOffsetHash(day, всего);
+    const r = вДиапазоне
+      ? await pool.query(
+          `SELECT "id","fen","sol","name","rating","theme" FROM "ChessPuzzle"
+             WHERE "rating" BETWEEN $1 AND $2 ORDER BY "id" OFFSET $3 LIMIT 1`,
+          [ДИАПАЗОН_ЗАДАЧИ_ДНЯ.мин, ДИАПАЗОН_ЗАДАЧИ_ДНЯ.макс, offset],
+        )
+      : await pool.query(
+          `SELECT "id","fen","sol","name","rating","theme" FROM "ChessPuzzle" ORDER BY "id" OFFSET $1 LIMIT 1`,
+          [offset],
+        );
     const row = r.rows?.[0];
     if (!row) return null;
     const sol = parseSolution(row.sol);

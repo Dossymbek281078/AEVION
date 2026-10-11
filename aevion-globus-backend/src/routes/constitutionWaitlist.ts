@@ -21,7 +21,12 @@ import { validate, WaitlistSubscribeSchema } from "../lib/constitutionSchemas";
 import { sendWaitlistConfirm, sendWeeklyDigestEmail as sendDigestEmail } from "../lib/constitutionBrevo";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { csvFromRows } from "../lib/csv";
-import { unsubConfigured, unsubContact, verifyUnsubToken } from "../lib/waitlistUnsubToken";
+import {
+  unsubConfigured,
+  unsubContact,
+  verifyUnsubToken,
+  меткаДляЖурнала,
+} from "../lib/waitlistUnsubToken";
 import { похожеНаПробу, просятПробы } from "../lib/probeRows";
 
 const capture = makeServiceCapture("constitutionWaitlist");
@@ -393,6 +398,24 @@ constitutionWaitlistRouter.get(
       );
     }
 
+    /*
+     * 🔴 ЗАХОД ЗАПИСЫВАЕТСЯ ДО ПОПЫТКИ УДАЛЕНИЯ, А НЕ ПОСЛЕ.
+     *
+     * Повод. 11.10.2026 выяснилось, что отписка на свежем инстансе вообще не
+     * доходила до базы, и узнать, сколько людей её просили, оказалось НЕЧЕМ:
+     * ни у нас (успех не писал ничего), ни у провайдера (ключ Brevo отвергнут
+     * 401, проверено). Прошлое уже не восстановить, но терять дальше нельзя.
+     *
+     * Почему ДО: запись после удаления теряется ровно в тех случаях, ради
+     * которых она и нужна — падение базы, исключение, обрыв процесса. Токен к
+     * этому моменту уже проверен, значит это настоящая просьба человека, а не
+     * случайный заход по адресу ручки.
+     *
+     * Адрес в журнал не идёт: только стабильная метка (`меткаДляЖурнала`).
+     * По ней можно сверить подозреваемый адрес, но не прочитать список.
+     */
+    console.log(`[Constitution] ОТПИСКА ЗАПРОШЕНА: ${меткаДляЖурнала(email)} dbAvailable=${dbAvailable}`);
+
     let removedFromDb = false;
     // Число строк нужно В ЖУРНАЛЕ, а не только как признак: «0» и «1» — разные
     // события, и различить их потом можно только если число записано.
@@ -439,14 +462,14 @@ constitutionWaitlistRouter.get(
     if (удалено) {
       пометитьОтписку(email);
       console.log(
-        `[Constitution] ОТПИСКА ВЫПОЛНЕНА: ${email} rowCount=${rowCount ?? "нет базы"} память=${removedFromMem}`,
+        `[Constitution] ОТПИСКА ВЫПОЛНЕНА: ${меткаДляЖурнала(email)} rowCount=${rowCount ?? "нет базы"} память=${removedFromMem}`,
       );
     } else if (повторныйЗаход) {
       console.log(
-        `[Constitution] ОТПИСКА ПОВТОРНЫЙ ЗАХОД: ${email} rowCount=0 — адрес удалён минутами ранее`,
+        `[Constitution] ОТПИСКА ПОВТОРНЫЙ ЗАХОД: ${меткаДляЖурнала(email)} rowCount=0 — адрес удалён минутами ранее`,
       );
     } else {
-      console.warn(`[Constitution] ОТПИСКА: адреса в списке не было: ${email} rowCount=${rowCount ?? "нет базы"}`);
+      console.warn(`[Constitution] ОТПИСКА: адреса в списке не было: ${меткаДляЖурнала(email)} rowCount=${rowCount ?? "нет базы"}`);
     }
 
     return page(

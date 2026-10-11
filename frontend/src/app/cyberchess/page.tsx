@@ -1238,6 +1238,24 @@ export function povodPredlozhitAdres(
  * Вынесен константой, чтобы сторож проверял ЧИСЛО, а не память: «первая партия
  * должна быть выигрываемой» иначе тихо откатится при любой правке списка.
  */
+/**
+ * Высоты, измеренные на живом проде 11.10.2026 на 390×844 (два окна независимо).
+ *
+ * `ВЫСОТА_НИЖНЕЙ_ПАНЕЛИ` — `cc-bottom-nav` занимала y 774–844 у меня и 775–844 у
+ * приёмки, то есть ~70. Моя прежняя оценка 72 промахнулась на 2 и была честно
+ * помечена как оценка; теперь это замер.
+ *
+ * `ВЫСОТА_РЯДА_КНОПОК` — ряд «Сдаться · Ничья · Отменить · Подсказка» высотой 44
+ * (замер того же захода: y 872–916).
+ *
+ * Числа нужны, чтобы две прилипшие полосы не наехали друг на друга: строка
+ * адреса висит НАД рядом кнопок, ряд — над панелью.
+ */
+export const ВЫСОТА_НИЖНЕЙ_ПАНЕЛИ = 70;
+export const ВЫСОТА_РЯДА_КНОПОК = 44;
+/** Отступ прилипшей полосы от того, что под ней. */
+export const ЗАЗОР_ПРИЛИПШИХ = 8;
+
 export const УРОВЕНЬ_ИИ_ПО_УМОЛЧАНИЮ = 1; // Casual / «Любитель», elo 800
 
 /**
@@ -9260,7 +9278,13 @@ export default function CyberChessPage(){
              * приёмка; если промах, число правится здесь одной строкой.
              */
             ...(vwPx<769
-              ? {position:"fixed" as const,left:8,right:8,bottom:"calc(env(safe-area-inset-bottom) + 72px)",zIndex:101}
+              ? {position:"fixed" as const,left:8,right:8,zIndex:101,
+                 /* Над нижней панелью, а если идёт партия — ещё и над прилипшим
+                    рядом «Сдаться», иначе две полосы наедут друг на друга.
+                    Числа — замеры, см. константы выше. */
+                 bottom:`calc(env(safe-area-inset-bottom) + ${
+                   ВЫСОТА_НИЖНЕЙ_ПАНЕЛИ+ЗАЗОР_ПРИЛИПШИХ
+                   +((on&&!over&&!setup&&tab==="play")?ВЫСОТА_РЯДА_КНОПОК+ЗАЗОР_ПРИЛИПШИХ:0)}px)`}
               : {position:"relative" as const,marginTop:SPACE[2]}),
             padding:SPACE[2],borderRadius:RADIUS.md,
             border:`1px solid ${CC.border}`,background:CC.surface1,
@@ -9481,7 +9505,23 @@ export default function CyberChessPage(){
           </div>
           {/* Ряд «Сдаться · Ничья · Отменить · Подсказка» — только на вкладке партии: на Задачах/Коуче/Анализе
               при паузе партии он сбивал с толку (тестер 20.09.2026, 390: «Сдаться» под доской задачи). */}
-          {on&&!over&&!setup&&tab==="play"&&<div style={{display:"flex",gap:8,marginTop:lowDesktop?4:SPACE[2],...podDoskoyRow}}>
+          {/*
+            🔴 РЯД ЗАВЕРШЕНИЯ ПАРТИИ ПРИЛИПАЕТ НАД НИЖНЕЙ ПАНЕЛЬЮ на узких экранах.
+            Замер 11.10.2026 на проде, 390×844: «Сдаться» стояла на y 872–916 при
+            окне 844 — ниже кадра на 28 px, и это БЕЗ строки адреса (приёмка
+            проверила, закрыв её: было y=866, то есть за кадром и без неё). Между
+            низом доски и рядом 206 px, прокрутка страницы 194 px. Чтобы завершить
+            партию, человеку надо было доскроллить — на действии «сдаться» это
+            прямой путь бросить вкладку вместо завершения.
+            Поднять ряд выше нельзя: 142 px в этой раскладке взять неоткуда, а
+            уменьшать доску ради кнопки — менять главное ради второстепенного.
+            `sticky` оставляет ряд в потоке и приклеивает его, только когда он
+            уехал бы за кадр.
+          */}
+          {on&&!over&&!setup&&tab==="play"&&<div style={{display:"flex",gap:8,marginTop:lowDesktop?4:SPACE[2],
+            ...(vwPx<769?{position:"sticky" as const,bottom:ВЫСОТА_НИЖНЕЙ_ПАНЕЛИ+ЗАЗОР_ПРИЛИПШИХ,zIndex:99,
+              background:CC.bg,paddingTop:4,paddingBottom:4}:{}),
+            ...podDoskoyRow}}>
             <Btn size="md" variant="danger" className="cc-game-btn" onClick={()=>{if(armed!=="resign"){sArmed("resign");return;}sArmed(null);if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{const nr=новыйРейтинг(rat,lv.elo,false);sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>{armed==="resign"?"Точно сдаться? ✓":"🏳 Сдаться"}</Btn>
             <Btn size="md" variant="gold" className="cc-game-btn" onClick={()=>{if(armed!=="draw"){sArmed("draw");return;}sArmed(null);if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("ИИ отклонил ничью","error")}}>{armed==="draw"?"Предложить ничью? ✓":"½ Ничья"}</Btn>
             <Btn size="md" variant="secondary" className="cc-game-btn" icon={<Icon.Undo width={14} height={14}/>} onClick={()=>{

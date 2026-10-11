@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import request from "supertest";
 import express from "express";
-import { unsubToken } from "../src/lib/waitlistUnsubToken";
+import { unsubToken, меткаДляЖурнала } from "../src/lib/waitlistUnsubToken";
 
 /**
  * Отписка обязана оставлять след ОБА раза и не отрицать только что исполненную
@@ -86,12 +86,17 @@ describe("Отписка: след в журнале на оба исхода", 
     expect(журнал.length, "журнал пуст — подмена console не сработала").toBeGreaterThan(0);
   });
 
-  it("🔴 удачная отписка пишет АДРЕС и ЧИСЛО СТРОК", async () => {
+  it("🔴 удачная отписка пишет МЕТКУ адреса и ЧИСЛО СТРОК", async () => {
+    // Утверждение изменено 11.10 в том же заходе, что обезличивание журнала:
+    // раньше здесь требовался сам адрес. Требование было неверным — адрес в
+    // журнале Railway виден всем, у кого есть доступ к панели.
+    const email = "unsub-probe-2@test.aev";
     базаОтвечает(1);
-    await отписаться("unsub-probe-2@test.aev");
+    await отписаться(email);
     const строка = журнал.find((s) => s.includes("ОТПИСКА ВЫПОЛНЕНА"));
     expect(строка, "нет следа удачной отписки").toBeTruthy();
-    expect(строка).toContain("unsub-probe-2@test.aev");
+    expect(строка).toContain(меткаДляЖурнала(email));
+    expect(строка, "адрес попал в журнал открытым").not.toContain(email);
     expect(строка).toContain("rowCount=1");
   });
 

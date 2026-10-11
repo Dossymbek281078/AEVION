@@ -719,6 +719,20 @@ export interface РазрезВоронки {
     hintTakenOurs: number;
     abandonedPuzzle: number;
     abandonedPuzzleOurs: number;
+    /**
+     * Сессии, где была ПОПЫТКА, но хода не было (`отПопытки === true`).
+     *
+     * Названо отдельным числом, а не выброшено молча: ступень `progressed`
+     * стала меньше, и без этого поля падение читалось бы как «людей стало
+     * меньше», хотя людей столько же — просто раньше их считали неверно.
+     * `progressed + attemptWithoutMove` даёт прежнее число.
+     *
+     * ⚠️ После выкатки волны 49 это число ПЕРЕСЕКАЕТСЯ с `wrongMove`: один и
+     * тот же человек назван двумя путями — признаком у `game_progress` и
+     * отдельным событием `puzzle_wrong_move`. Складывать их нельзя.
+     */
+    attemptWithoutMove: number;
+    attemptWithoutMoveOurs: number;
     /** Начала оплаты без единого признака живого человека. См. byChannel. */
     checkoutStartNoSignal: number;
   };
@@ -875,6 +889,20 @@ export interface РазрезВоронки {
     hintTakenOurs: number;
     abandonedPuzzle: number;
     abandonedPuzzleOurs: number;
+    /**
+     * Сессии, где была ПОПЫТКА, но хода не было (`отПопытки === true`).
+     *
+     * Названо отдельным числом, а не выброшено молча: ступень `progressed`
+     * стала меньше, и без этого поля падение читалось бы как «людей стало
+     * меньше», хотя людей столько же — просто раньше их считали неверно.
+     * `progressed + attemptWithoutMove` даёт прежнее число.
+     *
+     * ⚠️ После выкатки волны 49 это число ПЕРЕСЕКАЕТСЯ с `wrongMove`: один и
+     * тот же человек назван двумя путями — признаком у `game_progress` и
+     * отдельным событием `puzzle_wrong_move`. Складывать их нельзя.
+     */
+    attemptWithoutMove: number;
+    attemptWithoutMoveOurs: number;
       /**
        * 🔴 НАЧАЛА ОПЛАТЫ БЕЗ ЕДИНОГО ПРИЗНАКА ЖИЗНИ: сессия нажала «купить», но
        * не смотрела цены, не задержалась (нет `engaged`) и не открыла второй
@@ -995,6 +1023,20 @@ export interface РазрезВоронки {
     hintTakenOurs: number;
     abandonedPuzzle: number;
     abandonedPuzzleOurs: number;
+    /**
+     * Сессии, где была ПОПЫТКА, но хода не было (`отПопытки === true`).
+     *
+     * Названо отдельным числом, а не выброшено молча: ступень `progressed`
+     * стала меньше, и без этого поля падение читалось бы как «людей стало
+     * меньше», хотя людей столько же — просто раньше их считали неверно.
+     * `progressed + attemptWithoutMove` даёт прежнее число.
+     *
+     * ⚠️ После выкатки волны 49 это число ПЕРЕСЕКАЕТСЯ с `wrongMove`: один и
+     * тот же человек назван двумя путями — признаком у `game_progress` и
+     * отдельным событием `puzzle_wrong_move`. Складывать их нельзя.
+     */
+    attemptWithoutMove: number;
+    attemptWithoutMoveOurs: number;
       puzzleSolved: number;
       puzzleSolvedOurs: number;
       waitlistSubmitted: number;
@@ -1183,6 +1225,8 @@ export function пустойКанал(): РазрезВоронки["byChannel"
     hintTakenOurs: 0,
     abandonedPuzzle: 0,
     abandonedPuzzleOurs: 0,
+    attemptWithoutMove: 0,
+    attemptWithoutMoveOurs: 0,
     checkoutStartNoSignal: 0,
     checkoutStartSessions: 0,
     checkoutStartSessionsOurs: 0,
@@ -1207,6 +1251,8 @@ export function пустойПост(): РазрезВоронки["byPost"][str
     hintTakenOurs: 0,
     abandonedPuzzle: 0,
     abandonedPuzzleOurs: 0,
+    attemptWithoutMove: 0,
+    attemptWithoutMoveOurs: 0,
     puzzleSolved: 0,
     puzzleSolvedOurs: 0,
     waitlistSubmitted: 0,
@@ -1337,6 +1383,8 @@ export function разрезВоронки(
     hintTakenOurs: 0,
     abandonedPuzzle: 0,
     abandonedPuzzleOurs: 0,
+    attemptWithoutMove: 0,
+    attemptWithoutMoveOurs: 0,
     checkoutStartNoSignal: 0,
   };
 
@@ -1631,6 +1679,20 @@ export function разрезВоронки(
     взялПодсказку: boolean;
     /** Ушёл из задачи, не решив (`puzzle_abandon`). */
     ушёлИзЗадачи: boolean;
+    /**
+     * Делал ПОПЫТКУ, но хода так и не сделал (`game_progress` с
+     * `meta.отПопытки === true`).
+     *
+     * 🔴 Нашло окно 37 замером живого пути 12.10.2026: `game_progress` страница
+     * шлёт и на НЕВЕРНУЮ попытку, причём с `plies: 1` — иначе сессия не попала
+     * бы в корзины полуходов вовсе. Рядом она честно везёт `отПопытки`, и в её
+     * коде прямо написано, зачем: «чтобы это не превратилось в тихую ложь».
+     *
+     * Мой читатель этот признак ИГНОРИРОВАЛ, то есть ступень «дошёл до порога»
+     * считала успехом того, кто ткнул не туда. Число завышалось в нашу пользу,
+     * и единственный живой «порог» за 11.10 мог быть именно таким.
+     */
+    попыткаБезХода: boolean;
   }
   const заходы = new Map<string, Заход>();
   for (const ev of events) {
@@ -1662,6 +1724,7 @@ export function разрезВоронки(
         ошибсяВЗадаче: false,
         взялПодсказку: false,
         ушёлИзЗадачи: false,
+        попыткаБезХода: false,
         ключПоста: (() => {
           const сыройПост = ev.meta?.post;
           const пост =
@@ -1727,7 +1790,15 @@ export function разрезВоронки(
     if (ev.type === "waitlist_offer_shown") з.показалиАдрес = true;
     if (ev.type === "waitlist_submit") з.оставилАдрес = true;
     if (ev.type === "puzzle_solved") з.решилЗадачу = true;
-    if (ev.type === "game_progress") з.дошёлПоПорогу = true;
+    if (ev.type === "game_progress") {
+      /*
+       * Признак от страницы, а не наша догадка: `отПопытки === true` означает
+       * «полуходов 0, попыток больше нуля». Такое событие в «дошёл до порога»
+       * НЕ идёт — иначе неверная попытка читается как ход.
+       */
+      if (ev.meta?.отПопытки === true) з.попыткаБезХода = true;
+      else з.дошёлПоПорогу = true;
+    }
     if (ev.type === "puzzle_wrong_move") з.ошибсяВЗадаче = true;
     if (ev.type === "puzzle_hint") з.взялПодсказку = true;
     if (ev.type === "puzzle_abandon") з.ушёлИзЗадачи = true;
@@ -1737,7 +1808,15 @@ export function разрезВоронки(
       // не число: формат договорён (plies числом), и подменять его молча
       // значило бы прятать расхождение с клиентом.
       const пх = ev.meta?.plies;
-      if (typeof пх === "number" && Number.isFinite(пх) && пх >= 0) {
+      /*
+       * У события-ПОПЫТКИ `plies` равен 1 принудительно (решение страницы,
+       * чтобы сессия попала в корзины). Брать его за максимум нельзя: сессия,
+       * где хода не было вовсе, оказывалась в корзине «1–2 полухода» рядом с
+       * теми, кто ход сделал. Корзины отвечают на вопрос «где бросили партию»,
+       * и попытка без хода — это не первый ход, это ноль.
+       */
+      const этоПопытка = ev.meta?.отПопытки === true;
+      if (!этоПопытка && typeof пх === "number" && Number.isFinite(пх) && пх >= 0) {
         const было = максПолуходов.get(ev.sid) ?? -1;
         if (пх > было) максПолуходов.set(ev.sid, пх);
       }
@@ -1917,6 +1996,20 @@ export function разрезВоронки(
       if (ппд) {
         ппд.hintTaken += 1;
         if (з.наш) ппд.hintTakenOurs += 1;
+      }
+    }
+    if (з.попыткаБезХода) {
+      итог.attemptWithoutMove += 1;
+      if (з.наш) итог.attemptWithoutMoveOurs += 1;
+      const кпб = byChannel[з.канал];
+      if (кпб) {
+        кпб.attemptWithoutMove += 1;
+        if (з.наш) кпб.attemptWithoutMoveOurs += 1;
+      }
+      const ппб = з.ключПоста ? byPost[з.ключПоста] : null;
+      if (ппб) {
+        ппб.attemptWithoutMove += 1;
+        if (з.наш) ппб.attemptWithoutMoveOurs += 1;
       }
     }
     if (з.ушёлИзЗадачи) {
@@ -3870,6 +3963,17 @@ eventsRouter.get("/funnel", (req, res) => {
      * человек упёрся. Без подписи «ошибок 7» легко прочтут как «семь человек
      * решают» — а это семь человек, которым не удалось.
      */
+    /*
+     * Подпись об ИЗМЕНИВШЕМСЯ смысле обязательна: `progressed` стал меньше, и
+     * без объяснения это прочтут как «людей стало меньше».
+     */
+    progressedNote:
+      "progressed — сессии, где СДЕЛАН ход. С 12.10.2026 сюда НЕ входит неверная попытка: " +
+      "страница шлёт на неё тот же game_progress с plies 1 и признаком отПопытки=true " +
+      "(замер окна 37 живым путём). Прежде такая сессия считалась порогом, то есть число " +
+      "было завышено в нашу пользу. Вычтенное названо полем attemptWithoutMove: " +
+      "progressed + attemptWithoutMove даёт прежнее число. Корзины byChessPlies попытку " +
+      "тоже больше не принимают: сессия без хода — это ноль полуходов, а не первый ход",
     insidePuzzleNote:
       "wrongMove / hintTaken / abandonedPuzzle — шаги НАЗАД, а не вперёд: их рост не " +
       "улучшает воронку, а показывает, где она рвётся. Единица та же (сессия), *Ours — " +

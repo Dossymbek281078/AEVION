@@ -733,6 +733,9 @@ export interface РазрезВоронки {
      */
     attemptWithoutMove: number;
     attemptWithoutMoveOurs: number;
+    /** Из показов формы — сколько случилось сразу после НЕВЕРНОЙ попытки. */
+    offerShownAfterAttempt: number;
+    offerShownAfterAttemptOurs: number;
     /** Начала оплаты без единого признака живого человека. См. byChannel. */
     checkoutStartNoSignal: number;
   };
@@ -903,6 +906,9 @@ export interface РазрезВоронки {
      */
     attemptWithoutMove: number;
     attemptWithoutMoveOurs: number;
+    /** Из показов формы — сколько случилось сразу после НЕВЕРНОЙ попытки. */
+    offerShownAfterAttempt: number;
+    offerShownAfterAttemptOurs: number;
       /**
        * 🔴 НАЧАЛА ОПЛАТЫ БЕЗ ЕДИНОГО ПРИЗНАКА ЖИЗНИ: сессия нажала «купить», но
        * не смотрела цены, не задержалась (нет `engaged`) и не открыла второй
@@ -1037,6 +1043,9 @@ export interface РазрезВоронки {
      */
     attemptWithoutMove: number;
     attemptWithoutMoveOurs: number;
+    /** Из показов формы — сколько случилось сразу после НЕВЕРНОЙ попытки. */
+    offerShownAfterAttempt: number;
+    offerShownAfterAttemptOurs: number;
       puzzleSolved: number;
       puzzleSolvedOurs: number;
       waitlistSubmitted: number;
@@ -1227,6 +1236,8 @@ export function пустойКанал(): РазрезВоронки["byChannel"
     abandonedPuzzleOurs: 0,
     attemptWithoutMove: 0,
     attemptWithoutMoveOurs: 0,
+    offerShownAfterAttempt: 0,
+    offerShownAfterAttemptOurs: 0,
     checkoutStartNoSignal: 0,
     checkoutStartSessions: 0,
     checkoutStartSessionsOurs: 0,
@@ -1253,6 +1264,8 @@ export function пустойПост(): РазрезВоронки["byPost"][str
     abandonedPuzzleOurs: 0,
     attemptWithoutMove: 0,
     attemptWithoutMoveOurs: 0,
+    offerShownAfterAttempt: 0,
+    offerShownAfterAttemptOurs: 0,
     puzzleSolved: 0,
     puzzleSolvedOurs: 0,
     waitlistSubmitted: 0,
@@ -1385,6 +1398,8 @@ export function разрезВоронки(
     abandonedPuzzleOurs: 0,
     attemptWithoutMove: 0,
     attemptWithoutMoveOurs: 0,
+    offerShownAfterAttempt: 0,
+    offerShownAfterAttemptOurs: 0,
     checkoutStartNoSignal: 0,
   };
 
@@ -1693,6 +1708,25 @@ export function разрезВоронки(
      * и единственный живой «порог» за 11.10 мог быть именно таким.
      */
     попыткаБезХода: boolean;
+    /**
+     * Форму адреса показали СРАЗУ ПОСЛЕ неверной попытки
+     * (`waitlist_offer_shown` с `meta.отПопытки === true`).
+     *
+     * 🔴 Зачем это отдельное число, а не оговорка в тексте. Замер окна 37
+     * 12.10.2026 показал состав живого пути: `surface=first-move`, и на пути
+     * задачи «первый ход» — это НЕВЕРНАЯ попытка. То есть адрес мы просим у
+     * человека в момент, когда он только что ошибся.
+     *
+     * За 11.10 было «показали 1 живому, оставил 0». Если показы в основном
+     * такие, причина не в тексте формы и не в её достижимости, а в МОМЕНТЕ — и
+     * тогда правка продукта совсем другая. Догадку превращаем в число.
+     *
+     * Ступень `offerShown` при этом НЕ уменьшается: форму человеку показали,
+     * это правда независимо от того, каким был предыдущий полуход. Признак
+     * описывает ХОД, а не показ, и вычитать здесь значило бы сделать число
+     * МЕНЬШЕ правды — повторить мою же ошибку в обратную сторону.
+     */
+    показалиПослеПопытки: boolean;
   }
   const заходы = new Map<string, Заход>();
   for (const ev of events) {
@@ -1725,6 +1759,7 @@ export function разрезВоронки(
         взялПодсказку: false,
         ушёлИзЗадачи: false,
         попыткаБезХода: false,
+        показалиПослеПопытки: false,
         ключПоста: (() => {
           const сыройПост = ev.meta?.post;
           const пост =
@@ -1787,7 +1822,11 @@ export function разрезВоронки(
     if (ev.type === "cta_click") з.нажал = true;
     if (ev.type === "daily_open") з.задачаДня = true;
     // Четыре ступени, у которых до 11.10.2026 не было публичного читателя.
-    if (ev.type === "waitlist_offer_shown") з.показалиАдрес = true;
+    if (ev.type === "waitlist_offer_shown") {
+      з.показалиАдрес = true;
+      // Тот же признак от страницы, что и у рубежа, и читается так же строго.
+      if (ev.meta?.отПопытки === true) з.показалиПослеПопытки = true;
+    }
     if (ev.type === "waitlist_submit") з.оставилАдрес = true;
     if (ev.type === "puzzle_solved") з.решилЗадачу = true;
     if (ev.type === "game_progress") {
@@ -1996,6 +2035,20 @@ export function разрезВоронки(
       if (ппд) {
         ппд.hintTaken += 1;
         if (з.наш) ппд.hintTakenOurs += 1;
+      }
+    }
+    if (з.показалиПослеПопытки) {
+      итог.offerShownAfterAttempt += 1;
+      if (з.наш) итог.offerShownAfterAttemptOurs += 1;
+      const кпп = byChannel[з.канал];
+      if (кпп) {
+        кпп.offerShownAfterAttempt += 1;
+        if (з.наш) кпп.offerShownAfterAttemptOurs += 1;
+      }
+      const пппп = з.ключПоста ? byPost[з.ключПоста] : null;
+      if (пппп) {
+        пппп.offerShownAfterAttempt += 1;
+        if (з.наш) пппп.offerShownAfterAttemptOurs += 1;
       }
     }
     if (з.попыткаБезХода) {
@@ -3967,6 +4020,18 @@ eventsRouter.get("/funnel", (req, res) => {
      * Подпись об ИЗМЕНИВШЕМСЯ смысле обязательна: `progressed` стал меньше, и
      * без объяснения это прочтут как «людей стало меньше».
      */
+    /*
+     * Это число отвечает на продуктовый вопрос, а не на вопрос об учёте,
+     * поэтому подпись называет сам вопрос: не «сколько показов», а «в какой
+     * момент мы просим адрес».
+     */
+    magnetMomentNote:
+      "offerShownAfterAttempt — из показов формы адреса те, что случились сразу после НЕВЕРНОЙ " +
+      "попытки (у события waitlist_offer_shown приходит отПопытки=true; surface=first-move, и на " +
+      "пути задачи «первый ход» — это именно попытка). offerShown при этом НЕ уменьшается: форму " +
+      "показали, и это правда. Вопрос, на который число отвечает: не просим ли мы адрес у того, " +
+      "кто только что ошибся. Если доля велика, причина «показали и не оставили» в МОМЕНТЕ, а не " +
+      "в тексте формы",
     progressedNote:
       "progressed — сессии, где СДЕЛАН ход. С 12.10.2026 сюда НЕ входит неверная попытка: " +
       "страница шлёт на неё тот же game_progress с plies 1 и признаком отПопытки=true " +

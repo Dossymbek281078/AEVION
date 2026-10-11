@@ -1191,6 +1191,30 @@ export function povodPredlozhitAdres(
  * Оба — ЧИСЛА. Строка `"1"` у окна 98 не зачтётся ходом и уедет в отдельный
  * счётчик, поэтому тип здесь проверяется отдельным утверждением.
  */
+/**
+ * Что делает выбор в приветственном окне.
+ *
+ * 🔴 ПОВОД 11.10.2026. Плитка «♟ Играть» обещает «Партия против ИИ 800–2400 —
+ * 5 секунд до старта», а открывала ЭКРАН НАСТРОЙКИ: замер окна user-37 на проде
+ * (пустое хранилище, чтение через 1, 3, 6 и 10 с) каждый раз давал одно и то же —
+ * партии нет, на доске «Нажмите доску», рядом панель настройки. Поломки в коде не
+ * было; было расхождение обещания с устройством, а это для первого экрана магнита
+ * то же самое: человек нажал «Играть» и не играет.
+ *
+ * Решение (оркестратор, 11.10): обещание ИСПОЛНЯЕМ — плитка сразу начинает партию
+ * на умолчаниях, меньше шагов до первого хода. Экран настроек остаётся достижимым:
+ * кнопка «Новая партия» в полосе под доской открывает именно его.
+ *
+ * Отдельной чистой функцией, потому что соответствие «что обещано → что произошло»
+ * иначе проверяется только глазами, а глаза смотрят раз.
+ */
+export function deystvieVyboraOnbordinga(intent: "play" | "learn" | "puzzles"):
+  { tab: "play" | "coach" | "puzzles"; setup: boolean; startGame: boolean } {
+  if (intent === "play") return { tab: "play", setup: false, startGame: true };
+  if (intent === "learn") return { tab: "coach", setup: false, startGame: false };
+  return { tab: "puzzles", setup: false, startGame: false };
+}
+
 export function chislaPartii(hist: readonly unknown[]): { moves: number; plies: number } {
   const полуходов = hist.length;
   return { moves: Math.floor(полуходов / 2), plies: полуходов };
@@ -13351,9 +13375,11 @@ ${question.trim()}`;
         // Единый онбординг: сразу в выбранный режим. Больше НЕ стопка (welcome-модалка
         // и 4-слайдовый тур убраны из первого визита — тур доступен в меню помощи).
         const wasFirst=firstRunRef.current;firstRunRef.current=false;
-        if(choice.intent==="play"){sTab("play");sSetup(true);}
-        else if(choice.intent==="learn"){sTab("coach");sSetup(false);}
-        else if(choice.intent==="puzzles"){sTab("puzzles");sSetup(false);}
+        const д=deystvieVyboraOnbordinga(choice.intent);
+        sTab(д.tab);sSetup(д.setup);
+        // Пауза перед стартом — как у остальных мест запуска партии (там же 50 мс):
+        // newG читает состояние, которое ставится этими же сеттерами.
+        if(д.startGame)setTimeout(()=>{sHotseat(false);sRivalMode(false);newG()},50);
         /* Всплывашки не показываем: контейнер общий, он прижат к низу экрана и
            накрывает нижнюю навигацию. Замер 01.09.2026 на 390px: пять кнопок
            из шести («Играть», «Задачи», «Анализ», «Коуч», «Профиль») были

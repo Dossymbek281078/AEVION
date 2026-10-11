@@ -132,11 +132,21 @@ describe("корзины полуходов показывают, где ухо�
       .send({ type: "page_view", sid: "обрыв", path: "/cyberchess?c=yt" });
     expect(вход.status, "просмотр не принят").toBe(204);
 
-    const ответ = await request(app)
-      .post("/api/pricing/events")
-      .set("user-agent", UA)
-      .send({ type: "game_progress", sid: "обрыв", path: "/cyberchess", meta: { plies: 13 } });
-    expect(ответ.status, "событие обрыва партии ручка не принимает").toBe(204);
+    /*
+     * ДВА имени, а не одно. Окно шахмат (user-16) шлёт пороговые события
+     * (`game_progress` на границах 1/3/11/21/41) И событие ухода
+     * (`game_abandon` по pagehide), потому что pagehide доезжает не всегда.
+     * Принимающая сторона обязана знать оба ДО выкатки клиента: сайт и бэкенд
+     * едут разными волнами, и если клиент уедет раньше, события отобьются с 400
+     * и пропадут безвозвратно — восстановить их нечем.
+     */
+    for (const имя of ["game_progress", "game_abandon"]) {
+      const ответ = await request(app)
+        .post("/api/pricing/events")
+        .set("user-agent", UA)
+        .send({ type: имя, sid: "обрыв", path: "/cyberchess", meta: { plies: 13 } });
+      expect(ответ.status, `событие ${имя} ручка не принимает`).toBe(204);
+    }
 
     const r = await request(app).get("/api/pricing/events/funnel?days=1");
     expect(

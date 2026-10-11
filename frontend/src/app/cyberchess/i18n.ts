@@ -119,6 +119,7 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "coach.askAboutPuzzle": "Открыть эту позицию у ИИ-тренера и спросить о ней",
     "coach.fenField": "FEN позиции",
     "nav.coach": "Тренер",
+    "nav.hint": "Подсказка",
     // Нижняя навигация на телефоне подписана короче, чем кнопка в шапке.
     // Разные ключи намеренно: иначе русский интерфейс менялся бы вместе с переводом.
     "nav.coachShort": "Коуч",
@@ -396,6 +397,7 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "coach.askAboutPuzzle": "Open this position with the AI coach and ask about it",
     "coach.fenField": "Position FEN",
     "nav.coach": "Coach",
+    "nav.hint": "Hint",
     "nav.coachShort": "Coach",
     "nav.more": "More",
     "nav.play": "Play",
@@ -668,6 +670,7 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "coach.askAboutPuzzle": "Бұл позицияны ЖИ-жаттықтырушыда ашып, сұрау қою",
     "coach.fenField": "Позиция FEN-і",
     "nav.coach": "Жаттықтырушы",
+    "nav.hint": "Көмек",
     // 🔴 КОРОТКОЕ слово здесь обязательно. «Жаттықтырушы» — 12 знаков, а в
     // нижнюю навигацию на 320px помещается пять разделов, то есть ~8 знаков
     // на подпись. Длинное слово молча обрезается в «Жаттықт…»: контейнер

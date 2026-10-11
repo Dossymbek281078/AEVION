@@ -1769,7 +1769,24 @@ export default function CyberChessPage(){
     ?{flexWrap:"nowrap",overflowX:"auto",scrollbarWidth:"none"}
     :{flexWrap:"wrap",overflowX:"visible"};
   const desktopVReserve=Math.max(250,boardTopPx>0?boardTopPx+(lowDesktop?186:150):0);
-  const boardPx=Math.max(isMobileLayout?200:280,Math.min(boardPxRaw,vhPx-(vwPx>=769?desktopVReserve:290)-зазорПодСтроку,vwPx-hReserve-dockReserve));
+  /*
+   * 🔴 12.10, приёмка волны 50: уступка доски сработала на 540 и 768 (клетка
+   * 58→52 и 83→68, почти ровно обещанные 54 и 69), а на 390×844 — НЕ сработала
+   * вовсе: клетка осталась 44, низ доски 664, всё до пикселя как было.
+   *
+   * Причина арифметическая: вычитание стояло у ВЕРТИКАЛЬНОГО предела, а на
+   * 390 доску ограничивает ШИРИНА. Считая по месту: vhPx − 290 = 554, предел по
+   * ширине ≈ 352, и min() берёт 352; вычесть 26 из 554 → 528 — на выбор не
+   * влияет никак. Там, где связывала высота (540, 768), правка работала; где
+   * ширина — молчала.
+   *
+   * Поэтому уступка снимается с ИТОГА, а не с одного из пределов: тогда она
+   * действует независимо от того, какой предел связывает. Нижняя граница
+   * (200 / 280 px) по-прежнему держит доску играбельной — уступка не может
+   * съесть её целиком.
+   */
+  const boardPx=Math.max(isMobileLayout?200:280,
+    Math.min(boardPxRaw,vhPx-(vwPx>=769?desktopVReserve:290),vwPx-hReserve-dockReserve)-зазорПодСтроку);
   const bw=boardPx+"px";
   // ── Ultra-wide fill: доска упирается в ВЫСОТУ (квадрат), а экраны 16:9 широкие —
   // остаётся горизонтальный простор, из-за которого группа [рейл+доска+панель] висела
@@ -7502,7 +7519,30 @@ export default function CyberChessPage(){
         <Btn variant="secondary" size="sm" icon={<Icon.Settings/>} onClick={()=>sShowSettings(true)} title="Настройки" ariaLabel="Настройки" style={{padding:"6px 10px",minHeight:36,minWidth:36}}/>
         {vwPx>=769&&<Btn variant={muted?"danger":"secondary"} size="sm" icon={muted?<Icon.Mute/>:<Icon.Sound/>} onClick={()=>{sMuted(v=>!v);showToast(muted?"Звук включён":"Звук выключен","info")}} title={muted?"Включить звук (M)":"Выключить звук (M)"} ariaLabel={muted?"Включить звук":"Выключить звук"} style={{padding:"6px 10px",minHeight:36,minWidth:36}}/>}
         {/* Mobile sidebar toggle — visible only on mobile via CSS */}
-        <button onClick={()=>sMobileSidebarOpen(v=>!v)} title="Открыть боковую панель" aria-label="Свернуть боковую панель" style={{padding:"6px 10px",minHeight:36,minWidth:36,border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,background:mobileSidebarOpen?CC.brandSoft:CC.surface1,color:mobileSidebarOpen?CC.brand:"inherit",cursor:"pointer",fontSize:18,fontWeight:700,display:"none",alignItems:"center",justifyContent:"center"}} className="cc-mobile-sidebar-btn">☰<span style={{fontSize:11,fontWeight:800,marginLeft:6}}>{cc.t("nav.coach")}</span></button>
+        <button onClick={()=>sMobileSidebarOpen(v=>!v)} title={mobileSidebarOpen?"Свернуть боковую панель":(tab==="puzzles"?"Открыть панель задачи: подсказка, решение, следующая":"Открыть боковую панель")}
+          aria-label={mobileSidebarOpen?"Свернуть боковую панель":"Открыть боковую панель"} style={{padding:"6px 10px",minHeight:36,minWidth:36,border:`1px solid ${CC.border}`,borderRadius:RADIUS.md,background:mobileSidebarOpen?CC.brandSoft:CC.surface1,color:mobileSidebarOpen?CC.brand:"inherit",cursor:"pointer",fontSize:18,fontWeight:700,display:"none",alignItems:"center",justifyContent:"center"}} className="cc-mobile-sidebar-btn">☰<span style={{fontSize:11,fontWeight:800,marginLeft:6}}>{
+            /*
+             * 🔴 12.10. Подпись называет то, что ЗА ней на этом экране.
+             *
+             * Замер на проде 302b39977922, три узкие пары: панель задачи на
+             * телефоне — это ШТОРКА (globals.css @media max-width:768px:
+             * position fixed, translateX(100%)), и «за кадром» — её ЗАКРЫТОЕ
+             * состояние, а не дефект вёрстки. Открывалка в кадре и своя на всех
+             * трёх парах, одно нажатие — и «Подсказка» становится своей
+             * (390: x 210..355, 540: x 331..477, 768: x 559..705).
+             *
+             * Дефект другой: подпись у открывалки была «☰ Тренер» на ЛЮБОМ
+             * экране. Человек, застрявший на задаче, не имеет причины искать
+             * подсказку, решение и следующую задачу за кнопкой «Тренер» — и
+             * приёмка, и я сначала прочитали это как «подсказку на телефоне
+             * попросить нельзя вовсе». Если так читают двое, кто знает код,
+             * то посетитель не прочитает вовсе.
+             *
+             * aria-label теперь согласован с состоянием: раньше у ЗАКРЫТОЙ
+             * шторки скринридер слышал «Свернуть боковую панель».
+             */
+            tab==="puzzles"?cc.t("nav.hint"):cc.t("nav.coach")
+          }</span></button>
         </div>
 
         {/* ⚙ Ещё — overflow-меню. Свернули «Инструменты» (клавиши/музыка/стрим/фулскрин/

@@ -1978,6 +1978,14 @@ export const ALLOWED_TYPES = new Set([
   // токена. Отправитель кладёт только meta.source (имя страницы-источника) —
   // рядом живёт сторож publicFunnelHasNoPersonalData.
   "waitlist_submit",
+  // Уход из незавершённой партии (pagehide/visibilitychange). Имя обязано жить в
+  // ДВУХ списках: 08.10 своё событие уже терялось молча — сервер отвечал 200 и
+  // отбрасывал незнакомый тип, а шаг воронки пропадал.
+  "game_abandon",
+  // Показ предложения адреса (знаменатель к waitlist_submit).
+  "waitlist_offer_shown",
+  // Задача решена (любая, не только задача дня).
+  "puzzle_solved",
   "ab_assigned",
 ]);
 

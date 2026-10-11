@@ -172,9 +172,22 @@ describe("apiFetchOrPaywall", () => {
 });
 
 describe("formatTiers", () => {
-  it("strips free and joins with /", () => {
-    expect(formatTiers(["medium", "full", "enterprise"])).toBe("Medium / Full / Enterprise");
-    expect(formatTiers(["free", "lite", "full"])).toBe("Lite / Full");
+  /*
+   * 🔴 Смысл изменён 08.10.2026, и это НЕ косметика.
+   * Канонический «full» значит «любой платный срок» (planGate.normalizeTier
+   * схлопывает lite…max → full), а в лестнице сроков Full — это 9 месяцев.
+   * Печатая ярлыки дословно, стена называла гостю план втрое длиннее нужного.
+   * Поэтому при наличии «full» выводится фраза, а не список ярлыков.
+   */
+  it("требование с «full» названо фразой, а не ярлыком тарифа", () => {
+    expect(formatTiers(["medium", "full", "enterprise"])).toBe("любой платный тариф, от Lite");
+    expect(formatTiers(["free", "lite", "full"])).toBe("любой платный тариф, от Lite");
+  });
+
+  it("без «full» ярлыки остаются, и free по-прежнему отбрасывается", () => {
+    expect(formatTiers(["free", "enterprise"])).toBe("Enterprise");
+    // Прежний контракт: платить не за что — пустая строка. Этот случай
+    // поймал мою ошибку в первой версии правки, поэтому закреплён отдельно.
     expect(formatTiers(["free"])).toBe("");
   });
 });

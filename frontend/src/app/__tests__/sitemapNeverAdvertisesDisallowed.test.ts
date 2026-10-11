@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { DISALLOWED_PATHS } from "../robots";
+import { DISALLOWED_PATHS } from "../robotsRules";
 import { isBlockedForCrawlers } from "../sitemap";
 
 /**

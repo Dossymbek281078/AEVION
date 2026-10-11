@@ -1,4 +1,12 @@
-import type { MetadataRoute } from "next";
+/*
+ * Правила robots.txt. Файл переехал из app/robots.ts 07.10.2026.
+ *
+ * Имя `app/robots.ts` у Next зарезервировано: он сам собирает из него
+ * robots.txt по типу MetadataRoute.Robots. В этом типе НЕТ директивы
+ * Clean-param, которую понимает Яндекс, а она нам нужна (см. ниже).
+ * Поэтому списки живут здесь, а отдаёт файл обработчик
+ * app/robots.txt/route.ts. Содержимое правил не менялось — только место.
+ */
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
@@ -178,15 +186,50 @@ export const CRAWLER_ALLOW_PATHS: readonly string[] = [
   ...SITEMAP_PATHS.filter((s) => s !== "/sitemap.xml"),
 ];
 
-export default function robots(): MetadataRoute.Robots {
-  return {
-    rules: [
-      {
-        userAgent: "*",
-        allow: [...CRAWLER_ALLOW_PATHS],
-        disallow: DISALLOWED_PATHS.map(robotsLine),
-      },
-    ],
-    sitemap: SITEMAP_PATHS.map((s) => `${BASE_URL}${s}`),
-  };
+
+/**
+ * Параметры адреса, которые Яндекс должен игнорировать при склейке страниц.
+ *
+ * 🔴 ЗАЧЕМ. Почти каждая наша ссылка несёт метку канала: `?c=yt-devhub-2min`
+ * из подписи под роликом, `utm_*` из писем, `?ref=` из каталогов. Для
+ * поисковика это РАЗНЫЕ адреса одной страницы: 730 адресов карты
+ * размножаются на сотни, вес страницы дробится между ними, а в выдаче
+ * показывается случайный вариант с хвостом метки.
+ *
+ * Clean-param — директива именно Яндекса (Google обходится canonical, он у
+ * нас проставлен). Пишется БЕЗ `User-agent: Yandex`: по документации она
+ * межсекционная, то есть действует независимо от того, в какой секции
+ * объявлена, и остальные роботы её просто игнорируют.
+ *
+ * Список ровно из того, что мы РЕАЛЬНО ставим в ссылки — не «на всякий
+ * случай»: `c` (наша метка канала, см. CHANNELS в lib/products.ts),
+ * четыре utm и `ref` (его дописывают каталоги вроде Product Hunt).
+ */
+export const CLEAN_PARAMS: readonly string[] = [
+  "c",
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_content",
+  "ref",
+];
+
+/**
+ * Готовый текст robots.txt. Собирается здесь, а не в обработчике, чтобы
+ * сторож проверял ровно то, что уедет на прод.
+ */
+export function текстRobots(базовыйАдрес: string): string {
+  // Перевод строки собирается кодом символа, а не escape-последовательностью:
+  // при записи файла через внешние инструменты обратный слэш съедается на
+  // границе вызова, и строковый литерал рвётся. Ловушка известная.
+  const ПЕРЕВОД = String.fromCharCode(10);
+  const строки: string[] = ["User-agent: *"];
+  for (const п of CRAWLER_ALLOW_PATHS) строки.push("Allow: " + п);
+  for (const п of DISALLOWED_PATHS) строки.push("Disallow: " + robotsLine(п));
+  строки.push("");
+  // Межсекционная директива Яндекса: параметры, не меняющие содержимое.
+  строки.push("Clean-param: " + CLEAN_PARAMS.join("&"));
+  строки.push("");
+  for (const s of SITEMAP_PATHS) строки.push("Sitemap: " + базовыйАдрес + s);
+  return строки.join(ПЕРЕВОД) + ПЕРЕВОД;
 }

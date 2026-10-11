@@ -20,7 +20,17 @@ vi.mock("../src/lib/dbPool", () => ({
       if (db.fail) throw new Error("connection terminated unexpectedly");
       if (/count\(\*\)/i.test(text)) return { rows: [{ n: db.total }], rowCount: 1 };
       if (/FROM "ChessPuzzle"/i.test(text)) {
-        const off = Number(params[0]);
+        /*
+         * 🔴 Смещение теперь НЕ всегда первый параметр.
+         *
+         * С 11.10.2026 задача дня выбирается из диапазона новичка (800–1200),
+         * и запрос стал `WHERE "rating" BETWEEN $1 AND $2 ... OFFSET $3`.
+         * Заглушка читала `params[0]` и возвращала `bank_800` — то есть id,
+         * собранный из НИЖНЕЙ ГРАНИЦЫ диапазона вместо смещения. Проверка
+         * краснела на исправном коде: позиционное чтение параметров ломается
+         * при любой правке формы запроса. Берём смещение по форме запроса.
+         */
+        const off = Number(/BETWEEN/i.test(text) ? params[2] : params[0]);
         return {
           rows: [{ id: `bank_${off}`, fen: "8/8/8/8/8/8/8/K6k w - - 0 1", sol: db.solRaw, name: "Тактика", rating: 1500, theme: "Пешечный эндшпиль" }],
           rowCount: 1,

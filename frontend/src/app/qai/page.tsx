@@ -5,6 +5,8 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { apiUrl } from "@/lib/apiBase";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import { getAuthHeaders } from "@/lib/auth";
+import { PaywallScreen } from "@/components/PaywallScreen";
+import { isPaywallPayload, type PaywallPayload } from "@/lib/paywall";
 
 interface Message {
   role: "user" | "assistant";
@@ -79,10 +81,21 @@ function CopyButton({ text }: { text: string }) {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+  /*
+   * Подсказки на этой странице по-русски ПРЯМО В КОДЕ, а не через словарь.
+   * Так велит сторож englishAttrsDoNotGrow: «если файл переводится словарём —
+   * заменять на ключ словаря; на ОДНОязычной странице русский прямо в коде
+   * и есть правильный ответ».
+   * Замер 11.10.2026: в этом файле вызовов словаря 0, импорта i18n нет,
+   * ключей qai в ru/en/kk тоже 0. Контроль прибора: у страницы цен таких
+   * вызовов 85 — значит проверка различает словарные и одноязычные файлы.
+   * Русский ТЕКСТ страницы рисует живой слой перевода, но атрибуты он не
+   * трогает — отсюда и брались английские подсказки на русском экране.
+   */
   return (
     <button
       onClick={handleCopy}
-      title="Copy"
+      title="Копировать"
       className="mt-1.5 inline-block rounded border border-slate-700 bg-transparent px-2 py-0.5 text-[11px] transition-colors hover:border-slate-500"
       style={{ color: copied ? "#34d399" : "#94a3b8" }}
     >
@@ -212,6 +225,15 @@ export default function QAIPage() {
   const [streaming, setStreaming] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  /*
+   * 🔴 Отказ стены больше не выбрасывается молча (09.10.2026).
+   * Было: `fetch(...).then(r => r.ok ? r.json() : null)` и пустой
+   * `.catch(() => {})` — тело 402 терялось, оставалась заглушка, и гость
+   * видел шапку и пустоту без единого слова о причине. Замер 08.10:
+   * /api/qai/personas у гостя -> 402 upgrade_required; модуль закрыт ПО
+   * ЗАМЫСЛУ (moduleAccess: продаётся false, стена true).
+   */
+  const [paywall, setPaywall] = useState<PaywallPayload | null>(null);
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
   const [personas, setPersonas] = useState<Persona[]>(FALLBACK_PERSONAS);
   const [activePersona, setActivePersona] = useState<string>("assistant");
@@ -226,14 +248,20 @@ export default function QAIPage() {
   useEffect(() => {
     // Personas — fetch best-effort
     fetch(apiUrl("/api/qai/personas"), { headers: getAuthHeaders() })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data?.personas && Array.isArray(data.personas)) {
-          setPersonas(data.personas);
+      .then(async (r) => ({ статус: r.status, тело: await r.json().catch(() => null) }))
+      .then(({ статус, тело }) => {
+        // Стена — не «нет данных»: у неё свой экран, как на 16 других страницах.
+        if (статус === 402 && isPaywallPayload(тело)) {
+          setPaywall(тело);
+          return;
+        }
+        if (тело?.personas && Array.isArray(тело.personas)) {
+          setPersonas(тело.personas);
         }
       })
       .catch(() => {
-        // keep fallback
+        // Сеть не ответила — оставляем заглушку, как было: это НЕ стена,
+        // и выдавать сбой за предложение купить нельзя.
       });
 
     const stored = localStorage.getItem("qai_session_id");
@@ -475,6 +503,11 @@ export default function QAIPage() {
 
   const activePersonaObj = personas.find((p) => p.id === activePersona) ?? personas[0];
 
+  /* Модуль закрыт стеной — показываем ЕЁ экран, а не пустой разговор. */
+  if (paywall) {
+    return <PaywallScreen payload={paywall} backHref="/modules" />;
+  }
+
   return (
     <>
       <Wave1Nav />
@@ -548,7 +581,7 @@ export default function QAIPage() {
                 <div className="mt-0.5 text-[11px] text-slate-500">{formatDate(s.createdAt)}</div>
                 <button
                   onClick={(e) => deleteSession(s.id, e)}
-                  title="Delete"
+                  title="Удалить"
                   className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-600 opacity-0 transition-opacity hover:bg-slate-700 hover:text-slate-200 group-hover:opacity-100"
                 >
                   ×
@@ -581,7 +614,7 @@ export default function QAIPage() {
               {(usage || sessionTotalTokens > 0) && (
                 <div className="hidden items-center gap-3 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-[11px] sm:flex">
                   {usage && (
-                    <span className="text-slate-300" title="Tokens for last response (approx)">
+                    <span className="text-slate-300" title="Токенов в последнем ответе (примерно)">
                       <span className="text-slate-500">last:</span>{" "}
                       <span className="font-mono text-emerald-300">
                         {usage.approxPromptTokens}↑ {usage.approxCompletionTokens}↓
@@ -589,7 +622,7 @@ export default function QAIPage() {
                     </span>
                   )}
                   {sessionTotalTokens > 0 && (
-                    <span className="text-slate-300" title="Approx tokens used this session">
+                    <span className="text-slate-300" title="Примерно токенов за сеанс">
                       <span className="text-slate-500">session:</span>{" "}
                       <span className="font-mono text-violet-300">~{sessionTotalTokens}</span>
                     </span>
@@ -603,7 +636,7 @@ export default function QAIPage() {
                     const sess = sessions.find((s) => s.id === sessionId);
                     exportChatAsMarkdown(messages, sess?.title);
                   }}
-                  title="Export chat as Markdown"
+                  title="Выгрузить переписку в Markdown"
                   className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 transition-colors hover:border-emerald-500/50 hover:text-emerald-300"
                 >
                   ↓ Export .md
@@ -728,7 +761,7 @@ export default function QAIPage() {
               {streaming ? (
                 <button
                   onClick={stopStreaming}
-                  title="Stop generation"
+                  title="Остановить генерацию"
                   className="h-12 flex-shrink-0 rounded-xl border border-red-500/50 bg-red-500/10 px-5 text-sm font-bold text-red-300 transition-colors hover:bg-red-500/20"
                 >
                   ◼ Stop

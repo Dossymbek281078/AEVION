@@ -14,6 +14,7 @@ import { useToast } from "@/components/ToastProvider";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { PitchValueCallout } from "@/components/PitchValueCallout";
 import { apiUrl } from "@/lib/apiBase";
+import { channelNow, postNow } from "@/lib/channelNow";
 import { getDeviceId } from "@/lib/aevApi";
 import { anchorBadge, ANCHOR_TONE_COLORS } from "./anchorBadge";
 
@@ -129,6 +130,68 @@ export default function BureauPage() {
       <PurchaseReturnTracker source="bureau" provider="stripe" successParam="paid" />
       <BureauPageInner />
     </Suspense>
+  );
+}
+
+/**
+ * Плашка для ПОКУПАТЕЛЕЙ ДАННЫХ, пришедших по уже отправленному письму.
+ *
+ * ПОВОД (11.10.2026). Шестнадцать писем площадкам лицензирования и дата-
+ * компаниям ушли со ссылками на `/bureau?c=mail-aiN` — их адресаты держат
+ * эти письма в ящиках, и ссылку в отправленном письме задним числом не
+ * исправить. А на `/bureau` нет ни слова provenance, training data или
+ * dataset: человек, которому написали про происхождение файлов для обучения
+ * ИИ, попадает на витрину бюро для авторов и не находит ничего из письма.
+ * Посадочная `/proof` для них уже есть, но они о ней не знают.
+ *
+ * Условие намеренно УЗКОЕ — канал `mail-outreach` и подметка вида `aiN`,
+ * то есть ровно разметка тех писем. Всем остальным плашка не показывается:
+ * бюро — платный канал, и отвлекать его посетителей на страницу, которая
+ * ничего не продаёт, значило бы лечить одно место за счёт другого.
+ *
+ * Метку читаем теми же `channelNow`/`postNow`, что касса и форма на этой
+ * странице, а не вторым способом разбора адреса: они уже умеют и прямой
+ * переход, и возврат из кассы (метка живёт в sessionStorage с первого захода).
+ * Чтение — в эффекте: эти функции трогают sessionStorage, которого при
+ * первом проходе разметки нет.
+ */
+export function DataBuyerNotice() {
+  const [show, setShow] = useState(false);
+
+  useEffect(() => {
+    try {
+      const channel = channelNow();
+      const post = postNow();
+      setShow(channel === "mail-outreach" && /^ai\d+$/.test(post ?? ""));
+    } catch {
+      // Недоступное хранилище — не повод падать: плашка просто не появится.
+      setShow(false);
+    }
+  }, []);
+
+  if (!show) return null;
+
+  return (
+    <div
+      style={{
+        border: "1px solid #bfdbfe",
+        background: "#eff6ff",
+        borderRadius: 10,
+        padding: "12px 16px",
+        marginBottom: 16,
+        fontSize: 15,
+        lineHeight: 1.6,
+        color: "#1e3a8a",
+      }}
+    >
+      Buying data to train models? This page is the authorship bureau. The provenance
+      layer we wrote to you about — the verifier, the live numbers, and what we are
+      not — is at{" "}
+      <Link href="/proof" style={{ color: "#1d4ed8", fontWeight: 700 }}>
+        aevion.app/proof
+      </Link>
+      .
+    </div>
   );
 }
 
@@ -503,6 +566,8 @@ function BureauPageInner() {
          * цену из каталога и сам спрашивает, какие сроки реально продаются
          * (иначе показал бы цену ступени, которая отвечает 503).
          */}
+        <DataBuyerNotice />
+
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
           <ModulePricingChip moduleId="bureau" theme="light" />
         </div>

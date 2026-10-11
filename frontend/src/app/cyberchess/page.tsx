@@ -724,8 +724,51 @@ const BG_PRESETS: BgPreset[] = [
 ];
 
 type BoardTheme = {name:string;light:string;dark:string;border:string;icon:string;premium?:string};
+
+/**
+ * Яркость цвета по восприятию (0 — чёрный, 255 — белый).
+ *
+ * Нужна, чтобы «светлее» было ИЗМЕРИМЫМ, а не вкусовым: жалоба основателя
+ * 09.10.2026 звучала «в задачах слишком тёмная доска», и проверять её надо
+ * числом, иначе следующая правка палитры снова сделает доску тёмной незаметно.
+ */
+export function yarkostCveta(hex: string): number {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+
+/**
+ * Порог «не темнее привычной шахматной доски».
+ *
+ * Отсчёт — классическая палитра lichess (#f0d9b5 / #b58863), её и назвал
+ * основатель через оркестратора как привычную. Яркость её тёмной клетки 145.2,
+ * светлой 219.8. Тема по умолчанию обязана быть НЕ ТЕМНЕЕ обеих.
+ */
+export const ПОРОГ_ТЁМНОЙ_КЛЕТКИ = yarkostCveta("#b58863");
+export const ПОРОГ_СВЕТЛОЙ_КЛЕТКИ = yarkostCveta("#f0d9b5");
+
 const BOARD_THEMES: BoardTheme[] = [
-  {name:"AEVION",light:"#e8e0d5",dark:"#5d8a6e",border:"#4a7a5e",icon:"⚡"},
+  /*
+   * 🔴 ПАЛИТРА ПО УМОЛЧАНИЮ ОСВЕТЛЕНА 09.10.2026 — прямое слово основателя
+   * («в задачах слишком тёмная доска»), передано оркестратором.
+   *
+   * Замер «до» на живом проде, вычисленный цвет клеток (не из кода): светлая
+   * rgb(232,224,213), тёмная rgb(93,138,110) — то есть ровно эта тема, и
+   * ОДИНАКОВО на задачах и в партии, на 390×844 и 1366×720, при светлой и
+   * тёмной системной схеме. Значит дело не в наложении на экране задач, а в
+   * самой палитре: яркость тёмной клетки была 121 против 145 у привычной
+   * шахматной.
+   *
+   * Почему осветлена САМА тема, а не переключён выбор по умолчанию: тема
+   * сохраняется в localStorage при каждой загрузке страницы, поэтому у всех,
+   * кто хоть раз заходил (включая основателя), уже записан этот индекс — смена
+   * умолчания не изменила бы НИ ОДНОГО живого экрана.
+   *
+   * Зелёный брендовый оттенок сохранён: светлее сделана только тёмная клетка.
+   * Светлая клетка (225) и так была светлее привычной (220), её не трогаем.
+   */
+  {name:"AEVION",light:"#e8e0d5",dark:"#93b89f",border:"#7aa389",icon:"⚡"},
   {name:"Янтарь",light:"#f0d9b5",dark:"#b58863",border:"#b58863",icon:"♟"},
   {name:"Изумруд",light:"#eeeed2",dark:"#769656",border:"#769656",icon:"🌿"},
   {name:"Океан",light:"#dee3e6",dark:"#5b8baf",border:"#4a7a9b",icon:"🌊"},
@@ -739,6 +782,13 @@ const BOARD_THEMES: BoardTheme[] = [
   {name:"Обсидиан",light:"#1f2937",dark:"#0a0a0a",border:"#fbbf24",icon:"🖤",premium:"theme_obsidian"},
   {name:"Сакура",light:"#ffe0ec",dark:"#f472b6",border:"#ec4899",icon:"🌸",premium:"theme_sakura"},
 ];
+
+/**
+ * Тема, которую видит человек, НЕ выбиравший тему (и запасной вариант, если
+ * сохранённый индекс негоден). Экспортируется, чтобы сторож проверял тот самый
+ * объект, что берёт страница, а не свою копию цветов рядом.
+ */
+export const ТЕМА_ДОСКИ_ПО_УМОЛЧАНИЮ = BOARD_THEMES[0];
 
 /* ═══ StatusBar — game state badge with inline SVG icons ═══ */
 type StatusBarProps = {over:string|null;chk:boolean;think:boolean;myT:boolean;useSF:boolean;pmsLen:number;histLen:number;rat:number;rkI:string};
@@ -1078,6 +1128,170 @@ export function уженеПредлагать(
   }
 }
 
+/**
+ * По какому поводу предлагать адрес — и предлагать ли вообще.
+ *
+ * 🔴 ПОВОД (замер на проде 08.10.2026 за 14 дней). Единственное АВТОМАТИЧЕСКОЕ
+ * предложение адреса в магните стояло за концом партии: эффект на `over`. За те
+ * же 14 дней `game_end` равен нулю — значит предложение увидел ноль человек, и
+ * `waitlist_submit` тоже ноль, при 42 живых заходах на /cyberchess. То есть сбор
+ * адресов на магните был заперт за условием, которого никто не достигает.
+ *
+ * Задача дня — ровно то, чем магнит зовёт: тридцать секунд и одна позиция. Её
+ * зачтённое сервером решение и есть достижение, в момент которого уместно
+ * спросить адрес.
+ *
+ * Возвращает ярлык повода (он же попадёт в `source` подписки, чтобы в воронке
+ * было видно, какой путь приносит адреса) либо null.
+ *
+ * Чистая функция и экспортируется намеренно: внутри страницы на 16 тысяч строк
+ * это условие вызовами с известным ответом не проверить, а проверять надо —
+ * прошлое условие молча не срабатывало месяц.
+ */
+export function povodPredlozhitAdres(
+  { партияОкончена, задачаДняЗачтена }: { партияОкончена: boolean; задачаДняЗачтена: boolean },
+  хранилище: Pick<Storage, "getItem"> | undefined = typeof localStorage === "undefined" ? undefined : localStorage,
+): "daily-solved" | "game-over" | null {
+  // Второй раз не предлагаем. Нечитаемое хранилище считается «не предлагали»
+  // (см. разбор у `уженеПредлагать`: падать надо в сторону работы).
+  if (уженеПредлагать(хранилище)) return null;
+  // Задача дня впереди партии: она происходит раньше и чаще, а предложить надо
+  // один раз. Если однажды случится и то и другое — поводом будет задача.
+  if (задачаДняЗачтена) return "daily-solved";
+  if (партияОкончена) return "game-over";
+  return null;
+}
+
+/**
+ * Что отправлять серверу как решение задачи дня.
+ *
+ * Отдельной экспортируемой функцией, потому что внутри страницы на 16 тысяч строк
+ * этот выбор вызовами с известным ответом не проверить, а он уже стоил нам
+ * молчаливого 400 на каждом решении (разбор — у otpravitDaily).
+ *
+ * Правило: отправляем каноническое решение (с ходом соперника). Если его нет —
+ * отправляем показанное, но это худший случай: сервер, скорее всего, откажет, и
+ * отказ человек увидит. Молча не отправлять нельзя — тогда решивший человек не
+ * попадёт в таблицу и не узнает почему.
+ */
+/**
+ * Два числа о длине партии, каждое со своей единицей.
+ *
+ * Отдельной экспортируемой функцией, потому что проверять надо именно СВЯЗЬ между
+ * ними, а внутри эффекта на странице в 16 тысяч строк вызовами с известным ответом
+ * её не проверишь. Связь неочевидна и уже вводила в заблуждение: при ОДНОМ
+ * полуходе `moves` равен нулю, то есть такая партия неотличима от партии, где не
+ * сделано ни одного хода (замер 08.10 на живом проде: сдача до первого хода даёт
+ * `game_end`, на экране «Вы сдались, белые, партия ещё не начата»).
+ *
+ * `moves` — пары ходов, в том виде, в каком поле существует с первого дня события;
+ * его смысл менять нельзя, иначе уже записанные события переопределяются задним
+ * числом. `plies` — полуходы, по ним воронка и ставит порог «партия или не партия».
+ *
+ * Оба — ЧИСЛА. Строка `"1"` у окна 98 не зачтётся ходом и уедет в отдельный
+ * счётчик, поэтому тип здесь проверяется отдельным утверждением.
+ */
+/**
+ * Что делает выбор в приветственном окне.
+ *
+ * 🔴 ПОВОД 11.10.2026. Плитка «♟ Играть» обещает «Партия против ИИ 800–2400 —
+ * 5 секунд до старта», а открывала ЭКРАН НАСТРОЙКИ: замер окна user-37 на проде
+ * (пустое хранилище, чтение через 1, 3, 6 и 10 с) каждый раз давал одно и то же —
+ * партии нет, на доске «Нажмите доску», рядом панель настройки. Поломки в коде не
+ * было; было расхождение обещания с устройством, а это для первого экрана магнита
+ * то же самое: человек нажал «Играть» и не играет.
+ *
+ * Решение (оркестратор, 11.10): обещание ИСПОЛНЯЕМ — плитка сразу начинает партию
+ * на умолчаниях, меньше шагов до первого хода. Экран настроек остаётся достижимым:
+ * кнопка «Новая партия» в полосе под доской открывает именно его.
+ *
+ * Отдельной чистой функцией, потому что соответствие «что обещано → что произошло»
+ * иначе проверяется только глазами, а глаза смотрят раз.
+ */
+/**
+ * Показывать ли строку «оставьте адрес» под доской.
+ *
+ * 🔴 ПОВОД 11.10.2026, числа окна воронки за 14 дней по 585 сессиям: `доиграли` 3
+ * (все наши), `задача дня решена` 2 (оба наши), а `попробовали` у ЖИВЫХ — 12.
+ * То есть первый ход — единственный рубеж магнита, до которого живые доходят, а
+ * оба прежних повода предложить адрес (конец партии, решённая задача дня) для
+ * живого человека недостижимы. Прежние поводы остаются, этот добавляется.
+ *
+ * Не модальным окном: прерывать начатую партию нельзя — мы и так теряем людей
+ * внутри неё.
+ */
+/**
+ * Сообщить, что задача РЕШЕНА.
+ *
+ * 🔴 ПОВОД 11.10.2026 (записка окна 91): события «задача решена» не было вовсе, и
+ * на вопрос «решил ли хоть один зритель ролика ту задачу, ради которой пришёл»
+ * ответить было нечем — ссылка `?puzzle=<id>` ведёт на конкретную позицию, а
+ * измерялось только её ОТКРЫТИЕ.
+ *
+ * Зовётся из ОБОИХ мест признания решения: их в модуле два (обычный разбор и
+ * путь с таймером), и событие в одном из них дало бы счётчик, слепой наполовину.
+ * Сторож `puzzleSolvedIzObeihTochek` держит это числом, а не памятью.
+ */
+/**
+ * Уровень ИИ, который достаётся гостю без настройки, — индекс в ALS.
+ *
+ * Вынесен константой, чтобы сторож проверял ЧИСЛО, а не память: «первая партия
+ * должна быть выигрываемой» иначе тихо откатится при любой правке списка.
+ */
+export const УРОВЕНЬ_ИИ_ПО_УМОЛЧАНИЮ = 1; // Casual / «Любитель», elo 800
+
+export function soobschitORescheniiZadachi(
+  pz: { id?: string; r?: number; theme?: string } | null | undefined,
+  этоЗадачаДня: boolean,
+): void {
+  track({ type: "puzzle_solved", source: "cyberchess/board",
+    meta: { app: "cyberchess", id: String(pz?.id ?? "нет id"), rating: Number(pz?.r ?? 0),
+      theme: String(pz?.theme ?? ""), daily: этоЗадачаДня } });
+}
+
+export function nuzhnoLiPokazatStrokuAdresa(
+  { партияИдёт, завершена, полуходов, ужеПоказывали, ужеПредлагали }:
+  { партияИдёт: boolean; завершена: boolean; полуходов: number; ужеПоказывали: boolean; ужеПредлагали: boolean },
+): boolean {
+  if (ужеПоказывали) return false;   // один раз за сессию
+  if (ужеПредлагали) return false;   // человек уже видел предложение или подписался
+  if (!партияИдёт || завершена) return false;
+  return полуходов >= 1;             // ровно после ПЕРВОГО хода
+}
+
+/**
+ * Сообщать ли об уходе из незавершённой партии.
+ *
+ * Повод: 10 живых с YouTube начали партию за 7 дней и ноль доиграли — люди
+ * теряются ВНУТРИ партии, а где именно, спросить было нечем. Событие шлётся на
+ * pagehide/visibilitychange и несёт число полуходов и уровень ИИ: через неделю
+ * станет видно, на каком ходу уходят и не тяжёл ли соперник.
+ */
+export function nuzhnoLiSoobschitOUhode(
+  { партияИдёт, завершена, былХод, ужеСообщили }:
+  { партияИдёт: boolean; завершена: boolean; былХод: boolean; ужеСообщили: boolean },
+): boolean {
+  if (ужеСообщили) return false;
+  if (!партияИдёт || завершена) return false;
+  return былХод;                     // партия без единого хода — не уход, а передумал
+}
+
+export function deystvieVyboraOnbordinga(intent: "play" | "learn" | "puzzles"):
+  { tab: "play" | "coach" | "puzzles"; setup: boolean; startGame: boolean } {
+  if (intent === "play") return { tab: "play", setup: false, startGame: true };
+  if (intent === "learn") return { tab: "coach", setup: false, startGame: false };
+  return { tab: "puzzles", setup: false, startGame: false };
+}
+
+export function chislaPartii(hist: readonly unknown[]): { moves: number; plies: number } {
+  const полуходов = hist.length;
+  return { moves: Math.floor(полуходов / 2), plies: полуходов };
+}
+
+export function kanonicheskoeReshenie(srv:{sol:string[];solRaw?:string[]}):string[]{
+  return (srv.solRaw&&srv.solRaw.length)?srv.solRaw:srv.sol;
+}
+
 export default function CyberChessPage(){
   const{showToast}=useToast();
   // Workspace preset (Focus / Standard / Stream / Study / Coach), keys 1..5.
@@ -1346,7 +1560,19 @@ export default function CyberChessPage(){
   useEffect(()=>{selRef.current=sel},[sel]);
   useEffect(()=>{vmRef.current=vm},[vm]);
   const[pmLim,sPmLim]=useState(30);
-  const[aiI,sAiI]=useState(2);
+  /*
+   * 🔴 Уровень ИИ по умолчанию — «Любитель» (800), а не «Клубный» (1200).
+   *
+   * Замер 11.10.2026: рейтинг самого игрока по умолчанию — 800 (`rat` ниже), а
+   * соперник по умолчанию стоял 1200, то есть новичка сажали играть против
+   * заведомо более сильного. Контроль времени по умолчанию 5+0 — блиц. Рядом
+   * число окна воронки: за 7 дней 10 живых с YouTube начали партию и НОЛЬ
+   * доиграли.
+   *
+   * Плитка приветствия обещает «против ИИ 800–2400» — 800 это её нижняя граница,
+   * то есть обещание не нарушено. Выбрать сильнее можно в настройках партии.
+   */
+  const[aiI,sAiI]=useState(УРОВЕНЬ_ИИ_ПО_УМОЛЧАНИЮ);
   const[pCol,sPCol]=useState<ChessColor>("w");
   const[tcI,sTcI]=useState(9); // 5+0 default
   const[customMin,sCustomMin]=useState(5);
@@ -1933,6 +2159,16 @@ export default function CyberChessPage(){
   // уже получена, и всегда доступно из меню «Ещё». Метка cyberchess-app попадает в рассылку
   // запуска: matchesModule («равна cyberchess или начинается с cyberchess-»).
   const[showWaitlist,sShowWaitlist]=useState(false);
+  /* Строка «оставьте адрес» под доской после ПЕРВОГО хода живой партии.
+     Повод и правило — у nuzhnoLiPokazatStrokuAdresa. Показ один раз за сессию:
+     ref переживает перерисовки, но не перезагрузку, и это намеренно — человеку,
+     закрывшему строку, она не возвращается в этой же сессии. */
+  const[strokaAdresa,sStrokaAdresa]=useState(false);
+  const strokaAdresaPokazanaRef=useRef(false);
+  /* Ярлык повода уезжает в `source` подписки: по нему в воронке видно, какой путь
+     приносит адреса. До 08.10.2026 повод был один и источник фиксированный
+     («cyberchess-app»), поэтому различить было нечего. */
+  const[поводПодписки,sПоводПодписки]=useState<"daily-solved"|"game-over">("game-over");
   const предлагалиПодпискуRef=useRef(false);
   useEffect(()=>{
     if(!over||предлагалиПодпискуRef.current)return;
@@ -1946,8 +2182,8 @@ export default function CyberChessPage(){
     // Отметка нужна ровно для одного: не предлагать второй раз. Не сумели
     // её прочитать — предлагаем; худшее последствие — предложить дважды,
     // а не потерять адрес совсем. Падать надо в сторону работы.
-    if (уженеПредлагать()) return;
-    const t=setTimeout(()=>{sShowWaitlist(true);try{localStorage.setItem("aevion_chess_waitlist_seen","1")}catch{}},2200);
+    if (povodPredlozhitAdres({партияОкончена:true,задачаДняЗачтена:false}) !== "game-over") return;
+    const t=setTimeout(()=>{sПоводПодписки("game-over");sShowWaitlist(true);try{localStorage.setItem("aevion_chess_waitlist_seen","1")}catch{}},2200);
     return()=>clearTimeout(t);
   },[over]);
   const[showClockDrill,sShowClockDrill]=useState(false);
@@ -2127,7 +2363,10 @@ export default function CyberChessPage(){
   // таблица лидеров. Раньше модуль считал свою, из загруженного набора:
   // человек решал одну задачу, а в таблице участвовала другая (28.08.2026,
   // сервер отдавал li_0m2HH из банка 502 584, телефон выбирал из 400).
-  type SrvDaily={day:string;id:string;fen:string;sol:string[];rating:number;theme:string};
+  /* solRaw — решение РОВНО в том виде, в каком его знает сервер, вместе с первым
+     ходом соперника. Нужно при отправке: /solve требует полного совпадения,
+     включая длину. Разбор — у otpravitDaily ниже. */
+  type SrvDaily={day:string;id:string;fen:string;sol:string[];solRaw:string[];rating:number;theme:string};
   // Метка канала из адреса: человек приходит на /cyberchess?c=ig из рекламы, и
   // ссылка на страницу запуска обязана её донести. Иначе подписка пометится
   // просто «cyberchess», и на вопрос «какой ролик привёл» ответа не будет —
@@ -3068,6 +3307,7 @@ export default function CyberChessPage(){
         if(p&&typeof p.fen==="string"&&Array.isArray(p.sol)){
           const npd=normalizePuzzle({fen:String(p.fen),sol:(p.sol as string[])||[],name:"",r:0,theme:""});
           sSrvDaily({day:String(d.day||""),id:String(p.id||""),fen:npd.fen,sol:npd.sol,
+                     solRaw:((p.sol as string[])||[]).map(String),
                      rating:Number(p.rating)||0,theme:String(p.theme||"")});
           sSrvDailyFailed(false);
         }else{sSrvDailyFailed(true)}
@@ -3083,12 +3323,32 @@ export default function CyberChessPage(){
   // Отправить решение задачи дня на сервер. Без userId сервер считает игрока
   // анонимом и в таблицу НЕ заносит — проверено на странице /cyberchess/daily,
   // берём оттуда же личность, а не заводим четвёртую.
-  const otpravitDaily=useCallback((srv:{day:string;sol:string[]})=>{
+  /*
+   * 🔴 На сервер уходит КАНОНИЧЕСКОЕ решение (solRaw), а не показанное игроку.
+   *
+   * Замер 08.10.2026 на живом проде, перехваченное тело запроса: ручка задачи дня
+   * отдала решение из шести ходов ["a5a6","e2f2","h2g1","f2g2","g1f1","e4g3"], а
+   * страница отправила пять — без первого хода соперника a5a6, — и сервер ответил
+   * 400. Ходы при этом ПРИМЕНЯЛИСЬ (клетка-источник пустела, цель занималась,
+   * занятых клеток 12 — ровно столько в FEN). То есть человек решал задачу
+   * правильно, а мы отвечали ему «решение не попало в таблицу лидеров».
+   *
+   * Причина: в состояние кладётся нормализованное решение (npd.sol), у которого
+   * первого хода соперника нет по устройству normalizePuzzle, а /solve требует
+   * полного совпадения с каноническим, включая ДЛИНУ. На отдельной странице
+   * /cyberchess/daily это уже учтено — там для отправки держат solRaw и рядом
+   * стоит предупреждение ровно про этот случай. На главной доске не учитывалось.
+   *
+   * Последствие было не только в таблице: daily_solved не уходил никогда с этого
+   * пути, а предложение адреса после решённой задачи дня висит на r.ok этого
+   * запроса — то есть адрес не предлагали никому.
+   */
+  const otpravitDaily=useCallback((srv:{day:string;sol:string[];solRaw?:string[]})=>{
     (async()=>{
       try{
         const r=await fetch("/api-backend/api/cyberchess-daily/solve",{
           method:"POST",headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({day:srv.day,moves:srv.sol,timeMs:0,hintsUsed:0,
+          body:JSON.stringify({day:srv.day,moves:kanonicheskoeReshenie(srv),timeMs:0,hintsUsed:0,
             userId:tournamentUserId(),name:tournamentDisplayName()||undefined}),
         });
         // ОТКАЗ СЕРВЕРА (400 wrong_day после UTC-полуночи на открытой вкладке, 429,
@@ -3104,6 +3364,15 @@ export default function CyberChessPage(){
           // daily_open, который шлёт плитка целей. Внутри ветки r.ok намеренно:
           // считаем то, что признал СЕРВЕР, иначе число разойдётся с таблицей.
           track({type:"daily_solved",source:"cyberchess/board",meta:{surface:"board",day:srv.day}});
+          /* Адрес спрашиваем здесь, а не только после партии: см. разбор у
+             povodPredlozhitAdres — за 14 дней конца партии не достиг никто, и
+             предложение адреса увидел ноль человек. Внутри ветки r.ok намеренно:
+             спрашиваем после того, что сервер ПРИЗНАЛ решением, иначе предложение
+             прилетит к человеку, которому только что сказали «не засчитано». */
+          if(povodPredlozhitAdres({партияОкончена:false,задачаДняЗачтена:true})==="daily-solved"){
+            предлагалиПодпискуRef.current=true;
+            setTimeout(()=>{sПоводПодписки("daily-solved");sShowWaitlist(true);try{localStorage.setItem("aevion_chess_waitlist_seen","1")}catch{}},1400);
+          }
         }
       }catch{
         // Награду человек уже получил; молчать про недоставленное решение
@@ -3735,6 +4004,7 @@ export default function CyberChessPage(){
                 }
                 const reward=Math.max(2,Math.round((pzCurrent.r||800)/200));
                 addChessy(reward,"задача решена");
+                soobschitORescheniiZadachi(pzCurrent,этоЗадачаДня);
                 if(pzTimerIntervalRef.current){clearInterval(pzTimerIntervalRef.current);pzTimerIntervalRef.current=null;}
                 {const elapsed=Math.floor((Date.now()-pzTimerRef.current)/1000);const tb=elapsed<10?20:elapsed<30?10:5;addChessy(tb,`⏱ скорость ${elapsed}с`);sPzSessionChessy(c=>c+reward+tb);}
                 bumpDaily("puzzle");
@@ -3775,6 +4045,7 @@ export default function CyberChessPage(){
           }
           const reward=Math.max(2,Math.round((pzCurrent.r||800)/200));
           addChessy(reward,"задача решена");
+          soobschitORescheniiZadachi(pzCurrent,этоЗадачаДня);
           if(pzTimerIntervalRef.current){clearInterval(pzTimerIntervalRef.current);pzTimerIntervalRef.current=null;}
           {const elapsed=Math.floor((Date.now()-pzTimerRef.current)/1000);const tb=elapsed<10?20:elapsed<30?10:5;addChessy(tb,`⏱ скорость ${elapsed}с`);sPzSessionChessy(c=>c+reward+tb);}
           bumpDaily("puzzle");
@@ -4030,6 +4301,36 @@ export default function CyberChessPage(){
      отправителя: доля "unknown" в by-type и есть мера того, насколько
      приметам можно верить. Молча записывать ничью вместо неузнанного нельзя. */
   const otpravlenKonetsRef=useRef<string|null>(null);
+  const soobschilUhodRef=useRef(false);
+
+  /* Показ строки адреса: решение в чистой функции, здесь только показ и счётчик.
+     Событие показа нужно как ЗНАМЕНАТЕЛЬ: без него «ноль подписок» не отличить
+     от «ноль показов». */
+  useEffect(()=>{
+    if(!nuzhnoLiPokazatStrokuAdresa({партияИдёт:on,завершена:!!over,полуходов:hist.length,
+      ужеПоказывали:strokaAdresaPokazanaRef.current,ужеПредлагали:уженеПредлагать()}))return;
+    strokaAdresaPokazanaRef.current=true;
+    sStrokaAdresa(true);
+    track({type:"waitlist_offer_shown",source:"cyberchess/board",meta:{surface:"first-move",plies:hist.length}});
+  },[on,over,hist.length]);
+
+  /* Уход из незавершённой партии. pagehide — основной случай (закрыли вкладку),
+     visibilitychange — ушли в другое приложение на телефоне. track() шлёт
+     sendBeacon, он переживает выгрузку страницы; обычный fetch здесь не доедет. */
+  useEffect(()=>{
+    const соoбщить=()=>{
+      if(!nuzhnoLiSoobschitOUhode({партияИдёт:on,завершена:!!over,былХод:hist.length>=1,
+        ужеСообщили:soobschilUhodRef.current}))return;
+      soobschilUhodRef.current=true;
+      track({type:"game_abandon",source:"cyberchess/board",
+        meta:{app:"cyberchess",...chislaPartii(hist),aiLevel:lv.name,aiElo:lv.elo,
+          mode:hotseat?"hotseat":(p2pMode?"p2p":"ai")}});
+    };
+    const наСкрытие=()=>{if(document.visibilityState==="hidden")соoбщить()};
+    window.addEventListener("pagehide",соoбщить);
+    document.addEventListener("visibilitychange",наСкрытие);
+    return()=>{window.removeEventListener("pagehide",соoбщить);document.removeEventListener("visibilitychange",наСкрытие)};
+  },[on,over,hist,lv,hotseat,p2pMode]);
   useEffect(()=>{
     // Решение вынесено в resheniePoKontsuPartii и проверяется вызовами с
     // известным ответом (ishodPartii.test.ts). Здесь остаётся только отправка:
@@ -4042,7 +4343,22 @@ export default function CyberChessPage(){
     otpravlenKonetsRef.current=reshenie.otpechatok;
     track({type:"game_end",
       meta:{app:"cyberchess",outcome:reshenie.outcome,
-        moves:Math.floor(hist.length/2),
+        /*
+         * ДВА числа, и у каждого своя единица — иначе порог «партия или не
+         * партия» считается не тем, чем кажется.
+         *
+         * `moves` — ПАРЫ ходов (полные ходы), как было с первого дня события;
+         * трогать его нельзя, иначе смысл уже записанных событий меняется задним
+         * числом, а перемерить их нечем (слово окна 98, 08.10: «plies добавить,
+         * moves не переопределять»).
+         *
+         * `plies` — ПОЛУХОДЫ, то есть «сделан ли хоть один ход вообще». Повод:
+         * замер 08.10 на живом проде — сдача ДО первого хода даёт game_end (на
+         * экране буквально «Вы сдались, белые, партия ещё не начата»), и по
+         * `moves` такая партия неотличима от партии в один полуход: у обеих ноль.
+         * Порог воронки у окна 98 встанет на `plies >= 1`.
+         */
+        ...chislaPartii(hist),
         mode:hotseat?"hotseat":(p2pMode?"p2p":"ai")}});
     // hist в зависимостях намеренно: число ходов читается из состояния, а
     // лишних отправок это не даёт — повторный заход отсекает отпечаток выше.
@@ -8885,6 +9201,24 @@ export default function CyberChessPage(){
             </div>;
           })()}
 
+          {/* Строка адреса сразу под доской — единственный рубеж, до которого живые
+              доходят (первый ход). Не модальное окно: прерывать партию нельзя.
+              ⚠️ Она сдвигает полосу «Сдаться · Ничья · Отменить · Подсказка» вниз;
+              приёмка меряет в КАДРЕ и строку, и эту полосу на 390/540/768/1024. */}
+          {strokaAdresa&&!over&&<div style={{marginTop:SPACE[2],padding:SPACE[2],borderRadius:RADIUS.md,
+            border:`1px solid ${CC.border}`,background:"rgba(5,150,105,0.06)",position:"relative"}}>
+            <button type="button" aria-label="Закрыть предложение" onClick={()=>sStrokaAdresa(false)}
+              style={{position:"absolute",top:4,right:6,background:"transparent",border:"none",
+                color:CC.textDim,fontSize:16,lineHeight:1,cursor:"pointer",padding:4}}>×</button>
+            <WaitlistCapture
+              source="cyberchess-first-move"
+              tone="light"
+              title="Задача дня — на почту"
+              description=""
+              buttonLabel="Получать"
+            />
+          </div>}
+
           {/* Controls — under-board strip. Game-essentials only. Heatmap/Whisper/Share/History live in the
               right-sidebar Tools card to reduce visual clutter under the board. */}
           <div style={{display:"flex",gap:8,marginTop:SPACE[2],...podDoskoyRow}}>
@@ -13148,6 +13482,28 @@ ${question.trim()}`;
     {/* First-time onboarding — 3-step color/AI/time choice (runs BEFORE the tour) */}
     {showOnboarding&&<OnboardingOverlay
       mode={themeMode}
+      /*
+       * Вход в задачу дня ПРЯМО из приветственного окна.
+       *
+       * Замер 08.10.2026 на проде за 14 дней: 42 живых входа на /cyberchess,
+       * «внимание» 6, задачу дня открыл НОЛЬ, партию не закончил никто
+       * (daily_open 0, game_end 0, waitlist_submit 0 при page_view 3042).
+       * Отправка событий при этом исправна — проверено проходом пути человека:
+       * daily_open ушёл со страницы и на сервере виден (всего=1, наши=1).
+       * Мешало другое: до кнопки «☀ Задача дня» надо сперва убрать это окно, а
+       * мой кликер не смог нажать её за 8 секунд, пока не нажал «Пропустить».
+       *
+       * Передаём обработчик ТОЛЬКО когда задача дня готова. Иначе
+       * loadDailyPuzzle закроет окно и скажет «ещё грузится» — человек окажется
+       * на пустой доске, а это хуже отсутствия кнопки (правило «отказ
+       * показывается отказом»).
+       */
+      onDaily={(srvDaily&&!srvDailyFailed)?()=>{
+        markOnboardingDone();
+        sShowOnboarding(false);
+        firstRunRef.current=false;
+        loadDailyPuzzle("onboarding");
+      }:undefined}
       onComplete={(choice:OnboardingChoice)=>{
         try{localStorage.setItem("aevion_onboarding_choice_v1",JSON.stringify(choice))}catch{}
         markOnboardingDone();
@@ -13155,9 +13511,11 @@ ${question.trim()}`;
         // Единый онбординг: сразу в выбранный режим. Больше НЕ стопка (welcome-модалка
         // и 4-слайдовый тур убраны из первого визита — тур доступен в меню помощи).
         const wasFirst=firstRunRef.current;firstRunRef.current=false;
-        if(choice.intent==="play"){sTab("play");sSetup(true);}
-        else if(choice.intent==="learn"){sTab("coach");sSetup(false);}
-        else if(choice.intent==="puzzles"){sTab("puzzles");sSetup(false);}
+        const д=deystvieVyboraOnbordinga(choice.intent);
+        sTab(д.tab);sSetup(д.setup);
+        // Пауза перед стартом — как у остальных мест запуска партии (там же 50 мс):
+        // newG читает состояние, которое ставится этими же сеттерами.
+        if(д.startGame)setTimeout(()=>{sHotseat(false);sRivalMode(false);newG()},50);
         /* Всплывашки не показываем: контейнер общий, он прижат к низу экрана и
            накрывает нижнюю навигацию. Замер 01.09.2026 на 390px: пять кнопок
            из шести («Играть», «Задачи», «Анализ», «Коуч», «Профиль») были
@@ -14452,7 +14810,7 @@ ${question.trim()}`;
     {/* Chessy Explainer */}
     <Modal open={showWaitlist} onClose={()=>sShowWaitlist(false)} size="md" title={<span style={{display:"inline-flex",alignItems:"center",gap:8}}>✉ Написать вам о запуске</span>}>
       <WaitlistCapture
-        source="cyberchess-app"
+        source={"cyberchess-"+поводПодписки}
         tone="light"
         title={cc.t("wl.launch.title") + (daysUntilLaunch(CHESS_LAUNCH_UTC) >= 0
           ? " — " + new Intl.DateTimeFormat(cc.locale, { day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(CHESS_LAUNCH_UTC))

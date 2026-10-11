@@ -21,7 +21,9 @@
  * live server; the router is a thin wrapper that adds optional bearer auth.
  */
 
-import { Router } from "express";
+import { Router, type Request, type Response, type NextFunction } from "express";
+import crypto from "crypto";
+import { rateLimit } from "../lib/rateLimit";
 import { projects } from "../data/projects";
 
 const PROTOCOL_VERSION = "2025-06-18";
@@ -220,12 +222,53 @@ export async function handleDemoMcp(msg: JsonRpcMessage, ctx: ToolContext): Prom
 
 export const mcpDemoRouter = Router();
 
-mcpDemoRouter.post("/", async (req, res) => {
+/**
+ * Потолок для всех, кто пришёл БЕЗ годного токена — одна общая корзина.
+ *
+ * Предел «на адрес» здесь был бы сторожем, который никогда не срабатывает:
+ * по замеру 28.08.2026 в lib/rateLimit.ts на Railway один посетитель получает
+ * СЕМЬ ключей, а X-Forwarded-For подделывает сам клиент. Поэтому ключ один для
+ * всех (keyFn), и обойти его сменой адреса нельзя. Наши зовущие (agentRuntime
+ * шлёт токен: routes/agentRuntime.ts) в эту корзину не попадают вовсе.
+ */
+const потолокБезТокена = rateLimit({
+  windowMs: 60_000,
+  max: 60,
+  keyPrefix: "mcp-demo-anon",
+  keyFn: () => "все",
+  message: "Too many unauthenticated MCP requests",
+}) as unknown as (req: Request, res: Response, next: NextFunction) => void;
+
+/** Сравнение за постоянное время: токен сравнивается целиком, а не до первого расхождения. */
+function токеныРавны(a: string, b: string): boolean {
+  const x = Buffer.from(a, "utf8");
+  const y = Buffer.from(b, "utf8");
+  if (x.length !== y.length) return false;
+  return crypto.timingSafeEqual(x, y);
+}
+
+/**
+ * Проверка входа стоит на УРОВНЕ РОУТЕРА, а не внутри обработчика POST.
+ *
+ * Внутри POST она охраняла бы ровно один метод: ветка deps/batch-bump-2026-07-27
+ * добавляет этому же адресу обработчик GET, который печатает список инструментов
+ * и сам факт «authentication: none» — и мимо проверки, стоявшей в POST, он прошёл
+ * бы свободно. Здесь закрыт КЛАСС: любой метод этого роутера.
+ */
+mcpDemoRouter.use((req, res, next) => {
   const required = process.env.MCP_DEMO_TOKEN?.trim();
-  if (required) {
-    const got = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-    if (got !== required) return res.status(401).json({ error: "Unauthorized" });
-  }
+  const got = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+  if (required && got && токеныРавны(got, required)) return next();
+  потолокБезТокена(req, res, () => {
+    if (required) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    next();
+  });
+});
+
+mcpDemoRouter.post("/", async (req, res) => {
   const port = process.env.PORT || "4001";
   const ctx: ToolContext = {
     baseUrl: process.env.SELF_BASE_URL || `http://127.0.0.1:${port}`,

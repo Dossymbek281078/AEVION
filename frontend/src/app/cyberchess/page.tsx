@@ -1240,6 +1240,24 @@ export function povodPredlozhitAdres(
  */
 export const УРОВЕНЬ_ИИ_ПО_УМОЛЧАНИЮ = 1; // Casual / «Любитель», elo 800
 
+/**
+ * Границы корзин прогресса партии.
+ *
+ * Разрез окна 85 раскладывает сессии по корзинам 0 / 1–2 / 3–10 / 11–20 / 21–40 /
+ * 41+. Событие шлём РОВНО на границе — пять раз за долгую партию, а не на каждый
+ * ход: сто событий за партию утопили бы ручку и ничего не добавили, потому что
+ * корзина у сессии всё равно одна, последняя достигнутая.
+ *
+ * Зачем это помимо game_abandon: уход ловится через pagehide, а он доезжает не
+ * всегда (вкладку могли убить, устройство уснуть). Пороговое событие остаётся
+ * последним следом того, докуда человек дошёл.
+ */
+export const ГРАНИЦЫ_ПРОГРЕССА = [1, 3, 11, 21, 41] as const;
+
+export function etoGranitsaProgressa(полуходов: number): boolean {
+  return (ГРАНИЦЫ_ПРОГРЕССА as readonly number[]).includes(полуходов);
+}
+
 export function soobschitORescheniiZadachi(
   pz: { id?: string; r?: number; theme?: string } | null | undefined,
   этоЗадачаДня: boolean,
@@ -4302,6 +4320,16 @@ export default function CyberChessPage(){
      приметам можно верить. Молча записывать ничью вместо неузнанного нельзя. */
   const otpravlenKonetsRef=useRef<string|null>(null);
   const soobschilUhodRef=useRef(false);
+
+  /* Прогресс партии по границам корзин — чтобы знать, ДОКУДА дошёл человек,
+     даже если событие ухода не доедет. */
+  useEffect(()=>{
+    if(!on||over)return;
+    if(!etoGranitsaProgressa(hist.length))return;
+    track({type:"game_progress",source:"cyberchess/board",
+      meta:{app:"cyberchess",...chislaPartii(hist),aiLevel:lv.name,aiElo:lv.elo,
+        mode:hotseat?"hotseat":(p2pMode?"p2p":"ai")}});
+  },[hist.length,on,over]);
 
   /* Показ строки адреса: решение в чистой функции, здесь только показ и счётчик.
      Событие показа нужно как ЗНАМЕНАТЕЛЬ: без него «ноль подписок» не отличить

@@ -2498,6 +2498,13 @@ eventsRouter.get("/funnel", (req, res) => {
   const доигралиПоДням: Record<string, Set<string>> = Object.create(null);
   const нажалиПоДням: Record<string, Set<string>> = Object.create(null);
   const задачаПоДням: Record<string, Set<string>> = Object.create(null);
+  /*
+   * Просмотры страницы цен ПО СЕССИЯМ внутри дня. Единица здесь не сессия, а
+   * ПРОСМОТР: `pricing` в этом разрезе считает события, и «наши» обязаны быть на
+   * той же оси, иначе вычитание смешает единицы — ровно тот класс, из-за
+   * которого сумма по каналам (688) не сходилась с итогом (675).
+   */
+  const ценыПоДням: Record<string, Map<string, number>> = Object.create(null);
   let ботов = 0;
   let ботовПоВебдрайверу = 0;
   let ботовПоСтрокеБраузера = 0;
@@ -2591,6 +2598,7 @@ eventsRouter.get("/funnel", (req, res) => {
     if (!доигралиПоДням[день]) доигралиПоДням[день] = new Set<string>();
     if (!нажалиПоДням[день]) нажалиПоДням[день] = new Set<string>();
     if (!задачаПоДням[день]) задачаПоДням[день] = new Set<string>();
+    if (!ценыПоДням[день]) ценыПоДням[день] = new Map<string, number>();
     const ст = поДням[день];
 
     if (ev.type === "page_view") {
@@ -2621,6 +2629,11 @@ eventsRouter.get("/funnel", (req, res) => {
       if (typeof ev.path === "string" && ev.path.includes("/pricing")) {
         ст.pricing += 1;
         чс.pricing += 1;
+        // Кому принадлежит просмотр, решается ПОСЛЕ прохода (множества наших
+        // собраны по всему файлу), поэтому здесь только копим по сессии.
+        // Просмотр без sid не приписывается никому: приписать его нам значило
+        // бы занизить живых, приписать людям — завысить.
+        if (ev.sid) ценыПоДням[день].set(ev.sid, (ценыПоДням[день].get(ev.sid) ?? 0) + 1);
       }
     } else if (ev.type === "checkout_start") {
       ст.checkoutStart += 1;
@@ -2679,6 +2692,18 @@ eventsRouter.get("/funnel", (req, res) => {
    * мы намерили сами, а это ровно то, из-за чего воронка однажды была на 91 %
    * нашей автоматикой и выглядела живой.
    */
+  /*
+   * Сколько ПРОСМОТРОВ из карты «сессия → число просмотров» принадлежит нам.
+   * Отдельная функция рядом с `наши`, потому что ось другая: там считаются
+   * люди, здесь — просмотры, и путать их нельзя даже в одной строке отчёта.
+   */
+  const нашиПросмотры = (карта: Map<string, number> | undefined): number => {
+    if (!карта) return 0;
+    let счёт = 0;
+    for (const [sid, сколько] of карта) if (нашиСессии.has(sid) || пробыОкон.has(sid)) счёт += сколько;
+    return счёт;
+  };
+
   const наши = (множество: Set<string> | undefined): number => {
     if (!множество) return 0;
     let счёт = 0;
@@ -2691,7 +2716,11 @@ eventsRouter.get("/funnel", (req, res) => {
     .map((д) => ({
       day: д,
       visits: поДням[д].visits + людиПоДням[д].size,
+      // Наши — на ТОЙ ЖЕ оси, что и число слева: визиты считаются сессиями,
+      // просмотры цен — просмотрами. Визит без sid нашим быть не может.
+      visitsOurs: наши(людиПоДням[д]),
       pricing: поДням[д].pricing,
+      pricingOurs: нашиПросмотры(ценыПоДням[д]),
       checkoutStart: поДням[д].checkoutStart,
       thankYouOpened: поДням[д].thankYouOpened,
       paid: измерялосьЛи(д) ? поДням[д].paid : null,
@@ -2710,12 +2739,14 @@ eventsRouter.get("/funnel", (req, res) => {
   const итог = byDay.reduce(
     (a, b) => ({
       visits: a.visits + b.visits,
+      visitsOurs: a.visitsOurs + b.visitsOurs,
       pricing: a.pricing + b.pricing,
+      pricingOurs: a.pricingOurs + b.pricingOurs,
       checkoutStart: a.checkoutStart + b.checkoutStart,
       thankYouOpened: a.thankYouOpened + b.thankYouOpened,
       checkoutStartOurs: a.checkoutStartOurs + b.checkoutStartOurs,
     }),
-    { visits: 0, pricing: 0, checkoutStart: 0, thankYouOpened: 0, checkoutStartOurs: 0 },
+    { visits: 0, visitsOurs: 0, pricing: 0, pricingOurs: 0, checkoutStart: 0, thankYouOpened: 0, checkoutStartOurs: 0 },
   );
 
   // Сумма по измеренным дням. Складывать вперемешку с null нельзя: null + число
@@ -2801,8 +2832,12 @@ eventsRouter.get("/funnel", (req, res) => {
       "уникальные сессии за всё окно; ступень «попробовали» (tried) считается " +
       "только здесь — у суточного итога такой оси нет",
     totalUnits:
-      "визиты — сумма суточных уникальных сессий; доЦен — просмотры страницы цен " +
-      "(не сессии); у сводки дня /day единица иная и названа там же",
+      "визиты — сумма суточных уникальных сессий, visitsOurs — сколько из них " +
+      "наши (та же ось); доЦен (pricing) — ПРОСМОТРЫ страницы цен, а не сессии, " +
+      "и pricingOurs считается просмотрами же: живое берётся вычитанием ТОЛЬКО " +
+      "внутри одной оси. Суммировать «наших» по каналам нельзя — сессия с двумя " +
+      "метками попадает в два канала, поэтому сумма по каналам больше итога; " +
+      "у сводки дня /day единица иная и названа там же",
     // Доля роботов печатается рядом: без неё «мало людей» читается как провал
     // продукта, тогда как это может быть просто состав трафика.
     eventsSeen: всего,

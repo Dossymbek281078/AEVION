@@ -133,6 +133,30 @@ function unsubBlock(email: string, color = "#64748b", lang: "ru" | "en" = "ru"):
     : `Отписаться: напишите на <a href="mailto:${unsubContact()}" style="color:${color}">${unsubContact()}</a>`;
 }
 
+/**
+ * То же самое для ТЕКСТОВОЙ части письма.
+ *
+ * 🔴 Повод (11.10.2026, нашёл оркестратор): под полем листа ожидания написано
+ * «Отписка одной ссылкой в каждом письме», а ссылка стояла только в HTML и в
+ * заголовке List-Unsubscribe. Кто читает письмо текстом (а это и почтовые
+ * клиенты с выключенным HTML, и часть мобильных), обещание не исполнялось.
+ * Разметки здесь быть не должно: в text/plain тег `<a>` человек увидит как есть.
+ */
+function unsubBlockText(email: string, lang: "ru" | "en" = "ru"): string {
+  const url = unsubscribeUrl(email);
+  if (lang === "en") {
+    return url ? `Unsubscribe: ${url}` : `Unsubscribe: write to ${unsubContact()}`;
+  }
+  return url ? `Отписаться: ${url}` : `Отписаться: напишите на ${unsubContact()}`;
+}
+
+/** Текстовая часть письма вместе со строкой отписки — один способ для всех вариантов. */
+function сТекстовойОтпиской(тело: string, email: string, lang: "ru" | "en" = "ru"): string {
+  return `${тело}
+
+${unsubBlockText(email, lang)}`;
+}
+
 export function buildWaitlistConfirmEmail(email: string, source?: string): ConstitutionEmailPayload {
   // Проверяется ВХОЖДЕНИЕ метки, а не начало строки. С 19.08 источник может
   // быть списком через запятую («cyberchess,constitution»): при повторной
@@ -167,7 +191,10 @@ export function buildWaitlistConfirmEmail(email: string, source?: string): Const
     to: [{ email }],
     subject: "📨 Ты в листе ожидания Constitution Pro",
     htmlContent: html,
-    textContent: `Ты в списке ожидания Constitution Pro. Откроем — сразу письмо с 30% скидкой. Пока: aevion.app/constitution`,
+    textContent: сТекстовойОтпиской(
+      `Ты в списке ожидания Constitution Pro. Откроем — сразу письмо с 30% скидкой. Пока: aevion.app/constitution`,
+      email,
+    ),
     tags: ["constitution", "waitlist-confirm"],
   };
 }
@@ -520,11 +547,14 @@ function buildPlatformWaitlistEmailEn(email: string, source?: string): Constitut
         ? `You are on the list: ${mod.name}`
         : "You are on the AEVION early-access list",
     htmlContent: html,
-    textContent: live
+    textContent: сТекстовойОтпиской(
+      live
       ? `${live.nameEn ?? live.name} is already open. Open: ${live.page}`
       : mod
         ? `You are on the early-access list for ${mod.name}. ${planPhrase(mod.plan, mod.planUtc, false, new Date(), модульОткрыт(mod.prefix), mod.page)} Launch page: ${mod.page}`
         : "You are on the AEVION early-access list. We ship one module at a time.",
+      email, "en",
+    ),
     tags: ["waitlist-confirm", "platform", "en"],
   };
 }
@@ -577,11 +607,14 @@ export function buildPlatformWaitlistEmail(email: string, source?: string): Cons
         ? `Вы в списке раннего доступа: ${mod.name}`
         : "Вы в списке раннего доступа AEVION",
     htmlContent: html,
-    textContent: live
+    textContent: сТекстовойОтпиской(
+      live
       ? `Адрес записан — «${live.name}» уже открыт. ${live.nextStep} Открыть: ${live.page}`
       : mod
         ? `Адрес записан — вы в списке раннего доступа к ${mod.name}. ${planPhrase(mod.plan, mod.planUtc, true, new Date(), модульОткрыт(mod.prefix), mod.page)} Страница: ${mod.page}`
         : `Адрес записан — вы в списке раннего доступа AEVION. Напишем в день запуска следующего модуля. Что уже работает: aevion.app/go`,
+      email,
+    ),
     tags: live ? ["platform", "live-entry-confirm"] : ["platform", "waitlist-confirm"],
   };
 }

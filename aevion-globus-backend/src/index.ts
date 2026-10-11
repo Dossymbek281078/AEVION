@@ -97,7 +97,12 @@ import { psyappDepsRouter } from "./routes/psyappDeps";
 import { lifeboxRouter } from "./routes/lifebox";
 import { createPlanningStubRouter, PLANNING_MODULES } from "./routes/planningStubs";
 import { mountMvpConcepts } from "./routes/mvpConcepts";
-import { qpaynetRouter, startQpaynetRetryWorker } from "./routes/qpaynet";
+import {
+  qpaynetRouter,
+  startQpaynetRetryWorker,
+  приёмДенегПодключён,
+  MAX_WALLETS_PER_OWNER,
+} from "./routes/qpaynet";
 import { qtradeOfflineRouter } from "./routes/qtradeoffline";
 import { apiQuotasRouter } from "./routes/apiQuotas";
 import { apiKeysRouter } from "./routes/apiKeys";
@@ -453,6 +458,11 @@ app.get("/api/health/deep", async (_req, res) => {
         bankDailyTransferCap: Number(process.env.BANK_DAILY_TRANSFER_CAP || 2000),
         corsRestricted: !!process.env.CORS_ALLOWED_ORIGINS,
         metricsTokenSet: !!process.env.METRICS_TOKEN,
+        // Два предела кошельков QPayNet названы ЗДЕСЬ, чтобы их можно было проверить на проде
+        // чтением, а не попыткой зачислить себе деньги или завести пятый кошелёк.
+        // Берём ТОТ ЖЕ источник, что и сами ручки, а не свою копию правила.
+        qpaynetFundingConnected: приёмДенегПодключён(),
+        qpaynetMaxWallets: MAX_WALLETS_PER_OWNER,
       },
     });
   } catch (err) {

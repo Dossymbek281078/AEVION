@@ -1238,6 +1238,24 @@ export function povodPredlozhitAdres(
  * Вынесен константой, чтобы сторож проверял ЧИСЛО, а не память: «первая партия
  * должна быть выигрываемой» иначе тихо откатится при любой правке списка.
  */
+/**
+ * Высоты, измеренные на живом проде 11.10.2026 на 390×844 (два окна независимо).
+ *
+ * `ВЫСОТА_НИЖНЕЙ_ПАНЕЛИ` — `cc-bottom-nav` занимала y 774–844 у меня и 775–844 у
+ * приёмки, то есть ~70. Моя прежняя оценка 72 промахнулась на 2 и была честно
+ * помечена как оценка; теперь это замер.
+ *
+ * `ВЫСОТА_РЯДА_КНОПОК` — ряд «Сдаться · Ничья · Отменить · Подсказка» высотой 44
+ * (замер того же захода: y 872–916).
+ *
+ * Числа нужны, чтобы две прилипшие полосы не наехали друг на друга: строка
+ * адреса висит НАД рядом кнопок, ряд — над панелью.
+ */
+export const ВЫСОТА_НИЖНЕЙ_ПАНЕЛИ = 70;
+export const ВЫСОТА_РЯДА_КНОПОК = 44;
+/** Отступ прилипшей полосы от того, что под ней. */
+export const ЗАЗОР_ПРИЛИПШИХ = 8;
+
 export const УРОВЕНЬ_ИИ_ПО_УМОЛЧАНИЮ = 1; // Casual / «Любитель», elo 800
 
 /**
@@ -1267,14 +1285,62 @@ export function soobschitORescheniiZadachi(
       theme: String(pz?.theme ?? ""), daily: этоЗадачаДня } });
 }
 
+/**
+ * Числа рубежа для события: сколько полуходов и сколько ПОПЫТОК.
+ *
+ * 🔴 Решение оркестратора 11.10.2026 после общего замера: попытку хода считать
+ * наравне с ходом. Повод — в режиме задачи НЕВЕРНАЯ попытка не пишется в `hist`
+ * вовсе, то есть человек, пришедший из ролика и ошибшийся, не попадал ни в
+ * строку адреса, ни в знаменатель `byChessPlies`: в числах он был неотличим от
+ * того, кто вообще не трогал доску. А сегодня 22 живые сессии из 22 на
+ * youtube|/cyberchess пришли именно по `?puzzle=`.
+ *
+ * Разрез воронки кладёт сессию в корзину по `meta.plies`, поэтому сессия, где
+ * была только попытка, отдаёт plies = 1 — иначе она не попадёт в корзины вовсе.
+ * Чтобы это не превратилось в тихую ложь, рядом едут `attempts` и признак
+ * `отПопытки`: по ним видно, что полуход был ПОПЫТКОЙ, а не состоявшимся ходом.
+ */
+/**
+ * Прилеплять ли строку адреса к низу окна.
+ *
+ * 🔴 Правило по МЕСТУ, а не по ширине. Замеры приёмки 11.10.2026 на проде:
+ *  * 390×844 — нижняя панель 70 px, низ строки 916 → не влезла;
+ *  * 1463×724 — обычный ноутбук, панели НЕТ, ширина больше любого «мобильного»
+ *    порога, а кнопка «Получать» всё равно за кадром (её низ 802 при окне 724).
+ * Правило «уже 769 px» второй случай пропускало: не хватало ВЫСОТЫ, а не ширины.
+ *
+ * Снизу у окна может стоять нижняя панель — на узких экранах она и есть граница
+ * доступного.
+ */
+export function nuzhnoLiPrilepit(
+  { низСтроки, высотаОкна, ширинаОкна }: { низСтроки: number; высотаОкна: number; ширинаОкна: number },
+): boolean {
+  const панель = ширинаОкна < 769 ? ВЫСОТА_НИЖНЕЙ_ПАНЕЛИ : 0;
+  return низСтроки > высотаОкна - панель - ЗАЗОР_ПРИЛИПШИХ;
+}
+
+export function chislaRubezha(полуходов: number, попыток: number):
+  { plies: number; moves: number; attempts: number; отПопытки: boolean } {
+  const отПопытки = полуходов === 0 && попыток > 0;
+  return {
+    plies: отПопытки ? 1 : полуходов,
+    moves: Math.floor(полуходов / 2),
+    attempts: попыток,
+    отПопытки,
+  };
+}
+
 export function nuzhnoLiPokazatStrokuAdresa(
-  { партияИдёт, завершена, полуходов, ужеПоказывали, ужеПредлагали }:
-  { партияИдёт: boolean; завершена: boolean; полуходов: number; ужеПоказывали: boolean; ужеПредлагали: boolean },
+  { партияИдёт, завершена, полуходов, попыток = 0, ужеПоказывали, ужеПредлагали }:
+  { партияИдёт: boolean; завершена: boolean; полуходов: number; попыток?: number;
+    ужеПоказывали: boolean; ужеПредлагали: boolean },
 ): boolean {
   if (ужеПоказывали) return false;   // один раз за сессию
   if (ужеПредлагали) return false;   // человек уже видел предложение или подписался
   if (!партияИдёт || завершена) return false;
-  return полуходов >= 1;             // ровно после ПЕРВОГО хода
+  // ПОПЫТКА считается наравне с ходом: в задаче неверный ход в `hist` не
+  // попадает, а человек уже попробовал — он вовлечён не меньше решившего.
+  return полуходов >= 1 || попыток >= 1;
 }
 
 /**
@@ -2183,6 +2249,17 @@ export default function CyberChessPage(){
      закрывшему строку, она не возвращается в этой же сессии. */
   const[strokaAdresa,sStrokaAdresa]=useState(false);
   const strokaAdresaPokazanaRef=useRef(false);
+  /* Прилипла ли строка адреса к низу окна.
+     🔴 Повод 11.10.2026, замер приёмки на проде: правило «уже 769 px» этот
+     случай ПРОПУСКАЛО. На окне 1463×724 (обычный ноутбук, не телефон) нижней
+     панели нет вовсе, ширина больше порога — а кнопка «Получать» всё равно за
+     кадром (y 755–802 при окне 724), и прокрутить надо 165 px. Человек видит
+     заголовок, вводит адрес и не видит кнопки, которой его отправляют.
+     Значит решает не ширина, а ПОМЕСТИЛАСЬ ЛИ строка: меряем её прямоугольник
+     и прилипаем, если не влезла. Переключение одностороннее — иначе прилипание
+     меняет раскладку, новая раскладка меняет ответ, и возникает мигание. */
+  const[строкаПрилипла,sСтрокаПрилипла]=useState(false);
+  const строкаРef=useRef<HTMLDivElement|null>(null);
   /* Ярлык повода уезжает в `source` подписки: по нему в воронке видно, какой путь
      приносит адреса. До 08.10.2026 повод был один и источник фиксированный
      («cyberchess-app»), поэтому различить было нечего. */
@@ -4325,22 +4402,37 @@ export default function CyberChessPage(){
      даже если событие ухода не доедет. */
   useEffect(()=>{
     if(!on||over)return;
-    if(!etoGranitsaProgressa(hist.length))return;
+    /* Первая попытка — такой же рубеж, как первый ход: иначе ошибившийся не
+       попадёт в корзины вовсе. Дальше считаем по настоящим полуходам. */
+    const рубеж=hist.length>0?hist.length:(pzFailedCount>0?1:0);
+    if(!etoGranitsaProgressa(рубеж))return;
     track({type:"game_progress",source:"cyberchess/board",
-      meta:{app:"cyberchess",...chislaPartii(hist),aiLevel:lv.name,aiElo:lv.elo,
+      meta:{app:"cyberchess",...chislaRubezha(hist.length,pzFailedCount),aiLevel:lv.name,aiElo:lv.elo,
         mode:hotseat?"hotseat":(p2pMode?"p2p":"ai")}});
-  },[hist.length,on,over]);
+  },[hist.length,on,over,pzFailedCount]);
 
   /* Показ строки адреса: решение в чистой функции, здесь только показ и счётчик.
      Событие показа нужно как ЗНАМЕНАТЕЛЬ: без него «ноль подписок» не отличить
      от «ноль показов». */
   useEffect(()=>{
     if(!nuzhnoLiPokazatStrokuAdresa({партияИдёт:on,завершена:!!over,полуходов:hist.length,
+      попыток:pzFailedCount,
       ужеПоказывали:strokaAdresaPokazanaRef.current,ужеПредлагали:уженеПредлагать()}))return;
     strokaAdresaPokazanaRef.current=true;
     sStrokaAdresa(true);
     track({type:"waitlist_offer_shown",source:"cyberchess/board",meta:{surface:"first-move",plies:hist.length}});
-  },[on,over,hist.length]);
+  },[on,over,hist.length,pzFailedCount]);
+
+  /* Поместилась ли строка в кадр. Одностороннее решение: только «в поток ->
+     прилипла», обратно не возвращаем. Считаем от НИЖНЕЙ ГРАНИЦЫ доступного:
+     на узких экранах её задаёт нижняя панель, на широких — край окна. */
+  useEffect(()=>{
+    if(!strokaAdresa||строкаПрилипла)return;
+    const э=строкаРef.current;
+    if(!э)return;
+    if(nuzhnoLiPrilepit({низСтроки:э.getBoundingClientRect().bottom,высотаОкна:vhPx,ширинаОкна:vwPx}))
+      sСтрокаПрилипла(true);
+  },[strokaAdresa,строкаПрилипла,vwPx,vhPx]);
 
   /* Уход из незавершённой партии. pagehide — основной случай (закрыли вкладку),
      visibilitychange — ушли в другое приложение на телефоне. track() шлёт
@@ -4351,7 +4443,7 @@ export default function CyberChessPage(){
         ужеСообщили:soobschilUhodRef.current}))return;
       soobschilUhodRef.current=true;
       track({type:"game_abandon",source:"cyberchess/board",
-        meta:{app:"cyberchess",...chislaPartii(hist),aiLevel:lv.name,aiElo:lv.elo,
+        meta:{app:"cyberchess",...chislaRubezha(hist.length,pzFailedCount),aiLevel:lv.name,aiElo:lv.elo,
           mode:hotseat?"hotseat":(p2pMode?"p2p":"ai")}});
     };
     const наСкрытие=()=>{if(document.visibilityState==="hidden")соoбщить()};
@@ -7660,7 +7752,7 @@ export default function CyberChessPage(){
                форма внутри идёт со светлым тоном; я подставил его по невнимательности
                и вернул, не дожидаясь, пока это заметят на кадре. Но при «висящей»
                строке фон обязан быть НЕПРОЗРАЧНЫМ, иначе сквозь неё видно доску. */
-            border:`1px solid ${CC.border}`,background:vwPx<769?"#eef7f2":"rgba(5,150,105,0.06)",color:CC.text,
+            border:`1px solid ${CC.border}`,background:(vwPx<769||строкаПрилипла)?"#eef7f2":"rgba(5,150,105,0.06)",color:CC.text,
                     fontSize:12,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
                   ◆ Решить задачу <span style={{color:CC.textMute,fontWeight:600,fontSize:11}}>{pzCountLabel}</span>
                 </button>
@@ -9238,7 +9330,7 @@ export default function CyberChessPage(){
               доходят (первый ход). Не модальное окно: прерывать партию нельзя.
               ⚠️ Она сдвигает полосу «Сдаться · Ничья · Отменить · Подсказка» вниз;
               приёмка меряет в КАДРЕ и строку, и эту полосу на 390/540/768/1024. */}
-          {strokaAdresa&&!over&&<div style={{
+          {strokaAdresa&&!over&&<div ref={строкаРef} style={{
             /*
              * 🔴 НА ТЕЛЕФОНЕ строка висит НАД нижней панелью, а не в потоке.
              *
@@ -9259,12 +9351,18 @@ export default function CyberChessPage(){
              * не мерил: высота зависит от содержимого кнопок. Проверяет кадром
              * приёмка; если промах, число правится здесь одной строкой.
              */
-            ...(vwPx<769
-              ? {position:"fixed" as const,left:8,right:8,bottom:"calc(env(safe-area-inset-bottom) + 72px)",zIndex:101}
+            ...((vwPx<769||строкаПрилипла)
+              ? {position:"fixed" as const,left:8,right:8,zIndex:101,
+                 /* Над нижней панелью, а если идёт партия — ещё и над прилипшим
+                    рядом «Сдаться», иначе две полосы наедут друг на друга.
+                    Числа — замеры, см. константы выше. */
+                 bottom:`calc(env(safe-area-inset-bottom) + ${
+                   ВЫСОТА_НИЖНЕЙ_ПАНЕЛИ+ЗАЗОР_ПРИЛИПШИХ
+                   +((on&&!over&&!setup&&tab==="play")?ВЫСОТА_РЯДА_КНОПОК+ЗАЗОР_ПРИЛИПШИХ:0)}px)`}
               : {position:"relative" as const,marginTop:SPACE[2]}),
             padding:SPACE[2],borderRadius:RADIUS.md,
             border:`1px solid ${CC.border}`,background:CC.surface1,
-            boxShadow:vwPx<769?"0 6px 20px rgba(0,0,0,0.18)":undefined}}>
+            boxShadow:(vwPx<769||строкаПрилипла)?"0 6px 20px rgba(0,0,0,0.18)":undefined}}>
             <button type="button" aria-label="Закрыть предложение" onClick={()=>sStrokaAdresa(false)}
               style={{position:"absolute",top:4,right:6,background:"transparent",border:"none",
                 color:CC.textDim,fontSize:16,lineHeight:1,cursor:"pointer",padding:4}}>×</button>
@@ -9481,7 +9579,23 @@ export default function CyberChessPage(){
           </div>
           {/* Ряд «Сдаться · Ничья · Отменить · Подсказка» — только на вкладке партии: на Задачах/Коуче/Анализе
               при паузе партии он сбивал с толку (тестер 20.09.2026, 390: «Сдаться» под доской задачи). */}
-          {on&&!over&&!setup&&tab==="play"&&<div style={{display:"flex",gap:8,marginTop:lowDesktop?4:SPACE[2],...podDoskoyRow}}>
+          {/*
+            🔴 РЯД ЗАВЕРШЕНИЯ ПАРТИИ ПРИЛИПАЕТ НАД НИЖНЕЙ ПАНЕЛЬЮ на узких экранах.
+            Замер 11.10.2026 на проде, 390×844: «Сдаться» стояла на y 872–916 при
+            окне 844 — ниже кадра на 28 px, и это БЕЗ строки адреса (приёмка
+            проверила, закрыв её: было y=866, то есть за кадром и без неё). Между
+            низом доски и рядом 206 px, прокрутка страницы 194 px. Чтобы завершить
+            партию, человеку надо было доскроллить — на действии «сдаться» это
+            прямой путь бросить вкладку вместо завершения.
+            Поднять ряд выше нельзя: 142 px в этой раскладке взять неоткуда, а
+            уменьшать доску ради кнопки — менять главное ради второстепенного.
+            `sticky` оставляет ряд в потоке и приклеивает его, только когда он
+            уехал бы за кадр.
+          */}
+          {on&&!over&&!setup&&tab==="play"&&<div style={{display:"flex",gap:8,marginTop:lowDesktop?4:SPACE[2],
+            ...(vwPx<769?{position:"sticky" as const,bottom:ВЫСОТА_НИЖНЕЙ_ПАНЕЛИ+ЗАЗОР_ПРИЛИПШИХ,zIndex:99,
+              background:CC.bg,paddingTop:4,paddingBottom:4}:{}),
+            ...podDoskoyRow}}>
             <Btn size="md" variant="danger" className="cc-game-btn" onClick={()=>{if(armed!=="resign"){sArmed("resign");return;}sArmed(null);if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{const nr=новыйРейтинг(rat,lv.elo,false);sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>{armed==="resign"?"Точно сдаться? ✓":"🏳 Сдаться"}</Btn>
             <Btn size="md" variant="gold" className="cc-game-btn" onClick={()=>{if(armed!=="draw"){sArmed("draw");return;}sArmed(null);if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("ИИ отклонил ничью","error")}}>{armed==="draw"?"Предложить ничью? ✓":"½ Ничья"}</Btn>
             <Btn size="md" variant="secondary" className="cc-game-btn" icon={<Icon.Undo width={14} height={14}/>} onClick={()=>{

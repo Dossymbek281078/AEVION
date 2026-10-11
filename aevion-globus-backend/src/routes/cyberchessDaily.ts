@@ -667,6 +667,8 @@ let bankTotalCache: { at: number; total: number } | null = null;
 export const ДИАПАЗОН_ЗАДАЧИ_ДНЯ = { мин: 800, макс: 1200 } as const;
 /** Счёт задач В ДИАПАЗОНЕ — отдельно от общего: смещение считается по нему. */
 let poolRangeTotalCache: { at: number; total: number } | null = null;
+/** Из скольких задач выбирали в последний раз: банк или его диапазонная часть. */
+let выбиралиИзПоследний: number | null = null;
 const BANK_TOTAL_TTL_MS = 6 * 60 * 60 * 1000;
 
 
@@ -745,6 +747,12 @@ async function dailyFromBank(day: string, useCache = true): Promise<Puzzle | nul
       );
     }
     const всего = вДиапазоне ? poolRangeTotalCache.total : bankTotalCache.total;
+    /* Из скольких выбирали СЕГОДНЯ — отдельная величина от размера банка.
+       Нашёл приёмка user-37 в тот же день, когда приехал диапазон: в теле ответа
+       уезжал весь банк (502 584), хотя выбор шёл из подмножества. Ровно та
+       путаница, против которой написан комментарий у полей ниже, и она
+       переоткрылась моей же правкой. */
+    выбиралиИзПоследний = всего;
     const offset = dayOffsetHash(day, всего);
     const r = вДиапазоне
       ? await pool.query(
@@ -812,7 +820,10 @@ router.get('/puzzle', async (_req: Request, res: Response) => {
     //   choiceTotal — из скольких выбирали СЕГОДНЯ, каким бы ни был источник.
     bankTotal: fromBank ? bankTotalCache?.total ?? null : null,
     poolSize: fromBank ? null : POOL.length,
-    choiceTotal: fromBank ? bankTotalCache?.total ?? null : POOL.length,
+    // 🔴 11.10.2026: было `bankTotalCache.total` — весь банк, хотя с этого же дня
+    // выбор идёт из диапазона 800–1200. Поле обещает «из скольких выбирали
+    // СЕГОДНЯ», и обещание надо держать, иначе следующий читатель поверит числу.
+    choiceTotal: fromBank ? выбиралиИзПоследний ?? bankTotalCache?.total ?? null : POOL.length,
     // Источник называется ЧЕСТНО. Прежний текст отправлял читателя на
     // /api/cyberchess-puzzles/daily — ручку, которой не существует (проверено
     // 19.08: 404). Обещание, которого нет, хуже отсутствия обещания.

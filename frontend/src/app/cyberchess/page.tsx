@@ -1208,6 +1208,74 @@ export function povodPredlozhitAdres(
  * Отдельной чистой функцией, потому что соответствие «что обещано → что произошло»
  * иначе проверяется только глазами, а глаза смотрят раз.
  */
+/**
+ * Показывать ли строку «оставьте адрес» под доской.
+ *
+ * 🔴 ПОВОД 11.10.2026, числа окна воронки за 14 дней по 585 сессиям: `доиграли` 3
+ * (все наши), `задача дня решена` 2 (оба наши), а `попробовали` у ЖИВЫХ — 12.
+ * То есть первый ход — единственный рубеж магнита, до которого живые доходят, а
+ * оба прежних повода предложить адрес (конец партии, решённая задача дня) для
+ * живого человека недостижимы. Прежние поводы остаются, этот добавляется.
+ *
+ * Не модальным окном: прерывать начатую партию нельзя — мы и так теряем людей
+ * внутри неё.
+ */
+/**
+ * Сообщить, что задача РЕШЕНА.
+ *
+ * 🔴 ПОВОД 11.10.2026 (записка окна 91): события «задача решена» не было вовсе, и
+ * на вопрос «решил ли хоть один зритель ролика ту задачу, ради которой пришёл»
+ * ответить было нечем — ссылка `?puzzle=<id>` ведёт на конкретную позицию, а
+ * измерялось только её ОТКРЫТИЕ.
+ *
+ * Зовётся из ОБОИХ мест признания решения: их в модуле два (обычный разбор и
+ * путь с таймером), и событие в одном из них дало бы счётчик, слепой наполовину.
+ * Сторож `puzzleSolvedIzObeihTochek` держит это числом, а не памятью.
+ */
+/**
+ * Уровень ИИ, который достаётся гостю без настройки, — индекс в ALS.
+ *
+ * Вынесен константой, чтобы сторож проверял ЧИСЛО, а не память: «первая партия
+ * должна быть выигрываемой» иначе тихо откатится при любой правке списка.
+ */
+export const УРОВЕНЬ_ИИ_ПО_УМОЛЧАНИЮ = 1; // Casual / «Любитель», elo 800
+
+export function soobschitORescheniiZadachi(
+  pz: { id?: string; r?: number; theme?: string } | null | undefined,
+  этоЗадачаДня: boolean,
+): void {
+  track({ type: "puzzle_solved", source: "cyberchess/board",
+    meta: { app: "cyberchess", id: String(pz?.id ?? "нет id"), rating: Number(pz?.r ?? 0),
+      theme: String(pz?.theme ?? ""), daily: этоЗадачаДня } });
+}
+
+export function nuzhnoLiPokazatStrokuAdresa(
+  { партияИдёт, завершена, полуходов, ужеПоказывали, ужеПредлагали }:
+  { партияИдёт: boolean; завершена: boolean; полуходов: number; ужеПоказывали: boolean; ужеПредлагали: boolean },
+): boolean {
+  if (ужеПоказывали) return false;   // один раз за сессию
+  if (ужеПредлагали) return false;   // человек уже видел предложение или подписался
+  if (!партияИдёт || завершена) return false;
+  return полуходов >= 1;             // ровно после ПЕРВОГО хода
+}
+
+/**
+ * Сообщать ли об уходе из незавершённой партии.
+ *
+ * Повод: 10 живых с YouTube начали партию за 7 дней и ноль доиграли — люди
+ * теряются ВНУТРИ партии, а где именно, спросить было нечем. Событие шлётся на
+ * pagehide/visibilitychange и несёт число полуходов и уровень ИИ: через неделю
+ * станет видно, на каком ходу уходят и не тяжёл ли соперник.
+ */
+export function nuzhnoLiSoobschitOUhode(
+  { партияИдёт, завершена, былХод, ужеСообщили }:
+  { партияИдёт: boolean; завершена: boolean; былХод: boolean; ужеСообщили: boolean },
+): boolean {
+  if (ужеСообщили) return false;
+  if (!партияИдёт || завершена) return false;
+  return былХод;                     // партия без единого хода — не уход, а передумал
+}
+
 export function deystvieVyboraOnbordinga(intent: "play" | "learn" | "puzzles"):
   { tab: "play" | "coach" | "puzzles"; setup: boolean; startGame: boolean } {
   if (intent === "play") return { tab: "play", setup: false, startGame: true };
@@ -1492,7 +1560,19 @@ export default function CyberChessPage(){
   useEffect(()=>{selRef.current=sel},[sel]);
   useEffect(()=>{vmRef.current=vm},[vm]);
   const[pmLim,sPmLim]=useState(30);
-  const[aiI,sAiI]=useState(2);
+  /*
+   * 🔴 Уровень ИИ по умолчанию — «Любитель» (800), а не «Клубный» (1200).
+   *
+   * Замер 11.10.2026: рейтинг самого игрока по умолчанию — 800 (`rat` ниже), а
+   * соперник по умолчанию стоял 1200, то есть новичка сажали играть против
+   * заведомо более сильного. Контроль времени по умолчанию 5+0 — блиц. Рядом
+   * число окна воронки: за 7 дней 10 живых с YouTube начали партию и НОЛЬ
+   * доиграли.
+   *
+   * Плитка приветствия обещает «против ИИ 800–2400» — 800 это её нижняя граница,
+   * то есть обещание не нарушено. Выбрать сильнее можно в настройках партии.
+   */
+  const[aiI,sAiI]=useState(УРОВЕНЬ_ИИ_ПО_УМОЛЧАНИЮ);
   const[pCol,sPCol]=useState<ChessColor>("w");
   const[tcI,sTcI]=useState(9); // 5+0 default
   const[customMin,sCustomMin]=useState(5);
@@ -2079,6 +2159,12 @@ export default function CyberChessPage(){
   // уже получена, и всегда доступно из меню «Ещё». Метка cyberchess-app попадает в рассылку
   // запуска: matchesModule («равна cyberchess или начинается с cyberchess-»).
   const[showWaitlist,sShowWaitlist]=useState(false);
+  /* Строка «оставьте адрес» под доской после ПЕРВОГО хода живой партии.
+     Повод и правило — у nuzhnoLiPokazatStrokuAdresa. Показ один раз за сессию:
+     ref переживает перерисовки, но не перезагрузку, и это намеренно — человеку,
+     закрывшему строку, она не возвращается в этой же сессии. */
+  const[strokaAdresa,sStrokaAdresa]=useState(false);
+  const strokaAdresaPokazanaRef=useRef(false);
   /* Ярлык повода уезжает в `source` подписки: по нему в воронке видно, какой путь
      приносит адреса. До 08.10.2026 повод был один и источник фиксированный
      («cyberchess-app»), поэтому различить было нечего. */
@@ -3918,6 +4004,7 @@ export default function CyberChessPage(){
                 }
                 const reward=Math.max(2,Math.round((pzCurrent.r||800)/200));
                 addChessy(reward,"задача решена");
+                soobschitORescheniiZadachi(pzCurrent,этоЗадачаДня);
                 if(pzTimerIntervalRef.current){clearInterval(pzTimerIntervalRef.current);pzTimerIntervalRef.current=null;}
                 {const elapsed=Math.floor((Date.now()-pzTimerRef.current)/1000);const tb=elapsed<10?20:elapsed<30?10:5;addChessy(tb,`⏱ скорость ${elapsed}с`);sPzSessionChessy(c=>c+reward+tb);}
                 bumpDaily("puzzle");
@@ -3958,6 +4045,7 @@ export default function CyberChessPage(){
           }
           const reward=Math.max(2,Math.round((pzCurrent.r||800)/200));
           addChessy(reward,"задача решена");
+          soobschitORescheniiZadachi(pzCurrent,этоЗадачаДня);
           if(pzTimerIntervalRef.current){clearInterval(pzTimerIntervalRef.current);pzTimerIntervalRef.current=null;}
           {const elapsed=Math.floor((Date.now()-pzTimerRef.current)/1000);const tb=elapsed<10?20:elapsed<30?10:5;addChessy(tb,`⏱ скорость ${elapsed}с`);sPzSessionChessy(c=>c+reward+tb);}
           bumpDaily("puzzle");
@@ -4213,6 +4301,36 @@ export default function CyberChessPage(){
      отправителя: доля "unknown" в by-type и есть мера того, насколько
      приметам можно верить. Молча записывать ничью вместо неузнанного нельзя. */
   const otpravlenKonetsRef=useRef<string|null>(null);
+  const soobschilUhodRef=useRef(false);
+
+  /* Показ строки адреса: решение в чистой функции, здесь только показ и счётчик.
+     Событие показа нужно как ЗНАМЕНАТЕЛЬ: без него «ноль подписок» не отличить
+     от «ноль показов». */
+  useEffect(()=>{
+    if(!nuzhnoLiPokazatStrokuAdresa({партияИдёт:on,завершена:!!over,полуходов:hist.length,
+      ужеПоказывали:strokaAdresaPokazanaRef.current,ужеПредлагали:уженеПредлагать()}))return;
+    strokaAdresaPokazanaRef.current=true;
+    sStrokaAdresa(true);
+    track({type:"waitlist_offer_shown",source:"cyberchess/board",meta:{surface:"first-move",plies:hist.length}});
+  },[on,over,hist.length]);
+
+  /* Уход из незавершённой партии. pagehide — основной случай (закрыли вкладку),
+     visibilitychange — ушли в другое приложение на телефоне. track() шлёт
+     sendBeacon, он переживает выгрузку страницы; обычный fetch здесь не доедет. */
+  useEffect(()=>{
+    const соoбщить=()=>{
+      if(!nuzhnoLiSoobschitOUhode({партияИдёт:on,завершена:!!over,былХод:hist.length>=1,
+        ужеСообщили:soobschilUhodRef.current}))return;
+      soobschilUhodRef.current=true;
+      track({type:"game_abandon",source:"cyberchess/board",
+        meta:{app:"cyberchess",...chislaPartii(hist),aiLevel:lv.name,aiElo:lv.elo,
+          mode:hotseat?"hotseat":(p2pMode?"p2p":"ai")}});
+    };
+    const наСкрытие=()=>{if(document.visibilityState==="hidden")соoбщить()};
+    window.addEventListener("pagehide",соoбщить);
+    document.addEventListener("visibilitychange",наСкрытие);
+    return()=>{window.removeEventListener("pagehide",соoбщить);document.removeEventListener("visibilitychange",наСкрытие)};
+  },[on,over,hist,lv,hotseat,p2pMode]);
   useEffect(()=>{
     // Решение вынесено в resheniePoKontsuPartii и проверяется вызовами с
     // известным ответом (ishodPartii.test.ts). Здесь остаётся только отправка:
@@ -9082,6 +9200,24 @@ export default function CyberChessPage(){
               }}/>}
             </div>;
           })()}
+
+          {/* Строка адреса сразу под доской — единственный рубеж, до которого живые
+              доходят (первый ход). Не модальное окно: прерывать партию нельзя.
+              ⚠️ Она сдвигает полосу «Сдаться · Ничья · Отменить · Подсказка» вниз;
+              приёмка меряет в КАДРЕ и строку, и эту полосу на 390/540/768/1024. */}
+          {strokaAdresa&&!over&&<div style={{marginTop:SPACE[2],padding:SPACE[2],borderRadius:RADIUS.md,
+            border:`1px solid ${CC.border}`,background:"rgba(5,150,105,0.06)",position:"relative"}}>
+            <button type="button" aria-label="Закрыть предложение" onClick={()=>sStrokaAdresa(false)}
+              style={{position:"absolute",top:4,right:6,background:"transparent",border:"none",
+                color:CC.textDim,fontSize:16,lineHeight:1,cursor:"pointer",padding:4}}>×</button>
+            <WaitlistCapture
+              source="cyberchess-first-move"
+              tone="light"
+              title="Задача дня — на почту"
+              description=""
+              buttonLabel="Получать"
+            />
+          </div>}
 
           {/* Controls — under-board strip. Game-essentials only. Heatmap/Whisper/Share/History live in the
               right-sidebar Tools card to reduce visual clutter under the board. */}

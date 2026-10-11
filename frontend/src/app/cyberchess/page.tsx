@@ -7757,7 +7757,8 @@ export default function CyberChessPage(){
                форма внутри идёт со светлым тоном; я подставил его по невнимательности
                и вернул, не дожидаясь, пока это заметят на кадре. Но при «висящей»
                строке фон обязан быть НЕПРОЗРАЧНЫМ, иначе сквозь неё видно доску. */
-            border:`1px solid ${CC.border}`,background:(vwPx<769||строкаПрилипла)?"#eef7f2":"rgba(5,150,105,0.06)",color:CC.text,
+            border:`1px solid ${CC.border}`,background:(vwPx<769||строкаПрилипла)?"#eef7f2":"rgba(5,150,105,0.06)",
+            paddingLeft:28,color:CC.text,
                     fontSize:12,fontWeight:800,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
                   ◆ Решить задачу <span style={{color:CC.textMute,fontWeight:600,fontSize:11}}>{pzCountLabel}</span>
                 </button>
@@ -9368,8 +9369,12 @@ export default function CyberChessPage(){
             padding:SPACE[2],borderRadius:RADIUS.md,
             border:`1px solid ${CC.border}`,background:CC.surface1,
             boxShadow:(vwPx<769||строкаПрилипла)?"0 6px 20px rgba(0,0,0,0.18)":undefined}}>
+            {/* Крестик СЛЕВА. Кадр приёмки на 1463×724: справа его накрывал чужой
+                элемент с z-index 9999 — попадаемая площадь ужалась до нижней
+                половины (центр давал чужой DIV). Воевать z-index’ами с соседом
+                хуже, чем отойти: слева накрытия нет ни на одной из шести пар. */}
             <button type="button" aria-label="Закрыть предложение" onClick={()=>sStrokaAdresa(false)}
-              style={{position:"absolute",top:4,right:6,background:"transparent",border:"none",
+              style={{position:"absolute",top:4,left:6,background:"transparent",border:"none",
                 color:CC.textDim,fontSize:16,lineHeight:1,cursor:"pointer",padding:4}}>×</button>
             <WaitlistCapture
               source="cyberchess-first-move"
@@ -9382,7 +9387,13 @@ export default function CyberChessPage(){
                    конце партии. Отметка та же, что у прежнего повода. */
                 try{localStorage.setItem("aevion_chess_waitlist_seen","1")}catch{}
                 предлагалиПодпискуRef.current=true;
-                sStrokaAdresa(false);
+                /* 🔴 Не убираем строку СРАЗУ. Кадр приёмки: на +3 с после отправки
+                   не было ни строки, ни надписи «Готово — адрес записан» — то есть
+                   человек не видел подтверждения, что адрес принят. Прежняя версия
+                   прятала строку в том же обработчике, и подтверждение исчезало
+                   вместе с ней. Шесть секунд — чтобы прочитать, и не настолько
+                   долго, чтобы мешать партии. */
+                setTimeout(()=>sStrokaAdresa(false),6000);
               }}
             />
           </div>}
@@ -9598,8 +9609,21 @@ export default function CyberChessPage(){
             уехал бы за кадр.
           */}
           {on&&!over&&!setup&&tab==="play"&&<div style={{display:"flex",gap:8,marginTop:lowDesktop?4:SPACE[2],
-            ...(vwPx<769?{position:"sticky" as const,bottom:ВЫСОТА_НИЖНЕЙ_ПАНЕЛИ+ЗАЗОР_ПРИЛИПШИХ,zIndex:99,
-              background:CC.bg,paddingTop:4,paddingBottom:4}:{}),
+            /*
+             * 🔴 ПОПРАВКА 11.10.2026 по кадру приёмки: `sticky` здесь НЕ сработал.
+             * Замер: ряд встал на 792–836 при окне 844, то есть в 8 px от низа, а
+             * не в 78, как просил `bottom`, — и его накрыла нижняя панель
+             * (775–844). Настоящий клик отбился: «button aria-label="Играть" from
+             * div.cc-bottom-nav intercepts pointer events». Причина в устройстве
+             * sticky: элемент липнет только в пределах СВОЕГО родителя, а он здесь
+             * кончается почти сразу за рядом — липнуть некуда.
+             * Поэтому `fixed`, как у строки адреса: положение считается от окна, а
+             * не от родителя, и числа те же измеренные.
+             */
+            ...(vwPx<769?{position:"fixed" as const,left:8,right:8,
+              bottom:`calc(env(safe-area-inset-bottom) + ${ВЫСОТА_НИЖНЕЙ_ПАНЕЛИ+ЗАЗОР_ПРИЛИПШИХ}px)`,
+              zIndex:100,background:CC.bg,paddingTop:4,paddingBottom:4,
+              boxShadow:"0 -4px 14px rgba(0,0,0,0.18)"}:{}),
             ...podDoskoyRow}}>
             <Btn size="md" variant="danger" className="cc-game-btn" onClick={()=>{if(armed!=="resign"){sArmed("resign");return;}sArmed(null);if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{const nr=новыйРейтинг(rat,lv.elo,false);sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>{armed==="resign"?"Точно сдаться? ✓":"🏳 Сдаться"}</Btn>
             <Btn size="md" variant="gold" className="cc-game-btn" onClick={()=>{if(armed!=="draw"){sArmed("draw");return;}sArmed(null);if(Math.abs(ev(game))<200){const ns={...sts,d:sts.d+1};sSts(ns);svS(ns);sPms([]);sOn(false);sOver("Draw agreed");snd("x")}else showToast("ИИ отклонил ничью","error")}}>{armed==="draw"?"Предложить ничью? ✓":"½ Ничья"}</Btn>

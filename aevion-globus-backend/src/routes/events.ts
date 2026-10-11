@@ -702,6 +702,23 @@ export interface РазрезВоронки {
     puzzleSolvedOurs: number;
     progressed: number;
     progressedOurs: number;
+    /**
+     * Три шага ВНУТРИ задачи. Нашло окно 16 замером живым заходом 12.10.2026:
+     * неверный ход и верный давали ОДИН И ТОТ ЖЕ `game_progress` (следующий
+     * порог только на трёх полуходах), а подсказка и уход не слали ничего.
+     * То есть «ткнул не туда и ушёл» было неотличимо от «начал решать» — и
+     * единственный живой человек за 11.10 мог быть любым из двух.
+     *
+     * Отправители уже приняты пишущей ручкой, но без этих ступеней события
+     * копились бы и не читались — тот самый класс «посчитал и не отдал»,
+     * только замеченный до выкатки, а не после.
+     */
+    wrongMove: number;
+    wrongMoveOurs: number;
+    hintTaken: number;
+    hintTakenOurs: number;
+    abandonedPuzzle: number;
+    abandonedPuzzleOurs: number;
     /** Начала оплаты без единого признака живого человека. См. byChannel. */
     checkoutStartNoSignal: number;
   };
@@ -841,6 +858,23 @@ export interface РазрезВоронки {
     puzzleSolvedOurs: number;
       progressed: number;
     progressedOurs: number;
+    /**
+     * Три шага ВНУТРИ задачи. Нашло окно 16 замером живым заходом 12.10.2026:
+     * неверный ход и верный давали ОДИН И ТОТ ЖЕ `game_progress` (следующий
+     * порог только на трёх полуходах), а подсказка и уход не слали ничего.
+     * То есть «ткнул не туда и ушёл» было неотличимо от «начал решать» — и
+     * единственный живой человек за 11.10 мог быть любым из двух.
+     *
+     * Отправители уже приняты пишущей ручкой, но без этих ступеней события
+     * копились бы и не читались — тот самый класс «посчитал и не отдал»,
+     * только замеченный до выкатки, а не после.
+     */
+    wrongMove: number;
+    wrongMoveOurs: number;
+    hintTaken: number;
+    hintTakenOurs: number;
+    abandonedPuzzle: number;
+    abandonedPuzzleOurs: number;
       /**
        * 🔴 НАЧАЛА ОПЛАТЫ БЕЗ ЕДИНОГО ПРИЗНАКА ЖИЗНИ: сессия нажала «купить», но
        * не смотрела цены, не задержалась (нет `engaged`) и не открыла второй
@@ -944,6 +978,23 @@ export interface РазрезВоронки {
        */
       progressed: number;
       progressedOurs: number;
+    /**
+     * Три шага ВНУТРИ задачи. Нашло окно 16 замером живым заходом 12.10.2026:
+     * неверный ход и верный давали ОДИН И ТОТ ЖЕ `game_progress` (следующий
+     * порог только на трёх полуходах), а подсказка и уход не слали ничего.
+     * То есть «ткнул не туда и ушёл» было неотличимо от «начал решать» — и
+     * единственный живой человек за 11.10 мог быть любым из двух.
+     *
+     * Отправители уже приняты пишущей ручкой, но без этих ступеней события
+     * копились бы и не читались — тот самый класс «посчитал и не отдал»,
+     * только замеченный до выкатки, а не после.
+     */
+    wrongMove: number;
+    wrongMoveOurs: number;
+    hintTaken: number;
+    hintTakenOurs: number;
+    abandonedPuzzle: number;
+    abandonedPuzzleOurs: number;
       puzzleSolved: number;
       puzzleSolvedOurs: number;
       waitlistSubmitted: number;
@@ -1126,6 +1177,12 @@ export function пустойКанал(): РазрезВоронки["byChannel"
     puzzleSolvedOurs: 0,
     progressed: 0,
     progressedOurs: 0,
+    wrongMove: 0,
+    wrongMoveOurs: 0,
+    hintTaken: 0,
+    hintTakenOurs: 0,
+    abandonedPuzzle: 0,
+    abandonedPuzzleOurs: 0,
     checkoutStartNoSignal: 0,
     checkoutStartSessions: 0,
     checkoutStartSessionsOurs: 0,
@@ -1144,6 +1201,12 @@ export function пустойПост(): РазрезВоронки["byPost"][str
     triedOurs: 0,
     progressed: 0,
     progressedOurs: 0,
+    wrongMove: 0,
+    wrongMoveOurs: 0,
+    hintTaken: 0,
+    hintTakenOurs: 0,
+    abandonedPuzzle: 0,
+    abandonedPuzzleOurs: 0,
     puzzleSolved: 0,
     puzzleSolvedOurs: 0,
     waitlistSubmitted: 0,
@@ -1268,6 +1331,12 @@ export function разрезВоронки(
     puzzleSolvedOurs: 0,
     progressed: 0,
     progressedOurs: 0,
+    wrongMove: 0,
+    wrongMoveOurs: 0,
+    hintTaken: 0,
+    hintTakenOurs: 0,
+    abandonedPuzzle: 0,
+    abandonedPuzzleOurs: 0,
     checkoutStartNoSignal: 0,
   };
 
@@ -1556,6 +1625,12 @@ export function разрезВоронки(
     решилЗадачу: boolean;
     /** Дошёл до порога в партии (`game_progress`). */
     дошёлПоПорогу: boolean;
+    /** Ошибся в задаче (`puzzle_wrong_move`) — ход сделан, но неверный. */
+    ошибсяВЗадаче: boolean;
+    /** Взял подсказку (`puzzle_hint`) — и она действительно получена. */
+    взялПодсказку: boolean;
+    /** Ушёл из задачи, не решив (`puzzle_abandon`). */
+    ушёлИзЗадачи: boolean;
   }
   const заходы = new Map<string, Заход>();
   for (const ev of events) {
@@ -1584,6 +1659,9 @@ export function разрезВоронки(
         оставилАдрес: false,
         решилЗадачу: false,
         дошёлПоПорогу: false,
+        ошибсяВЗадаче: false,
+        взялПодсказку: false,
+        ушёлИзЗадачи: false,
         ключПоста: (() => {
           const сыройПост = ev.meta?.post;
           const пост =
@@ -1650,6 +1728,9 @@ export function разрезВоронки(
     if (ev.type === "waitlist_submit") з.оставилАдрес = true;
     if (ev.type === "puzzle_solved") з.решилЗадачу = true;
     if (ev.type === "game_progress") з.дошёлПоПорогу = true;
+    if (ev.type === "puzzle_wrong_move") з.ошибсяВЗадаче = true;
+    if (ev.type === "puzzle_hint") з.взялПодсказку = true;
+    if (ev.type === "puzzle_abandon") з.ушёлИзЗадачи = true;
     {
       // Полуходы берём у ЛЮБОГО события, которое их несёт: так разрез не
       // придётся править, когда появится событие обрыва партии. Строка здесь
@@ -1798,6 +1879,58 @@ export function разрезВоронки(
       if (ппорог) {
         ппорог.progressed += 1;
         if (з.наш) ппорог.progressedOurs += 1;
+      }
+    }
+    /*
+     * Три шага ВНУТРИ задачи — тем же способом, что соседи выше: итог, канал
+     * первого касания, пост. Канал берётся у ПЕРВОГО касания сессии, а не у
+     * страницы задачи: вопрос «кто привёл человека, который бросил задачу» —
+     * про источник.
+     *
+     * Эти три отличаются от соседей смыслом, и его стоит держать в голове,
+     * читая числа: `progressed` и `puzzleSolved` — шаги ВПЕРЁД, а здесь шаги
+     * НАЗАД. Поэтому их рост не улучшает воронку, он объясняет, где она рвётся.
+     */
+    if (з.ошибсяВЗадаче) {
+      итог.wrongMove += 1;
+      if (з.наш) итог.wrongMoveOurs += 1;
+      const кош = byChannel[з.канал];
+      if (кош) {
+        кош.wrongMove += 1;
+        if (з.наш) кош.wrongMoveOurs += 1;
+      }
+      const пош = з.ключПоста ? byPost[з.ключПоста] : null;
+      if (пош) {
+        пош.wrongMove += 1;
+        if (з.наш) пош.wrongMoveOurs += 1;
+      }
+    }
+    if (з.взялПодсказку) {
+      итог.hintTaken += 1;
+      if (з.наш) итог.hintTakenOurs += 1;
+      const кпд = byChannel[з.канал];
+      if (кпд) {
+        кпд.hintTaken += 1;
+        if (з.наш) кпд.hintTakenOurs += 1;
+      }
+      const ппд = з.ключПоста ? byPost[з.ключПоста] : null;
+      if (ппд) {
+        ппд.hintTaken += 1;
+        if (з.наш) ппд.hintTakenOurs += 1;
+      }
+    }
+    if (з.ушёлИзЗадачи) {
+      итог.abandonedPuzzle += 1;
+      if (з.наш) итог.abandonedPuzzleOurs += 1;
+      const куз = byChannel[з.канал];
+      if (куз) {
+        куз.abandonedPuzzle += 1;
+        if (з.наш) куз.abandonedPuzzleOurs += 1;
+      }
+      const пуз = з.ключПоста ? byPost[з.ключПоста] : null;
+      if (пуз) {
+        пуз.abandonedPuzzle += 1;
+        if (з.наш) пуз.abandonedPuzzleOurs += 1;
       }
     }
   }
@@ -3105,6 +3238,12 @@ eventsRouter.get("/funnel", (req, res) => {
   const показПоЧасам: Record<string, Set<string>> = Object.create(null);
   const доигралиПоЧасам: Record<string, Set<string>> = Object.create(null);
   const нажалиПоЧасам: Record<string, Set<string>> = Object.create(null);
+  // Три шага ВНУТРИ задачи — здесь они нужны ровно за тем же, зачем соседи:
+  // назвать ЧАС, с которого отправитель заработал. Эти три самые новые, и
+  // вопрос «с какого часа это измеряется» по ним зададут первым.
+  const ошибкиПоЧасам: Record<string, Set<string>> = Object.create(null);
+  const подсказкиПоЧасам: Record<string, Set<string>> = Object.create(null);
+  const уходыПоЧасам: Record<string, Set<string>> = Object.create(null);
   // События, прошедшие отбор по времени и по «не робот», — их же считает разрез
   // по каналам и приложениям. Второй проход по файлу не делаем: это тот самый
   // случай, когда два прохода незаметно расходятся в правилах отбора.
@@ -3201,6 +3340,9 @@ eventsRouter.get("/funnel", (req, res) => {
     if (!показПоЧасам[час]) показПоЧасам[час] = new Set<string>();
     if (!доигралиПоЧасам[час]) доигралиПоЧасам[час] = new Set<string>();
     if (!нажалиПоЧасам[час]) нажалиПоЧасам[час] = new Set<string>();
+    if (!ошибкиПоЧасам[час]) ошибкиПоЧасам[час] = new Set<string>();
+    if (!подсказкиПоЧасам[час]) подсказкиПоЧасам[час] = new Set<string>();
+    if (!уходыПоЧасам[час]) уходыПоЧасам[час] = new Set<string>();
     const чс = поЧасам[час];
     if (!людиПоДням[день]) людиПоДням[день] = new Set<string>();
     /*
@@ -3249,6 +3391,9 @@ eventsRouter.get("/funnel", (req, res) => {
     if (ev.sid && ev.type === "puzzle_solved") задачаРешенаПоЧасам[час].add(ev.sid);
     if (ev.sid && ev.type === "waitlist_submit") адресПоЧасам[час].add(ev.sid);
     if (ev.sid && ev.type === "waitlist_offer_shown") показПоЧасам[час].add(ev.sid);
+    if (ev.sid && ev.type === "puzzle_wrong_move") ошибкиПоЧасам[час].add(ev.sid);
+    if (ev.sid && ev.type === "puzzle_hint") подсказкиПоЧасам[час].add(ev.sid);
+    if (ev.sid && ev.type === "puzzle_abandon") уходыПоЧасам[час].add(ev.sid);
     if (ev.sid && ev.type === "game_end") {
       // Тот же порог, что в разрезе: партия доиграна от ОДНОГО полухода. Иначе
       // по дням и по каналам «доиграли» считались бы по-разному, и два числа
@@ -3371,6 +3516,12 @@ eventsRouter.get("/funnel", (req, res) => {
       finishedOurs: наши(доигралиПоЧасам[ч]),
       clicked: нажалиПоЧасам[ч]?.size ?? 0,
       clickedOurs: наши(нажалиПоЧасам[ч]),
+      wrongMove: ошибкиПоЧасам[ч]?.size ?? 0,
+      wrongMoveOurs: наши(ошибкиПоЧасам[ч]),
+      hintTaken: подсказкиПоЧасам[ч]?.size ?? 0,
+      hintTakenOurs: наши(подсказкиПоЧасам[ч]),
+      abandonedPuzzle: уходыПоЧасам[ч]?.size ?? 0,
+      abandonedPuzzleOurs: наши(уходыПоЧасам[ч]),
     }))
     /*
      * 🔴 ФИЛЬТР ОБЯЗАН ЗНАТЬ НОВЫЕ СТУПЕНИ. Прежде он пропускал час только по
@@ -3391,7 +3542,10 @@ eventsRouter.get("/funnel", (req, res) => {
         ч.waitlistSubmitted ||
         ч.offerShown ||
         ч.finished ||
-        ч.clicked,
+        ч.clicked ||
+        ч.wrongMove ||
+        ч.hintTaken ||
+        ч.abandonedPuzzle,
     )
     .slice(-ПРЕДЕЛ_ЧАСОВ);
 
@@ -3710,6 +3864,18 @@ eventsRouter.get("/funnel", (req, res) => {
       "внимания среди живых значит, что страницу никто не смотрит. Человека " +
       "доказывают только шаги, которых автомат по адресу не делает: puzzleSolved, " +
       "progressed, waitlistSubmitted, cta_click, checkoutStart",
+    /*
+     * Подпись нужна, потому что три числа читаются ПРОТИВОПОЛОЖНО соседям.
+     * У остальных ступеней рост — хорошая новость; у этих рост означает, что
+     * человек упёрся. Без подписи «ошибок 7» легко прочтут как «семь человек
+     * решают» — а это семь человек, которым не удалось.
+     */
+    insidePuzzleNote:
+      "wrongMove / hintTaken / abandonedPuzzle — шаги НАЗАД, а не вперёд: их рост не " +
+      "улучшает воронку, а показывает, где она рвётся. Единица та же (сессия), *Ours — " +
+      "наши пробы. До 12.10.2026 этих ступеней не было вовсе: неверный ход и верный давали " +
+      "один и тот же game_progress, а подсказка и уход не слали ничего, поэтому «ткнул не " +
+      "туда и ушёл» было неотличимо от «начал решать»",
     byPostAttributionNote:
       "канал и пост берутся из meta.channel и meta.post события, а НЕ из адреса " +
       "в path; метка в адресе отвечает только за признак «наше». Прямой POST без " +

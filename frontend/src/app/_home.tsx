@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiUrl, getClientApiBase } from "@/lib/apiBase";
 import { покупкиНаГлавной } from "@/lib/homeBuyLinks";
 import { BuyLink } from "@/components/BuyLink";
+import { useI18n } from "@/lib/i18n";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 import { channelNow, сыраяМеткаКанала } from "@/lib/channelNow";
 import { fetchPlanetStats, fetchRecentArtifacts } from "@/lib/planetData";
@@ -83,6 +84,15 @@ const btnGhost: CSSProperties = {
 };
 
 export default function HomePage() {
+  // 08.10.2026. Заголовок берётся ИЗ СЛОВАРЯ, а не литералом.
+  // Замер на проде в чистом контексте ru-RU (без куки, newContext locale ru-RU):
+  //   1123мс — страница переведена на 653 знака, H1 ещё английский
+  //   2608мс — переведено 3057 знаков, H1 ВСЁ ЕЩЁ английский
+  //   5450мс — H1 наконец по-русски
+  // То есть русский гость пять секунд читал английский заголовок, когда
+  // остальная страница уже была русской. Литерал переводит слой перевода, и
+  // до заголовка он доходит последним; словарь отдаёт строку сразу.
+  const { t } = useI18n();
   /** Только после mount: избегаем гонок ref/layout и проблем с отдельным async-чанком `dynamic()`. */
   const [globeClient, setGlobeClient] = useState(false);
   useEffect(() => {
@@ -319,11 +329,34 @@ const DEMO_NOTE =
           поэтому её посетители не попадали в знаменатель — конверсия выглядела
           лучше, чем есть. Компонент сам читает ?c= из ссылки. */}
       <PageTracking page="home" />
+      {/* 07.10.2026. Герой занимает ПОЛНЫЙ экран по высоте — и это не косметика,
+          а единственный способ выполнить «одно действие в первом экране» на любой
+          машине.
+          Замер на проде ffa6cbcaddd6 показал, что одного выноса блока покупок из
+          героя мало: число действий зависело от ВЫСОТЫ окна —
+            390x844 — 3, покупок 0      1280x720  — 3,  покупок 0
+            390x932 — 3, покупок 0      1280x800  — 6,  покупок 3
+                                        1280x900  — 6,  покупок 3
+                                        1280x1080 — 17, покупок 3
+          Блок покупок стоял на 794px: на 720 он за сгибом, на 800 и выше — в кадре.
+          Пустой отступ сверху это бы «починил» ровно для той высоты, на которой его
+          подобрали, и сломал на следующей — подгонка под одну точку замера.
+          `100svh` решает структурно: что бы ни стояло ниже, оно начинается за
+          сгибом при ЛЮБОЙ высоте окна. `svh`, а не `vh`, намеренно: на телефонах
+          `vh` считается без адресной строки, и первый экран оказывается выше
+          видимого — это известная ловушка мобильных браузеров.
+          Содержимое центрируется по вертикали, иначе на высоком окне герой
+          растянется, а текст прилипнет к верху. */}
       <section
         style={{
           background: "linear-gradient(145deg, #0f172a 0%, #115e59 48%, #0d9488 100%)",
           color: "#fff",
           padding: "44px 24px 52px",
+          minHeight: "100svh",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          boxSizing: "border-box",
         }}
       >
         <div style={{ maxWidth: 1280, margin: "0 auto" }}>
@@ -353,7 +386,7 @@ const DEMO_NOTE =
               letterSpacing: "-0.03em",
             }}
           >
-            Describe it in a sentence — get a working site
+            {t("home.title")}
           </h1>
           <p
             style={{
@@ -364,13 +397,13 @@ const DEMO_NOTE =
               margin: 0,
             }}
           >
-            DevHub writes the code, shows a live preview and publishes to a real
-            subdomain. No GitHub, no cloud account, no sign-up for the first project.
+            {t("home.subtitle")}
             <br />
+            {/* Вторая строка: что есть компания. Я чуть не потерял её при
+                переносе текстов в словарь — поймал на вычитке дифа. Она верна
+                и описывает нас, просто это не то, за чем человек пришёл. */}
             <span style={{ opacity: 0.72, fontSize: "0.92em" }}>
-              AEVION is trust infrastructure for digital assets and intellectual
-              property: identity, IP registration, signatures, authorship bureau and
-              compliance across <strong>{MODULE_NODES} product nodes</strong>.
+              {t("home.company", { n: MODULE_NODES })}
             </span>
           </p>
           {/* 07.10.2026, набросок по заданию оркестратора.
@@ -384,7 +417,7 @@ const DEMO_NOTE =
               является, пока семь кнопок стоят тем же рядом. */}
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", marginTop: 28 }}>
             <Link href="/devhub" style={btnPrimary}>
-              Open DevHub — free, no account
+              {t("home.cta.devhub")}
             </Link>
             <Link
               href="/auth"
@@ -396,7 +429,7 @@ const DEMO_NOTE =
                 fontWeight: 600,
               }}
             >
-              or start with identity (Auth)
+              {t("home.cta.auth")}
             </Link>
           </div>
           {/* 07.10.2026, набросок. Баннер QVenture стоял ПЕРВЫМ элементом экрана и

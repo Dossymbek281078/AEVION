@@ -1164,7 +1164,21 @@ export default function CyberChessPage(){
   // ему в лицо ПОСЛЕ действия. Замер 28.08.2026 на телефонной ширине
   // показывал ровно это. Layout-эффект выполняется до отрисовки кадра, так
   // что человек либо видит приветствие сразу, либо не видит вовсе.
-  useIsoLayoutEffect(()=>{if(!hasCompletedOnboarding())sShowOnboarding(true)},[]);
+  /*
+   * Онбординг НЕ открывается, когда человек пришёл по ссылке на задачу.
+   *
+   * Повод 07.10.2026 (замер окна 10 браузером на проде): по ссылке
+   * /cyberchess?puzzle=<id> приветственное окно вставало поверх доски. Человек
+   * пришёл из ролика смотреть КОНКРЕТНУЮ позицию, а видит окно про первый визит —
+   * и ссылка не исполняет своего обещания с первого экрана.
+   * Проверка адреса синхронная, до любой загрузки: решение принимается раньше,
+   * чем успеет открыться окно.
+   */
+  useIsoLayoutEffect(()=>{
+    let поСсылке=false;
+    try{поСсылке=!!new URLSearchParams(window.location.search).get("puzzle")}catch{}
+    if(!поСсылке&&!hasCompletedOnboarding())sShowOnboarding(true);
+  },[]);
 
   useIsoLayoutEffect(()=>{const up=()=>{sVwPx(window.innerWidth);sVhPx(window.innerHeight)};up();window.addEventListener("resize",up);return()=>window.removeEventListener("resize",up);},[]);
   // Тосты общего провайдера — над BottomNav на телефоне (тестер 20.09.2026, 390px: тост
@@ -5632,11 +5646,30 @@ export default function CyberChessPage(){
    *          человеку уже сказано здесь, а второе сообщение подряд читается как
    *          две разные беды.
    */
+  /*
+   * 🔴 «Задачу поставили НАМЕРЕННО — не подменять её случайной».
+   *
+   * Повод 07.10.2026, дефект на проде, замер окна 10 браузером: ссылка
+   * /cyberchess?puzzle=<id> открывала ЧУЖУЮ задачу (ждали ★678 — на экране ★1062).
+   * Ручка :id отдавала верно; подменял фронт, и подменял МОЙ ЖЕ код.
+   *
+   * Цепочка: postavitZadachuNaDosku зовёт sTab("puzzles"), а `tab` входит в КЛЮЧ
+   * ВЫБОРА эффекта, подбирающего случайную задачу под фильтры. Ключ меняется →
+   * эффект просыпается → ставит случайную поверх только что поставленной. То есть
+   * само открытие задачи и вызывало её подмену.
+   *
+   * Флаг одноразовый: эффект, увидев его, пропускает ОДИН подбор и запоминает
+   * текущий ключ, дальше работает как раньше — смена фильтров человеком
+   * по-прежнему даёт новую задачу. Стоит в ОБЩЕЙ функции, поэтому защищает и
+   * задачу дня: у неё была та же подмена, просто её никто не измерял.
+   */
+  const postavlenoNamerennoRef=useRef(false);
   const postavitZadachuNaDosku=(pz:typeof PUZZLES[number],{dnevnaya}:{dnevnaya:boolean}):boolean=>{
     sЭтоЗадачаДня(dnevnaya);
     sTab("puzzles");
     let g;try{g=new Chess(pz.fen)}catch{showToast("Задача повреждена, пропускаю","error");return false}
     setGame(g);sBk(k=>k+1);sPzCurrent(pz);sPzAttempt("idle");sSel(null);sVm(new Set());sLm(null);sOver(null);sHist([]);sFenHist([pz.fen]);sCapW([]);sCapB([]);sOn(true);sSetup(false);sPms([]);sPmSel(null);sPCol(g.turn());sFlip(g.turn()==="b");sEvalCp(0);sEvalMate(0);pT.reset();aT.reset();startClock(0);
+    postavlenoNamerennoRef.current=true; // см. разбор выше: иначе подбор затрёт её
     return true;
   };
   const loadDailyPuzzle=(surface:string="unknown")=>{
@@ -6010,6 +6043,10 @@ export default function CyberChessPage(){
     // подменялась (замер 24.09.2026 на проде). Пропускаем перезагрузку, когда изменился
     // ТОЛЬКО размер пула, а выбор человека (фильтры, режим, вкладка) прежний и задача цела.
     const ключВыбора=[pzFilterGoal,pzFilterMate,pzFilterPhase,pzFilterTheme,pzFilterSide,tab,pzMode,rushDuration,pzCustomSec].join("|");
+    // Задачу только что поставили намеренно (ссылка или задача дня) — один подбор
+    // пропускаем и запоминаем ключ, иначе смена вкладки на "puzzles", которую
+    // делает сама установка, тут же подменит её случайной.
+    if(postavlenoNamerennoRef.current){postavlenoNamerennoRef.current=false;выборЗадачиRef.current=ключВыбора;return;}
     if(pzCurrent&&pzAttempt==="idle"&&выборЗадачиRef.current===ключВыбора){выборЗадачиRef.current=ключВыбора;return;}
     выборЗадачиRef.current=ключВыбора;
     const idx=Math.floor(Math.random()*fPz.length);

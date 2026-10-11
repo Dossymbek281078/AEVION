@@ -252,7 +252,7 @@ export default function ModulePricingChip({ moduleId, theme = "light", hideBuy =
           title={
             app && appFrom
               ? tr("moduleChip.buyTitle", "Выбрать срок и оплатить — от {price}/мес при оплате за 12 месяцев", { price: appFrom })
-              : tr("moduleChip.buyTitle", "Выбрать срок и оплатить — от {price}/мес при оплате за 12 месяцев", { price: planetFrom })
+              : tr("moduleChip.requestAccessTitle", "Отдельно пока не продаётся — напишите нам, подберём доступ")
           }
           style={{
             padding: "6px 14px",
@@ -265,7 +265,22 @@ export default function ModulePricingChip({ moduleId, theme = "light", hideBuy =
             background: "linear-gradient(135deg, #0d9488, #0ea5e9)",
           }}
         >
-          {tr("moduleChip.buy", "Купить")}
+          {/*
+            🔴 Слово на кнопке обязано совпадать с тем, что за ней (07.10.2026).
+            Замер на проде: /qright показывал «Buy», ссылка вела на
+            /pricing?app=qright#apps, а там по этому приложению предлагается
+            только «Contact us» — среди шести кнопок «Buy» на странице цен
+            QRight нет, и касса на него отвечает 400 invalid_app. Человек жал
+            «Купить» и попадал в «напишите нам».
+            Признак берём из ДАННЫХ, а не из списка слагов: appFrom уже
+            вычислен по реально продаваемым срокам (providers.lemonsqueezy
+            .sellable.configured) и равен null, когда купить нечего. Случай
+            «приложения нет вовсе» НЕ трогаем: там ссылка ведёт на общие
+            тарифы, где планету купить действительно можно.
+          */}
+          {app && !appFrom
+            ? tr("moduleChip.requestAccess", "Обсудить доступ")
+            : tr("moduleChip.buy", "Купить")}
         </Link>
       )}
     </span>

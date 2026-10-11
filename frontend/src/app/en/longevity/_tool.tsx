@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { keepChannel } from "@/lib/products";
 
 /**
@@ -69,6 +69,21 @@ export function LongevityTool({ channel = null }: { channel?: string | null }) {
   const [vals, setVals] = useState<Record<string, string>>({});
   const [checked, setChecked] = useState(false);
 
+  // The first screen links here with href="#try-example" (page.tsx). Arriving
+  // with that hash fills the example and computes in one tap, so a visitor from
+  // the video doesn't type 11 labs. The anchor itself scrolls here (id below).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const apply = () => {
+      if (window.location.hash !== "#try-example") return;
+      setVals(Object.fromEntries(FIELDS.map((f) => [f.key, f.placeholder])));
+      setChecked(true);
+    };
+    apply();
+    window.addEventListener("hashchange", apply);
+    return () => window.removeEventListener("hashchange", apply);
+  }, []);
+
   // Считаем только по заполненным полям. Пустое поле — это «не знаю», а не
   // «в норме»: молчаливое превращение пропуска в норму и есть тот способ,
   // которым отчёт становится успокаивающим и неверным.
@@ -85,7 +100,7 @@ export function LongevityTool({ channel = null }: { channel?: string | null }) {
   const off = results.filter((r) => r.state !== "ok");
 
   return (
-    <div style={styles.box}>
+    <div id="try-example" style={{ ...styles.box, scrollMarginTop: 16 }}>
       <div style={styles.grid}>
         {FIELDS.map((f) => (
           <label key={f.key} style={styles.row}>
@@ -108,9 +123,25 @@ export function LongevityTool({ channel = null }: { channel?: string | null }) {
         ))}
       </div>
 
-      <button type="button" onClick={() => setChecked(true)} style={styles.button}>
-        Check my numbers
-      </button>
+      {/* One tap, no typing: a visitor sees the tool work on an example (values =
+          field placeholders) instead of entering 11 labs first. 06–07.10:
+          /longevity drew live YouTube visitors, 0 tried — the first screen
+          demanded manual entry before any result. Mirrors the RU /longevity fix. */}
+      <div style={styles.actions}>
+        <button
+          type="button"
+          onClick={() => {
+            setVals(Object.fromEntries(FIELDS.map((f) => [f.key, f.placeholder])));
+            setChecked(true);
+          }}
+          style={styles.buttonGhost}
+        >
+          Show an example
+        </button>
+        <button type="button" onClick={() => setChecked(true)} style={styles.button}>
+          Check my numbers
+        </button>
+      </div>
 
       {checked && filled.length === 0 && (
         <p style={styles.note}>
@@ -191,6 +222,18 @@ const styles: Record<string, React.CSSProperties> = {
     border: `1px solid ${INK}`,
     background: INK,
     color: "#fff",
+    borderRadius: 8,
+    padding: "10px 18px",
+    fontSize: 14.5,
+    fontWeight: 600,
+    cursor: "pointer",
+  },
+  actions: { display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" },
+  buttonGhost: {
+    marginTop: 16,
+    border: `1px solid ${INK}`,
+    background: "transparent",
+    color: INK,
     borderRadius: 8,
     padding: "10px 18px",
     fontSize: 14.5,

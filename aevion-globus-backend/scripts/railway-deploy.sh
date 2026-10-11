@@ -190,7 +190,38 @@ fi
 # «отметкаВКонтексте=НЕ ДОЕХАЛА» — файла не было в контексте сборки, хотя
 # .gitignore его не скрывает и в .railwayignore он не упомянут. Отслеживаемый
 # файл уезжает при любом устройстве архива, поэтому чинит независимо от причины.
-trap 'git -C "$BACKEND_DIR" checkout -- build-info.json 2>/dev/null || rm -f "$BACKEND_DIR/build-info.json"' EXIT
+# 08.10.2026 (приёмка, по поручению оркестратора): прежний trap молчал и в
+# неудачном случае УДАЛЯЛ заглушку. Замер: за две выкатки подряд дерево
+# осталось грязным по-разному — после волны 29 файл оказался удалён (сработала
+# ветка `rm -f`, то есть checkout не удался и об этом никто не узнал), после
+# волны 30 изменён (trap не отработал вовсе: задача выкатки была оборвана по
+# лимиту до конца скрипта). Грязное дерево здесь не косметика: без заглушки
+# следующая сборка даёт на проде `commit: unknown`, а сторож чистого дерева
+# у соседа отказывает, и это читают как поломку, а не как остаток выкатки.
+# Поэтому: восстанавливаем ДВУМЯ путями, причину отказа печатаем, никогда
+# не удаляем. Молчаливого исхода у уборки больше нет (§16).
+restore_build_info() {
+  local f="$BACKEND_DIR/build-info.json"
+  local err
+  # git -C НЕ годится: BACKEND_DIR приходит из pwd и в Git Bash имеет вид
+  # /c/Users/..., а git ищет такой путь внутри диска C и падает кодом 128
+  # (fatal: cannot change to ...). Замер 08.10.2026: git -C на MSYS-пути -> 128,
+  # на windows-пути -> 0. Поэтому первая ветка не срабатывала НИКОГДА, и уборка
+  # каждый раз уходила в удаление заглушки. cd понимает оба вида пути.
+  if err=$( (cd "$BACKEND_DIR" && git checkout -- build-info.json) 2>&1 ); then
+    echo "[уборка] заглушка восстановлена из индекса (git checkout)" >&2
+    return 0
+  fi
+  echo "[уборка] git checkout НЕ удался: ${err:-без сообщения}" >&2
+  if git -C "$BACKEND_DIR" show HEAD:aevion-globus-backend/build-info.json > "$f" 2>/dev/null      || git show HEAD:aevion-globus-backend/build-info.json > "$f" 2>/dev/null; then
+    echo "[уборка] заглушка восстановлена из HEAD (git show)" >&2
+    return 0
+  fi
+  echo "[уборка] 🔴 ВОССТАНОВИТЬ НЕ УДАЛОСЬ: $f оставлен как есть, файл НЕ удалён." >&2
+  echo "[уборка] Верните его вручную: git checkout -- aevion-globus-backend/build-info.json" >&2
+  return 1
+}
+trap 'restore_build_info' EXIT
 
 cat > "$BACKEND_DIR/build-info.json" <<JSON
 {

@@ -111,6 +111,47 @@ describe("шапка на телефоне", () => {
     ).toBeGreaterThan(0);
   });
 
+  it("панель меню скрыта, пока details закрыт, и раскрывается при [open]", () => {
+    /*
+     * Добавлено 07.10.2026. Панель задана position: absolute с left/right,
+     * и её display обязан стоять под [open], иначе правило живёт всегда.
+     *
+     * 🔴 Чего эта проверка НЕ доказывает — и это стоило дня двум окнам.
+     * Видимого дефекта тут НЕ было: на проде (Chrome 154, окно 390x844)
+     * человек панель закрытого меню не видит. Прямоугольник у неё при этом
+     * ненулевой (y 52, h 421, w 20), и два окна доложили по нему
+     * несуществующую утечку. Прямоугольник — НЕ проверка видимости;
+     * видимость это elementFromPoint или кадр, и меряется она браузером,
+     * как и сказано в шапке этого файла про пиксели.
+     * Кадр: Desktop/АЕВИОН/15-Аудиты-и-сводки/2026-10-07-навигация-телефон/
+     */
+    const c = отрисовать();
+    const details = c.querySelector("details.aev-hdr-menu") as HTMLDetailsElement | null;
+    const панель = c.querySelector(".aev-hdr-menu-panel") as HTMLElement | null;
+    expect(details, "details.aev-hdr-menu не найден — сторож ослеп").not.toBeNull();
+    expect(панель, "панель не найдена — сторож ослеп").not.toBeNull();
+
+    // КОНТРОЛЬ ПРИБОРА: если jsdom не применил <style>, красное ниже означало бы
+    // «панель течёт», хотя означает «стили не доехали». Базовое правило
+    // .aev-hdr-menu { display: none } стоит в файле безусловно.
+    const базовое = getComputedStyle(details!).display;
+    expect(
+      базовое,
+      `jsdom не применил стили компонента (.aev-hdr-menu display=${базовое}, ждали none) — ` +
+        "это отказ ПРИБОРА, судить по нему о коде нельзя",
+    ).toBe("none");
+
+    const пунктов = панель!.querySelectorAll("a").length;
+    process.stderr.write(`[сторож] пунктов в панели меню: ${пунктов}${String.fromCharCode(10)}`);
+    expect(пунктов, "в панели нет ссылок — проверять нечего").toBeGreaterThan(0);
+
+    expect(details!.open, "details обязан рождаться закрытым").toBe(false);
+    expect(getComputedStyle(панель!).display, "при закрытом details панель обязана быть none").toBe("none");
+
+    details!.open = true;
+    expect(getComputedStyle(панель!).display, "при открытом details панель обязана раскрываться в grid").toBe("grid");
+  });
+
   it("медиазапрос прячет полную строку на узком экране", () => {
     const c = отрисовать();
     const стиль = [...c.querySelectorAll("style")].map((s) => s.textContent || "").join(" ");

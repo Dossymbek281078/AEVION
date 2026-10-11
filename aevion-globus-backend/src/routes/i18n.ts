@@ -384,11 +384,35 @@ i18nRouter.post("/cache/clear", (req, res) => {
   res.json({ cleared, remaining: cache.size, target: target || "all" });
 });
 
+/*
+ * 🔴 Замер 07.10.2026. Отказ перевода был ПОСЧИТАН и никем не прочитан.
+ *
+ * Запрос честно возвращает `degraded: true` и причину (см. translateBatchSafe),
+ * но знаменатель потребителей: ручку упоминают 5 файлов, ВЫЗЫВАЕТ её один —
+ * `AutoTranslate.tsx`, и слова `degraded` в нём 0. Два «вызова» из списка
+ * оказались комментариями о ручке, а не обращениями к ней.
+ *
+ * А здесь `status` был зашит в "ok" КОНСТАНТОЙ — то есть ручка отвечала «всё
+ * хорошо» даже при engine: "none", когда перевод невозможен в принципе, и во
+ * время передышки по исчерпанной квоте DeepL. Снаружи «доступно» читалось как
+ * «пригодно» (§15), и у отказа не оставалось ни одного читателя.
+ */
 i18nRouter.get("/health", (_req, res) => {
   const deeplConfigured = !!process.env.DEEPL_API_KEY?.trim();
   const anthropicConfigured = !!process.env.ANTHROPIC_API_KEY?.trim();
+  const now = Date.now();
+  // Передышка по квоте: активна, пока shouldAskDeepl отвечает «не спрашивать».
+  const deeplQuotaCooldown = deeplConfigured && !shouldAskDeepl(now);
+  const quotaCooldownSecondsLeft = deeplQuotaCooldown
+    ? Math.max(0, Math.round((deeplQuotaUntil - now) / 1000))
+    : 0;
+  // Перевода нет вовсе — ни одного ключа; либо DeepL в передышке без запасного.
+  const translationPossible = anthropicConfigured || (deeplConfigured && !deeplQuotaCooldown);
   res.json({
-    status: "ok",
+    status: !translationPossible ? "down" : deeplQuotaCooldown ? "degraded" : "ok",
+    translationPossible,
+    deeplQuotaCooldown,
+    quotaCooldownSecondsLeft,
     service: "i18n-translate",
     deeplConfigured,
     anthropicConfigured,

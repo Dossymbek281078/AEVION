@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
+import { useI18nOptional } from "@/lib/i18n";
 
 const ALL_GOALS = [
   { id: "sleep",     label: "Sleep",       icon: "Moon"  },
@@ -27,12 +28,14 @@ interface PlanItem {
 }
 
 export default function PlanCard() {
+  // Язык плана = язык посетителя. До 12.10.2026 план приходил по-английски
+  // (и в °F) человеку, читающему страницу по-русски (замер окна Приложения-31.12).
+  const lang = useI18nOptional()?.lang ?? "ru";
   const [age, setAge] = useState("");
   const [goals, setGoals] = useState<string[]>(["sleep", "cardio"]);
   const [plan, setPlan] = useState<PlanItem[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [provider, setProvider] = useState<string>("");
 
   function toggleGoal(id: string) {
     setGoals((prev) =>
@@ -57,12 +60,11 @@ export default function PlanCard() {
       const resp = await fetch(apiUrl("/api/qlife/plan"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ age: ageNum, goals }),
+        body: JSON.stringify({ age: ageNum, goals, lang }),
       });
       const data = await resp.json();
       if (!resp.ok || !data.ok) { setError(data.error || "Generation failed"); return; }
       setPlan(data.plan);
-      setProvider(data.provider ?? "");
     } catch (err: any) {
       setError(err?.message || "Network error");
     } finally {
@@ -132,9 +134,6 @@ export default function PlanCard() {
         <div style={styles.planSection}>
           <div style={styles.planHeader}>
             <span style={styles.planHeaderText}>Your Longevity Plan</span>
-            {provider && (
-              <span style={styles.providerBadge}>via {provider}</span>
-            )}
           </div>
           <div style={styles.planGrid}>
             {plan.map((item, i) => {
@@ -248,14 +247,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#e2e8f0",
     fontSize: 14,
     fontWeight: 700,
-  },
-  providerBadge: {
-    background: "#1e293b",
-    borderRadius: 20,
-    color: "#64748b",
-    fontSize: 11,
-    fontWeight: 600,
-    padding: "2px 8px",
   },
   planGrid: {
     display: "grid",

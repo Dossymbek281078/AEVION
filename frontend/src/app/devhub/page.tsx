@@ -23,6 +23,7 @@ import { stackForIdea, даннымНуженСервер, доступенРе�
   type РежимПостройки } from "@/lib/devhubStackChoice";
 import { indexCapabilities, isCapabilityBlocked, type CapabilityIndex } from "@/lib/devhubCapabilities";
 import { DEVHUB_EXAMPLES, exampleText } from "./examples";
+import { primerDlyaPustogoPolya } from "@/lib/devhubPervyyShag";
 
 type Stack = "next" | "express" | "static" | "react" | "python";
 type ProjectStatus = "draft" | "building" | "live" | "error";
@@ -462,6 +463,20 @@ export default function DevHubPage() {
   const [хранилищеБлокировано, setХранилищеБлокировано] = useState(false);
   useEffect(() => setHydrated(true), []);
 
+  /*
+   * Поле не встречает человека пустым (см. lib/devhubPervyyShag.ts).
+   * Повод числами: за 7 дней 66 заходов на /devhub и НОЛЬ живых нажатий
+   * «Построить» — кнопка включается только после первого набранного знака,
+   * то есть страница сперва требовала придумать формулировку.
+   * Подставляется только в ПУСТОЕ поле: набранное человеком — в том числе до
+   * гидратации — важнее подсказки, а стёртый текст это его решение.
+   */
+  useEffect(() => {
+    if (!hydrated) return;
+    const примеры = [t("hero.ex1"), t("hero.ex2"), t("hero.ex3")];
+    setIdeaPrompt((текущий) => primerDlyaPustogoPolya({ введено: текущий, примеры }) ?? текущий);
+  }, [hydrated, t]);
+
   // Anything typed into either form before hydration lives only in the DOM;
   // adopt it on mount so the first data-driven re-render does not wipe it.
   const ideaFieldRef = useRef<HTMLDivElement>(null);
@@ -655,6 +670,13 @@ export default function DevHubPage() {
             >
                   {!hydrated ? t("hero.loading") : ideaStarting ? t("hero.building") : t("hero.build")}
             </button>
+          </div>
+          {/* Правда, а не лозунг, и проверена на проде 12.10.2026: гостевая
+              сессия без аккаунта создала проект, получила код и выложила его
+              на свой адрес (поднялся за 31 с). Строка стоит ПОД кнопкой —
+              человек читает её ровно в момент решения «нажимать ли». */}
+          <div style={{ marginTop: 8, fontSize: 12.5, color: "#99f6e4" }}>
+            Бесплатно, без регистрации — результат за минуту
           </div>
           {/* ПОДНЯТО 01.10.2026 по замеру приёмки: на 390x844 верх блока стоял
               на y=764. На настоящем телефоне адресная строка съедает около

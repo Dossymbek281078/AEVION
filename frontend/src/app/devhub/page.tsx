@@ -17,6 +17,7 @@ import { useI18n } from "@/lib/i18n";
 import { catalog } from "@/lib/aevionCatalog";
 import { fixDoubledScheme } from "@/lib/urls";
 import { track } from "@/lib/track";
+import { shagPervogoEkrana, podklyuchitSobytiyaPervogoEkrana } from "@/lib/sobytiyaPervogoEkrana";
 import { productById } from "@/lib/products";
 import { PageTracking } from "@/components/PageTracking";
 import { devhubServerError, useDevhubServerError } from "@/lib/devhubServerError";
@@ -517,6 +518,9 @@ export default function DevHubPage() {
    * Подставляется только в ПУСТОЕ поле: набранное человеком — в том числе до
    * гидратации — важнее подсказки, а стёртый текст это его решение.
    */
+  // События первого экрана (прокрутка, время до ухода): что делают те, кто уходит без шага.
+  useEffect(() => podklyuchitSobytiyaPervogoEkrana(), []);
+
   useEffect(() => {
     if (!hydrated) return;
     const примеры = [t("hero.ex1"), t("hero.ex2"), t("hero.ex3")];
@@ -701,7 +705,7 @@ export default function DevHubPage() {
               data-prehydration-field="ideaPrompt"
               aria-label={t("hero.ideaAria")}
               value={ideaPrompt}
-              onFocus={(e) => { if (примерНеТронутRef.current) e.currentTarget.select(); }}
+              onFocus={(e) => { shagPervogoEkrana("textarea_focus"); if (примерНеТронутRef.current) e.currentTarget.select(); }}
               onChange={(e) => {
                 const было = ideaPrompt;
                 const стало = e.target.value;
@@ -842,7 +846,7 @@ export default function DevHubPage() {
             ].map((example) => (
               <button
                 key={example}
-                onClick={() => setIdeaPrompt(example)}
+                onClick={() => { shagPervogoEkrana("example_chip_click"); setIdeaPrompt(example); }}
                 disabled={!hydrated}
                 style={{
                   padding: "5px 11px", background: "rgba(255,255,255,0.12)", color: "#ccfbf1",

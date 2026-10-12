@@ -55,7 +55,7 @@ import PostGameCard from "./PostGameCard";
 import DeepAnalysisPanel from "./DeepAnalysisPanel";
 import { temaZadachiRu, fazaRu, imyaZadachiBezPovtorov } from "./puzzleLabels";
 import { productById, keepChannel } from "@/lib/products";
-import { normalizePuzzle, solverSide, imyaPoResheniyu, goditsyaDlyaRush, hodPoRusski } from "./puzzleNormalize";
+import { normalizePuzzle, solverSide, imyaPoResheniyu, goditsyaDlyaRush, hodPoRusski, zadanieNadDoskoy } from "./puzzleNormalize";
 import WaitlistCapture from "@/components/WaitlistCapture";
 import { channelNow } from "@/lib/channelNow";
 import { tochnostSohranennoy } from "./postGameSummary";
@@ -9061,6 +9061,11 @@ export default function CyberChessPage(){
             </button>
           </div>}
 
+          {/* Задание ВИДИМОЙ строкой над доской. До 12.10.2026 человек, пришедший
+              по ссылке из комментария, не видел на экране ни чей ход, ни что искать:
+              это было только в подписи для скринридера и в карточке правой панели,
+              а она на телефоне — закрытая шторка. Число ходов из РЕШЕНИЯ, не из тега. */}
+          {tab==="puzzles"&&pzCurrent&&<div style={{width:bw,paddingLeft:23,fontSize:13,fontWeight:800,color:CC.text,lineHeight:1.25,marginBottom:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{zadanieNadDoskoy(pzCurrent)}</div>}
           <div translate="no" style={{display:"flex",width:bw,gap:4}}>
             {/* Eval bar — with W/B labels + centered numeric badge.
                 Hidden in P2P mode (no analysis surface during human matches). */}

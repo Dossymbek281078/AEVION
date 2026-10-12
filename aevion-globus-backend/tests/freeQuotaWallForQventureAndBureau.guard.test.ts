@@ -74,7 +74,9 @@ vi.mock("../src/lib/ensureQVentureTables", () => ({
 }));
 vi.mock("../src/lib/qventure/lenses", () => ({ runCouncil: mockCouncil }));
 vi.mock("../src/lib/sentry/platform", () => ({ makeServiceCapture: () => vi.fn() }));
-vi.mock("../src/lib/rateLimit", () => ({
+// Остальные экспорты — настоящие: норма считает гостя через clientIp (12.10.2026).
+vi.mock("../src/lib/rateLimit", async (orig) => ({
+  ...(await orig<typeof import("../src/lib/rateLimit")>()),
   rateLimit: () => (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 

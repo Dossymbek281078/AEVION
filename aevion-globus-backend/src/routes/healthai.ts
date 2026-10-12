@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { спроситьИИ } from "../lib/дешёвыйИИ";
 import crypto from "crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { учестьДействие, отказПоНорме } from "../lib/freeActionQuota";
 import { rateLimit } from "../lib/rateLimit";
 import { getPool } from "../lib/dbPool";
 import { makeServiceCapture } from "../lib/sentry/platform";
@@ -791,6 +792,15 @@ healthaiRouter.post("/check", async (req: Request, res: Response) => {
   }
   const severity = Math.max(1, Math.min(10, Number(body.severity) || 5));
   const durationH = Math.max(0, Number(body.durationH) || 0);
+
+  // Бесплатная норма проверок (lib/planGate.ts, ПРОБНЫЕ_ПУТИ). Считаем ПОСЛЕ
+  // разбора: пустой запрос не должен съедать бесплатную попытку. Спит, пока
+  // healthai_check не назван в PAID_ACTIONS; платящего не считает.
+  const норма = await учестьДействие(req, "healthai_check");
+  if (норма.заблокировано) {
+    отказПоНорме(res, "healthai", норма);
+    return;
+  }
 
   const { matched, generic } = classifySymptoms(symptoms);
 

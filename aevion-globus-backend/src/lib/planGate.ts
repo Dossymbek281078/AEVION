@@ -392,6 +392,32 @@ export function paywallEnabledFor(moduleId: string): boolean {
  * Границу держим узко: открываем ПОДПИСКУ на будущее, а не выдачу продукта.
  * Всё, что отдаёт функциональность, остаётся за тарифом.
  */
+/**
+ * Пробные пути: гость получает ОДИН результат закрытого модуля, дальше стена.
+ *
+ * Замер прода 12.10.2026 (окно Приложения-31.12): в HealthAI гость упирался в
+ * 402 уже на «Создать профиль» — попробовать нельзя было ничего, хотя модуль
+ * рекламируется. Путь открывается ТОЛЬКО если его действие названо в
+ * PAID_ACTIONS: тогда ручка сама считает бесплатную норму
+ * (lib/freeActionQuota.ts, FREE_<ДЕЙСТВИЕ>_PER_MONTH). Без этой переменной
+ * выкатка ничего не меняет — включает основатель одной настройкой.
+ * PAID_ACTIONS читаем здесь напрямую: freeActionQuota сам импортирует planGate.
+ */
+const ПРОБНЫЕ_ПУТИ: Record<string, ReadonlyArray<{ method: string; path: string; действие: string }>> = {
+  healthai: [
+    { method: "POST", path: "/profile", действие: "healthai_check" },
+    { method: "POST", path: "/check", действие: "healthai_check" },
+  ],
+};
+
+export function пробныйПуть(moduleId: string, req: Pick<Request, "method" | "path">): boolean {
+  const список = ПРОБНЫЕ_ПУТИ[moduleId];
+  if (!список) return false;
+  const названные = new Set((process.env.PAID_ACTIONS || "").split(",").map((x) => x.trim()).filter(Boolean));
+  const p = req.path.toLowerCase().replace(/\/+$/, "");
+  return список.some((x) => x.method === req.method && p === x.path && названные.has(x.действие));
+}
+
 function isExemptPath(req: Request): boolean {
   if (req.method === "OPTIONS") return true;
   const p = req.path.toLowerCase();
@@ -556,6 +582,7 @@ export function requireModule(moduleId: string, роутер?: РоутерСо�
       if (пути.length > 0 && !путьСовпадает(пути, req.path)) { next(); return; }
     }
     if (isExemptPath(req)) { next(); return; }
+    if (пробныйПуть(moduleId, req)) { next(); return; }
     const plan = resolveUserPlan(req);
     if (isModuleEntitled(plan, moduleId)) { next(); return; }
 

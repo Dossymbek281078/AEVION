@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { адресВозврата } from "../returnTo";
+import { адресВозврата, адресВозвратаИлиОткуда } from "../returnTo";
 
 const ЗДЕСЬ = dirname(fileURLToPath(import.meta.url));
 const СТРАНИЦА = readFileSync(join(ЗДЕСЬ, "..", "page.tsx"), "utf8");
@@ -42,12 +42,34 @@ describe("адрес возврата после входа", () => {
   it("и вход, и регистрация зовут возврат после успеха", () => {
     const вызовов = СТРАНИЦА.split("вернутьТуда();").length - 1;
     expect(вызовов, "возврат должен стоять в signIn И в register").toBe(2);
-    expect(СТРАНИЦА).toMatch(/адресВозврата\(window\.location\.search\)/);
+    expect(СТРАНИЦА).toMatch(/адресВозвратаИлиОткуда\(window\.location\.search, document\.referrer, window\.location\.origin, запомненная\)/);
+    expect(СТРАНИЦА).toMatch(/sessionStorage\.getItem\(ПОСЛЕДНЯЯ_СТРАНИЦА\)/);
   });
 
   it("QSign отправляет на вход с обратным адресом", () => {
     const qsign = readFileSync(join(ЗДЕСЬ, "..", "..", "qsign", "page.tsx"), "utf8");
     expect(qsign).toContain('href="/auth?next=/qsign"');
     expect(qsign).not.toMatch(/href="\/auth"/);
+  });
+
+  it("без next — назад на страницу нашего сайта, откуда пришли", () => {
+    const O = "https://aevion.app";
+    expect(адресВозвратаИлиОткуда("", "https://aevion.app/lifebox?c=ig", O)).toBe("/lifebox?c=ig");
+    expect(адресВозвратаИлиОткуда("?next=/qsign", "https://aevion.app/lifebox", O)).toBe("/qsign");
+  });
+
+  it("КОНТРОЛЬ: чужой сайт, пустой referrer и сама /auth — никуда не ведём", () => {
+    const O = "https://aevion.app";
+    expect(адресВозвратаИлиОткуда("", "https://evil.com/aevion.app", O)).toBeNull();
+    expect(адресВозвратаИлиОткуда("", "", O)).toBeNull();
+    expect(адресВозвратаИлиОткуда("", "https://aevion.app/auth", O)).toBeNull();
+    expect(адресВозвратаИлиОткуда("", "не адрес", O)).toBeNull();
+  });
+
+  it("переход через <Link>: referrer пустой, но запомненная страница возвращает (замер прода 12.10)", () => {
+    const O = "https://aevion.app";
+    expect(адресВозвратаИлиОткуда("", "", O, "/z-tide?c=ig")).toBe("/z-tide?c=ig");
+    expect(адресВозвратаИлиОткуда("?next=/qsign", "", O, "/z-tide")).toBe("/qsign");
+    expect(адресВозвратаИлиОткуда("", "", O, "//evil.com")).toBeNull();
   });
 });

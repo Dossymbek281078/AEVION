@@ -51,3 +51,23 @@ describe("тренер говорит о норме", () => {
     expect(СТРАНИЦА.split("soobschenieONorme(").length - 1).toBe(1);
   });
 });
+
+describe("тренер при 200 с fallback:\"engine\" показывает разбор движком с текстом сервера", () => {
+  it("🔴 ветка fallback стоит до разбора content и уходит в общий catch меткой отказПоСмыслу", () => {
+    const запрос = СТРАНИЦА.indexOf("fetch(`${BACKEND}/api/coach/chat`,");
+    const кусок = СТРАНИЦА.slice(запрос, запрос + 4000);
+    const ветка = кусок.indexOf('if(data?.fallback==="engine")');
+    const разбор = кусок.indexOf("const reply=data.content?.filter(");
+    expect(ветка, "ветка fallback есть").toBeGreaterThan(-1);
+    expect(разбор).toBeGreaterThan(-1);
+    expect(ветка, "fallback разбирается ДО чтения content — иначе на экране «(нет ответа)»").toBeLessThan(разбор);
+    expect(кусок.slice(ветка, разбор)).toContain("отказПоСмыслу=true");
+  });
+
+  it("🔴 в catch текст сервера подставляется вместо «недоступен», движок — как обычно", () => {
+    const i = СТРАНИЦА.indexOf('content:(e?.отказПоСмыслу?сообщениеОшибки:base)+tip');
+    expect(i, "подстановка текста сервера в сообщение чата").toBeGreaterThan(-1);
+    // литерал, за который держится ccCoachLimitTellsTheTruth, не тронут
+    expect(СТРАНИЦА).toContain("const base=лимитИсчерпан");
+  });
+});

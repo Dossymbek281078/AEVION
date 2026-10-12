@@ -12900,6 +12900,10 @@ ${question.trim()}`;
                   }
                   if(!res.ok){const e=await res.json().catch(()=>({error:`HTTP ${res.status}`}));throw new Error(e.error||`Server ${res.status}`)}
                   const data=await res.json();
+                  /* Сервер отбраковал свой ответ (не тот язык, огрызок) и честно говорит об этом
+                     кодом 200 с fallback:"engine" (решение оркестратора 13.10.2026: это не авария,
+                     5xx не поднимать). Человеку — разбор движком, как при отказе провайдера. */
+                  if(data?.fallback==="engine"){const о:any=new Error(String(data.message||"Тренер ответил не по делу — показываю разбор движком."));о.отказПоСмыслу=true;throw о;}
                   const reply=data.content?.filter((c:any)=>c.type==="text"||c.text).map((c:any)=>c.text||"").join("")||"(нет ответа)";
                   // Тренер ответил — прежняя пометка об отказе больше не верна.
                   тренерОтветил();
@@ -12950,7 +12954,8 @@ ${question.trim()}`;
                   const tip=bestSan
                     ?`\n\n♟ Отвечаю движком (Stockfish, глубина 14): лучший ход — ${ходПоРусски||bestSan}, оценка ${evalCpStr} (с точки зрения белых).${лимитИсчерпан?"":" Спроси ещё раз через минуту для развёрнутого разбора."}`
                     :(лимитИсчерпан?" Нажми 🔍 Объясни или 📋 План — они считаются движком и работают.":" Попробуй через минуту или используй кнопки 🔍 Объясни / 📋 План выше.");
-                  sCoachChat([...newMsgs,{role:"assistant",content:base+tip,ts:Date.now()}]);
+                  // Отказ по смыслу (200 с fallback:"engine") — текст сервера, остальное как при отказе провайдера.
+                  sCoachChat([...newMsgs,{role:"assistant",content:(e?.отказПоСмыслу?сообщениеОшибки:base)+tip,ts:Date.now()}]);
                 }finally{
                   sCoachChatLoading(false);
                 }

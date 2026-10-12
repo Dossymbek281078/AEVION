@@ -1,4 +1,5 @@
 import { Router, type Response, type Request } from "express";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 import { randomUUID } from "node:crypto";
 import { csvFromRows } from "../lib/csv";
 import { readJsonFile, writeJsonFile } from "../lib/jsonFileStore";
@@ -336,7 +337,7 @@ function sendCsvAttachment(
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader(
     "Content-Disposition",
-    `attachment; filename="${baseName}-${new Date().toISOString().slice(0, 10)}.csv"`,
+    `attachment; filename="${baseName}-${denPoMestnomu()}.csv"`,
   );
   res.status(200).send(csv);
 }
@@ -434,7 +435,7 @@ qtradeRouter.get("/statement.pdf", async (req, res, next) => {
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      `inline; filename="aevion-statement-${period}-${new Date().toISOString().slice(0, 10)}.pdf"`,
+      `inline; filename="aevion-statement-${period}-${denPoMestnomu()}.pdf"`,
     );
     doc.pipe(res);
 

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { denPoMestnomu } from "../../lib/denPoMestnomu";
 import crypto from "crypto";
 import {
   buildPool as pool,
@@ -329,7 +330,7 @@ applicationsRouter.get("/by-vacancy/:id/export.csv", async (req, res) => {
       .toLowerCase();
     const vacancySlug = /[a-z0-9]/.test(slugRaw) ? slugRaw.slice(0, 40) : String(id);
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="applications-${vacancySlug}-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.setHeader("Content-Disposition", `attachment; filename="applications-${vacancySlug}-${denPoMestnomu()}.csv"`);
     return res.send(`${header}\n${body}`);
   } catch (err: unknown) {
     return fail(res, 500, "applications_csv_failed");

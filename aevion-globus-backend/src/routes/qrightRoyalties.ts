@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 import { randomUUID } from "node:crypto";
 import { requireAuth } from "../lib/authJwt";
 import { csvFromRows } from "../lib/csv";
@@ -33,7 +34,7 @@ function sendCsv(res: Response, baseName: string, rows: (string | number | null 
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader(
     "Content-Disposition",
-    `attachment; filename="${baseName}-${new Date().toISOString().slice(0, 10)}.csv"`,
+    `attachment; filename="${baseName}-${denPoMestnomu()}.csv"`,
   );
   res.status(200).send(csvFromRows(rows));
 }

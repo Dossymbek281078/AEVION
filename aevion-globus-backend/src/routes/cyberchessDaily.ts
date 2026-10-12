@@ -1,4 +1,5 @@
 import { подсказкаРешающего } from "../lib/dailyHint";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 import { Router, Request, Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -478,7 +479,7 @@ async function saveDailyToDb(stamp: number): Promise<void> {
 }
 
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return denPoMestnomu();
 }
 
 function dayIndex(d?: string): number {
@@ -905,7 +906,7 @@ router.get('/history', async (req: Request, res: Response) => {
   const out: Array<{ day: string; id: string; theme: string; rating: number; fromBank: boolean }> = [];
   for (let i = 0; i < days; i++) {
     const di = today - i;
-    const date = new Date(di * 86400000).toISOString().slice(0, 10);
+    const date = denPoMestnomu(new Date(di * 86400000));
     const fromBank = i === 0 ? await dailyFromBank(date) : await dailyFromBank(date, false);
     const p = fromBank ?? pickDailyPuzzle(POOL, di);
     if (!p) continue;
@@ -969,7 +970,7 @@ function previousDay(day: string): string {
   const d = new Date(`${day}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return day;
   d.setUTCDate(d.getUTCDate() - 1);
-  return d.toISOString().slice(0, 10);
+  return denPoMestnomu(d);
 }
 
 function streakEndingAt(day: string, solvedDays: string[]): number {
@@ -979,7 +980,7 @@ function streakEndingAt(day: string, solvedDays: string[]): number {
   if (Number.isNaN(d.getTime())) return 1;
   for (;;) {
     d.setUTCDate(d.getUTCDate() - 1);
-    if (!set.has(d.toISOString().slice(0, 10))) break;
+    if (!set.has(denPoMestnomu(d))) break;
     n += 1;
     if (n >= MAX_STREAK) break;
   }

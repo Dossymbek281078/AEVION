@@ -1,4 +1,5 @@
 import { captureException } from "./sentry";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 
 /**
  * Сколько писем ушло за сутки — чтобы исчерпание квоты перестало быть НЕВИДИМЫМ.
@@ -73,7 +74,7 @@ const warnedAt = new Set<number>();
  * пройденные отметки сработают за один вызов.
  */
 export function noteEmailSent(recipients = 1): { day: string; count: number } {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = denPoMestnomu();
   if (today !== sentDay) {
     sentDay = today;
     sentCount = 0;

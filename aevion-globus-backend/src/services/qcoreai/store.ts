@@ -12,6 +12,7 @@
  */
 
 import crypto from "crypto";
+import { denPoMestnomu } from "../../lib/denPoMestnomu";
 import { getPool } from "../../lib/dbPool";
 import { ensureQCoreTables, isDbReady } from "../../lib/ensureQCoreTables";
 import type { ChatMessage } from "./providers";
@@ -1314,7 +1315,7 @@ export async function getCostTimeseries(
       if (!sessionIds.has(r.sessionId)) continue;
       const t = Date.parse(r.startedAt);
       if (!Number.isFinite(t) || t < cutoff) continue;
-      const date = new Date(t).toISOString().slice(0, 10);
+      const date = denPoMestnomu(new Date(t));
       const cur = buckets.get(date) || { runs: 0, costUsd: 0 };
       cur.runs += 1;
       cur.costUsd += r.totalCostUsd ?? 0;

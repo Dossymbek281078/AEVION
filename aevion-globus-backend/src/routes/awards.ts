@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 import crypto from "crypto";
 import { getJwtSecret } from "../lib/authJwt";
 import jwt from "jsonwebtoken";
@@ -1498,7 +1499,7 @@ awardsRouter.get("/sitemap.xml", awardsEmbedRateLimit, async (req, res) => {
     const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
     const host = (req.headers.host as string) || "aevion.app";
     const origin = `${proto}://${host}`;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = denPoMestnomu();
 
     const medals = await pool.query(
       `SELECT m."entryId", m."awardedAt"

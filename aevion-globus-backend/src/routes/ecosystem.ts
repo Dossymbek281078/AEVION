@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 import { requireAuth } from "../lib/authJwt";
 import { csvFromRows } from "../lib/csv";
 import { getPool } from "../lib/dbPool";
@@ -28,7 +29,7 @@ function sendCsv(
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader(
     "Content-Disposition",
-    `attachment; filename="${baseName}-${new Date().toISOString().slice(0, 10)}.csv"`,
+    `attachment; filename="${baseName}-${denPoMestnomu()}.csv"`,
   );
   res.status(200).send(csvFromRows(rows));
 }
@@ -132,7 +133,7 @@ function dailyBuckets(): Map<string, { qright: number; chess: number; planet: nu
   todayUtcMidnight.setUTCHours(0, 0, 0, 0);
   for (let i = EARNINGS_DAILY_WINDOW - 1; i >= 0; i--) {
     const d = new Date(todayUtcMidnight.getTime() - i * 86_400_000);
-    map.set(d.toISOString().slice(0, 10), { qright: 0, chess: 0, planet: 0 });
+    map.set(denPoMestnomu(d), { qright: 0, chess: 0, planet: 0 });
   }
   return map;
 }

@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 // Обычный импорт, а не require: под `require` подмена драйвера в тестах не
 // действует — тест «зеленеет», не выполнив ни одного запроса. Та же правка
 // уже сделана в cyberchessMatchStore.ts (12.08); esModuleInterop включён,
@@ -31,7 +32,7 @@ function sendCsv(res: Response, baseName: string, rows: (string | number | null 
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader(
     "Content-Disposition",
-    `attachment; filename="${baseName}-${new Date().toISOString().slice(0, 10)}.csv"`,
+    `attachment; filename="${baseName}-${denPoMestnomu()}.csv"`,
   );
   res.status(200).send(csvFromRows(rows));
 }

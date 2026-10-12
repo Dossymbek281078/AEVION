@@ -482,9 +482,13 @@ coachRouter.post("/chat", normaTrenera, anonCoachCeiling, generationLimit("coach
         /* останемся с прежним ответом и отдадим отказ ниже */
       }
       if (языкНеТот(вопросЧеловека, итог.reply) || ответОгрызок(итог.reply)) {
-        console.error("[coach] ответ отбракован дважды — отдаём отказ");
-        return res.status(502).json({
-          error:
+        console.warn("[coach] ответ отбракован дважды — отдаём разбор движком (fallback)");
+        /* Не авария, а отказ по смыслу: 200 с fallback — решение оркестратора 13.10.2026;
+           5xx здесь поднимал мониторинг зря (§15: 5xx значит «у нас сломалось»). */
+        return res.status(200).json({
+          fallback: "engine",
+          reason: языкНеТот(вопросЧеловека, итог.reply) ? "wrong-language" : "fragment",
+          message:
             "Тренер ответил не по делу — показываю разбор движком. Партия и задачи работают.",
         });
       }

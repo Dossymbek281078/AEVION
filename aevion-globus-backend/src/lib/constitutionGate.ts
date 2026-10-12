@@ -11,6 +11,7 @@
  */
 
 import type { Request, Response, NextFunction } from "express";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 import { verifyBearerOptional } from "./authJwt";
 import { getActivePlan } from "../routes/provisioning";
 import { clientIp } from "../lib/rateLimit";
@@ -135,7 +136,7 @@ async function takeAiQuota(rawKey: string): Promise<{ allowed: boolean; used: nu
   await ensureAiDailyTable();
   const limit = AI_FREE_DAILY_LIMIT;
   if (aiDbAvailable) {
-    const day = new Date().toISOString().slice(0, 10);
+    const day = denPoMestnomu();
     const key = aiKeyHash(rawKey);
     try {
       const r = await getPool().query(

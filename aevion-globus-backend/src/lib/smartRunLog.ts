@@ -9,6 +9,7 @@
  * are fire-and-forget — logging a run must never slow or fail a user request.
  */
 import { getPool } from "./dbPool";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 
 const EST_COUNCIL_COST_USD = 0.077;
 
@@ -312,7 +313,7 @@ export async function dailySmartRuns(days = 7): Promise<SmartDay[] | null> {
     const last = rows[rows.length - 1].day;
     const lastMs = Date.parse(last + "T00:00:00Z");
     for (let i = n - 1; i >= 0; i--) {
-      const d = new Date(lastMs - i * 86_400_000).toISOString().slice(0, 10);
+      const d = denPoMestnomu(new Date(lastMs - i * 86_400_000));
       const hit = byDay.get(d);
       out.push({
         date: d,

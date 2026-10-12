@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { getJwtSecret } from "../lib/authJwt";
@@ -405,7 +406,7 @@ modulesRouter.get("/registry.csv", modulesEmbedRateLimit, async (req, res) => {
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename="aevion-modules-${new Date().toISOString().slice(0, 10)}.csv"`
+      `attachment; filename="aevion-modules-${denPoMestnomu()}.csv"`
     );
     res.setHeader("Cache-Control", "public, max-age=300");
     res.send([header, ...lines].join("\r\n"));
@@ -1682,7 +1683,7 @@ modulesRouter.get("/sitemap.xml", modulesEmbedRateLimit, async (req, res) => {
         .replace(/'/g, "&apos;");
     }
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = denPoMestnomu();
     let latestOverrideMs = 0;
     for (const p of enriched) {
       const u = p.override?.updatedAt || p.updatedAt;

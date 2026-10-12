@@ -35,6 +35,7 @@
  */
 
 import { Router, Response } from "express";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 import { randomUUID, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { EventEmitter } from "node:events";
 import Stripe from "stripe";
@@ -1340,7 +1341,7 @@ qpaynetRouter.get("/transactions.csv", csvLimiter, async (req, res) => {
   ].map(escape).join(","));
 
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
-  res.setHeader("Content-Disposition", `attachment; filename="qpaynet-transactions-${new Date().toISOString().slice(0,10)}.csv"`);
+  res.setHeader("Content-Disposition", `attachment; filename="qpaynet-transactions-${denPoMestnomu()}.csv"`);
   res.send(header + "\n" + rows.join("\n"));
 });
 
@@ -2090,7 +2091,7 @@ qpaynetRouter.get("/requests.csv", async (req, res) => {
     r.notified_at ? new Date(r.notified_at).toISOString() : "",
   ].map(escape).join(","));
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
-  res.setHeader("Content-Disposition", `attachment; filename="qpaynet-requests-${new Date().toISOString().slice(0,10)}.csv"`);
+  res.setHeader("Content-Disposition", `attachment; filename="qpaynet-requests-${denPoMestnomu()}.csv"`);
   res.send(header + "\n" + rows.join("\n"));
 });
 
@@ -3226,7 +3227,7 @@ qpaynetRouter.get("/admin/refunds.csv", async (req, res) => {
       csvEscape(new Date(row.created_at).toISOString()),
     ].join(","));
   }
-  const stamp = new Date().toISOString().slice(0, 10);
+  const stamp = denPoMestnomu();
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="qpaynet-refunds-${stamp}.csv"`);
   res.send(lines.join("\n") + "\n");
@@ -3895,7 +3896,7 @@ qpaynetRouter.get("/me/dashboard", async (req, res) => {
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     last7days: daily7.rows.map((r: any) => ({
-      day: new Date(r.day).toISOString().slice(0, 10),
+      day: denPoMestnomu(new Date(r.day)),
       inKzt: fromTiin(BigInt(r.in_amount)),
       outKzt: fromTiin(BigInt(r.out_amount)),
     })),

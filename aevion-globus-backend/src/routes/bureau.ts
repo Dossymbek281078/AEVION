@@ -12,6 +12,7 @@
  * webhook.
  */
 import { Router, type Request, type Response } from "express";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 import { учестьДействие, отказПоНорме } from "../lib/freeActionQuota";
 import { BUREAU_VERIFIED_REFERENCE } from "../data/lemonSqueezyVariants";
 import crypto from "crypto";
@@ -1932,7 +1933,7 @@ bureauRouter.get("/kyc-stub/:sessionId", (req: Request, res: Response) => {
 
 function bumpCertFetchCounter(req: Request, certId: string): void {
   const host = refererHost(req);
-  const day = new Date().toISOString().slice(0, 10);
+  const day = denPoMestnomu();
   pool
     .query(
       `INSERT INTO "BureauCertFetchSource" ("certId","sourceHost","day","fetches")
@@ -2691,7 +2692,7 @@ bureauRouter.get("/sitemap.xml", bureauEmbedRateLimit, async (req, res) => {
     const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
     const host = (req.headers.host as string) || "aevion.app";
     const origin = `${proto}://${host}`;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = denPoMestnomu();
 
     const r = await pool.query(
       `SELECT "id","authorVerifiedAt","protectedAt"

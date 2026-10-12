@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
@@ -789,7 +790,7 @@ qstoreRouter.get("/me/dashboard/chart", async (req: Request, res: Response) => {
   for (let d = days - 1; d >= 0; d--) {
     const day = new Date(now);
     day.setDate(day.getDate() - d);
-    const dateStr = day.toISOString().slice(0, 10);
+    const dateStr = denPoMestnomu(day);
     const dayStart = dateStr;
     const dayEnd = dateStr + "T23:59:59.999Z";
     const daySales = allSales.filter((s) => s.createdAt >= dayStart && s.createdAt <= dayEnd);

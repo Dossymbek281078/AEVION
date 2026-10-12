@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { getJwtSecret } from "../lib/authJwt";
@@ -2565,7 +2566,7 @@ planetComplianceRouter.get("/certificates/:certId/badge.svg", planetEmbedRateLim
       return res.status(304).end();
     }
 
-    const dateLabel = createdAt.toISOString().slice(0, 10);
+    const dateLabel = denPoMestnomu(createdAt);
     bumpPlanetCertCounters(req, row.id);
 
     if (row.revokedAt) {
@@ -2898,7 +2899,7 @@ planetComplianceRouter.get("/admin/certificates.csv", async (req, res) => {
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename="planet-certificates-${new Date().toISOString().slice(0, 10)}.csv"`
+      `attachment; filename="planet-certificates-${denPoMestnomu()}.csv"`
     );
     res.setHeader("Cache-Control", "no-store");
     res.send([header, ...lines].join("\r\n"));
@@ -3660,7 +3661,7 @@ planetComplianceRouter.get("/sitemap.xml", planetEmbedRateLimit, async (req, res
     const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
     const host = (req.headers.host as string) || "aevion.app";
     const origin = `${proto}://${host}`;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = denPoMestnomu();
 
     const r = await pool.query(
       `SELECT v."id" AS "artifactVersionId", c."createdAt"

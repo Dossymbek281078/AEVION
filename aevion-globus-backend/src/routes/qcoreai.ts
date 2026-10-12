@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 import { makeServiceCapture } from "../lib/sentry/platform";
 
 const captureQCoreAIError = makeServiceCapture("qcoreai");
@@ -2273,7 +2274,7 @@ qcoreaiRouter.get("/sessions/:id/export", async (req, res) => {
       return;
     }
 
-    let md = `# ${session.title}\n\n*Exported from AEVION QCoreAI · ${new Date().toISOString().slice(0, 10)}*\n\n---\n\n`;
+    let md = `# ${session.title}\n\n*Exported from AEVION QCoreAI · ${denPoMestnomu()}*\n\n---\n\n`;
     for (const run of runs) {
       const messages = await listMessages(run.id);
       md += renderRunMarkdown({ session, run, messages });
@@ -5433,7 +5434,7 @@ qcoreaiRouter.get("/me/cost-trend", async (req, res) => {
       for (let i = days - 1; i >= 0; i--) {
         const d = new Date(now);
         d.setDate(d.getDate() - i);
-        const dateStr = d.toISOString().slice(0, 10);
+        const dateStr = denPoMestnomu(d);
         const costUsd = byDay.get(dateStr) ?? 0;
         points.push({ date: dateStr, costUsd, rollingAvg7d: 0 });
       }
@@ -6015,7 +6016,7 @@ qcoreaiRouter.post("/notebook/collections/:id/export", async (req, res) => {
     const lines: string[] = [
       `# ${collection?.name ?? "Collection"} — QCoreAI Notebook Export`,
       ``,
-      `*Exported: ${new Date().toISOString().slice(0, 10)} | ${collSnippets.length} snippet(s)*`,
+      `*Exported: ${denPoMestnomu()} | ${collSnippets.length} snippet(s)*`,
       ``,
     ];
     if (collection?.description) {
@@ -6169,7 +6170,7 @@ qcoreaiRouter.get("/benchmarks", (_req, res) => {
   });
   res.json({
     models,
-    lastUpdated: new Date().toISOString().slice(0, 10),
+    lastUpdated: denPoMestnomu(),
     note: "costScore is computed live from pricing.ts's real list prices (cheaper = higher score). measuredLatencyMs is the median full-request latency of this instance's recent real non-streaming calls (provider_health_log window; null until >=3 samples). speedScore/qualityScore are illustrative estimates, not measured -- for an actual measured multi-agent quality benchmark (N=40, pairwise-judged, reproducible), see /qcoreai/vs and docs/benchmarks/.",
   });
 });
@@ -6710,7 +6711,7 @@ qcoreaiRouter.get("/analytics/cohorts", async (req, res) => {
       params
     );
     const cohorts = r.rows.map((row: any) => ({
-      week: new Date(row.week).toISOString().slice(0, 10),
+      week: denPoMestnomu(new Date(row.week)),
       sessionsCreated: row.sessionsCreated,
       runsWeek0: row.runsWeek0,
       runsWeek1: row.runsWeek1,

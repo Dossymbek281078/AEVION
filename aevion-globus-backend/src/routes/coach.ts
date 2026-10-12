@@ -35,6 +35,7 @@ import { makeServiceCapture } from "../lib/sentry/platform";
 import { randomUUID } from "crypto";
 import { requireAuth } from "../lib/authJwt";
 import { generationLimit, rateLimit } from "../lib/rateLimit";
+import { normaTrenera } from "../lib/coachNorma";
 import { checkAiInputBudget, isAnonymousRequest } from "../lib/aiInputBudget";
 import {
   callProvider,
@@ -356,7 +357,7 @@ const anonCoachCeiling = rateLimit({
   message: "rate_limit_exceeded: too many anonymous coach requests platform-wide, sign in to continue",
 });
 
-coachRouter.post("/chat", anonCoachCeiling, generationLimit("coach_chat"), async (req: Request, res: Response) => {
+coachRouter.post("/chat", normaTrenera, anonCoachCeiling, generationLimit("coach_chat"), async (req: Request, res: Response) => {
   try {
     // Ключ именно Anthropic больше не обязателен: ответить может любой
     // настроенный поставщик. Отказ здесь означает, что не настроен НИ ОДИН.
@@ -513,7 +514,7 @@ coachRouter.post("/chat", anonCoachCeiling, generationLimit("coach_chat"), async
 // токен за токеном (живая печать, lichess/ChatGPT-стиль). Фронт парсит
 // content_block_delta (delta.type==="text_delta") и дописывает текст.
 // Без thinking — быстрый первый токен для коротких подсказок.
-coachRouter.post("/chat/stream", anonCoachCeiling, generationLimit("coach_chat_stream"), async (req: Request, res: Response) => {
+coachRouter.post("/chat/stream", normaTrenera, anonCoachCeiling, generationLimit("coach_chat_stream"), async (req: Request, res: Response) => {
   try {
     // Ключ именно Anthropic больше не обязателен: поток может выдать любой
     // настроенный поставщик. Отказ здесь — «не настроен НИ ОДИН».

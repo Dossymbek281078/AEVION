@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useEffect, useState } from "react";
+import { renderMarkdown } from "@/lib/build/markdown";
 import { MODULE_NODES } from "@/data/pitchFacts";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { Wave1Nav } from "@/components/Wave1Nav";
@@ -552,12 +553,18 @@ export default function QCoreAIPage() {
                     border: m.role === "user" ? "none" : "1px solid rgba(15,23,42,0.08)",
                     fontSize: 14,
                     lineHeight: 1.55,
-                    whiteSpace: "pre-wrap" as const,
+                    whiteSpace: m.role === "assistant" ? ("normal" as const) : ("pre-wrap" as const),
                     boxShadow: m.role === "assistant" ? "0 1px 4px rgba(15,23,42,0.06)" : "none",
                   }}
-                >
-                  {m.content}
-                </div>
+                  // Ответ модели приходит Markdown-ом. До 12.10.2026 он печатался
+                  // как есть — гость видел «**QRight**» со звёздочками (замер окна
+                  // Приложения-31.12). renderMarkdown сперва экранирует HTML,
+                  // поэтому ответ модели не может вставить свою разметку.
+                  className={m.role === "assistant" ? "[&_p]:my-1.5 [&_a]:text-teal-700 [&_code]:bg-slate-100 [&_code]:text-slate-800" : undefined}
+                  {...(m.role === "assistant"
+                    ? { dangerouslySetInnerHTML: { __html: renderMarkdown(m.content) } }
+                    : { children: m.content })}
+                />
               </div>
             ))
           )}

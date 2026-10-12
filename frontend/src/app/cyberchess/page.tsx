@@ -184,6 +184,7 @@ import OpeningFlashCard from "./OpeningFlashCard";
 import MirrorModePanel from "./MirrorModePanel";
 import { buildPlayerProfile, mirrorDepth, type PlayerProfile, type SavedGameForMirror } from "./mirrorMode";
 import { getAuthToken } from "@/lib/auth";
+import { sekundyResheniya, bonusZaSkorost, podpisSkorosti } from "./skorostZadachi";
 
 /** Русское склонение по числу: 1 задача, 2 задачи, 5 задач.
  *  Без него счётчик пишет «502 584 задач» там, где нужно «задачи». */
@@ -2251,6 +2252,29 @@ export default function CyberChessPage(){
       (b as HTMLElement).style.background=sec<10?"#d1fae5":sec<30?"#fef3c7":"#f3f4f6";
     }
   },[]);
+  /*
+   * 🔴 СЕКУНДОМЕР ЗАВОДИТСЯ ОДНИМ МЕСТОМ НА ВСЕ ПУТИ (12.10.2026).
+   *
+   * Было: старт стоял руками в двух загрузчиках — выбор задачи из списка и
+   * загрузка FEN из файла. А задача приходит и ТРЕТЬИМ путём, по ссылке
+   * `?puzzle=<id>` из ролика, и там ref оставался нулём. На экране это давало
+   * «⏱ скорость 1791803299с» — время с 1970 года, — а по шкале бонуса такой
+   * «результат» всегда падал в последнюю ветку: пришедший из ролика, самый
+   * ценный для нас человек, получал минимальную награду и нелепое число.
+   *
+   * Поэтому старт привязан к СМЕНЕ ЗАДАЧИ, а не к месту загрузки: появится
+   * четвёртый путь — он тоже окажется измерен, и чинить это снова не придётся.
+   * Ключ — id задачи: по ходу решения тот же объект правится (sol.slice), и по
+   * ссылке на объект секундомер сбрасывался бы посреди решения.
+   */
+  useEffect(()=>{
+    if(!pzCurrent)return;
+    if(pzTimerIntervalRef.current)clearInterval(pzTimerIntervalRef.current);
+    pzTimerRef.current=Date.now();sPzTimer(0);paintPzTimer(0);
+    pzTimerIntervalRef.current=setInterval(()=>paintPzTimer(Math.floor((Date.now()-pzTimerRef.current)/1000)),500);
+    return()=>{if(pzTimerIntervalRef.current)clearInterval(pzTimerIntervalRef.current);};
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[pzCurrent?.id,paintPzTimer]);
   // Per-puzzle wrong-attempt tracking (keyed by fen so it resets on puzzle change).
   // Used to reveal the expected best move as a hint after 2 wrong tries (lichess-style).
   const pzWrongTriesRef=useRef<{fen:string;n:number}>({fen:"",n:0});
@@ -4341,7 +4365,7 @@ export default function CyberChessPage(){
                 addChessy(reward,"задача решена");
                 soobschitORescheniiZadachi(pzCurrent,этоЗадачаДня);
                 if(pzTimerIntervalRef.current){clearInterval(pzTimerIntervalRef.current);pzTimerIntervalRef.current=null;}
-                {const elapsed=Math.floor((Date.now()-pzTimerRef.current)/1000);const tb=elapsed<10?20:elapsed<30?10:5;addChessy(tb,`⏱ скорость ${elapsed}с`);sPzSessionChessy(c=>c+reward+tb);}
+                {const elapsed=sekundyResheniya(pzTimerRef.current,Date.now());const tb=bonusZaSkorost(elapsed);const подпись=podpisSkorosti(elapsed);if(tb>0&&подпись)addChessy(tb,подпись);sPzSessionChessy(c=>c+reward+tb);}
                 bumpDaily("puzzle");
                 if(pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
                 if(dailyState&&!dailyState.solved&&этоЗадачаДня){
@@ -4382,7 +4406,7 @@ export default function CyberChessPage(){
           addChessy(reward,"задача решена");
           soobschitORescheniiZadachi(pzCurrent,этоЗадачаДня);
           if(pzTimerIntervalRef.current){clearInterval(pzTimerIntervalRef.current);pzTimerIntervalRef.current=null;}
-          {const elapsed=Math.floor((Date.now()-pzTimerRef.current)/1000);const tb=elapsed<10?20:elapsed<30?10:5;addChessy(tb,`⏱ скорость ${elapsed}с`);sPzSessionChessy(c=>c+reward+tb);}
+          {const elapsed=sekundyResheniya(pzTimerRef.current,Date.now());const tb=bonusZaSkorost(elapsed);const подпись=podpisSkorosti(elapsed);if(tb>0&&подпись)addChessy(tb,подпись);sPzSessionChessy(c=>c+reward+tb);}
           bumpDaily("puzzle");
           if(pzCurrent.theme==="Твоя ошибка"){addChessy(3,"🎯 ошибка исправлена")}
           // Daily puzzle bonus — first solve today

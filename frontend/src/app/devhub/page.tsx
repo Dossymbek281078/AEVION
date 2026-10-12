@@ -23,7 +23,7 @@ import { stackForIdea, даннымНуженСервер, доступенРе�
   type РежимПостройки } from "@/lib/devhubStackChoice";
 import { indexCapabilities, isCapabilityBlocked, type CapabilityIndex } from "@/lib/devhubCapabilities";
 import { DEVHUB_EXAMPLES, exampleText } from "./examples";
-import { primerDlyaPustogoPolya } from "@/lib/devhubPervyyShag";
+import { primerDlyaPustogoPolya, ПОЛЕ_ОПИСАНИЯ_ФОН, ПОЛЕ_ОПИСАНИЯ_ТЕКСТ } from "@/lib/devhubPervyyShag";
 
 type Stack = "next" | "express" | "static" | "react" | "python";
 type ProjectStatus = "draft" | "building" | "live" | "error";
@@ -654,8 +654,13 @@ export default function DevHubPage() {
               onChange={(e) => setIdeaPrompt(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) startFromIdea(); }}
               placeholder={t("hero.placeholder")}
+              /* Цвета ЯВНЫЕ. Унаследованные делали ввод невидимым: текст был
+                 rgb(15,23,42), а градиент карточки под полем начинается ровно
+                 с rgb(15,23,42) — контраст 1:1 там, где стоит курсор (замер
+                 12.10.2026 на проде). Человек не видел, что набирает. */
               style={{
                 flex: "1 1 380px", minHeight: 56, padding: "12px 14px", border: "none",
+                background: ПОЛЕ_ОПИСАНИЯ_ФОН, color: ПОЛЕ_ОПИСАНИЯ_ТЕКСТ,
                 borderRadius: 10, fontSize: 14, fontFamily: "inherit", resize: "vertical", boxSizing: "border-box",
               }}
             />

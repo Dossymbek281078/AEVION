@@ -774,6 +774,22 @@ export interface РазрезВоронки {
    * закрывшая вкладку без события, здесь не появится вовсе — и это видно по
    * тому, что сумма корзин меньше числа «попробовали».
    */
+  /**
+   * Разрез по ШАГАМ ВНУТРИ модуля: ключ «источник|шаг», например
+   * «devhub|generation». Считается ПО СЕССИЯМ, как byChessPlies.
+   *
+   * 🔴 Замер 12.10.2026 (приёмка user-99): DevHub давно шлёт три шага пути
+   * покупателя — build_from_idea (нажал «Построить»), generation (файлы
+   * пришли), deploy_pages (выложил на свой адрес) — событиями feature_use.
+   * Воронка их принимала, но складывала в общие ступени «внимание» и
+   * «попробовали», где они смешаны с шахматами. В теле /funnel слов feature,
+   * build_from_idea, generation, deploy_pages было РОВНО НОЛЬ при 145 КБ
+   * ответа. То есть на вопрос «сколько человек довели приложение до адреса»
+   * ответить было нечем — при том, что события лежали сырыми всё это время.
+   *
+   * События уже записаны, поэтому разрез отвечает и за прошедшие дни.
+   */
+  byFeature: Record<string, { сессий: number; сессийНаших: number }>;
   byChessPlies: Record<string, { сессий: number; сессийНаших: number }>;
   byChannel: Record<
     string,
@@ -1328,7 +1344,7 @@ export function пустойВход(): РазрезВоронки["byEntryPage"
 }
 
 export function разрезВоронки(
-  events: Array<Pick<AnalyticsEvent, "type" | "path" | "meta" | "sid" | "refHost">>,
+  events: Array<Pick<AnalyticsEvent, "type" | "path" | "meta" | "sid" | "refHost" | "source">>,
   нашиСессии: ReadonlySet<string> = new Set(),
   пробыОкон: ReadonlySet<string> = new Set(),
 ): РазрезВоронки {
@@ -2526,9 +2542,41 @@ export function разрезВоронки(
     if (сессий > 0) byChessPlies[имя] = { сессий, сессийНаших: наших };
   }
 
+  /**
+   * Шаги внутри модуля (см. тип byFeature). Отдельным проходом, а не внутри
+   * большого цикла: тот отсеивает всё, кроме checkout-событий, и feature_use
+   * до него не доходит.
+   */
+  const byFeature = Object.create(null) as РазрезВоронки["byFeature"];
+  {
+    const сессииШага = new Map<string, Set<string>>();
+    for (const ev of events) {
+      if (ev.type !== "feature_use") continue;
+      const сыройШаг = ev.meta?.feature;
+      const шаг = typeof сыройШаг === "string" && сыройШаг.trim() ? сыройШаг.trim().slice(0, 40) : null;
+      if (!шаг || !ev.sid) continue;
+      const сыройИсточник = ev.source;
+      const источник =
+        typeof сыройИсточник === "string" && сыройИсточник.trim() ? сыройИсточник.trim().slice(0, 40) : "unknown";
+      const ключ = `${источник}|${шаг}`;
+      let набор = сессииШага.get(ключ);
+      if (!набор) {
+        набор = new Set<string>();
+        сессииШага.set(ключ, набор);
+      }
+      набор.add(ev.sid);
+    }
+    for (const [ключ, набор] of сессииШага) {
+      let наших = 0;
+      for (const sid of набор) if (нашЗаход(sid) || заходы.get(sid)?.наш) наших += 1;
+      byFeature[ключ] = { сессий: набор.size, сессийНаших: наших };
+    }
+  }
+
   return {
     byChannel,
     byApp,
+    byFeature,
     byPost,
     byEntryPage,
     byUnknownTag: топМеток,
@@ -3965,6 +4013,7 @@ eventsRouter.get("/funnel", (req, res) => {
     // весь день выглядел прямыми заходами.
     byChannel: разрез.byChannel,
     byApp: разрез.byApp,
+    byFeature: разрез.byFeature,
     // 🔴 ЭТИ ДВА ПОЛЯ ЗАБЫЛ ОТПРАВИТЬ — 30.09.2026, нашлось проверкой прода.
     // Разрез по постам и по страницам входа считался, тесты были зелёными, а в
     // JSON поля не попадали: ответ перечисляет поля поимённо, и я дописал их в

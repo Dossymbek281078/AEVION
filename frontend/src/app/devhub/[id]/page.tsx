@@ -12,6 +12,7 @@ import { shouldOfferDbHint, shouldOfferDeployHint, shouldOfferManifestHint } fro
 import { buildReactPreviewSrcdoc, isClientPreviewStack } from "@/lib/reactPreview";
 import { pickEntryFile, hasRenderableHtml } from "@/lib/devhubEntryFile";
 import { maketRabochegoOkna } from "@/lib/devhubMaket";
+import { vstavitZaglushkuHranilisha, PODPIS_O_HRANILISHE } from "@/lib/devhubPreviewStorage";
 import { indexCapabilities, isCapabilityBlocked, isCapabilityConfirmed, capabilityHint, каналВыкатки, type CapabilityIndex } from "@/lib/devhubCapabilities";
 import { assetSnippet, appendSnippet, type AssetKind } from "@/lib/devhubAssetSnippet";
 import { newFilePathError, renamePathError, normalizeFilePath } from "@/lib/devhubFilePaths";
@@ -689,7 +690,13 @@ function buildVisualEditDocs(htmlPath: string, filesList: FileItem[]): { sourceD
   overlay.textContent = VISUAL_EDIT_OVERLAY_SCRIPT;
   displayDoc.body?.appendChild(overlay);
 
-  return { sourceDoc, srcdoc: "<!DOCTYPE html>\n" + displayDoc.documentElement.outerHTML };
+  // Хранилище песочницы. Без этого сгенерированный код падал на localStorage
+  // (SecurityError: sandboxed, замер 12.10.2026), и сохранение в превью молча
+  // не работало. allow-same-origin не добавляем — см. devhubPreviewStorage.ts.
+  return {
+    sourceDoc,
+    srcdoc: vstavitZaglushkuHranilisha("<!DOCTYPE html>\n" + displayDoc.documentElement.outerHTML),
+  };
 }
 
 type VisualStyles = { color: string; fontSize: string; fontWeight: string; textAlign: string };
@@ -2052,7 +2059,8 @@ if (/Месячная норма исчерпана|Месячный лимит[
     ).then((r) => {
       if (cancelled) return;
       if ("error" in r) { setReactPreviewSrcdoc(null); setReactPreviewError(serverError(r.error, "Превью не собралось")); }
-      else { setReactPreviewSrcdoc(r.srcdoc); }
+      // Та же заглушка хранилища, что и у статики: песочница одна и та же.
+      else { setReactPreviewSrcdoc(vstavitZaglushkuHranilisha(r.srcdoc)); }
       setVisualEditSelected(null);
     });
     return () => { cancelled = true; };
@@ -4266,13 +4274,22 @@ if (/Месячная норма исчерпана|Месячный лимит[
                   <div style={{ fontSize: 15 }}>Не найден index.html — создайте его, чтобы править кликами.</div>
                 </div>
               ) : (
-                <iframe
-                  ref={visualEditIframeRef}
-                  srcDoc={visualEditSrcdoc}
-                  sandbox="allow-scripts"
-                  style={{ flex: 1, width: "100%", border: "none", background: "#fff" }}
-                  title={AL.vePreview}
-                />
+                <>
+                  <iframe
+                    ref={visualEditIframeRef}
+                    srcDoc={visualEditSrcdoc}
+                    sandbox="allow-scripts"
+                    style={{ flex: 1, width: "100%", border: "none", background: "#fff" }}
+                    title={AL.vePreview}
+                  />
+                  {/* Честная граница: в песочнице стоит наше хранилище в памяти,
+                      и данные живут, пока открыто превью. Молчать тут нельзя —
+                      человек решит, что сохранение работает, и узнает обратное
+                      после выкатки. */}
+                  <div style={{ padding: "6px 12px", fontSize: 11, lineHeight: 1.35, color: "#64748b", background: "#f8fafc", borderTop: "1px solid #f1f5f9" }}>
+                    {PODPIS_O_HRANILISHE}
+                  </div>
+                </>
               )
             ) : selectedFile ? (
               <>

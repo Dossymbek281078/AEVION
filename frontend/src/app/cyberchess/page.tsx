@@ -185,6 +185,7 @@ import MirrorModePanel from "./MirrorModePanel";
 import { buildPlayerProfile, mirrorDepth, type PlayerProfile, type SavedGameForMirror } from "./mirrorMode";
 import { getAuthToken } from "@/lib/auth";
 import { sekundyResheniya, bonusZaSkorost, podpisSkorosti } from "./skorostZadachi";
+import { zapasPodDoskoy } from "./zapasPodDoskoy";
 
 /** Русское склонение по числу: 1 задача, 2 задачи, 5 задач.
  *  Без него счётчик пишет «502 584 задач» там, где нужно «задачи». */
@@ -1639,6 +1640,8 @@ export default function CyberChessPage(){
   const[repertoireOpen,sRepertoireOpen]=useState(false);
   const[boardArt,sBoardArt]=useState<BoardArtId>(()=>{try{return(localStorage.getItem("aevion_chess_art_v1")||"off") as BoardArtId}catch{return"off"}});
   useEffect(()=>{try{localStorage.setItem("aevion_chess_art_v1",boardArt)}catch{}},[boardArt]);
+  // Заход по ссылке на задачу (?puzzle=): крупнее доска, без рейла и лишних рядов на столе.
+  const[зашёлЗаЗадачей,sЗашёлЗаЗадачей]=useState(false);
   const[boardScale,sBoardScale]=useState<number>(()=>{try{const v=parseFloat(localStorage.getItem("cc_board_scale_v1")||"1");return isNaN(v)?1:Math.max(0.5,Math.min(1.5,v))}catch{return 1}});
   useEffect(()=>{try{localStorage.setItem("cc_board_scale_v1",String(boardScale))}catch{}},[boardScale]);
   const[vwPx,sVwPx]=useState(1280);const[vhPx,sVhPx]=useState(800);
@@ -1664,6 +1667,24 @@ export default function CyberChessPage(){
   useIsoLayoutEffect(()=>{
     let поСсылке=false;
     try{поСсылке=!!new URLSearchParams(window.location.search).get("puzzle")}catch{}
+    /*
+     * 🔴 ЗАШЁЛ ЗА ЗАДАЧЕЙ — ДОСКА КРУПНЕЕ, ЛИШНЕЕ УБРАНО (12.10.2026).
+     *
+     * Замер на проде 7fb9d76ac6a4, окно ноутбука 1463×724, заход по ?puzzle=:
+     * доска 257×257 px — 18 % ширины экрана, самое маленькое, что есть на
+     * экране. Слева колонка «Оценка / Материал / Партия» (378×573) — для задачи
+     * бесполезная, справа пустой список «Ходы». На телефоне (390×844) доска
+     * 351×351, 90 % ширины — там всё в порядке. То есть беда ровно там, где
+     * смотрят ролики с компьютера. По воронке за 14 дней с ютуба пришли 167
+     * живых, задачу решил ОДИН.
+     *
+     * Размер доски ограничен ВЫСОТОЙ: vhPx − (boardTopPx + 186), где 186 —
+     * запас под два ряда кнопок партии («Новая партия», «Сдаться», «Ничья»),
+     * которые пришедшему за задачей не нужны. Для этого захода на столе рейл
+     * не показываем, а запас под доской сокращаем — доска растёт на разницу.
+     * Остальные режимы не трогаем: флаг живёт только у захода по ссылке.
+     */
+    sЗашёлЗаЗадачей(поСсылке);
     if(!поСсылке&&!hasCompletedOnboarding())sShowOnboarding(true);
   },[]);
 
@@ -1695,7 +1716,7 @@ export default function CyberChessPage(){
   // ~660 (рейл 248 + панель 340 + поля), без рейла ~400 (только панель + поля) — так
   // 3-колоночная раскладка никогда не выходит за окно. Кап 1400 — доска заполняет
   // высоту больших окон, но не доминирует на 4K. boardScale поверх, финал зажат потолком.
-  const railShown=vwPx>=1100; // должно совпадать с порогом рендера <aside> ниже
+  const railShown=vwPx>=1100&&!зашёлЗаЗадачей; // должно совпадать с порогом рендера <aside> ниже
   // Путь к настоящей кассе ($, Lemon Squeezy) — ВСЕГДА на экране, независимо от ширины и онбординга.
   // Замер 20.09.2026: единственная цена жила в баннере проектов (только ≥1100px и только без
   // онбординга) — на телефоне и у нового гостя цены не было никогда; магазин Chessy продаёт
@@ -1799,7 +1820,9 @@ export default function CyberChessPage(){
   const podDoskoyRow:React.CSSProperties=lowDesktop
     ?{flexWrap:"nowrap",overflowX:"auto",scrollbarWidth:"none"}
     :{flexWrap:"wrap",overflowX:"visible"};
-  const desktopVReserve=Math.max(250,boardTopPx>0?boardTopPx+(lowDesktop?186:150):0);
+  // Пришедшему за задачей ряды партии под доской не нужны — запас меньше, доска больше.
+  const запасПодДоской=zapasPodDoskoy(зашёлЗаЗадачей,lowDesktop);
+  const desktopVReserve=Math.max(250,boardTopPx>0?boardTopPx+запасПодДоской:0);
   /*
    * 🔴 12.10, приёмка волны 50: уступка доски сработала на 540 и 768 (клетка
    * 58→52 и 83→68, почти ровно обещанные 54 и 69), а на 390×844 — НЕ сработала
@@ -8925,7 +8948,7 @@ export default function CyberChessPage(){
             Порог vwPx>=1100 (синхронен с railShown выше — бюджет ширины доски резервирует
             под рейл, поэтому aside(248)+доска+панель(340)+gaps влезают без overflow на любой
             ширине ≥1100). Ниже 1100 рейл скрыт → привычная раскладка доска+правая панель. */}
-        {(on||over||tab==="analysis")&&!streamerMode&&vwPx>=1100&&(()=>{
+        {(on||over||tab==="analysis")&&!streamerMode&&railShown&&(()=>{
           const PV:Record<string,number>={"♕":9,"♛":9,"♖":5,"♜":5,"♗":3,"♝":3,"♘":3,"♞":3,"♙":1,"♟":1};
           const sum=(a:string[])=>a.reduce((s,c)=>s+(PV[c]||0),0);
           const adv=sum(capB)-sum(capW); // >0 = белые впереди
@@ -9893,7 +9916,7 @@ export default function CyberChessPage(){
 
           {/* Controls — under-board strip. Game-essentials only. Heatmap/Whisper/Share/History live in the
               right-sidebar Tools card to reduce visual clutter under the board. */}
-          <div style={{display:"flex",gap:8,marginTop:SPACE[2],...podDoskoyRow}}>
+          {!(зашёлЗаЗадачей&&!isMobileLayout)&&<div style={{display:"flex",gap:8,marginTop:SPACE[2],...podDoskoyRow}}>
             <Btn size="md" variant="secondary" icon={<Icon.Flip width={16} height={16}/>} onClick={()=>sFlip(!flip)}>Перевернуть</Btn>
             <Btn size="md" variant="primary" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>Новая партия</Btn>
             {on&&!setup&&<Btn size="md" variant={mirrorActive?"primary":"secondary"} onClick={()=>{if(mirrorActive){sMirrorActive(false);showToast("🪞 Зеркальный режим выключен","info");}else{sMirrorActive(true);showToast("🪞 Зеркальный режим — соперник играет как ты","info");}}} title="Зеркальный режим — соперник копирует твой стиль">🪞</Btn>}
@@ -10085,7 +10108,7 @@ export default function CyberChessPage(){
             {over&&!hotseat&&<Btn size="md" variant="secondary" title="Новая партия с теми же настройками против другого уровня ИИ" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>⚙ Настройки</Btn>}
             {/* Premove Undo / Clear — moved to the top strip above the board (premoves row).
                 Removed from this bottom controls row to avoid duplication. */}
-          </div>
+          </div>}
           {/* Ряд «Сдаться · Ничья · Отменить · Подсказка» — только на вкладке партии: на Задачах/Коуче/Анализе
               при паузе партии он сбивал с толку (тестер 20.09.2026, 390: «Сдаться» под доской задачи). */}
           {/*

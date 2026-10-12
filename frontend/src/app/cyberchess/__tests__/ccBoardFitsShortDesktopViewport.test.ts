@@ -6,12 +6,18 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { zapasPodDoskoy } from "../zapasPodDoskoy";
+
 const src = readFileSync(join(__dirname, "..", "page.tsx"), "utf8");
 
 describe("доска помещается на низком десктопном экране", () => {
   it("верх доски измеряется, бюджет высоты = верх + 150px под доской", () => {
     expect(src).toContain('const el=document.querySelector("[data-cc-board]");');
-    expect(src).toContain("const desktopVReserve=Math.max(250,boardTopPx>0?boardTopPx+(lowDesktop?186:150):0);");
+    // 12.10.2026: запас под доской вынесен в zapasPodDoskoy (заход за задачей по ?puzzle=
+    // получает меньший запас — доска крупнее). Свойство «низкий стол → 186, стол → 150»
+    // проверяется НИЖЕ через саму функцию, а здесь — что страница её и зовёт.
+    expect(src).toContain("const запасПодДоской=zapasPodDoskoy(зашёлЗаЗадачей,lowDesktop);");
+    expect(src).toContain("const desktopVReserve=Math.max(250,boardTopPx>0?boardTopPx+запасПодДоской:0);");
     expect(src).toContain('vhPx-(vwPx>=769?desktopVReserve:290)');
     expect(src).toContain('data-cc-board="1"');
   });
@@ -31,7 +37,9 @@ describe("ряды кнопок под доской на низком дескт
   it("оба ряда идут одной строкой с боковой прокруткой, запас 186px", () => {
     expect(src).toContain("const lowDesktop=vwPx>=769&&vhPx<860;");
     expect(src).toContain('?{flexWrap:"nowrap",overflowX:"auto",scrollbarWidth:"none"}');
-    expect(src).toContain("boardTopPx+(lowDesktop?186:150)");
+    // Политика записана литералами в zapasPodDoskoy.ts; здесь — её поведение.
+    expect(zapasPodDoskoy(false, true), "низкий стол без захода за задачей").toBe(186);
+    expect(zapasPodDoskoy(false, false), "обычный стол").toBe(150);
     expect(src.match(/\.\.\.podDoskoyRow\}\}>/g)?.length).toBe(2);
   });
   it("контроль: на обычном десктопе и телефоне ряды по-прежнему переносятся", () => {

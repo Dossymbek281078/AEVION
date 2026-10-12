@@ -32,7 +32,19 @@ describe("разметка каталога приложений", () => {
       itemListElement: Array<{ item: { sku: string; offers: { lowPrice: string; highPrice: string } } }>;
     };
     const sku = схема.itemListElement.map((э) => э.item.sku).sort();
-    expect(sku).toEqual(["cyberchess", "devhub", "ip_bureau", "multichat", "qventure"]);
+    /*
+     * 🔴 12.10.2026: ip_bureau ушёл из списка по прямому слову основателя
+     * «убрать кнопку бюро». Касса его вариант по-прежнему знает (в Lemon
+     * Squeezy ничего не трогали), поэтому проверка «только то, что касса
+     * продаёт» сама по себе его бы оставила. Разметка — ТРЕТЬЯ точка
+     * предложения: обещать поисковику покупку того, чего нет на витрине,
+     * значит звать человека из выдачи в тупик.
+     * Причина запрета — в lib/neProdayotsyaOtdelno.ts: модуль открыт
+     * бесплатно, а Verified купить нельзя (kyc заглушка, платежи настроены
+     * неверно).
+     */
+    expect(sku).toEqual(["cyberchess", "devhub", "multichat", "qventure"]);
+    expect(sku, "бюро вернулось в разметку — витрина и выдача разошлись").not.toContain("ip_bureau");
     expect(sku).not.toContain("qskyway");
     expect(sku).not.toContain("qsign");
   });

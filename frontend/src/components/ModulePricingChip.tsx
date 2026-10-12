@@ -8,6 +8,7 @@ import { PRICING_APP, PRICING_TERMS, keepChannel } from "@/lib/products";
 import { channelNow } from "@/lib/channelNow";
 import { useI18nOptional } from "@/lib/i18n";
 import { RazrabotkaPreduprezhdenie } from "./RazrabotkaPreduprezhdenie";
+import { predlagaemOtdelno } from "@/lib/neProdayotsyaOtdelno";
 import {
   PLANET_BASE_MONTHLY,
   TERM_TIERS,
@@ -140,7 +141,16 @@ export default function ModulePricingChip({ moduleId, theme = "light", hideBuy =
 
   const незачемПокупать = ownPlan !== null && PAID_PLANS.has(ownPlan);
 
-  const app = standaloneApp(moduleId);
+  /*
+   * 🔴 Слово основателя 12.10.2026: «убрать кнопку бюро». Плашка — ВТОРАЯ точка
+   * покупки отдельного приложения (первая — раздел «Отдельные приложения» на
+   * /pricing), и убрать одну, забыв другую, значит оставить человеку кнопку на
+   * странице самого модуля. Здесь приложение «исчезает» как ОТДЕЛЬНЫЙ товар, и
+   * плашка сама собой превращается в «Входит в подписку AEVION» — ровно то, чем
+   * бюро и остаётся: бесплатным и внутри планеты.
+   */
+  const appВозможный = standaloneApp(moduleId);
+  const app = appВозможный && predlagaemOtdelno(appВозможный.slug) ? appВозможный : undefined;
   const planetFrom = `$${fromPricePerMonth(PLANET_BASE_MONTHLY)}`;
   // Самый дешёвый срок из тех, что реально продаются; список не пришёл —
   // берём месяц (см. разбор выше), а не самый длинный срок.

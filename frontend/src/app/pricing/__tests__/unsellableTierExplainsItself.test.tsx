@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, cleanup, act } from "@testing-library/react";
 import { I18nProvider } from "@/lib/i18n";
 import { PLANET_BASE_MONTHLY, STANDALONE_APPS, termPricePerMonth, termTotal } from "@/lib/termPricing";
+import { predlagaemOtdelno } from "@/lib/neProdayotsyaOtdelno";
 import { localizeTier } from "@/lib/pricingLocalize";
 
 /**
@@ -376,7 +377,18 @@ describe("отдельные приложения: цена, покупка и �
   it("строка «пять приложений дороже планеты» печатается ровно тогда, когда это верно", async () => {
     ответыСервера(ВСЕ_ССЫЛКИ, []);
     await отрисовать();
-    const сумма = STANDALONE_APPS.reduce((s, a) => s + termTotal(a.baseMonthly, "lite"), 0);
+    /*
+     * 🔴 12.10.2026: сумма считается по тем приложениям, которые мы РЕАЛЬНО
+     * предлагаем. Бюро убрано из предложения прямым словом основателя
+     * (lib/neProdayotsyaOtdelno.ts), и считать выгоду подписки против товара,
+     * которого на витрине нет, значит обещать человеку несуществующую разницу.
+     * Сама строка от этого не исчезает: без бюро восемь приложений на месяц
+     * дают $448 против $400 за планету — утверждение остаётся верным, и
+     * проверка ниже по-прежнему требует, чтобы строка появлялась ровно тогда,
+     * когда оно верно.
+     */
+    const сумма = STANDALONE_APPS.filter((a) => predlagaemOtdelno(a.slug))
+      .reduce((s, a) => s + termTotal(a.baseMonthly, "lite"), 0);
     const планета = termTotal(PLANET_BASE_MONTHLY, "lite");
     const строка = document.querySelector('[data-testid="apps-vs-planet"]');
     expect(Boolean(строка), `сумма приложений ${сумма}, планета ${планета}`).toBe(сумма > планета);

@@ -20,6 +20,7 @@
  */
 import { apiUrl } from "@/lib/apiBase";
 import { STANDALONE_APPS, fromPricePerMonth, type StandaloneApp } from "@/lib/termPricing";
+import { predlagaemOtdelno } from "@/lib/neProdayotsyaOtdelno";
 
 const САЙТ = "https://aevion.app";
 
@@ -85,7 +86,7 @@ export async function оплачиваемыеПриложения(): Promise<St
     return [];
   }
   const готовые = slugиИзКассы(настроено);
-  return STANDALONE_APPS.filter((a) => готовые.has(a.slug));
+  return STANDALONE_APPS.filter((a) => готовые.has(a.slug) && predlagaemOtdelno(a.slug));
 }
 
 export async function разметкаПриложений(): Promise<Record<string, unknown> | null> {
@@ -113,7 +114,7 @@ export async function разметкаПриложений(): Promise<Record<str
   }
 
   const готовые = slugиИзКассы(настроено);
-  const товары = STANDALONE_APPS.filter((a) => готовые.has(a.slug));
+  const товары = STANDALONE_APPS.filter((a) => готовые.has(a.slug) && predlagaemOtdelno(a.slug));
   if (!товары.length) {
     console.warn("[apps/разметка] ни одного оплачиваемого приложения — разметки не будет");
     return null;

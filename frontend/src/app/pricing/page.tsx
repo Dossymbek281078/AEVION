@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { RazrabotkaPreduprezhdenie } from "@/components/RazrabotkaPreduprezhdenie";
+import { predlagaemOtdelno } from "@/lib/neProdayotsyaOtdelno";
 import { apiUrl } from "@/lib/apiBase";
 import { fetchAiSavings, счётчикГоденДляПоказа } from "@/lib/aiSavings";
 import { запомнитьНамерение } from "@/lib/checkoutIntent";
@@ -1550,7 +1551,11 @@ export default function PricingPage() {
       */}
       {(() => {
         const месяцев = TERM_MONTHS[appTerm];
-        const суммаПриложений = STANDALONE_APPS.reduce((s, a) => s + termTotal(a.baseMonthly, appTerm), 0);
+        // Сумма «если покупать по отдельности» считается по тому, что РЕАЛЬНО
+        // предлагается: иначе выгода подписки считалась бы против товара,
+        // которого на витрине нет.
+        const суммаПриложений = STANDALONE_APPS.filter((a) => predlagaemOtdelno(a.slug))
+          .reduce((s, a) => s + termTotal(a.baseMonthly, appTerm), 0);
         const планета = termTotal(PLANET_BASE_MONTHLY, appTerm);
         return (
           <section id="apps" style={{ marginBottom: 56 }}>
@@ -1566,7 +1571,9 @@ export default function PricingPage() {
               {t("pricing.home.apps.title")}
             </h2>
             <p style={{ color: "#64748b", margin: 0, marginBottom: 16 }}>
-              {t("pricing.home.apps.subtitle", { count: String(STANDALONE_APPS.length) })}
+              {/* Счёт в подписи обязан равняться числу показанных карточек:
+                  «пять приложений» над четырьмя — это наша же неправда. */}
+              {t("pricing.home.apps.subtitle", { count: String(STANDALONE_APPS.filter((a) => predlagaemOtdelno(a.slug)).length) })}
             </p>
             <div
               role="group"
@@ -1614,7 +1621,16 @@ export default function PricingPage() {
                 gap: 16,
               }}
             >
-              {STANDALONE_APPS.map((a) => {
+              {/*
+                🔴 Слово основателя 12.10.2026: «убрать кнопку бюро». Список
+                приложений, которые СЕЙЧАС не предлагаются отдельно, живёт в
+                одном месте с причиной (lib/neProdayotsyaOtdelno.ts), а не
+                вычёркиванием строки из STANDALONE_APPS: тот же список считает
+                цены, опознаёт уже оплаченные подписки и даёт имя модулю на
+                экране заплатившего. Выкинув оттуда слаг, мы сломали бы доступ
+                тем, кто уже купил, — а задача была перестать ПРЕДЛАГАТЬ.
+              */}
+              {STANDALONE_APPS.filter((a) => predlagaemOtdelno(a.slug)).map((a) => {
                 const ссылка = ссылкаПриложения(a.slug, appTerm);
                 const ключ = ключПриложения(a.slug);
                 const нетТовара = безТовараСсылка(ссылка);

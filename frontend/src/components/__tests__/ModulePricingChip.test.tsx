@@ -12,6 +12,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import ModulePricingChip from "../ModulePricingChip";
 import { PLANET_BASE_MONTHLY, STANDALONE_APPS, TERM_TIERS, fromPricePerMonth, termPricePerMonth } from "@/lib/termPricing";
+import { predlagaemOtdelno } from "@/lib/neProdayotsyaOtdelno";
 
 vi.mock("@/lib/apiBase", () => ({ apiUrl: (p: string) => p }));
 
@@ -43,7 +44,21 @@ function гостьСоСписком(ссылки: string[]) {
 }
 
 describe("ModulePricingChip — цены лестницы сроков", () => {
-  it.each(STANDALONE_APPS.map((a) => [a.moduleId, a] as const))(
+  /*
+   * 🔴 12.10.2026: перебор идёт по тем приложениям, которые мы ПРЕДЛАГАЕМ
+   * отдельно. Бюро из предложения убрано прямым словом основателя (причина — в
+   * lib/neProdayotsyaOtdelno.ts), и ждать от его плашки «своей цены» значило бы
+   * требовать от кода того, что решено не делать.
+   * Знаменатель не прячется: отдельная проверка ниже утверждает, что убрано
+   * РОВНО одно приложение, а не половина каталога.
+   */
+  it("🔴 знаменатель перебора: из каталога убрано ровно одно приложение", () => {
+    const предлагаемые = STANDALONE_APPS.filter((a) => predlagaemOtdelno(a.slug));
+    expect(STANDALONE_APPS.length - предлагаемые.length, "из предложения убрано не одно приложение").toBe(1);
+    expect(предлагаемые.some((a) => a.slug === "ip_bureau")).toBe(false);
+  });
+
+  it.each(STANDALONE_APPS.filter((a) => predlagaemOtdelno(a.slug)).map((a) => [a.moduleId, a] as const))(
     "приложение %s: своя цена «от», имя и цена всей планеты",
     (moduleId, app) => {
       guest();
@@ -95,10 +110,28 @@ describe("ModulePricingChip — цены лестницы сроков", () => {
     expect(screen.getByText("Купить").closest("a")!.getAttribute("href")).toBe("/pricing#tiers");
   });
 
-  it("короткий id витрины тоже узнаётся: bureau — это IP Bureau", () => {
+  /*
+   * 🔴 ПЕРЕПИСАНО 12.10.2026 по прямому слову основателя «убрать кнопку бюро».
+   *
+   * Проверка закрепляла прежнее решение: плашка бюро показывала СВОЮ цену как
+   * отдельного товара. Решение изменилось, и причина названа в
+   * lib/neProdayotsyaOtdelno.ts: модуль открыт бесплатно (стены нет), а
+   * Verified купить нельзя — проверка личности заглушка, провайдер платежей
+   * настроен неверно. Продавать в таком виде значит обещать ложь.
+   *
+   * Поэтому теперь проверяется ПРОТИВОПОЛОЖНОЕ, и это не подгонка под зелёный
+   * цвет: имени отдельного товара и его цены на плашке быть НЕ должно, а
+   * человек должен видеть, что бюро входит в подписку. Короткий id «bureau»
+   * по-прежнему узнаётся — иначе сломался бы экран заплатившего.
+   */
+  it("🔴 бюро больше не предлагается отдельно: плашка ведёт в подписку, а не в кассу модуля", () => {
     guest();
     const { container } = render(<ModulePricingChip moduleId="bureau" />);
-    expect(container.textContent).toContain("IP Bureau");
+    const text = container.textContent ?? "";
+    expect(text).toContain("Входит в подписку AEVION");
+    expect(text, "на плашке осталась отдельная цена бюро").not.toContain("$32");
+    expect(text, "бюро всё ещё подаётся как отдельный товар").not.toContain("IP Bureau");
+    expect(screen.getByText("Купить").closest("a")!.getAttribute("href")).toBe("/pricing#tiers");
   });
 
   it("снятые цены и имена тарифов на плашке не появляются", () => {

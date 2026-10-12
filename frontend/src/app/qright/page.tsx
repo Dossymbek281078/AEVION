@@ -759,6 +759,17 @@ export default function QRightPage() {
             <p style={{ margin: 0, fontSize: 14, opacity: 0.75, lineHeight: 1.6, maxWidth: 600 }}>
               Register your work and walk away with a self-contained proof bundle — Ed25519-signed immediately and Bitcoin-anchored once the timestamp confirms, verifiable even if AEVION disappears tomorrow.
             </p>
+            {/* Замер 12.10.2026 (окно Приложения-31.12): бесплатная форма стоит в
+                1359 px от верха на 1463×724 и ~2100 px на телефоне — под приёмом
+                адресов, реестром и ключом автора. Гость видел цену $200/мес и
+                уходил, не узнав, что сертификат выдаётся бесплатно. */}
+            <a
+              href="#protect-form"
+              data-testid="qright-jump-to-form"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 16, padding: "12px 20px", borderRadius: 12, background: "#14b8a6", color: "#0f172a", fontWeight: 800, fontSize: 15, textDecoration: "none" }}
+            >
+              🛡️ Protect my work — free ↓
+            </a>
           </div>
         </div>
 
@@ -1023,7 +1034,7 @@ export default function QRightPage() {
               )}
             </div>
 
-            <form onSubmit={submit} style={{ display: "grid", gap: 16 }}>
+            <form id="protect-form" onSubmit={submit} style={{ display: "grid", gap: 16, scrollMarginTop: 80 }}>
               <div>
                 <label style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", marginBottom: 6, display: "block" }}>
                   What are you protecting? *

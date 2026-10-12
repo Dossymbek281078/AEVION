@@ -9246,6 +9246,9 @@ export default function CyberChessPage(){
               onContextMenu={e=>{e.preventDefault();e.stopPropagation();}}
               className={`${!lm&&bk>0&&on&&browseIdx<0?"cc-board-enter":""}${chk?" cc-check-flash":""}${over&&over.includes("win")?" cc-win-glow":""}${over&&over.includes("сдался")&&!over.includes("Вы")?" cc-loss-dim":""}`}
               data-cc-board="1"
+              {/* id показанной задачи — для приёмки и отладки: ручка выдаёт не одну
+                  задачу, и «какая на экране» иначе не узнать (bd, 12.10.2026). */}
+              data-cc-puzzle={pzCurrent?.id??""}
               style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.25), 0 2px 6px rgba(0,0,0,0.12)",position:"relative",touchAction:"none",userSelect:"none",WebkitUserSelect:"none",...({WebkitUserDrag:"none",WebkitTouchCallout:"none"} as React.CSSProperties)}}>
               {/* Board Art decorative overlay — behind pieces, subtle at opacity 0.10 */}
               {boardArt!=="off"&&<BoardArtOverlay art={boardArt} opacity={0.10}/>}

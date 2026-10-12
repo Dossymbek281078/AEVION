@@ -817,8 +817,26 @@ healthaiRouter.post("/check", async (req: Request, res: Response) => {
     createdAt: nowIso(),
   };
 
+  /*
+   * 🔴 ПРОВЕРКА БЕЗ ПРОФИЛЯ НЕ ПАДАЕТ (12.10.2026, Sentry AEVION-BACKEND-1G).
+   *
+   * guardProfile выше пускает несуществующий profileId намеренно
+   * (requireExists: false — бесплатная проверка гостю, волна healthai от
+   * 12.10). Но addCheck пишет в "SymptomCheck", у которой profileId — внешний
+   * ключ на "HealthProfile": вставка падала на fk_sc_profile, ручка отвечала
+   * 500, а бесплатная попытка к этому моменту была уже списана. Гость получал
+   * ошибку сервера вместо ответа — и терял попытку.
+   *
+   * Ответ гостю без профиля отдаём, а не сохраняем: сохранять его некуда.
+   * Говорим об этом прямо полем saved — молчаливое «не сохранилось» хуже.
+   */
+  const профиль = await store.getProfile(body.profileId);
+  if (!профиль) {
+    res.json({ check, saved: false, reason: "profile-not-found" });
+    return;
+  }
   await store.addCheck(check);
-  res.json({ check });
+  res.json({ check, saved: true });
 });
 
 healthaiRouter.post("/log", async (req: Request, res: Response) => {

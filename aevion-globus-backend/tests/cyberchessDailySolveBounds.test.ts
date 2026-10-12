@@ -1,4 +1,5 @@
 import { describe, test, expect, beforeEach, afterAll, vi } from "vitest";
+import { denPoMestnomu } from "../src/lib/denPoMestnomu";
 import express from "express";
 import request from "supertest";
 import fs from "node:fs";
@@ -63,7 +64,7 @@ const leaderboard = async () => {
 const day = "2026-08-12";
 // GET /puzzle всегда отдаёт задачу СЕГОДНЯШНЕГО дня, поэтому решение сверяется
 // с сегодняшним; зашитая дата выше осталась для случаев, где ходы не нужны.
-const todayForPuzzle = () => new Date().toISOString().slice(0, 10);
+const todayForPuzzle = () => denPoMestnomu();
 let n = 0;
 const freshUser = () => `player_${++n}_${Date.now()}`;
 

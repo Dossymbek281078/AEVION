@@ -12,6 +12,7 @@
  * тринадцатыми — падали с 429 из-за чужих запросов, а не по делу.
  */
 import { describe, test, expect, vi, afterAll } from "vitest";
+import { denPoMestnomu } from "../src/lib/denPoMestnomu";
 import express from "express";
 import request from "supertest";
 import fs from "node:fs";
@@ -31,7 +32,7 @@ const app = express();
 app.use(express.json());
 app.use("/api/cyberchess/daily", dailyRouter);
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => denPoMestnomu();
 const movesForToday = async (): Promise<string[]> => {
   const r = await request(app).get("/api/cyberchess/daily/puzzle");
   return (r.body?.puzzle?.sol ?? []) as string[];

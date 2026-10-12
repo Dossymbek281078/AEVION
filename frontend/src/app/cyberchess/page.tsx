@@ -1315,6 +1315,36 @@ function низДоскиВКадре(): number | null {
 
 export const УРОВЕНЬ_ИИ_ПО_УМОЛЧАНИЮ = 1; // Casual / «Любитель», elo 800
 
+/* «▶ Вернуться к партии» — зелёная строка в шапке.
+ *
+ * Замер 12.10.2026 на пути человека из комментария к ролику (390×844,
+ * youtube/komm-mat3-075iw: 56 живых визитов и ОДИН ход за сутки): на свежем
+ * телефоне эта строка была самым ярким предметом экрана — и вела НЕ к партии.
+ * Возвращаться было НЕ К ЧЕМУ: загрузка задачи сама включает партию (`sOn(true)`
+ * стоит рядом с `sPzCurrent(pz)` во всех загрузчиках задач), поэтому плашка
+ * появлялась у каждого, кто открыл задачу по ссылке. Нажатие переносило ПОЗИЦИЮ
+ * ЗАДАЧИ во вкладку «Играть»: шли часы (замерено 4:57), появлялись «Сдаться» и
+ * «½ Ничья», а подсказка, решение и следующая задача исчезали. Проверено делом:
+ * расстановка до и после нажатия одна и та же, 17 фигур — это не другая партия.
+ *
+ * Условие сужено ровно на этот случай — задача на доске во вкладке задач. На
+ * других вкладках плашка остаётся: там она честная, партия идёт, часы на паузе.
+ */
+export function pokazatVozvratVPartiyu(
+  { идётПартия, конецПартии, вкладка, партияСЧеловеком, задачаНаДоске }:
+  {
+    идётПартия: boolean;
+    конецПартии: boolean;
+    вкладка: "play" | "puzzles" | "analysis" | "coach";
+    партияСЧеловеком: boolean;
+    задачаНаДоске: boolean;
+  },
+): boolean {
+  if (!идётПартия || конецПартии || вкладка === "play" || партияСЧеловеком) return false;
+  if (вкладка === "puzzles" && задачаНаДоске) return false;
+  return true;
+}
+
 /**
  * Границы корзин прогресса партии.
  *
@@ -7593,7 +7623,7 @@ export default function CyberChessPage(){
             Строка шапки сдвигает контент вниз — накрывать ей нечего по построению; и отступ
             152px под скроллером больше не нужен. С 19.09.2026 так на ЛЮБОЙ ширине: десктопная
             fixed-пилюля top:156 при прокрутке «Анализа» ложилась на 8-ю горизонталь доски. */}
-        {on&&!over&&tab!=="play"&&!isHumanGame&&<button onClick={()=>sTab("play")} title="Вернуться к партии — часы на паузе, пока ты здесь" className="cc-focus-ring" style={{flex:vwPx<769?"1 1 100%":"0 0 auto",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"9px 14px",borderRadius:RADIUS.full,border:"none",background:"linear-gradient(135deg,#059669,#10b981)",color:"#fff",fontSize:14,fontWeight:900,cursor:"pointer"}}>
+        {pokazatVozvratVPartiyu({идётПартия:on,конецПартии:!!over,вкладка:tab,партияСЧеловеком:!!isHumanGame,задачаНаДоске:!!pzCurrent})&&<button onClick={()=>sTab("play")} title="Вернуться к партии — часы на паузе, пока ты здесь" className="cc-focus-ring" style={{flex:vwPx<769?"1 1 100%":"0 0 auto",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"9px 14px",borderRadius:RADIUS.full,border:"none",background:"linear-gradient(135deg,#059669,#10b981)",color:"#fff",fontSize:14,fontWeight:900,cursor:"pointer"}}>
           <span style={{fontSize:15,lineHeight:1}}>▶</span><span>Вернуться к партии</span><span style={{fontSize:11,fontWeight:700,opacity:0.85,background:"rgba(255,255,255,0.2)",padding:"2px 8px",borderRadius:999}}>⏸ пауза</span>
         </button>}
       </div>}

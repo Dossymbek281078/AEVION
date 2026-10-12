@@ -15,6 +15,7 @@ import AskAi from "@/components/AskAi";
 import { apiUrl } from "@/lib/apiBase";
 import { canonicalContentHash } from "@/lib/canonicalContentHash";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
+import { ЦЕНА_ПРОВЕРКИ_ЦЕНТЫ, ценаСПериодом } from "../bureau/verifiedPrice";
 import { Sparkline } from "@/components/Sparkline";
 import { PageTracking } from "@/components/PageTracking";
 import { useI18n } from "@/lib/i18n";
@@ -212,6 +213,7 @@ export default function QRightPage() {
    * покупатель.
    */
   const [платнаяПроверкаДоступна, установитьДоступность] = useState<boolean | null>(null);
+  const [ценаПроверкиЦенты, установитьЦену] = useState<number>(ЦЕНА_ПРОВЕРКИ_ЦЕНТЫ);
   useEffect(() => {
     let живо = true;
     fetch(apiUrl("/api/bureau/health"), { cache: "no-store" })
@@ -220,6 +222,8 @@ export default function QRightPage() {
         if (!живо) return;
         if (!d) return установитьДоступность(false);
         установитьДоступность(d.kyc !== "stub" && d.payment !== "misconfigured");
+        // Цену называет тот же сервис, что выставит её кассе (verifiedPrice.ts).
+        if (typeof d.pricing?.verifiedTierCents === "number") установитьЦену(d.pricing.verifiedTierCents);
       })
       .catch(() => живо && установитьДоступность(false));
     return () => {
@@ -767,10 +771,10 @@ export default function QRightPage() {
           <WaitlistCapture
             source="qright"
             tone="dark"
-            title={launchHasPassed() ? "Написать вам о запуске бюро" : "Написать вам в день запуска"}
+            title={launchHasPassed() ? "Написать, когда откроется отметка Verified" : "Написать вам в день запуска"}
             description={
               launchHasPassed()
-                ? `Реестр открыт уже сейчас. Бюро обещали к ${PLATFORM_LAUNCH_HUMAN} — напишем одно письмо, как только откроем, и условия раннего доступа.`
+                ? "Реестр открыт и бесплатен — защитите работу ниже. Отметку «Verified» (бюро подтверждает личность автора) ещё подключаем: оставьте адрес, напишем одно письмо, когда её можно будет оформить."
                 : `Реестр открыт уже сейчас. Одно письмо на запуск бюро ${PLATFORM_LAUNCH_HUMAN} и условия раннего доступа.`
             }
           />
@@ -1374,7 +1378,7 @@ export default function QRightPage() {
                   style={{ padding: "12px 20px", borderRadius: 12, border: "1px solid #4f46e5", color: "#4f46e5", background: "#fff", fontWeight: 800, fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
                   title="Upgrade to Verified — adds real-name attestation by AEVION Bureau"
                 >
-                  ⭐ Upgrade to Verified ($19)
+                  ⭐ Upgrade to Verified ({ценаСПериодом(ценаПроверкиЦенты)})
                 </Link>
               )}
               <Link

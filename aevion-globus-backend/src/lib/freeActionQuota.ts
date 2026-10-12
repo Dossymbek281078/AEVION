@@ -21,6 +21,7 @@
 import type { Request, Response } from "express";
 import { getPool } from "./dbPool";
 import { resolveUserPlan } from "./planGate";
+import { clientIp } from "./rateLimit";
 
 /** Действия, за которые берём деньги. Пусто = механизм спит целиком. */
 function платныеДействия(): Set<string> {
@@ -64,11 +65,10 @@ export function бесплатноВМесяц(действие: string): number
 function ктоЭто(req: Request): string {
   const план = resolveUserPlan(req);
   if (план.email) return "email:" + план.email.trim().toLowerCase();
-  const ip =
-    (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ||
-    req.socket?.remoteAddress ||
-    "неизвестно";
-  return "ip:" + ip;
+  // Не левый элемент X-Forwarded-For: его пишет сам клиент, и гость обнулял бы
+  // свою бесплатную норму поддельным заголовком (замер кода 12.10.2026, окно
+  // Приложения-31.12). clientIp — тот же источник, что у ограничителей запросов.
+  return "ip:" + (clientIp(req) || "неизвестно");
 }
 
 function текущийМесяц(): string {

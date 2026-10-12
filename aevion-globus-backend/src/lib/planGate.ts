@@ -32,10 +32,22 @@ import type { Request, Response, NextFunction } from "express";
 import { appSlugForModuleId } from "../data/lemonSqueezyVariants";
 import { verifyBearerOptional } from "./authJwt";
 import { readLatestSubscription } from "../routes/provisioning";
-import { MODULES_PRICING, type TierId } from "../data/pricing";
+import { MODULES_PRICING, STANDALONE_APPS, type TierId } from "../data/pricing";
 import { модулиСоСтенойПоДанным } from "../data/moduleAccess";
 import { recordDeny, type DenyAudience } from "./paywallDenyLog";
 import { appSubscriptionState } from "./appEntitlements";
+
+/**
+ * Куда ведёт стена: на КАРТОЧКУ модуля на /pricing, а не на общую страницу тарифов.
+ * Замер 13.10.2026 (гость Мультичата, 390×844): стена вела на /pricing, где человеку ещё
+ * надо было найти Multichat среди тридцати карточек; у самой страницы модуля кнопка
+ * «Купить» ведёт на /pricing?app=multichat#apps. Slug — из MODULES_PRICING (источник
+ * истины витрины: STANDALONE_APPS); модуль без карточки — прежний /pricing.
+ */
+export function ссылкаНаТариф(moduleId: string): string {
+  const карточка = STANDALONE_APPS.find((m) => m.moduleId === moduleId);
+  return карточка ? `/pricing?app=${карточка.slug}#apps` : "/pricing";
+}
 
 const PUBLIC_BASE = (process.env.AEVION_PUBLIC_BASE_URL ?? "https://aevion.app").replace(/\/+$/, "");
 
@@ -495,15 +507,15 @@ function upgradeResponse(res: Response, moduleId: string, plan: ResolvedPlan, au
   const message = authenticated
     ? `На этом аккаунте покупки модуля «${moduleId}» нет. ` +
       `Если вы оплачивали другим адресом — войдите под ним: ${loginUrl}. ` +
-      `Если ещё не оформляли — модуль входит в любую платную подписку: ${PUBLIC_BASE}/pricing`
+      `Если ещё не оформляли — модуль входит в любую платную подписку: ${PUBLIC_BASE}${ссылкаНаТариф(moduleId)}`
     : `Если вы уже оплатили — войдите под почтой, которой платили, и доступ откроется: ${loginUrl}. ` +
-      `Если ещё нет — модуль «${moduleId}» входит в любую платную подписку: ${PUBLIC_BASE}/pricing`;
+      `Если ещё нет — модуль «${moduleId}» входит в любую платную подписку: ${PUBLIC_BASE}${ссылкаНаТариф(moduleId)}`;
   res.status(402).json({
     error: "upgrade_required",
     module: moduleId,
     plan: plan.tier,
     requiredTiers: requiredTiers.length ? requiredTiers : ["full"],
-    upgradeUrl: `${PUBLIC_BASE}/pricing`,
+    upgradeUrl: `${PUBLIC_BASE}${ссылкаНаТариф(moduleId)}`,
     // authState и loginUrl — чтобы фронт показал кнопку входа в случае
     // «не вошёл», а не только «к тарифам». Старые клиенты поля игнорируют.
     authState,

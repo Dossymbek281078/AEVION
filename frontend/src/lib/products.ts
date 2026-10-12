@@ -1096,7 +1096,28 @@ export function keepChannelOrProbe(
   raw: string | string[] | undefined,
   channel: string | null,
 ): string {
-  if (channel) return keepChannel(path, channel);
+  /*
+   * 🔴 12.10.2026: ПОД-МЕТКА ТЕРЯЛАСЬ ЗДЕСЬ, и это стоило платных денег.
+   *
+   * 07.10 у `keepChannel` появился третий довод — сырая метка целиком, чтобы
+   * `?c=ph-launch1` не превращалось в `?c=ph` на втором прыжке. Сюда ту
+   * починку не донесли: этот помощник звал `keepChannel(path, channel)` без
+   * третьего довода, то есть сам же её и отменял. Механизм был написан и не
+   * позван — ровно тот класс, что сегодня нашёлся во флаге структурного ответа.
+   *
+   * Цена: рекламная ссылка Meta (платные $20/день, аудитория KZ)
+   * `/longevity?c=meta-book-12-10` у человека с английской кукой уводится на
+   * `/en/longevity`, и под-метка кампании срезалась до `meta`. В разрезе по
+   * постам кампания недосчитывалась сессий, то есть мы платили за показы и не
+   * знали, какое объявление их привело.
+   */
+  if (channel) return keepChannel(path, channel, сыраяСтрока(raw));
   const наша = нашаМетка(raw);
   return наша ? добавитьМетку(path, наша) : path;
+}
+
+/** Первый непустой вид сырого параметра: Next отдаёт его строкой или массивом. */
+function сыраяСтрока(raw: string | string[] | undefined): string | null {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  return typeof v === "string" && v.trim() ? v.trim() : null;
 }

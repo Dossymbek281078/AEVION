@@ -36,13 +36,20 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "hero.title": "Цены AEVION",
     "hero.subtitle": "Единая платформа: цифровая собственность, AI, финтех, потребительские продукты — все модули под одним аккаунтом.",
     /* Hero variant B — savings/comparison angle */
-    "hero.B.badge": "AEVION GTM · −73% VS DOCUSIGN+OPENAI+STRIPE",
+    /* 🔴 12.10.2026: «−73%» убрано. Расчёта под этим числом в коде НЕТ ни
+       строки — ни в competitors.ts, ни где-либо ещё; источник не назван, и
+       проверить его человек не может. Сравнительный процент без расчёта —
+       утверждение, за которое нечем ответить. Осталось то, что правда и
+       проверяемо: четыре инструмента заменяются одной подпиской. */
+    "hero.B.badge": "AEVION GTM · ЧЕТЫРЕ ИНСТРУМЕНТА В ОДНОЙ ПОДПИСКЕ",
     "hero.B.title": "Замените 4 SaaS на одно решение",
-    "hero.B.subtitle": "Цифровая собственность, AI, подписи и платежи под одной подпиской. Экономия до 73% против связки DocuSign + OpenAI + Stripe + Patently.",
-    /* Hero variant C — outcome/free trial angle */
-    "hero.C.badge": "AEVION GTM · 14 ДНЕЙ FREE · NO CREDIT CARD",
-    "hero.C.title": "Запустите свой digital-продукт за 14 дней",
-    "hero.C.subtitle": "Production-ready модули AEVION: AI, IP, fintech и compliance. Free trial 14 дней, без credit card. Customer Success включён бесплатно.",
+    "hero.B.subtitle": "Цифровая собственность, AI, подписи и платежи под одной подпиской — вместо связки DocuSign + OpenAI + Stripe + Patently.",
+    /* 🔴 12.10.2026: вариант C УДАЛЁН, а не просто перестал показываться.
+       Он обещал «14 ДНЕЙ FREE · NO CREDIT CARD» и «Free trial 14 дней» —
+       триала касса не даёт ни одного дня и ни по одному тарифу, а вариант
+       доставался каждому третьему посетителю страницы цен. Строки убраны из
+       словаря целиком: текст, который лежит рядом, однажды покажут. Вернуть —
+       вместе с настоящим триалом в кассе, не раньше. */
 
     /* Promo */
     "promo.activeBanner": "АКТИВНЫЕ ПРОМО:",
@@ -532,12 +539,9 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "hero.badge": "AEVION GTM · PRICING",
     "hero.title": "AEVION pricing",
     "hero.subtitle": "Unified platform: digital IP, AI, fintech, consumer products — every module under a single account.",
-    "hero.B.badge": "AEVION GTM · −73% VS DOCUSIGN+OPENAI+STRIPE",
+    "hero.B.badge": "AEVION GTM · FOUR TOOLS IN ONE SUBSCRIPTION",
     "hero.B.title": "Replace 4 SaaS with one platform",
-    "hero.B.subtitle": "Digital IP, AI, signatures and payments in one subscription. Save up to 73% vs DocuSign + OpenAI + Stripe + Patently combined.",
-    "hero.C.badge": "AEVION GTM · 14 DAYS FREE · NO CREDIT CARD",
-    "hero.C.title": "Ship your digital product in 14 days",
-    "hero.C.subtitle": "Production-ready AEVION modules: AI, IP, fintech and compliance. Free trial 14 days, no credit card. Customer Success included.",
+    "hero.B.subtitle": "Digital IP, AI, signatures and payments in one subscription — instead of DocuSign + OpenAI + Stripe + Patently combined.",
 
     "promo.activeBanner": "ACTIVE PROMOS:",
     "promo.copied": "✓ Copied",
@@ -995,10 +999,17 @@ const baseDict: Record<Lang, Record<string, string>> = {
  * Композиция базового словаря и вынесенных секций.
  * Section keys имеют приоритет (override) над baseDict.
  */
-const dict: Record<string, Record<string, string>> = {
+/**
+ * Вынесено наружу 12.10.2026: сторож честности заголовка должен читать ТЕ ЖЕ
+ * строки, что видит человек, а не свою копию рядом. Копия — это второй
+ * источник правды, и он расходится молча.
+ */
+export const PRICING_DICT: Record<string, Record<string, string>> = {
   ru: { ...baseDict.ru, ...migrationsDict.ru },
   en: { ...baseDict.en, ...migrationsDict.en },
 };
+
+const dict = PRICING_DICT;
 
 /**
  * Ключ слова «месяц» в нужной форме для числа месяцев: 1 → one, 2–4 → few, иначе many

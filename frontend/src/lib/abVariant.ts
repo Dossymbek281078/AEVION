@@ -39,17 +39,41 @@ function writeCookie(name: string, value: string, days: number) {
   document.cookie = `${name}=${encodeURIComponent(value)}; expires=${exp}; path=/; samesite=lax`;
 }
 
-function pickRandom(): ABValue {
-  const r = Math.random();
-  if (r < 1 / 3) return "A";
-  if (r < 2 / 3) return "B";
-  return "C";
+/**
+ * 🔴 КАКИЕ ВАРИАНТЫ РАЗРЕШЕНЫ ПО КЛЮЧУ (12.10.2026).
+ *
+ * Повод: вариант «C» ключа `hero` обещал на /pricing «14 ДНЕЙ FREE · NO CREDIT
+ * CARD» и «Free trial 14 дней, Customer Success включён бесплатно». Триала
+ * касса НЕ даёт — ни одного дня и ни по одному тарифу. Треть посетителей
+ * страницы цен читала обещание, которого продукт не выполняет; это ровно тот
+ * класс, который мы сами называем ложным обещанием на продающей странице.
+ *
+ * Опыт не «выключен» и не удалён: `hero` просто идёт двумя честными
+ * вариантами. Вернуть третий можно будет тогда, когда триал появится в кассе,
+ * — одной строкой здесь.
+ */
+const РАЗРЕШЁННЫЕ: Record<ABKey, ABValue[]> = {
+  hero: ["A", "B"],
+  tierCards: ["A", "B", "C"],
+};
+
+function pickRandom(key: ABKey): ABValue {
+  const можно = РАЗРЕШЁННЫЕ[key];
+  return можно[Math.floor(Math.random() * можно.length)] ?? "A";
 }
 
 function getOrAssign(key: ABKey): ABValue {
   const cookieName = COOKIE_PREFIX + key;
   const fromCookie = readCookie(cookieName);
-  if (fromCookie === "A" || fromCookie === "B" || fromCookie === "C") {
+  /*
+   * Запрещённый вариант из КУКИ не принимается — иначе человек, которому «C»
+   * достался до 12.10, продолжал бы видеть обещание триала ещё месяц: кука
+   * живёт дольше правки. Починка, которая не достаёт до уже помеченных
+   * посетителей, — половина починки.
+   */
+  const разрешён = (v: string | null): v is ABValue =>
+    (v === "A" || v === "B" || v === "C") && РАЗРЕШЁННЫЕ[key].includes(v);
+  if (разрешён(fromCookie)) {
     if (typeof window !== "undefined") {
       try {
         window.localStorage.setItem(cookieName, fromCookie);
@@ -67,11 +91,12 @@ function getOrAssign(key: ABKey): ABValue {
       fromLs = null;
     }
   }
-  if (fromLs === "A" || fromLs === "B" || fromLs === "C") {
+  // Та же мера и для хранилища: запрещённый вариант оттуда тоже не принимаем.
+  if (разрешён(fromLs)) {
     writeCookie(cookieName, fromLs, COOKIE_DAYS);
     return fromLs;
   }
-  const newValue = pickRandom();
+  const newValue = pickRandom(key);
   writeCookie(cookieName, newValue, COOKIE_DAYS);
   if (typeof window !== "undefined") {
     try {

@@ -248,6 +248,10 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
   // страница только СПРАШИВАЕТ и ничего не решает сама — иначе счёт можно
   // было бы обнулить перезагрузкой.
   const [свободно, setСвободно] = useState<number | null>(null);
+  /* Пересчёт остатка после КАЖДОГО вопроса. Замер 13.10.2026 (прод bede7bfd2, 390×844): после
+     первого ответа страница продолжала писать «осталось 2 запроса», а второй вопрос упёрся в
+     стену — остаток спрашивался один раз при монтировании. */
+  const [пересчёт, setПересчёт] = useState(0);
   useEffect(() => {
     let отменено = false;
     fetch(apiUrl("/api/multichat-guest/allowance"), { cache: "no-store", headers: заголовкиУстройства() })
@@ -255,7 +259,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
       .then((j) => { if (!отменено && j) setСвободно(Number(j.осталось ?? 0)); })
       .catch(() => { if (!отменено) setСвободно(null); });
     return () => { отменено = true; };
-  }, [authed]);
+  }, [authed, пересчёт]);
 
   const гостьМожет = authed !== true && (свободно ?? 0) > 0;
   const disabled = busy || prompt.trim().length < 5 || (authed !== true && !гостьМожет);
@@ -283,7 +287,13 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
         headers: { "Content-Type": "application/json", ...заголовкиУстройства(), ...getAuthHeaders() },
         body: JSON.stringify({ title: q.slice(0, 80) }),
       }).then((r) => r.json());
-      if (!conv?.id) throw new Error(conv?.error || "не удалось создать беседу");
+      if (!conv?.id) {
+        // 402 модульной стены приходит сюда кодом upgrade_required — человеку нужен текст, а
+        // кнопки входа и тарифа уже даёт стена (PaywallModal). Замер 13.10.2026: на экране
+        // печаталось голое «upgrade_required».
+        if (conv?.error === "upgrade_required") throw new Error("Бесплатные запросы на сегодня закончились. Войдите под почтой оплаты или откройте тариф — кнопки ниже.");
+        throw new Error(conv?.error || "не удалось создать беседу");
+      }
 
       const r = await fetch(apiUrl(`/api/multichat/conversations/${conv.id}/dispatch`), {
         method: "POST",
@@ -304,6 +314,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
       setError(e instanceof Error ? e.message : "запрос не прошёл");
     } finally {
       setBusy(false);
+      setПересчёт((n) => n + 1);
     }
   }
 
@@ -361,7 +372,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
         aria-label={MC.askAria}
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
-        rows={3}
+        rows={2}
         placeholder={MC.askPh}
         style={{
           width: "100%", background: T.surface, border: `1px solid ${T.lineSoft}`, borderRadius: 10,

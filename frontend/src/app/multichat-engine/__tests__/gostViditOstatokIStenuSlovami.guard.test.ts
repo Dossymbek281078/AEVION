@@ -38,8 +38,12 @@ describe("гость Мультичата видит остаток и стен�
     expect(ИСХОДНИК.indexOf('throw new Error(conv?.error || "не удалось создать беседу")')).toBeGreaterThan(i);
   });
 
-  it("поле ввода в две строки — кнопка «Спросить консилиум» ближе к первому экрану телефона", () => {
+  it("поле в две строки и ряд кнопки прижат — «Спросить консилиум» в кадре 390×844", () => {
     expect(ИСХОДНИК).toContain("rows={2}");
     expect(ИСХОДНИК).not.toContain("rows={3}");
+    // замер 13.10: с rows=2 и marginTop 10 низ кнопки был 848 > 844; отступ 4 и кнопка 7px — в кадре
+    const ряд = ИСХОДНИК.indexOf('alignItems: "center", gap: 12, marginTop: 4 }}>');
+    expect(ряд, "ряд кнопок с отступом 4").toBeGreaterThan(-1);
+    expect(ИСХОДНИК.slice(ряд, ряд + 500)).toContain('padding: "7px 18px"');
   });
 });

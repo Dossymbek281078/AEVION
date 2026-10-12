@@ -379,14 +379,17 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
           padding: 12, fontSize: 14, lineHeight: 1.6, color: T.text, fontFamily: "inherit",
         }}
       />
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, marginTop: 10 }}>
+      {/* Ряд кнопок прижат к полю: замер 13.10.2026 на проде 27b023a6 (390×844) — низ кнопки
+          «Спросить консилиум» 848 при окне 844 даже с полем в две строки; −6 px отступа и
+          −4 px высоты кнопки кладут её в кадр (низ ≈838). Цифры из кадра, не на глаз. */}
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, marginTop: 4 }}>
         <button
           onClick={ask}
           disabled={disabled}
           style={{
             background: disabled ? T.btnDisabledBg : T.btnAccentBg,
             color: disabled ? T.textMute : T.onAccentDeep,
-            border: "none", borderRadius: 10, padding: "9px 18px",
+            border: "none", borderRadius: 10, padding: "7px 18px",
             fontSize: 14, fontWeight: 600, cursor: disabled ? "default" : "pointer",
           }}
         >

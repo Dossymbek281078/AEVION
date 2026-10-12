@@ -171,7 +171,8 @@ import { generateShareSVG, downloadFile } from "./gameShare";
 import CoachPredictions from "./CoachPredictions";
 import OpeningExplorerPanel from "./OpeningExplorerPanel";
 import dynamic from "next/dynamic";
-import OnboardingOverlay, { hasCompletedOnboarding, markOnboardingDone, type OnboardingChoice } from "./OnboardingOverlay";
+import { hasCompletedOnboarding, markOnboardingDone } from "./OnboardingOverlay";
+import PoloskaStarta from "./PoloskaStarta";
 import { наградаЗаВозврат } from "./dailyReward";
 import { новыйРейтинг } from "./rating";
 import { tournamentUserId, tournamentDisplayName } from "./tournaments/playerIdentity";
@@ -9136,6 +9137,21 @@ export default function CyberChessPage(){
             </button>
           </div>}
 
+          {/* «С чего начать» — полоской, не окном (решение оркестратора 13.10.2026 по замеру bd:
+             модальное окно перехватывало клики по доске и «Задаче дня»). Показ один раз — ключ
+             ONBOARDING_KEY, условие первого показа прежнее (не по ссылке на задачу). */}
+          {showOnboarding&&<PoloskaStarta t={cc.t} mode={themeMode==="dark"?"dark":"light"} width={bw}
+            onDaily={(srvDaily&&!srvDailyFailed)?()=>{markOnboardingDone();sShowOnboarding(false);firstRunRef.current=false;loadDailyPuzzle("onboarding");}:undefined}
+            onIntent={(intent)=>{
+              try{localStorage.setItem("aevion_onboarding_choice_v1",JSON.stringify({intent}))}catch{}
+              markOnboardingDone();sShowOnboarding(false);firstRunRef.current=false;
+              const д=deystvieVyboraOnbordinga(intent);
+              sTab(д.tab);sSetup(д.setup);
+              // Пауза перед стартом — как у остальных мест запуска партии (newG читает состояние этих же сеттеров).
+              if(д.startGame)setTimeout(()=>{sHotseat(false);sRivalMode(false);newG()},50);
+            }}
+            onClose={()=>{markOnboardingDone();sShowOnboarding(false);firstRunRef.current=false;}}
+          />}
           {/* Задание ВИДИМОЙ строкой над доской. До 12.10.2026 человек, пришедший
               по ссылке из комментария, не видел на экране ни чей ход, ни что искать:
               это было только в подписи для скринридера и в карточке правой панели,
@@ -14248,63 +14264,6 @@ ${question.trim()}`;
         }}
       >×</button>
     </div>}
-
-    {/* First-time onboarding — 3-step color/AI/time choice (runs BEFORE the tour) */}
-    {showOnboarding&&<OnboardingOverlay
-      mode={themeMode}
-      /*
-       * Вход в задачу дня ПРЯМО из приветственного окна.
-       *
-       * Замер 08.10.2026 на проде за 14 дней: 42 живых входа на /cyberchess,
-       * «внимание» 6, задачу дня открыл НОЛЬ, партию не закончил никто
-       * (daily_open 0, game_end 0, waitlist_submit 0 при page_view 3042).
-       * Отправка событий при этом исправна — проверено проходом пути человека:
-       * daily_open ушёл со страницы и на сервере виден (всего=1, наши=1).
-       * Мешало другое: до кнопки «☀ Задача дня» надо сперва убрать это окно, а
-       * мой кликер не смог нажать её за 8 секунд, пока не нажал «Пропустить».
-       *
-       * Передаём обработчик ТОЛЬКО когда задача дня готова. Иначе
-       * loadDailyPuzzle закроет окно и скажет «ещё грузится» — человек окажется
-       * на пустой доске, а это хуже отсутствия кнопки (правило «отказ
-       * показывается отказом»).
-       */
-      onDaily={(srvDaily&&!srvDailyFailed)?()=>{
-        markOnboardingDone();
-        sShowOnboarding(false);
-        firstRunRef.current=false;
-        loadDailyPuzzle("onboarding");
-      }:undefined}
-      onComplete={(choice:OnboardingChoice)=>{
-        try{localStorage.setItem("aevion_onboarding_choice_v1",JSON.stringify(choice))}catch{}
-        markOnboardingDone();
-        sShowOnboarding(false);
-        // Единый онбординг: сразу в выбранный режим. Больше НЕ стопка (welcome-модалка
-        // и 4-слайдовый тур убраны из первого визита — тур доступен в меню помощи).
-        const wasFirst=firstRunRef.current;firstRunRef.current=false;
-        const д=deystvieVyboraOnbordinga(choice.intent);
-        sTab(д.tab);sSetup(д.setup);
-        // Пауза перед стартом — как у остальных мест запуска партии (там же 50 мс):
-        // newG читает состояние, которое ставится этими же сеттерами.
-        if(д.startGame)setTimeout(()=>{sHotseat(false);sRivalMode(false);newG()},50);
-        /* Всплывашки не показываем: контейнер общий, он прижат к низу экрана и
-           накрывает нижнюю навигацию. Замер 01.09.2026 на 390px: пять кнопок
-           из шести («Играть», «Задачи», «Анализ», «Коуч», «Профиль») были
-           недоступны касанию около пяти секунд после первого входа. Само
-           сообщение не теряется — окно приветствия, которое человек только
-           что закрыл, говорит «+50 Chessy уже на счёте», и счётчик монет
-           виден в шапке. */
-      }}
-      onSkip={()=>{markOnboardingDone();sShowOnboarding(false);
-        const wasFirst=firstRunRef.current;firstRunRef.current=false;
-        /* Всплывашки не показываем: контейнер общий, он прижат к низу экрана и
-           накрывает нижнюю навигацию. Замер 01.09.2026 на 390px: пять кнопок
-           из шести («Играть», «Задачи», «Анализ», «Коуч», «Профиль») были
-           недоступны касанию около пяти секунд после первого входа. Само
-           сообщение не теряется — окно приветствия, которое человек только
-           что закрыл, говорит «+50 Chessy уже на счёте», и счётчик монет
-           виден в шапке. */
-      }}
-    />}
 
     {/* Coach SR reminders — surfaced as a single toast-card if any 1/3/7-day milestones are due */}
     {dueReminders.length>0&&<div style={{

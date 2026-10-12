@@ -30,8 +30,9 @@ describe("приветствие новичка", () => {
 
   it("после закрытия окна приветствия всплывашек не остаётся", () => {
     const код = КОД();
-    const i = код.indexOf("onSkip={()=>{markOnboardingDone()");
-    expect(i, "обработчик «просто осмотрюсь» пропал — проверку переписать").toBeGreaterThan(0);
+    // 13.10.2026: окно заменено полоской над доской (PoloskaStarta); «просто осмотрюсь» стало крестиком onClose.
+    const i = код.indexOf("onClose={()=>{markOnboardingDone()");
+    expect(i, "обработчик закрытия полоски пропал — проверку переписать").toBeGreaterThan(0);
     const тело = код.slice(i, i + 700);
     expect(тело).not.toContain("showToast(");
   });

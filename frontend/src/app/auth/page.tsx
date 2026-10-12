@@ -139,10 +139,10 @@ const OAUTH_META: Record<string, { brand: string; gradient: string; envHint: str
 // замер 06.09.2026 (en-US): страница английская, подсказки полей русские —
 // и это ФОРМА РЕГИСТРАЦИИ, первое, что заполняет западный визитёр.
 // Тот же образец, что GEN_UI/ATTR_UI в devhub; вне провайдера — русский.
-const AUTH_A11Y: Record<string, { name: string; namePh: string; email: string; password: string; passwordPh: string }> = {
-  ru: { name: "Имя", namePh: "Как к вам обращаться", email: "Почта", password: "Пароль", passwordPh: "Не короче 6 знаков" },
-  en: { name: "Name", namePh: "What should we call you", email: "Email", password: "Password", passwordPh: "At least 6 characters" },
-  kk: { name: "Аты", namePh: "Сізге қалай жүгінейік", email: "Пошта", password: "Құпиясөз", passwordPh: "Кемінде 6 таңба" },
+const AUTH_A11Y: Record<string, { name: string; namePh: string; email: string; password: string; passwordPh: string; forgot: string }> = {
+  ru: { name: "Имя", namePh: "Как к вам обращаться", email: "Почта", password: "Пароль", passwordPh: "Не короче 6 знаков", forgot: "Забыли пароль?" },
+  en: { name: "Name", namePh: "What should we call you", email: "Email", password: "Password", passwordPh: "At least 6 characters", forgot: "Forgot your password?" },
+  kk: { name: "Аты", namePh: "Сізге қалай жүгінейік", email: "Пошта", password: "Құпиясөз", passwordPh: "Кемінде 6 таңба", forgot: "Құпиясөзді ұмыттыңыз ба?" },
 };
 
 export default function AuthPage() {
@@ -627,6 +627,30 @@ export default function AuthPage() {
                   </div>
                 ) : null}
               </div>
+              {/*
+                🔴 «ЗАБЫЛИ ПАРОЛЬ» — ВЫХОД ИЗ ТУПИКА (12.10.2026).
+
+                Страница сброса (`/build/reset-password`) и обе ручки существуют
+                с давних пор, но со страницы входа на них не было НИ ОДНОЙ
+                ссылки: человек, забывший пароль, упирался в «неверный пароль»
+                и уходил. Это не неудобство, а потеря уже пришедшего — в том
+                числе заплатившего, которому мы продали доступ.
+
+                Текст из словаря на три языка, а не одной строкой по-русски:
+                живой доводчик перевода на сайте есть, но полагаться на него для
+                ЕДИНСТВЕННОГО выхода из тупика нельзя — он молча обрезает
+                длинные слова и переводит не всё. Видно только в режиме входа:
+                при регистрации пароля ещё нет, и ссылка была бы шумом.
+              */}
+              {mode === "login" ? (
+                <Link
+                  href="/build/reset-password"
+                  aria-label={AA.forgot}
+                  style={{ fontSize: 13, color: "#0d9488", fontWeight: 700, textDecoration: "none", alignSelf: "flex-start" }}
+                >
+                  {AA.forgot}
+                </Link>
+              ) : null}
               <button onClick={mode === "login" ? signIn : register} disabled={submitDisabled} style={{ padding: "12px 20px", borderRadius: 12, border: "none", background: submitDisabled ? "#94a3b8" : "linear-gradient(135deg, #0d9488, #0ea5e9)", color: "#fff", cursor: submitDisabled ? "default" : "pointer", fontWeight: 900, fontSize: 15, boxShadow: submitDisabled ? "none" : "0 4px 14px rgba(13,148,136,0.35)" }}>
                 {busy ? "Секунду…" : mode === "register" ? "Создать аккаунт" : "Войти"}
               </button>

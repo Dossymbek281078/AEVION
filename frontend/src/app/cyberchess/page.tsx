@@ -186,6 +186,7 @@ import { buildPlayerProfile, mirrorDepth, type PlayerProfile, type SavedGameForM
 import { getAuthToken } from "@/lib/auth";
 import { sekundyResheniya, bonusZaSkorost, podpisSkorosti } from "./skorostZadachi";
 import { zapasPodDoskoy } from "./zapasPodDoskoy";
+import { strokaTsennosti } from "./panelResheno";
 
 /** Русское склонение по числу: 1 задача, 2 задачи, 5 задач.
  *  Без него счётчик пишет «502 584 задач» там, где нужно «задачи». */
@@ -6882,6 +6883,15 @@ export default function CyberChessPage(){
   // поэтому смена фильтра (адаптивная сложность) больше НЕ отменяет отложенную загрузку.
   useEffect(()=>{
     if(pzAttempt!=="correct")return; // поток как на lichess/chess.com
+    /*
+     * 🔴 ПРИШЁЛ ПО ССЫЛКЕ НА ЗАДАЧУ — АВТОПЕРЕХОДА НЕТ (12.10.2026, слово оркестратора).
+     * Замер bd: после «Решено!» человек видит свой мат 1,2 с и страницу уносит
+     * к следующей задаче. Для пришедшего с ролика (наш единственный живой вход)
+     * это значит, что экран успеха и любое предложение живут ~1 с. Вместо
+     * автоперехода — панель «Решено!» с кнопкой «Следующая задача» и событие
+     * next_clicked: доля «взялись за вторую» станет измеримой. Rush не трогаем.
+     */
+    if(зашёлЗаЗадачей&&pzMode!=="rush")return;
     const delay=pzMode==="rush"?550:pzMode==="learn"?1100:1200;
     const t=setTimeout(()=>{loadNextPuzzleRef.current();},delay);
     return()=>clearTimeout(t);
@@ -9927,6 +9937,14 @@ export default function CyberChessPage(){
 
           {/* Controls — under-board strip. Game-essentials only. Heatmap/Whisper/Share/History live in the
               right-sidebar Tools card to reduce visual clutter under the board. */}
+          {/* Панель «Решено!» — только для пришедшего по ссылке на задачу: вместо
+              автоперехода человек сам нажимает «Следующая задача». */}
+          {зашёлЗаЗадачей&&pzAttempt==="correct"&&pzCurrent&&pzMode!=="rush"&&<div data-cc-resheno="1" role="status" style={{marginTop:SPACE[2],padding:"12px 14px",borderRadius:RADIUS.md,background:"#ecfdf5",border:"1px solid #a7f3d0",display:"flex",flexWrap:"wrap",alignItems:"center",gap:10}}>
+            <div style={{fontWeight:900,fontSize:16,color:"#065f46"}}>✓ Решено! {pzCurrent.name}</div>
+            <button type="button" className="cc-touch" onClick={()=>{track({type:"feature_use",source:"cyberchess/puzzle",meta:{feature:"next_clicked",app:"cyberchess"}});loadNextPuzzleRef.current();}}
+              style={{padding:"9px 16px",borderRadius:RADIUS.md,border:"none",background:CC.accent,color:"#fff",fontWeight:900,fontSize:14,cursor:"pointer"}}>Следующая задача →</button>
+            <div style={{fontSize:13,color:"#047857",fontWeight:700}}>{strokaTsennosti(pzTotal)}</div>
+          </div>}
           {!(зашёлЗаЗадачей&&!isMobileLayout)&&<div style={{display:"flex",gap:8,marginTop:SPACE[2],...podDoskoyRow}}>
             <Btn size="md" variant="secondary" icon={<Icon.Flip width={16} height={16}/>} onClick={()=>sFlip(!flip)}>Перевернуть</Btn>
             <Btn size="md" variant="primary" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>Новая партия</Btn>

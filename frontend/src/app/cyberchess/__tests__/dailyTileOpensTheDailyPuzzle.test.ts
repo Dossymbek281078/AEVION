@@ -25,7 +25,7 @@ const КОД = bezKommentariev(readFileSync(join(__dirname, "..", "page.tsx"), "
 
 describe("задача дня на главной странице шахмат", () => {
   it("открывается серверная задача, а не локальный индекс", () => {
-    expect(КОД).toContain("normalizePuzzle({fen:srvDaily.fen,sol:srvDaily.sol");
+    expect(КОД).toContain("normalizePuzzle({id:srvDaily.id,fen:srvDaily.fen,sol:srvDaily.sol");
     expect(КОД).not.toContain("normalizePuzzle(PUZZLES[dailyState.idx]");
   });
 

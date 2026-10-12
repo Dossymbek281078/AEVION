@@ -51,7 +51,7 @@ describe("сырой формат банка нормализуется", () => 
     //    и НОРМАЛИЗУЮТ. Привязка теперь к имени загрузчика, а не к его списку
     //    параметров — список меняется, свойство нет.
     expect(page).toMatch(/const loadDailyPuzzle=\(/);
-    expect(page).toMatch(/loadDailyPuzzle=\([^)]*\)=>\{[\s\S]{0,400}?normalizePuzzle\(\{fen:srvDaily\.fen/);
+    expect(page).toMatch(/loadDailyPuzzle=\([^)]*\)=>\{[\s\S]{0,400}?normalizePuzzle\(\{id:srvDaily\.id,fen:srvDaily\.fen/);
     // и старого локального источника задачи дня больше нет
     expect(page).not.toContain("normalizePuzzle(PUZZLES[dailyState.idx]");
     expect(page).toContain("const pz0=fPz[i]||PUZZLES[0];const pz=pz0?normalizePuzzle(pz0):pz0;");

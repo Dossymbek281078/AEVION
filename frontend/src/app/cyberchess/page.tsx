@@ -6532,7 +6532,7 @@ export default function CyberChessPage(){
   const loadDailyPuzzle=(surface:string="unknown")=>{
     if(srvDailyFailed){showToast("Задача дня не загрузилась — проверьте связь","error");return}
     if(!srvDaily){showToast("Задача дня ещё грузится…","info");return}
-    const pz=normalizePuzzle({fen:srvDaily.fen,sol:srvDaily.sol,name:srvDaily.theme,r:srvDaily.rating,theme:srvDaily.theme}) as typeof PUZZLES[number];
+    const pz=normalizePuzzle({id:srvDaily.id,fen:srvDaily.fen,sol:srvDaily.sol,name:srvDaily.theme,r:srvDaily.rating,theme:srvDaily.theme}) as typeof PUZZLES[number];
     if(!postavitZadachuNaDosku(pz,{dnevnaya:true}))return;
     showToast(`☀ Задача дня · ${pz.r}`,"info");
     track({type:"daily_open",source:"cyberchess/daily",meta:{surface,day:srvDaily.day}});

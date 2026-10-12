@@ -7,6 +7,7 @@ import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { RazrabotkaPreduprezhdenie } from "@/components/RazrabotkaPreduprezhdenie";
 import { predlagaemOtdelno } from "@/lib/neProdayotsyaOtdelno";
+import { vybratVhod } from "@/lib/vhodNaStranitseTsen";
 import { apiUrl } from "@/lib/apiBase";
 import { fetchAiSavings, счётчикГоденДляПоказа } from "@/lib/aiSavings";
 import { запомнитьНамерение } from "@/lib/checkoutIntent";
@@ -634,9 +635,34 @@ export default function PricingPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    const mod = params.get("module");
-    if (mod && (standaloneApp(mod) || data?.modules?.some((m) => m.id === mod))) {
-      setHeroModule(mod);
+    /*
+     * 🔴 `?app=<слаг>` ТОЖЕ поднимает карточку наверх (12.10.2026).
+     *
+     * Замер того дня: из трёх живых людей, нажавших «Купить CyberChess» в
+     * шахматах, до цен дошёл ОДИН. Кнопка ведёт на `/pricing?app=cyberchess`,
+     * и всё это время верхний блок включался только по `?module=`. Пришедший
+     * по `?app=` попадал на страницу в 23 экрана, где его карточка стоит на
+     * 6162 px (7.3 экрана вниз), и видел её лишь после 1402 КБ кода — если
+     * вообще дожидался.
+     *
+     * Автопрокрутка к карточке (29.09) остаётся: она довозит того, кто
+     * дождался. Но прокрутка не может показать раньше, чем страница
+     * отрисовалась, а верхний блок — может: он стоит в первом экране и несёт
+     * то же самое — имя, цену за месяц, сумму за срок и кнопку в кассу.
+     *
+     * Второго места с ценой не заводится: блок и карточка берут цену из
+     * `termPricePerMonth`/`termTotal`, а ссылку — из `ссылкаПриложения`.
+     * `?module=` остаётся главнее `?app=`: это более точная ссылка, её ставит
+     * страница продукта.
+     */
+    const вход = vybratVhod({
+      module: params.get("module"),
+      app: params.get("app"),
+      естьМодуль: (id) => Boolean(standaloneApp(id)) || Boolean(data?.modules?.some((m) => m.id === id)),
+      prodayotsyaOtdelno: predlagaemOtdelno,
+    });
+    if (вход) {
+      setHeroModule(вход);
     }
     // Человек пришёл ЗА КОНКРЕТНЫМ приложением — довозим его до карточки.
     //

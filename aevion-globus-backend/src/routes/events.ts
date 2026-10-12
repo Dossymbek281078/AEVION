@@ -799,6 +799,12 @@ export interface РазрезВоронки {
    * `byPostFeatureВсего`.
    */
   byPostFeature: Record<string, { сессий: number; сессийНаших: number }>;
+  /**
+   * Последний шаг сессии ВНУТРИ DevHub: где человек остановился.
+   * Ключ — имя шага или «открыл страницу». Сессии без событий DevHub сюда
+   * не попадают.
+   */
+  byLastStep: Record<string, { сессий: number; сессийНаших: number }>;
   /** Сколько пар «пост × шаг» нашлось ДО обрезки вывода до 50. */
   byPostFeatureВсего: number;
   byChessPlies: Record<string, { сессий: number; сессийНаших: number }>;
@@ -2603,6 +2609,54 @@ export function разрезВоронки(
    * а `byPostFeatureВсего` называет, сколько их было на самом деле: обрезка без
    * знаменателя читается как «больше ничего нет».
    */
+  /**
+   * 🔴 ГДЕ ЧЕЛОВЕК ОСТАНОВИЛСЯ ВНУТРИ DevHub (12.10.2026).
+   *
+   * Разрезы отвечают «сколько дошло до каждого шага», но не отвечают «где
+   * оборвалось»: сессия, дошедшая до генерации и ушедшая, видна и в
+   * `build_from_idea`, и в `generation`, и ни один из них не говорит, что
+   * дальше её не было. Для починки пути это и есть главный вопрос.
+   *
+   * Считаем ПОСЛЕДНЕЕ событие сессии на /devhub: шаг модуля, если он был,
+   * иначе `page_view` — «открыл и ушёл». Сессии без событий DevHub сюда не
+   * попадают вовсе.
+   */
+  const byLastStep = Object.create(null) as РазрезВоронки["byLastStep"];
+  {
+    /** sid → последний шаг (имя), по порядку записи журнала. */
+    const последний = new Map<string, string>();
+    for (const ev of events) {
+      if (!ev.sid) continue;
+      const путь = typeof ev.path === "string" ? ev.path : "";
+      const источник = typeof ev.source === "string" ? ev.source : "";
+      const этоDevhub = путь.includes("/devhub") || источник === "devhub";
+      if (!этоDevhub) continue;
+      if (ev.type === "feature_use") {
+        const сырой = ev.meta?.feature;
+        const шаг = typeof сырой === "string" && сырой.trim() ? сырой.trim().slice(0, 40) : null;
+        if (шаг) последний.set(ev.sid, шаг);
+        continue;
+      }
+      if (ev.type === "page_view") {
+        // Просмотр страницы НЕ затирает уже достигнутый шаг: человек мог
+        // вернуться на /devhub после генерации, и «открыл» здесь было бы
+        // откатом назад. Ставим его только первым, как начальное состояние.
+        if (!последний.has(ev.sid)) последний.set(ev.sid, "открыл страницу");
+      }
+    }
+    const поШагам = new Map<string, Set<string>>();
+    for (const [sid, шаг] of последний) {
+      let набор = поШагам.get(шаг);
+      if (!набор) { набор = new Set<string>(); поШагам.set(шаг, набор); }
+      набор.add(sid);
+    }
+    for (const [шаг, набор] of поШагам) {
+      let наших = 0;
+      for (const sid of набор) if (нашЗаход(sid) || заходы.get(sid)?.наш) наших += 1;
+      byLastStep[шаг] = { сессий: набор.size, сессийНаших: наших };
+    }
+  }
+
   const byPostFeature = Object.create(null) as РазрезВоронки["byPostFeature"];
   let byPostFeatureВсего = 0;
   {
@@ -2637,6 +2691,7 @@ export function разрезВоронки(
     byChannel,
     byApp,
     byFeature,
+    byLastStep,
     byPostFeature,
     byPostFeatureВсего,
     byPost,
@@ -4078,6 +4133,9 @@ eventsRouter.get("/funnel", (req, res) => {
     byFeature: разрез.byFeature,
     // Пересечение «пост × шаг»: ровно тот класс, о котором предупреждает
     // комментарий ниже, — поэтому дописано здесь СРАЗУ, одним заходом с расчётом.
+    byLastStep: разрез.byLastStep,
+    byLastStepNote:
+      "последний шаг сессии внутри DevHub — где человек остановился; «открыл страницу» значит, что шагов не было вовсе",
     byPostFeature: разрез.byPostFeature,
     byPostFeatureВсего: разрез.byPostFeatureВсего,
     byPostFeatureNote:

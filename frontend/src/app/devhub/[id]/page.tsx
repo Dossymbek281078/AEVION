@@ -12,7 +12,7 @@ import { shouldOfferDbHint, shouldOfferDeployHint, shouldOfferManifestHint } fro
 import { buildReactPreviewSrcdoc, isClientPreviewStack } from "@/lib/reactPreview";
 import { pickEntryFile, hasRenderableHtml } from "@/lib/devhubEntryFile";
 import { maketRabochegoOkna } from "@/lib/devhubMaket";
-import { vstavitZaglushkuHranilisha, PODPIS_O_HRANILISHE } from "@/lib/devhubPreviewStorage";
+import { vstavitZaglushkuHranilisha } from "@/lib/devhubPreviewStorage";
 import { indexCapabilities, isCapabilityBlocked, isCapabilityConfirmed, capabilityHint, каналВыкатки, type CapabilityIndex } from "@/lib/devhubCapabilities";
 import { assetSnippet, appendSnippet, type AssetKind } from "@/lib/devhubAssetSnippet";
 import { newFilePathError, renamePathError, normalizeFilePath } from "@/lib/devhubFilePaths";
@@ -113,7 +113,7 @@ const PODPIS_VKLADKI: Record<Vkladka, string> = {
 // словарь IDE (~400 строк) ждёт языкового решения основателя; здесь
 // НАМЕРЕННО только замеренный поимённо остаток пути новичка (проба
 // en-newcomer-probe, 06.09.2026: 66 знаков до генерации + тосты после).
-const GEN_UI: Record<string, { ph: string; noteContinued: string; noteTruncated: string; noteNoProvider: string; noteSyntax: string; created: string; noChanges: string; syntaxWarn: string; memoryWarn: string; runCost: string; runTokens: string; stCalling: string; stWriting: string; stContinue: string; stSyntax: string; stSelfFix: string; stSaving: string; busyDb: string; busyDesign: string; busyGen: string; busyUndo: string; busyPublish: string; busyPull: string; busyDeploy: string; busyPlan: string; busyImg: string; busySave: string; busyApply: string; busyPush: string; busySync: string; busyCompose: string; busySend: string; busyTranslate: string; busyCreate: string; busyPreview: string; busyUpload: string; busyStt: string; busyAgent: string; busySetup: string; deployNeedsFiles: string; siteLive: string; openSite: string; domainSoon: string; confirmDelFile: string }> = {
+const GEN_UI: Record<string, { ph: string; noteContinued: string; noteTruncated: string; noteNoProvider: string; noteSyntax: string; created: string; noChanges: string; syntaxWarn: string; memoryWarn: string; runCost: string; runTokens: string; stCalling: string; stWriting: string; stContinue: string; stSyntax: string; stSelfFix: string; stSaving: string; busyDb: string; busyDesign: string; busyGen: string; busyUndo: string; busyPublish: string; busyPull: string; busyDeploy: string; busyPlan: string; busyImg: string; busySave: string; busyApply: string; busyPush: string; busySync: string; busyCompose: string; busySend: string; busyTranslate: string; busyCreate: string; busyPreview: string; busyUpload: string; busyStt: string; busyAgent: string; busySetup: string; deployNeedsFiles: string; siteLive: string; openSite: string; domainSoon: string; confirmDelFile: string; btnGenerate: string; btnDeploy: string; btnDeployVercel: string; emptyEditor: string; deployWhatHappens: string; storageNote: string }> = {
   ru: {
     ph: "Опишите, что нужно построить…\nНапример: «REST API с входом пользователей и ручкой товаров»",
     noteContinued: "Ответ упёрся в предел длины — недостающие файлы дозагружены отдельным вызовом",
@@ -138,6 +138,10 @@ const GEN_UI: Record<string, { ph: string; noteContinued: string; noteTruncated:
     busyStt: "Расшифровываю…", busyAgent: "Выполняю сценарий…", busySetup: "Настраиваю…",
     confirmDelFile: "Удалить файл {path}? Кнопка отмены правок ИИ его не вернёт.",
     noChanges: "Без изменений",
+    btnGenerate: "Сгенерировать код (Ctrl+Enter)", btnDeploy: "Выкатить", btnDeployVercel: "Выкатить на Vercel",
+    emptyEditor: "Выберите файл или попросите ИИ написать код",
+    deployWhatHappens: "По нажатию сайт появится по публичному адресу — его можно открыть и отправить кому угодно.",
+    storageNote: "В превью данные форм живут, пока оно открыто; на опубликованном сайте они хранятся в браузере посетителя.",
     syntaxWarn: "не прошли проверку синтаксиса — просмотрите перед выкаткой",
     memoryWarn: "но база была недоступна — они пока в памяти и могут пропасть при перезапуске. Сохраните копию.",
   },
@@ -165,6 +169,10 @@ const GEN_UI: Record<string, { ph: string; noteContinued: string; noteTruncated:
     busyStt: "Transcribing…", busyAgent: "Running the scenario…", busySetup: "Setting up…",
     confirmDelFile: "Delete {path}? The AI-undo button will not bring it back.",
     noChanges: "No changes",
+    btnGenerate: "Generate code (Ctrl+Enter)", btnDeploy: "Deploy", btnDeployVercel: "Deploy to Vercel",
+    emptyEditor: "Pick a file or ask the AI to write the code",
+    deployWhatHappens: "Deploy publishes your site at a public address — open it or share it with anyone.",
+    storageNote: "In the preview, form data lives only while it is open; on the published site it is stored in the visitor's browser.",
     syntaxWarn: "failed the syntax check — review before deploying",
     memoryWarn: "but the database was unavailable — they live in memory for now and may vanish on restart. Save a copy.",
   },
@@ -192,6 +200,10 @@ const GEN_UI: Record<string, { ph: string; noteContinued: string; noteTruncated:
     busyStt: "Мәтінге айналдырылуда…", busyAgent: "Сценарий орындалуда…", busySetup: "Бапталуда…",
     confirmDelFile: "{path} файлын жою керек пе? ЖИ болдырмау түймесі оны қайтармайды.",
     noChanges: "Өзгеріс жоқ",
+    btnGenerate: "Код жасау (Ctrl+Enter)", btnDeploy: "Жариялау", btnDeployVercel: "Vercel-ге жариялау",
+    emptyEditor: "Файлды таңдаңыз немесе ЖИ-дан код жазуын сұраңыз",
+    deployWhatHappens: "Басқанда сайт жалпыға ашық мекенжайда пайда болады — оны ашуға және кез келген адамға жіберуге болады.",
+    storageNote: "Алдын ала қарауда пішін деректері ол ашық тұрғанда ғана сақталады; жарияланған сайтта олар келушінің браузерінде сақталады.",
     syntaxWarn: "синтаксис тексеруінен өтпеді — жариялау алдында қараңыз",
     memoryWarn: "бірақ дерекқор қолжетімсіз болды — олар әзірге жадта және қайта іске қосқанда жоғалуы мүмкін. Көшірмесін сақтаңыз.",
   },
@@ -4000,7 +4012,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
               opacity: каналВыкатки(caps) === null ? 0.45 : 1,
             }}
           >
-            {deploying ? GL.busyDeploy : "Выкатить"}
+            {deploying ? GL.busyDeploy : GL.btnDeploy}
           </button>
           <button
             onClick={deployToVercel}
@@ -4287,7 +4299,10 @@ if (/Месячная норма исчерпана|Месячный лимит[
                       человек решит, что сохранение работает, и узнает обратное
                       после выкатки. */}
                   <div style={{ padding: "6px 12px", fontSize: 11, lineHeight: 1.35, color: "#64748b", background: "#f8fafc", borderTop: "1px solid #f1f5f9" }}>
-                    {PODPIS_O_HRANILISHE}
+                    {/* Сначала — что произойдёт по нажатию «Выкатить», потом короткая
+                        оговорка про данные форм. Прежняя подпись начиналась с оговорки и
+                        читалась как угроза потери (окно ИИ-блогера, 12.10.2026). */}
+                    {GL.deployWhatHappens} {GL.storageNote}
                   </div>
                 </>
               )
@@ -4311,7 +4326,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
             ) : (
               <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: "#1e293b", color: "#64748b" }}>
                 <div style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: 36, marginBottom: 12 }}>Выберите файл или попросите ИИ написать код</div>
+                  <div style={{ fontSize: 36, marginBottom: 12 }}>{GL.emptyEditor}</div>
                 </div>
               </div>
             )}
@@ -4633,7 +4648,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                       cursor: generating ? "not-allowed" : "pointer",
                     }}
                   >
-                    {generating ? GL.busyGen : "Сгенерировать код (Ctrl+Enter)"}
+                    {generating ? GL.busyGen : GL.btnGenerate}
                   </button>
                   <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "#475569", cursor: "pointer" }}
                     title={AL.provInfo}>
@@ -5075,7 +5090,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                         cursor: vercelDeploying ? "not-allowed" : "pointer",
                       }}
                     >
-                      {vercelDeploying ? GL.busyDeploy : "Выкатить на Vercel"}
+                      {vercelDeploying ? GL.busyDeploy : GL.btnDeployVercel}
                     </button>
                   </div>
 

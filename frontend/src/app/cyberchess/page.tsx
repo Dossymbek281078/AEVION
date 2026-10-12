@@ -285,8 +285,8 @@ function ruResult(o: string | null): string {
   return o
     .replace("Checkmate! You win! 🏆", "Мат — вы победили! 🏆")
     .replace("Checkmate — AI wins", "Мат — победил ИИ")
-    .replace("Checkmate — соперник выиграл", "Мат — соперник выиграл")
-    .replace("Checkmate — цель достигнута! 🏆", "Мат — цель достигнута! 🏆")
+    .replace("Мат — соперник выиграл", "Мат — соперник выиграл")
+    .replace("Мат — цель достигнута! 🏆", "Мат — цель достигнута! 🏆")
     .replace(/^Checkmate —/, "Мат —")
     .replace("AI timed out — you win!", "У ИИ вышло время — вы победили!")
     .replace("Time out", "Время вышло")
@@ -605,8 +605,8 @@ const ACH_LABELS:Record<string,string>={
   first_win:"🏆 Первая победа",
   wins_10:"🎖 10 побед",
   wins_50:"🏅 50 побед",
-  beat_expert:"⚔ Победа над Expert",
-  beat_master:"👑 Победа над Master",
+  beat_expert:"⚔ Победа над Экспертом",
+  beat_master:"👑 Победа над Мастером",
   puzzles_10:"🧩 10 задач",
   puzzles_50:"🧠 50 задач",
   puzzles_100:"🎯 100 задач",
@@ -4570,7 +4570,7 @@ export default function CyberChessPage(){
         if(currentEndgame){
           // Endgame trainer: checkmate delivered by the trainee side?
           const traineeWon=game.turn()!==currentEndgame.side;
-          r=traineeWon?"Checkmate — цель достигнута! 🏆":"Checkmate — соперник выиграл";
+          r=traineeWon?"Мат — цель достигнута! 🏆":"Мат — соперник выиграл";
           if(traineeWon&&currentEndgame.goal==="Win"){
             setTimeout(()=>{addChessy(currentEndgame.reward,`🏰 ${currentEndgame.name}`);unlockAch("endgame_master",80,"Мастер эндшпилей")},600);
           }
@@ -7332,7 +7332,7 @@ export default function CyberChessPage(){
                 заданы явно, поэтому вид не меняется. */}
             <h1 style={{fontSize:15,fontWeight:900,color:CC.text,letterSpacing:0.2,display:"inline-flex",alignItems:"center",gap:6,margin:0}}>
               <span translate="no" className="notranslate">CyberChess</span>
-              {isPro&&<span title={isUltimate?"Ultimate активен":"Pro активен"} style={{
+              {isPro&&<span title={isUltimate?"Режим «Ультимат» активен":"Pro активен"} style={{
                 display:"inline-flex",alignItems:"center",gap:3,
                 fontSize:9,fontWeight:900,letterSpacing:1,textTransform:"uppercase" as const,
                 padding:"2px 7px",borderRadius:RADIUS.full,
@@ -10849,7 +10849,7 @@ export default function CyberChessPage(){
                       if(!canDrop){
                         if(game.turn()!==pCol)showToast("Дождись своего хода","info");
                         else if(variant==="crazyhouse")showToast("Нужно сначала захватить фигуру соперника","info");
-                        else{const rem=hist.length%dropEvery;const next=rem===0?0:dropEvery-rem;showToast(next===0?"Drop доступен — но пул пуст. Захвати фигуру!":`Drop доступен через ${next} ход${next===1?"":"ов"}`,"info");}
+                        else{const rem=hist.length%dropEvery;const next=rem===0?0:dropEvery-rem;showToast(next===0?"Сброс доступен — но пул пуст. Захвати фигуру!":`Drop доступен через ${next} ход${next===1?"":"ов"}`,"info");}
                         return;
                       }
                       sSelectedDropPiece(t);sDropPickerOpen(true);
@@ -15522,7 +15522,7 @@ ${question.trim()}`;
               });
               const url=URL.createObjectURL(blob);
               sReelBlobUrl(url);
-              addChessy(8,"reel сгенерирован");
+              addChessy(8,"ролик собран");
             }catch(e:any){
               showToast(`Ошибка: ${e?.message||"не удалось"}. Safari не поддерживает MediaRecorder WebM — используй Chrome/Firefox/Edge.`,"error");
             }
@@ -16282,7 +16282,7 @@ ${question.trim()}`;
                 const selected=boardTheme===i;
                 return <button key={i}
                   className="cc-focus-ring"
-                  onClick={()=>{if(locked){showToast("Premium — доступно в магазине","info");sShowSettings(false);sShowShop(true);return}sBoardTheme(i)}}
+                  onClick={()=>{if(locked){showToast("Премиум — доступно в магазине","info");sShowSettings(false);sShowShop(true);return}sBoardTheme(i)}}
                   style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",
                     borderRadius:RADIUS.full,
                     border:selected?`2px solid ${CC.brand}`:`1px solid ${CC.border}`,

@@ -12,7 +12,10 @@ import { join } from "node:path";
 
 const src = readFileSync(join(__dirname, "..", "page.tsx"), "utf8");
 const i = src.indexOf("const otpravitDaily=useCallback(");
-const block = src.slice(i, i + 1800);
+// Окно — ВСЯ функция до её закрытия, а не 1800 знаков: функция выросла, и
+// фиксированное окно резало catch — тест краснел при верном коде (12.10.2026).
+const конец = src.indexOf("},[showToast]);", i);
+const block = src.slice(i, конец > 0 ? конец + "},[showToast]);".length : i + 1800);
 
 describe("otpravitDaily: отказ сервера показан, а не проглочен", () => {
   it("функция найдена", () => { expect(i).toBeGreaterThan(0); });

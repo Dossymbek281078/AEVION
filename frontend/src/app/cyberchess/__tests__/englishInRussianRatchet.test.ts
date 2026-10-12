@@ -23,7 +23,19 @@ import path from "node:path";
  * ЕСЛИ ПОЧИНИЛИ НЕСКОЛЬКО МЕСТ: опустите ПРЕДЕЛ до нового числа, иначе
  * храповик перестанет держать достигнутое.
  */
-const PREDEL = 251;
+const PREDEL = 130;
+/*
+ * Имена собственные — дебюты, игроки, площадки, названия режимов и тем — не
+ * «английские слова в русском тексте»: у них нет перевода, который был бы
+ * правильнее. Список закрытый: новое имя добавляется руками, а не угадывается.
+ */
+const ИМЕНА = new Set([
+  "Lopez", "Berlin", "Italian", "Scholar", "Capablanca", "Tal", "Carlsen", "Anand", "Wijk",
+  "Lucena", "Philidor", "Lichess", "lichess", "Stockfish", "Chrome", "Anthropic", "Claude",
+  "Klimt", "FIDE", "QShield", "QSign", "QCoreAI", "Chessy", "Rush", "Survival", "Ghost",
+  "Neon", "Obsidian", "Sakura", "Wood", "Rose", "Dark", "Reel", "WhatIf", "Masters", "masters",
+  "Twin", "Fishing", "Puzzle", "Play", "Command", "Emoji", "Expert", "Master",
+]);
 
 const BELYJ = new Set([
   // Шахматные обозначения: их понимает любой играющий.
@@ -60,9 +72,18 @@ describe("английские слова в русском тексте", () =>
         for (const m of l.matchAll(/"([^"]{10,140})"/g)) {
           const t = m[1];
           if (!/[а-яА-Я]{4}/.test(t)) continue;
+          /*
+           * 12.10.2026: регулярка по кавычкам ловила ОБРЫВКИ КОДА между двумя
+           * кавычками JSX/JS (`,fontWeight:700}}>Сейчас</div><div style={{`), и
+           * «английским словом» становились fontWeight, showToast, const. Замер:
+           * из 244 находок 81 — такие обрывки, 72 — имена собственные (Lopez,
+           * Berlin, Capablanca), и только 91 — надписи, видимые человеку. Прибор
+           * мерил не то. Обрывок кода узнаётся по синтаксису внутри «строки».
+           */
+          if (/[{}<>;]|=>|\$\{|\)\s*\{/.test(t)) continue;
           const slova = t.match(/\b[A-Za-z][A-Za-z-]{3,}\b/g) || [];
           const chuzhoe = slova.find(
-            (w) => !BELYJ.has(w) && !["http", "https", "none", "flex", "span", "div"].includes(w.toLowerCase()),
+            (w) => !BELYJ.has(w) && !ИМЕНА.has(w) && !["http", "https", "none", "flex", "span", "div"].includes(w.toLowerCase()),
           );
           if (chuzhoe) { najdeno.push(`${path.basename(f)}: ${chuzhoe}`); break; }
         }
@@ -70,6 +91,10 @@ describe("английские слова в русском тексте", () =>
     }
     // Нижняя граница — защита от поломки самой проверки: если она вдруг
     // перестанет что-либо находить, зелёный цвет будет означать слепоту.
+    // Контроль слепоты: прибор, который ничего не находит, не «чист», а сломан —
+    // после правки 12.10 (исключены обрывки кода и имена) он обязан видеть десятки
+    // настоящих надписей с английским словом. Ноль здесь значил бы «не умею искать».
+    expect(najdeno.length, "прибор ослеп: находок меньше 50").toBeGreaterThan(50);
     expect(najdeno.length, "проверка ослепла — находит подозрительно мало").toBeGreaterThan(100);
     expect(najdeno.length, `стало ${najdeno.length}, предел ${PREDEL}`).toBeLessThanOrEqual(PREDEL);
   });

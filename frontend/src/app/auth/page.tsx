@@ -139,10 +139,12 @@ const OAUTH_META: Record<string, { brand: string; gradient: string; envHint: str
 // замер 06.09.2026 (en-US): страница английская, подсказки полей русские —
 // и это ФОРМА РЕГИСТРАЦИИ, первое, что заполняет западный визитёр.
 // Тот же образец, что GEN_UI/ATTR_UI в devhub; вне провайдера — русский.
-const AUTH_A11Y: Record<string, { name: string; namePh: string; email: string; password: string; passwordPh: string; forgot: string }> = {
-  ru: { name: "Имя", namePh: "Как к вам обращаться", email: "Почта", password: "Пароль", passwordPh: "Не короче 6 знаков", forgot: "Забыли пароль?" },
-  en: { name: "Name", namePh: "What should we call you", email: "Email", password: "Password", passwordPh: "At least 6 characters", forgot: "Forgot your password?" },
-  kk: { name: "Аты", namePh: "Сізге қалай жүгінейік", email: "Пошта", password: "Құпиясөз", passwordPh: "Кемінде 6 таңба", forgot: "Құпиясөзді ұмыттыңыз ба?" },
+const AUTH_A11Y: Record<string, { name: string; namePh: string; email: string; password: string; passwordPh: string; forgot: string; tabLogin: string; tabRegister: string }> = {
+  // Подписи вкладок — в словаре, а не строкой по-русски: 12.10.2026 приёмка
+  // увидела на английской странице вкладку «In» — живой перевод вшитого «Вход».
+  ru: { name: "Имя", namePh: "Как к вам обращаться", email: "Почта", password: "Пароль", passwordPh: "Не короче 6 знаков", forgot: "Забыли пароль?", tabLogin: "Вход", tabRegister: "Регистрация" },
+  en: { name: "Name", namePh: "What should we call you", email: "Email", password: "Password", passwordPh: "At least 6 characters", forgot: "Forgot your password?", tabLogin: "Log in", tabRegister: "Register" },
+  kk: { name: "Аты", namePh: "Сізге қалай жүгінейік", email: "Пошта", password: "Құпиясөз", passwordPh: "Кемінде 6 таңба", forgot: "Құпиясөзді ұмыттыңыз ба?", tabLogin: "Кіру", tabRegister: "Тіркелу" },
 };
 
 export default function AuthPage() {
@@ -426,7 +428,7 @@ export default function AuthPage() {
             <div style={{ display: "inline-flex", borderRadius: 12, border: "1px solid rgba(15,23,42,0.12)", overflow: "hidden", marginBottom: 20 }}>
               {(["register", "login"] as const).map((m) => (
                 <button key={m} onClick={() => setMode(m)} disabled={busy} style={{ padding: "10px 20px", border: "none", background: mode === m ? "#0f172a" : "#fff", color: mode === m ? "#fff" : "#64748b", fontWeight: mode === m ? 800 : 600, fontSize: 14, cursor: "pointer" }}>
-                  {m === "register" ? "Регистрация" : "Вход"}
+                  {m === "register" ? AA.tabRegister : AA.tabLogin}
                 </button>
               ))}
             </div>

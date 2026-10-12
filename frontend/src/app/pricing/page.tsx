@@ -7,7 +7,7 @@ import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { RazrabotkaPreduprezhdenie } from "@/components/RazrabotkaPreduprezhdenie";
 import { predlagaemOtdelno } from "@/lib/neProdayotsyaOtdelno";
-import { vybratVhod } from "@/lib/vhodNaStranitseTsen";
+import { vybratVhod, nuzhnaProkrutkaKKartochke } from "@/lib/vhodNaStranitseTsen";
 import { apiUrl } from "@/lib/apiBase";
 import { fetchAiSavings, счётчикГоденДляПоказа } from "@/lib/aiSavings";
 import { запомнитьНамерение } from "@/lib/checkoutIntent";
@@ -679,7 +679,20 @@ export default function PricingPage() {
     // человека наверху лучше, чем дёрнуть страницу в случайный момент.
     const слаг = params.get("app");
     let отменитьОжидание: (() => void) | undefined;
-    if (слаг) {
+    /*
+     * 🔴 12.10.2026: ПРОКРУТКА НЕ ДЕЛАЕТСЯ, КОГДА КАРТОЧКА УЖЕ НАВЕРХУ.
+     *
+     * Замер того вечера на проде 7fb9d76ac6a4, 390×844: верхний блок с
+     * `?app=cyberchess` отрисовался ровно там, где нужно — 102–458 px, кнопка
+     * «Купить CyberChess» на 269–316, целиком в первом экране и достижима
+     * (elementFromPoint возвращает саму кнопку). И тут же автопрокрутка увезла
+     * человека на scrollY 2697, то есть на 2595 px НИЖЕ этого блока.
+     *
+     * Две механики решали одну задачу и мешали друг другу: прокрутка написана
+     * для случая, когда карточки наверху НЕТ. Если блок показывает то же
+     * приложение — везти никуда не надо, он уже перед глазами.
+     */
+    if (слаг && nuzhnaProkrutkaKKartochke(слаг, вход)) {
       /*
        * 🔴 29.09.2026. Здесь стоял отсчёт попыток: 40 раз по 150 мс, то есть
        * шесть секунд, и если карточка не успевала появиться — тишина.

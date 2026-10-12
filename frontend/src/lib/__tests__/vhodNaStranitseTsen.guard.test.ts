@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { vybratVhod } from "../vhodNaStranitseTsen";
+import { vybratVhod, nuzhnaProkrutkaKKartochke } from "../vhodNaStranitseTsen";
 import { STANDALONE_APPS, standaloneApp } from "../termPricing";
 import { predlagaemOtdelno } from "../neProdayotsyaOtdelno";
 
@@ -76,5 +76,41 @@ describe("что показывать первым экраном на /pricing"
     // Ровно ОДИН вызов: решение принимается в одном месте. Объявление через
     // useState сюда не попадает — там имя без скобки.
     expect(вызовов, "setHeroModule зовётся не из одного места").toBe(1);
+  });
+});
+
+describe("везти ли прокруткой к карточке", () => {
+  it("🔴 карточка уже наверху — прокрутки НЕТ", () => {
+    /*
+     * Замер 12.10.2026 на проде, 390×844: верхний блок встал на 102–458 px,
+     * кнопка «Купить CyberChess» на 269–316 — в первом экране и достижима.
+     * И тут же автопрокрутка увезла человека на scrollY 2697, то есть на
+     * 2595 px НИЖЕ этого блока. Две механики решали одну задачу и мешали.
+     */
+    expect(nuzhnaProkrutkaKKartochke("cyberchess", "cyberchess")).toBe(false);
+  });
+
+  it("наверху ДРУГОЕ приложение — прокрутка нужна", () => {
+    // `?module=devhub&app=cyberchess`: наверху devhub, а человек пришёл за
+    // шахматами — до его карточки надо довезти.
+    expect(nuzhnaProkrutkaKKartochke("cyberchess", "devhub")).toBe(true);
+  });
+
+  it("наверху ничего (холодный вход) — прокрутка нужна", () => {
+    // Снятое с отдельной продажи наверх не поднимается, а карточка внизу есть.
+    expect(nuzhnaProkrutkaKKartochke("ip_bureau", "")).toBe(true);
+  });
+
+  it("метки нет — везти некуда", () => {
+    for (const s of [null, undefined, "", "   "]) {
+      expect(nuzhnaProkrutkaKKartochke(s, ""), `не false для ${JSON.stringify(s)}`).toBe(false);
+    }
+  });
+
+  it("🔴 страница зовёт именно это решение, а не своё", () => {
+    const стр = readFileSync(join(process.cwd(), "src/app/pricing/page.tsx"), "utf8");
+    expect(стр, "страница не зовёт nuzhnaProkrutkaKKartochke").toContain("nuzhnaProkrutkaKKartochke(слаг, вход)");
+    // И ожидание карточки запускается ровно из одного места.
+    expect((стр.match(/ждатьКарточкуПриложения\(/g) || []).length).toBe(1);
   });
 });

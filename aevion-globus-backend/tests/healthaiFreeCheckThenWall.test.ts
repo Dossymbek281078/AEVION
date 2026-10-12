@@ -45,6 +45,7 @@ describe("HealthAI: пробные пути открываются только 
     process.env.PAID_ACTIONS = "bureau_verify,healthai_check";
     expect(пробныйПуть("healthai", { method: "POST", path: "/check" })).toBe(true);
     expect(пробныйПуть("healthai", { method: "POST", path: "/profile/" })).toBe(true);
+    expect(пробныйПуть("healthai", { method: "GET", path: "/profiles/me" })).toBe(true);
     expect(пробныйПуть("healthai", { method: "GET", path: "/trends/x" })).toBe(false);
     expect(пробныйПуть("healthai", { method: "POST", path: "/log" })).toBe(false);
     expect(пробныйПуть("qfusionai", { method: "POST", path: "/check" })).toBe(false);

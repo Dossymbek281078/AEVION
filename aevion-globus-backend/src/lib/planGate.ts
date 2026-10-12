@@ -407,6 +407,11 @@ const ПРОБНЫЕ_ПУТИ: Record<string, ReadonlyArray<{ method: string; pa
   healthai: [
     { method: "POST", path: "/profile", действие: "healthai_check" },
     { method: "POST", path: "/check", действие: "healthai_check" },
+    // Страница зовёт её сразу после «Создать профиль» (loadFamily). Закрытая, она
+    // отвечала бы 402 в окне того же клика — и перехватчик показал бы стену
+    // раньше, чем гость получил свою бесплатную проверку. Ручка отдаёт только
+    // СВОИ профили (без входа — 401), продукта не выдаёт.
+    { method: "GET", path: "/profiles/me", действие: "healthai_check" },
   ],
 };
 

@@ -15,6 +15,7 @@ import AskAi from "@/components/AskAi";
 import { apiUrl } from "@/lib/apiBase";
 import { canonicalContentHash } from "@/lib/canonicalContentHash";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
+import { ЦЕНА_ПРОВЕРКИ_ЦЕНТЫ, ценаСПериодом } from "../bureau/verifiedPrice";
 import { Sparkline } from "@/components/Sparkline";
 import { PageTracking } from "@/components/PageTracking";
 import { useI18n } from "@/lib/i18n";
@@ -212,6 +213,7 @@ export default function QRightPage() {
    * покупатель.
    */
   const [платнаяПроверкаДоступна, установитьДоступность] = useState<boolean | null>(null);
+  const [ценаПроверкиЦенты, установитьЦену] = useState<number>(ЦЕНА_ПРОВЕРКИ_ЦЕНТЫ);
   useEffect(() => {
     let живо = true;
     fetch(apiUrl("/api/bureau/health"), { cache: "no-store" })
@@ -220,6 +222,8 @@ export default function QRightPage() {
         if (!живо) return;
         if (!d) return установитьДоступность(false);
         установитьДоступность(d.kyc !== "stub" && d.payment !== "misconfigured");
+        // Цену называет тот же сервис, что выставит её кассе (verifiedPrice.ts).
+        if (typeof d.pricing?.verifiedTierCents === "number") установитьЦену(d.pricing.verifiedTierCents);
       })
       .catch(() => живо && установитьДоступность(false));
     return () => {
@@ -755,6 +759,17 @@ export default function QRightPage() {
             <p style={{ margin: 0, fontSize: 14, opacity: 0.75, lineHeight: 1.6, maxWidth: 600 }}>
               Register your work and walk away with a self-contained proof bundle — Ed25519-signed immediately and Bitcoin-anchored once the timestamp confirms, verifiable even if AEVION disappears tomorrow.
             </p>
+            {/* Замер 12.10.2026 (окно Приложения-31.12): бесплатная форма стоит в
+                1359 px от верха на 1463×724 и ~2100 px на телефоне — под приёмом
+                адресов, реестром и ключом автора. Гость видел цену $200/мес и
+                уходил, не узнав, что сертификат выдаётся бесплатно. */}
+            <a
+              href="#protect-form"
+              data-testid="qright-jump-to-form"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 16, padding: "12px 20px", borderRadius: 12, background: "#14b8a6", color: "#0f172a", fontWeight: 800, fontSize: 15, textDecoration: "none" }}
+            >
+              🛡️ Protect my work — free ↓
+            </a>
           </div>
         </div>
 
@@ -767,10 +782,10 @@ export default function QRightPage() {
           <WaitlistCapture
             source="qright"
             tone="dark"
-            title={launchHasPassed() ? "Написать вам о запуске бюро" : "Написать вам в день запуска"}
+            title={launchHasPassed() ? "Написать, когда откроется отметка Verified" : "Написать вам в день запуска"}
             description={
               launchHasPassed()
-                ? `Реестр открыт уже сейчас. Бюро обещали к ${PLATFORM_LAUNCH_HUMAN} — напишем одно письмо, как только откроем, и условия раннего доступа.`
+                ? "Реестр открыт и бесплатен — защитите работу ниже. Отметку «Verified» (бюро подтверждает личность автора) ещё подключаем: оставьте адрес, напишем одно письмо, когда её можно будет оформить."
                 : `Реестр открыт уже сейчас. Одно письмо на запуск бюро ${PLATFORM_LAUNCH_HUMAN} и условия раннего доступа.`
             }
           />
@@ -1019,7 +1034,7 @@ export default function QRightPage() {
               )}
             </div>
 
-            <form onSubmit={submit} style={{ display: "grid", gap: 16 }}>
+            <form id="protect-form" onSubmit={submit} style={{ display: "grid", gap: 16, scrollMarginTop: 80 }}>
               <div>
                 <label style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", marginBottom: 6, display: "block" }}>
                   What are you protecting? *
@@ -1374,7 +1389,7 @@ export default function QRightPage() {
                   style={{ padding: "12px 20px", borderRadius: 12, border: "1px solid #4f46e5", color: "#4f46e5", background: "#fff", fontWeight: 800, fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
                   title="Upgrade to Verified — adds real-name attestation by AEVION Bureau"
                 >
-                  ⭐ Upgrade to Verified ($19)
+                  ⭐ Upgrade to Verified ({ценаСПериодом(ценаПроверкиЦенты)})
                 </Link>
               )}
               <Link

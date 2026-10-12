@@ -68,6 +68,7 @@ import { проверитьРасход, этоОк, запросOpenAI, зап�
 import { проверитьИменаМоделей, проверитьУмолчанияВызовом } from "../lib/объявленныеМодели";
 import { вставитьБейдж, нуженБейдж } from "../lib/aevionBadge";
 import { файлыВхода, нуженВход, УКАЗАНИЕ_ПРО_ВХОД } from "../lib/devhubAuthScaffold";
+import { ukazanieBezVydumannyhDannyh, tekushchiyGod } from "../lib/devhubNoFakeData";
 import { сметаПродукта, РАСЦЕНКИ_ПРОДУКТА } from "../lib/pipelineQuote";
 import { ценаПоЕдиницам, тарифЕсть } from "../lib/unitPricing";
 
@@ -2546,13 +2547,26 @@ async function generateCodeWithAI(
         ? `You are an expert developer. Generate complete, working code for MULTIPLE coordinated files that must work together: ${targetFiles.join(", ")}. When given a file's current content, edit it in place rather than starting over; keep the files consistent with each other (matching imports, types, endpoint paths, function names, etc). Return ONLY a JSON object: {"files": [{"path": "...", "content": "...", "language": "..."}, ...]} with exactly one entry per requested file. No explanation, just JSON.`
         : `You are an expert developer. Generate complete, working code. When given a list of existing project files, pick a path that fits the project's existing structure and match its conventions. Any file containing JSX must use a .jsx extension (.tsx for TypeScript) — the in-browser live preview keys off the extension. Return ONLY a JSON object: {"files": [{"path": "filename", "content": "...", "language": "..."}]}. No explanation, just JSON. Generate a scaffold for the ${stack} stack.`;
 
+  /*
+   * 🔴 ЗАПРЕТ ВЫДУМАННЫХ ДАННЫХ ДОПИСЫВАЕТСЯ КО ВСЕМ ТРЁМ ВЕТВЯМ СРАЗУ.
+   *
+   * Именно так, а не внутри каждой строки: ветвей три (одна цель, несколько
+   * согласованных файлов, каркас), и указание, попавшее в две из трёх, дало бы
+   * зелёную проверку при дырявой третьей. Образец приёма — УКАЗАНИЕ_ПРО_ВХОД
+   * ниже: отдельная именованная строка, дописанная в одном месте.
+   *
+   * Повод и замер — в lib/devhubNoFakeData.ts. Год подставляет сервер: своей
+   * даты модель не знает, и «© 2023» в 2026 году взялось именно отсюда.
+   */
+  const промптСЗапретом = `${systemPrompt} ${ukazanieBezVydumannyhDannyh(tekushchiyGod())}`;
+
   // Когда вход нужен, модель ОБЯЗАНА пользоваться нашим шаблоном, а не писать свой:
   // иначе рядом появится второй вход, и дырявым окажется именно он.
   const проВход = нуженВход(prompt) ? ` ${УКАЗАНИЕ_ПРО_ВХОД}` : "";
   const userMsg = `${foldHistory(history)}Generate code for: ${prompt}. Stack: ${stack}.${указаниеПоСтеку(stack, existingFiles.length, targetFiles.length)}${проВход}${images?.length ? " Recreate the attached screenshot/design as closely as practical (layout, colors, spacing, text)." : ""}${buildFileContext(existingFiles, targetFiles)}`;
 
   const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
-    { role: "system", content: systemPrompt },
+    { role: "system", content: промптСЗапретом },
     { role: "user", content: userMsg },
   ];
 
@@ -2815,11 +2829,21 @@ async function planProjectWithAI(idea: string, existingFiles: Array<{ path: stri
     `"milestones": [{"title": "short step name", "prompt": "a ready-to-use prompt for an AI code-generation tool ` +
     `to build exactly this step"}], "firstPrompt": "the exact prompt to hand to a code generator right now, matching milestones[0]"}. ` +
     `Order milestones so each is buildable and demoable on its own before the next.`;
+  /*
+   * 🔴 ЗАПРЕТ ВЫДУМАННЫХ ДАННЫХ НУЖЕН И ЗДЕСЬ, хотя эта ручка кода не пишет.
+   *
+   * Она отдаёт `firstPrompt` и `milestones[].prompt` — ГОТОВЫЕ промпты, которые
+   * потом уходят генератору как сообщение ПОЛЬЗОВАТЕЛЯ. Выдуманный адрес,
+   * попавший в такой промпт, генератор исполнит добросовестно: для него это
+   * просьба человека, а не собственная выдумка, и системный запрет на той
+   * стороне с ней заспорит. Дешевле не родить её здесь, чем ловить там.
+   */
+  const промптЗамыслаСЗапретом = `${systemPrompt} ${ukazanieBezVydumannyhDannyh(tekushchiyGod())}`;
   const userMsg = `Idea: ${idea}${existingContext}`;
 
   try {
     const result = await callProvider(provider.id, [
-      { role: "system", content: systemPrompt },
+      { role: "system", content: промптЗамыслаСЗапретом },
       { role: "user", content: userMsg },
     ], provider.defaultModel, 0.3);
       // Учёт расхода. До 31.08.2026 его здесь не было вовсе: /plan зовёт

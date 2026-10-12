@@ -238,8 +238,21 @@ describe("truncated model reply — complete files are salvaged, not dumped to o
     const contUser = (contCall[1] as Array<{ role: string; content: string }>).filter((m) => m.role === "user").pop()!;
     expect(contUser.content).toContain("cut off");
     expect(contUser.content).toContain("src/App.jsx");
-    // Codegen calls carry the raised token cap.
-    expect(contCall[5]).toBe(8192);
+    /*
+     * Бюджет генерации поднят до 16384 — 12.10.2026, по замеру, а не на глаз.
+     * Обрывы ответа (этот самый дозапрос) лечились двумя способами: запретить
+     * модели «размышлять» или дать больше места. Первый убрал обрывы и ускорил
+     * медиану с 24 до 13 с, но страницы стали короче на 38 %, а script.js
+     * пропал во всех пяти прогонах. Выбран второй: размышление вернули,
+     * бюджет удвоили.
+     *
+     * ⚠️ Число здесь ПОВТОРЕНО руками, и это осознанно: GEN_MAX_TOKENS —
+     * локальная константа внутри функции, импортировать её нечем. Значит эта
+     * строка — политика, а не отражение кода: меняя бюджет, меняют и её. Так же
+     * сделано у цены пилота, и по той же причине: проверка, выводящая ожидание
+     * из охраняемого значения, утверждает «число равно самому себе».
+     */
+    expect(contCall[5]).toBe(16384);
     vi.mocked(callProvider).mockReset();
   });
 

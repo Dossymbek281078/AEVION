@@ -97,10 +97,25 @@ export async function appSubscriptionState(
   email: string | null,
   moduleId: string,
 ): Promise<AppSubscriptionState> {
-  if (!email) return "none";
   const slug = appSlugForModuleId(moduleId);
   if (!slug) return "none"; // модуль не продаётся отдельно — и спрашивать нечего
+  return podpiskaNaSlag(email, slug);
+}
 
+/**
+ * То же, но по СЛАГУ подписки напрямую.
+ *
+ * Понадобилось тарифу DevHub «Старт» (12.10.2026): он продаётся слагом
+ * `devhub_start`, которому не соответствует никакой модуль — это не отдельное
+ * приложение, а другой объём того же DevHub. Отдельную копию чтения заводить
+ * нельзя: читать подписки надо ОДНИМ способом, иначе две копии разойдутся
+ * молча, и расхождение будет видно только там, куда никто не смотрит.
+ */
+export async function podpiskaNaSlag(
+  email: string | null,
+  slug: string,
+): Promise<AppSubscriptionState> {
+  if (!email) return "none";
   const apps = await activeAppsFor(email);
   if (apps === null) return "unknown"; // чтение не удалось, а не «не куплено»
   return apps.has(slug) ? "active" : "none";

@@ -4,6 +4,8 @@ import { usageToTokens } from "../lib/usageTokens";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { resolvePlanFromPayload, isModuleEntitled } from "../lib/planGate";
+import { СЛАГ_СТАРТ, tarifStartZaveden, НОРМЫ_СТАРТ } from "../lib/devhubStart";
+import { podpiskaNaSlag } from "../lib/appEntitlements";
 import { siteZone, dnsProvider, dnsConfigured, dnsTokensNeeded, upsertCname, zoneActiveUncached, zoneProbe, labelInZone, isDevHubLabel } from "../lib/devhubDns";
 import { promises as dnsPromises } from "node:dns";
 import { devHubVariantIds } from "../data/lemonSqueezyVariants";
@@ -695,7 +697,7 @@ type CapabilityKey = "video" | "image" | "tts" | "music" | "deploy" | "speech" |
 //
 // Тариф не путать с оплатой: `registered` НЕ даёт доступа к платным
 // возможностям, он только поднимает бесплатные нормы вошедшему.
-type StudioTier = "free" | "registered" | "pro" | "enterprise";
+type StudioTier = "free" | "registered" | "start" | "pro" | "enterprise";
 
 /**
  * Имя голоса → идентификатор у поставщика. ОДНА таблица на модуль.
@@ -766,6 +768,14 @@ const TIER_LIMITS: Record<StudioTier, Record<CapabilityKey, number>> = {
   // знакомство, а не подарок тарифа. Числа кратны гостевым, чтобы разница
   // читалась в интерфейсе одной фразой.
   registered: { video: 9,   image: 30,  tts: 30000,  music: 15,  deploy: 30, speech: 15,   translate: 150,  generate: 90 },
+  /*
+   * 🔴 «Старт» $15/мес — слово основателя 12.10.2026 «Старт по нормам — да».
+   * Четыре числа названы им (300 генераций, 100 выкаток, 60 картинок, 15
+   * видео), остальные производны (×3.33 от registered, как у генераций) и
+   * лежат между registered и pro. Источник чисел — lib/devhubStart.ts, здесь
+   * они НЕ переписываются: два списка норм разошлись бы молча.
+   */
+  start:      { ...НОРМЫ_СТАРТ },
   pro:        { video: 50,  image: 200, tts: 200000, music: 100, deploy: -1, speech: 100,  translate: 1000, generate: 1000 },
   enterprise: { video: -1,  image: -1,  tts: -1,     music: -1,  deploy: -1, speech: -1,   translate: -1,   generate: -1 },
 };
@@ -815,7 +825,17 @@ async function tierFromPlatformPlan(userId: string): Promise<StudioTier | null> 
     `, [userId]);
     const email = r.rows[0]?.email;
     if (typeof email !== "string" || !email) return null;
-    return isModuleEntitled(resolvePlanFromPayload({ email }), "devhub") ? "pro" : null;
+    // Подписка планеты или отдельного DevHub даёт полный тариф — это старше.
+    if (isModuleEntitled(resolvePlanFromPayload({ email }), "devhub")) return "pro";
+    /*
+     * 🔴 «Старт» — отдельная ступень между вошедшим и полным тарифом.
+     * Спрашиваем ТОЛЬКО когда товар заведён: пока варианта в кассе нет, купить
+     * его физически нельзя, и лишний запрос к подпискам ничего не даст.
+     * «unknown» (чтение не удалось) ступени НЕ даёт: выдать платные нормы по
+     * незнанию — это подарить их любому при сбое чтения.
+     */
+    if (tarifStartZaveden() && (await podpiskaNaSlag(email, СЛАГ_СТАРТ)) === "active") return "start";
+    return null;
   } catch (e: unknown) {
     console.warn(`[DevHub] план платформы не прочитан для ${userId}: ${e instanceof Error ? e.message : String(e)}`);
     return null;

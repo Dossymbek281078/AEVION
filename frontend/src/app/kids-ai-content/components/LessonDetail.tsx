@@ -99,7 +99,7 @@ const loadingStyle: React.CSSProperties = {
  * unordered and ordered lists, blank-line paragraphs. Not a full spec —
  * lessons are authored to fit this subset.
  */
-function renderMarkdown(md: string): React.ReactNode {
+export function renderMarkdown(md: string): React.ReactNode {
   const lines = md.split(/\r?\n/);
   const out: React.ReactNode[] = [];
   let i = 0;
@@ -109,13 +109,18 @@ function renderMarkdown(md: string): React.ReactNode {
     // Split on bold and code spans. Order matters: code first so ** inside ` is ignored.
     const parts: React.ReactNode[] = [];
     let cursor = 0;
-    const re = /(\*\*[^*]+\*\*|`[^`]+`)/g;
+    // *курсив* добавлен 12.10.2026: уроки его используют («вещь *одна*»), а
+    // ребёнок видел звёздочки (замер окна Приложения-31.12). Звёздочка должна
+    // прилегать к слову с обеих сторон — «* пункт» и «2 * 3» не задеваются.
+    const re = /(\*\*[^*]+\*\*|`[^`]+`|\*[^*\s](?:[^*]*[^*\s])?\*)/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(s)) !== null) {
       if (m.index > cursor) parts.push(s.slice(cursor, m.index));
       const tok = m[0];
       if (tok.startsWith("**")) {
         parts.push(<strong key={`b${key++}`}>{tok.slice(2, -2)}</strong>);
+      } else if (tok.startsWith("*")) {
+        parts.push(<em key={`i${key++}`}>{tok.slice(1, -1)}</em>);
       } else {
         parts.push(
           <code

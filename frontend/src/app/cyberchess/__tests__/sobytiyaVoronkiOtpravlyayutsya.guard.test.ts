@@ -151,3 +151,67 @@ describe("события воронки шахмат отправляются и
     expect(teloFunkcii(текст, "  const takojFunkciiNet="), "разбор придумал тело отсутствующей функции").toBe("");
   });
 });
+
+/*
+ * «Первый ход сделан» (12.10.2026). Между «попробовали» (уходит автоматом при
+ * заходе по ?puzzle=) и «решил» не было ни одной ступени, которую делает человек.
+ * Сторож держит МЕСТО отправки: только внутри exec — единственной функции, через
+ * которую проходит любой ход (перетаскивание, нажатие, онлайн); для задачи — после
+ * проверки легальности и ДО сравнения с решением (неверный ход — тоже ход);
+ * для партии — только свой ход (fromUser), после того как ход применился.
+ */
+function teloExec(исходник: string): string {
+  const i = исходник.indexOf("const exec=useCallback(");
+  if (i < 0) return "";
+  const ПС = String.fromCharCode(10);
+  const хвост = исходник.slice(i);
+  // useCallback закрывается строкой «  },[…]);» — не «  };». Ищем строкой, не регуляркой: слэш съедается на границе вызова (§2е)
+  const конец = хвост.indexOf(ПС + "  },[");
+  return конец < 0 ? "" : хвост.slice(0, конец);
+}
+
+describe("«первый ход сделан» отправляется из exec", () => {
+  const exec = teloExec(текст);
+
+  it("КОНТРОЛЬ: тело exec найдено и ограничено (внутри — проверка хода, снаружи — newG)", () => {
+    expect(exec.length).toBeGreaterThan(1000);
+    expect(exec.length).toBeLessThan(60000);
+    expect(exec).toContain("Недопустимый ход");
+    expect(exec).not.toContain("const newG=");
+  });
+
+  it("🔴 ровно два вызова, оба внутри exec; ни одна кнопка не шлёт его сама", () => {
+    const всего = текст.split("otmetitPervyyHod(").length - 1;
+    const вExec = exec.split("otmetitPervyyHod(").length - 1;
+    expect(вExec, "в exec: задача + партия").toBe(2);
+    expect(всего - вExec, "вызовы вне exec").toBe(0);
+  });
+
+  it("🔴 задача: после проверки легальности и ДО сравнения с решением", () => {
+    const вызов = exec.indexOf('otmetitPervyyHod(pervyyHodOtpravlenRef,"puzzle",pzCurrent.id)');
+    const легальность = exec.indexOf("if(!legal)");
+    const сравнение = exec.indexOf("if(attemptUci===expectedUci");
+    expect(вызов).toBeGreaterThan(-1);
+    expect(легальность, "проверка легальности есть").toBeGreaterThan(-1);
+    expect(вызов, "нелегальный ход — не ход").toBeGreaterThan(легальность);
+    expect(вызов, "неверный ход — тоже ход: отправка до того, как известен исход").toBeLessThan(сравнение);
+  });
+
+  it("🔴 партия: только свой ход, и только применившийся", () => {
+    const i = exec.indexOf('otmetitPervyyHod(pervyyHodOtpravlenRef,"game")');
+    expect(i).toBeGreaterThan(-1);
+    const строка = exec.slice(exec.lastIndexOf(String.fromCharCode(10), i) + 1, i);
+    expect(строка, "ход ИИ/соперника/призрака — не ход человека").toContain("if(fromUser)");
+    const применился = exec.indexOf("if(!mv)return false;");
+    expect(i).toBeGreaterThan(применился);
+  });
+
+  it("🔴 newG сбрасывает память партии — после отправки начала партии", () => {
+    const newG = teloFunkcii(текст, "  const newG=");
+    expect(newG.length).toBeGreaterThan(100);
+    expect(newG.split('pervyyHodOtpravlenRef.current=""').length - 1).toBe(1);
+    expect(newG.indexOf('pervyyHodOtpravlenRef.current=""')).toBeGreaterThan(newG.indexOf('feature:"chess_game_start"'));
+    // и нигде больше: сброс в другом месте делал бы «первый ход» повторным
+    expect(текст.split('pervyyHodOtpravlenRef.current=""').length - 1).toBe(1);
+  });
+});

@@ -2,6 +2,7 @@
 import { стримГоден } from "./ответНеГоден";
 import { лимитПровайдера, когдаВернётся as срокВозврата, тренерОтветил, пометкаОВыключенномРазборе, пометкаЗапаснойМодели, общаяОчередьАнонимов } from "./coachOutage";
 import { главныйВыдуманныйХод, дополнитьХодомДвижка, текстВместоОтвета } from "./проверьХодыОтвета";
+import { otmetitPervyyHod } from "./pervyyHod";
 import { track } from "@/lib/track";
 import { ishodDlyaCPI, resheniePoKontsuPartii } from "./ishodPartii";
 
@@ -2313,6 +2314,9 @@ export default function CyberChessPage(){
   // Per-puzzle wrong-attempt tracking (keyed by fen so it resets on puzzle change).
   // Used to reveal the expected best move as a hint after 2 wrong tries (lichess-style).
   const pzWrongTriesRef=useRef<{fen:string;n:number}>({fen:"",n:0});
+  /* «Первый ход сделан»: один раз на задачу (pz:<id>) и на партию (game, сбрасывает newG).
+     Между «попробовали» (уходит автоматом по ?puzzle=) и «решил» ступени не было (12.10.2026). */
+  const pervyyHodOtpravlenRef=useRef("");
   // ScoreCard: chessy earned in this puzzle session
   const[pzSessionChessy,sPzSessionChessy]=useState(0);
   // File input ref for custom FEN/PGN puzzle loading
@@ -4350,6 +4354,7 @@ export default function CyberChessPage(){
       let legal=false;
       try{const probe=new Chess(game.fen());legal=!!probe.move({from,to,promotion:pr||"q"});}catch{legal=false;}
       if(!legal){showToast("Недопустимый ход","error");return false;}
+      otmetitPervyyHod(pervyyHodOtpravlenRef,"puzzle",pzCurrent.id);
       if(attemptUci===expectedUci||attemptUci.slice(0,4)===expectedUci.slice(0,4)){
         // Execute user's correct move
         let mv;try{mv=game.move({from,to,promotion:pr||"q"});}catch{mv=null}
@@ -4502,6 +4507,7 @@ export default function CyberChessPage(){
     let mv;
     try{mv=game.move({from,to,promotion:pr||"q"});}catch{return false;}
     if(!mv)return false;
+    if(fromUser)otmetitPervyyHod(pervyyHodOtpravlenRef,"game");
     // P2P: send move to peer
     if(p2pRef.current.mode&&p2pRef.current.send){p2pRef.current.send({t:"mv",uci:`${from}${to}${pr||""}`,san:mv.san,at:Date.now()})}
     {const isChk=game.isCheck();const playSnd=()=>{if(mv.captured)snd("capture");else if(mv.san.includes("O-"))snd("castle");else if(isChk)snd("check");else snd("move");};
@@ -6384,6 +6390,7 @@ export default function CyberChessPage(){
       source:"cyberchess/board",
       meta:{feature:"chess_game_start",app:"cyberchess",variant:String(V),side:cl,
         mode:hotseat?"hotseat":(p2pMode?"p2p":"ai")}});
+    pervyyHodOtpravlenRef.current="";
     sMoveAnnotations({});sAnnotPicker(null);sMoveComments({});sCommentEditPly(null);
     // Reset Ghost Duel and P2P if they were active (new game started)
     if(ghostDuelMode){sGhostDuelMode(false);sGhostDuelConfig(null);sGhostDuelDivergePly(null)}

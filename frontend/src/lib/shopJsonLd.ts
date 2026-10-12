@@ -1,4 +1,5 @@
 import { GUIDES, type Product } from "./products";
+import { kartinkaTovara } from "./kartinkiTovarov";
 
 /**
  * Разметка товаров для поисковика.
@@ -39,6 +40,10 @@ export function разметкаТоваров(источник: Product[] = GUI
         name: p.title,
         description: p.desc,
         sku: p.id,
+        // Настоящая обложка или НИЧЕГО. Товар без обложки не получит товарный
+        // блок в выдаче — это честная цена за то, что мы не ставим вместо
+        // обложки логотип (правило Google: картинка представляет содержимое).
+        image: kartinkaTovara(p.id) ?? undefined,
         brand: { "@type": "Organization", name: "AEVION", url: SITE },
         offers: {
           "@type": "Offer",

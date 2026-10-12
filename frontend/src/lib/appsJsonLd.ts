@@ -21,6 +21,7 @@
 import { apiUrl } from "@/lib/apiBase";
 import { STANDALONE_APPS, fromPricePerMonth, type StandaloneApp } from "@/lib/termPricing";
 import { predlagaemOtdelno } from "@/lib/neProdayotsyaOtdelno";
+import { kartinkaPrilozheniya } from "@/lib/kartinkiTovarov";
 
 const САЙТ = "https://aevion.app";
 
@@ -39,6 +40,11 @@ export function товарПриложения(app: StandaloneApp) {
     "@type": "Product",
     sku: app.slug,
     name: `AEVION ${app.name}`,
+    // Картинка — обязательное поле Product у Google: без неё товарный блок не
+    // показывается вовсе, и вся разметка цены работает вхолостую. Берём
+    // opengraph-картинку страницы самого приложения: она нарисована из его
+    // настоящих данных, в отличие от общего логотипа.
+    image: kartinkaPrilozheniya(app.slug) ?? undefined,
     url: `${САЙТ}/pricing?app=${encodeURIComponent(app.slug)}#apps`,
     offers: {
       "@type": "AggregateOffer",

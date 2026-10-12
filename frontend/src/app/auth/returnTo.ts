@@ -30,3 +30,24 @@ export function адресВозврата(search: string): string | null {
   if (путь === "/auth" || путь.startsWith("/auth?") || путь.startsWith("/auth/")) return null;
   return путь;
 }
+
+/**
+ * То же, но если `next` не передан — страница, с которой пришли (referrer),
+ * если она с нашего сайта. 12.10.2026: 32 ссылки «Войти» на страницах модулей
+ * ведут на голый /auth (банк, шахматы, lifebox, z-tide, qpaynet…); править
+ * каждую — 32 правки в чужих зонах, а без возврата человек после входа
+ * застревал на /auth. Явный next всегда главнее.
+ */
+export function адресВозвратаИлиОткуда(search: string, referrer: string, origin: string): string | null {
+  const явный = адресВозврата(search);
+  if (явный) return явный;
+  if (!referrer) return null;
+  let u: URL;
+  try {
+    u = new URL(referrer);
+  } catch {
+    return null;
+  }
+  if (u.origin !== origin) return null;
+  return адресВозврата(`?next=${encodeURIComponent(u.pathname + u.search)}`);
+}

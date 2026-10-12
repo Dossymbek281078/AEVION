@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useI18nOptional } from "@/lib/i18n";
 import { setAuthToken } from "@/lib/auth";
-import { адресВозврата } from "./returnTo";
+import { адресВозвратаИлиОткуда } from "./returnTo";
 import { useEffect, useMemo, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
@@ -240,7 +240,7 @@ export default function AuthPage() {
   // Пришёл со страницы модуля (`/auth?next=/qsign`) — туда и вернуть
   // (returnTo.ts: до 12.10.2026 параметр не читал никто).
   const вернутьТуда = () => {
-    const куда = адресВозврата(window.location.search);
+    const куда = адресВозвратаИлиОткуда(window.location.search, document.referrer, window.location.origin);
     if (куда) window.location.assign(куда);
   };
 

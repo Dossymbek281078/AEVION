@@ -10065,6 +10065,15 @@ devhubRouter.get("/studio/deploy-stats", async (req, res) => {
   // исправлено, но старые записи остались, и «успешных 0» продолжает пугать
   // человека, читающего эту цифру. Пусть цифра называет свою оговорку сама.
   let failedWithUrl = 0;
+  /*
+   * «Наши» выкатки и проекты отделяются от людей той же функцией, что и
+   * самоуборка пробных сайтов: пробный гостевой проект — имя probe-/smoke-
+   * ИЛИ метка захода ?c=probe-… (0-НАШИ-ЗАХОДЫ). Повод 12.10.2026: «14
+   * проектов от 11 гостей» читались как живые сборки, а были нашими пробами.
+   * Один источник правды: классификация в JS, а не вторая регулярка в SQL.
+   */
+  const наших = { всего: 0, live: 0 };
+  const проекты = { total: 0, ours: 0 };
 
   if (!isDevHubDbReady()) {
     storage = "memory";
@@ -10073,7 +10082,12 @@ devhubRouter.get("/studio/deploy-stats", async (req, res) => {
       if (Date.parse(d.triggeredAt) >= since) {
         counts.set(d.status, (counts.get(d.status) ?? 0) + 1);
         if (d.status === "failed" && d.deployUrl) failedWithUrl += 1;
+        const пр = memProjects.get(d.projectId);
+        if (пр && пробныйГостевойПроект(пр)) { наших.всего += 1; if (d.status === "live") наших.live += 1; }
       }
+    }
+    for (const пр of memProjects.values()) {
+      if (Date.parse(пр.createdAt) >= since) { проекты.total += 1; if (пробныйГостевойПроект(пр)) проекты.ours += 1; }
     }
   } else {
     // Отказ хранилища — НЕ наша поломка, и отвечать на него пятисоткой значит
@@ -10083,14 +10097,31 @@ devhubRouter.get("/studio/deploy-stats", async (req, res) => {
     // помощник для него уже есть — второй способ отвечать заводить незачем.
     try {
       const r = await pool.query(
-        `SELECT "status", COUNT(*)::int AS n
-           FROM "DevHubDeployment"
-          WHERE "triggeredAt" >= NOW() - ($1::int * INTERVAL '1 day')
-          GROUP BY "status"`,
+        `SELECT "status", "name", "entryTag", "userId", COUNT(*)::int AS n
+           FROM (SELECT d."status", p."name", p."entryTag", d."userId"
+                   FROM "DevHubDeployment" d
+                   LEFT JOIN "DevHubProject" p ON p."id" = d."projectId"
+                  WHERE d."triggeredAt" >= NOW() - ($1::int * INTERVAL '1 day')) x
+          GROUP BY "status", "name", "entryTag", "userId"`,
         [days],
       );
-      for (const row of r.rows as Array<{ status: string; n: number }>) {
-        counts.set(row.status, Number(row.n));
+      for (const row of r.rows as Array<{ status: string; name?: string | null; entryTag?: string | null; userId?: string | null; n: number }>) {
+        const n = Number(row.n);
+        counts.set(row.status, (counts.get(row.status) ?? 0) + n);
+        if (пробныйГостевойПроект({ name: row.name ?? "", userId: row.userId ?? "", entryTag: row.entryTag ?? null })) {
+          наших.всего += n;
+          if (row.status === "live") наших.live += n;
+        }
+      }
+      const pr = await pool.query(
+        `SELECT "name", "entryTag", "userId"
+           FROM "DevHubProject"
+          WHERE "createdAt" >= NOW() - ($1::int * INTERVAL '1 day')`,
+        [days],
+      );
+      for (const row of pr.rows as Array<{ name?: string | null; entryTag?: string | null; userId?: string | null }>) {
+        проекты.total += 1;
+        if (пробныйГостевойПроект({ name: row.name ?? "", userId: row.userId ?? "", entryTag: row.entryTag ?? null })) проекты.ours += 1;
       }
       const f = await pool.query(
         `SELECT COUNT(*)::int AS n
@@ -10120,6 +10151,16 @@ devhubRouter.get("/studio/deploy-stats", async (req, res) => {
     // «неудач» имеют живой адрес и почти наверняка были успехами, которые
     // прежняя проверка не дождалась.
     failedWithUrl,
+    // Наши пробы и люди — отдельно; «people» и есть число для вопроса «сколько
+    // живых дошло до сборки». Знаменатель у successRate людей — только их выкатки.
+    ours: { total: наших.всего, live: наших.live },
+    people: {
+      total: total - наших.всего,
+      live: live - наших.live,
+      successRate: total - наших.всего > 0 ? Math.round((1000 * (live - наших.live)) / (total - наших.всего)) / 10 : null,
+    },
+    // Проекты, СОЗДАННЫЕ в окне (не выкатки): столько гостей/людей начали сборку.
+    projects: { total: проекты.total, ours: проекты.ours, people: проекты.total - проекты.ours },
     // NULL, а не 0, когда считать не из чего. Ноль здесь читался бы как
     // «ни одна публикация не удалась» — это другое утверждение, и оно
     // отправило бы человека чинить работающее.

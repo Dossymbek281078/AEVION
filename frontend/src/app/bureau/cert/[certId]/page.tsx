@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { podpisNotariusaTekst, type ОтветПроверки } from "@/lib/podpisNotariusa";
 import { notFound } from "next/navigation";
 import type { CSSProperties } from "react";
 import Link from "next/link";
@@ -28,6 +29,20 @@ async function loadEmbed(certId: string): Promise<EmbedView | null> {
     if (res.status === 404) return { id: certId, status: "not_found" };
     if (!res.ok) return null;
     return (await res.json()) as EmbedView;
+  } catch {
+    return null;
+  }
+}
+
+/** Ответ ручки проверки подписи нотариуса; null — ручка не ответила. */
+async function loadNotarization(certId: string): Promise<ОтветПроверки | null> {
+  try {
+    const res = await fetch(
+      `${getApiBase()}/api/bureau/cert/${encodeURIComponent(certId)}/notarization/verify`,
+      { cache: "no-store", signal: AbortSignal.timeout(6000) }
+    );
+    if (!res.ok) return null;
+    return (await res.json()) as ОтветПроверки;
   } catch {
     return null;
   }
@@ -191,6 +206,8 @@ export default async function BureauCertPage({ params }: Props) {
   const theme = levelTheme(data.verificationLevel, data.status);
   const isRevoked = data.status === "revoked";
   const isVerified = data.verificationLevel === "verified" || data.verificationLevel === "notarized";
+  // Строка о подписи нужна только нотаризованному: у остальных подписи нотариуса нет.
+  const подпись = data.verificationLevel === "notarized" ? podpisNotariusaTekst(await loadNotarization(certId)) : null;
   const protectedAt = data.protectedAt
     ? new Date(data.protectedAt).toISOString().slice(0, 10)
     : null;
@@ -252,6 +269,13 @@ export default async function BureauCertPage({ params }: Props) {
           >
             {theme.label}
           </div>
+          {подпись && (
+            /* Честная строка о подписи: демо-подпись названа своим именем там,
+               где её видит покупатель, а не только в JSON (12.10.2026). */
+            <div data-bureau-signature={подпись.тон} style={{ marginTop: -6, marginBottom: 12, fontSize: 12.5, fontWeight: 700, color: подпись.тон === "ok" ? "#15803d" : подпись.тон === "demo" ? "#b45309" : "#b91c1c" }}>
+              {подпись.текст}
+            </div>
+          )}
           <h1 style={{ margin: 0, fontSize: 26, fontWeight: 900, color: "#0f172a" }}>
             {data.title || `Certificate ${certId.slice(0, 12)}`}
           </h1>

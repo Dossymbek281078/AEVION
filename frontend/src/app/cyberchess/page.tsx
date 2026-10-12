@@ -9249,6 +9249,19 @@ export default function CyberChessPage(){
               style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:1,aspectRatio:"1",borderRadius:8,overflow:"hidden",border:`2px solid ${bT.border}`,boxShadow:"0 10px 40px rgba(0,0,0,0.25), 0 2px 6px rgba(0,0,0,0.12)",position:"relative",touchAction:"none",userSelect:"none",WebkitUserSelect:"none",...({WebkitUserDrag:"none",WebkitTouchCallout:"none"} as React.CSSProperties)}}>
               {/* Board Art decorative overlay — behind pieces, subtle at opacity 0.10 */}
               {boardArt!=="off"&&<BoardArtOverlay art={boardArt} opacity={0.10}/>}
+              {/* 🔴 Панель «Решено!» — ОВЕРЛЕЙ В ГРАНИЦАХ ДОСКИ (12.10.2026).
+                  Первая версия стояла под доской и была недостижима: на 1463×724 кнопка
+                  оказывалась на y=913 при окне 774 и прокрутке ≤50 px, на 390×844 её
+                  накрывало нижнее меню (приёмка bd: rect + elementFromPoint без прокрутки).
+                  Доска же на обеих парах целиком в первом экране — значит всё, что
+                  внутри неё, достижимо. Только для пришедшего по ссылке на задачу. */}
+              {зашёлЗаЗадачей&&pzAttempt==="correct"&&pzCurrent&&pzMode!=="rush"&&<div data-cc-resheno="1" role="status"
+                style={{position:"absolute",left:8,right:8,bottom:8,zIndex:6,padding:"12px 14px",borderRadius:RADIUS.md,background:"rgba(236,253,245,0.97)",border:"1px solid #a7f3d0",boxShadow:"0 6px 24px rgba(0,0,0,0.25)",display:"flex",flexWrap:"wrap",alignItems:"center",gap:10}}>
+                <div style={{fontWeight:900,fontSize:16,color:"#065f46"}}>✓ Решено! {pzCurrent.name}</div>
+                <button type="button" className="cc-touch" onClick={()=>{track({type:"feature_use",source:"cyberchess/puzzle",meta:{feature:"next_clicked",app:"cyberchess"}});loadNextPuzzleRef.current();}}
+                  style={{padding:"9px 16px",borderRadius:RADIUS.md,border:"none",background:CC.accent,color:"#fff",fontWeight:900,fontSize:14,cursor:"pointer"}}>Следующая задача →</button>
+                <div style={{fontSize:13,color:"#047857",fontWeight:700}}>{strokaTsennosti(pzTotal)}</div>
+              </div>}
               {/* Threat Heatmap overlay (killer #12) */}
               {showThreatMap&&(()=>{
                 const tm:ThreatMap=computeThreatMap(bd as any);
@@ -9937,14 +9950,7 @@ export default function CyberChessPage(){
 
           {/* Controls — under-board strip. Game-essentials only. Heatmap/Whisper/Share/History live in the
               right-sidebar Tools card to reduce visual clutter under the board. */}
-          {/* Панель «Решено!» — только для пришедшего по ссылке на задачу: вместо
-              автоперехода человек сам нажимает «Следующая задача». */}
-          {зашёлЗаЗадачей&&pzAttempt==="correct"&&pzCurrent&&pzMode!=="rush"&&<div data-cc-resheno="1" role="status" style={{marginTop:SPACE[2],padding:"12px 14px",borderRadius:RADIUS.md,background:"#ecfdf5",border:"1px solid #a7f3d0",display:"flex",flexWrap:"wrap",alignItems:"center",gap:10}}>
-            <div style={{fontWeight:900,fontSize:16,color:"#065f46"}}>✓ Решено! {pzCurrent.name}</div>
-            <button type="button" className="cc-touch" onClick={()=>{track({type:"feature_use",source:"cyberchess/puzzle",meta:{feature:"next_clicked",app:"cyberchess"}});loadNextPuzzleRef.current();}}
-              style={{padding:"9px 16px",borderRadius:RADIUS.md,border:"none",background:CC.accent,color:"#fff",fontWeight:900,fontSize:14,cursor:"pointer"}}>Следующая задача →</button>
-            <div style={{fontSize:13,color:"#047857",fontWeight:700}}>{strokaTsennosti(pzTotal)}</div>
-          </div>}
+
           {!(зашёлЗаЗадачей&&!isMobileLayout)&&<div style={{display:"flex",gap:8,marginTop:SPACE[2],...podDoskoyRow}}>
             <Btn size="md" variant="secondary" icon={<Icon.Flip width={16} height={16}/>} onClick={()=>sFlip(!flip)}>Перевернуть</Btn>
             <Btn size="md" variant="primary" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>Новая партия</Btn>

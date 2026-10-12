@@ -8936,11 +8936,34 @@ export async function classifyDeploymentServe(url: string, timeoutMs = 4000, att
 
 const RECONCILE_RATE_MS_DEFAULT = 60_000;      // не чаще раза в минуту на проект
 const RECONCILE_FAIL_THRESHOLD = 2;            // неоднозначный отказ понижает со 2-го подряд
+// Свежесозданный поддомен <проект>.pages.dev расходится по краю Cloudflare НЕ
+// мгновенно: verifyDeploymentServes видит 2xx с точки сети сервера за ~2 мин и
+// метит проект live, а первые минуты тот же (или другой) резолвер может отдавать
+// NXDOMAIN/404 — это ОЖИДАЕМОЕ окно распространения, а не смерть адреса. Замер
+// 12.10.2026: проект гостя жил 200 ≈14 ч, но мой внешний резолвер на 8-й минуте
+// ещё отдавал NXDOMAIN. Поэтому для МОЛОДОЙ выкатки NXDOMAIN/404 НЕ понижает —
+// иначе карточка только что опубликованного живого сайта ложно станет «Ошибка».
+const RECONCILE_DEPLOY_GRACE_MS_DEFAULT = 30 * 60_000; // 30 мин на распространение
 let reconcileRateMs = RECONCILE_RATE_MS_DEFAULT;
+let reconcileDeployGraceMs = RECONCILE_DEPLOY_GRACE_MS_DEFAULT;
 const reconcileState = new Map<string, { ambiguousFails: number; lastCheckAt: number }>();
 
-export function __resetReconcileStateForTest(): void { reconcileState.clear(); reconcileRateMs = RECONCILE_RATE_MS_DEFAULT; }
+export function __resetReconcileStateForTest(): void {
+  reconcileState.clear();
+  reconcileRateMs = RECONCILE_RATE_MS_DEFAULT;
+  reconcileDeployGraceMs = RECONCILE_DEPLOY_GRACE_MS_DEFAULT;
+}
 export function __setReconcileRateMsForTest(ms: number): void { reconcileRateMs = ms; }
+export function __setReconcileDeployGraceMsForTest(ms: number): void { reconcileDeployGraceMs = ms; }
+
+/** Возраст последней выкатки проекта в мс (по completedAt/triggeredAt выкатки,
+ * иначе по отметке проекта), или null, если отметку не разобрать. */
+async function deploymentAgeMs(project: DevHubProject): Promise<number | null> {
+  const deps = await dbListDeployments(project.id, 1).catch(() => [] as DevHubDeployment[]);
+  const stamp = deps[0]?.completedAt ?? deps[0]?.triggeredAt ?? project.updatedAt;
+  const t = Date.parse(stamp);
+  return Number.isFinite(t) ? Date.now() - t : null;
+}
 
 /** Re-check a LIVE project's address and downgrade it to "error" when the
  * address is really gone, so the card never shows «Живой» over a dead URL.
@@ -8963,7 +8986,12 @@ async function reconcileLiveProject(project: DevHubProject): Promise<{ status: s
   }
   let downgrade: boolean;
   if (verdict === "nxdomain" || verdict === "gone404") {
-    downgrade = true;                                 // однозначно мёртв — сразу
+    // Однозначно мёртв — но только если выкатка уже СТАРШЕ окна распространения.
+    // Молодой <проект>.pages.dev мог ещё не разойтись по краю CF (см. выше):
+    // не понижаем и НЕ копим счётчик — это ожидаемое окно, а не наш сбой.
+    const ageMs = await deploymentAgeMs(project);
+    const распространяется = ageMs !== null && ageMs < reconcileDeployGraceMs;
+    downgrade = !распространяется;
   } else {
     st.ambiguousFails += 1;                           // неоднозначно — со 2-го подряд
     downgrade = st.ambiguousFails >= RECONCILE_FAIL_THRESHOLD;

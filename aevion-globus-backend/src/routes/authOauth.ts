@@ -42,6 +42,7 @@ import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import { getJwtSecret } from "../lib/authJwt";
+import { rememberIssuedUser } from "../lib/tokenVersion";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
 import { makeServiceCapture } from "../lib/sentry/platform";
@@ -383,6 +384,9 @@ authOauthRouter.get("/:provider/callback", async (req, res) => {
       getJwtSecret(),
       { expiresIn: process.env.AUTH_JWT_EXPIRES_IN || "7d" },
     );
+    // Первый вход через OAuth заводит пользователя — без этой строки до
+    // 5 минут его токен отвергался бы (lib/tokenVersion.ts).
+    rememberIssuedUser(user.id, 0);
 
     const redirect = successRedirect();
     const sep = redirect.includes("?") ? "&" : "?";

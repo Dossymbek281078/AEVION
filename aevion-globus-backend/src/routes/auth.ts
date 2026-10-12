@@ -4,6 +4,7 @@ import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { getJwtSecret } from "../lib/authJwt";
+import { rememberIssuedUser } from "../lib/tokenVersion";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
@@ -230,7 +231,11 @@ function signToken(payload: {
 }): string {
   const secret = getJwtSecret();
   const expiresIn = process.env.AUTH_JWT_EXPIRES_IN || "7d";
-  return jwt.sign(payload, secret, { expiresIn });
+  const token = jwt.sign(payload, secret, { expiresIn });
+  // Без этого новый человек до 5 минут получает 401 на каждой закрытой ручке
+  // (lib/tokenVersion.ts, rememberIssuedUser).
+  rememberIssuedUser(payload.sub, payload.tv ?? 0);
+  return token;
 }
 
 function requireAuth(req: any, res: any) {

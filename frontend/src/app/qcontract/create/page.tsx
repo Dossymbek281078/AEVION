@@ -5,6 +5,7 @@ import { getAuthToken } from "@/lib/auth";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n";
+import { ЧЕРНОВИК, ВХОД_С_ВОЗВРАТОМ } from "./draft";
 
 type ContentType = "text" | "url" | "html";
 type SelfDestructMode = "views" | "time" | "both" | "none";
@@ -35,6 +36,19 @@ export default function CreateDocument() {
   const [result, setResult] = useState<{ shareUrl: string } | null>(null);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [нуженВход, setНуженВход] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(ЧЕРНОВИК);
+      if (!raw) return;
+      sessionStorage.removeItem(ЧЕРНОВИК);
+      const d = JSON.parse(raw) as { title?: string; content?: string; contentType?: ContentType };
+      if (typeof d.title === "string") setTitle(d.title);
+      if (typeof d.content === "string") setContent(d.content);
+      if (d.contentType === "text" || d.contentType === "url" || d.contentType === "html") setContentType(d.contentType);
+    } catch {}
+  }, []);
 
   useEffect(() => {
     fetch(apiUrl("/api/qcontract/templates"))
@@ -54,7 +68,13 @@ export default function CreateDocument() {
 
   async function handleCreate() {
     const token = getAuthToken() ?? "";
-    if (!token) { setError(t("qcontract.create.error.auth_required")); return; }
+    if (!token) {
+      try { sessionStorage.setItem(ЧЕРНОВИК, JSON.stringify({ title, content, contentType })); } catch {}
+      setНуженВход(true);
+      setError(t("qcontract.create.error.auth_required"));
+      return;
+    }
+    setНуженВход(false);
     if (!title.trim()) { setError(t("qcontract.create.error.title_required")); return; }
     if (!content.trim()) { setError(t("qcontract.create.error.content_required")); return; }
 
@@ -287,7 +307,19 @@ export default function CreateDocument() {
           </div>
         </div>
 
-        {error && <div className="bg-red-900/30 border border-red-800 rounded-xl px-4 py-3 text-sm text-red-300">{error}</div>}
+        {error && (
+          <div className="bg-red-900/30 border border-red-800 rounded-xl px-4 py-3 text-sm text-red-300">
+            {error}
+            {нуженВход && (
+              <>
+                {" "}
+                <Link href={ВХОД_С_ВОЗВРАТОМ} data-testid="qcontract-login-return" className="font-bold text-white underline">
+                  Войти — черновик сохранится
+                </Link>
+              </>
+            )}
+          </div>
+        )}
 
         <button
           onClick={handleCreate}

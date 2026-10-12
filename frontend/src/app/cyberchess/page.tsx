@@ -7316,6 +7316,24 @@ export default function CyberChessPage(){
   } : BG_PRESETS.find(p=>p.id===bgPreset)?.css ? {
     backgroundImage:BG_PRESETS.find(p=>p.id===bgPreset)!.css!,backgroundSize:"cover",backgroundPosition:"center",backgroundAttachment:"fixed",
   } : {};
+  /* «С чего начать» — полоской, не окном (решение оркестратора 13.10.2026 по замеру bd:
+     модальное окно перехватывало клики по доске и «Задаче дня»). Один помощник, ДВА места
+     показа: экран настройки (над превью доски — это первый экран каждого, замер 13.10:
+     колонка доски до первого действия не монтируется, и полоска только в ней никому не
+     показывалась) и колонка доски. Показ один раз — ключ ONBOARDING_KEY, условие первого
+     показа прежнее (не по ссылке на задачу). */
+  const полоскаСтарта=(ширина:number|string)=>showOnboarding&&<PoloskaStarta t={cc.t} mode={themeMode==="dark"?"dark":"light"} width={ширина}
+            onDaily={(srvDaily&&!srvDailyFailed)?()=>{markOnboardingDone();sShowOnboarding(false);firstRunRef.current=false;loadDailyPuzzle("onboarding");}:undefined}
+            onIntent={(intent)=>{
+              try{localStorage.setItem("aevion_onboarding_choice_v1",JSON.stringify({intent}))}catch{}
+              markOnboardingDone();sShowOnboarding(false);firstRunRef.current=false;
+              const д=deystvieVyboraOnbordinga(intent);
+              sTab(д.tab);sSetup(д.setup);
+              // Пауза перед стартом — как у остальных мест запуска партии (newG читает состояние этих же сеттеров).
+              if(д.startGame)setTimeout(()=>{sHotseat(false);sRivalMode(false);newG()},50);
+            }}
+            onClose={()=>{markOnboardingDone();sShowOnboarding(false);firstRunRef.current=false;}}
+          />;
   const hasBg=bgPreset!=="none"&&!!bgPreset;
   return(<main suppressHydrationWarning style={{...bgStyle,background:hasBg?"none":tabBg,transition:`background ${MOTION.base} ${MOTION.ease}`,height:isMobileLayout?"auto":"100dvh",minHeight:"100dvh",overflow:isMobileLayout?"visible":"hidden",color:CC.text,display:"flex",flexDirection:"column",position:"relative"}}>
     {hasBg&&<div style={{position:"fixed",inset:0,background:themeMode==="dark"?"rgba(15,13,10,0.72)":"rgba(255,255,255,0.55)",zIndex:0,pointerEvents:"none"}}/>}
@@ -7792,6 +7810,7 @@ export default function CyberChessPage(){
 
               При 1280×768 работает ветка lowDesktop (vhPx<860) и ничего
               не меняется — там места нет и сейчас. */}
+          {полоскаСтарта(isMobileLayout?340:560)}
           <SetupBoardPreview
             orientation={pCol}
             light={bT.light}
@@ -9137,21 +9156,7 @@ export default function CyberChessPage(){
             </button>
           </div>}
 
-          {/* «С чего начать» — полоской, не окном (решение оркестратора 13.10.2026 по замеру bd:
-             модальное окно перехватывало клики по доске и «Задаче дня»). Показ один раз — ключ
-             ONBOARDING_KEY, условие первого показа прежнее (не по ссылке на задачу). */}
-          {showOnboarding&&<PoloskaStarta t={cc.t} mode={themeMode==="dark"?"dark":"light"} width={bw}
-            onDaily={(srvDaily&&!srvDailyFailed)?()=>{markOnboardingDone();sShowOnboarding(false);firstRunRef.current=false;loadDailyPuzzle("onboarding");}:undefined}
-            onIntent={(intent)=>{
-              try{localStorage.setItem("aevion_onboarding_choice_v1",JSON.stringify({intent}))}catch{}
-              markOnboardingDone();sShowOnboarding(false);firstRunRef.current=false;
-              const д=deystvieVyboraOnbordinga(intent);
-              sTab(д.tab);sSetup(д.setup);
-              // Пауза перед стартом — как у остальных мест запуска партии (newG читает состояние этих же сеттеров).
-              if(д.startGame)setTimeout(()=>{sHotseat(false);sRivalMode(false);newG()},50);
-            }}
-            onClose={()=>{markOnboardingDone();sShowOnboarding(false);firstRunRef.current=false;}}
-          />}
+          {полоскаСтарта(bw)}
           {/* Задание ВИДИМОЙ строкой над доской. До 12.10.2026 человек, пришедший
               по ссылке из комментария, не видел на экране ни чей ход, ни что искать:
               это было только в подписи для скринридера и в карточке правой панели,

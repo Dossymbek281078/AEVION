@@ -212,6 +212,24 @@ export default function DevHubPage() {
   const [showModal, setShowModal] = useState(false);
   const [ideaPrompt, setIdeaPrompt] = useState("");
   /*
+   * 🔴 ПОДСТАВЛЕННЫЙ ПРИМЕР НЕ ДОЛЖЕН ПРИКЛЕИВАТЬСЯ К ТЕКСТУ ЧЕЛОВЕКА.
+   *
+   * Дефект моей же правки от 12.10 утром: поле приходит ЗАПОЛНЕННЫМ примером
+   * (значением, а не подсказкой) — чтобы кнопка «Построить» была рабочей сразу
+   * и человеку не пришлось придумывать формулировку. Но тот, кто кликает в
+   * поле и начинает печатать, дописывает СВОЙ текст в конец примера.
+   * Замер окна «ИИ-блогер» 12.10 ~14:14, playwright 390×844: получился проект
+   * «лендинг кофейни…» с файлами birthday.html И coffeeshop.html сразу — ИИ
+   * добросовестно собрал оба сайта, потому что в описании стояли оба.
+   *
+   * Правка: пока пример не тронут, первое касание его СНИМАЕТ — и выделением
+   * при фокусе (тогда печать заменяет), и подстраховкой при первом вводе на
+   * случай, когда выделение не срабатывает (мобильные браузеры ставят курсор
+   * сами). Человек, который хотел пример, его не теряет: он уже нажал
+   * «Построить» или правит текст, а это снимает признак «не тронут».
+   */
+  const примерНеТронутRef = useRef(false);
+  /*
    * Возможности сервера нужны НА ВХОДЕ, а не только в рабочем окне: от них зависит,
    * можно ли вообще предложить человеку «приложение с базой и входом». Пока сборки
    * нет, выбора не показываем — обещание без механизма хуже отсутствия выбора.
@@ -497,7 +515,11 @@ export default function DevHubPage() {
   useEffect(() => {
     if (!hydrated) return;
     const примеры = [t("hero.ex1"), t("hero.ex2"), t("hero.ex3")];
-    setIdeaPrompt((текущий) => primerDlyaPustogoPolya({ введено: текущий, примеры }) ?? текущий);
+    setIdeaPrompt((текущий) => {
+      const пример = primerDlyaPustogoPolya({ введено: текущий, примеры });
+      if (пример) примерНеТронутRef.current = true;
+      return пример ?? текущий;
+    });
   }, [hydrated, t]);
 
   // Anything typed into either form before hydration lives only in the DOM;
@@ -674,7 +696,23 @@ export default function DevHubPage() {
               data-prehydration-field="ideaPrompt"
               aria-label={t("hero.ideaAria")}
               value={ideaPrompt}
-              onChange={(e) => setIdeaPrompt(e.target.value)}
+              onFocus={(e) => { if (примерНеТронутRef.current) e.currentTarget.select(); }}
+              onChange={(e) => {
+                const было = ideaPrompt;
+                const стало = e.target.value;
+                /*
+                 * Подстраховка к выделению: если пример ещё не тронут, а человек
+                 * ДОПИСАЛ в конец (мобильный браузер поставил курсор сам), от
+                 * введённого остаётся только его часть — пример не приклеивается.
+                 */
+                if (примерНеТронутRef.current && стало.startsWith(было) && стало.length > было.length) {
+                  примерНеТронутRef.current = false;
+                  setIdeaPrompt(стало.slice(было.length));
+                  return;
+                }
+                примерНеТронутRef.current = false;
+                setIdeaPrompt(стало);
+              }}
               onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) startFromIdea(); }}
               placeholder={t("hero.placeholder")}
               /* Цвета ЯВНЫЕ. Унаследованные делали ввод невидимым: текст был

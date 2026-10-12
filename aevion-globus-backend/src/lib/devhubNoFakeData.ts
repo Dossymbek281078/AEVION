@@ -30,8 +30,9 @@
  * писать про «сегодня», а такая проверка зеленеет сама собой 1 января и ничего
  * не утверждает. Сторож передаёт год явно и сравнивает с ним же.
  */
-export function ukazanieBezVydumannyhDannyh(год: number): string {
+export function ukazanieBezVydumannyhDannyh(год: number, язык: ЯзыкЗапроса = "unknown"): string {
   return (
+    ukazanieOYazyke(язык) +
     `NEVER invent the user's real-world data. Do NOT write made-up street addresses, ` +
     `city names, phone numbers, email addresses, prices, company names, person names, ` +
     `social media handles, opening hours or legal entities. ` +
@@ -63,4 +64,50 @@ export function ukazanieBezVydumannyhDannyh(год: number): string {
 /** Текущий год по часам сервера — единственное место, где он берётся. */
 export function tekushchiyGod(): number {
   return new Date().getFullYear();
+}
+
+/**
+ * Язык запроса человека — по письменности, а не по словарю.
+ *
+ * 🔴 ПОВОД 12.10.2026 (нашло окно ИИ-блогера живым замером): на английский
+ * запрос «birthday party invitation: date, place, party schedule» DevHub отдал
+ * страницу с 11 строками кириллицы — «[Имя именинника] Birthday Party!»,
+ * «[Название места]», «© 2026 [Ваша компания/Имя]». Правило «заготовка на
+ * языке запроса» в промпте СТОЯЛО, но языку модель должна была ВЫВЕСТИ сама из
+ * текста, а системный промпт вокруг — русский. Она и вывела «русский».
+ *
+ * Поэтому язык теперь определяет сервер и называет модели прямо, словом.
+ * Письменность — честный признак: кириллица ↔ русский/казахский, латиница ↔
+ * английский. Смешанный или пустой текст → «неизвестно», и тогда остаётся
+ * прежнее правило «как у запроса», а не ложная уверенность.
+ */
+export type ЯзыкЗапроса = "ru" | "en" | "unknown";
+
+export function yazykZaprosa(текст: string | null | undefined): ЯзыкЗапроса {
+  const т = String(текст ?? "");
+  const кир = (т.match(/[А-Яа-яЁёӘәҒғҚқҢңӨөҰұҮүҺһІі]/g) || []).length;
+  const лат = (т.match(/[A-Za-z]/g) || []).length;
+  const букв = кир + лат;
+  if (букв < 3) return "unknown";
+  if (кир / букв >= 0.6) return "ru";
+  if (лат / букв >= 0.6) return "en";
+  return "unknown";
+}
+
+/** Фраза для промпта: язык НАЗВАН, а не «тот же, что у запроса». */
+export function ukazanieOYazyke(язык: ЯзыкЗапроса): string {
+  if (язык === "ru") {
+    return (
+      `The user's request is written in RUSSIAN. Every piece of visible text you generate — ` +
+      `headings, buttons, labels and EVERY placeholder in square brackets — must be in Russian. `
+    );
+  }
+  if (язык === "en") {
+    return (
+      `The user's request is written in ENGLISH. Every piece of visible text you generate — ` +
+      `headings, buttons, labels and EVERY placeholder in square brackets — must be in English. ` +
+      `Do not write a single Cyrillic word anywhere in the page. `
+    );
+  }
+  return "";
 }

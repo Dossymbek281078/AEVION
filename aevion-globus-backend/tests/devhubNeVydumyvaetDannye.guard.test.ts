@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ukazanieBezVydumannyhDannyh, tekushchiyGod } from "../src/lib/devhubNoFakeData";
+import { ukazanieBezVydumannyhDannyh, tekushchiyGod, yazykZaprosa } from "../src/lib/devhubNoFakeData";
 
 /*
  * 🔴 ГЕНЕРАЦИЯ НЕ ДОЛЖНА ВЫДУМЫВАТЬ ДАННЫЕ ЧЕЛОВЕКА.
@@ -32,7 +32,8 @@ describe("указание «не выдумывай данные» доезжа
 
     // И накрыты они ОДНИМ дописыванием после тернарника, а не тремя копиями:
     // копии расходятся при первой правке.
-    expect(КОД).toContain("const промптСЗапретом = `${systemPrompt} ${ukazanieBezVydumannyhDannyh(tekushchiyGod())}`");
+    // 12.10.2026: вторым аргументом едет язык запроса, определённый сервером.
+    expect(КОД).toContain("const промптСЗапретом = `${systemPrompt} ${ukazanieBezVydumannyhDannyh(tekushchiyGod(), yazykZaprosa(prompt))}`");
     // Модели уходит строка С запретом, а не исходная.
     expect(КОД).toContain('{ role: "system", content: промптСЗапретом }');
   });
@@ -115,5 +116,50 @@ describe("указание «не выдумывай данные» доезжа
   it("контроль прибора: файл маршрута прочитан, а не пуст", () => {
     expect(КОД.length).toBeGreaterThan(50_000);
     expect(КОД).toContain("devhubNoFakeData");
+  });
+});
+
+describe("язык запроса называется модели прямо", () => {
+  /*
+   * 🔴 Повод 12.10.2026 (окно ИИ-блогера, живой замер): на английский запрос
+   * «birthday party invitation…» DevHub отдал страницу с 11 строками кириллицы:
+   * «[Имя именинника] Birthday Party!», «[Название места]», «© 2026 [Ваша
+   * компания/Имя]». Правило «на языке запроса» в промпте было — но язык модель
+   * должна была вывести сама, а системный промпт вокруг русский. Теперь язык
+   * определяет сервер и называет словом.
+   */
+  it("🔴 детектор: английский, русский, казахский, смешанный, пустой — знаменатель 5 из 5", () => {
+    const случаи: Array<[string, string]> = [
+      ["birthday party invitation: date, place, party schedule", "en"],
+      ["визитка мастера маникюра с ценами и записью", "ru"],
+      ["кофеханаға арналған сайт: мәзір, мекенжай", "ru"],
+      ["landing для кофейни with menu and карта проезда", "unknown"],
+      ["", "unknown"],
+    ];
+    for (const [т, ждём] of случаи) expect(yazykZaprosa(т), `текст: «${т}»`).toBe(ждём);
+    expect(случаи.length).toBe(5);
+  });
+
+  it("🔴 для английского запроса промпт запрещает кириллицу прямо, для русского — требует русский", () => {
+    const en = ukazanieBezVydumannyhDannyh(2026, "en");
+    expect(en).toContain("request is written in ENGLISH");
+    expect(en).toContain("Do not write a single Cyrillic word");
+    const ru = ukazanieBezVydumannyhDannyh(2026, "ru");
+    expect(ru).toContain("request is written in RUSSIAN");
+    expect(ru).not.toContain("Cyrillic word");
+    // Неизвестный язык — никакой ложной уверенности: фразы про язык нет вовсе,
+    // работает прежнее правило «как у запроса».
+    const нет = ukazanieBezVydumannyhDannyh(2026, "unknown");
+    expect(нет).not.toContain("request is written in");
+    // Контроль: прежнее правило при этом на месте во всех трёх.
+    for (const п of [en, ru, нет]) expect(п).toContain("SAME LANGUAGE the user wrote their request in");
+  });
+
+  it("🔴 ОБА места вызова передают язык запроса — знаменатель 2 из 2", () => {
+    const код = readFileSync(join(process.cwd(), "src/routes/devhub.ts"), "utf8");
+    const вызовы = код.match(/ukazanieBezVydumannyhDannyh\(tekushchiyGod\(\)[^)]*\)/g) || [];
+    expect(вызовы.length, "мест вызова").toBe(2);
+    const безЯзыка = вызовы.filter((в) => !/yazykZaprosa\((prompt|idea)\)/.test(в));
+    expect(безЯзыка, "вызовы без языка запроса").toEqual([]);
   });
 });

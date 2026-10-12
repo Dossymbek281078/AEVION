@@ -70,7 +70,7 @@ import { проверитьРасход, этоОк, запросOpenAI, зап�
 import { проверитьИменаМоделей, проверитьУмолчанияВызовом } from "../lib/объявленныеМодели";
 import { вставитьБейдж, нуженБейдж } from "../lib/aevionBadge";
 import { файлыВхода, нуженВход, УКАЗАНИЕ_ПРО_ВХОД } from "../lib/devhubAuthScaffold";
-import { ukazanieBezVydumannyhDannyh, tekushchiyGod } from "../lib/devhubNoFakeData";
+import { ukazanieBezVydumannyhDannyh, yazykZaprosa, tekushchiyGod } from "../lib/devhubNoFakeData";
 import { сметаПродукта, РАСЦЕНКИ_ПРОДУКТА } from "../lib/pipelineQuote";
 import { ценаПоЕдиницам, тарифЕсть } from "../lib/unitPricing";
 
@@ -2614,7 +2614,8 @@ async function generateCodeWithAI(
    * Повод и замер — в lib/devhubNoFakeData.ts. Год подставляет сервер: своей
    * даты модель не знает, и «© 2023» в 2026 году взялось именно отсюда.
    */
-  const промптСЗапретом = `${systemPrompt} ${ukazanieBezVydumannyhDannyh(tekushchiyGod())}`;
+  // Язык запроса определяет СЕРВЕР и называет модели прямо (разбор в devhubNoFakeData.ts).
+  const промптСЗапретом = `${systemPrompt} ${ukazanieBezVydumannyhDannyh(tekushchiyGod(), yazykZaprosa(prompt))}`;
 
   // Когда вход нужен, модель ОБЯЗАНА пользоваться нашим шаблоном, а не писать свой:
   // иначе рядом появится второй вход, и дырявым окажется именно он.
@@ -2928,7 +2929,7 @@ async function planProjectWithAI(idea: string, existingFiles: Array<{ path: stri
    * просьба человека, а не собственная выдумка, и системный запрет на той
    * стороне с ней заспорит. Дешевле не родить её здесь, чем ловить там.
    */
-  const промптЗамыслаСЗапретом = `${systemPrompt} ${ukazanieBezVydumannyhDannyh(tekushchiyGod())}`;
+  const промптЗамыслаСЗапретом = `${systemPrompt} ${ukazanieBezVydumannyhDannyh(tekushchiyGod(), yazykZaprosa(idea))}`;
   const userMsg = `Idea: ${idea}${existingContext}`;
 
   try {

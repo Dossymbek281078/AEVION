@@ -21,6 +21,8 @@
  */
 import { describe, test, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { ProofPilotBlock } from "../ProofPilotBlock";
 import { PILOT_USD, PILOT_RECORDS, PILOT_FEATURE, pismoZakaza } from "@/lib/proofPilot";
 
@@ -116,6 +118,37 @@ describe("нажатие на пилот видно воронке", () => {
     for (const слово of ["stub", "soc", "iso", "consent-to-train", "no data catalogue"]) {
       expect(текст, `обещание без оговорки «${слово}»`).toContain(слово);
     }
+  });
+});
+
+/*
+ * 🔴 УКАЗАТЕЛЬ ИЗ ПЕРВОГО ЭКРАНА НЕ ДОЛЖЕН ВЕСТИ В НИКУДА.
+ *
+ * Замер 12.10.2026 живым браузером на проде 02a69a6bd531: кнопка пилота
+ * достижима, но лежит на 4.9 экрана вниз при 390×844 и на 3.0 при 1463×724.
+ * Поэтому в первом экране стоит строка-ссылка на `#pilot`. У такой пары есть
+ * свой класс отказа: один конец переживает правку, другой нет, и ссылка молча
+ * перестаёт куда-либо вести — страница при этом выглядит исправной.
+ *
+ * Сторож держит ОБА конца. Мишень проверяется отрисовкой (а не чтением файла),
+ * чтобы переименование свойства не прошло мимо; ссылка — чтением страницы,
+ * потому что страница серверная и в прогоне не отрисовывается.
+ */
+describe("ссылка из первого экрана ведёт на блок", () => {
+  test("🔴 у блока есть мишень id=pilot", () => {
+    const { container } = render(<ProofPilotBlock />);
+    expect(container.querySelector("#pilot"), "мишени #pilot нет — ссылка сверху ведёт в никуда").toBeTruthy();
+  });
+
+  test("🔴 на странице есть ссылка на эту мишень", () => {
+    const страница = readFileSync(
+      join(process.cwd(), "src/app/proof/page.tsx"),
+      "utf8",
+    );
+    expect(страница).toContain('href="#pilot"');
+    // Контроль прибора: файл прочитан, а не пуст.
+    expect(страница.length).toBeGreaterThan(5000);
+    expect(страница).toContain("ProofPilotBlock");
   });
 });
 

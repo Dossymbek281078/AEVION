@@ -50,6 +50,7 @@ export function ProofPilotBlock() {
 
   return (
     <section
+      id="pilot"
       style={{
         border: "1px solid #0d9488",
         borderRadius: 10,

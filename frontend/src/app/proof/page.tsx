@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { PageTracking } from "@/components/PageTracking";
 import { ProofPilotBlock } from "@/components/ProofPilotBlock";
+import { PILOT_USD, PILOT_RECORDS, PILOT_DAYS } from "@/lib/proofPilot";
 
 /**
  * Страница для ПОКУПАТЕЛЕЙ ДАННЫХ — продолжение письма, а не витрина.
@@ -119,6 +120,30 @@ export default function ProofPage() {
           us is on this page and in the archive below, and none of it requires contacting
           us. What is verifiable, what is not, and how to check both yourself — before any
           conversation about money.
+        </p>
+
+        {/*
+         * 🔴 УКАЗАТЕЛЬ НА ПЛАТНЫЙ ШАГ, И ВОТ ЗАЧЕМ ОН НУЖЕН ОТДЕЛЬНО.
+         *
+         * Замер живым браузером 12.10.2026 сразу после выкатки блока пилота
+         * (прод 02a69a6bd531, страница целиком): кнопка «Order the pilot»
+         * достижима в оба окна (elementFromPoint отвечает «она сама»), но лежит
+         * на 4.9 экрана вниз при 390×844 и на 3.0 экрана при 1463×724. То есть
+         * единственный платный шаг страницы существует и работает, а увидеть
+         * его без длинной прокрутки нельзя.
+         *
+         * Порядок убеждения при этом менять НЕЛЬЗЯ: цена стоит после доводов
+         * намеренно — человек сперва убеждается, что проверка работает без нас.
+         * Поэтому здесь не блок и не кнопка, а ОДНА строка: платный шаг есть,
+         * стоит столько, лежит там. Денег она не просит и обещаний не добавляет.
+         */}
+        <p style={{ color: "#475569", fontSize: 15, lineHeight: 1.6, marginBottom: 26 }}>
+          If you already know what you need signed, the paid pilot is{" "}
+          <a href="#pilot" style={{ color: "#1d4ed8", fontWeight: 700 }}>
+            ${PILOT_USD} for up to {PILOT_RECORDS.toLocaleString("en-US")} records in{" "}
+            {PILOT_DAYS} days
+          </a>{" "}
+          — the terms and the limits are further down this page.
         </p>
 
         <div

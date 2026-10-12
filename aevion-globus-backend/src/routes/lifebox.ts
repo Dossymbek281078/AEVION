@@ -14,6 +14,7 @@
  *   DELETE /api/lifebox/capsules/:id           — hard delete
  */
 
+import { проверитьКлюч, выдатьКлючНовому } from "../lib/lifeboxOwnerKey";
 import { Router, type Request, type Response } from "express";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { getPool } from "../lib/dbPool";
@@ -369,8 +370,23 @@ lifeboxRouter.post("/capsules", writeLimit, async (req: Request, res: Response) 
       unlock_at: unlockDate.toISOString(),
     };
 
+    const доступ = await проверитьКлюч(cleanAlias, req.get("x-lifebox-key"));
+    if (доступ === "denied") {
+      res.status(403).json({
+        ok: false,
+        error: "owner_key_required",
+        message: "Этот псевдоним защищён ключом. Откройте LifeBox в браузере, где создавали капсулы, или вставьте сохранённый ключ.",
+      });
+      return;
+    }
+    const капсулДо = доступ === "legacy"
+      ? (isLifeBoxDbReady() ? await dbListByAlias(cleanAlias) : memListByAlias(cleanAlias)).length
+      : 0;
+
     const persisted = isLifeBoxDbReady();
     const capsule = persisted ? await dbInsert(fields) : memInsert(fields);
+    // Ключ выдаётся только совсем новому псевдониму и показывается ОДИН раз.
+    const ownerKey = доступ === "legacy" ? await выдатьКлючНовому(cleanAlias, капсулДо) : null;
 
     // For the create response we deliberately mask content (capsule is locked).
     //
@@ -393,6 +409,10 @@ lifeboxRouter.post("/capsules", writeLimit, async (req: Request, res: Response) 
           "перезапуск сервиса — сохраните текст у себя и создайте её заново позже.",
       }),
       capsule: publicView(capsule),
+      ...(ownerKey ? {
+        ownerKey,
+        ownerKeyNote: "Ключ к вашим капсулам. Мы храним только его отпечаток и показать ещё раз не сможем — сохраните его.",
+      } : {}),
     });
   } catch (e: any) {
     captureLifeBoxError(e, { route: "lifebox" });
@@ -423,6 +443,15 @@ lifeboxRouter.get("/capsules/:alias", readLimit, async (req: Request, res: Respo
     const cleanAlias = sanitizeAlias(raw);
     if (!cleanAlias) {
       res.status(400).json({ ok: false, error: "invalid alias" });
+      return;
+    }
+
+    if ((await проверитьКлюч(cleanAlias, req.get("x-lifebox-key"))) === "denied") {
+      res.status(403).json({
+        ok: false,
+        error: "owner_key_required",
+        message: "Этот псевдоним защищён ключом. Откройте LifeBox в браузере, где создавали капсулы, или вставьте сохранённый ключ.",
+      });
       return;
     }
 
@@ -463,6 +492,14 @@ lifeboxRouter.get("/capsules/:id/unlock", readLimit, async (req: Request, res: R
     }
     if (capsule.alias !== cleanAlias) {
       res.status(403).json({ ok: false, error: "alias does not match" });
+      return;
+    }
+    if ((await проверитьКлюч(cleanAlias, req.get("x-lifebox-key"))) === "denied") {
+      res.status(403).json({
+        ok: false,
+        error: "owner_key_required",
+        message: "Этот псевдоним защищён ключом. Откройте LifeBox в браузере, где создавали капсулы, или вставьте сохранённый ключ.",
+      });
       return;
     }
 
@@ -528,6 +565,14 @@ lifeboxRouter.patch("/capsules/:id", writeLimit, async (req: Request, res: Respo
       res.status(403).json({ ok: false, error: "alias does not match" });
       return;
     }
+    if ((await проверитьКлюч(cleanAlias, req.get("x-lifebox-key"))) === "denied") {
+      res.status(403).json({
+        ok: false,
+        error: "owner_key_required",
+        message: "Этот псевдоним защищён ключом. Откройте LifeBox в браузере, где создавали капсулы, или вставьте сохранённый ключ.",
+      });
+      return;
+    }
     if (isUnlocked(capsule)) {
       res.status(403).json({
         ok: false,
@@ -589,6 +634,14 @@ lifeboxRouter.delete("/capsules/:id", writeLimit, async (req: Request, res: Resp
     }
     if (capsule.alias !== cleanAlias) {
       res.status(403).json({ ok: false, error: "alias does not match" });
+      return;
+    }
+    if ((await проверитьКлюч(cleanAlias, req.get("x-lifebox-key"))) === "denied") {
+      res.status(403).json({
+        ok: false,
+        error: "owner_key_required",
+        message: "Этот псевдоним защищён ключом. Откройте LifeBox в браузере, где создавали капсулы, или вставьте сохранённый ключ.",
+      });
       return;
     }
 

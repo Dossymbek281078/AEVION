@@ -13,6 +13,23 @@ import StatsBar, { type StatsPayload } from "./components/StatsBar";
 const API = "/api-backend/api/lifebox";
 const ALIAS_KEY = "lifebox.alias";
 
+/*
+ * Ключ владельца псевдонима (бэкенд: lib/lifeboxOwnerKey.ts). До 12.10.2026
+ * псевдоним сам был ключом: угадал чужой — читаешь и удаляешь чужие капсулы.
+ * Ключ живёт в этом браузере; на другом устройстве его вставляют вручную.
+ */
+const KEY_PREFIX = "lifebox.key.";
+function ключДля(a: string): string | null {
+  try { return window.localStorage.getItem(KEY_PREFIX + a); } catch { return null; }
+}
+function запомнитьКлюч(a: string, key: string): void {
+  try { window.localStorage.setItem(KEY_PREFIX + a, key); } catch {}
+}
+function заголовкиКлюча(a: string): Record<string, string> {
+  const k = ключДля(a);
+  return k ? { "x-lifebox-key": k } : {};
+}
+
 const palette = {
   gold:     "#d4af37",
   goldSoft: "#f5d27a",
@@ -48,6 +65,9 @@ export default function LifeBoxPage() {
   // просто перезагружала список. Метка доехала, а человек её не видел, то есть
   // починка была ровно наполовину.
   const [storageWarning, setStorageWarning] = useState<string | null>(null);
+  const [новыйКлюч, setНовыйКлюч] = useState<string | null>(null);
+  const [нуженКлюч, setНуженКлюч] = useState(false);
+  const [вставленныйКлюч, setВставленныйКлюч] = useState("");
 
   // Load alias from localStorage on mount
   useEffect(() => {
@@ -83,9 +103,10 @@ export default function LifeBoxPage() {
     setLoadingList(true);
     try {
       const [listRes, statsRes] = await Promise.all([
-        fetch(`${API}/capsules/${encodeURIComponent(currentAlias)}`),
+        fetch(`${API}/capsules/${encodeURIComponent(currentAlias)}`, { headers: заголовкиКлюча(currentAlias) }),
         fetch(`${API}/stats`),
       ]);
+      setНуженКлюч(listRes.status === 403);
       const listJson = await listRes.json();
       const statsJson = await statsRes.json();
       if (listJson?.ok && Array.isArray(listJson.capsules)) {
@@ -118,13 +139,17 @@ export default function LifeBoxPage() {
     try {
       const r = await fetch(`${API}/capsules`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...заголовкиКлюча(payload.alias) },
         body: JSON.stringify(payload),
       });
       const j = await r.json();
       if (!r.ok || !j?.ok) throw new Error(j?.error || `HTTP ${r.status}`);
       // Модуль называется «сейф для себя будущего». Если сейф сегодня не
       // сейф — человек должен узнать об этом сейчас, а не через год.
+      if (typeof j?.ownerKey === "string") {
+        запомнитьКлюч(payload.alias, j.ownerKey);
+        setНовыйКлюч(j.ownerKey);
+      }
       setStorageWarning(j?.storage === "memory" ? (j?.warning || "Хранилище временно недоступно — капсула не переживёт перезапуск сервиса.") : null);
       await loadCapsules(alias);
     } finally {
@@ -140,7 +165,8 @@ export default function LifeBoxPage() {
     setReaderLoading(true);
     try {
       const r = await fetch(
-        `${API}/capsules/${capsule.id}/unlock?alias=${encodeURIComponent(alias)}`
+        `${API}/capsules/${capsule.id}/unlock?alias=${encodeURIComponent(alias)}`,
+        { headers: заголовкиКлюча(alias) },
       );
       const j = await r.json();
       if (!r.ok || !j?.ok) {
@@ -160,7 +186,7 @@ export default function LifeBoxPage() {
     try {
       await fetch(
         `${API}/capsules/${capsule.id}?alias=${encodeURIComponent(alias)}`,
-        { method: "DELETE" }
+        { method: "DELETE", headers: заголовкиКлюча(alias) }
       );
       await loadCapsules(alias);
     } catch { /* ignore */ }
@@ -284,6 +310,38 @@ export default function LifeBoxPage() {
           <StatsBar stats={stats} loading={loadingList && !stats} />
 
           <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: 28, marginBottom: 32 }}>
+            {новыйКлюч && (
+              <div role="alert" data-testid="lifebox-new-key" style={{ border: "1px solid #d4af37", background: "#fffbeb", color: "#3b2f05", borderRadius: 10, padding: "12px 14px", marginBottom: 16, fontSize: 14, lineHeight: 1.55 }}>
+                <b>Ключ к вашим капсулам — сохраните его.</b> Мы храним только его отпечаток и показать ещё раз не сможем.
+                Без ключа капсулы не открыть на другом устройстве.
+                <div style={{ fontFamily: "monospace", wordBreak: "break-all", margin: "8px 0", padding: 8, background: "#fff", borderRadius: 6 }}>{новыйКлюч}</div>
+                <a
+                  href={`data:text/plain;charset=utf-8,${encodeURIComponent(`LifeBox
+Псевдоним: ${alias}
+Ключ: ${новыйКлюч}
+`)}`}
+                  download={`lifebox-${alias}-key.txt`}
+                  style={{ fontWeight: 700, marginRight: 12 }}
+                >
+                  Скачать ключ (.txt)
+                </a>
+                <button type="button" onClick={() => setНовыйКлюч(null)}>Сохранил</button>
+              </div>
+            )}
+            {нуженКлюч && (
+              <form
+                role="alert"
+                data-testid="lifebox-need-key"
+                onSubmit={(e) => { e.preventDefault(); if (вставленныйКлюч.trim()) { запомнитьКлюч(alias, вставленныйКлюч.trim()); setВставленныйКлюч(""); loadCapsules(alias); } }}
+                style={{ border: "1px solid #f87171", background: "#fef2f2", color: "#7f1d1d", borderRadius: 10, padding: "12px 14px", marginBottom: 16, fontSize: 14, lineHeight: 1.55 }}
+              >
+                <b>Этот псевдоним защищён ключом.</b> Вставьте ключ, который сохранили при первой капсуле.
+                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                  <input value={вставленныйКлюч} onChange={(e) => setВставленныйКлюч(e.target.value)} placeholder="ключ" style={{ flex: 1, padding: 8 }} />
+                  <button type="submit">Открыть</button>
+                </div>
+              </form>
+            )}
             {storageWarning && (
               /* Метка доехала — покажем её человеку. Бэкенд с 19.08.2026 честно
                  говорит storage: "memory", но до этой вставки страница ответ не

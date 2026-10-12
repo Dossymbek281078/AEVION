@@ -2669,7 +2669,23 @@ async function generateCodeWithAI(
     for (const cand of chain) {
       if (result) break;
       try {
-        result = await callProvider(cand.id, messages, cand.defaultModel, 0.2, images, GEN_MAX_TOKENS);
+        /*
+         * 🔴 `структурныйОтвет: true` — ОТВЕТ ОБЯЗАН БЫТЬ JSON, и это меняет всё.
+         *
+         * Флаг завели 07.10.2026 с объяснением прямо в providers.ts: у моделей с
+         * внутренним размышлением (gemini-2.5-flash — наш основной поставщик
+         * генерации) размышление тратит ТОТ ЖЕ бюджет, что и ответ. Для свободного
+         * текста обрыв даёт неполный, но читаемый ответ; для JSON обрыв означает,
+         * что ответ не разберётся вовсе.
+         *
+         * И до 12.10 его не передавал НИ ОДИН вызов во всём бэкенде — механизм был
+         * написан и не позван. Цена видна в замере: пять генераций гостем на одном
+         * тексте дали 23.3 / 63.0 / 23.9 / 22.5 / 26.3 с, и ровно у медленного
+         * прогона стоит `continued: true` — ответ оборвался на 8192 токенах, и
+         * сервер делал ВТОРОЙ вызов. Размышление съедало бюджет, которого хватало
+         * остальным четырём.
+         */
+        result = await callProvider(cand.id, messages, cand.defaultModel, 0.2, images, GEN_MAX_TOKENS, undefined, undefined, true);
         // Ответ мог прийти от следующего поставщика (закрытый по лимиту пропущен
         // в callProvider) — учёт и подпись берут того, кто ответил на самом деле.
         const used = result.providerUsed
@@ -2719,7 +2735,8 @@ async function generateCodeWithAI(
             `Return ONLY a JSON object {"files":[...]} with the REMAINING files (do not repeat the completed ones). No explanation.`,
         },
       ];
-      const cont = await callProvider(provider.id, contMessages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS);
+      // Дозапрос тоже просит JSON — и тоже не должен тратить бюджет на размышление.
+      const cont = await callProvider(provider.id, contMessages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS, undefined, undefined, true);
       учтиГенерацию(provider.id, provider.defaultModel, cont.usage, moduleTag, userId);
       учтиВЗапуск(cont.usage);
       const contParsed = parseGeneratedFiles(cont.reply, []);
@@ -2758,7 +2775,8 @@ async function generateCodeWithAI(
         `\n\nReturn the corrected, complete files in the same JSON format. No explanation, just JSON.`,
     });
     try {
-      result = await callProvider(provider.id, messages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS);
+      // Самопочинка возвращает те же файлы в том же JSON — флаг обязателен и здесь.
+      result = await callProvider(provider.id, messages, provider.defaultModel, 0.2, images, GEN_MAX_TOKENS, undefined, undefined, true);
       учтиГенерацию(provider.id, provider.defaultModel, result.usage, moduleTag, userId);
       учтиВЗапуск(result.usage);
     } catch {
@@ -2845,7 +2863,7 @@ async function planProjectWithAI(idea: string, existingFiles: Array<{ path: stri
     const result = await callProvider(provider.id, [
       { role: "system", content: промптЗамыслаСЗапретом },
       { role: "user", content: userMsg },
-    ], provider.defaultModel, 0.3);
+    ], provider.defaultModel, 0.3, undefined, undefined, undefined, undefined, true);
       // Учёт расхода. До 31.08.2026 его здесь не было вовсе: /plan зовёт
       // платного поставщика НАПРЯМУЮ, минуя smartComplete, а учёт пишет
       // именно smartComplete. Расход ручки был невидим полностью — и это

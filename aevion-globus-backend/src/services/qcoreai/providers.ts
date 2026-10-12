@@ -923,6 +923,55 @@ async function meterCall(meter: CallMeter | undefined, providerId: string, model
  */
 export type ПорядокЗапаса = readonly string[];
 
+/**
+ * 🔴 СРОК НА ОДИН ВЫЗОВ МОДЕЛИ. До 12.10.2026 его не было вовсе.
+ *
+ * Замер в тот день, пять генераций DevHub гостем на одном и том же тексте:
+ * 23.3 / 63.0 / 23.9 / 22.5 / 26.3 с. Разброс 2.8×, а у окна продаж на том же
+ * описании — 27 и 170 с. При этом во всём файле единственный AbortController
+ * стоял на вспомогательном чтении JSON (2.5 с), а сам вызов модели шёл БЕЗ
+ * срока: одна медленная сторона у поставщика держала человека сколько угодно,
+ * и перейти к запасному было некому — переход существовал только по ОТКАЗУ
+ * (402, «no credits»), то есть по деньгам, а не по времени.
+ *
+ * Значение: 35 с. Медиана живого вызова 24 с, худший нормальный — 26 с;
+ * 35 даёт запас в полтора раза и при этом укладывает худший случай из трёх
+ * последовательных вызовов (основной + дозапрос + самопочинка) в разумное
+ * время. Переопределяется переменной сервиса, если жизнь покажет другое.
+ */
+export function срокВызоваМс(): number {
+  // Функция, а не константа модуля: значение читается В МОМЕНТ вызова. Иначе
+  // его нельзя было бы проверить (сторож задаёт срок в миллисекундах, чтобы не
+  // ждать в прогоне по полминуты), а переменная сервиса начала бы действовать
+  // только с перезапуска — ровно та ловушка, на которой застряли нормы 3 и 3.
+  return Math.max(1, Number(process.env.AI_CALL_TIMEOUT_MS ?? 35_000) || 35_000);
+}
+
+/** Признак «вызов не уложился в срок» — по нему и только по нему идём к запасному. */
+const ПРОСРОЧКА = "aevion_call_deadline_exceeded";
+
+/**
+ * Гонка вызова со сроком.
+ *
+ * ⚠️ Сам запрос мы НЕ обрываем: обрыв fetch у разных поставщиков ведёт себя
+ * по-разному, а нам нужно только перестать ЖДАТЬ. Висящий запрос завершится
+ * сам и просто никому не понадобится — цена этого меньше, чем риск оставить
+ * человека без ответа из-за нашей же отмены.
+ */
+async function соСроком<T>(работа: Promise<T>, мс: number): Promise<T> {
+  let таймер: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      работа,
+      new Promise<never>((_, отказ) => {
+        таймер = setTimeout(() => отказ(new Error(ПРОСРОЧКА)), мс);
+      }),
+    ]);
+  } finally {
+    if (таймер) clearTimeout(таймер);
+  }
+}
+
 export async function callProvider(
   providerId: string,
   messages: ChatMessage[],
@@ -950,15 +999,28 @@ export async function callProvider(
   for (;;) {
     tried.push(current);
     try {
-      const res = await callProviderOnce(current, messages, currentModel, temperature, images, maxTokens, meter, структурныйОтвет);
+      const res = await соСроком(
+        callProviderOnce(current, messages, currentModel, temperature, images, maxTokens, meter, структурныйОтвет),
+        срокВызоваМс(),
+      );
       if (current !== "stub" && !String(res.reply ?? "").trim()) {
         throw new Error(`${current} answered with an empty reply`);
       }
       return current === providerId ? res : { ...res, providerUsed: current, failedOver: { from: providerId, tried } };
     } catch (e) {
-      const reason = providerOutageReason(e) ?? ((e instanceof Error ? e.message : "").includes("empty reply") ? "empty reply" : null);
+      const просрочка = (e instanceof Error ? e.message : "") === ПРОСРОЧКА;
+      const reason = просрочка
+        ? `не ответил за ${Math.round(срокВызоваМс() / 1000)} с`
+        : providerOutageReason(e) ?? ((e instanceof Error ? e.message : "").includes("empty reply") ? "empty reply" : null);
       if (!reason || current === "stub") throw e;
-      noteProviderOutage(current, reason);
+      /*
+       * Просрочка НЕ отключает поставщика на полчаса: один медленный ответ —
+       * это не закрытый счёт. Отключив его, мы наказали бы живого поставщика за
+       * единичную медлительность и увели бы весь поток на запасного, который
+       * может быть дороже. Поэтому помечаем только настоящие отказы, а по
+       * просрочке просто берём следующего на ЭТОТ вызов.
+       */
+      if (!просрочка) noteProviderOutage(current, reason);
       // Кандидаты: либо явный порядок этого вызова, либо прежний — порядок
       // реестра. Имена, которых в реестре нет, просто выпадают.
       const кандидаты = порядокЗапаса

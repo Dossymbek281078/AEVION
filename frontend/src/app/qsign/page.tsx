@@ -964,7 +964,7 @@ export default function QSignPage() {
             </button>
             {!token ? (
               <Link
-                href="/auth"
+                href="/auth?next=/qsign"
                 style={{
                   padding: "8px 12px",
                   borderRadius: 8,

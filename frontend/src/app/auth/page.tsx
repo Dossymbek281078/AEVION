@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useI18nOptional } from "@/lib/i18n";
 import { setAuthToken } from "@/lib/auth";
+import { адресВозврата } from "./returnTo";
 import { useEffect, useMemo, useState } from "react";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { useToast } from "@/components/ToastProvider";
@@ -236,6 +237,13 @@ export default function AuthPage() {
     })();
   }, [token]);
 
+  // Пришёл со страницы модуля (`/auth?next=/qsign`) — туда и вернуть
+  // (returnTo.ts: до 12.10.2026 параметр не читал никто).
+  const вернутьТуда = () => {
+    const куда = адресВозврата(window.location.search);
+    if (куда) window.location.assign(куда);
+  };
+
   const signIn = async () => {
     setErr(null); setMe(null); setBusy(true);
     try {
@@ -258,6 +266,7 @@ export default function AuthPage() {
   // запись оставляла бы их пустыми до следующего старта приложения.
   setAuthToken(nextToken);
       showToast("Вы вошли", "success");
+      вернутьТуда();
     } catch (e: any) {
       setErr(e?.message || "Error");
       showToast(e?.message || "Не удалось войти", "error");
@@ -286,6 +295,7 @@ export default function AuthPage() {
   // запись оставляла бы их пустыми до следующего старта приложения.
   setAuthToken(nextToken);
       showToast("Аккаунт создан. Добро пожаловать в AEVION", "success");
+      вернутьТуда();
     } catch (e: any) {
       setErr(e?.message || "Error");
       showToast(e?.message || "Не удалось зарегистрироваться", "error");

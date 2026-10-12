@@ -331,10 +331,24 @@ qlifeRouter.post("/biomarkers", writeLimit, async (req: Request, res: Response) 
   }
 });
 
+/**
+ * Язык текста плана. Замер 12.10.2026 (окно Приложения-31.12): посетитель
+ * русской страницы получал план по-английски и с температурой в °F — модель
+ * отвечала на языке системной подсказки, а язык ей никто не называл.
+ * Неизвестное значение — русский: основная аудитория страницы.
+ */
+export function языкПлана(lang: unknown): string {
+  const l = typeof lang === "string" ? lang.trim().toLowerCase().slice(0, 2) : "";
+  if (l === "en") return "English";
+  if (l === "kk") return "Kazakh";
+  return "Russian";
+}
+
 /** POST /api/qlife/plan */
 qlifeRouter.post("/plan", aiLimit, async (req: Request, res: Response) => {
   try {
     const { age, goals } = req.body ?? {};
+    const язык = языкПлана(req.body?.lang);
 
     if (!age || isNaN(Number(age)) || Number(age) < 10 || Number(age) > 120) {
       res.status(400).json({ ok: false, error: "age must be a number between 10 and 120" });
@@ -365,7 +379,9 @@ qlifeRouter.post("/plan", aiLimit, async (req: Request, res: Response) => {
           "Create a personalized longevity plan as a JSON array. " +
           "Each item must have exactly these fields: goal (string), recommendation (string, max 200 chars), " +
           "frequency (string, e.g. 'daily', '3x per week'), expected_benefit (string, max 150 chars). " +
-          "Return ONLY the raw JSON array — no markdown, no explanation, no code fences.",
+          "Return ONLY the raw JSON array — no markdown, no explanation, no code fences. " +
+          `Write recommendation, frequency and expected_benefit in ${язык}. ` +
+          "Use metric units only (°C, kg, cm, km). Keep the goal field as given.",
       },
       {
         role: "user" as const,

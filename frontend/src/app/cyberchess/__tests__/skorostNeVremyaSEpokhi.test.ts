@@ -18,6 +18,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { sekundyResheniya, bonusZaSkorost, podpisSkorosti } from "../skorostZadachi";
+import { CHESS_LAUNCH_UTC } from "../launchDate";
 
 const СЕЙЧАС = Date.UTC(2026, 9, 12, 11, 8, 19); // 1791803299000
 
@@ -46,11 +47,13 @@ describe("секунды решения", () => {
   });
 
   it("🔴 метка старта «из прошлого века» не принимается за секундомер", () => {
-    // Любое значение до 2026 года — это не наш старт, а чей-то ноль.
+    // Любое значение ДО ЗАПУСКА ШАХМАТ — это не наш старт, а чей-то ноль:
+    // до запуска решений быть не могло. Граница берётся из единого источника
+    // launchDate.ts (12.10.2026: свой литерал даты здесь ловил dataZapuskaOdna).
     expect(sekundyResheniya(1, СЕЙЧАС)).toBeNull();
-    expect(sekundyResheniya(Date.UTC(2025, 11, 31), СЕЙЧАС)).toBeNull();
-    // А начало этого года — уже правдоподобно.
-    expect(sekundyResheniya(Date.UTC(2026, 0, 1), СЕЙЧАС)).not.toBeNull();
+    expect(sekundyResheniya(CHESS_LAUNCH_UTC - 1, СЕЙЧАС)).toBeNull();
+    // А день запуска — уже правдоподобно.
+    expect(sekundyResheniya(CHESS_LAUNCH_UTC, СЕЙЧАС)).not.toBeNull();
   });
 
   it("часы перевели назад — не выдумываем отрицательное время", () => {

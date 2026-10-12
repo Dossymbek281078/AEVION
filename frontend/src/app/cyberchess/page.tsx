@@ -1761,6 +1761,17 @@ export default function CyberChessPage(){
    */
   const[зазорПодСтроку,sЗазорПодСтроку]=useState(0);
   const isMobileLayout=vwPx<769;
+  /*
+   * 🔴 ШАПКА В ОДИН РЯД ПРИ ЗАХОДЕ ЗА ЗАДАЧЕЙ (12.10.2026, слово оркестратора).
+   *
+   * Замер «после» волны 88 на 1463×724: доска выросла до 317, но её верх так и
+   * стоит на y=290 — два ряда шапки (~230 px) остались главным ограничителем
+   * высоты. Второй ряд — это профиль (рейтинг + Chessy) и «⚙ Ещё», которые
+   * переносятся на новую строку, когда не влезают в первую. Пришедшему с
+   * ролика за задачей они не нужны в первую секунду; главная навигация
+   * (Играть/Задачи/Анализ/Коуч, «от $12/мес») остаётся. Другие режимы не трогаем.
+   */
+  const шапкаКомпактна=зашёлЗаЗадачей&&!isMobileLayout;
   // 🔴 01.10.2026: НА ТЕЛЕФОНЕ РАЗДЕЛ «КОУЧ» ОБЯЗАН ОТКРЫВАТЬ ШТОРКУ.
   //
   // Замер на проде, гость, 390×844: нажатие «ИИ-коуч» переключало вкладку
@@ -7511,7 +7522,7 @@ export default function CyberChessPage(){
         <div style={{flex:1}}/>
 
         {/* Профиль — рейтинг + Chessy (микро-лейбл убран: чистая шапка) */}
-        {vwPx>=769&&<div className="cc-hzone" style={{display:"flex",alignItems:"center",gap:3,flexShrink:0}}>
+        {vwPx>=769&&!шапкаКомпактна&&<div className="cc-hzone" style={{display:"flex",alignItems:"center",gap:3,flexShrink:0}}>
           <div style={{display:"inline-flex",alignItems:"center",gap:6}}>
         {/* Rating badge */}
         <div style={{
@@ -7634,9 +7645,9 @@ export default function CyberChessPage(){
         {/* ⚙ Ещё — overflow-меню. Свернули «Инструменты» (клавиши/музыка/стрим/фулскрин/
             онлайн) и «Навигацию» (раскладка/язык/экосистема) в одно меню → чистая шапка. */}
         <div style={{position:"relative",flexShrink:0}}>
-          <button onClick={()=>sMoreMenuOpen(v=>!v)} aria-haspopup="menu" aria-expanded={moreMenuOpen} title="Ещё — клавиши, музыка, стрим, раскладка, язык, экосистема" className="cc-focus-ring" style={{display:"inline-flex",alignItems:"center",gap:5,padding:"7px 12px",borderRadius:RADIUS.full,border:`1px solid ${moreMenuOpen?CC.brand:CC.borderStrong}`,background:moreMenuOpen?CC.brandSoft:CC.surface1,color:moreMenuOpen?CC.brand:CC.textDim,fontSize:12,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap"}}>
+          {!шапкаКомпактна&&<button onClick={()=>sMoreMenuOpen(v=>!v)} aria-haspopup="menu" aria-expanded={moreMenuOpen} title="Ещё — клавиши, музыка, стрим, раскладка, язык, экосистема" className="cc-focus-ring" style={{display:"inline-flex",alignItems:"center",gap:5,padding:"7px 12px",borderRadius:RADIUS.full,border:`1px solid ${moreMenuOpen?CC.brand:CC.borderStrong}`,background:moreMenuOpen?CC.brandSoft:CC.surface1,color:moreMenuOpen?CC.brand:CC.textDim,fontSize:12,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap"}}>
             <span style={{fontSize:14}} aria-hidden>⚙</span><span>{cc.t("nav.more")}</span><span style={{fontSize:9}} aria-hidden>▾</span>
-          </button>
+          </button>}
           {moreMenuOpen&&<>
             <div onClick={()=>sMoreMenuOpen(false)} style={{position:"fixed",inset:0,zIndex:190}}/>
             <div role="menu" style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:200,minWidth:240,padding:10,borderRadius:RADIUS.lg,background:CC.surface1,border:`1px solid ${CC.borderStrong}`,boxShadow:SHADOW.lg,display:"flex",flexDirection:"column",gap:4}}>

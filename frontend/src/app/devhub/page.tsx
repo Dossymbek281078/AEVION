@@ -7,6 +7,7 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { СОБЫТИЕ_ПЕРЕНОСА } from "@/components/DevHubGuestIdentity";
 import { apiUrl } from "@/lib/apiBase";
+import { меткаЗаходаДляЗаписи } from "@/lib/channelNow";
 import { useDevhubT, type DevhubKey } from "./i18n";
 import { COMPARISON_ROWS, capabilityIsKnownOff, comparisonTotalUsd } from "./capabilityRows";
 import { howtoTranscript } from "./howtoTranscript";
@@ -229,6 +230,7 @@ export default function DevHubPage() {
    * «Построить» или правит текст, а это снимает признак «не тронут».
    */
   const примерНеТронутRef = useRef(false);
+
   /*
    * Возможности сервера нужны НА ВХОДЕ, а не только в рабочем окне: от них зависит,
    * можно ли вообще предложить человеку «приложение с базой и входом». Пока сборки
@@ -309,7 +311,8 @@ export default function DevHubPage() {
       const r = await fetch(apiUrl("/api/devhub/projects"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, description: idea, stack }),
+        // Метка захода — «с какого ролика дошёл до сборки»; разбор в channelNow.ts.
+        body: JSON.stringify({ name, description: idea, stack, entryTag: меткаЗаходаДляЗаписи() }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(serverError(data.error, t("err.create")));
@@ -426,7 +429,9 @@ export default function DevHubPage() {
       const r = await fetch(apiUrl("/api/devhub/projects"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: form.name, description: form.description, stack: form.stack }),
+        // Та же метка и на втором пути создания: иначе половина проектов
+        // осталась бы без источника, а мы бы снова считали по половине данных.
+        body: JSON.stringify({ name: form.name, description: form.description, stack: form.stack, entryTag: меткаЗаходаДляЗаписи() }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(serverError(data.error, "Не удалось создать проект"));

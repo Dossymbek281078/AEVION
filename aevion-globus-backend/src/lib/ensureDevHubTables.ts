@@ -48,6 +48,26 @@ export async function ensureDevHubTables(pool: PgPoolInstance): Promise<void> {
       ALTER TABLE "DevHubProject"
         ADD COLUMN IF NOT EXISTS "collaborators" JSONB NOT NULL DEFAULT '[]'::jsonb;
     `);
+    /*
+     * 🔴 МЕТКА ЗАХОДА У ПРОЕКТА (12.10.2026). Зачем столбец, а не вывод по имени.
+     *
+     * Два повода сошлись в один день:
+     *  • мы не можем сказать, С КАКОГО РОЛИКА пришёл тот, кто ДОШЁЛ ДО СБОРКИ.
+     *    Воронка знает заходы на страницу, а проект — нет: у записи не было ни
+     *    канала, ни поста. Разрез «пост × сборка» строить было не из чего;
+     *  • автоснятие пробных сайтов решает по ИМЕНИ проекта («probe-…»), и это
+     *    заставляло соседние окна портить имя — у окна роликов имя видно В
+     *    КАДРЕ. Совет «называйте probe-» был плохим: удобство нашей уборки за
+     *    счёт того, что видит зритель.
+     *
+     * Метка берётся из адреса захода на клиенте и кладётся сюда при создании.
+     * NULL — честное «не знаем» (создано до этой правки или метки не было), и
+     * ни одно решение по NULL не принимается.
+     */
+    await pool.query(`
+      ALTER TABLE "DevHubProject"
+        ADD COLUMN IF NOT EXISTS "entryTag" TEXT;
+    `);
     await pool.query(`
       CREATE INDEX IF NOT EXISTS "DevHubProject_user_idx"
         ON "DevHubProject" ("userId", "updatedAt" DESC);

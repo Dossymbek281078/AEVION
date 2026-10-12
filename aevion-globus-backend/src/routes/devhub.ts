@@ -630,6 +630,12 @@ interface DevHubProject {
   customDomain: string | null;
   envVars: Record<string, string>;
   collaborators: Array<{ userId: string; role: string }>;
+  /**
+   * Метка захода, с которой человек пришёл («yt-chess-level», «probe-blogger»).
+   * null — честное «не знаем»: проект создан до 12.10.2026 или метки не было.
+   * По null решений не принимаем.
+   */
+  entryTag: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1651,13 +1657,17 @@ async function dbGetProject(id: string): Promise<DevHubProject | null> {
 async function dbSaveProject(p: DevHubProject): Promise<void> {
   if (!isDevHubDbReady()) { memProjects.set(p.id, p); return; }
   await pool.query(
-    `INSERT INTO "DevHubProject" ("id","userId","name","description","stack","status","repoUrl","deployUrl","customDomain","envVars","collaborators","createdAt","updatedAt")
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb,$12,$13)
+    `INSERT INTO "DevHubProject" ("id","userId","name","description","stack","status","repoUrl","deployUrl","customDomain","envVars","collaborators","entryTag","createdAt","updatedAt")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb,$14,$12,$13)
      ON CONFLICT ("id") DO UPDATE SET
        "name"=$3,"description"=$4,"stack"=$5,"status"=$6,"repoUrl"=$7,"deployUrl"=$8,
-       "customDomain"=$9,"envVars"=$10::jsonb,"collaborators"=$11::jsonb,"updatedAt"=$13`,
+       "customDomain"=$9,"envVars"=$10::jsonb,"collaborators"=$11::jsonb,"updatedAt"=$13,
+       -- Метку НЕ перетираем пустой при обновлении: она ставится один раз, при
+       -- создании. Иначе любое сохранение проекта стирало бы источник.
+       "entryTag"=COALESCE($14, "DevHubProject"."entryTag")`,
     [p.id, p.userId, p.name, p.description, p.stack, p.status, p.repoUrl, p.deployUrl,
-     p.customDomain, JSON.stringify(p.envVars), JSON.stringify(p.collaborators), p.createdAt, p.updatedAt]
+     p.customDomain, JSON.stringify(p.envVars), JSON.stringify(p.collaborators), p.createdAt, p.updatedAt,
+     p.entryTag ?? null]
   );
   // The row is now the truth again, so the parked copy must go — otherwise the
   // rescue above becomes its own bug and a stale in-memory project outranks
@@ -1705,11 +1715,37 @@ async function dbDeleteProject(id: string): Promise<void> {
   await pool.query(`DELETE FROM "DevHubProject" WHERE "id"=$1`, [id]);
 }
 
+/**
+ * Метка захода из тела запроса: «yt-chess-level», «probe-blogger».
+ *
+ * Принимаем только латиницу, цифры, дефис и подчёркивание и не длиннее 60
+ * знаков. Это поле уедет в отчёты и будет решать судьбу пробных сайтов —
+ * непроверенная строка из адреса там не нужна. Не подошло — null, то есть
+ * честное «не знаем», а не выдуманное значение.
+ */
+/**
+ * Метка захода из тела запроса: «yt-chess-level», «probe-user-99» или null.
+ *
+ * ⚠️ ПОЧЕМУ ОТКАЗ, А НЕ ОБРЕЗКА. Первая версия делала `.slice(0, 60)` — и метка
+ * длиннее предела молча превращалась в ДРУГУЮ метку: два разных ролика с общим
+ * началом имени склеились бы в один, и отчёт «с какого ролика дошли до сборки»
+ * врал бы правдоподобно. Обрезанный опознаватель хуже отсутствующего, поэтому
+ * слишком длинное — это null, честное «не знаю».
+ */
+function меткаЗахода(сырое: unknown): string | null {
+  if (typeof сырое !== "string") return null;
+  const t = сырое.trim().toLowerCase();
+  if (t.length > 60) return null;
+  return t && /^[a-z0-9_-]+$/.test(t) ? t : null;
+}
+
 function rowToProject(row: any): DevHubProject {
   return {
     id: row.id, userId: row.userId, name: row.name, description: row.description,
     stack: row.stack, status: row.status, repoUrl: row.repoUrl, deployUrl: row.deployUrl,
     customDomain: row.customDomain, envVars: row.envVars || {},
+    // Столбца может не быть у записей до 12.10.2026 — тогда честный null.
+    entryTag: typeof row.entryTag === "string" && row.entryTag ? row.entryTag : null,
     collaborators: row.collaborators || [],
     createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
     updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt,
@@ -3012,6 +3048,13 @@ devhubRouter.post("/projects", dhCreateLimit(), async (req, res) => {
     customDomain: null,
     envVars: {},
     collaborators: [],
+    /*
+     * Метка захода приходит С КЛИЕНТА: канал знает браузер (адрес или память
+     * вкладки), сервер его не видит. Режем до 60 знаков и принимаем только
+     * безопасные символы — это поле попадёт в отчёты и в решение об уборке,
+     * и чужая строка из адреса не должна туда попасть как есть.
+     */
+    entryTag: меткаЗахода(req.body?.entryTag),
     createdAt: now(),
     updatedAt: now(),
   };
@@ -3291,8 +3334,22 @@ const СРОК_ПРОБНОГО_САЙТА_МС =
   Math.max(1, Number(process.env.DEVHUB_PROBE_SITE_TTL_MINUTES ?? 120)) * 60_000;
 
 /** Пробный проект гостя: и имя помечено, и владелец — не вошедший человек. */
-export function пробныйГостевойПроект(p: { name: string; userId: string }): boolean {
-  return isGuestRequester(p.userId) && ПРОБНОЕ_ИМЯ.test(String(p.name ?? ""));
+export function пробныйГостевойПроект(p: { name: string; userId: string; entryTag?: string | null }): boolean {
+  if (!isGuestRequester(p.userId)) return false;
+  /*
+   * 🔴 12.10.2026: ПРИЗНАК ТЕПЕРЬ И ПО МЕТКЕ ЗАХОДА, а не только по имени.
+   *
+   * Повод назвал окно роликов, и оно право: имя проекта видно В КАДРЕ записи.
+   * Требуя «probe-» в имени, мы заставляли портить ролик ради нашей уборки —
+   * удобство механизма за счёт того, что видит зритель. Мой совет был плох.
+   *
+   * Метка захода (?c=probe-…) в кадр не попадает и уже отличает наши заходы в
+   * воронке. Имя оставлено ВТОРЫМ признаком, а не заменено: проекты, созданные
+   * до этой правки, метки не имеют, и снимать их по-прежнему надо.
+   */
+  if (ПРОБНОЕ_ИМЯ.test(String(p.name ?? ""))) return true;
+  const метка = typeof p.entryTag === "string" ? p.entryTag : "";
+  return /^(probe|smoke)[-_]/i.test(метка);
 }
 
 /**

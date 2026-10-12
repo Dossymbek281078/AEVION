@@ -29,7 +29,38 @@ function getTransport() {
   });
 }
 
-const FROM = process.env.SMTP_FROM || "AEVION QBuild <noreply@aevion.app>";
+/**
+ * Отправитель писем: АДРЕС из настройки, ИМЯ — из кода.
+ *
+ * 🔴 ПОВОД 12.10.2026 (нашло окно «Почта» живым замером). Письмо сброса пароля
+ * приходило от «AEVION QPayNet <noreply@aevion.app>» с темой «Сброс пароля —
+ * AEVION QBuild». QPayNet — наш платёжный модуль, QBuild — модуль найма; ни тот,
+ * ни другой человек не открывал, он заводил аккаунт AEVION. Для письма о ПАРОЛЕ
+ * это худшее из возможных: чужое имя в отправителе читается как фишинг, и
+ * осторожный человек его не откроет — то есть выход из тупика «забыл пароль»
+ * не работает, хотя письмо доходит за 3 секунды.
+ *
+ * Имя взялось из переменной `SMTP_FROM` на проде: кто-то однажды вписал туда
+ * имя модуля, и оно поехало во ВСЕ письма платформы. Поэтому разделяем: адрес
+ * обязан остаться настраиваемым (у поставщика подтверждён конкретный ящик), а
+ * видимое человеку ИМЯ задаёт код — его можно охранять сторожем, а переменную
+ * нельзя.
+ */
+export const БРЕНД_ПЛАТФОРМЫ = "AEVION";
+
+/** Почтовый адрес из `SMTP_FROM` — без имени. Нет настройки — наш noreply. */
+export function adresOtpravitelya(): string {
+  const сырое = process.env.SMTP_FROM?.trim() || "";
+  const вУглах = сырое.match(/<([^>]+)>/);
+  const адрес = (вУглах ? вУглах[1] : сырое).trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(адрес) ? адрес : "noreply@aevion.app";
+}
+
+/** Отправитель вида `AEVION <noreply@aevion.app>` для письма этого бренда. */
+export function otpravitel(бренд: string = БРЕНД_ПЛАТФОРМЫ): string {
+  const имя = бренд.trim() || БРЕНД_ПЛАТФОРМЫ;
+  return `${имя} <${adresOtpravitelya()}>`;
+}
 const BASE = process.env.FRONTEND_URL?.replace(/\/+$/, "") || "https://aevion.app";
 
 /**
@@ -52,14 +83,14 @@ export function canSendEmail(): boolean {
  * не настроена» — и это было бы неправдой: соседний код в ту же секунду
  * успешно шлёт письма.
  */
-async function sendViaResend(to: string, subject: string, html: string): Promise<boolean> {
+async function sendViaResend(to: string, subject: string, html: string, бренд?: string): Promise<boolean> {
   const key = process.env.RESEND_API_KEY?.trim();
   if (!key) return false;
   try {
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: FROM, to, subject, html }),
+      body: JSON.stringify({ from: otpravitel(бренд), to, subject, html }),
     });
     if (!r.ok) {
       // Тело не печатаем: в ответе провайдера бывает адрес получателя.
@@ -95,7 +126,7 @@ async function sendViaResend(to: string, subject: string, html: string): Promise
 // Экспортирован 31.08.2026: связывание гостя с покупкой (DevHub) шлёт своё
 // письмо, и второй транспорт рядом с этим был бы источником расхождений —
 // выбор провайдера, квоты и учёт отправленного живут здесь.
-export async function send(to: string, subject: string, html: string): Promise<boolean> {
+export async function send(to: string, subject: string, html: string, бренд?: string): Promise<boolean> {
   try {
     const transport = getTransport();
     if (!transport) {
@@ -109,7 +140,7 @@ export async function send(to: string, subject: string, html: string): Promise<b
       // транспорт. В routes/build/ пять мест шлют через Resend, то есть
       // сервер вполне может быть настроен только на него, и жаловаться на
       // отсутствие SMTP при рабочей почте было бы неправдой.
-      if (await sendViaResend(to, subject, html)) return true;
+      if (await sendViaResend(to, subject, html, бренд)) return true;
       console.warn(
         `[build/email] письмо «${subject}» для ${to} НЕ отправлено: ни SMTP, ни Resend не настроены. ` +
           "Задайте SMTP_HOST, SMTP_USER и SMTP_PASS либо RESEND_API_KEY.",
@@ -122,14 +153,14 @@ export async function send(to: string, subject: string, html: string): Promise<b
       }
       return false;
     }
-    await transport.sendMail({ from: FROM, to, subject, html });
+    await transport.sendMail({ from: otpravitel(бренд), to, subject, html });
     записатьИсход(true, "smtp");
     return true;
   } catch (e) {
     console.warn("[build/email] send failed:", (e as Error).message);
     записатьИсход(false, "smtp", (e as Error).message);
     // SMTP есть, но сорвался — пробуем второй транспорт, если он настроен.
-    return sendViaResend(to, subject, html);
+    return sendViaResend(to, subject, html, бренд);
   }
 }
 
@@ -138,7 +169,7 @@ export async function send(to: string, subject: string, html: string): Promise<b
 // человек, зарегистрировавшийся играть в шахматы, получал письмо от чужого
 // модуля. Замер 28.08.2026 на живом ящике: отправитель «AEVION QPayNet»,
 // тема «Подтвердите email — AEVION QBuild». Два чужих имени в одном письме.
-function layout(body: string, brand = "AEVION QBuild"): string {
+function layout(body: string, brand = БРЕНД_ПЛАТФОРМЫ): string {
   return `
 <!DOCTYPE html>
 <html lang="ru">
@@ -318,6 +349,10 @@ export async function sendVerificationEmail(opts: {
       </p>
       <p style="font-size:12px;color:#64748b">Если вы не регистрировались — проигнорируйте это письмо.</p>
     `, brand),
+    // Имя В ОТПРАВИТЕЛЕ то же, что в теле: иначе человек видит одно имя в
+    // списке писем и другое внутри — ровно то расхождение, из-за которого
+    // письмо о пароле читалось как фишинг (12.10.2026).
+    brand,
   );
 }
 
@@ -329,7 +364,7 @@ export async function sendPasswordResetEmail(opts: {
   const link = `${BASE}/build/reset-password?token=${encodeURIComponent(opts.token)}&email=${encodeURIComponent(opts.to)}`;
   return send(
     opts.to,
-    "Сброс пароля — AEVION QBuild",
+    `Сброс пароля — ${БРЕНД_ПЛАТФОРМЫ}`,
     layout(`
       <h2>Сброс пароля</h2>
       <p>Привет, <strong>${opts.name}</strong>! Кто-то запросил сброс пароля для вашего аккаунта.</p>
@@ -340,6 +375,9 @@ export async function sendPasswordResetEmail(opts: {
       </p>
       <p style="font-size:12px;color:#64748b">Если вы не запрашивали сброс — просто проигнорируйте это письмо. Ваш пароль не изменится.</p>
     `),
+    // Отправителя не передаём: у send() умолчание и есть БРЕНД_ПЛАТФОРМЫ.
+    // Мутация показала, что явный аргумент здесь ничего не меняет — значит он
+    // лишний, а лишний аргумент читается как несущий смысл.
   );
 }
 

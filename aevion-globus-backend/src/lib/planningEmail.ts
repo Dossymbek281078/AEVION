@@ -11,7 +11,15 @@
 
 import nodemailer from "nodemailer";
 
-const FROM = process.env.SMTP_FROM || "AEVION <noreply@aevion.app>";
+/*
+ * Отправитель — через общий помощник: ИМЯ из кода, адрес из настройки.
+ *
+ * 12.10.2026: здесь было `process.env.SMTP_FROM`, а на проде в этой переменной
+ * лежало «AEVION QPayNet» — то есть письма листа ожидания тоже приходили от
+ * имени платёжного модуля, которого человек не открывал. Один и тот же класс в
+ * двух местах: имя, видимое человеку, задавалось настройкой.
+ */
+import { otpravitel } from "./build/email";
 // 01.09.2026: приглашение ответить письмом убрано из подписи.
 // У домена aevion.app НЕТ записи MX (контроль: у gmail.com и aevion.io она есть),
 // то есть ответ на такое письмо не доходил никуда: человек узнавал отлупом, мы не
@@ -112,7 +120,7 @@ export function sendWaitlistConfirmation(ctx: WaitlistEmailContext): void {
           : `<p style="font-size:12px;color:#64748b">Don't want updates? Just reply with "unsubscribe" and we'll remove you.</p>`}
       `;
       await transport.sendMail({
-        from: FROM,
+        from: otpravitel(),
         to: ctx.toEmail,
         subject: `You're on the ${ctx.moduleTitle} waitlist`,
         html: layout(`${ctx.moduleTitle} waitlist`, body),

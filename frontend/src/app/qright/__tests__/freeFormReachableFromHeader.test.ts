@@ -21,6 +21,13 @@ describe("QRight: путь к бесплатной форме из шапки", 
     );
   });
 
+  it("кнопка стоит ДО абзаца описания — иначе на 390×844 уходит за первый экран", () => {
+    const кнопка = SRC.indexOf('data-testid="qright-jump-to-form"');
+    const абзац = SRC.indexOf("Register your work and walk away");
+    expect(абзац).toBeGreaterThan(0);
+    expect(кнопка).toBeLessThan(абзац);
+  });
+
   it("кнопка стоит ВЫШЕ приёма адресов, а не под ним", () => {
     const кнопка = SRC.indexOf('data-testid="qright-jump-to-form"');
     const приём = SRC.indexOf("<WaitlistCapture");

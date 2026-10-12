@@ -5,6 +5,7 @@ import { ждатьКарточкуПриложения } from "@/lib/scrollToAp
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
+import { RazrabotkaPreduprezhdenie } from "@/components/RazrabotkaPreduprezhdenie";
 import { apiUrl } from "@/lib/apiBase";
 import { fetchAiSavings, счётчикГоденДляПоказа } from "@/lib/aiSavings";
 import { запомнитьНамерение } from "@/lib/checkoutIntent";
@@ -1255,6 +1256,17 @@ export default function PricingPage() {
         </div>
       )}
 
+      {/*
+        🔴 Предупреждение «в разработке» — ОДНО, прямо над сеткой тарифов, то
+        есть над всеми кнопками «Купить» сразу. Копия в каждой карточке была бы
+        пятью копиями одного текста: они расходятся при первой правке, и человек
+        читает одно и то же пять раз подряд. Второе место — у кнопки оплаты в
+        калькуляторе, потому что туда приходят, минуя карточки.
+      */}
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 20px" }}>
+        <RazrabotkaPreduprezhdenie отступСверху={0} />
+      </div>
+
       {/* Tier cards */}
       <section
         id="tiers"
@@ -2267,6 +2279,9 @@ export default function PricingPage() {
                     </Link>
                   </p>
                 )}
+                {/* Предупреждение «в разработке» — ДО кнопки оплаты, а не после:
+                    прочитанное после списания читается как отговорка. */}
+                <RazrabotkaPreduprezhdenie вид="строка" отступСверху={14} />
                 {/*
                   🔴 07.10.2026: КНОПКА КАЛЬКУЛЯТОРА ПОКУПАЕТ ТОЛЬКО ГОЛУЮ СТУПЕНЬ.
                   Она единственная передавала seats и promoCode в кассу, а сумма до

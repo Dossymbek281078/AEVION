@@ -21,7 +21,11 @@ import SuccessPage from "../checkout/success/page";
 
 const t = (k: string) => k; // подписи не важны: сверяем КЛЮЧИ, они однозначны
 
-vi.mock("@/lib/i18n", () => ({ useI18n: () => ({ t, lang: "ru" }) }));
+// `useI18nOptional` добавлен 12.10.2026: страница показывает предупреждение
+// «платформа в разработке» (RazrabotkaPreduprezhdenie), а он читает словарь
+// через него. Без этого вывоза подмена роняет ВЕСЬ файл, и 11 проверок про
+// «не обещаем непроверенного» молча перестали бы выполняться.
+vi.mock("@/lib/i18n", () => ({ useI18n: () => ({ t, lang: "ru" }), useI18nOptional: () => null }));
 vi.mock("@/lib/track", () => ({ track: vi.fn() }));
 vi.mock("next/navigation", () => ({
   // session_id добавлен 08.09.2026: эти тесты про «сервер не подтвердил»,

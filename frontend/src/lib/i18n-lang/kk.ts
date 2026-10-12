@@ -7418,6 +7418,8 @@ const kk: Record<string, string> = {
   "moduleChip.buy": "Сатып алу",
   "moduleChip.requestAccess": "Қолжетімділікті талқылау",
   "moduleChip.requestAccessTitle": "Әзірге бөлек сатылмайды — бізге жазыңыз, қолжетімділікті ұйымдастырамыз",
+  "razrabotka.notice": "AEVION белсенді әзірленуде: техникалық ақаулар болуы мүмкін. Біз оларды түзетеміз, ал ақылы мүмкіндік біздің кінәмізден істемей тұрған уақытты жазылымды ұзарту арқылы өтейміз.",
+  "razrabotka.write": "Бізге жазыңыз:",
 };
 
 export default kk;

@@ -33,7 +33,9 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => "/pricing/checkout/success",
 }));
-vi.mock("@/lib/i18n", () => ({ useI18n: () => ({ t: (k: string) => k }) }));
+// `useI18nOptional` — см. соседний тест: его требует предупреждение
+// «платформа в разработке» на этой же странице (12.10.2026).
+vi.mock("@/lib/i18n", () => ({ useI18n: () => ({ t: (k: string) => k }), useI18nOptional: () => null }));
 vi.mock("@/lib/track", () => ({ track: vi.fn() }));
 
 // eslint-disable-next-line import/first

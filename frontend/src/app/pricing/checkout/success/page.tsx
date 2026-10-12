@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
+import { RazrabotkaPreduprezhdenie } from "@/components/RazrabotkaPreduprezhdenie";
 import { track } from "@/lib/track";
 import { useI18n } from "@/lib/i18n";
 import { apiUrl } from "@/lib/apiBase";
@@ -350,6 +351,13 @@ function SuccessInner() {
           {t("pricing.checkoutSuccess.backAllTiers")}
         </Link>
       </div>
+      {/*
+        Предупреждение «в разработке» повторяется и ПОСЛЕ оплаты — намеренно.
+        До оплаты оно предупреждает, после — напоминает, куда писать, если
+        платная возможность не работает: человек, который уже заплатил, ищет
+        адрес именно здесь, а не возвращается на страницу цен.
+      */}
+      <RazrabotkaPreduprezhdenie отступСверху={0} />
 
       {/* Main card */}
       <div

@@ -7,6 +7,7 @@ import { track } from "@/lib/track";
 import { PRICING_APP, PRICING_TERMS, keepChannel } from "@/lib/products";
 import { channelNow } from "@/lib/channelNow";
 import { useI18nOptional } from "@/lib/i18n";
+import { RazrabotkaPreduprezhdenie } from "./RazrabotkaPreduprezhdenie";
 import {
   PLANET_BASE_MONTHLY,
   TERM_TIERS,
@@ -283,6 +284,13 @@ export default function ModulePricingChip({ moduleId, theme = "light", hideBuy =
             : tr("moduleChip.buy", "Купить")}
         </Link>
       )}
+      {/*
+        🔴 Предупреждение «в разработке» стоит ЗДЕСЬ, у плашки, а не на каждой
+        из сорока страниц модулей по отдельности: копия на странице — это сорок
+        копий, которые разойдутся при первой правке текста. Плашка и есть тот
+        экран «входит в подписку», который основатель назвал 12.10.2026.
+      */}
+      <RazrabotkaPreduprezhdenie вид="строка" отступСверху={8} />
     </span>
   );
 }

@@ -38,9 +38,20 @@ export function адресВозврата(search: string): string | null {
  * каждую — 32 правки в чужих зонах, а без возврата человек после входа
  * застревал на /auth. Явный next всегда главнее.
  */
-export function адресВозвратаИлиОткуда(search: string, referrer: string, origin: string): string | null {
+export function адресВозвратаИлиОткуда(
+  search: string,
+  referrer: string,
+  origin: string,
+  запомненная: string | null = null,
+): string | null {
   const явный = адресВозврата(search);
   if (явный) return явный;
+  // Запомненная страница (components/LastPageMemory.tsx) главнее referrer:
+  // при переходе через <Link> referrer пустой — замер прода 12.10.2026.
+  if (запомненная) {
+    const путь = адресВозврата(`?next=${encodeURIComponent(запомненная)}`);
+    if (путь) return путь;
+  }
   if (!referrer) return null;
   let u: URL;
   try {

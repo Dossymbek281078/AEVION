@@ -12,6 +12,7 @@ import { AppShellRevenueBadge } from "@/components/AppShellRevenueBadge";
 import { AutoTranslate } from "@/components/AutoTranslate";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import RouteAnnouncer from "@/components/RouteAnnouncer";
+import LastPageMemory from "@/components/LastPageMemory";
 import { WebVitals } from "@/components/WebVitals";
 import { InstallPrompt } from "@/components/InstallPrompt";
 import { PaywallModal } from "@/components/PaywallModal";
@@ -73,6 +74,7 @@ export function ClientProviders({ children }: { children: React.ReactNode }) {
           на страницах было ноль.
         */}
         <RouteAnnouncer />
+        <LastPageMemory />
         <ToastProvider>
           <PlanLimitToastBridge />
           <div style={{ flex: 1 }}>{children}</div>

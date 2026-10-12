@@ -42,7 +42,8 @@ describe("адрес возврата после входа", () => {
   it("и вход, и регистрация зовут возврат после успеха", () => {
     const вызовов = СТРАНИЦА.split("вернутьТуда();").length - 1;
     expect(вызовов, "возврат должен стоять в signIn И в register").toBe(2);
-    expect(СТРАНИЦА).toMatch(/адресВозвратаИлиОткуда\(window\.location\.search, document\.referrer, window\.location\.origin\)/);
+    expect(СТРАНИЦА).toMatch(/адресВозвратаИлиОткуда\(window\.location\.search, document\.referrer, window\.location\.origin, запомненная\)/);
+    expect(СТРАНИЦА).toMatch(/sessionStorage\.getItem\(ПОСЛЕДНЯЯ_СТРАНИЦА\)/);
   });
 
   it("QSign отправляет на вход с обратным адресом", () => {
@@ -63,5 +64,12 @@ describe("адрес возврата после входа", () => {
     expect(адресВозвратаИлиОткуда("", "", O)).toBeNull();
     expect(адресВозвратаИлиОткуда("", "https://aevion.app/auth", O)).toBeNull();
     expect(адресВозвратаИлиОткуда("", "не адрес", O)).toBeNull();
+  });
+
+  it("переход через <Link>: referrer пустой, но запомненная страница возвращает (замер прода 12.10)", () => {
+    const O = "https://aevion.app";
+    expect(адресВозвратаИлиОткуда("", "", O, "/z-tide?c=ig")).toBe("/z-tide?c=ig");
+    expect(адресВозвратаИлиОткуда("?next=/qsign", "", O, "/z-tide")).toBe("/qsign");
+    expect(адресВозвратаИлиОткуда("", "", O, "//evil.com")).toBeNull();
   });
 });

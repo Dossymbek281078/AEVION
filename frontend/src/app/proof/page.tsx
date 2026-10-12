@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { PageTracking } from "@/components/PageTracking";
+import { ProofPilotBlock } from "@/components/ProofPilotBlock";
 
 /**
  * Страница для ПОКУПАТЕЛЕЙ ДАННЫХ — продолжение письма, а не витрина.
@@ -275,6 +276,8 @@ node demo-local.mjs                                   # sign 3 files, alter one 
         <p style={{ color: "#475569", fontSize: 15, lineHeight: 1.7, marginBottom: 30 }}>
           That is the only part we make machine-checkable, and the only part we claim.
         </p>
+
+        <ProofPilotBlock />
 
         <div
           style={{

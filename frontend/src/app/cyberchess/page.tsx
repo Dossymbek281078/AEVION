@@ -55,7 +55,7 @@ import PostGameCard from "./PostGameCard";
 import DeepAnalysisPanel from "./DeepAnalysisPanel";
 import { temaZadachiRu, fazaRu, imyaZadachiBezPovtorov } from "./puzzleLabels";
 import { productById, keepChannel } from "@/lib/products";
-import { normalizePuzzle, solverSide, imyaPoResheniyu, goditsyaDlyaRush, hodPoRusski, zadanieNadDoskoy } from "./puzzleNormalize";
+import { normalizePuzzle, solverSide, imyaPoResheniyu, goditsyaDlyaRush, hodPoRusski, zadanieNadDoskoy, matovVResheniyi } from "./puzzleNormalize";
 import WaitlistCapture from "@/components/WaitlistCapture";
 import { channelNow } from "@/lib/channelNow";
 import { tochnostSohranennoy } from "./postGameSummary";
@@ -11877,7 +11877,7 @@ export default function CyberChessPage(){
                   </span>}
                   {/* Фишки без повторов и без того, что уже сказано заголовком: у банка фаза часто равна теме
                       («Эндшпиль · Эндшпиль · Эндшпиль» на проде 23.09), а «Мат в 1» дублировал pzTitle. */}
-                  {[fazaRu(pzCurrent.phase),temaZadachiRu(pzCurrent.theme),pzCurrent.goal==="Mate"&&pzCurrent.mateIn?`Мат в ${pzCurrent.mateIn}`:""]
+                  {[fazaRu(pzCurrent.phase),temaZadachiRu(pzCurrent.theme),matovVResheniyi(pzCurrent)?`Мат в ${matovVResheniyi(pzCurrent)}`:""]
                     .filter((t,i,a)=>t&&a.indexOf(t)===i&&t!==pzTitle.replace(/^[⚪⚫]\s*/,""))
                     .map(t=><span key={t} style={{fontSize:11,padding:"3px 9px",borderRadius:10,background:"#f3f4f6",color:T.dim,fontWeight:700}}>{t}</span>)}
                 </div>
@@ -11909,7 +11909,7 @@ export default function CyberChessPage(){
                   return <div style={{marginBottom:10}}>
                     <div style={{fontSize:15,fontWeight:900,color:"#065f46",padding:"10px 14px",borderRadius:8,background:"linear-gradient(135deg,#ecfdf5,#d1fae5)",border:"1px solid #6ee7b7",display:"flex",alignItems:"center",gap:8,animation:"cc-turn-flash 0.6s ease-out"}}>
                       <span style={{fontSize:20}}>✅</span>
-                      <span>{pzMode==="rush"&&rushStreak>=3?`Серия ${rushStreak}! 🔥`:pzMode==="rush"?"Верно! 🎯":isMate?`Мат в ${pzCurrent.mateIn}! Отлично!`:"Верно! Отличный ход"}</span>
+                      <span>{pzMode==="rush"&&rushStreak>=3?`Серия ${rushStreak}! 🔥`:pzMode==="rush"?"Верно! 🎯":isMate?`Мат в ${matovVResheniyi(pzCurrent) ?? pzCurrent.mateIn}! Отлично!`:"Верно! Отличный ход"}</span>
                       {(pzMode==="timed3"||pzMode==="timed5"||pzMode==="rush"||pzMode==="custom")&&<span style={{marginLeft:"auto",fontSize:12,fontWeight:700,color:"#059669"}}>+3с ⏱</span>}
                     </div>
                     {/* Объяснение тактического мотива — ключевое отличие от простого «верно/неверно» */}

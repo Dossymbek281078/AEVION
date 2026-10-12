@@ -11,6 +11,7 @@ import { diffLines } from "@/lib/lineDiff";
 import { shouldOfferDbHint, shouldOfferDeployHint, shouldOfferManifestHint } from "@/lib/devhubHints";
 import { buildReactPreviewSrcdoc, isClientPreviewStack } from "@/lib/reactPreview";
 import { pickEntryFile, hasRenderableHtml } from "@/lib/devhubEntryFile";
+import { maketRabochegoOkna } from "@/lib/devhubMaket";
 import { indexCapabilities, isCapabilityBlocked, isCapabilityConfirmed, capabilityHint, каналВыкатки, type CapabilityIndex } from "@/lib/devhubCapabilities";
 import { assetSnippet, appendSnippet, type AssetKind } from "@/lib/devhubAssetSnippet";
 import { newFilePathError, renamePathError, normalizeFilePath } from "@/lib/devhubFilePaths";
@@ -1032,6 +1033,17 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [buildDone, setBuildDone] = useState(false);
   const [buildLiveUrl, setBuildLiveUrl] = useState<string | null>(null);
   const [showBuildLog, setShowBuildLog] = useState(false);
+  // Ширина окна — ради раскладки рабочего окна на телефоне (см. devhubMaket.ts).
+  // Начальное значение широкое: на сервере окна нет, а расхождение разметки
+  // при гидратации дороже одного лишнего пересчёта на клиенте.
+  const [shirinaOkna, setShirinaOkna] = useState(1280);
+  useEffect(() => {
+    const pereschitat = () => setShirinaOkna(window.innerWidth);
+    pereschitat();
+    window.addEventListener("resize", pereschitat);
+    return () => window.removeEventListener("resize", pereschitat);
+  }, []);
+  const maket = maketRabochegoOkna(shirinaOkna);
   const buildLogRef = useRef<HTMLDivElement | null>(null);
   const currentDeployIdRef = useRef<string | null>(null);
 
@@ -4038,14 +4050,16 @@ if (/Месячная норма исчерпана|Месячный лимит[
       )}
 
       {/* Main IDE area */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden", height: showBuildLog ? "calc(100vh - 220px)" : "calc(100vh - 60px)" }}>
-        {/* File tree — left sidebar */}
+      <div style={{ flex: 1, display: "flex", flexDirection: maket.другПодДругом ? "column" : "row", overflow: "hidden", height: showBuildLog ? "calc(100vh - 220px)" : "calc(100vh - 60px)" }}>
+        {/* File tree — слева на широком окне, полосой сверху на телефоне:
+            иначе дерево держало 260 px из 390 и человек видел своё приложение
+            в полоске 115 px (замер 12.10.2026 на проде). */}
         <div
           onDragEnter={onFileTreeDragEnter}
           onDragOver={onFileTreeDragOver}
           onDragLeave={onFileTreeDragLeave}
           onDrop={onFileTreeDrop}
-          style={{ width: 260, background: "#fff", borderRight: "1px solid rgba(15,23,42,0.1)", display: "flex", flexDirection: "column", flexShrink: 0, position: "relative" }}>
+          style={{ width: maket.ширинаДерева, height: maket.высотаДерева, background: "#fff", borderRight: maket.границаДереваСнизу ? "none" : "1px solid rgba(15,23,42,0.1)", borderBottom: maket.границаДереваСнизу ? "1px solid rgba(15,23,42,0.1)" : "none", display: "flex", flexDirection: "column", flexShrink: 0, position: "relative" }}>
           {fileTreeDragOver && (
             <div style={{
               position: "absolute", inset: 6, zIndex: 5, pointerEvents: "none",

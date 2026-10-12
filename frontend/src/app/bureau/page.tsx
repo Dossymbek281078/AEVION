@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { ценаТекстом, ценаСПериодом } from "./verifiedPrice";
+import { ценаVerifiedДляВитрины } from "./verifiedPrice";
 import { useI18nOptional } from "@/lib/i18n";
 import { BU_BUSY } from "./busyUi";
 import Link from "next/link";
@@ -647,7 +647,13 @@ function BureauPageInner() {
             ) : (
               <div>
                 <div style={{ fontSize: 15, color: "#312e81", lineHeight: 1.6, marginBottom: 8 }}>
-                  Anonymous certificates are fully cryptographically protected. Upgrade any one of yours to <b>Verified</b> ({ценаСПериодом(dashboard?.pricing?.verifiedTierCents)}) and the bureau will record your declared name alongside the certificate, with the identity check its provider performs.
+                  {/* Абзац на языке читателя (буквы страницы — английские, русский даёт живой перевод,
+                      и этот абзац в него не попадал — письмо Почты 12.10.2026). Цена — только при живом KYC. */}
+                  {buLang === "ru" ? (
+                    <>Анонимные сертификаты полностью защищены криптографически. Любой из ваших можно повысить до <b>Verified</b> ({ценаVerifiedДляВитрины(kycMode, buLang, dashboard?.pricing?.verifiedTierCents)}) — бюро запишет заявленное вами имя рядом с сертификатом вместе с проверкой личности, которую выполняет её поставщик.</>
+                  ) : (
+                    <>Anonymous certificates are fully cryptographically protected. Upgrade any one of yours to <b>Verified</b> ({ценаVerifiedДляВитрины(kycMode, buLang, dashboard?.pricing?.verifiedTierCents)}) and the bureau will record your declared name alongside the certificate, with the identity check its provider performs.</>
+                  )}
                 </div>
               </div>
             )}
@@ -760,7 +766,7 @@ function BureauPageInner() {
               },
               {
                 name: "Verified",
-                price: `${ценаТекстом()} / month`,
+                price: ценаVerifiedДляВитрины(kycMode, buLang, dashboard?.pricing?.verifiedTierCents),
                 // Третья поверхность той же формулировки (28.08). Две другие — карточка бюро и
 // страница объекта QRight — смягчены ранее в этой же ветке; эта осталась
 // утверждать проверку паспорта как совершившийся факт, хотя ГЛУБИНА проверки

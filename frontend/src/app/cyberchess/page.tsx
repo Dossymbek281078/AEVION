@@ -4,6 +4,7 @@ import { лимитПровайдера, когдаВернётся as срок�
 import { главныйВыдуманныйХод, дополнитьХодомДвижка, текстВместоОтвета } from "./проверьХодыОтвета";
 import { denPoMestnomu, vcheraPoMestnomu } from "./denPoMestnomu";
 import { otmetitPervyyHod } from "./pervyyHod";
+import { soobschenieONorme } from "./normaTrenera";
 import { track } from "@/lib/track";
 import { ishodDlyaCPI, resheniePoKontsuPartii } from "./ishodPartii";
 
@@ -12889,6 +12890,14 @@ ${question.trim()}`;
                     signal:ctrl.signal
                   });
                   clearTimeout(tId);
+                  /* 402 — дневная норма тренера исчерпана (спящая переменная нормы на сервере, см. coachNorma).
+                     Отказ показывается отказом: текст сервера и ссылка на тариф, а не ответ движка
+                     из общего catch — иначе человек не узнал бы ни о норме, ни о подписке. */
+                  if(res.status===402){
+                    const telo402=await res.json().catch(()=>null);
+                    sCoachChat([...newMsgs,{role:"assistant",content:soobschenieONorme(telo402,typeof location!=="undefined"?location.origin:""),ts:Date.now()}]);
+                    return;
+                  }
                   if(!res.ok){const e=await res.json().catch(()=>({error:`HTTP ${res.status}`}));throw new Error(e.error||`Server ${res.status}`)}
                   const data=await res.json();
                   const reply=data.content?.filter((c:any)=>c.type==="text"||c.text).map((c:any)=>c.text||"").join("")||"(нет ответа)";

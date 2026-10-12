@@ -31,3 +31,21 @@ export function ценаТекстом(cents: number | null | undefined = ЦЕН
 export function ценаСПериодом(cents: number | null | undefined = ЦЕНА_ПРОВЕРКИ_ЦЕНТЫ): string {
   return `${ценаТекстом(cents)}/month`;
 }
+
+/**
+ * Что витрина /bureau печатает вместо цены Verified, пока проверка личности не живая.
+ *
+ * Решение оркестратора 13.10.2026: до KYC цену $29 не показывать — «появится после
+ * проверки личности». Режим приходит из /api/bureau/health (`kyc`): "live" — цена;
+ * "stub" (заглушка одобряет любого) и null (ручка не ответила) — ожидание, потому что
+ * своя неосведомлённость обязана НЕ обещать. Одна функция на обе поверхности
+ * страницы (абзац и карточка тарифа), чтобы они не разошлись.
+ */
+export function ценаVerifiedДляВитрины(
+  kycMode: "live" | "stub" | null,
+  lang: string,
+  cents?: number | null,
+): string {
+  if (kycMode === "live") return ценаСПериодом(cents);
+  return lang === "ru" ? "цена появится после проверки личности" : "price appears after identity verification";
+}

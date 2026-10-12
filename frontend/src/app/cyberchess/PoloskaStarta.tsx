@@ -55,6 +55,10 @@ export default function PoloskaStarta({ t, onDaily, onIntent, onClose, width, mo
         alignItems: "center",
         gap: 8,
         padding: "10px 12px",
+        // По центру колонки, как и превью доски под ней: на 1463×724 полоска стояла у левого
+        // края колонки (x=134), а превью — по центру (x=567); замер 13.10.2026.
+        marginLeft: "auto",
+        marginRight: "auto",
         marginBottom: 8,
         borderRadius: 12,
         border: `1px solid ${тёмная ? "rgba(165,180,252,0.35)" : "#c7d2fe"}`,

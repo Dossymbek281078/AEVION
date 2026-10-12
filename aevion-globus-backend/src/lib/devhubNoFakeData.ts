@@ -36,9 +36,23 @@ export function ukazanieBezVydumannyhDannyh(год: number): string {
     `city names, phone numbers, email addresses, prices, company names, person names, ` +
     `social media handles, opening hours or legal entities. ` +
     `If the design needs such a value and the user did not provide it, KEEP the section ` +
-    `and put a visible placeholder in square brackets instead, in the same language as ` +
-    `the rest of the page: [your address], [your phone], [your email], [your price], ` +
-    `[your company name], [ваш адрес], [ваш телефон], [ваша почта], [ваша цена]. ` +
+    `and put a visible placeholder in square brackets instead. ` +
+    /*
+     * 🔴 ЯЗЫК ЗАГОТОВКИ — ЯЗЫК ОПИСАНИЯ, и сказано это жёстко не из педантизма.
+     * Прежняя формулировка «in the same language as the rest of the page»
+     * оказалась слабой: замер 12.10.2026 на русской странице «визитка мастера
+     * маникюра» дал «[your price] руб.» — модель прочла её как «страница
+     * русская, но плашки можно английские», и склеила два языка в одной
+     * строке. Поэтому ниже названо прямо: язык берётся у ОПИСАНИЯ человека,
+     * обе формы показаны примерами, а смешение запрещено отдельной фразой с
+     * тем самым неудачным примером.
+     */
+    `The placeholder MUST be written in the SAME LANGUAGE the user wrote their request in — ` +
+    `not in English by default. If the request is in Russian, every placeholder is Russian: ` +
+    `[ваш адрес], [ваш телефон], [ваша почта], [ваша цена], [название вашей компании]. ` +
+    `If the request is in English: [your address], [your phone], [your email], [your price], ` +
+    `[your company name]. NEVER mix languages inside one line — "[your price] руб." is wrong, ` +
+    `"[ваша цена] руб." is right. ` +
     `Do not delete the contacts or pricing block just because the data is unknown — ` +
     `a placeholder the user can fill in is useful, an invented address is harmful. ` +
     `The current year is ${год}: use ${год} for copyright lines and dates, or omit the ` +

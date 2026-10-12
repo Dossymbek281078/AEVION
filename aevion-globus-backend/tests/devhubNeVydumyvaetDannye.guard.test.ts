@@ -77,6 +77,24 @@ describe("указание «не выдумывай данные» доезжа
     expect(у.toLowerCase()).toContain("keep the section");
   });
 
+  it("🔴 заготовка — на языке ОПИСАНИЯ человека, и смешение запрещено прямо", () => {
+    /*
+     * Повод 12.10.2026, замер на проде: на русской странице «визитка мастера
+     * маникюра» модель выдала «[your price] руб.» — склеила два языка в одной
+     * строке. Прежняя формулировка «in the same language as the rest of the
+     * page» оказалась слабой: модель прочла её как «страница русская, но
+     * плашки можно английские». Поэтому язык назван от ОПИСАНИЯ, показаны обе
+     * формы и запрещено смешение — с тем самым неудачным примером.
+     */
+    const у = ukazanieBezVydumannyhDannyh(2026);
+    expect(у).toMatch(/SAME LANGUAGE the user wrote/i);
+    expect(у, "нет примера русских заготовок").toContain("[ваша цена]");
+    expect(у, "нет примера английских заготовок").toContain("[your price]");
+    expect(у.toLowerCase(), "смешение языков не запрещено прямо").toContain("never mix languages");
+    // И ровно та склейка, что получилась на проде, названа как неверная.
+    expect(у).toContain('"[your price] руб." is wrong');
+  });
+
   it("🔴 год приходит ЧИСЛОМ: «текущий год» модель домыслит, так и появился © 2023", () => {
     const у = ukazanieBezVydumannyhDannyh(2026);
     expect(у).toContain("The current year is 2026");

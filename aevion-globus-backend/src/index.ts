@@ -1515,6 +1515,17 @@ app.use(makeHttpErrorHandler());
 initSentry();
 
 const httpServer = app.listen(PORT, () => {
+  /*
+   * 🔴 Ключ подписи бюро проверяется ПРИ СТАРТЕ, а не при первой нотаризации
+   * (12.10.2026). Негодный PEM раньше дал бы 500 первому покупателю; теперь
+   * он виден в журнале сразу после выкатки, а /health называет режим «сломан».
+   */
+  try {
+    const { sostoyanieKlyucha } = require("./lib/bureauNotaryKey") as typeof import("./lib/bureauNotaryKey");
+    const к = sostoyanieKlyucha();
+    if (к.режим === "сломан") console.error("[bureau] BUREAU_NOTARY_SIGNING_KEY задан, но НЕГОДЕН:", к.pochemu);
+    else console.log("[bureau] подпись нотариуса:", к.режим, к.idKlyucha ? "keyId=" + к.idKlyucha : "");
+  } catch (e) { console.error("[bureau] не смог проверить ключ подписи:", e instanceof Error ? e.message : e); }
   console.log(`AEVION Globus Backend запущен на порту ${PORT}`);
   // QSign v2 — DB-backed webhook delivery queue. Survives restarts.
   startWebhookWorker();

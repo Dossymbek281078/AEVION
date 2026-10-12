@@ -34,6 +34,7 @@ import { makeServiceCapture } from "../lib/sentry/platform";
 import { emitEcosystemEvent } from "../lib/ecosystemEvents";
 import { safeErrorText } from "../lib/safeError";
 import { anchorSummary } from "../lib/opentimestamps/anchorSummary";
+import { sostoyanieKlyucha, podpisat, proverit, АЛГОРИТМ as АЛГОРИТМ_ПОДПИСИ } from "../lib/bureauNotaryKey";
 import { queryDate } from "../lib/queryDate";
 const captureBureauError = makeServiceCapture("bureau");
 
@@ -179,11 +180,72 @@ export function paymentProviderMode(
  */
 export function notarySignatureMode(
   env: NodeJS.ProcessEnv = process.env,
-): "ed25519" | "demo" {
-  // Условие ровно то же, что в signNotarization: pem после trim непустой.
-  // Разойдутся — состояние будет описывать не тот код, что подписывает.
-  return env.BUREAU_NOTARY_SIGNING_KEY?.trim() ? "ed25519" : "demo";
+): "ed25519" | "demo" | "сломан" {
+  /*
+   * 12.10.2026: три исхода, а не два. Переменная задана, но ключ негодный —
+   * это «сломан», и так и отвечаем в /health: тихо свести к demo значило бы
+   * показать работающую настройку там, где человек ключ задать ХОТЕЛ, а мы
+   * подписываем демонстрационным HMAC. Источник один — lib/bureauNotaryKey.
+   */
+  if (env !== process.env) {
+    return env.BUREAU_NOTARY_SIGNING_KEY?.trim() ? "ed25519" : "demo";
+  }
+  return sostoyanieKlyucha().режим;
 }
+
+/**
+ * GET /api/bureau/notary-key — ОТКРЫТЫЙ ключ платформы, которым подписаны
+ * нотаризации. Без него слово «ed25519» в сертификате ничего не доказывает:
+ * проверить подпись нельзя (замер 12.10.2026: переменная ключа встречалась
+ * в 4 местах, и ни одно не отдавало открытый ключ). Демо-режим говорит об
+ * этом прямо. Ничего секретного здесь нет — открытый ключ и есть то, что
+ * публикуют.
+ */
+bureauRouter.get("/notary-key", (_req, res) => {
+  const с = sostoyanieKlyucha();
+  if (с.режим !== "ed25519") {
+    return res.json({ mode: с.режим, algorithm: null, keyId: null, publicKeyPem: null, reason: с.pochemu });
+  }
+  res.json({ mode: "ed25519", algorithm: АЛГОРИТМ_ПОДПИСИ, keyId: с.idKlyucha, publicKeyPem: с.otkrytyKlyuchPem });
+});
+
+/**
+ * GET /api/bureau/cert/:certId/notarization/verify — сходится ли подпись
+ * нотаризации с опубликованным открытым ключом. Это то, что сделает третья
+ * сторона; мы делаем то же самое, чтобы наше «подписано» было проверяемо
+ * нами же. Демо-подпись честно не проходит: HMAC проверяется знанием секрета.
+ */
+bureauRouter.get("/cert/:certId/notarization/verify", async (req, res) => {
+  try {
+    const certId = String(req.params.certId || "");
+    const cert = await pool.query(
+      `SELECT "notarySignatureId","contentHash" FROM "IPCertificate" WHERE "id" = $1`,
+      [certId],
+    );
+    if (cert.rows.length === 0) return res.status(404).json({ ok: false, reason: "cert-not-found" });
+    const { notarySignatureId, contentHash } = cert.rows[0] as { notarySignatureId: string | null; contentHash: string };
+    if (!notarySignatureId) return res.status(404).json({ ok: false, reason: "not-notarized" });
+    const sig = await pool.query(
+      `SELECT "signature","signatureAlgorithm","keyId","status" FROM "BureauNotarySignature" WHERE "id" = $1`,
+      [notarySignatureId],
+    );
+    if (sig.rows.length === 0) return res.status(404).json({ ok: false, reason: "signature-not-found" });
+    const row = sig.rows[0] as { signature: string; signatureAlgorithm: string; keyId: string | null; status: string };
+    if (row.status !== "signed") return res.json({ ok: false, reason: "not-signed", status: row.status });
+    const с = sostoyanieKlyucha();
+    if (row.signatureAlgorithm !== АЛГОРИТМ_ПОДПИСИ) {
+      return res.json({ ok: false, reason: "demo-signature", algorithm: row.signatureAlgorithm });
+    }
+    if (с.режим !== "ed25519" || !с.idKlyucha) return res.json({ ok: false, reason: "no-public-key", mode: с.режим });
+    if (row.keyId && row.keyId !== с.idKlyucha) {
+      return res.json({ ok: false, reason: "key-mismatch", signedWith: row.keyId, current: с.idKlyucha });
+    }
+    const итог = proverit({ payload: `${certId}:${contentHash}`, signature: row.signature, algorithm: row.signatureAlgorithm, otkrytyKlyuchPem: с.otkrytyKlyuchPem });
+    res.json({ ok: итог.ok, reason: итог.pochemu, keyId: с.idKlyucha, algorithm: АЛГОРИТМ_ПОДПИСИ });
+  } catch (e) {
+    res.status(500).json({ ok: false, reason: "verify-failed" });
+  }
+});
 
 bureauRouter.get("/health", (_req, res) => {
   res.json({
@@ -2925,6 +2987,8 @@ bureauRouter.delete("/org/:orgId/invites/:inviteId", async (req, res) => {
 async function ensureNotarizeColumns(): Promise<void> {
   await pool.query(`ALTER TABLE "BureauNotarySignature" ADD COLUMN IF NOT EXISTS "status" TEXT NOT NULL DEFAULT 'pending';`);
   await pool.query(`ALTER TABLE "BureauNotarySignature" ADD COLUMN IF NOT EXISTS "requestedByUserId" TEXT;`);
+  // Опознаватель ключа подписи (12.10.2026): проверка должна пережить смену ключа.
+  await pool.query(`ALTER TABLE "BureauNotarySignature" ADD COLUMN IF NOT EXISTS "keyId" TEXT;`);
   await pool.query(
     `ALTER TABLE "BureauNotarySignature" ADD COLUMN IF NOT EXISTS "signatureAlgorithm" TEXT NOT NULL DEFAULT 'demo-hmac-sha256';`,
   );
@@ -2955,20 +3019,20 @@ async function ensureNotarizeColumns(): Promise<void> {
  * Ключ приходит из BUREAU_NOTARY_SIGNING_KEY (PKCS#8 PEM). Его заводит человек;
  * пока переменной нет, режим честно остаётся демонстрационным.
  */
-export type SignatureResult = { signature: string; algorithm: string };
+export type SignatureResult = { signature: string; algorithm: string; keyId: string | null };
 
 export function signNotarization(
   payload: string,
   notaryPublicKey: string | null,
 ): SignatureResult {
-  const pem = process.env.BUREAU_NOTARY_SIGNING_KEY?.trim();
-  if (pem) {
-    // Ed25519 подписывает сообщение целиком, без предварительного хеша, —
-    // поэтому алгоритм у crypto.sign() null, и это не упущение.
-    const signature = crypto
-      .sign(null, Buffer.from(payload, "utf8"), pem)
-      .toString("base64");
-    return { signature, algorithm: "ed25519" };
+  /*
+   * 12.10.2026: подпись и ПРОВЕРКА живут в одном модуле (lib/bureauNotaryKey),
+   * чтобы ключ нельзя было включить без проверяльщика. Отсюда же — keyId:
+   * без него проверка не переживёт смену ключа.
+   */
+  const состояние = sostoyanieKlyucha();
+  if (состояние.режим === "ed25519") {
+    return podpisat(payload);
   }
   // Демонстрационный режим. Оставлен, чтобы поток нотаризации работал до
   // появления ключа, но назван своим именем в возвращаемом значении.
@@ -2976,7 +3040,7 @@ export function signNotarization(
     .createHmac("sha256", notaryPublicKey || "demo-key")
     .update(payload)
     .digest("hex");
-  return { signature, algorithm: "demo-hmac-sha256" };
+  return { signature, algorithm: "demo-hmac-sha256", keyId: null };
 }
 
 /**
@@ -3127,9 +3191,9 @@ bureauRouter.post("/admin/cert/:certId/notarize/sign", async (req, res) => {
       await client.query(
         `UPDATE "BureauNotarySignature"
             SET "signature" = $1, "status" = 'signed', "signedAt" = NOW(),
-                "notaryRegistryRef" = $2, "signatureAlgorithm" = $4
+                "notaryRegistryRef" = $2, "signatureAlgorithm" = $4, "keyId" = $5
           WHERE "id" = $3`,
-        [signed.signature, registryRef, notarySignatureId, signed.algorithm],
+        [signed.signature, registryRef, notarySignatureId, signed.algorithm, signed.keyId],
       );
       await client.query(
         `UPDATE "IPCertificate"

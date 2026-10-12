@@ -2,6 +2,7 @@
 import { стримГоден } from "./ответНеГоден";
 import { лимитПровайдера, когдаВернётся as срокВозврата, тренерОтветил, пометкаОВыключенномРазборе, пометкаЗапаснойМодели, общаяОчередьАнонимов } from "./coachOutage";
 import { главныйВыдуманныйХод, дополнитьХодомДвижка, текстВместоОтвета } from "./проверьХодыОтвета";
+import { denPoMestnomu, vcheraPoMestnomu } from "./denPoMestnomu";
 import { otmetitPervyyHod } from "./pervyyHod";
 import { track } from "@/lib/track";
 import { ishodDlyaCPI, resheniePoKontsuPartii } from "./ishodPartii";
@@ -555,7 +556,7 @@ function buildPGN(
   meta:{white?:string;black?:string;result?:string;date?:string;event?:string}={},
   annotations:Record<number,string>={}
 ):string{
-  const d=meta.date||new Date().toISOString().slice(0,10).replace(/-/g,".");
+  const d=meta.date||denPoMestnomu().replace(/-/g,".");
   const headers=[
     `[Event "${meta.event||"AEVION CyberChess"}"]`,
     `[Site "aevion.app/cyberchess"]`,
@@ -2917,7 +2918,7 @@ export default function CyberChessPage(){
   //   - we have a daily variant info today
   //   - PiP is currently closed
   //   - user hasn't dismissed the suggestion today
-  const todayIso=new Date().toISOString().slice(0,10);
+  const todayIso=denPoMestnomu();
   const pipDismissKey=`aevion_cyberchess_pip_suggest_dismissed_${todayIso}`;
   useEffect(()=>{
     if(typeof window==="undefined")return;
@@ -3279,7 +3280,7 @@ export default function CyberChessPage(){
   useEffect(()=>{
     try{
       const raw=localStorage.getItem("cc_login_streak_v1");
-      const today=new Date().toISOString().slice(0,10);
+      const today=denPoMestnomu();
       const parsed=raw?JSON.parse(raw) as {streak:number;lastDay:string}:null;
       if(!parsed){
         localStorage.setItem("cc_login_streak_v1",JSON.stringify({streak:1,lastDay:today}));
@@ -3287,7 +3288,7 @@ export default function CyberChessPage(){
       }
       if(parsed.lastDay===today){sLoginStreak(parsed.streak);return;}
       // Yesterday? → streak+1. Older → reset to 1.
-      const yesterday=new Date(Date.now()-86400000).toISOString().slice(0,10);
+      const yesterday=vcheraPoMestnomu();
       const newStreak=parsed.lastDay===yesterday?parsed.streak+1:1;
       localStorage.setItem("cc_login_streak_v1",JSON.stringify({streak:newStreak,lastDay:today}));
       sLoginStreak(newStreak);
@@ -7068,7 +7069,7 @@ export default function CyberChessPage(){
     for(let i=0;i<results.length;i++){
       const isPlayerMove=playerIsWhite?(i%2===0):(i%2===1);
       if(isPlayerMove&&results[i].quality==="blunder"&&fenHist[i]){
-        blunders.push({fen:fenHist[i],san:hist[i]||"",date:new Date().toISOString().slice(0,10),opening:currentOpening?.name,moveNum:Math.floor(i/2)+1});
+        blunders.push({fen:fenHist[i],san:hist[i]||"",date:denPoMestnomu(),opening:currentOpening?.name,moveNum:Math.floor(i/2)+1});
       }
     }
     if(blunders.length>0){
@@ -10449,7 +10450,7 @@ export default function CyberChessPage(){
                   const isWin=!!(over?.includes("You win"));const isDraw=!!(over?.includes("Draw")||over?.includes("draw"));
                   const svg=generateShareSVG({fen:game.fen(),result:over||"",isWin,isDraw,white:{name:white,rating:rat},black:{name:black,rating:lv.elo},opening:currentOpening?.name,moves:hist.length,flip,accuracy:undefined,ratingDelta:isWin?Math.max(1,Math.min(50,Math.round((lv.elo-rat)*0.1+10))):undefined});
                   const blob=new Blob([svg],{type:"image/svg+xml"});
-                  downloadFile(blob,`aevion-chess-${new Date().toISOString().slice(0,10)}.svg`);
+                  downloadFile(blob,`aevion-chess-${denPoMestnomu()}.svg`);
                   showToast("SVG скачан — открой в браузере чтобы поделиться","success");
                 }} style={{background:"linear-gradient(135deg,#fef3c7,#fde68a)",color:"#78350f",borderColor:"#fcd34d"}}>📤 Картинкой</Btn>
               </>}
@@ -11553,7 +11554,7 @@ export default function CyberChessPage(){
               </span>
               {hist.length>0&&<div style={{display:"flex",gap:3,alignItems:"center"}}>
                 <button onClick={()=>{const pgn=buildPGN(hist,{white:pCol==="w"?"Вы":lv.ru,black:pCol==="b"?"Вы":lv.ru,result:over||"*",event:currentOpening?.name},moveAnnotations);navigator.clipboard.writeText(pgn).then(()=>showToast("PGN скопирован","success")).catch(()=>showToast("Ошибка копирования","error"));}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer",fontWeight:700,color:T.dim}} title="Скопировать PGN в буфер">📋</button>
-                <button onClick={()=>{const pgn=buildPGN(hist,{white:pCol==="w"?"Вы":lv.ru,black:pCol==="b"?"Вы":lv.ru,result:over||"*",event:currentOpening?.name},moveAnnotations);const b=new Blob([pgn],{type:"text/plain"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`cyberchess_${new Date().toISOString().slice(0,10)}.pgn`;a.click();URL.revokeObjectURL(a.href);showToast("PGN скачан","success");}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer",fontWeight:700,color:T.dim}} title="Скачать PGN">⬇</button>
+                <button onClick={()=>{const pgn=buildPGN(hist,{white:pCol==="w"?"Вы":lv.ru,black:pCol==="b"?"Вы":lv.ru,result:over||"*",event:currentOpening?.name},moveAnnotations);const b=new Blob([pgn],{type:"text/plain"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`cyberchess_${denPoMestnomu()}.pgn`;a.click();URL.revokeObjectURL(a.href);showToast("PGN скачан","success");}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer",fontWeight:700,color:T.dim}} title="Скачать PGN">⬇</button>
                 <span style={{width:1,height:14,background:T.border,flexShrink:0}}/>
                 <button onClick={()=>{sReplaying(false);const g=new Chess(fenHist[0]);setGame(g);sBk(k=>k+1);sBrowseIdx(0);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="В начало">⏮</button>
                 <button onClick={()=>{sReplaying(false);const ni=Math.max(0,(browseIdx<0?hist.length:browseIdx)-1);const g=new Chess(fenHist[ni]);setGame(g);sBk(k=>k+1);sBrowseIdx(ni);sLm(null);sSel(null);sVm(new Set());}} style={{padding:"3px 7px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",fontSize:11,cursor:"pointer"}} title="Назад">◀</button>
@@ -13606,12 +13607,12 @@ ${question.trim()}`;
       // Bulk PGN export — concatenate all filtered games as a multi-PGN .pgn file
       const exportPGN=()=>{
         if(filtered.length===0){showToast("Нет партий для экспорта","error");return}
-        const today=new Date().toISOString().slice(0,10);
+        const today=denPoMestnomu();
         const blocks=filtered.map((g,i)=>{
           const white=g.playerColor==="w"?"Вы":g.aiLevel;
           const black=g.playerColor==="b"?"Вы":g.aiLevel;
           const result=isWinG(g)?(g.playerColor==="w"?"1-0":"0-1"):isLossG(g)?(g.playerColor==="w"?"0-1":"1-0"):"1/2-1/2";
-          const date=new Date(g.date).toISOString().slice(0,10).replace(/-/g,".");
+          const date=denPoMestnomu(new Date(g.date)).replace(/-/g,".");
           return buildPGN(g.moves,{white,black,result,date,event:`AEVION CyberChess · ${g.category} · ${g.opening||""}`});
         });
         const blob=new Blob([blocks.join("\n\n")],{type:"application/x-chess-pgn"});

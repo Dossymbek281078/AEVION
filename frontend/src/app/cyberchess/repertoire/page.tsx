@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { denPoMestnomu } from "../denPoMestnomu";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import OpeningRepertoire from "../OpeningRepertoire";
 import {
@@ -199,7 +200,7 @@ function ToolBar({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    const date = new Date().toISOString().slice(0, 10);
+    const date = denPoMestnomu();
     a.download = `cyberchess-repertoire-${date}.json`;
     a.click();
     URL.revokeObjectURL(url);

@@ -1,5 +1,6 @@
 "use client";
 import { useState, useMemo, useEffect } from "react";
+import { denPoMestnomu } from "./denPoMestnomu";
 import Link from "next/link";
 import { COACH_KNOWLEDGE, type KnowledgeCategory, type KnowledgeEntry, type Difficulty } from "./coachKnowledge";
 import { ldCPIState, type CPIState, type CPIBreakdown } from "./cpi";
@@ -148,7 +149,7 @@ export default function CoachKnowledge({ visible, onClose, onLoadPosition }: Pro
   const [dq, sDq] = useState<DQState | null>(() => {
     if (typeof window === "undefined") return null;
     try {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = denPoMestnomu();
       const saved = JSON.parse(localStorage.getItem(DQ_KEY) || "null") as DQState | null;
       if (saved?.date === today) return saved;
       const cands = COACH_KNOWLEDGE.flatMap(c => c.entries.filter(e => !!e.bestMove).map(e => `${c.id}/${e.id}`));

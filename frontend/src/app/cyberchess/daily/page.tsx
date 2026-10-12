@@ -2,6 +2,7 @@
 // CyberChess Daily Puzzle — real chess.js + 365 pool + leaderboard + streak
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { denPoMestnomu } from "../denPoMestnomu";
 import { themeRu } from './themes';
 import { tournamentUserId, tournamentDisplayName } from '../tournaments/playerIdentity';
 import { Chess, Square } from 'chess.js';
@@ -138,7 +139,7 @@ function uciToCoord(uci: string): [number, number] {
 }
 
 function todayKey(): string {
-  return new Date().toISOString().slice(0, 10);
+  return denPoMestnomu();
 }
 
 function dayIndex(): number {

@@ -36,6 +36,7 @@ import {
   __resetDevHubStore,
   __clearDeferredDevHubWork,
   __setReconcileRateMsForTest,
+  __setReconcileDeployGraceMsForTest,
 } from "../src/routes/devhub";
 
 const originalFetch = globalThis.fetch;
@@ -92,9 +93,10 @@ describe("POST /api/devhub/projects/:id/recheck — a dead 'live' address is dow
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  test("NXDOMAIN downgrades to error on the first check (the measured prod bug)", async () => {
+  test("NXDOMAIN downgrades to error once past the propagation window (the measured prod bug)", async () => {
     const app = makeApp();
     const id = await seedLiveProject(app);
+    __setReconcileDeployGraceMsForTest(0); // выкатка уже «старая» — окно распространения прошло
     fetchMock.mockRejectedValue(nxdomain());
     const r = await request(app).post(`/api/devhub/projects/${id}/recheck`).send({});
     expect(r.body.status).toBe("error");
@@ -105,13 +107,44 @@ describe("POST /api/devhub/projects/:id/recheck — a dead 'live' address is dow
     expect(list.body.projects.find((p: any) => p.id === id).status).toBe("error");
   });
 
-  test("a 404 downgrades to error on the first check", async () => {
+  test("a 404 downgrades to error once past the propagation window", async () => {
     const app = makeApp();
     const id = await seedLiveProject(app);
+    __setReconcileDeployGraceMsForTest(0);
     fetchMock.mockResolvedValue({ ok: false, status: 404 });
     const r = await request(app).post(`/api/devhub/projects/${id}/recheck`).send({});
     expect(r.body.status).toBe("error");
     expect(r.body.verdict).toBe("gone404");
+  });
+
+  test("NXDOMAIN on a YOUNG deployment does NOT downgrade — the *.pages.dev is still propagating (default 30-min grace)", async () => {
+    // Регрессия 12.10.2026: понижение на NXDOMAIN сразу ложно рубило только что
+    // опубликованный живой адрес, который ещё расходится по краю CF. Проект,
+    // засеянный только что, МОЛОДОЙ — при дефолтном окне NXDOMAIN не понижает.
+    const app = makeApp();
+    const id = await seedLiveProject(app);
+    // окно НЕ трогаем: __resetDevHubStore вернул дефолт 30 мин
+    fetchMock.mockRejectedValue(nxdomain());
+    const r = await request(app).post(`/api/devhub/projects/${id}/recheck`).send({});
+    expect(r.body.status).toBe("live");       // живой: распространяется, а не умер
+    expect(r.body.verdict).toBe("nxdomain");
+    expect(r.body.serves).toBe(false);
+    const list = await request(app).get("/api/devhub/projects");
+    expect(list.body.projects.find((p: any) => p.id === id).status).toBe("live");
+  });
+
+  test("a young NXDOMAIN does not even arm the ambiguous counter: a later real death still needs the window to pass", async () => {
+    // В грейсе NXDOMAIN не копит счётчик — иначе «распространение» тихо
+    // превратилось бы в понижение. После снятия окна одиночный NXDOMAIN рубит.
+    const app = makeApp();
+    const id = await seedLiveProject(app);
+    fetchMock.mockRejectedValue(nxdomain());
+    const young = await request(app).post(`/api/devhub/projects/${id}/recheck`).send({});
+    expect(young.body.status).toBe("live");
+    __setReconcileDeployGraceMsForTest(0);     // окно прошло
+    const aged = await request(app).post(`/api/devhub/projects/${id}/recheck`).send({});
+    expect(aged.body.status).toBe("error");
+    expect(aged.body.verdict).toBe("nxdomain");
   });
 
   test("a SINGLE timeout does NOT downgrade — it may be our network (status stays live)", async () => {

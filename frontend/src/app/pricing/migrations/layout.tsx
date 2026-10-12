@@ -3,7 +3,9 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Миграция на AEVION — гайды с DocuSign, OpenAI, Stripe, Patently",
   description:
-    "Step-by-step гайды миграции на AEVION с популярных альтернатив. Time-to-migrate 5-30 дней, экономия 42-74%, zero downtime. Customer Success помогает бесплатно.",
+    // 🔴 12.10.2026: «экономия 42-74%» убрана — расчёта под числом нет, а
+    // сравнение идёт с ценами чужих продуктов. Остальное — проверяемое.
+    "Пошаговые гайды перехода на AEVION с DocuSign, OpenAI, Stripe и Patently: что переносится, в каком порядке и без простоя. Сколько сэкономите — посчитаем по вашим объёмам.",
   openGraph: {
     title: "AEVION Migration Guides",
     description: "DocuSign → QSign · OpenAI → QCoreAI · Stripe → QPayNet · Patently → IP Bureau",

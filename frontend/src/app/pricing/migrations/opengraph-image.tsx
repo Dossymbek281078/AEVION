@@ -96,10 +96,17 @@ export default async function Image() {
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ display: "flex", gap: 20 }}>
-            <Pair from="DocuSign" to="QSign" delta="−73%" />
-            <Pair from="OpenAI" to="QCoreAI" delta="−45%" />
-            <Pair from="Stripe" to="QPayNet" delta="−42% latency" />
-            <Pair from="Patently" to="IP Bureau" delta="−74%" />
+            {/*
+              🔴 12.10.2026: проценты экономии убраны. Расчёта под ними в коде
+              нет ни строки, источник не назван, а сравнивают они с ценами
+              ЧУЖИХ продуктов — такое утверждение должно опираться на цифры,
+              которые человек может проверить. Направление миграции остаётся:
+              оно правда и ничего не обещает.
+            */}
+            <Pair from="DocuSign" to="QSign" delta="" />
+            <Pair from="OpenAI" to="QCoreAI" delta="" />
+            <Pair from="Stripe" to="QPayNet" delta="" />
+            <Pair from="Patently" to="IP Bureau" delta="" />
           </div>
           <div style={{ fontSize: 16, color: "#64748b" }}>aevion.app/pricing/migrations</div>
         </div>

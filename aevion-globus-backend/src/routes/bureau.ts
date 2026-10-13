@@ -3338,3 +3338,80 @@ bureauRouter.get("/cert-for-qright/:qrightObjectId", bureauEmbedRateLimit, async
     res.status(500).json({ error: "lookup_failed" });
   }
 });
+
+/**
+ * POST /api/bureau/admin/renotarize[?dry=1] — пере-нотаризация живым ключом.
+ *
+ * Решение оркестратора 13.10.2026: записи, подписанные демо-алгоритмом ДО появления
+ * BUREAU_NOTARY_SIGNING_KEY, остаются ИСТОРИЕЙ (их не трогаем); для каждой создаётся
+ * новая запись Ed25519 с тем же payload, что у живой подписи (`certId:contentHash`),
+ * и сертификат указывает на новую — verify по любому живому id отдаёт ed25519.
+ * dry=1 — только знаменатель, без записи. Ключ спит — ничего не пишем, говорим это.
+ */
+bureauRouter.post("/admin/renotarize", async (req, res) => {
+  const a = isBureauAdmin(req);
+  if (!a.ok) return res.status(403).json({ error: "admin_required", reason: a.reason });
+  try {
+    await ensureBureauTables();
+    await ensureNotarizeColumns();
+    const dry = String(req.query.dry ?? "") === "1";
+    const режим = sostoyanieKlyucha().режим;
+    const кандидаты = await pool.query(
+      `SELECT s."id", s."notaryId", s."certId", s."signedHash", s."notaryRegistryRef", c."contentHash"
+         FROM "BureauNotarySignature" s
+         JOIN "IPCertificate" c ON c."notarySignatureId" = s."id"
+        WHERE s."status" = 'signed' AND s."signatureAlgorithm" <> 'ed25519'
+        ORDER BY s."signedAt" ASC NULLS LAST`,
+    );
+    const строки = кандидаты.rows as Array<{ id: string; notaryId: string; certId: string; signedHash: string; notaryRegistryRef: string | null; contentHash: string }>;
+    const всего = строки.length;
+    if (dry || режим !== "ed25519") {
+      return res.json({
+        ok: режим === "ed25519",
+        dry,
+        режимКлюча: режим,
+        всего,
+        переподписано: 0,
+        сертификаты: строки.map((r) => r.certId),
+        note: режим === "ed25519" ? "пробный прогон: ничего не записано" : "ключ подписи не живой — пере-нотаризация не выполняется",
+      });
+    }
+    const готово: Array<{ certId: string; старая: string; новая: string }> = [];
+    for (const r of строки) {
+      const signed = podpisat(`${r.certId}:${r.contentHash}`);
+      const newId = "nsig-" + crypto.randomBytes(8).toString("hex");
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(
+          `INSERT INTO "BureauNotarySignature"
+             ("id","notaryId","certId","signedHash","signature","status","signedAt","notaryRegistryRef","signatureAlgorithm","keyId")
+           VALUES ($1,$2,$3,$4,$5,'signed',NOW(),$6,$7,$8)`,
+          [newId, r.notaryId, r.certId, r.signedHash, signed.signature, r.notaryRegistryRef, signed.algorithm, signed.keyId],
+        );
+        // Старая запись не меняется: она — история; меняется только указатель сертификата.
+        await client.query(
+          `UPDATE "IPCertificate" SET "notarySignatureId" = $1 WHERE "id" = $2 AND "notarySignatureId" = $3`,
+          [newId, r.certId, r.id],
+        );
+        await client.query("COMMIT");
+      } catch (txErr) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw txErr;
+      } finally {
+        client.release();
+      }
+      await logBureauAudit({
+        action: "admin.notarize.resign",
+        certId: r.certId,
+        verificationId: newId,
+        actor: a.email,
+        payload: { старая: r.id, keyId: signed.keyId },
+      });
+      готово.push({ certId: r.certId, старая: r.id, новая: newId });
+    }
+    res.json({ ok: true, dry: false, режимКлюча: режим, всего, переподписано: готово.length, сертификаты: готово });
+  } catch (err: any) {
+    res.status(500).json({ error: safeErrorText(err, "internal error", "bureau") });
+  }
+});

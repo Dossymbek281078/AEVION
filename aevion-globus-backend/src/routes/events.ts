@@ -4792,7 +4792,26 @@ eventsRouter.get("/recent", (req, res) => {
   }
 
   const lines = content.split("\n").filter((l) => l.trim().length > 0);
-  const tail = lines.slice(-limit).reverse();
+  /*
+   * ?since=<ISO | epoch ms> — события не старше момента, из ХВОСТА журнала (он хронологичен).
+   * Повод 13.10.2026: разбор читателей писем (кто из 9 «живых» /proof человек) упирался в
+   * limit≤1000 — хвост начинался с 03:32Z, а визиты были раньше. Граница включительная:
+   * событие ровно в since входит. limit по-прежнему ограничивает ответ сверху.
+   */
+  const sinceRaw = typeof req.query.since === "string" ? req.query.since.trim() : "";
+  const sinceMs = sinceRaw ? (/^\d{10,}$/.test(sinceRaw) ? Number(sinceRaw) : Date.parse(sinceRaw)) : Number.NaN;
+  let pool = lines;
+  if (Number.isFinite(sinceMs)) {
+    let от = lines.length;
+    for (let i = lines.length - 1; i >= 0; i--) {
+      let t = Number.NaN;
+      try { t = Date.parse((JSON.parse(lines[i]) as { ts?: string }).ts ?? ""); } catch { /* битая строка — считаем старой */ }
+      if (!(t >= sinceMs)) break;
+      от = i;
+    }
+    pool = lines.slice(от);
+  }
+  const tail = pool.slice(-limit).reverse();
   const items: AnalyticsEvent[] = [];
   for (const line of tail) {
     try {
@@ -4801,7 +4820,7 @@ eventsRouter.get("/recent", (req, res) => {
       // skip
     }
   }
-  res.json({ items, total: lines.length });
+  res.json({ items, total: lines.length, since: Number.isFinite(sinceMs) ? new Date(sinceMs).toISOString() : null, matched: pool.length });
 });
 
 /**

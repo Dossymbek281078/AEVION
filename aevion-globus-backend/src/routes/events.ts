@@ -4811,6 +4811,23 @@ eventsRouter.get("/recent", (req, res) => {
     }
     pool = lines.slice(от);
   }
+  /*
+   * ?until=<ISO | epoch ms> — верхняя граница окна, включительно. Повод 13.10.2026: since один
+   * отдаёт НОВЕЙШУЮ тысячу после момента (limit≤1000), и события 10–12.10 (ai25/ai38/ai4)
+   * были недостижимы при matched 3293. since+until режут окно, которое в предел помещается.
+   */
+  const untilRaw = typeof req.query.until === "string" ? req.query.until.trim() : "";
+  const untilMs = untilRaw ? (/^[0-9]{10,}$/.test(untilRaw) ? Number(untilRaw) : Date.parse(untilRaw)) : Number.NaN;
+  if (Number.isFinite(untilMs)) {
+    let до = pool.length;
+    for (let i = pool.length - 1; i >= 0; i--) {
+      let t = Number.NaN;
+      try { t = Date.parse((JSON.parse(pool[i]) as { ts?: string }).ts ?? ""); } catch { /* битая строка — считаем старой */ }
+      if (!(t > untilMs)) break;
+      до = i;
+    }
+    pool = pool.slice(0, до);
+  }
   const tail = pool.slice(-limit).reverse();
   const items: AnalyticsEvent[] = [];
   for (const line of tail) {
@@ -4820,7 +4837,7 @@ eventsRouter.get("/recent", (req, res) => {
       // skip
     }
   }
-  res.json({ items, total: lines.length, since: Number.isFinite(sinceMs) ? new Date(sinceMs).toISOString() : null, matched: pool.length });
+  res.json({ items, total: lines.length, since: Number.isFinite(sinceMs) ? new Date(sinceMs).toISOString() : null, until: Number.isFinite(untilMs) ? new Date(untilMs).toISOString() : null, matched: pool.length });
 });
 
 /**

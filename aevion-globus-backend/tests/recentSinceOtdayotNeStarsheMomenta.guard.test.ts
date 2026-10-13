@@ -62,4 +62,19 @@ describe("/recent?since=", () => {
     expect(r.status).toBe(200);
     expect((r.body.items as unknown[]).length).toBe(4);
   });
+  it("🔴 since+until — окно: новее until не входит, ровно until входит; limit не мешает", async () => {
+    const r = await request(await приложение()).get(`/api/pricing/events/recent?since=${T0 - 60_000}&until=${T0 + 1_000}&limit=2`);
+    expect(r.status).toBe(200);
+    // новейшие первыми; «позже» (+120 с) отрезано until, «старое» (−60 с) входит по since; limit=2 режет уже внутри окна
+    expect(r.body.items.map((e: { sid: string }) => e.sid)).toEqual(["после", "ровно"]);
+    expect(r.body.until).toBe("2026-10-13T06:00:01.000Z");
+    expect(r.body.matched).toBe(3);
+  });
+
+  it("until без since — хвост до момента", async () => {
+    const r = await request(await приложение()).get("/api/pricing/events/recent?until=2026-10-13T05:59:59.000Z");
+    expect(r.body.items.map((e: { sid: string }) => e.sid)).toEqual(["старое"]);
+    expect(r.body.since).toBeNull();
+    expect(r.body.matched).toBe(1);
+  });
 });

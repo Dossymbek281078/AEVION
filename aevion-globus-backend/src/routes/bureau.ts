@@ -3365,6 +3365,15 @@ bureauRouter.post("/admin/renotarize", async (req, res) => {
     );
     const строки = кандидаты.rows as Array<{ id: string; notaryId: string; certId: string; signedHash: string; notaryRegistryRef: string | null; contentHash: string }>;
     const всего = строки.length;
+    // Знаменатель для продаж (bd, 13.10): сколько сертификатов вообще и как распределены
+    // привязанные подписи по статусу и алгоритму — иначе «кандидатов 0» не отличить от «нотаризаций 0».
+    const сертификатовВсего = Number(((await pool.query(`SELECT COUNT(*)::int AS n FROM "IPCertificate"`)).rows[0] as { n?: number } | undefined)?.n ?? 0);
+    const разрезПодписей = (await pool.query(
+      `SELECT s."status", s."signatureAlgorithm" AS algorithm, COUNT(*)::int AS n
+         FROM "BureauNotarySignature" s
+         JOIN "IPCertificate" c ON c."notarySignatureId" = s."id"
+        GROUP BY 1, 2 ORDER BY 3 DESC`,
+    )).rows as Array<{ status: string; algorithm: string; n: number }>;
     if (dry || режим !== "ed25519") {
       return res.json({
         ok: режим === "ed25519",
@@ -3372,6 +3381,8 @@ bureauRouter.post("/admin/renotarize", async (req, res) => {
         режимКлюча: режим,
         всего,
         переподписано: 0,
+        сертификатовВсего,
+        разрезПодписей,
         сертификаты: строки.map((r) => r.certId),
         note: режим === "ed25519" ? "пробный прогон: ничего не записано" : "ключ подписи не живой — пере-нотаризация не выполняется",
       });
@@ -3410,7 +3421,7 @@ bureauRouter.post("/admin/renotarize", async (req, res) => {
       });
       готово.push({ certId: r.certId, старая: r.id, новая: newId });
     }
-    res.json({ ok: true, dry: false, режимКлюча: режим, всего, переподписано: готово.length, сертификаты: готово });
+    res.json({ ok: true, dry: false, режимКлюча: режим, всего, переподписано: готово.length, сертификатовВсего, разрезПодписей, сертификаты: готово });
   } catch (err: any) {
     res.status(500).json({ error: safeErrorText(err, "internal error", "bureau") });
   }

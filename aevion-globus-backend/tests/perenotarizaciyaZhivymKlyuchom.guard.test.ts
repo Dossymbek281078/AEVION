@@ -22,6 +22,8 @@ vi.mock("../src/lib/dbPool", () => ({
   getPool: () => ({
     query: async (sql: string, params: unknown[] = []) => {
       журналЗапросов.push({ sql, params });
+      if (/COUNT\(\*\)::int AS n FROM "IPCertificate"/.test(sql)) return { rows: [{ n: 11 }], rowCount: 1 };
+      if (/GROUP BY 1, 2/.test(sql)) return { rows: [{ status: "signed", algorithm: "demo-hmac-sha256", n: 1 }], rowCount: 1 };
       if (/JOIN "IPCertificate" c ON c\."notarySignatureId" = s\."id"/.test(sql)) {
         return { rows: [{ id: "nsig-old1", notaryId: "notary-1", certId: "cert-13cd6ccef0abbc1d", signedHash: "h", notaryRegistryRef: "REG-1", contentHash: "abc123" }], rowCount: 1 };
       }
@@ -66,6 +68,9 @@ describe("пере-нотаризация живым ключом", () => {
     expect(r.body.всего).toBe(1);
     expect(r.body.переподписано).toBe(0);
     expect(r.body.сертификаты).toEqual(["cert-13cd6ccef0abbc1d"]);
+    // знаменатель для продаж: сколько сертификатов и как распределены привязанные подписи
+    expect(r.body.сертификатовВсего).toBe(11);
+    expect(r.body.разрезПодписей).toEqual([{ status: "signed", algorithm: "demo-hmac-sha256", n: 1 }]);
     expect(транзакция.length).toBe(0);
   });
 

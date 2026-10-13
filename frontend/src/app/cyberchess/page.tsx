@@ -2832,6 +2832,8 @@ export default function CyberChessPage(){
   // ОДИН раз авто-открываем обзорный тур («что куда нажимать») — не стопкой, а следом
   // за наградой, так первый посетитель гарантированно видит гайд, а не ищет его в Ctrl+K.
   // Дальше тур доступен вручную кнопкой «?» в шапке и командой «Обзорный тур».
+  // 139в: карточка награды не модальная — сама уходит через 8 с, доску не держит.
+  useEffect(()=>{if(!dailyReward)return;const t=setTimeout(()=>sDailyReward(null),8000);return()=>clearTimeout(t)},[dailyReward]);
   const closeDailyReward=useCallback(()=>{
     sDailyReward(null);
     const wasFirstRun=firstRunRef.current;
@@ -14201,8 +14203,12 @@ ${question.trim()}`;
     </Modal>
 
     {/* Daily Login Reward modal */}
-    {dailyReward&&<div role="dialog" aria-modal="true"
-      style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.65)",backdropFilter:"blur(4px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:250,padding:16}}
+    {/* 139в (14.10): награда за возврат — карточка в углу БЕЗ затемнения и без перекрытия доски.
+        Замер на проде 138 (390×844, повторный визит): модалка с backdrop накрывала доску и пилюлю
+        «Играть» — первый экран встречал окном, а не игрой; у lichess/chess.com окон над доской нет.
+        Карточка сама уходит через 8 с (эффект ниже), клик по ней — закрыть сразу. */}
+    {dailyReward&&<div role="status" aria-live="polite" data-cc-daily-reward="1"
+      style={{position:"fixed",right:isMobileLayout?12:16,left:isMobileLayout?12:"auto",bottom:isMobileLayout?84:16,zIndex:250,display:"flex",justifyContent:"flex-end",pointerEvents:"none"}}
       onClick={closeDailyReward}>
       {/* Цвета берём из темы модуля, а не зашиваем. Раньше здесь стоял
           тёмно-синий градиент с белым текстом — единственное тёмное окно во
@@ -14211,24 +14217,24 @@ ${question.trim()}`;
           выглядело чужеродно рядом со светлыми страницами.
           С токенами окно следует теме: светлое в светлой, тёмное в тёмной. */}
       <div onClick={e=>e.stopPropagation()} style={{
-        background:CC.surface1,color:CC.text,
-        borderRadius:20,maxWidth:360,width:"100%",padding:"28px 32px",textAlign:"center",
+        background:CC.surface1,color:CC.text,pointerEvents:"auto",cursor:"pointer",
+        borderRadius:16,maxWidth:340,width:"100%",padding:"14px 18px",textAlign:"center",
         boxShadow:SHADOW.lg,border:`1px solid ${CC.borderStrong}`,
       }}>
-        <div style={{fontSize:64,lineHeight:1,marginBottom:10}}>
+        <div style={{fontSize:36,lineHeight:1,marginBottom:6}}>
           {dailyReward.isWelcome?"🎉":dailyReward.streak>=14?"🔥":dailyReward.streak>=7?"⭐":dailyReward.streak>=3?"✨":"☀"}
         </div>
-        <div style={{fontSize:22,fontWeight:900,marginBottom:4}}>
+        <div style={{fontSize:17,fontWeight:900,marginBottom:2}}>
           {dailyReward.isWelcome?"Добро пожаловать!":dailyReward.streak>=7?"Неделя без пропусков!":dailyReward.streak>=3?"Отличная серия!":"Ежедневный бонус"}
         </div>
         <div style={{fontSize:15,color:CC.textDim,marginBottom:16,lineHeight:1.4}}>
           {dailyReward.isWelcome?"Твой первый визит — начнём вместе":"День "+dailyReward.streak+" подряд — продолжай в том же духе!"}
         </div>
         <div style={{
-          display:"inline-flex",alignItems:"center",gap:8,padding:"12px 24px",
+          display:"inline-flex",alignItems:"center",gap:6,padding:"6px 14px",
           borderRadius:999,background:"linear-gradient(135deg,#fef3c7,#fde68a)",
-          fontSize:24,fontWeight:900,color:"#78350f",
-          boxShadow:"0 4px 16px rgba(217,119,6,0.3)",marginBottom:16
+          fontSize:16,fontWeight:900,color:"#78350f",
+          boxShadow:"0 4px 16px rgba(217,119,6,0.3)",marginBottom:8
         }}>
           <span>🪙</span>
           <span>+{dailyReward.bonus} Chessy</span>

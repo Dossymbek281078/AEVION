@@ -74,17 +74,19 @@ describe("HealthAI /check: вторая проверка гостя упирае
   });
 });
 
-describe("норма не обнуляется поддельным X-Forwarded-For", () => {
-  test("гость с чужим адресом в заголовке считается по своему соединению", async () => {
+describe("гость считается по своему адресу, а не по общему адресу прокси", () => {
+  test("разные гости за одним прокси — разные счётчики; без заголовка — адрес соединения", async () => {
     process.env.PAID_ACTIONS = "healthai_check";
-    const req = (xff: string) => ({
-      method: "POST", path: "/check", headers: { "x-forwarded-for": xff },
+    const req = (xff?: string) => ({
+      method: "POST", path: "/check", headers: xff ? { "x-forwarded-for": xff } : {},
       socket: { remoteAddress: "203.0.113.7" },
     }) as any;
-    await учестьДействие(req("1.1.1.1"), "healthai_check");
-    await учестьДействие(req("9.9.9.9"), "healthai_check");
-    expect(actors.length).toBe(2);
-    expect(actors[0], "ключ взят из заголовка клиента").not.toContain("1.1.1.1");
-    expect(actors[0]).toBe(actors[1]);
+    await учестьДействие(req("1.1.1.1, 100.64.0.2"), "healthai_check");
+    await учестьДействие(req("9.9.9.9, 100.64.0.2"), "healthai_check");
+    await учестьДействие(req(), "healthai_check");
+    expect(actors.length).toBe(3);
+    expect(actors[0]).toBe("ip:1.1.1.1");
+    expect(actors[1]).toBe("ip:9.9.9.9");
+    expect(actors[2], "без заголовка — запасной clientIp").toContain("203.0.113.7");
   });
 });

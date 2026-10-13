@@ -158,3 +158,58 @@ describe("перетаскивание фигуры (как lichess) и коор
     expect(calls.some((b) => b.akt === "move")).toBe(false);
   });
 });
+
+function собратьСтраницуСПодсказкой() {
+  собратьСтраницу();
+  const g7 = document.querySelector('[data-sq="g7"]') as HTMLButtonElement;
+  g7.insertAdjacentHTML("afterend", '<button type="button" data-sq="g6" class="d"></button><button type="button" data-sq="g5" class="l"></button>');
+  document.querySelector("[data-cc-status]")!.insertAdjacentHTML("afterend", '<div class="wd hb"><button type="button" data-cc-podskazka>Hint</button></div><div class="wd hdr"><small>🔥 <b data-cc-streak>0</b></small></div>');
+  vi.stubGlobal("fetch", vi.fn(async (_u: string, init?: RequestInit) => {
+    const b = JSON.parse(String(init?.body ?? "{}"));
+    const json = b.akt === "hint" ? { from: "g7" } : b.akt === "targets" ? { targets: ["g6", "g5"] } : b.to === "g6"
+      ? { vid: "ok", fen: "8/5k2/6pp/3PRK2/r5PP/8/8/8 w - - 0 53", i: 1, reshena: true, otvet: null, movable: [] }
+      : { vid: "wrong" };
+    return { json: async () => json } as Response;
+  }));
+}
+const клик2 = (sq: string) => (document.querySelector(`[data-sq="${sq}"]`) as HTMLButtonElement).click();
+
+describe("подсказка и серия решённых подряд", () => {
+  it("кнопка подсказки: сервер отдаёт клетку фигуры, она подсвечена, событие puzzle_hint с surface:light; ход снимает подсветку", async () => {
+    собратьСтраницуСПодсказкой();
+    new Function(КЛИЕНТ)();
+    (document.querySelector("[data-cc-podskazka]") as HTMLButtonElement).click();
+    await тик();
+    expect(document.querySelector('[data-sq="g7"]')!.classList.contains("h")).toBe(true);
+    const h = отправлено.find((e) => e.type === "feature_use" && e.meta?.feature === "puzzle_hint");
+    expect(h?.meta?.surface).toBe("light");
+    expect(h?.meta?.hints).toBe(1);
+    клик2("g7"); await тик(); клик2("g6"); await тик();
+    expect(document.querySelector('[data-sq="g7"]')!.classList.contains("h")).toBe(false);
+  });
+  it("ROUTE: POST akt=hint отдаёт клетку ожидаемого хода, null после решения", () => {
+    expect(ROUTE).toContain('if (b.akt === "hint") return Response.json({ from: s.reshena || s.i >= s.sol.length ? null : s.sol[s.i].slice(0, 2) });');
+    expect(ROUTE).not.toContain("data-cc-hint"); // прежний сторож: отдельной строки «как ходить» нет
+  });
+  it("серия: решено → +1 и в localStorage; неверный ход → 0; puzzle_solved несёт streak", async () => {
+    localStorage.setItem("cc_light_streak", "4");
+    собратьСтраницуСПодсказкой();
+    new Function(КЛИЕНТ)();
+    expect(document.querySelector("[data-cc-streak]")!.textContent).toBe("4");
+    клик2("g7"); await тик(); клик2("g6"); await тик();
+    expect(document.querySelector("[data-cc-streak]")!.textContent).toBe("5");
+    expect(localStorage.getItem("cc_light_streak")).toBe("5");
+    const solved = отправлено.find((e) => e.type === "puzzle_solved");
+    expect(solved?.meta?.streak).toBe(5);
+    // новая страница, неверный ход
+    собратьСтраницуСПодсказкой();
+    new Function(КЛИЕНТ)();
+    клик2("g7"); await тик(); клик2("g5"); await тик();
+    expect(document.querySelector("[data-cc-streak]")!.textContent).toBe("0");
+    expect(localStorage.getItem("cc_light_streak")).toBe("0");
+  });
+  it("слова подсказки и серии есть на трёх языках, en без кириллицы", () => {
+    for (const y of ["ru", "en", "kk"] as const) for (const k of ["pz.hintBtn", "pz.hintShown", "pz.streak"]) expect(PZ_SLOVA[y][k], y + k).toBeTruthy();
+    expect(PZ_SLOVA.en["pz.hintBtn"] + PZ_SLOVA.en["pz.hintShown"] + PZ_SLOVA.en["pz.streak"]).not.toMatch(/[А-Яа-яЁё]/);
+  });
+});

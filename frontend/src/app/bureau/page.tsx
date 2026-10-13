@@ -199,6 +199,8 @@ export function DataBuyerNotice() {
 function BureauPageInner() {
   const buLang = useI18nOptional()?.lang ?? "en";
   const BU = BU_BUSY[buLang] ?? BU_BUSY.en;
+  // 128 (13.10.2026): главный CTA бюро — на языке страницы, не литералом (на ru-RU стоял «Protect Your Work» при русском h1).
+  const ctaProtect = ({ ru: "🛡️ Защитить работу", kk: "🛡️ Жұмысты қорғау" } as Record<string, string>)[buLang] ?? "🛡️ Protect Your Work";
   const { showToast } = useToast();
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   // «Сертификатов нет» и «не удалось узнать» — разные вещи. При сбое загрузки
@@ -567,12 +569,6 @@ function BureauPageInner() {
          * цену из каталога и сам спрашивает, какие сроки реально продаются
          * (иначе показал бы цену ступени, которая отвечает 503).
          */}
-        <DataBuyerNotice />
-
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-          <ModulePricingChip moduleId="bureau" theme="light" />
-        </div>
-
         {/* ── Hero Header ── */}
         <div style={{ borderRadius: 20, overflow: "hidden", marginBottom: 28 }}>
           <div style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%)", padding: "32px 28px 28px", color: "#fff" }}>
@@ -588,7 +584,7 @@ function BureauPageInner() {
             </p>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Link href="/qright" onClick={() => track({ type: "cta_click", source: "bureau", meta: { product: "qright" } })} style={{ padding: "10px 20px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 16, display: "inline-flex", alignItems: "center", gap: 6 }}>
-                🛡️ Protect Your Work
+                {ctaProtect}
               </Link>
               <Link href="#registry" style={{ padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 15.5 }}>
                 🔎 Search prior art
@@ -599,6 +595,15 @@ function BureauPageInner() {
             </div>
           </div>
         </div>
+        {/* 128 (13.10.2026): путь к оплате — ПОД героем. На 390×844 полоса подписки (164 px) стояла над h1,
+            и первый продуктовый CTA «Защитить работу» уезжал на 901 px — вне первого экрана; 16 живых сессий
+            бюро за 14 дн. без единого нажатия. Герой + CTA — выше, чип цены и заметка для покупателей данных — сразу под ним. */}
+        <DataBuyerNotice />
+
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+          <ModulePricingChip moduleId="bureau" theme="light" />
+        </div>
+
 
         {/* ── My Identity (authed users only) ── */}
         {authed && (dashboardFailed || myIdentity || inFlightUpgrade || (dashboard && dashboard.certificates.length > 0)) && (
@@ -1063,7 +1068,7 @@ function BureauPageInner() {
               <div style={{ fontSize: 48, marginBottom: 12 }}>📜</div>
               <div style={{ fontWeight: 800, fontSize: 16, color: "#0f172a", marginBottom: 6 }}>No certificates yet</div>
               <div style={{ fontSize: 15.5, color: "#64748b", marginBottom: 16 }}>Protect your first work to see it here</div>
-              <Link href="/qright" onClick={() => track({ type: "cta_click", source: "bureau", meta: { product: "qright" } })} style={{ display: "inline-block", padding: "12px 24px", borderRadius: 12, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 16 }}>🛡️ Protect Your Work</Link>
+              <Link href="/qright" onClick={() => track({ type: "cta_click", source: "bureau", meta: { product: "qright" } })} style={{ display: "inline-block", padding: "12px 24px", borderRadius: 12, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 16 }}>{ctaProtect}</Link>
             </div>
           ) : filteredCerts.length === 0 ? (
             <div style={{ textAlign: "center", padding: "32px 20px", borderRadius: 16, border: "1px dashed rgba(15,23,42,0.12)", background: "#fff" }}>

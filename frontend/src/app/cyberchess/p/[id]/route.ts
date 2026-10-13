@@ -40,9 +40,23 @@ async function zagruzit(id: string): Promise<Syraya | null> {
   return pz;
 }
 
+/** Следующая лёгкая задача близкого рейтинга (±150), случайная; при отказе бэкенда — полная версия.
+ * Повод 13.10: после решения ссылка вела в монолит (900 КБ JS, 7 с на Fast 3G) — серия обрывалась на первой задаче. */
+async function sleduyushchayaZadacha(tekId: string, rating: number, keep: URLSearchParams, polnaya: string): Promise<string> {
+  const q = new URLSearchParams({ shuffle: "1", limit: "3", minRating: String(Math.max(0, rating - 150)), maxRating: String(rating + 150) });
+  const r = await serverFetch(`/api/cyberchess-puzzles?${q.toString()}`, { timeoutMs: 2500, retries: 0 });
+  if (!r || !r.ok) return polnaya;
+  try {
+    const list = ((await r.json()) as { puzzles?: Array<{ id?: string }> })?.puzzles ?? [];
+    const next = list.map((x) => String(x?.id ?? "")).find((x) => x && x !== tekId);
+    if (!next) return polnaya;
+    return `/cyberchess/p/${encodeURIComponent(next)}${keep.toString() ? "?" + keep.toString() : ""}`;
+  } catch { return polnaya; }
+}
+
 const esc = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-function html(p: { id: string; fen: string; zadanie: string; name: string; rating: number; theme: string; locale: PzYazyk; storona: "w" | "b"; polnaya: string; channel: string | null; post: string | null; path: string; title: string; description: string }): string {
+function html(p: { id: string; fen: string; zadanie: string; name: string; rating: number; theme: string; locale: PzYazyk; storona: "w" | "b"; polnaya: string; sleduyushchaya: string; channel: string | null; post: string | null; path: string; title: string; description: string }): string {
   const t = (k: string) => pzT(p.locale, k);
   const ryady = kletki(p.fen, p.storona);
   const mogut = new Set(hodyashchie(p.fen, p.storona));
@@ -78,7 +92,7 @@ main{min-height:100dvh;display:grid;grid-template-columns:1fr;justify-items:cent
 <div class="wd b" data-cc-board="1" data-cc-puzzle="${esc(p.id)}" role="grid" aria-label="${esc(p.zadanie)}">${kletkiHtml}</div>
 <div class="wd s" data-cc-status>${esc(t("pz.yourMove"))}</div>
 <div class="wd zm" data-cc-zoom><button type="button" data-zm="-" aria-label="${esc(t("pz.zoomOut"))}" title="${esc(t("pz.zoomOut"))}">−</button><span data-zm-v>100%</span><button type="button" data-zm="+" aria-label="${esc(t("pz.zoomIn"))}" title="${esc(t("pz.zoomIn"))}">+</button><small>${esc(t("pz.zoomLabel"))}</small></div>
-<div class="wd r" data-cc-resheno><a href="${esc(p.polnaya)}">${esc(t("pz.next"))}</a></div>
+<div class="wd r" data-cc-resheno><a data-cc-next href="${esc(p.sleduyushchaya)}">${esc(t("pz.next"))}</a></div>
 <a class="wd f" data-cc-full href="${esc(p.polnaya)}">${esc(t("pz.fullVersion"))}</a>
 </main>
 <script id="cc-cfg" type="application/json">${JSON.stringify(cfg).replace(/</g, "\\u003c")}</script>
@@ -110,10 +124,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   const keep = new URLSearchParams();
   for (const k of ["c", "probe", "p"]) { const v = url.searchParams.get(k); if (v) keep.set(k, v); }
   const polnaya = `/cyberchess?puzzle=${encodeURIComponent(id)}${keep.toString() ? "&" + keep.toString() : ""}`;
+  const sleduyushchaya = await sleduyushchayaZadacha(id, pz.r ?? 1200, keep, polnaya);
   const c = url.searchParams.get("c") ?? undefined;
   const title = `${zadanie} · CyberChess`;
   const description = locale === "ru" ? "Реши задачу прямо здесь — без регистрации. Полная версия: тренер, подсказки, 500 000 задач." : locale === "kk" ? "Есепті осы жерде шеш — тіркеусіз. Толық нұсқа: жаттықтырушы, кеңестер, 500 000 есеп." : "Solve it right here — no sign-up. Full version: coach, hints, 500,000 puzzles.";
-  const body = html({ id, fen: pz.fen, zadanie, name, rating: pz.r ?? 1200, theme: pz.theme ?? "", locale, storona: sozdatSostoyanie(pz.fen, pz.sol).storona, polnaya, channel: channelFrom(c), post: postFrom(c), path: url.pathname + url.search, title, description });
+  const body = html({ id, fen: pz.fen, zadanie, name, rating: pz.r ?? 1200, theme: pz.theme ?? "", locale, storona: sozdatSostoyanie(pz.fen, pz.sol).storona, polnaya, sleduyushchaya, channel: channelFrom(c), post: postFrom(c), path: url.pathname + url.search, title, description });
   return new Response(body, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "private, no-store", "Vary": "Accept-Language, Cookie" } });
 }
 

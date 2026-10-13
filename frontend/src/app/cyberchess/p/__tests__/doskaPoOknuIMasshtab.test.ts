@@ -100,3 +100,14 @@ describe("кнопки −/+ меняют масштаб доски и помн�
     expect(zm()).toBe("1");
   });
 });
+
+describe("после решения — следующая ЛЁГКАЯ задача, не монолит", () => {
+  it("ссылка data-cc-next строится из sleduyushchayaZadacha (случайная, близкий рейтинг, с метками)", () => {
+    expect(ROUTE).toContain('data-cc-next href="${esc(p.sleduyushchaya)}"');
+    expect(ROUTE).not.toContain('data-cc-resheno><a href="${esc(p.polnaya)}"');
+    expect(ROUTE).toMatch(/shuffle: "1"/);
+    expect(ROUTE).toMatch(/minRating: String\(Math\.max\(0, rating - 150\)\)/);
+    expect(ROUTE).toContain("find((x) => x && x !== tekId)");
+    expect(ROUTE).toContain("return `/cyberchess/p/${encodeURIComponent(next)}${keep.toString()");
+  });
+});

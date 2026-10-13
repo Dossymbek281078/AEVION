@@ -28,6 +28,7 @@ import { tiktokRouter } from "./routes/tiktok";
 import { planetComplianceRouter } from "./routes/planetCompliance";
 import { modulesRouter } from "./routes/modules";
 import { helpContactRouter } from "./routes/helpContact";
+import { proofPilotRouter } from "./routes/proofPilot";
 import { statusRouter } from "./routes/status";
 import { entitlementsRouter } from "./routes/entitlements";
 import { requireModule } from "./lib/planGate";
@@ -520,6 +521,7 @@ app.use("/api/modules", modulesRouter);
 // и вела на домен без записей MX. Теперь обращение сохраняется, и «принято»
 // говорится только по факту записи.
 app.use("/api/help", helpContactRouter);
+app.use("/api/proof", proofPilotRouter);
 app.use("/api/status", statusRouter);
 
 // Module paywall — dormant unless the module id is listed in PAYWALL_MODULES

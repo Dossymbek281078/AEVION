@@ -1,6 +1,7 @@
 "use client";
 
 import { track } from "@/lib/track";
+import { PilotOrderForm } from "./PilotOrderForm";
 import {
   PILOT_USD,
   PILOT_RECORDS,
@@ -91,6 +92,8 @@ export function ProofPilotBlock() {
         reply with the format we need and a fixed date. Nothing is charged on this page: the
         invoice comes after we agree the scope.
       </p>
+      <PilotOrderForm />
+      <p style={{ margin: "0 0 8px", fontSize: 13, color: "#475569" }}>Prefer email? The same request as a letter:</p>
       <a
         href={pismoZakaza()}
         onClick={zakazat}

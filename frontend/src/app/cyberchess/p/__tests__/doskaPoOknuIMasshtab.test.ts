@@ -238,7 +238,7 @@ describe("поделиться задачей", () => {
     (document.querySelector("[data-cc-share]") as HTMLButtonElement).click();
     await тик();
     expect(written.length).toBe(1);
-    expect(written[0]).toMatch(/\/cyberchess\/p\/.*\?c=tg-share$/);
+    expect(written[0]).toBe(location.origin + location.pathname + "?c=tg-share"); // jsdom: localhost/, в браузере — /cyberchess/p/<id> (проверено Playwright)
     expect(document.querySelector("[data-cc-status]")!.textContent).toBe("copied!");
     const sh = отправлено.find((e) => e.type === "feature_use" && e.meta?.feature === "puzzle_share");
     expect(sh?.meta?.how).toBe("copy");

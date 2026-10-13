@@ -5,6 +5,7 @@ import { ценаVerifiedДляВитрины } from "./verifiedPrice";
 import { useI18nOptional } from "@/lib/i18n";
 import { BU_BUSY } from "./busyUi";
 import Link from "next/link";
+import { track } from "@/lib/track";
 import { useSearchParams } from "next/navigation";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { PurchaseReturnTracker } from "@/components/PurchaseReturnTracker";
@@ -586,7 +587,7 @@ function BureauPageInner() {
               A cryptographic proof-of-authorship bureau. Register, sign, and certify your intellectual property with standards-based cryptography (SHA-256, Ed25519, Bitcoin-anchored timestamps) — backed by international copyright law.
             </p>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Link href="/qright" style={{ padding: "10px 20px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 16, display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <Link href="/qright" onClick={() => track({ type: "cta_click", source: "bureau", meta: { product: "qright" } })} style={{ padding: "10px 20px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 16, display: "inline-flex", alignItems: "center", gap: 6 }}>
                 🛡️ Protect Your Work
               </Link>
               <Link href="#registry" style={{ padding: "10px 20px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 15.5 }}>
@@ -630,7 +631,7 @@ function BureauPageInner() {
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <Link href="/qright" style={{ padding: "10px 16px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 15.5 }}>
+                  <Link href="/qright" onClick={() => track({ type: "cta_click", source: "bureau", meta: { product: "qright" } })} style={{ padding: "10px 16px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 15.5 }}>
                     Protect another work
                   </Link>
                 </div>
@@ -893,7 +894,7 @@ function BureauPageInner() {
                 ({filtersActive ? `${filteredCerts.length} of ${certificates.length}` : certificates.length})
               </span>
             </div>
-            <Link href="/qright" style={{ padding: "8px 16px", borderRadius: 8, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 15 }}>+ New Certificate</Link>
+            <Link href="/qright" onClick={() => track({ type: "cta_click", source: "bureau", meta: { product: "qright" } })} style={{ padding: "8px 16px", borderRadius: 8, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 15 }}>+ New Certificate</Link>
           </div>
           <div style={{ fontSize: 15, color: "#64748b", marginBottom: 12, lineHeight: 1.5 }}>
             Public prior-art lookup — search by title, author, or paste a SHA-256 hash. Or <strong>drop a file below</strong> to check it instantly.
@@ -1062,7 +1063,7 @@ function BureauPageInner() {
               <div style={{ fontSize: 48, marginBottom: 12 }}>📜</div>
               <div style={{ fontWeight: 800, fontSize: 16, color: "#0f172a", marginBottom: 6 }}>No certificates yet</div>
               <div style={{ fontSize: 15.5, color: "#64748b", marginBottom: 16 }}>Protect your first work to see it here</div>
-              <Link href="/qright" style={{ display: "inline-block", padding: "12px 24px", borderRadius: 12, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 16 }}>🛡️ Protect Your Work</Link>
+              <Link href="/qright" onClick={() => track({ type: "cta_click", source: "bureau", meta: { product: "qright" } })} style={{ display: "inline-block", padding: "12px 24px", borderRadius: 12, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 16 }}>🛡️ Protect Your Work</Link>
             </div>
           ) : filteredCerts.length === 0 ? (
             <div style={{ textAlign: "center", padding: "32px 20px", borderRadius: 16, border: "1px dashed rgba(15,23,42,0.12)", background: "#fff" }}>
@@ -1076,7 +1077,7 @@ function BureauPageInner() {
                   : "Try a different search term or reset filters."}
               </div>
               {hashLooksLikeSha256 ? (
-                <Link href="/qright" style={{ display: "inline-block", padding: "10px 20px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 15.5 }}>
+                <Link href="/qright" onClick={() => track({ type: "cta_click", source: "bureau", meta: { product: "qright" } })} style={{ display: "inline-block", padding: "10px 20px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 15.5 }}>
                   🛡️ Register this work
                 </Link>
               ) : (

@@ -31,6 +31,12 @@ export default function LegkayaZadacha({ id, fen, sol, zadanie, name, rating, th
   const pervyyHodRef = useRef("");
   const soobshchiliRef = useRef(false);
 
+  // Метка гидратации — для честного замера «время до первого ВОЗМОЖНОГО хода»: доска
+  // приходит в HTML раньше, чем навешаны обработчики, и без метки прибор мерил бы HTML.
+  useEffect(() => {
+    try { document.querySelector("[data-cc-light-puzzle]")?.setAttribute("data-hydrated", "1"); } catch { /* нет DOM */ }
+  }, []);
+
   // Воронка: открытие задачи по ссылке — та же ступень и та же форма, что у полной версии.
   useEffect(() => {
     track({ type: "feature_use", source: "cyberchess/link", meta: { feature: "puzzle_link_open", app: "cyberchess", puzzle: id, surface: "light" } });

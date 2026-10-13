@@ -1,6 +1,6 @@
 import { paywallEnabledFor } from "./planGate";
 import { ДОСТУП_МОДУЛЕЙ, модулиСоСтенойПоДанным } from "../data/moduleAccess";
-import { сводкаПлатныхДействий } from "./freeActionQuota";
+import { сводкаПлатныхДействий, сводкаАдресаГостя } from "./freeActionQuota";
 
 /**
  * Сводка о том, настроена ли ВЫДАЧА КУПЛЕННОГО — для ручки состояния.
@@ -47,6 +47,7 @@ export interface СводкаПейволла {
    * снятие нормы» могло означать «продаём пустоту».
    */
   paidActions: { configured: boolean; count: number; actions: string[] };
+  guestIpFromSite: ReturnType<typeof сводкаАдресаГостя>;
 }
 
 export function сводкаПейволла(): СводкаПейволла {
@@ -59,5 +60,6 @@ export function сводкаПейволла(): СводкаПейволла {
     soldButOpen: продаётся.filter((м) => !paywallEnabledFor(м.moduleId)).length,
     soldTotal: продаётся.length,
     paidActions: сводкаПлатныхДействий(),
+    guestIpFromSite: сводкаАдресаГостя(),
   };
 }

@@ -43,7 +43,7 @@ describe("сторона доски считается от окна польз�
 });
 
 function собратьСтраницу() {
-  const cfg = { id: "li_test", fen: "8/5kp1/7p/3PRK2/r5PP/8/8/8 b - - 0 52", i: 0, storona: "b", movable: ["g7"], texts: { wrong: "x", yourMove: "y", hint: "h", solved: "s" }, ev: { channel: "youtube", post: "chess-1", path: "/cyberchess/p/li_test?c=yt-chess-1", rating: 1000, theme: "t", fen: "f" } };
+  const cfg = { id: "li_test", fen: "8/5kp1/7p/3PRK2/r5PP/8/8/8 b - - 0 52", i: 0, storona: "b", movable: ["g7"], texts: { wrong: "x", yourMove: "y", hint: "h", solved: "s", hintShown: "hs", copied: "copied!", shareTitle: "t" }, ev: { channel: "youtube", post: "chess-1", path: "/cyberchess/p/li_test?c=yt-chess-1", rating: 1000, theme: "t", fen: "f" } };
   document.body.innerHTML = `<main data-cc-light-puzzle="li_test"><div data-cc-board="1" data-cc-puzzle="li_test"><button type="button" data-sq="g7" class="l"></button></div><div data-cc-status class="wd s"></div><div class="wd zm" data-cc-zoom><button type="button" data-zm="-">−</button><span data-zm-v>100%</span><button type="button" data-zm="+">+</button></div><div class="wd r" data-cc-resheno></div></main><script id="cc-cfg" type="application/json">${JSON.stringify(cfg)}</script>`;
 }
 
@@ -156,5 +156,97 @@ describe("перетаскивание фигуры (как lichess) и коор
     await тик();
     const calls = (fetch as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls.map((c) => JSON.parse(String(c[1]?.body ?? "{}")));
     expect(calls.some((b) => b.akt === "move")).toBe(false);
+  });
+});
+
+function собратьСтраницуСПодсказкой() {
+  собратьСтраницу();
+  const g7 = document.querySelector('[data-sq="g7"]') as HTMLButtonElement;
+  g7.insertAdjacentHTML("afterend", '<button type="button" data-sq="g6" class="d"></button><button type="button" data-sq="g5" class="l"></button>');
+  document.querySelector("[data-cc-status]")!.insertAdjacentHTML("afterend", '<div class="wd hb"><button type="button" data-cc-podskazka>Hint</button></div><div class="wd hdr"><small>🔥 <b data-cc-streak>0</b></small></div>');
+  vi.stubGlobal("fetch", vi.fn(async (_u: string, init?: RequestInit) => {
+    const b = JSON.parse(String(init?.body ?? "{}"));
+    const json = b.akt === "hint" ? { from: "g7" } : b.akt === "targets" ? { targets: ["g6", "g5"] } : b.to === "g6"
+      ? { vid: "ok", fen: "8/5k2/6pp/3PRK2/r5PP/8/8/8 w - - 0 53", i: 1, reshena: true, otvet: null, movable: [] }
+      : { vid: "wrong" };
+    return { json: async () => json } as Response;
+  }));
+}
+const клик2 = (sq: string) => (document.querySelector(`[data-sq="${sq}"]`) as HTMLButtonElement).click();
+
+describe("подсказка и серия решённых подряд", () => {
+  it("кнопка подсказки: сервер отдаёт клетку фигуры, она подсвечена, событие puzzle_hint с surface:light; ход снимает подсветку", async () => {
+    собратьСтраницуСПодсказкой();
+    new Function(КЛИЕНТ)();
+    (document.querySelector("[data-cc-podskazka]") as HTMLButtonElement).click();
+    await тик();
+    expect(document.querySelector('[data-sq="g7"]')!.classList.contains("h")).toBe(true);
+    const h = отправлено.find((e) => e.type === "feature_use" && e.meta?.feature === "puzzle_hint");
+    expect(h?.meta?.surface).toBe("light");
+    expect(h?.meta?.hints).toBe(1);
+    клик2("g7"); await тик(); клик2("g6"); await тик();
+    expect(document.querySelector('[data-sq="g7"]')!.classList.contains("h")).toBe(false);
+  });
+  it("ROUTE: POST akt=hint отдаёт клетку ожидаемого хода, null после решения", () => {
+    expect(ROUTE).toContain('if (b.akt === "hint") return Response.json({ from: s.reshena || s.i >= s.sol.length ? null : s.sol[s.i].slice(0, 2) });');
+    expect(ROUTE).not.toContain("data-cc-hint"); // прежний сторож: отдельной строки «как ходить» нет
+  });
+  it("серия: решено → +1 и в localStorage; неверный ход → 0; puzzle_solved несёт streak", async () => {
+    localStorage.setItem("cc_light_streak", "4");
+    собратьСтраницуСПодсказкой();
+    new Function(КЛИЕНТ)();
+    expect(document.querySelector("[data-cc-streak]")!.textContent).toBe("4");
+    клик2("g7"); await тик(); клик2("g6"); await тик();
+    expect(document.querySelector("[data-cc-streak]")!.textContent).toBe("5");
+    expect(localStorage.getItem("cc_light_streak")).toBe("5");
+    const solved = отправлено.find((e) => e.type === "puzzle_solved");
+    expect(solved?.meta?.streak).toBe(5);
+    // новая страница, неверный ход
+    собратьСтраницуСПодсказкой();
+    new Function(КЛИЕНТ)();
+    клик2("g7"); await тик(); клик2("g5"); await тик();
+    expect(document.querySelector("[data-cc-streak]")!.textContent).toBe("0");
+    expect(localStorage.getItem("cc_light_streak")).toBe("0");
+  });
+  it("слова подсказки и серии есть на трёх языках, en без кириллицы", () => {
+    for (const y of ["ru", "en", "kk"] as const) for (const k of ["pz.hintBtn", "pz.hintShown", "pz.streak"]) expect(PZ_SLOVA[y][k], y + k).toBeTruthy();
+    expect(PZ_SLOVA.en["pz.hintBtn"] + PZ_SLOVA.en["pz.hintShown"] + PZ_SLOVA.en["pz.streak"]).not.toMatch(/[А-Яа-яЁё]/);
+  });
+});
+
+describe("задача дня по стабильному адресу /cyberchess/p/daily", () => {
+  it("id «daily» грузится из /api/cyberchess-daily/puzzle, рейтинг берётся из rating, полная версия — /cyberchess/daily, в заголовке «Задача дня»", () => {
+    expect(ROUTE).toContain('id === "daily" ? "/api/cyberchess-daily/puzzle" : `/api/cyberchess-puzzles/${encodeURIComponent(id)}`');
+    expect(ROUTE).toContain("r: raw.r ?? raw.rating");
+    expect(ROUTE).toContain('const polnaya = daily ? `/cyberchess/daily${keep.toString() ? "?" + keep.toString() : ""}`');
+    expect(ROUTE).toContain('${daily ? pzT(locale, "pz.daily") + " · " : ""}${zadanie} · CyberChess');
+    expect(ROUTE).toContain('fen: p.fen, daily: p.daily }');
+    expect(КЛИЕНТ).toContain("daily:!!C.ev.daily");
+    for (const y of ["ru", "en", "kk"] as const) expect(PZ_SLOVA[y]["pz.daily"], y).toBeTruthy();
+    expect(PZ_SLOVA.en["pz.daily"]).not.toMatch(/[А-Яа-яЁё]/);
+  });
+});
+
+describe("поделиться задачей", () => {
+  it("кнопка в блоке «решено»; без navigator.share — копирует ссылку с ?c=tg-share, статус «скопировано», событие puzzle_share", async () => {
+    собратьСтраницуСПодсказкой();
+    document.querySelector("[data-cc-resheno]")!.insertAdjacentHTML("beforeend", '<button type="button" data-cc-share>Share</button>');
+    const written: string[] = [];
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (t: string) => { written.push(t); } } });
+    Object.defineProperty(navigator, "share", { configurable: true, value: undefined });
+    new Function(КЛИЕНТ)();
+    (document.querySelector("[data-cc-share]") as HTMLButtonElement).click();
+    await тик();
+    expect(written.length).toBe(1);
+    expect(written[0]).toBe(location.origin + location.pathname + "?c=tg-share"); // jsdom: localhost/, в браузере — /cyberchess/p/<id> (проверено Playwright)
+    expect(document.querySelector("[data-cc-status]")!.textContent).toBe("copied!");
+    const sh = отправлено.find((e) => e.type === "feature_use" && e.meta?.feature === "puzzle_share");
+    expect(sh?.meta?.how).toBe("copy");
+    expect(sh?.meta?.surface).toBe("light");
+  });
+  it("слова на трёх языках, en без кириллицы; кнопка в HTML маршрута", () => {
+    expect(ROUTE).toContain('<button type="button" data-cc-share>${esc(t("pz.share"))}</button>');
+    for (const y of ["ru", "en", "kk"] as const) for (const k of ["pz.share", "pz.copied"]) expect(PZ_SLOVA[y][k], y + k).toBeTruthy();
+    expect(PZ_SLOVA.en["pz.share"] + PZ_SLOVA.en["pz.copied"]).not.toMatch(/[А-Яа-яЁё]/);
   });
 });

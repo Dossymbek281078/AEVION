@@ -7839,7 +7839,7 @@ export default function CyberChessPage(){
             dark={bT.dark}
             border={bT.border}
             maxPx={превьюPx}
-            label={`▶ ${cc.t("board.cta.start")}`}
+            label={`▶ ${cc.t("nav.play")}`} /* 138: пилюля в центре доски — коротко, как Play у chess.com; «нажмите доску» лишнее, кнопка и есть подсказка */
             onStart={()=>{sHotseat(false);sRivalMode(false);newG()}}
           />
           {/* Масштаб доски виден на первом экране (слово основателя: «где масштаб +− не видно»). */}

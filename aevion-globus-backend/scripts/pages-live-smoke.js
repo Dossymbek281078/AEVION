@@ -168,9 +168,9 @@ const PAGES = [
   // Галерея DevHub — три НАСТОЯЩИХ приложения, которыми витрина доказывает
   // продукт (собраны 06.09.2026 через живой прод). Пропадёт адрес — витрина
   // начнёт обещать мёртвое, и никто не заметит.
-  "https://465693ea.aevion-project-7760cf.pages.dev",
-  "https://909ef2a1.aevion-project-af430e.pages.dev",
-  "https://75d87932.aevion-project-b85b54.pages.dev",
+  "https://aevion-project-7760cf.pages.dev",
+  "https://aevion-project-af430e.pages.dev",
+  "https://aevion-project-b85b54.pages.dev",
   // Добавлено 06.10.2026 вместе с четвёртым примером галереи (замер: фраза →
   // живой адрес за 33 с). Повод конкретный: список адресов витрины ведётся в
   // ДВУХ местах — frontend/src/app/devhub/examples.ts и здесь, — и я сам

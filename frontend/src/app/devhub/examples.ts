@@ -48,26 +48,29 @@ export function exampleText(ex: DevhubExample, lang: string): DevhubExampleText 
 // (гость → фраза → генерация → Pages), адреса проверены на 200 и на
 // соответствие теме. Ежедневный смоук страниц держит их под наблюдением.
 export const DEVHUB_EXAMPLES: DevhubExample[] = [
+  // 13.10.2026 (user-99): адреса — корни Pages-проектов, а не хеши выкаток. Хеш-адрес навсегда
+  // отдаёт СТАРУЮ выкатку (без значка «Сделано в AEVION»); корень — последнюю. Три примера
+  // переизданы со значком 13.10, снаружи 200 + data-aevion-badge у 4 из 4.
   {
     title: "Кофейня у моста",
     prompt: "лендинг кофейни с меню, часами работы и картой проезда",
     en: { title: "Coffee shop by the bridge", prompt: "a coffee shop landing page with a menu, opening hours and a map" },
     kk: { title: "Көпір жанындағы кофехана", prompt: "мәзірі, жұмыс уақыты және картасы бар кофехана лендингі" },
-    url: "https://465693ea.aevion-project-7760cf.pages.dev",
+    url: "https://aevion-project-7760cf.pages.dev",
   },
   {
     title: "Портфолио фотографа",
     prompt: "портфолио фотографа с галереей и тёмной темой",
     en: { title: "Photographer's portfolio", prompt: "a photographer's portfolio with a gallery and a dark theme" },
     kk: { title: "Фотографтың портфолиосы", prompt: "галереясы мен қараңғы темасы бар фотограф портфолиосы" },
-    url: "https://909ef2a1.aevion-project-af430e.pages.dev",
+    url: "https://aevion-project-af430e.pages.dev",
   },
   {
     title: "Афиша концерта",
     prompt: "афиша концерта с программой и картой проезда",
     en: { title: "Concert poster page", prompt: "a concert poster page with the program and a directions map" },
     kk: { title: "Концерт афишасы", prompt: "бағдарламасы мен жол картасы бар концерт афишасы" },
-    url: "https://75d87932.aevion-project-b85b54.pages.dev",
+    url: "https://aevion-project-b85b54.pages.dev",
   },
   // ЗАМЕРЕНО 06.10.2026 окном ls-devhub на живом проде, как обычный гость:
   // фраза -> генерация 19 с (gemini-2.5-flash, $0.00202425, 2 файла) ->

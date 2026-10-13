@@ -60,7 +60,13 @@ function html(p: { id: string; fen: string; zadanie: string; name: string; ratin
   const t = (k: string) => pzT(p.locale, k);
   const ryady = kletki(p.fen, p.storona);
   const mogut = new Set(hodyashchie(p.fen, p.storona));
-  const kletkiHtml = ryady.flat().map((k) => `<button type="button" data-sq="${k.sq}" class="${k.dark ? "d" : "l"}${mogut.has(k.sq) ? " m" : ""}" aria-label="${k.sq}">${k.p ? `<span class="${k.p[0] === "w" ? "w" : "b"}">${GLIF[k.p]}</span>` : ""}</button>`).join("");
+  // Координаты как у lichess: буква на нижнем ряду, цифра в левом столбце (в атрибутах — draw() их перерисовывает).
+  const kletkiHtml = ryady.flatMap((ryad, r) => ryad.map((k, c) => {
+    const cf = r === 7 ? ` data-cf="${k.sq[0]}"` : "";
+    const cr = c === 0 ? ` data-cr="${k.sq[1]}"` : "";
+    const koord = (r === 7 ? `<i class="c f">${k.sq[0]}</i>` : "") + (c === 0 ? `<i class="c r">${k.sq[1]}</i>` : "");
+    return `<button type="button" data-sq="${k.sq}"${cf}${cr} class="${k.dark ? "d" : "l"}${mogut.has(k.sq) ? " m" : ""}" aria-label="${k.sq}">${k.p ? `<span class="${k.p[0] === "w" ? "w" : "b"}">${GLIF[k.p]}</span>` : ""}${koord}</button>`;
+  })).join("");
   const cfg = { id: p.id, fen: p.fen, i: 0, storona: p.storona, movable: [...mogut], texts: { wrong: t("pz.wrong"), yourMove: t("pz.yourMove"), hint: t("pz.hint"), solved: t("pz.solved").replace("{name}", p.name) }, ev: { channel: p.channel, post: p.post, path: p.path, rating: p.rating, theme: p.theme, fen: p.fen } };
   return `<!doctype html><html lang="${p.locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>${esc(p.title)}</title><meta name="description" content="${esc(p.description)}"><meta name="robots" content="noindex">
@@ -77,7 +83,9 @@ main{min-height:100dvh;display:grid;grid-template-columns:1fr;justify-items:cent
 .b.wd{grid-column:1;grid-row:1/span 7}.hdr,.z,.s,.zm,.r,.f{grid-column:2;width:290px}.hdr{grid-row:1}.z{grid-row:2;font-size:18px}.s{grid-row:3}.zm{grid-row:4}.r{grid-row:5}.f{grid-row:6}}
 @media(min-width:1280px){:root{--side:min(100dvh - 120px,100vw - 440px)}main{grid-template-columns:auto 360px;column-gap:28px}.hdr,.z,.s,.zm,.r,.f{width:360px}}
 .z{font-size:15px;font-weight:800}.b .m::before{content:"";position:absolute;inset:6%;border-radius:50%;box-shadow:0 0 0 3px rgba(5,150,105,.75) inset}
-.b{aspect-ratio:1/1;display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);border-radius:8px;overflow:hidden;box-shadow:0 4px 18px rgba(0,0,0,.4);touch-action:manipulation;user-select:none}
+.b{aspect-ratio:1/1;display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);border-radius:8px;overflow:hidden;box-shadow:0 4px 18px rgba(0,0,0,.4);touch-action:none;user-select:none}
+.b i.c{position:absolute;font-style:normal;font-weight:800;opacity:.8;pointer-events:none;font-size:calc(var(--zm)*var(--side)/8*.22);line-height:1}.b i.f{right:4%;bottom:3%}.b i.r{left:5%;top:4%}.b .l i.c{color:#b58863}.b .d i.c{color:#f0d9b5}
+.ghost{position:fixed;left:0;top:0;pointer-events:none;z-index:9;transform:translate(-50%,-50%);font-size:calc(var(--zm)*var(--side)/8*.9);line-height:1;filter:drop-shadow(0 6px 8px rgba(0,0,0,.5))}.ghost.w{color:#fff;text-shadow:0 0 2px #000}.ghost.b{color:#111}
 .b button{position:relative;border:0;padding:0;margin:0;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:calc(var(--zm)*var(--side)/8*.78);line-height:1}
 .zm{display:flex;align-items:center;gap:8px;font-size:13px;color:#cbd5e1}.zm button{width:40px;height:36px;border:1px solid #475569;border-radius:8px;background:#1e293b;color:#f1f5f9;font-size:20px;font-weight:900;cursor:pointer;line-height:1}.zm button:hover{background:#334155}.zm span{min-width:44px;text-align:center;font-variant-numeric:tabular-nums}
 .b .l{background:#f0d9b5}.b .d{background:#b58863}.b .sel{background:#f6f669!important}.b .last.l{background:#cdd26a}.b .last.d{background:#aaa23a}

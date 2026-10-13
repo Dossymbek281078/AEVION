@@ -111,3 +111,50 @@ describe("после решения — следующая ЛЁГКАЯ зада
     expect(ROUTE).toContain("return `/cyberchess/p/${encodeURIComponent(next)}${keep.toString()");
   });
 });
+
+describe("перетаскивание фигуры (как lichess) и координаты", () => {
+  it("координаты: буквы на нижнем ряду, цифры в левом столбце; draw() их не стирает", () => {
+    expect(ROUTE).toContain('data-cf="${k.sq[0]}"');
+    expect(ROUTE).toContain('<i class="c f">${k.sq[0]}</i>');
+    expect(ROUTE).toContain('<i class="c r">${k.sq[1]}</i>');
+    expect(КЛИЕНТ).toContain('b.getAttribute("data-cf")');
+    expect(ROUTE).toContain("touch-action:none"); // иначе палец прокручивает страницу вместо фигуры
+  });
+  it("pointerdown на своей фигуре + pointerup над целью = ход (без клика)", async () => {
+    собратьСтраницу();
+    document.body.insertAdjacentHTML("beforeend", "");
+    const g7 = document.querySelector('[data-sq="g7"]') as HTMLButtonElement;
+    // цель g6 — добавим клетку
+    g7.insertAdjacentHTML("afterend", '<button type="button" data-sq="g6" class="d"></button>');
+    const g6 = document.querySelector('[data-sq="g6"]') as HTMLButtonElement;
+    (document as unknown as { elementFromPoint: (x: number, y: number) => Element | null }).elementFromPoint = () => g6;
+    // сервер ходов: цели g7 → g6; ход g7→g6 — верный и решает задачу
+    vi.stubGlobal("fetch", vi.fn(async (_u: string, init?: RequestInit) => {
+      const b = JSON.parse(String(init?.body ?? "{}"));
+      const json = b.akt === "targets" ? { targets: ["g6"] } : { vid: "ok", fen: "8/5k2/6pp/3PRK2/r5PP/8/8/8 w - - 0 53", i: 1, reshena: true, otvet: null, movable: [] };
+      return { json: async () => json } as Response;
+    }));
+    new Function(КЛИЕНТ)();
+    const board = document.querySelector("[data-cc-board]")!;
+    g7.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 10, clientY: 10 }));
+    await тик(); // цели для g7 пришли (fetch-заглушка)
+    board.dispatchEvent(new MouseEvent("pointerup", { bubbles: true, clientX: 50, clientY: 50 }));
+    await тик();
+    const calls = (fetch as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls.map((c) => JSON.parse(String(c[1]?.body ?? "{}")));
+    expect(calls.some((b) => b.akt === "targets" && b.from === "g7")).toBe(true);
+    expect(calls.some((b) => b.akt === "move" && b.from === "g7" && b.to === "g6")).toBe(true);
+    expect(document.querySelector(".ghost")).toBeNull();
+  });
+  it("pointerup на той же клетке — хода нет (это тап, его ведёт click)", async () => {
+    собратьСтраницу();
+    const g7 = document.querySelector('[data-sq="g7"]') as HTMLButtonElement;
+    (document as unknown as { elementFromPoint: (x: number, y: number) => Element | null }).elementFromPoint = () => g7;
+    new Function(КЛИЕНТ)();
+    g7.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+    await тик();
+    g7.dispatchEvent(new MouseEvent("pointerup", { bubbles: true }));
+    await тик();
+    const calls = (fetch as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls.map((c) => JSON.parse(String(c[1]?.body ?? "{}")));
+    expect(calls.some((b) => b.akt === "move")).toBe(false);
+  });
+});

@@ -66,3 +66,42 @@ describe("блок появляется там, где приёма адреса
     expect(screen.queryByTestId("footer-waitlist-idle")).not.toBeNull();
   });
 });
+
+describe("🔴 подвал на /en/… говорит по-английски сам — включая placeholder, который слой перевода не трогает", () => {
+  beforeEach(() => { document.body.innerHTML = ""; });
+
+  async function поле(адрес: string) {
+    путь = адрес;
+    vi.useFakeTimers();
+    render(<FooterWaitlist />);
+    await vi.advanceTimersByTimeAsync(1000);
+    vi.useRealTimers();
+    await waitFor(() => expect(screen.queryByTestId("footer-waitlist")).not.toBeNull());
+    const input = document.querySelector('input[type="email"]') as HTMLInputElement;
+    const button = document.querySelector("button") as HTMLButtonElement;
+    return { placeholder: input.placeholder, button: button.textContent ?? "" };
+  }
+
+  it("/en/devhub (туда ведут пять каталогов): placeholder и кнопка английские", async () => {
+    const р = await поле("/en/devhub");
+    expect(р.placeholder).toBe("you@example.com");
+    expect(р.button).toBe("Notify me");
+    expect(/[а-яА-ЯёЁ]/.test(р.placeholder + р.button)).toBe(false);
+  });
+
+  it("КОНТРОЛЬ: /devhub без префикса — прежний русский", async () => {
+    const р = await поле("/devhub");
+    expect(р.placeholder).toBe("вы@почта.рф");
+    expect(р.button).toBe("Сообщить мне");
+  });
+
+  it("явный lang старше адреса", async () => {
+    путь = "/en/devhub";
+    vi.useFakeTimers();
+    render(<FooterWaitlist lang="ru" />);
+    await vi.advanceTimersByTimeAsync(1000);
+    vi.useRealTimers();
+    await waitFor(() => expect(screen.queryByTestId("footer-waitlist")).not.toBeNull());
+    expect((document.querySelector('input[type="email"]') as HTMLInputElement).placeholder).toBe("вы@почта.рф");
+  });
+});

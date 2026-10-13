@@ -7,7 +7,8 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { СОБЫТИЕ_ПЕРЕНОСА } from "@/components/DevHubGuestIdentity";
 import { apiUrl } from "@/lib/apiBase";
-import { меткаЗаходаДляЗаписи } from "@/lib/channelNow";
+import { меткаЗаходаДляЗаписи, postNow } from "@/lib/channelNow";
+import { zagolovokPoMetke } from "./zagolovokPoMetke";
 import { useDevhubT, type DevhubKey } from "./i18n";
 import { COMPARISON_ROWS, capabilityIsKnownOff, comparisonTotalUsd } from "./capabilityRows";
 import { howtoTranscript } from "./howtoTranscript";
@@ -202,6 +203,10 @@ export default function DevHubPage() {
   // Цена и ссылка на кассу — из одного источника с бэкендом, см. блок ниже.
   const devhubProduct = productById("devhub");
   const { lang } = useI18n();
+  /* Заголовок первого экрана по метке ролика (?c=). Метка живёт в window, поэтому на сервере и в
+     первой отрисовке — общее обещание, после монтирования — обещание ролика (13.10.2026). */
+  const [обещание, setОбещание] = useState(() => zagolovokPoMetke(lang, null));
+  useEffect(() => { setОбещание(zagolovokPoMetke(lang, postNow())); }, [lang]);
   const serverError = useDevhubServerError();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -523,13 +528,15 @@ export default function DevHubPage() {
 
   useEffect(() => {
     if (!hydrated) return;
-    const примеры = [t("hero.ex1"), t("hero.ex2"), t("hero.ex3")];
+    // Пример по метке ролика — первым: обещание и первый запрос совпадают (13.10.2026).
+    const поМетке = zagolovokPoMetke(lang, postNow()).primer;
+    const примеры = [...(поМетке ? [поМетке] : []), t("hero.ex1"), t("hero.ex2"), t("hero.ex3")];
     setIdeaPrompt((текущий) => {
       const пример = primerDlyaPustogoPolya({ введено: текущий, примеры });
       if (пример) примерНеТронутRef.current = true;
       return пример ?? текущий;
     });
-  }, [hydrated, t]);
+  }, [hydrated, t, lang]);
 
   // Anything typed into either form before hydration lives only in the DOM;
   // adopt it on mount so the first data-driven re-render does not wipe it.
@@ -663,8 +670,9 @@ export default function DevHubPage() {
             здесь сторожит только браузерный зонд после выкатки, не набор тестов. */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "clamp(12px, 3.5vw, 32px)", flexWrap: "wrap", gap: 12 }}>
           <div>
-            <h1 style={{ fontSize: "clamp(22px, 6.5vw, 28px)", fontWeight: 800, color: "#0f172a", margin: 0 }}>
-              DevHub
+            <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1, textTransform: "uppercase", color: "#0d9488" }}>DevHub</div>
+            <h1 data-devhub-obeshchanie={обещание.istochnik} style={{ fontSize: "clamp(22px, 6.5vw, 28px)", fontWeight: 800, color: "#0f172a", margin: 0 }}>
+              {обещание.h1}
             </h1>
             <p style={{ color: "#64748b", marginTop: 6, fontSize: 15 }}>
               {t("hero.sub")}

@@ -7370,7 +7370,7 @@ export default function CyberChessPage(){
         position:"sticky",top:0,zIndex:Z.sticky,
         // Телефон: справа 100px под плавающую языковую пилюлю «RU ▼» (AppShellLanguagePill, fixed
         // top:12/right:12) — на 390 она ложилась на ☰/🔊 шапки (тестер 20.09.2026).
-        margin:vwPx<769?"0 -12px 4px":"0 -12px 8px",padding:vwPx<769?"3px 72px 3px 12px":"6px 12px",
+        margin:vwPx<769?"0 -12px 4px":"0 -12px 8px",padding:vwPx<769?"3px 72px 3px 12px":"6px 84px 6px 12px", // 137: справа место под пилюлю языка (fixed top:12/right:12) — полосы над шапкой больше нет
         background:CC.surfaceGlass,backdropFilter:"blur(14px)",WebkitBackdropFilter:"blur(14px)",
         borderBottom:`1px solid ${CC.border}`,
         // 136: одна строка (≤64 px) — доске нужна высота. Между 769 и 1023 перенос допускается.

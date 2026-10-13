@@ -34,7 +34,7 @@ describe("доска во всю доступную высоту (136)", () => {
     expect(src).toContain("{vwPx>=1700&&<button onClick={()=>sShowSections(true)}");
     expect(src).toContain("{vwPx>=1700&&!шапкаКомпактна&&<div className=\"cc-hzone\"");
     expect(src).toContain("{(vwPx>=1500||active)&&<span>{t.label}</span>}");
-    expect(src).toContain('padding:vwPx<769?"3px 72px 3px 12px":"6px 12px"');
+    expect(src).toContain('padding:vwPx<769?"3px 72px 3px 12px":"6px 84px 6px 12px"'); // 137: справа место под пилюлю
   });
   it("🔴 карточка «С чего начать» — не в колонке над доской: телефон под доской, десктоп в панели", () => {
     const колонка = src.indexOf('data-cc-board-col="1"');

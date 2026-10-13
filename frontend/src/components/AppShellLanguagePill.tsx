@@ -17,9 +17,13 @@ export function AppShellLanguagePill() {
     const el = ref.current;
     const root = document.documentElement;
     if (!el) return;
+    // 137 (14.10.2026, слово основателя «доска маленькая»): на /cyberchess* верхний отступ под пилюлю
+    // не нужен — шапка шахмат липкая и сама держит место справа (padding-right 72/84). Замер на проде:
+    // полоса 50 px над шапкой съедала 7 % высоты игровой доски на 1463×724 (474 px = 65 % vh).
+    const безВерхнегоОтступа = /^\/cyberchess(\/|$)/.test(window.location.pathname);
     const обновить = () => {
       const h = el.getBoundingClientRect().height;
-      root.style.setProperty("--aevion-pill-h", `${Math.round(h) + 12}px`);
+      root.style.setProperty("--aevion-pill-h", безВерхнегоОтступа ? "0px" : `${Math.round(h) + 12}px`);
     };
     обновить();
     const ro = new ResizeObserver(обновить);

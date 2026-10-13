@@ -86,6 +86,17 @@ export function shag(s: Sostoyanie, from: string, to: string): IshodShaga {
   return { vid: "ok", sostoyanie: { ...s, fen: g.fen(), i, reshena }, otvet, reshena };
 }
 
+/** Клетки с фигурами игрока, у которых есть хотя бы один ход, — подсветка «как ходить». */
+export function hodyashchie(fen: string, storona: "w" | "b"): string[] {
+  try {
+    const g = new Chess(fen);
+    if (g.turn() !== storona) return [];
+    return [...new Set(g.moves({ verbose: true }).map((m) => m.from as string))].sort();
+  } catch {
+    return [];
+  }
+}
+
 /** Доска для отрисовки: 8 рядов сверху вниз с учётом ориентации (игрок снизу). */
 export function kletki(fen: string, storona: "w" | "b"): Array<Array<{ sq: string; p: string | null; dark: boolean }>> {
   const g = new Chess(fen);

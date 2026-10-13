@@ -7,6 +7,7 @@
 export type PzYazyk = "ru" | "en" | "kk";
 export const PZ_SLOVA: Record<PzYazyk, Record<string, string>> = {
   ru: {
+    "pz.hint": "Нажмите подсвеченную фигуру, затем клетку",
     "pz.sideBlack": "Ход чёрных",
     "pz.sideWhite": "Ход белых",
     "pz.mateIn": "Мат в {n}",
@@ -36,6 +37,7 @@ export const PZ_SLOVA: Record<PzYazyk, Record<string, string>> = {
     "pz.fullVersion": "Полная версия: тренер, подсказки, 500 000 задач →",
   },
   en: {
+    "pz.hint": "Tap a highlighted piece, then a square",
     "pz.sideBlack": "Black to move",
     "pz.sideWhite": "White to move",
     "pz.mateIn": "Mate in {n}",
@@ -65,6 +67,7 @@ export const PZ_SLOVA: Record<PzYazyk, Record<string, string>> = {
     "pz.fullVersion": "Full version: coach, hints, 500,000 puzzles →",
   },
   kk: {
+    "pz.hint": "Жарықтанған фигураны, сосын шаршыны басыңыз",
     "pz.sideBlack": "Қаралар жүреді",
     "pz.sideWhite": "Ақтар жүреді",
     "pz.mateIn": "{n} жүрісте мат",

@@ -58,12 +58,12 @@ const investorFaqs: FAQ[] = [
   },
   {
     q: "Can I see live product, not just slides?",
-    a: "Yes — the core modules on /pitch are working MVPs (each module shows its stage). /qright registers IP in seconds. /bureau issues signed, timestamped certificates citing 6 international frameworks. /bank is a 5-tab multilingual dashboard with 18 features. /pitch itself shows live API metrics in the hero (green pill = backend up). To book a guided walkthrough: yahiin1978@gmail.com.",
+    a: "Yes — the core modules on /pitch are working MVPs (each module shows its stage). /qright registers IP in seconds. /bureau issues signed, timestamped certificates citing 6 international frameworks. /bank is a 5-tab multilingual dashboard with 18 features. /pitch itself shows live API metrics in the hero (green pill = backend up). To book a guided walkthrough: data@aevion.app.",
     updated: "2026-05-08",
   },
   {
     q: "How do I follow up?",
-    a: "Email yahiin1978@gmail.com with subject 'AEVION investor demo'. We'll set up a 30-minute live walk-through (screen share, real backend, real data) and follow with a tailored deep-dive deck under NDA.",
+    a: "Email data@aevion.app with subject 'AEVION investor demo'. We'll set up a 30-minute live walk-through (screen share, real backend, real data) and follow with a tailored deep-dive deck under NDA.",
   },
 ];
 
@@ -196,7 +196,7 @@ export default function HelpPage() {
       "Sent from /help",
     ].filter(Boolean);
     const body = encodeURIComponent(lines.join("\n"));
-    return `mailto:yahiin1978@gmail.com?subject=${subject}&body=${body}`;
+    return `mailto:data@aevion.app?subject=${subject}&body=${body}`;
   }
 
   async function handleContactSubmit(e: React.FormEvent) {
@@ -482,8 +482,8 @@ export default function HelpPage() {
             }}
           >
             {t(category === "investors" ? "helpRoot.faq.empty.investors" : "helpRoot.faq.empty.users", { q: query })}{" "}
-            <a href="mailto:yahiin1978@gmail.com" style={{ color: "#0d9488", fontWeight: 700 }}>
-              yahiin1978@gmail.com
+            <a href="mailto:data@aevion.app" style={{ color: "#0d9488", fontWeight: 700 }}>
+              data@aevion.app
             </a>
           </div>
         ) : null}

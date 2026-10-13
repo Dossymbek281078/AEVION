@@ -25,7 +25,7 @@ export const metadata: Metadata = {
 };
 
 const H2 = { fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 } as const;
-const MAIL = "yahiin1978@gmail.com";
+const MAIL = "data@aevion.app";
 
 export default function SupportPage() {
   const updated = "August 16, 2026";

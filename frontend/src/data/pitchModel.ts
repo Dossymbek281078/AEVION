@@ -938,6 +938,6 @@ export const ask = {
     `We're raising for a focused 18-month sprint: harden the launched ${DEEP_DIVE_MODULES} modules, ship 4 of the ${MODULE_NODES - DEEP_DIVE_MODULES} emerging nodes, and lock 2 enterprise compliance pilots. Capital is for engineering, GTM in three creator verticals, and one regulatory partnership. The offer is one, not a ladder: a partnership — $10M returnable advance plus resources (compute, engineers, distribution, brand), revenue split 51% founder / 49% partner, founder stays as Chief Idea Officer. Not a buyout.`,
   termsHref: "/acquire",
   termsLabel: "See the full deal ladder (1% → 95%)",
-  ctaPrimary: { label: "Book an investor demo", href: "mailto:yahiin1978@gmail.com?subject=AEVION investor demo" },
+  ctaPrimary: { label: "Book an investor demo", href: "mailto:data@aevion.app?subject=AEVION investor demo" },
   ctaSecondary: { label: "Read the deep-dive", href: "/demo/deep" },
 } as const;

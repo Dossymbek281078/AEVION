@@ -84,7 +84,7 @@ const de: Record<string, string> = {
   "footer.products": "Produkte",
   "footer.rights": "Alle Rechte vorbehalten.",
   "help.still": "Weitere Hilfe benötigt?",
-  "help.subtitle": "Alles über AEVION. Keine Antwort? E-Mail: yahiin1978@gmail.com",
+  "help.subtitle": "Alles über AEVION. Keine Antwort? E-Mail: data@aevion.app",
   "help.title": "Hilfe-Center",
   "home.badge": "Produkt MVP · bereit für Demo",
   "home.cta.auth": "Mit Identität beginnen",

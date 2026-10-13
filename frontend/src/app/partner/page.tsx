@@ -54,7 +54,7 @@ const DEAL = [
   { label: "Вето основателя", value: "Constitution v1 — изменения только с письменного согласия" },
   { label: "Due diligence", value: "Tech + legal + financial, 30 дней" },
   { label: "Эксклюзивность", value: "60 дней с подписания LOI" },
-  { label: "Контакт", value: "yahiin1978@gmail.com" },
+  { label: "Контакт", value: "data@aevion.app" },
 ];
 
 // Partnership upside is the partner's 49% of project revenue as ARR grows —
@@ -98,8 +98,8 @@ export default function PartnerPage() {
           Двигатель остаётся в компании как Chief Idea Officer — навсегда.
         </p>
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 40 }}>
-          <a href="mailto:yahiin1978@gmail.com?subject=AEVION%20Innovation%20Partnership%20-%20LOI%20inquiry" style={btnPrimary}>
-            Запросить LOI · yahiin1978@gmail.com
+          <a href="mailto:data@aevion.app?subject=AEVION%20Innovation%20Partnership%20-%20LOI%20inquiry" style={btnPrimary}>
+            Запросить LOI · data@aevion.app
           </a>
           <Link href="/partner#deal" style={btnGhost}>Условия сделки</Link>
           <Link href="/status" style={btnGhost}>Live health-board</Link>
@@ -190,7 +190,7 @@ export default function PartnerPage() {
         </div>
         <div style={{ padding: 18, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 14, fontSize: 13, color: "#64748b", lineHeight: 1.6 }}>
           Полный Tech DD пакет — честный статус каждого продукта, curl-команды, архитектура, что именно нужна команда для запуска каждого:
-          {" "}<a href="mailto:yahiin1978@gmail.com?subject=AEVION%20Tech%20DD%20request" style={{ color: "#10b981", textDecoration: "none", fontWeight: 700 }}>запросить по email →</a>
+          {" "}<a href="mailto:data@aevion.app?subject=AEVION%20Tech%20DD%20request" style={{ color: "#10b981", textDecoration: "none", fontWeight: 700 }}>запросить по email →</a>
         </div>
       </section>
 
@@ -334,8 +334,8 @@ export default function PartnerPage() {
             LOI с 8 пунктами — подписываем в течение 5 рабочих дней. Funds через эскроу при закрытии. DIFC courts.
           </div>
           <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-            <a href="mailto:yahiin1978@gmail.com?subject=AEVION%20Innovation%20Partnership%20-%20LOI%20request&body=Hello,%0A%0AWe%20are%20interested%20in%20the%20AEVION%20Innovation%20Partnership.%0A%0AOrganisation:%0AContact:%0AInvestment%20capacity:%0ATeam%20we%20can%20bring:%0APreferred%20jurisdiction:%0ATimeline:%0A%0A--" style={btnPrimary}>
-              Запросить LOI · yahiin1978@gmail.com
+            <a href="mailto:data@aevion.app?subject=AEVION%20Innovation%20Partnership%20-%20LOI%20request&body=Hello,%0A%0AWe%20are%20interested%20in%20the%20AEVION%20Innovation%20Partnership.%0A%0AOrganisation:%0AContact:%0AInvestment%20capacity:%0ATeam%20we%20can%20bring:%0APreferred%20jurisdiction:%0ATimeline:%0A%0A--" style={btnPrimary}>
+              Запросить LOI · data@aevion.app
             </a>
             <Link href="/partner/print" style={btnGhost}>PDF brief (Ctrl+P)</Link>
           </div>

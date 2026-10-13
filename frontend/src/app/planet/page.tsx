@@ -385,7 +385,7 @@ export default function PlanetCompliancePage() {
         <strong>{t("planet.betaBanner.strong")}</strong>{" "}
         {t("planet.betaBanner.pre")}{" "}
         <a
-          href="mailto:yahiin1978@gmail.com?subject=Planet%20feedback"
+          href="mailto:data@aevion.app?subject=Planet%20feedback"
           style={{ color: "#0d9488", fontWeight: 700, textDecoration: "underline" }}
         >
           {t("planet.betaBanner.cta")}

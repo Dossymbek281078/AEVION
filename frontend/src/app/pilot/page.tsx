@@ -155,7 +155,7 @@ export default function PilotPage() {
 
               <a
                 href={
-                  "mailto:yahiin1978@gmail.com" +
+                  "mailto:data@aevion.app" +
                   "?subject=" + encodeURIComponent(`AEVION ${p.badge} — start request`) +
                   "&body=" + encodeURIComponent(
                     `Здравствуйте,\n\nИнтересует запуск ${p.badge} (${p.price} / ${p.duration}).\n\nКомпания:\nКонтактное лицо:\nДолжность:\nТехническая команда (роли):\nЖелаемая дата старта:\n\nГотов(а) подписать pilot SOW в течение 5 рабочих дней после первого звонка.\n\n--`

@@ -89,12 +89,12 @@ export default function PartnerPrintPage() {
             <tr><th>Founder veto</th><td>Constitution v1 — changes only with the founder&apos;s written consent</td></tr>
             <tr><th>Due diligence</th><td>Tech + legal + financial, 30 days</td></tr>
             <tr><th>Exclusivity</th><td>60 days from LOI signing</td></tr>
-            <tr><th>Contact</th><td><strong>yahiin1978@gmail.com</strong></td></tr>
+            <tr><th>Contact</th><td><strong>data@aevion.app</strong></td></tr>
           </tbody>
         </table>
 
         <div className="footer">
-          aevion.app/partner · aevion.app/status · yahiin1978@gmail.com
+          aevion.app/partner · aevion.app/status · data@aevion.app
         </div>
 
         {/* PAGE 2 — Innovation pipeline */}
@@ -203,7 +203,7 @@ export default function PartnerPrintPage() {
 
         <div className="footer">
           AEVION · Innovation Partnership · Confidential · 2026 ·
-          yahiin1978@gmail.com · aevion.app/partner
+          data@aevion.app · aevion.app/partner
         </div>
 
       </div>

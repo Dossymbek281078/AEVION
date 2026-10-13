@@ -508,8 +508,8 @@ export default function InvestorPage() {
           </div>
           <p style={{ fontSize: 13, color: "#475569", marginTop: 20 }}>
             Partnership, not a buyout · $10M returnable advance + 51/49 revenue · contact:{" "}
-            <a href="mailto:yahiin1978@gmail.com?subject=AEVION%20investment%20inquiry" style={{ color: "#10b981", textDecoration: "none", fontWeight: 700 }}>
-              yahiin1978@gmail.com
+            <a href="mailto:data@aevion.app?subject=AEVION%20investment%20inquiry" style={{ color: "#10b981", textDecoration: "none", fontWeight: 700 }}>
+              data@aevion.app
             </a>
           </p>
         </div>

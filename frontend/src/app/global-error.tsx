@@ -31,7 +31,7 @@ export default function GlobalError({
           </h1>
           <p style={{ marginTop: 8, color: "#94a3b8", fontSize: 14 }}>
             The whole layout couldn&apos;t render. Reload to try again — if it keeps happening, mail
-            yahiin1978@gmail.com.
+            data@aevion.app.
           </p>
           {error?.digest && (
             <p style={{ marginTop: 8, color: "#64748b", fontSize: 11, fontFamily: "monospace" }}>

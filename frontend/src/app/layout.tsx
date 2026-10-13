@@ -101,7 +101,7 @@ const organizationJsonLd = {
     "Trust infrastructure for digital assets and intellectual property. IP registry (QRight), cryptographic signatures (QSign), authorship & prior-art bureau, compliance certification (Planet), awards, digital banking.",
   sameAs: [`${SITE}/pitch`],
   contactPoint: [
-    { "@type": "ContactPoint", contactType: "investor relations", email: "yahiin1978@gmail.com", areaServed: "Worldwide" },
+    { "@type": "ContactPoint", contactType: "investor relations", email: "data@aevion.app", areaServed: "Worldwide" },
   ],
 };
 

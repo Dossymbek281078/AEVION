@@ -135,24 +135,30 @@ export default function SetupBoardPreview({
           указания, что делать дальше. Для пришедшего с ролика это и есть уход.
           Подпись сделана НАЛОЖЕНИЕМ: габариты кнопки не меняются, значит
           прежние замеры высоты доски (и урок про «высоту 3 пикселя») в силе. */}
+      {/* 138 (13.10, слово основателя «интерфейс как у lichess/chess.com»): призыв — не тонкая
+          подпись у нижнего ряда (замер 13.10 на 390×844: она ложилась на фигуры), а крупная
+          кнопка-пилюля в ЦЕНТРЕ доски, как «Play» у chess.com. Сама доска остаётся кнопкой
+          (pointer-events: none у пилюли), так что первый экран = доска + один явный шаг, и он в
+          кадре на всех 7 парах окон — большая «ИГРАТЬ» в лобби на 1463×724 лежала на 662–736. */}
       <span
+        data-cc-start-pill="1"
         style={{
           position: "absolute",
-          left: 0,
-          right: 0,
-          bottom: 0,
-          // Тонко и мягко намеренно: подпись лежит ПОВЕРХ доски, а внизу стоят
-          // фигуры человека. Замер на телефоне 390x844: клетка 42 px, подпись
-          // в 28 px накрывала две трети клетки и все 8 фигур нижнего ряда.
-          // 22 px — половина клетки, фигуры сквозь градиент видны.
-          padding: "4px 8px",
-          fontSize: 12,
-          fontWeight: 700,
-          letterSpacing: 0.2,
-          textAlign: "center",
+          left: "50%",
+          top: "50%",
+          transform: "translate(-50%,-50%)",
+          padding: "12px 22px",
+          borderRadius: 999,
+          background: "rgba(5,150,105,0.94)",
           color: "#fff",
-          textShadow: "0 1px 2px rgba(0,0,0,0.9)",
-          background: "linear-gradient(to top, rgba(0,0,0,0.58), rgba(0,0,0,0))",
+          fontSize: 18,
+          fontWeight: 900,
+          letterSpacing: 0.3,
+          whiteSpace: "nowrap",
+          maxWidth: "92%",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          boxShadow: "0 10px 28px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.25)",
           pointerEvents: "none",
           lineHeight: 1.2,
         }}

@@ -154,6 +154,10 @@ export default function BureauUpgradePage() {
         }),
       });
       const data = await r.json();
+      // Бесплатная норма проверок исчерпана — окно тарифа поднимает общий
+      // перехватчик (lib/paywall.ts); голый код «free_quota_exceeded» в
+      // красной строке человеку ничего не говорит.
+      if (r.status === 402 && data?.error === "free_quota_exceeded") return;
       if (!r.ok) throw new Error(data?.error || `Error ${r.status}`);
       setVerificationId(data.verificationId);
       setStep("kyc-running");

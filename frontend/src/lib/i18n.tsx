@@ -242,6 +242,12 @@ function языкИзЗапроса(): Lang | null {
     if (isLang(явный)) return явный;
     const метка = (п.get("c") ?? "").trim().toLowerCase();
     if (метка.startsWith("mail-")) return "en";
+    // 126 (13.10.2026, оркестратор): /proof — страница для англоязычных писем, целиком en при
+    // любой локали. Без метки mail- ru-RU видел её наполовину переведённой живым слоем
+    // («Доверие · IP · Globus», «$490 … in 7 дней»). Решение по адресу, как у ?lang= и
+    // mail-: только состояние провайдера, в хранилище и куку не пишется — язык сайта у
+    // посетителя не меняется.
+    if (window.location.pathname === "/proof" || window.location.pathname === "/proof/") return "en";
   } catch {}
   return null;
 }

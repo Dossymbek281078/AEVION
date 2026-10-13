@@ -745,6 +745,8 @@ interface Project {
   deployUrl: string | null;
   repoUrl: string | null;
   customDomain: string | null;
+  /** 135: метка захода (probe-/yt-…) — канал для письма, когда пост не запомнен. */
+  entryTag?: string | null;
   envVars: Record<string, string>;
   collaborators: Array<{ userId: string; role: string }>;
   createdAt: string;
@@ -1073,8 +1075,12 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
     const post = postNow();
     track({ type: "feature_use", source: "devhub", meta: { feature: DEVHUB_SAVE_FEATURE, projectId: id, ...(post ? { post, channel: post } : {}) } });
     try {
-      const канал = kanalDlyaLista(post);
-      const r = await fetch(apiUrl("/api/constitution/waitlist/subscribe"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: адрес, source: DEVHUB_SAVE_SOURCE, projectId: id, ...(канал ? { channel: канал } : {}) }) });
+      // 135: канал — из метки захода, а при пробе (?probe=) пост не запоминается — тогда из entryTag проекта.
+      const канал = kanalDlyaLista(post ?? project?.entryTag ?? null);
+      const адресДляПисьма = pagesResult?.liveUrl ?? pagesResult?.pagesUrl ?? buildLiveUrl ?? project?.deployUrl ?? null;
+      const siteUrl = адресДляПисьма && /^https:\/\/[a-z0-9.-]+\.pages\.dev\/?$/.test(адресДляПисьма) ? адресДляПисьма : undefined;
+      const domain = pagesResult?.domain && /^[a-z0-9-]+\.aevion\.app$/.test(pagesResult.domain) ? pagesResult.domain : undefined;
+      const r = await fetch(apiUrl("/api/constitution/waitlist/subscribe"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: адрес, source: DEVHUB_SAVE_SOURCE, projectId: id, lang: uiLang, ...(канал ? { channel: канал } : {}), ...(siteUrl ? { siteUrl: адресДляПисьма } : {}), ...(domain ? { domain } : {}) }) });
       if (r.ok) { setSaveState("done"); try { localStorage.setItem(klyuchSokhraneniya(id), "1"); } catch { /* приватное окно */ } }
       else setSaveState("error");
     } catch { setSaveState("error"); }

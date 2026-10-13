@@ -125,6 +125,10 @@ export const WaitlistSubscribeSchema = z.object({
   source: z.string().max(60).optional(),
   /** 132б (13.10.2026): гость DevHub оставляет почту после живого адреса — id проекта для письма на data@. */
   projectId: z.string().max(64).regex(/^[A-Za-z0-9_-]+$/, "неверный id проекта").optional(),
+  /** 135: язык гостя и его адреса — для письма гостю на его языке с обеими ссылками. */
+  lang: z.enum(["ru", "en", "kk"]).optional(),
+  siteUrl: z.string().max(200).regex(/^https:\/\/[a-z0-9.-]+\.pages\.dev\/?$/, "неверный адрес сайта").optional(),
+  domain: z.string().max(120).regex(/^[a-z0-9-]+\.aevion\.app$/, "неверный домен").optional(),
   /*
    * Канал привлечения — ОТДЕЛЬНО от source.
    *

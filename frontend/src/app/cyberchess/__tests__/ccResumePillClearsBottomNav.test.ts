@@ -47,9 +47,9 @@ describe("«Вернуться к партии» — только в поток�
     expect(src).not.toContain('title="Показать горячие клавиши"');
   });
   it("мобильная шапка компактна: «Все разделы», «Помощь», «Войти», рейтинг/Chessy — только с 769", () => {
-    expect(src).toContain('{vwPx>=769&&<button onClick={()=>sShowSections(true)}');
+    expect(src).toContain('{vwPx>=1700&&<button onClick={()=>sShowSections(true)}'); // 136: с 1700, ниже — в «Ещё»
     expect(src).toContain('{vwPx>=769&&ccAuth.checked&&(');
-    expect(src).toContain('{vwPx>=769&&!шапкаКомпактна&&<div className="cc-hzone"');
+    expect(src).toContain('{vwPx>=1700&&!шапкаКомпактна&&<div className="cc-hzone"');
     // …а убранное не пропало: на телефоне оно в меню «Ещё»
     expect(src).toContain('lbl:"Войти в аккаунт AEVION",act:()=>{window.location.href="/auth?next=/cyberchess"}');
     expect(src).toContain("lbl:`Рейтинг ${rat} · Chessy ${chessy.balance}`,act:()=>sShowStatsDashboard(true)");

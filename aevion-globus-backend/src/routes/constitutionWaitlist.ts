@@ -41,18 +41,41 @@ import { dirname } from "node:path";
  */
 export const DEVHUB_GUEST_SOURCE = /^devhub-guest/i;
 export const DEVHUB_GUEST_TO = "data@aevion.app";
-export function pismoGostyuDevHub(z: { email: string; source: string; channel: string | null; projectId: string | null }) {
+export function pismoGostyuDevHub(z: { email: string; source: string; channel: string | null; projectId: string | null; siteUrl?: string | null; domain?: string | null }) {
   const проект = z.projectId ? `https://aevion.app/devhub/${z.projectId}` : "—";
   const text = [
     "DevHub guest wants to keep the site",
     "",
     `Email:    ${z.email}`,
     `Project:  ${проект}`,
+    `Site:     ${z.siteUrl ?? "—"} · own address: ${z.domain ? "https://" + z.domain : "—"}`,
     `Source:   ${z.source} · channel: ${z.channel ?? "—"}`,
     "",
     "Promised on the page: the link is sent and the own name on aevion.app is connected within a day.",
   ].join("\n");
   return { to: DEVHUB_GUEST_TO, subject: `DevHub guest — keep the site — ${z.email}`, text, html: `<pre style="font:14px/1.5 ui-monospace,monospace">${text.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</pre>` };
+}
+/**
+ * 135 (13.10.2026): письмо самому гостю — тем же путём, что на data@ (Resend: dkim+spf+dmarc pass),
+ * на его языке, с обеими ссылками. Прежнее Brevo-подтверждение «Вы в списке раннего доступа: DevHub
+ * Studio» Gmail клал в спам, и оно было по-русски для en-гостя — живой человек ссылку не видел.
+ * Сроков «минуты» не обещаем: подтверждение — в течение суток, как на карточке.
+ */
+export function pismoGostyuNaEgoYazyke(z: { email: string; lang: "ru" | "en" | "kk"; siteUrl: string | null; domain: string | null }) {
+  const own = z.domain ? `https://${z.domain}` : null;
+  const T = {
+    en: { subject: "Your site on AEVION DevHub: link and address", live: "Your site is live:", own: "Your own address:", connecting: "it is being connected now; we confirm by email within a day.", keep: "Keep this email — the links stay valid.", reply: "Reply to data@aevion.app with any question. — AEVION" },
+    ru: { subject: "Ваш сайт в AEVION DevHub: ссылка и адрес", live: "Ваш сайт в интернете:", own: "Ваш собственный адрес:", connecting: "он подключается сейчас; подтвердим письмом в течение суток.", keep: "Сохраните это письмо — ссылки остаются действительными.", reply: "На любой вопрос ответим: data@aevion.app. — AEVION" },
+    kk: { subject: "AEVION DevHub-тағы сайтыңыз: сілтеме және мекенжай", live: "Сайтыңыз интернетте:", own: "Өз мекенжайыңыз:", connecting: "ол қазір қосылуда; бір тәулік ішінде хатпен растаймыз.", keep: "Бұл хатты сақтаңыз — сілтемелер жарамды болып қалады.", reply: "Кез келген сұрақ бойынша: data@aevion.app. — AEVION" },
+  }[z.lang];
+  const text = [
+    `${T.live} ${z.siteUrl ?? "—"}`,
+    own ? `${T.own} ${own} — ${T.connecting}` : "",
+    "",
+    T.keep,
+    T.reply,
+  ].filter((l, i) => l !== "" || i === 2).join("\n");
+  return { to: z.email, subject: T.subject, text, html: `<pre style="font:14px/1.5 ui-monospace,monospace">${text.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</pre>` };
 }
 function zapisatZayavkuGostya(lead: Record<string, unknown>): string | null {
   try {
@@ -209,8 +232,9 @@ constitutionWaitlistRouter.post(
   validate(WaitlistSubscribeSchema),
   async (req: Request, res: Response) => {
     try {
-      const body = req.body as { email: string; source?: string; channel?: string; projectId?: string };
+      const body = req.body as { email: string; source?: string; channel?: string; projectId?: string; lang?: "ru" | "en" | "kk"; siteUrl?: string; domain?: string };
       const projectId = body.projectId ? String(body.projectId).slice(0, 64) : null;
+      const гостьDevHub = DEVHUB_GUEST_SOURCE.test((body.source ?? "unknown").slice(0, 60));
       const emailRaw = body.email.trim().toLowerCase();
       const sourceRaw = (body.source ?? "unknown").slice(0, 60);
       // Пусто — это «не знаем», а не «прямой заход»: выдуманный «direct»
@@ -304,21 +328,27 @@ constitutionWaitlistRouter.post(
       // незачем. Если различить не удалось (база недоступна, isNew остаётся
       // true) — письмо шлём: лучше лишнее письмо, чем молчание в ответ на
       // первую подписку.
-      if (isNew) void sendWaitlistConfirm(row.email, row.source)
+      if (isNew && !гостьDevHub) void sendWaitlistConfirm(row.email, row.source)
         .then((sent) => {
           if (!sent) capture(new Error("waitlist confirm email not sent"), { where: "waitlist.confirmEmail" });
         })
         .catch((mailErr) => capture(mailErr, { where: "waitlist.confirmEmail" }));
 
       let mailed: boolean | undefined;
-      if (DEVHUB_GUEST_SOURCE.test(sourceRaw)) {
-        const письмо = await sendEmail(pismoGostyuDevHub({ email: row.email, source: sourceRaw, channel: channelRaw, projectId }));
+      let guestMailed: boolean | undefined;
+      if (гостьDevHub) {
+        const siteUrl = body.siteUrl ?? null;
+        const domain = body.domain ?? null;
+        const письмо = await sendEmail(pismoGostyuDevHub({ email: row.email, source: sourceRaw, channel: channelRaw, projectId, siteUrl, domain }));
         mailed = письмо.ok;
         if (!письмо.ok) console.error("[waitlist] письмо о госте DevHub НЕ ушло на data@:", письмо.error ?? "failed");
-        const журнал = zapisatZayavkuGostya({ ts: row.createdAt, kind: "devhub_save_email", email: row.email, source: sourceRaw, channel: channelRaw, projectId, mailed });
+        const гостю = await sendEmail(pismoGostyuNaEgoYazyke({ email: row.email, lang: body.lang ?? "en", siteUrl, domain }));
+        guestMailed = гостю.ok;
+        if (!гостю.ok) console.error("[waitlist] письмо ГОСТЮ DevHub НЕ ушло:", гостю.error ?? "failed");
+        const журнал = zapisatZayavkuGostya({ ts: row.createdAt, kind: "devhub_save_email", email: row.email, source: sourceRaw, channel: channelRaw, projectId, siteUrl, domain, lang: body.lang ?? "en", mailed, guestMailed });
         if (журнал) console.error("[waitlist] журнал заявок:", журнал);
       }
-      res.status(201).json({ ok: true, storage, ...(mailed === undefined ? {} : { mailed }) });
+      res.status(201).json({ ok: true, storage, ...(mailed === undefined ? {} : { mailed, guestMailed }) });
     } catch (err) {
       capture(err);
       res.status(500).json({

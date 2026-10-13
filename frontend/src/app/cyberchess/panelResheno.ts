@@ -9,9 +9,10 @@
  * До решения основателя о платной ценности здесь просто «ещё задачи и
  * ИИ-тренер» (слово оркестратора 12.10.2026).
  */
-export function strokaTsennosti(pzTotal: number | null | undefined): string {
+export function strokaTsennosti(pzTotal: number | null | undefined, locale: "ru" | "en" | "kk" = "ru"): string {
   if (typeof pzTotal === "number" && Number.isFinite(pzTotal) && pzTotal > 0) {
-    return `Ещё ${Math.floor(pzTotal).toLocaleString("ru-RU")} задач и ИИ-тренер`;
+    const n = Math.floor(pzTotal).toLocaleString(locale === "en" ? "en-US" : locale === "kk" ? "kk-KZ" : "ru-RU");
+    return locale === "en" ? `${n} more puzzles and an AI coach` : locale === "kk" ? `Тағы ${n} есеп және ЖИ-жаттықтырушы` : `Ещё ${n} задач и ИИ-тренер`;
   }
-  return "Ещё задачи и ИИ-тренер";
+  return locale === "en" ? "More puzzles and an AI coach" : locale === "kk" ? "Тағы есептер және ЖИ-жаттықтырушы" : "Ещё задачи и ИИ-тренер";
 }

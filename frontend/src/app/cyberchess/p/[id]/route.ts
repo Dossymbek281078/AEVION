@@ -53,12 +53,19 @@ function html(p: { id: string; fen: string; zadanie: string; name: string; ratin
 <link rel="canonical" href="https://aevion.app${esc(p.polnaya)}">
 <meta property="og:title" content="${esc(p.title)}"><meta property="og:description" content="${esc(p.description)}"><meta property="og:type" content="website"><meta property="og:url" content="https://aevion.app/cyberchess/p/${esc(p.id)}"><meta property="og:image" content="https://aevion.app/cyberchess/launch/opengraph-image"><meta name="twitter:card" content="summary_large_image">
 <style>
-:root{color-scheme:dark}*{box-sizing:border-box}html,body{margin:0;background:#0f172a;color:#f1f5f9;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-main{min-height:100dvh;display:flex;flex-direction:column;align-items:center;gap:10px;padding:12px 12px 24px}
-.wd{width:min(92vw,60vh,480px)}.hdr{display:flex;justify-content:space-between;align-items:baseline}.hdr b{font-size:15px}.hdr small{opacity:.75}
+:root{color-scheme:dark;--zm:1;--side:min(92vw,100dvh - 150px)}*{box-sizing:border-box}html,body{margin:0;background:#0f172a;color:#f1f5f9;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+/* Доска — главный объект: её сторона считается от ОКНА ПОЛЬЗОВАТЕЛЯ (слово основателя 13.10: «как lichess/chess.com»),
+   не от фиксированного предела. Телефон: столбец, доска ≈ вся ширина. Desktop (≥1024): доска по высоте окна слева,
+   справа панель задания/статуса 290–360 px — разметка lichess. --zm — ручной масштаб 0,6…1 («−/+»), помнится в localStorage. */
+main{min-height:100dvh;display:grid;grid-template-columns:1fr;justify-items:center;align-content:start;gap:10px;padding:10px 12px 20px}
+.wd{width:calc(var(--zm)*var(--side))}.hdr{display:flex;justify-content:space-between;align-items:baseline}.hdr b{font-size:15px}.hdr small{opacity:.75}
+@media(min-width:1024px){:root{--side:min(100dvh - 120px,100vw - 360px)}main{grid-template-columns:auto 290px;grid-template-rows:repeat(6,min-content) 1fr;justify-content:center;align-items:start;column-gap:20px;padding-top:16px}
+.b.wd{grid-column:1;grid-row:1/span 7}.hdr,.z,.s,.zm,.r,.f{grid-column:2;width:290px}.hdr{grid-row:1}.z{grid-row:2;font-size:18px}.s{grid-row:3}.zm{grid-row:4}.r{grid-row:5}.f{grid-row:6}}
+@media(min-width:1280px){:root{--side:min(100dvh - 120px,100vw - 440px)}main{grid-template-columns:auto 360px;column-gap:28px}.hdr,.z,.s,.zm,.r,.f{width:360px}}
 .z{font-size:15px;font-weight:800}.b .m::before{content:"";position:absolute;inset:6%;border-radius:50%;box-shadow:0 0 0 3px rgba(5,150,105,.75) inset}
 .b{aspect-ratio:1/1;display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);border-radius:8px;overflow:hidden;box-shadow:0 4px 18px rgba(0,0,0,.4);touch-action:manipulation;user-select:none}
-.b button{position:relative;border:0;padding:0;margin:0;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:clamp(22px,7.5vmin,46px);line-height:1}
+.b button{position:relative;border:0;padding:0;margin:0;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:calc(var(--zm)*var(--side)/8*.78);line-height:1}
+.zm{display:flex;align-items:center;gap:8px;font-size:13px;color:#cbd5e1}.zm button{width:40px;height:36px;border:1px solid #475569;border-radius:8px;background:#1e293b;color:#f1f5f9;font-size:20px;font-weight:900;cursor:pointer;line-height:1}.zm button:hover{background:#334155}.zm span{min-width:44px;text-align:center;font-variant-numeric:tabular-nums}
 .b .l{background:#f0d9b5}.b .d{background:#b58863}.b .sel{background:#f6f669!important}.b .last.l{background:#cdd26a}.b .last.d{background:#aaa23a}
 .b .w{color:#fff;text-shadow:0 0 2px #000,0 0 1px #000}.b .bk,.b .b{color:#111}
 .b .t::after{content:"";position:absolute;width:30%;height:30%;border-radius:50%;background:rgba(20,20,20,.3)}.b .t.p::after{width:86%;height:86%;background:transparent;border:4px solid rgba(20,20,20,.35)}
@@ -70,6 +77,7 @@ main{min-height:100dvh;display:flex;flex-direction:column;align-items:center;gap
 <div class="wd z" data-cc-zadanie>${esc(p.zadanie)}</div>
 <div class="wd b" data-cc-board="1" data-cc-puzzle="${esc(p.id)}" role="grid" aria-label="${esc(p.zadanie)}">${kletkiHtml}</div>
 <div class="wd s" data-cc-status>${esc(t("pz.yourMove"))}</div>
+<div class="wd zm" data-cc-zoom><button type="button" data-zm="-" aria-label="${esc(t("pz.zoomOut"))}" title="${esc(t("pz.zoomOut"))}">−</button><span data-zm-v>100%</span><button type="button" data-zm="+" aria-label="${esc(t("pz.zoomIn"))}" title="${esc(t("pz.zoomIn"))}">+</button><small>${esc(t("pz.zoomLabel"))}</small></div>
 <div class="wd r" data-cc-resheno><a href="${esc(p.polnaya)}">${esc(t("pz.next"))}</a></div>
 <a class="wd f" data-cc-full href="${esc(p.polnaya)}">${esc(t("pz.fullVersion"))}</a>
 </main>

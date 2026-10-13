@@ -34,6 +34,9 @@ export const PZ_SLOVA: Record<PzYazyk, Record<string, string>> = {
     "pz.bank": "задач в банке",
     "pz.wrong": "Не то — попробуйте другой ход",
     "pz.yourMove": "Ваш ход — нажмите фигуру, затем клетку",
+    "pz.zoomOut": "Уменьшить доску",
+    "pz.zoomIn": "Увеличить доску",
+    "pz.zoomLabel": "масштаб доски",
     "pz.fullVersion": "Полная версия: тренер, подсказки, 500 000 задач →",
   },
   en: {
@@ -64,6 +67,9 @@ export const PZ_SLOVA: Record<PzYazyk, Record<string, string>> = {
     "pz.bank": "puzzles in the bank",
     "pz.wrong": "Not that one — try another move",
     "pz.yourMove": "Your move — tap a piece, then a square",
+    "pz.zoomOut": "Smaller board",
+    "pz.zoomIn": "Bigger board",
+    "pz.zoomLabel": "board size",
     "pz.fullVersion": "Full version: coach, hints, 500,000 puzzles →",
   },
   kk: {
@@ -94,6 +100,9 @@ export const PZ_SLOVA: Record<PzYazyk, Record<string, string>> = {
     "pz.bank": "есеп банкте",
     "pz.wrong": "Ол емес — басқа жүрісті байқап көріңіз",
     "pz.yourMove": "Сіздің жүрісіңіз — фигураны, сосын шаршыны басыңыз",
+    "pz.zoomOut": "Тақтаны кішірейту",
+    "pz.zoomIn": "Тақтаны үлкейту",
+    "pz.zoomLabel": "тақта өлшемі",
     "pz.fullVersion": "Толық нұсқа: жаттықтырушы, кеңестер, 500 000 есеп →",
   },
 };

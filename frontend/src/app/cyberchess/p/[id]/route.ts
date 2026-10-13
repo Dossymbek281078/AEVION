@@ -56,6 +56,12 @@ async function sleduyushchayaZadacha(tekId: string, rating: number, keep: URLSea
 
 const esc = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
+/*
+ * Разметка лёгкой задачи. Доска — главный объект: её сторона считается от ОКНА ПОЛЬЗОВАТЕЛЯ (слово основателя
+ * 13.10: «как lichess/chess.com»), не от фиксированного предела. Телефон: столбец, доска ≈ вся ширина. Desktop (≥1024):
+ * доска по высоте окна слева, справа панель задания/статуса 290–360 px — разметка lichess. --zm — ручной масштаб 0,6…1
+ * («−/+»), помнится в localStorage. Комментарий здесь, а не в <style>: в en/kk-страницу кириллица не уезжает.
+ */
 function html(p: { id: string; fen: string; zadanie: string; name: string; rating: number; theme: string; locale: PzYazyk; storona: "w" | "b"; polnaya: string; sleduyushchaya: string; channel: string | null; post: string | null; path: string; title: string; description: string }): string {
   const t = (k: string) => pzT(p.locale, k);
   const ryady = kletki(p.fen, p.storona);
@@ -74,9 +80,6 @@ function html(p: { id: string; fen: string; zadanie: string; name: string; ratin
 <meta property="og:title" content="${esc(p.title)}"><meta property="og:description" content="${esc(p.description)}"><meta property="og:type" content="website"><meta property="og:url" content="https://aevion.app/cyberchess/p/${esc(p.id)}"><meta property="og:image" content="https://aevion.app/cyberchess/launch/opengraph-image"><meta name="twitter:card" content="summary_large_image">
 <style>
 :root{color-scheme:dark;--zm:1;--side:min(92vw,100dvh - 150px)}*{box-sizing:border-box}html,body{margin:0;background:#0f172a;color:#f1f5f9;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-/* Доска — главный объект: её сторона считается от ОКНА ПОЛЬЗОВАТЕЛЯ (слово основателя 13.10: «как lichess/chess.com»),
-   не от фиксированного предела. Телефон: столбец, доска ≈ вся ширина. Desktop (≥1024): доска по высоте окна слева,
-   справа панель задания/статуса 290–360 px — разметка lichess. --zm — ручной масштаб 0,6…1 («−/+»), помнится в localStorage. */
 main{min-height:100dvh;display:grid;grid-template-columns:1fr;justify-items:center;align-content:start;gap:10px;padding:10px 12px 20px}
 .wd{width:calc(var(--zm)*var(--side))}.hdr{display:flex;justify-content:space-between;align-items:baseline}.hdr b{font-size:15px}.hdr small{opacity:.75}
 @media(min-width:1024px){:root{--side:min(100dvh - 120px,100vw - 360px)}main{grid-template-columns:auto 290px;grid-template-rows:repeat(6,min-content) 1fr;justify-content:center;align-items:start;column-gap:20px;padding-top:16px}

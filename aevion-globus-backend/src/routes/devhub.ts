@@ -69,6 +69,7 @@ import { можноСлужитьСтатикой } from "../lib/staticServable"
 import { проверитьРасход, этоОк, запросOpenAI, запросAnthropic, запросGemini, разборElevenLabs, разборBrevo, запросBrevo } from "../lib/providerSpendCheck";
 import { проверитьИменаМоделей, проверитьУмолчанияВызовом } from "../lib/объявленныеМодели";
 import { вставитьБейдж, нуженБейдж } from "../lib/aevionBadge";
+import { sseHeartbeat } from "../lib/sseHeartbeat";
 import { файлыВхода, нуженВход, УКАЗАНИЕ_ПРО_ВХОД } from "../lib/devhubAuthScaffold";
 import { ukazanieBezVydumannyhDannyh, yazykZaprosa, tekushchiyGod } from "../lib/devhubNoFakeData";
 import { сметаПродукта, РАСЦЕНКИ_ПРОДУКТА } from "../lib/pipelineQuote";
@@ -4168,6 +4169,8 @@ devhubRouter.post("/projects/:id/generate/stream", dhCostlyLimit("dhgenerate"), 
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no");
   res.flushHeaders();
+  // 130 (13.10.2026): модель зовётся без потока, 30–120 с тишины рвут SSE до результата — пульс комментарием.
+  const стопПульса = sseHeartbeat(res);
   const send = (event: Record<string, unknown>) => {
     try { res.write(`data: ${JSON.stringify(event)}\n\n`); } catch { /* socket closed */ }
   };
@@ -4185,6 +4188,7 @@ devhubRouter.post("/projects/:id/generate/stream", dhCostlyLimit("dhgenerate"), 
       send({ type: "error", error: e?.message || "generation failed" });
     }
   }
+  стопПульса();
   res.end();
 });
 

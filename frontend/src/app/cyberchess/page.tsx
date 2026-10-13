@@ -9112,7 +9112,7 @@ export default function CyberChessPage(){
           </div>}
           {/* ── Chess.com-style player rows ─────────────────────
               Показываются всегда в game mode, даже без таймера. */}
-          {(on||over)&&tab!=="analysis"&&!setup&&(()=>{
+          {(on||over)&&tab!=="analysis"&&tab!=="puzzles"&&!setup&&(()=>{
             // Material count: unicode → point value
             const PIECE_VAL:Record<string,number>={"♕":9,"♛":9,"♖":5,"♜":5,"♗":3,"♝":3,"♘":3,"♞":3,"♙":1,"♟":1};
             const pieceVal=(s:string)=>PIECE_VAL[s]||0;
@@ -9823,7 +9823,7 @@ export default function CyberChessPage(){
           })()}
 
           {/* Нижняя player row (свой игрок) — chess.com style */}
-          {(on||over)&&tab!=="analysis"&&!setup&&(()=>{
+          {(on||over)&&tab!=="analysis"&&tab!=="puzzles"&&!setup&&(()=>{
             const PV2:Record<string,number>={"♕":9,"♛":9,"♖":5,"♜":5,"♗":3,"♝":3,"♘":3,"♞":3,"♙":1,"♟":1};
             const pieceVal2=(s:string)=>PV2[s]||0;
             const wMat2=capB.reduce((s,c)=>s+pieceVal2(c),0);const bMat2=capW.reduce((s,c)=>s+pieceVal2(c),0);

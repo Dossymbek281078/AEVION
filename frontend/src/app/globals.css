@@ -895,10 +895,14 @@ button:focus:not(:focus-visible) {
      [style*="min(calc(100vh - 120px)"] was dead (that inline-style string no longer
      exists after a refactor) and has been removed rather than left as stale bait. */
 
-  /* Main flex row (board + right panel) — stack vertically */
+  /* Main flex row (board + right panel) — stack vertically.
+     139а (14.10): инлайновый justify-content:center на десктопе центрирует ГОРИЗОНТАЛЬНО (direction row),
+     а здесь direction column — он центрировал ВЕРТИКАЛЬНО: при min-height calc(100vh − 110px) колонка доски
+     на /cyberchess?puzzle= начиналась на 184 px при шапке 54 (замер 390×844, прод 0f3f04ed8). Сверху — не центр. */
   .cc-main-row {
     flex-direction: column !important;
     gap: 8px !important;
+    justify-content: flex-start !important;
   }
 
   /* Sidebar как drawer на мобайле */

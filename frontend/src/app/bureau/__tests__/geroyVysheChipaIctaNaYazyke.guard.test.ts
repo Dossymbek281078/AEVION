@@ -32,4 +32,12 @@ describe("/bureau: герой выше чипа цены, CTA на языке с
     expect(СТРАНИЦА).toContain("{ctaProtect}");
     expect(СТРАНИЦА).not.toMatch(/>\s*🛡️ Protect Your Work\s*</);
   });
+  it("🔴 128б: в герое ряд кнопок с CTA стоит ВЫШЕ абзаца — на 390×844 ru CTA был на 724 px при пороге 700", () => {
+    const hero = СТРАНИЦА.indexOf("── Hero Header ──");
+    const row = СТРАНИЦА.indexOf('<div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>', hero);
+    const lede = СТРАНИЦА.indexOf('<p style={{ margin: "16px 0 0", fontSize: 16, opacity: 0.8', hero);
+    expect(row, "ряд кнопок есть").toBeGreaterThan(hero);
+    expect(lede, "абзац есть").toBeGreaterThan(hero);
+    expect(row).toBeLessThan(lede);
+  });
 });

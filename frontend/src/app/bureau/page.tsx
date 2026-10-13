@@ -579,9 +579,6 @@ function BureauPageInner() {
                 <p style={{ margin: 0, fontSize: 15.5, opacity: 0.75 }}>Cryptographic Proof of Authorship & Prior Art</p>
               </div>
             </div>
-            <p style={{ margin: "0 0 16px", fontSize: 16, opacity: 0.8, lineHeight: 1.6, maxWidth: 640 }}>
-              A cryptographic proof-of-authorship bureau. Register, sign, and certify your intellectual property with standards-based cryptography (SHA-256, Ed25519, Bitcoin-anchored timestamps) — backed by international copyright law.
-            </p>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Link href="/qright" onClick={() => track({ type: "cta_click", source: "bureau", meta: { product: "qright" } })} style={{ padding: "10px 20px", borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 16, display: "inline-flex", alignItems: "center", gap: 6 }}>
                 {ctaProtect}
@@ -593,6 +590,10 @@ function BureauPageInner() {
                 Quantum Shield Dashboard
               </Link>
             </div>
+            {/* 128б: абзац — ПОД рядом кнопок: на 390×844 ru CTA был на 724 px (порог первого экрана 700). */}
+            <p style={{ margin: "16px 0 0", fontSize: 16, opacity: 0.8, lineHeight: 1.6, maxWidth: 640 }}>
+              A cryptographic proof-of-authorship bureau. Register, sign, and certify your intellectual property with standards-based cryptography (SHA-256, Ed25519, Bitcoin-anchored timestamps) — backed by international copyright law.
+            </p>
           </div>
         </div>
         {/* 128 (13.10.2026): путь к оплате — ПОД героем. На 390×844 полоса подписки (164 px) стояла над h1,

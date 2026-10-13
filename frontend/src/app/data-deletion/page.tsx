@@ -46,7 +46,7 @@ export default function DataDeletionPage() {
           <h2 style={H2}>1. How to request deletion</h2>
           <p>
             Send an email from the address registered on your account to{" "}
-            <a href="mailto:yahiin1978@gmail.com">yahiin1978@gmail.com</a> with the subject{" "}
+            <a href="mailto:data@aevion.app">data@aevion.app</a> with the subject{" "}
             <b>Delete my data</b>. Sending it from the registered address is what proves the request
             is yours; we do not ask for documents or a phone number.
           </p>
@@ -106,7 +106,7 @@ export default function DataDeletionPage() {
 
           <h2 style={H2}>5. Questions</h2>
           <p>
-            Write to <a href="mailto:yahiin1978@gmail.com">yahiin1978@gmail.com</a>. Related documents:{" "}
+            Write to <a href="mailto:data@aevion.app">data@aevion.app</a>. Related documents:{" "}
             <a href="/privacy">Privacy Policy</a> and <a href="/terms">Terms of Service</a>.
           </p>
         </div>

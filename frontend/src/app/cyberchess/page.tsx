@@ -41,7 +41,7 @@ import Piece, { PIECE_SETS, useActivePieceSet, setActivePieceSet } from "./Piece
 import SetupBoardPreview from "./SetupBoardPreview";
 const AiCoach = dynamic(() => import("./AiCoach"), { ssr: false });
 const CoachKnowledge = dynamic(() => import("./CoachKnowledgeModal"), { ssr: false });
-import { COACH_KNOWLEDGE } from "./coachKnowledge";
+import type { KnowledgeCategory as CoachKnowledgeCategory } from "./coachKnowledge";
 // Ленивые: код уезжает отдельным чанком и не утяжеляет первый экран.
 // Замер 28.08.2026: страница тянет 1.26 МБ, и на медленном 3G кнопка
 // «ИГРАТЬ» становится нажимаемой через 38 секунд. Эти три панели
@@ -178,7 +178,7 @@ import PoloskaStarta from "./PoloskaStarta";
 import { наградаЗаВозврат } from "./dailyReward";
 import { новыйРейтинг } from "./rating";
 import { tournamentUserId, tournamentDisplayName } from "./tournaments/playerIdentity";
-import { getDueReminders, dismissReminder } from "./coachKnowledge";
+import { getDueReminders, dismissReminder } from "./coachReminders";
 import WorkspacePiP, { useWorkspacePiP } from "./WorkspacePiP";
 import { makeDuelConfig, getGhostMoveAt, checkDivergence, formatPastDate, type GhostDuelConfig, type GhostSourceGame } from "./ghostDuel";
 import Link from "next/link";
@@ -2010,6 +2010,9 @@ export default function CyberChessPage(){
   },[coachChat,coachChatLoading]);
   const[showKnowledge,sShowKnowledge]=useState(false);
   const[showFlashcards,sShowFlashcards]=useState(false);
+  // 122: знания тренера (160 КБ текста) грузятся только когда открыли карточки, а не до первого хода.
+  const[coachKnowledge,sCoachKnowledge]=useState<CoachKnowledgeCategory[]|null>(null);
+  useEffect(()=>{if(showFlashcards&&!coachKnowledge){import("./coachKnowledge").then(m=>sCoachKnowledge(m.COACH_KNOWLEDGE)).catch(()=>{});}},[showFlashcards,coachKnowledge]);
   const[flashcardIdx,sFlashcardIdx]=useState(0);
   const[flashcardFlipped,sFlashcardFlipped]=useState(false);
   const[dailyReward,sDailyReward]=useState<{bonus:number;streak:number;isWelcome:boolean}|null>(null);
@@ -4402,7 +4405,7 @@ export default function CyberChessPage(){
                   showToast(`✓ +${bonus}с`,"success");
                   // Auto-advance handled by the single pzAttempt==="correct" effect
                 }else{
-                  showToast(`✓ Решено! ${pzCurrent.name}`,"success");
+                  showToast(cc.t("pz.solved").replace("{name}",pzCurrent.name),"success");
                 }
                 const reward=Math.max(2,Math.round((pzCurrent.r||800)/200));
                 addChessy(reward,"задача решена");
@@ -4443,7 +4446,7 @@ export default function CyberChessPage(){
             showToast(`✓ +${bonus}с`,"success");
             // Auto-advance handled by the single pzAttempt==="correct" effect
           }else{
-            showToast(`✓ Решено! ${pzCurrent.name}`,"success");
+            showToast(cc.t("pz.solved").replace("{name}",pzCurrent.name),"success");
           }
           const reward=Math.max(2,Math.round((pzCurrent.r||800)/200));
           addChessy(reward,"задача решена");
@@ -6607,7 +6610,7 @@ export default function CyberChessPage(){
         const pz={...(normalizePuzzle({fen:syraya.fen,sol:syraya.sol,name:syraya.name??syraya.theme??"Задача",
           r:syraya.r??1200,theme:syraya.theme??"Тактика"}) as typeof PUZZLES[number]),id:syraya.id??id};
         if(!postavitZadachuNaDosku(pz,{dnevnaya:false}))return;
-        showToast(`🔗 Задача по ссылке · ${pz.r}`,"info");
+        showToast(cc.t("pz.link.opened").replace("{n}",String(pz.r)),"info");
         // Своё событие не заводим: открытие задачи по ссылке — это та же
         // ключевая возможность, и feature_use уже считается ступенью
         // «попробовали» и разрезается по каналу и посту. Нужен именно разрез по
@@ -6615,7 +6618,7 @@ export default function CyberChessPage(){
         track({type:"feature_use",source:"cyberchess/link",meta:{feature:"puzzle_link_open",app:"cyberchess",puzzle:id}});
       }catch{
         if(otmenen)return;
-        showToast("Задача по ссылке не открылась — открываю раздел задач","error");
+        showToast(cc.t("pz.link.failed"),"error");
         sTab("puzzles");
       }
     })();
@@ -6649,7 +6652,7 @@ export default function CyberChessPage(){
   const randomPz=useCallback(()=>{if(!fPz.length)return;ldPz(Math.floor(Math.random()*fPz.length))},[fPz.length]);
   // Имя текущей задачи по её решению («Мат в 2», «Выигрыш фигуры за 3 хода»); считается один раз на задачу (по fen)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const pzTitle=useMemo(()=>pzCurrent?(imyaPoResheniyu(pzCurrent)||(pzCurrent.goal==="Mate"?`Мат в ${pzCurrent.mateIn}`:"Найди лучший ход")):"",[pzCurrent?.fen]);
+  const pzTitle=useMemo(()=>pzCurrent?(imyaPoResheniyu(pzCurrent,cc.locale)||(pzCurrent.goal==="Mate"?cc.t("pz.mateIn").replace("{n}",String(pzCurrent.mateIn)):cc.t("pz.bestMove"))):"",[pzCurrent?.fen]);
   // Старт Puzzle Rush — с задачи, которая годится для раша (мат ≤3 / короткий выигрыш материала)
   const rushStartIdx=()=>{const c:number[]=[];for(let i=0;i<fPz.length&&c.length<400;i++){const p=fPz[i];if(p.goal==="Mate"?(p.mateIn||9)<=3:p.sol.length<=10)c.push(i);}for(let k=0;k<30&&c.length;k++){const i=c[Math.floor(Math.random()*c.length)];if(goditsyaDlyaRush(fPz[i]))return i;}return Math.floor(Math.random()*Math.max(1,fPz.length));};
   // Проиграть решение пазла НА ДОСКЕ (визуальный разбор, lichess-style). Сбрасывает
@@ -7392,7 +7395,7 @@ export default function CyberChessPage(){
               </span>}
             </h1>
             <div className="cc-header-sub" style={{fontSize:11,color:CC.textDim,fontWeight:600}}>
-              SF18 · {pzCountLabel} {ccPlural(pzTotal??PUZZLES.length,"задача","задачи","задач")} в банке{useSF&&sfOk?" · ⚡":""}
+              SF18 · {pzCountLabel} {cc.locale==="ru"?ccPlural(pzTotal??PUZZLES.length,"задача","задачи","задач")+" в банке":cc.t("pz.bank")}{useSF&&sfOk?" · ⚡":""}
             </div>
           </div>
         </div>
@@ -7404,7 +7407,7 @@ export default function CyberChessPage(){
         {!streamerMode&&vwPx>=769&&(()=>{
           const navLocked=on&&!over&&isHumanGame;
           const TABS:{k:"play"|"puzzles"|"analysis"|"coach";label:string;icon:string;hue:string}[]=
-            (["play","puzzles","analysis","coach"] as const).map(k=>({k,label:TAB_META[k].label,icon:TAB_META[k].icon,hue:TAB_META[k].hue}));
+            (["play","puzzles","analysis","coach"] as const).map(k=>({k,label:cc.t(k==="coach"?"nav.coachShort":"nav."+k),icon:TAB_META[k].icon,hue:TAB_META[k].hue}));
           const goTab=(k:"play"|"puzzles"|"analysis"|"coach")=>{
             if(k==="play"){ sTab("play"); if(!on&&!over)sSetup(true); return; }
             if(navLocked){ showToast("🔒 Нельзя во время партии с человеком","info"); return; }
@@ -7471,7 +7474,7 @@ export default function CyberChessPage(){
             fontSize:12,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap",
           }}>
           <span style={{fontSize:14}}>⌕</span>
-          <span>Команды</span>
+          <span>{cc.t("nav.commands")}</span>
           {/* Подсказка сочетания клавиш — только там, где клавиатура есть.
               На телефоне «⌃K» не подсказка, а шум: нажать это нечем, а место
               в шапке первого экрана стоит дорого. Замер 27.08 на 375px: шапка
@@ -7493,7 +7496,7 @@ export default function CyberChessPage(){
             fontSize:12,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap",
           }}>
           <span style={{fontSize:14}}>☰</span>
-          <span>Все разделы</span>
+          <span>{cc.t("nav.sections")}</span>
         </button>}
         {/* Единое «? Помощь» — обзорный тур / горячие клавиши / что такое Chessy. Собрано из
             4 разрозненных help-входов, чтобы новичок не гадал, какой «?» куда ведёт. */}
@@ -7507,7 +7510,7 @@ export default function CyberChessPage(){
               border:`1.5px solid ${helpMenuOpen?"#2563eb":"#3b82f6"}`,background:helpMenuOpen?"rgba(37,99,235,0.18)":"rgba(59,130,246,0.12)",color:"#2563eb",
               fontSize:12,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap"}}>
             <span style={{fontSize:14,lineHeight:1}} aria-hidden>?</span>
-            <span>Помощь</span>
+            <span>{cc.t("nav.help")}</span>
             <span style={{fontSize:9}} aria-hidden>▾</span>
           </button>
           {helpMenuOpen&&<>
@@ -7697,7 +7700,7 @@ export default function CyberChessPage(){
                   ...(ccAuth.checked&&!ccAuth.user?[{ic:<span style={{fontSize:14}} aria-hidden>👤</span>,lbl:"Войти в аккаунт AEVION",act:()=>{window.location.href="/auth?next=/cyberchess"}}]:[]),
                   ...(ccAuth.user?[{ic:<span style={{fontSize:14}} aria-hidden>👤</span>,lbl:"Мой аккаунт AEVION",act:()=>{window.location.href="/account"}}]:[]),
                   {ic:<span style={{fontSize:14}} aria-hidden>◆</span>,lbl:`Рейтинг ${rat} · Chessy ${chessy.balance}`,act:()=>sShowStatsDashboard(true)},
-                  {ic:<span style={{fontSize:14}} aria-hidden>☰</span>,lbl:"Все разделы",act:()=>sShowSections(true)},
+                  {ic:<span style={{fontSize:14}} aria-hidden>☰</span>,lbl:cc.t("nav.sections"),act:()=>sShowSections(true)},
                 ] : []),
                 {ic:<span style={{fontSize:14}} aria-hidden>✉</span>,lbl:"Написать мне о запуске",act:()=>sShowWaitlist(true)},
                 {ic:<Icon.Help width={16} height={16}/>,lbl:"Горячие клавиши",act:()=>sShowHelp(true)},
@@ -8121,7 +8124,7 @@ export default function CyberChessPage(){
               <div>
                 <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
                   <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>{cc.t("ai.label")}</span>
-                  <input type="range" aria-label="Сила соперника" min={0} max={(chessy.owned.master_ai||isPro)?6:4}
+                  <input type="range" aria-label={cc.t("ai.strength.aria")} min={0} max={(chessy.owned.master_ai||isPro)?6:4}
                     value={Math.min(aiI,(chessy.owned.master_ai||isPro)?6:4)}
                     onChange={e=>{const v=+e.target.value;if(v>=5&&!(chessy.owned.master_ai||isPro)){showToast("Master/Stockfish — платный уровень. Купи в Chessy-магазине","info");sShowShop(true);return}sAiI(v)}}
                     style={{flex:1,accentColor:lv.color}}/>
@@ -8243,7 +8246,7 @@ export default function CyberChessPage(){
                 </button>
                 <button onClick={()=>{sTab("puzzles");sPzMode("rush" as any);if(fPz.length)ldPz(rushStartIdx())}}
                   className="cc-focus-ring"
-                  aria-label="Запустить Puzzle Rush"
+                  aria-label={cc.t("rush.start.aria")}
                   translate="no"
                   style={{padding:"6px 12px",borderRadius:RADIUS.full,
                     border:`1px solid #fcd34d`,background:"linear-gradient(135deg,#fffbeb,#fef3c7)",color:"#92400e",
@@ -8341,7 +8344,7 @@ export default function CyberChessPage(){
           {/* Совет дня убран с главного экрана — доступен в разделе Коуч → Knowledge */}
           {false&&(()=>{
             const now=new Date();const seed=now.getFullYear()*10000+now.getMonth()*100+now.getDate();
-            const allEntries=COACH_KNOWLEDGE.flatMap(c=>c.entries.map(e=>({...e,catTitle:c.title})));
+            const allEntries=(coachKnowledge??[]).flatMap(c=>c.entries.map(e=>({...e,catTitle:c.title})));
             if(allEntries.length===0)return null;
             const tip=allEntries[seed%allEntries.length];
             const shortBody=typeof tip.description==="string"?tip.description.slice(0,120)+(tip.description.length>120?"…":""):String(tip.description).slice(0,120);
@@ -9163,7 +9166,7 @@ export default function CyberChessPage(){
               по ссылке из комментария, не видел на экране ни чей ход, ни что искать:
               это было только в подписи для скринридера и в карточке правой панели,
               а она на телефоне — закрытая шторка. Число ходов из РЕШЕНИЯ, не из тега. */}
-          {tab==="puzzles"&&pzCurrent&&<div style={{width:bw,paddingLeft:23,fontSize:13,fontWeight:800,color:CC.text,lineHeight:1.25,marginBottom:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{zadanieNadDoskoy(pzCurrent)}</div>}
+          {tab==="puzzles"&&pzCurrent&&<div style={{width:bw,paddingLeft:23,fontSize:13,fontWeight:800,color:CC.text,lineHeight:1.25,marginBottom:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{zadanieNadDoskoy(pzCurrent,cc.locale)}</div>}
           <div translate="no" style={{display:"flex",width:bw,gap:4}}>
             {/* Eval bar — with W/B labels + centered numeric badge.
                 Hidden in P2P mode (no analysis surface during human matches). */}
@@ -9290,10 +9293,10 @@ export default function CyberChessPage(){
                   внутри неё, достижимо. Только для пришедшего по ссылке на задачу. */}
               {зашёлЗаЗадачей&&pzAttempt==="correct"&&pzCurrent&&pzMode!=="rush"&&<div data-cc-resheno="1" role="status"
                 style={{position:"absolute",left:8,right:8,bottom:8,zIndex:6,padding:"12px 14px",borderRadius:RADIUS.md,background:"rgba(236,253,245,0.97)",border:"1px solid #a7f3d0",boxShadow:"0 6px 24px rgba(0,0,0,0.25)",display:"flex",flexWrap:"wrap",alignItems:"center",gap:10}}>
-                <div style={{fontWeight:900,fontSize:16,color:"#065f46"}}>✓ Решено! {pzCurrent.name}</div>
+                <div style={{fontWeight:900,fontSize:16,color:"#065f46"}}>{cc.t("pz.solved").replace("{name}",pzCurrent.name)}</div>
                 <button type="button" className="cc-touch" onClick={()=>{track({type:"feature_use",source:"cyberchess/puzzle",meta:{feature:"next_clicked",app:"cyberchess"}});loadNextPuzzleRef.current();}}
-                  style={{padding:"9px 16px",borderRadius:RADIUS.md,border:"none",background:CC.accent,color:"#fff",fontWeight:900,fontSize:14,cursor:"pointer"}}>Следующая задача →</button>
-                <div style={{fontSize:13,color:"#047857",fontWeight:700}}>{strokaTsennosti(pzTotal)}</div>
+                  style={{padding:"9px 16px",borderRadius:RADIUS.md,border:"none",background:CC.accent,color:"#fff",fontWeight:900,fontSize:14,cursor:"pointer"}}>{cc.t("pz.next")}</button>
+                <div style={{fontSize:13,color:"#047857",fontWeight:700}}>{strokaTsennosti(pzTotal,cc.locale)}</div>
               </div>}
               {/* Threat Heatmap overlay (killer #12) */}
               {showThreatMap&&(()=>{
@@ -9985,8 +9988,8 @@ export default function CyberChessPage(){
               right-sidebar Tools card to reduce visual clutter under the board. */}
 
           {!(зашёлЗаЗадачей&&!isMobileLayout)&&<div style={{display:"flex",gap:8,marginTop:SPACE[2],...podDoskoyRow}}>
-            <Btn size="md" variant="secondary" icon={<Icon.Flip width={16} height={16}/>} onClick={()=>sFlip(!flip)}>Перевернуть</Btn>
-            <Btn size="md" variant="primary" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>Новая партия</Btn>
+            <Btn size="md" variant="secondary" icon={<Icon.Flip width={16} height={16}/>} onClick={()=>sFlip(!flip)}>{cc.t("pz.flip")}</Btn>
+            <Btn size="md" variant="primary" onClick={()=>{sSetup(true);sOn(false);sOver(null);sPms([])}}>{cc.t("pz.newGame")}</Btn>
             {on&&!setup&&<Btn size="md" variant={mirrorActive?"primary":"secondary"} onClick={()=>{if(mirrorActive){sMirrorActive(false);showToast("🪞 Зеркальный режим выключен","info");}else{sMirrorActive(true);showToast("🪞 Зеркальный режим — соперник играет как ты","info");}}} title="Зеркальный режим — соперник копирует твой стиль">🪞</Btn>}
             {(tab==="play"||tab==="coach"||tab==="analysis")&&btn(voiceListening?"🔴 Слушаю (нажми для паузы)":"🎤 Голос",()=>{
               const SR=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;
@@ -10416,13 +10419,13 @@ export default function CyberChessPage(){
               style={{padding:"4px 8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,
                 background:showThreatMap?CC.brandSoft:CC.surface2,
                 color:showThreatMap?CC.brand:CC.textDim}}>
-              🌡 Карта угроз
+              {cc.t("pz.threatMap")}
             </button>
             <button onClick={async()=>{try{const t=await whisperAndSpeak(game.fen(),evalCp,evalMate);showToast(`🔊 ${t}`,"info")}catch{showToast("Голос недоступен","error")}}}
               title="Голосовой анализ позиции"
               style={{padding:"4px 8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,
                 background:CC.surface2,color:CC.textDim}}>
-              🔊 Вслух
+              {cc.t("pz.aloud")}
             </button>
             {savedGames.length>0&&<button onClick={()=>sGamesModalOpen(true)}
               style={{padding:"4px 8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,
@@ -11746,9 +11749,9 @@ export default function CyberChessPage(){
                 })}
               </div>;})():<div style={{padding:"28px 18px",textAlign:"center",color:CC.textMute}}>
                 <div style={{fontSize:32,marginBottom:SPACE[2],opacity:0.6}}>♟</div>
-                <div style={{fontSize:13,fontWeight:700,color:CC.textDim}}>Пока нет ходов</div>
+                <div style={{fontSize:13,fontWeight:700,color:CC.textDim}}>{cc.t("pz.noMoves")}</div>
                 <div style={{fontSize:11,color:CC.textMute,marginTop:4,lineHeight:1.5}}>
-                  {tab==="play"||tab==="coach"?"Сделай первый ход — история появится здесь":tab==="puzzles"?"Выбери позицию или загрузи задачу":"Загрузи PGN/FEN или введи ходы"}
+                  {tab==="play"||tab==="coach"?cc.t("pz.noMoves.play"):tab==="puzzles"?cc.t("pz.noMoves.puzzles"):"Загрузи PGN/FEN или введи ходы"}
                 </div>
               </div>}
             </div>
@@ -11852,7 +11855,7 @@ export default function CyberChessPage(){
             <Card padding={SPACE[2]} tone="surface1">
               <SectionHeader title="РЕЖИМ" hint={pzMode==="rush"?(rushKind==="survival"?`Survival · 3 ошибки · адаптивно`:`Timed ${Math.floor(rushDuration/60)}:${String(rushDuration%60).padStart(2,"0")} · адаптивно`):pzMode==="timed3"?"3 мин + bonus":pzMode==="timed5"?"5 мин + bonus":pzMode==="custom"?`Custom ${Math.floor(pzCustomSec/60)}:${String(pzCustomSec%60).padStart(2,"0")}`:""}/>
               <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:SPACE[1]}}>
-                {([["learn","📚","Обучение"],["timed3","3⏱","3 мин"],["timed5","5⏱","5 мин"],["custom","⚙","Свой"],["rush","⚡","Серия"]] as const).map(([m,ic,label])=>{
+                {([["learn","📚",cc.t("pz.mode.learn")],["timed3","3⏱",cc.t("pz.mode.3min")],["timed5","5⏱",cc.t("pz.mode.5min")],["custom","⚙",cc.t("pz.mode.custom")],["rush","⚡","Серия"]] as const).map(([m,ic,label])=>{
                   const active=pzMode===m;
                   return <button key={m} onClick={()=>sPzMode(m)} className="cc-focus-ring"
                     style={{padding:"8px 4px",borderRadius:RADIUS.md,
@@ -12083,7 +12086,7 @@ export default function CyberChessPage(){
                     sPCol(g.turn());sFlip(g.turn()==="b");
                     sCoachAIEnabled(true);sEditorMode(false);sSetup(false);sTab("coach");
                     showToast("Позиция задачи у тренера — спрашивай","success");
-                  }} title={cc.t("coach.askAboutPuzzle")}>🎓 Спросить тренера</Btn>}
+                  }} title={cc.t("coach.askAboutPuzzle")}>{cc.t("pz.askCoach")}</Btn>}
                 </div>
                 {/* Подсказка по хоткеям — discoverability клавиш пазла */}
                 <div style={{marginTop:6,display:"flex",gap:8,flexWrap:"wrap",fontSize:10,color:T.dim,fontWeight:700}}>
@@ -12357,7 +12360,7 @@ export default function CyberChessPage(){
                   </div>:fPz.length===0?<div style={{padding:"28px",textAlign:"center",color:T.dim,fontSize:13,fontStyle:"italic"}}>Нет задач по фильтру</div>:
                 fPz.slice(0,100).map((pz,i)=>{
                   // Build readable name: "Мат в 2 · f5+ Kxf5 · Эндшпиль"
-                  const goalLabel=imyaPoResheniyu(pz)||(pz.goal==="Mate"?`Мат в ${pz.mateIn||1}`:"Лучший ход"); // по ходам, а не по тегу
+                  const goalLabel=imyaPoResheniyu(pz,cc.locale)||(pz.goal==="Mate"?cc.t("pz.mateIn").replace("{n}",String(pz.mateIn||1)):cc.t("pz.bestMoveShort")); // по ходам, а не по тегу
                   const sideLabel=solverSide(pz)==="w"?"⚪ Белые":"⚫ Чёрные";
                   const phaseLabel=pz.phase==="Opening"?"📖 Дебют":pz.phase==="Middlegame"?"⚔️ Миттельшп.":pz.phase==="Endgame"?"🏁 Эндшп.":"";
                   return(<button key={i} onClick={()=>ldPz(i)} style={{width:"100%",padding:"14px 16px",border:"none",borderBottom:i<Math.min(fPz.length,100)-1?`1px solid ${T.border}`:"none",background:pzI===i?"rgba(124,58,237,0.06)":"#fff",cursor:"pointer",textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,borderLeft:pzI===i?`4px solid ${T.purple}`:"4px solid transparent"}}>
@@ -13496,7 +13499,8 @@ ${question.trim()}`;
             quickEval={quickEvalPromise}
           />}
 
-          <CoachKnowledge
+          {/* 122б: модал знаний монтируется только открытым — иначе его чанк (90 КБ) уезжал в сеть сразу после монтирования, в последние метры до первого хода. */}
+          {showKnowledge&&<CoachKnowledge
             visible={showKnowledge}
             onClose={()=>sShowKnowledge(false)}
             onLoadPosition={(fen:string,hint?:string)=>{
@@ -13508,9 +13512,9 @@ ${question.trim()}`;
                 else showToast("Позиция загружена","success");
               }catch{showToast("Неверная позиция","error")}
             }}
-          />
+          />}
 
-          {showFlashcards&&(()=>{const cards=COACH_KNOWLEDGE.flatMap(c=>c.entries.filter(e=>!!e.bestMove&&!!e.fen).map(e=>({t:e.title,f:e.fen!,b:e.bestMove!,ex:typeof e.explanation==="string"?e.explanation.slice(0,180):String(e.explanation).slice(0,180),cat:c.title})));if(!cards.length)return null;const card=cards[flashcardIdx%cards.length];return<div onClick={()=>sShowFlashcards(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.65)",backdropFilter:"blur(3px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:220,padding:16}}><div onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Флеш-карточки коуча" style={{background:"linear-gradient(135deg,#0f172a,#1e1b4b)",color:"#fff",borderRadius:16,maxWidth:460,width:"100%",padding:"24px",border:"1px solid rgba(167,139,250,0.3)",boxShadow:"0 24px 64px rgba(0,0,0,0.5)"}}>
+          {showFlashcards&&coachKnowledge&&(()=>{const cards=coachKnowledge.flatMap(c=>c.entries.filter(e=>!!e.bestMove&&!!e.fen).map(e=>({t:e.title,f:e.fen!,b:e.bestMove!,ex:typeof e.explanation==="string"?e.explanation.slice(0,180):String(e.explanation).slice(0,180),cat:c.title})));if(!cards.length)return null;const card=cards[flashcardIdx%cards.length];return<div onClick={()=>sShowFlashcards(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.65)",backdropFilter:"blur(3px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:220,padding:16}}><div onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Флеш-карточки коуча" style={{background:"linear-gradient(135deg,#0f172a,#1e1b4b)",color:"#fff",borderRadius:16,maxWidth:460,width:"100%",padding:"24px",border:"1px solid rgba(167,139,250,0.3)",boxShadow:"0 24px 64px rgba(0,0,0,0.5)"}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}><span>🃏</span><span style={{fontSize:11,fontWeight:900,letterSpacing:1,color:"#a78bfa",textTransform:"uppercase" as const}}>Флеш-карточки</span><span style={{marginLeft:"auto",fontSize:11,color:"#94a3b8"}}>{(flashcardIdx%cards.length)+1}/{cards.length}</span><button onClick={()=>sShowFlashcards(false)} style={{padding:"2px 7px",borderRadius:4,border:"1px solid rgba(255,255,255,0.15)",background:"transparent",color:"#94a3b8",fontSize:11,cursor:"pointer"}}>✕</button></div>
             <div style={{textAlign:"center",marginBottom:12}}><div style={{fontSize:16,fontWeight:900,color:"#f1f5f9",marginBottom:4}}>{card.t}</div><div style={{fontSize:11,color:"#a78bfa",padding:"1px 8px",borderRadius:999,background:"rgba(124,58,237,0.15)",display:"inline-block"}}>{card.cat}</div></div>
             <button onClick={()=>sFlashcardFlipped(v=>!v)} style={{width:"100%",padding:"12px",borderRadius:10,border:"1px solid rgba(167,139,250,0.4)",background:flashcardFlipped?"rgba(124,58,237,0.18)":"transparent",color:"#e9d5ff",fontSize:13,fontWeight:800,cursor:"pointer",marginBottom:10}}>{flashcardFlipped?`✓ Ход: ${card.b}`:"👁 Показать ответ"}</button>

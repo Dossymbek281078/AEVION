@@ -91,7 +91,7 @@ const FAQ = [
   },
   {
     q: "How do you handle vulnerability reports?",
-    a: "Send to yahiin1978@gmail.com with subject 'AEVION security' or use the /.well-known/security.txt contact. Acknowledgment within 24 hours, fix coordination per CVD norms, public credit on /changelog once mitigated.",
+    a: "Send to data@aevion.app with subject 'AEVION security' or use the /.well-known/security.txt contact. Acknowledgment within 24 hours, fix coordination per CVD norms, public credit on /changelog once mitigated.",
   },
   {
     q: "Do you publish a SOC 2 / ISO 27001 report?",
@@ -240,8 +240,8 @@ export default function SecurityPage() {
           <h2 style={{ fontSize: 18, fontWeight: 900, margin: "0 0 8px", color: "#fff" }}>Reach the security team</h2>
           <div style={{ fontSize: 14, lineHeight: 1.65, opacity: 0.95 }}>
             <div>
-              <a href="mailto:yahiin1978@gmail.com?subject=AEVION%20security" style={{ color: "#fff", fontWeight: 800 }}>
-                yahiin1978@gmail.com
+              <a href="mailto:data@aevion.app?subject=AEVION%20security" style={{ color: "#fff", fontWeight: 800 }}>
+                data@aevion.app
               </a>
               {" "}— subject &quot;AEVION security&quot;, ack within 24h.
             </div>

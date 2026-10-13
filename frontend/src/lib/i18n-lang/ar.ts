@@ -84,7 +84,7 @@ const ar: Record<string, string> = {
   "footer.products": "المنتجات",
   "footer.rights": "جميع الحقوق محفوظة.",
   "help.still": "هل تحتاج مزيداً من المساعدة؟",
-  "help.subtitle": "كل ما تحتاج معرفته حول AEVION. لم تجد إجابة؟ راسلنا على yahiin1978@gmail.com",
+  "help.subtitle": "كل ما تحتاج معرفته حول AEVION. لم تجد إجابة؟ راسلنا على data@aevion.app",
   "help.title": "مركز المساعدة",
   "home.badge": "منتج MVP · جاهز للعرض",
   "home.cta.auth": "ابدأ بالهوية",

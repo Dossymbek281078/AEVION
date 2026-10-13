@@ -1,0 +1,65 @@
+{
+  "note": "NEGATIVE CONTROL, two different statements. Record 1 carries only an id: the verifier reads the LIVE registry, so it proves this signature is revoked right now. Record 2 carries the record inline: it proves the verifier honours the revoked flag with no network at all, as a SNAPSHOT taken on the checkedAt date below. Both must fail; the verifier must exit 1.",
+  "apiBase": "https://api.aevion.app",
+  "publicKey": "63fd4f60e1839498443a99cd69710fe3c7089606fb2188b75246f9903c0b36b8",
+  "records": [
+    {
+      "file": "revoked-work.bin",
+      "id": "a399a3f6-9dde-47e4-ad7a-a72ee5c09373"
+    },
+    {
+      "file": "revoked-work-snapshot.bin",
+      "id": "47dcc749-5b56-449c-9c5c-f098abc7b059",
+      "record": {
+        "id": "47dcc749-5b56-449c-9c5c-f098abc7b059",
+        "algoVersion": "qsign-v2.0",
+        "canonicalization": "RFC8785",
+        "createdAt": "2026-07-22T10:44:34.105Z",
+        "valid": false,
+        "revoked": true,
+        "revokedAt": "2026-07-22T10:44:39.402Z",
+        "revocationReason": "smoke test revocation",
+        "payload": {
+          "alpha": 2,
+          "hello": "AEVION",
+          "ts": 1784717074,
+          "zeta": 1
+        },
+        "payloadCanonical": "{\"alpha\":2,\"hello\":\"AEVION\",\"ts\":1784717074,\"zeta\":1}",
+        "payloadHash": "2dae252e1109fb6c6c9c662179b604514c255b9956085c434d6d75a3ebe137c3",
+        "hmac": {
+          "kid": "qsign-hmac-v1",
+          "algo": "HMAC-SHA256",
+          "signature": "ca6e76931bff1e8082a90bc130c9d5866890e1d39708943ad54d3617fbcd23fa",
+          "valid": true
+        },
+        "ed25519": {
+          "kid": "qsign-ed25519-v1",
+          "algo": "Ed25519",
+          "signature": "30d033a0737b3e380cc97257f8ac3d8330eb0f9301d94b9d79515efd4391615c5f5a76258441850d0dce0409ffd44576d335d0ec31d6feb7f58c2542154a4302",
+          "publicKey": "63fd4f60e1839498443a99cd69710fe3c7089606fb2188b75246f9903c0b36b8",
+          "valid": true
+        },
+        "dilithium": {
+          "algo": "ML-DSA-65",
+          "kid": "qsign-dilithium-mldsa65-preview-v1",
+          "mode": "preview",
+          "digest": "d29c4b3533682fa44d83543d7943f8098956cfcdb636fff5f3abbcc470fe5e274ef55008018a85f969844ae5b83ad57096ee8c3b7fa0d31dd15959bd17d78e20",
+          "valid": null,
+          "note": "Preview slot reserved for ML-DSA-65 (Dilithium-3) post-quantum signatures. The `digest` field is a deterministic SHA-512 fingerprint of canonical||kid — NOT a cryptographic signature. Set QSIGN_DILITHIUM_V1_SEED to activate real ML-DSA-65 signatures."
+        },
+        "issuer": {
+          "email": "q***@a***.test"
+        },
+        "geo": {
+          "source": "gps",
+          "country": "US",
+          "city": null,
+          "lat": null,
+          "lng": null
+        }
+      }
+    }
+  ],
+  "checkedAt": "2026-10-11"
+}

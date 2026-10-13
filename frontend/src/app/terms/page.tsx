@@ -115,7 +115,7 @@ export default function TermsPage() {
 
               До этого решения стоит адрес, который проверен как рабочий. Красивый
               адрес, не принимающий писем, хуже рабочего некрасивого. */}
-          <p>For questions about these Terms, contact AEVION LLC at yahiin1978@gmail.com or through the Help Center.</p>
+          <p>For questions about these Terms, contact AEVION LLC at data@aevion.app or through the Help Center.</p>
           <p style={{ color: "#64748b", fontSize: 13 }}>AEVION LLC · 30 N Gould St, Ste R, Sheridan, WY 82801, United States</p>
         </div>
       </ProductPageShell>

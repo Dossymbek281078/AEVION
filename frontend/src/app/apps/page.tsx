@@ -743,7 +743,7 @@ export default function AppsPage() {
             Need enterprise pricing, custom contract, or a demo?
           </p>
           <a
-            href="mailto:yahiin1978@gmail.com"
+            href="mailto:data@aevion.app"
             style={{ color: "#0d9488", fontSize: 14, fontWeight: 600, textDecoration: "none" }}
           >
             Contact us →

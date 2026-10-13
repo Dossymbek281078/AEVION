@@ -583,8 +583,8 @@ export default function DevelopersPage() {
           <h2 style={{ fontSize: 18, fontWeight: 900, margin: "0 0 8px", color: "#fff" }}>Sandbox & support</h2>
           <div style={{ fontSize: 14, lineHeight: 1.65, opacity: 0.95 }}>
             Sandbox API keys, OpenAPI spec download, integration help —{" "}
-            <a href="mailto:yahiin1978@gmail.com?subject=AEVION%20developer%20access" style={{ color: "#fff", fontWeight: 800 }}>
-              yahiin1978@gmail.com
+            <a href="mailto:data@aevion.app?subject=AEVION%20developer%20access" style={{ color: "#fff", fontWeight: 800 }}>
+              data@aevion.app
             </a>
             {" "}with subject &quot;developer access&quot;. Reply within 24h.
             <br />

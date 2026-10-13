@@ -145,6 +145,10 @@ export default function ProofPage() {
           </a>{" "}
           — the terms and the limits are further down this page.
         </p>
+        {/* 129: дубль кнопки заказа в первом экране — на телефоне до блока пилота 4 экрана прокрутки, 0 нажатий за 14 дн. */}
+        <p style={{ marginTop: -14, marginBottom: 26 }}>
+          <a href="#pilot" data-proof-order-top style={{ display: "inline-block", padding: "10px 18px", borderRadius: 10, background: "#0f766e", color: "#fff", fontWeight: 800, fontSize: 15, textDecoration: "none" }}>Order the pilot — ${PILOT_USD}</a>
+        </p>
 
         <div
           style={{

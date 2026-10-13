@@ -75,11 +75,18 @@ const хода = (n: number) => (n === 1 ? "ход" : n < 5 ? "хода" : "хо
 const выигрыш = (gain: number) => (gain >= 9 ? "ферзя" : gain >= 5 ? "ладьи" : gain >= 3 ? "фигуры" : gain >= 2 ? "качества" : "пешки");
 
 /** Понятное имя по решению: «Мат в 2», «Выигрыш фигуры за 3 хода». Позиционная задача — null (пусть подпись останется прежней). */
-export function imyaPoResheniyu(pz: PuzzleLike): string | null {
+export type PzLocale = "ru" | "en" | "kk";
+/* Имена — на языке читателя (118, 13.10.2026: англоязычный гость из Shorts видел «Ход чёрных · Мат в 1»). */
+const piece = (gain: number): Record<PzLocale, string> => (gain >= 9 ? { ru: "ферзя", en: "a queen", kk: "уәзір" } : gain >= 5 ? { ru: "ладьи", en: "a rook", kk: "тура" } : gain >= 3 ? { ru: "фигуры", en: "a piece", kk: "фигура" } : gain >= 2 ? { ru: "качества", en: "the exchange", kk: "сапа" } : { ru: "пешки", en: "a pawn", kk: "пешка" });
+export function imyaPoResheniyu(pz: PuzzleLike, locale: PzLocale = "ru"): string | null {
   const r = razborZadachi(pz);
   if (!r) return null;
-  if (r.kind === "mate") return `Мат в ${r.moves}`;
-  if (r.kind === "material") return `Выигрыш ${выигрыш(r.gain)} за ${r.moves} ${хода(r.moves)}`;
+  if (r.kind === "mate") return locale === "en" ? `Mate in ${r.moves}` : locale === "kk" ? `${r.moves} жүрісте мат` : `Мат в ${r.moves}`;
+  if (r.kind === "material") {
+    if (locale === "en") return `Win ${piece(r.gain).en} in ${r.moves} ${r.moves === 1 ? "move" : "moves"}`;
+    if (locale === "kk") return `${r.moves} жүрісте ${piece(r.gain).kk} ұту`;
+    return `Выигрыш ${выигрыш(r.gain)} за ${r.moves} ${хода(r.moves)}`;
+  }
   return null;
 }
 
@@ -100,10 +107,12 @@ export function imyaPoResheniyu(pz: PuzzleLike): string | null {
  * и «Ход чёрных» означал бы ровно противоположное тому, что человек видит.
  * Проверено мутацией 12.10: подстановка сырого fen краснит 4 проверки из 7.
  */
-export function zadanieNadDoskoy(pz: PuzzleLike): string {
+export function zadanieNadDoskoy(pz: PuzzleLike, locale: PzLocale = "ru"): string {
   const fen = normalizePuzzle(pz).fen;
-  const ходит = fen.split(" ")[1] === "b" ? "Ход чёрных" : "Ход белых";
-  return ходит + " · " + (imyaPoResheniyu(pz) || "Найдите лучший ход");
+  const black = fen.split(" ")[1] === "b";
+  const ходит = locale === "en" ? (black ? "Black to move" : "White to move") : locale === "kk" ? (black ? "Қаралар жүреді" : "Ақтар жүреді") : (black ? "Ход чёрных" : "Ход белых");
+  const best = locale === "en" ? "Find the best move" : locale === "kk" ? "Ең жақсы жүрісті табыңыз" : "Найдите лучший ход";
+  return ходит + " · " + (imyaPoResheniyu(pz, locale) || best);
 }
 
 /**

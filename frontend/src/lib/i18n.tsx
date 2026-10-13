@@ -242,6 +242,12 @@ function языкИзЗапроса(): Lang | null {
     if (isLang(явный)) return явный;
     const метка = (п.get("c") ?? "").trim().toLowerCase();
     if (метка.startsWith("mail-")) return "en";
+    // 126 (13.10.2026, оркестратор): /proof — страница для англоязычных писем, целиком en при
+    // любой локали. Без метки mail- ru-RU видел её наполовину переведённой живым слоем
+    // («Доверие · IP · Globus», «$490 … in 7 дней»). Решение по адресу, как у ?lang= и
+    // mail-: только состояние провайдера, в хранилище и куку не пишется — язык сайта у
+    // посетителя не меняется.
+    if (window.location.pathname === "/proof" || window.location.pathname === "/proof/") return "en";
   } catch {}
   return null;
 }
@@ -399,8 +405,14 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     if (typeof document !== "undefined") {
       document.documentElement.lang = lang;
       document.documentElement.dir = LANG_RTL[lang] ? "rtl" : "ltr";
+      // 120 (13.10.2026): решение провайдера — явный выбор. Инлайн-скрипт корневого
+      // layout (html lang по доле кириллицы) при этой метке lang не переписывает:
+      // на /cyberchess он через 0,4 с после нас ставил ru гостю en-US, и живой слой
+      // перевода замолкал. Метка только когда язык определён (langReady), иначе
+      // стартовое "en" из useState сошло бы за решение.
+      if (langReady) document.documentElement.setAttribute("data-lang-src", "provider");
     }
-  }, [lang]);
+  }, [lang, langReady]);
 
   const t = useCallback(
     (key: string, vars?: Record<string, string | number>): string => {

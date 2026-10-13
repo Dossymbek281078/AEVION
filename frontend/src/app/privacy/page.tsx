@@ -68,7 +68,7 @@ export default function PrivacyPage() {
           <p>We use essential cookies for authentication (JWT tokens stored locally). We use minimal analytics to understand platform usage. No third-party advertising trackers.</p>
 
           <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>7. Your Rights</h2>
-          <p>You have the right to: access your data, correct inaccurate data, request deletion of your account, export your data, and withdraw consent. Contact yahiin1978@gmail.com to exercise these rights.</p>
+          <p>You have the right to: access your data, correct inaccurate data, request deletion of your account, export your data, and withdraw consent. Contact data@aevion.app to exercise these rights.</p>
 
           <h2 style={{ fontSize: 18, fontWeight: 800, marginTop: 28, marginBottom: 8 }}>8. Data Retention</h2>
           <p>Account data is retained while your account is active. IP registration records and compliance certificates are retained permanently as part of the evidence trail — this is the core value proposition. Note that even outside our retention, a Verification Bundle you downloaded remains independently checkable: SHA-256, Ed25519, and the Bitcoin-anchored timestamp are the trust anchors, not our database. Financial records are retained as required by applicable law.</p>
@@ -85,7 +85,7 @@ export default function PrivacyPage() {
               домен принадлежит ДРУГОЙ компании с тем же названием — запросы на
               удаление данных уходили бы посторонним. У aevion.app записи MX нет
               вовсе. Разбор — в комментарии на /terms. */}
-          <p>Privacy contact: yahiin1978@gmail.com.</p>
+          <p>Privacy contact: data@aevion.app.</p>
           <p style={{ color: "#64748b", fontSize: 13 }}>AEVION LLC · 30 N Gould St, Ste R, Sheridan, WY 82801, United States</p>
         </div>
       </ProductPageShell>

@@ -16,6 +16,7 @@
  *   <h1>{t("spectator.hub.title")}</h1>
  */
 
+import { PZ_SLOVA } from "./p/pzSlova";
 import { useEffect, useState, useCallback } from "react";
 
 export type CcLocale = "ru" | "en" | "kk";
@@ -30,6 +31,7 @@ export const SUPPORTED_LOCALES: { code: CcLocale; label: string; flag: string }[
 
 const DICTIONARY: Record<CcLocale, Record<string, string>> = {
   ru: {
+    ...PZ_SLOVA.ru,
     // 30.09.2026: две подписи ушли из кода в словарь — сторож attrI18n считал их
     // русским текстом на переводимой странице, и он прав: на английском экране
     // они оставались русскими. Дата запуска здесь НЕ пишется — её подставляет
@@ -101,6 +103,8 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "chip.rating": "Рейтинг",
     "chip.history": "История",
     "chip.history.aria": "История онлайн-матчей",
+    "ai.strength.aria": "Сила соперника",
+    "rush.start.aria": "Запустить Puzzle Rush",
     // Названия уровней ИИ. Ключ — поле name из таблицы ALS в нижнем регистре.
     "ai.beginner": "Новичок",
     "ai.casual": "Любитель",
@@ -126,6 +130,9 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "nav.more": "Ещё",
     "nav.play": "Играть",
     "nav.puzzles": "Задачи",
+    "nav.commands": "Команды",
+    "nav.sections": "Все разделы",
+    "nav.help": "Помощь",
     "nav.analysis": "Анализ",
     "nav.profile": "Профиль",
     "board.cta.start": "Нажмите доску — начнём партию",
@@ -334,6 +341,7 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "flash.show_theory":           "Покажи теорию 📚",
   },
   en: {
+    ...PZ_SLOVA.en,
     "wl.launch.title": "CyberChess full launch",
     "buy.card.title": "Card payment · CyberChess subscription",
     "tc.bullet": "Bullet", "tc.blitz": "Blitz", "tc.rapid": "Rapid", "tc.custom": "Custom",
@@ -384,6 +392,8 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "chip.rating": "Rating",
     "chip.history": "History",
     "chip.history.aria": "Online match history",
+    "ai.strength.aria": "Opponent strength",
+    "rush.start.aria": "Start Puzzle Rush",
     "ai.beginner": "Beginner",
     "ai.casual": "Casual",
     "ai.club": "Club",
@@ -402,6 +412,9 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "nav.more": "More",
     "nav.play": "Play",
     "nav.puzzles": "Puzzles",
+    "nav.commands": "Commands",
+    "nav.sections": "All sections",
+    "nav.help": "Help",
     "nav.analysis": "Analysis",
     "nav.profile": "Profile",
     "board.cta.start": "Tap the board — let's play",
@@ -595,6 +608,7 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "flash.show_theory":           "Show theory 📚",
   },
   kk: {
+    ...PZ_SLOVA.kk,
     "wl.launch.title": "CyberChess толық іске қосылуы",
     "buy.card.title": "Картамен төлеу · CyberChess жазылымы",
     // 🔴 ЭТИХ ЧЕТЫРЁХ КЛЮЧЕЙ ЗДЕСЬ НЕ БЫЛО до 05.10.2026, и пропуск не падал,
@@ -655,6 +669,8 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "chip.rating": "Рейтинг",
     "chip.history": "Тарих",
     "chip.history.aria": "Онлайн ойындар тарихы",
+    "ai.strength.aria": "Қарсылас күші",
+    "rush.start.aria": "Puzzle Rush бастау",
     // Коротко намеренно: подпись стоит рядом с рейтингом в строке без переноса.
     // «Жаңадан бастаушы» (16 знаков) эту строку развалило бы.
     "ai.beginner": "Бастаушы",
@@ -681,6 +697,9 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "nav.more": "Тағы",
     "nav.play": "Ойнау",
     "nav.puzzles": "Есептер",
+    "nav.commands": "Пәрмендер",
+    "nav.sections": "Барлық бөлімдер",
+    "nav.help": "Көмек",
     "nav.analysis": "Талдау",
     "nav.profile": "Профиль",
     "board.cta.start": "Тақтаны басыңыз — ойынды бастаймыз",

@@ -529,7 +529,7 @@ export default function StudioPage() {
             {
               tier: "Enterprise", price: "Custom", color: "#7c3aed",
               features: ["Unlimited everything", "Dedicated compute", "Custom domains pool", "Team collaboration", "SLA + support", "White-label option", "API access"],
-              cta: "Contact us", ctaHref: "mailto:yahiin1978@gmail.com?subject=AEVION+Studio+Enterprise", disabled: false,
+              cta: "Contact us", ctaHref: "mailto:data@aevion.app?subject=AEVION+Studio+Enterprise", disabled: false,
             },
           ].map((plan) => (
             <div key={plan.tier} style={{ border: `2px solid ${plan.color}`, borderRadius: 16, padding: "28px 24px", background: "#fff", display: "flex", flexDirection: "column" }}>

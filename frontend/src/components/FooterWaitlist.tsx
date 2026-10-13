@@ -29,6 +29,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import { useI18nOptional, языкИзАдреса } from "@/lib/i18n";
 import { WaitlistCapture } from "./WaitlistCapture";
 
 /** Помечает источник: видно в выгрузке. Схема сервера режет на 60 знаках. */
@@ -67,6 +68,20 @@ export type WaitlistIfMissingProps = {
 
 export function FooterWaitlist(props: WaitlistIfMissingProps = {}) {
   const pathname = usePathname();
+  /*
+   * Язык блока — из адреса: на /en/… подвал говорит по-английски САМ, а не
+   * через живой слой перевода. Повод 13.10.2026 (bd): на /en/devhub заголовок и
+   * кнопка переводились слоем, а placeholder «вы@почта.рф» — нет (слой идёт по
+   * текстовым узлам, атрибуты не трогает), и англоязычный посетитель из пяти
+   * каталогов видел кириллицу ровно в поле контакта. Явный проп lang старше.
+   *
+   * 115б (bd, замер локалью en-US): у /devhub префикса нет, а страница английская —
+   * язык берём из ТОГО ЖЕ источника, что и остальная страница (i18n: префикс →
+   * сохранённый выбор → navigator.language); префикс адреса — запасной путь вне
+   * провайдера (тесты, обособленные оболочки).
+   */
+  const i18n = useI18nOptional();
+  const язык: "ru" | "en" = props.lang ?? (i18n ? (i18n.lang === "en" ? "en" : "ru") : (языкИзАдреса(pathname) === "en" ? "en" : "ru"));
   const [показывать, установить] = useState(false);
   const [узел, запомнить] = useState<HTMLDivElement | null>(null);
 
@@ -91,15 +106,15 @@ export function FooterWaitlist(props: WaitlistIfMissingProps = {}) {
       <WaitlistCapture
         source={(props.source ?? footerWaitlistSource(pathname)).slice(0, 60)}
         tone="light"
-        lang={props.lang ?? "ru"}
-        title={props.title ?? "Не готовы сегодня — оставьте адрес"}
+        lang={язык}
+        title={props.title ?? (язык === "en" ? "Not ready today — leave your address" : "Не готовы сегодня — оставьте адрес")}
         description={
           props.description ??
-          "Напишем, когда откроется то, что вы смотрели, и пришлём условия раннего доступа."
+          (язык === "en" ? "We will write when what you were looking at opens and send you the early-access terms." : "Напишем, когда откроется то, что вы смотрели, и пришлём условия раннего доступа.")
         }
         promise=""
-        buttonLabel={props.buttonLabel ?? "Сообщить мне"}
-        doneText={props.doneText ?? "Готово — адрес записан. Подтверждение уже ушло вам на почту."}
+        buttonLabel={props.buttonLabel ?? (язык === "en" ? "Notify me" : "Сообщить мне")}
+        doneText={props.doneText ?? (язык === "en" ? "Done — your address is saved. A confirmation is already in your inbox." : "Готово — адрес записан. Подтверждение уже ушло вам на почту.")}
       />
     </div>
   );

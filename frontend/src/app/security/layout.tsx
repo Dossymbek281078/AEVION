@@ -48,7 +48,7 @@ const faqJsonLd = {
       name: "How do you handle vulnerability reports?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Send to yahiin1978@gmail.com with subject 'AEVION security' or use the /.well-known/security.txt contact. Acknowledgment within 24 hours, fix coordination per CVD norms, public credit on /changelog once mitigated.",
+        text: "Send to data@aevion.app with subject 'AEVION security' or use the /.well-known/security.txt contact. Acknowledgment within 24 hours, fix coordination per CVD norms, public credit on /changelog once mitigated.",
       },
     },
     {

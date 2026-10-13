@@ -104,7 +104,7 @@ export function SiteFooter() {
             Contact
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <a href="mailto:yahiin1978@gmail.com" style={footerLink}>yahiin1978@gmail.com</a>
+            <a href="mailto:data@aevion.app" style={footerLink}>data@aevion.app</a>
             <span>Astana, Kazakhstan</span>
             <span>+7 702 625 83 77</span>
           </div>

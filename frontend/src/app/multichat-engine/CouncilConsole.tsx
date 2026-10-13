@@ -23,6 +23,7 @@
 import { useEffect, useState } from "react";
 import { useI18nOptional } from "@/lib/i18n";
 import { apiUrl } from "@/lib/apiBase";
+import { track } from "@/lib/track";
 import { getAuthHeaders, isAuthenticated } from "@/lib/auth";
 import { T } from "./theme";
 import { agentFailure, agentTitle, retryHint } from "./failureText";
@@ -268,6 +269,11 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
     const q = prompt.trim();
     if (q.length < 5 || busy) return;
     setBusy(true);
+    // 124 (13.10.2026): первое действие гостя — вопрос консилиуму. До этого страница не слала
+    // ни одного feature_use, и в воронке «попробовали» у /multichat-engine стояло 0 при 15 живых
+    // сессиях из youtube — слепое пятно прибора, а не поведение людей. Ступень «попробовали»
+    // воронка считает по feature_use (events.ts), канал и пост track() прикладывает сам.
+    track({ type: "feature_use", source: "multichat", meta: { feature: "council_ask", app: "multichat", guest: !isAuthenticated(), chars: q.length } });
     setError(null);
     setIsExample(false);
     // Прошлый результат снимаем ДО запроса, а не после успешного ответа.
@@ -325,6 +331,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
   async function runExample() {
     if (busy) return;
     setBusy(true);
+    track({ type: "feature_use", source: "multichat", meta: { feature: "council_example", app: "multichat", guest: !isAuthenticated() } });
     setError(null);
     // Симметрично ask(): если пример не загрузится, на экране не должен
     // остаться прошлый настоящий прогон — он там уже без своего вопроса.

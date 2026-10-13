@@ -84,7 +84,7 @@ const tr: Record<string, string> = {
   "footer.products": "Ürünler",
   "footer.rights": "Tüm hakları saklıdır.",
   "help.still": "Daha fazla yardıma ihtiyacınız var mı?",
-  "help.subtitle": "AEVION hakkında her şey. Cevap bulamadınız mı? yahiin1978@gmail.com adresine e-posta gönderin",
+  "help.subtitle": "AEVION hakkında her şey. Cevap bulamadınız mı? data@aevion.app adresine e-posta gönderin",
   "help.title": "Yardım Merkezi",
   "home.badge": "Ürün MVP · demoya hazır",
   "home.cta.auth": "Kimlikle başla",

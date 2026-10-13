@@ -13,6 +13,7 @@ import { InfoTip } from "@/components/InfoTip";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import AskAi from "@/components/AskAi";
 import { apiUrl } from "@/lib/apiBase";
+import { track } from "@/lib/track";
 import { canonicalContentHash } from "@/lib/canonicalContentHash";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { ЦЕНА_ПРОВЕРКИ_ЦЕНТЫ, ценаСПериодом } from "../bureau/verifiedPrice";
@@ -467,6 +468,10 @@ export default function QRightPage() {
         };
       }
 
+      // 125 (13.10.2026): первое действие — создание сертификата. До этого /qright слал только
+      // page_view/engaged, и «попробовали» у /bureau и /qright в воронке было 0 при 22 живых
+      // сессиях за 14 дн. — слепое пятно прибора. Ступень считается по feature_use (events.ts).
+      track({ type: "feature_use", source: "qright", meta: { feature: "protect", app: "qright", kind: String(kind) } });
       const res = await fetch(apiUrl("/api/pipeline/protect"), {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders() },

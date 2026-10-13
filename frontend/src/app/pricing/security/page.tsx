@@ -463,7 +463,7 @@ export default async function SecurityPage() {
             {t("pricing.security.bugBounty.reportCta")}
           </Link>
           <a
-            href="mailto:yahiin1978@gmail.com"
+            href="mailto:data@aevion.app"
             style={{
               display: "inline-block",
               padding: "12px 24px",
@@ -476,7 +476,7 @@ export default async function SecurityPage() {
               fontSize: 14,
             }}
           >
-            yahiin1978@gmail.com
+            data@aevion.app
           </a>
         </div>
       </section>
@@ -571,8 +571,8 @@ export default async function SecurityPage() {
         </Link>
         <div style={{ fontSize: 12, color: "#94a3b8" }}>
           {t("pricing.security.questions")}{" "}
-          <a href="mailto:yahiin1978@gmail.com" style={{ color: "#0d9488", fontWeight: 700 }}>
-            yahiin1978@gmail.com
+          <a href="mailto:data@aevion.app" style={{ color: "#0d9488", fontWeight: 700 }}>
+            data@aevion.app
           </a>
         </div>
       </div>

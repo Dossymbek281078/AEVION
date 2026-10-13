@@ -91,7 +91,10 @@ fi
 # Отдельный урок: проверяя гипотезу, я воспроизвёл только `set -e` и получил
 # «не роняет» — потому что испытывал не тот прибор. Условие ломается именно
 # сочетанием с pipefail.
-PODKIDYSHI="$(git ls-tree -r --name-only HEAD | grep -E '(^|/)src/.*\.mjs$' | head -20 || true)"
+# 13.10.2026 (129б): под tools/<имя>/src/ .mjs законны — это verify-kit для покупателя
+# (frontend/tools/verify-bundle/src/*.mjs, ESM по замыслу, в образ бэкенда не едет).
+# Замер: 5 таких файлов, все verify-bundle; остальной src по-прежнему без .mjs.
+PODKIDYSHI="$(git ls-tree -r --name-only HEAD | grep -E '(^|/)src/.*\.mjs$' | grep -vE '(^|/)tools/[^/]+/src/' | head -20 || true)"
 if [ -n "$PODKIDYSHI" ]; then
   echo "ОСТАНОВКА: в ветке есть .mjs внутри src — у нас там только .ts." >&2
   echo "Похоже на чужой файл, уже подхваченный автосейвом:" >&2

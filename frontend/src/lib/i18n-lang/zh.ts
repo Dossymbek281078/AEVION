@@ -84,7 +84,7 @@ const zh: Record<string, string> = {
   "footer.products": "产品",
   "footer.rights": "版权所有。",
   "help.still": "还需要帮助？",
-  "help.subtitle": "关于AEVION的一切。找不到答案？发邮件至 yahiin1978@gmail.com",
+  "help.subtitle": "关于AEVION的一切。找不到答案？发邮件至 data@aevion.app",
   "help.title": "帮助中心",
   "home.badge": "产品 MVP · 演示就绪",
   "home.cta.auth": "从身份开始",

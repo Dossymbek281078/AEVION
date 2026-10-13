@@ -16,8 +16,9 @@ import { serverFetch } from "@/lib/apiBase";
 import { channelFrom, postFrom } from "@/lib/products";
 import { pzT, type PzYazyk } from "../pzSlova";
 import { zadachaDlyaEkrana, zadanieNadDoskoy, imyaPoResheniyu, type PzLocale } from "../../puzzleNormalize";
-import { GLIF, kletki, shag, sozdatSostoyanie, svoyaFigura, tseli } from "../logikaZadachi";
+import { GLIF, hodyashchie, kletki, shag, sozdatSostoyanie, svoyaFigura, tseli } from "../logikaZadachi";
 import { yazykZaprosa } from "../yazykZaprosa";
+import { КЛИЕНТ } from "../klientSkript";
 
 export const dynamic = "force-dynamic";
 
@@ -44,8 +45,9 @@ const esc = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;"
 function html(p: { id: string; fen: string; zadanie: string; name: string; rating: number; theme: string; locale: PzYazyk; storona: "w" | "b"; polnaya: string; channel: string | null; post: string | null; path: string; title: string; description: string }): string {
   const t = (k: string) => pzT(p.locale, k);
   const ryady = kletki(p.fen, p.storona);
-  const kletkiHtml = ryady.flat().map((k) => `<button type="button" data-sq="${k.sq}" class="${k.dark ? "d" : "l"}" aria-label="${k.sq}">${k.p ? `<span class="${k.p[0] === "w" ? "w" : "b"}">${GLIF[k.p]}</span>` : ""}</button>`).join("");
-  const cfg = { id: p.id, fen: p.fen, i: 0, storona: p.storona, texts: { wrong: t("pz.wrong"), yourMove: t("pz.yourMove"), solved: t("pz.solved").replace("{name}", p.name) }, ev: { channel: p.channel, post: p.post, path: p.path, rating: p.rating, theme: p.theme, fen: p.fen } };
+  const mogut = new Set(hodyashchie(p.fen, p.storona));
+  const kletkiHtml = ryady.flat().map((k) => `<button type="button" data-sq="${k.sq}" class="${k.dark ? "d" : "l"}${mogut.has(k.sq) ? " m" : ""}" aria-label="${k.sq}">${k.p ? `<span class="${k.p[0] === "w" ? "w" : "b"}">${GLIF[k.p]}</span>` : ""}</button>`).join("");
+  const cfg = { id: p.id, fen: p.fen, i: 0, storona: p.storona, movable: [...mogut], texts: { wrong: t("pz.wrong"), yourMove: t("pz.yourMove"), hint: t("pz.hint"), solved: t("pz.solved").replace("{name}", p.name) }, ev: { channel: p.channel, post: p.post, path: p.path, rating: p.rating, theme: p.theme, fen: p.fen } };
   return `<!doctype html><html lang="${p.locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>${esc(p.title)}</title><meta name="description" content="${esc(p.description)}"><meta name="robots" content="noindex">
 <link rel="canonical" href="https://aevion.app${esc(p.polnaya)}">
@@ -54,7 +56,7 @@ function html(p: { id: string; fen: string; zadanie: string; name: string; ratin
 :root{color-scheme:dark}*{box-sizing:border-box}html,body{margin:0;background:#0f172a;color:#f1f5f9;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
 main{min-height:100dvh;display:flex;flex-direction:column;align-items:center;gap:10px;padding:12px 12px 24px}
 .wd{width:min(92vw,60vh,480px)}.hdr{display:flex;justify-content:space-between;align-items:baseline}.hdr b{font-size:15px}.hdr small{opacity:.75}
-.z{font-size:15px;font-weight:800}
+.z{font-size:15px;font-weight:800}.b .m::before{content:"";position:absolute;inset:6%;border-radius:50%;box-shadow:0 0 0 3px rgba(5,150,105,.75) inset}
 .b{aspect-ratio:1/1;display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);border-radius:8px;overflow:hidden;box-shadow:0 4px 18px rgba(0,0,0,.4);touch-action:manipulation;user-select:none}
 .b button{position:relative;border:0;padding:0;margin:0;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:clamp(22px,7.5vmin,46px);line-height:1}
 .b .l{background:#f0d9b5}.b .d{background:#b58863}.b .sel{background:#f6f669!important}.b .last.l{background:#cdd26a}.b .last.d{background:#aaa23a}
@@ -72,31 +74,9 @@ main{min-height:100dvh;display:flex;flex-direction:column;align-items:center;gap
 <a class="wd f" data-cc-full href="${esc(p.polnaya)}">${esc(t("pz.fullVersion"))}</a>
 </main>
 <script id="cc-cfg" type="application/json">${JSON.stringify(cfg).replace(/</g, "\\u003c")}</script>
-<script>${СКРИПТ}</script>
+<script>${КЛИЕНТ}</script>
 </body></html>`;
 }
-
-/* Клиент: без React и chess.js. Цели и ходы спрашивает у сервера (POST сюда же). */
-const СКРИПТ = `(function(){var C=JSON.parse(document.getElementById("cc-cfg").textContent);var G=${JSON.stringify(GLIF)};
-var main=document.querySelector("[data-cc-light-puzzle]");main.setAttribute("data-hydrated","1");
-var board=document.querySelector("[data-cc-board]"),st=document.querySelector("[data-cc-status]"),resh=document.querySelector("[data-cc-resheno]");
-var sid;try{sid=sessionStorage.getItem("aevion_gtm_sid");if(!sid){sid="s_"+Date.now().toString(36)+"_"+Math.random().toString(36).slice(2,10);sessionStorage.setItem("aevion_gtm_sid",sid)}}catch(e){sid="s_"+Date.now().toString(36)}
-function ev(body){body.sid=sid;body.path=C.ev.path;if(body.meta){if(C.ev.channel)body.meta.channel=C.ev.channel;if(C.ev.post)body.meta.post=C.ev.post}try{if(navigator.webdriver)body.webdriver=true}catch(e){}var d=JSON.stringify(body);try{if(navigator.sendBeacon&&navigator.sendBeacon("/api-backend/api/pricing/events",new Blob([d],{type:"application/json"})))return}catch(e){}try{fetch("/api-backend/api/pricing/events",{method:"POST",headers:{"Content-Type":"application/json"},body:d,keepalive:true})}catch(e){}}
-ev({type:"page_view",source:"cyberchess-p",meta:{}});
-ev({type:"feature_use",source:"cyberchess/link",meta:{feature:"puzzle_link_open",app:"cyberchess",puzzle:C.id,surface:"light"}});
-var sel=null,targets=[],busy=false,pervyy=false,resheno=false,last=[];
-function fenPieces(fen){var rows=fen.split(" ")[0].split("/"),m={};for(var r=0;r<8;r++){var f=0;for(var i=0;i<rows[r].length;i++){var ch=rows[r][i];if(ch>="1"&&ch<="8"){f+=+ch}else{var sq="abcdefgh"[f]+(8-r);m[sq]=(ch===ch.toUpperCase()?"w":"b")+ch.toLowerCase();f++}}}return m}
-function draw(){var pcs=fenPieces(C.fen);var bs=board.querySelectorAll("[data-sq]");for(var i=0;i<bs.length;i++){var b=bs[i],sq=b.getAttribute("data-sq"),p=pcs[sq];b.innerHTML=p?'<span class="'+(p[0]==="w"?"w":"b")+'">'+G[p]+"</span>":"";b.classList.toggle("sel",sel===sq);b.classList.toggle("last",last.indexOf(sq)>=0);var isT=targets.indexOf(sq)>=0;b.classList.toggle("t",isT);b.classList.toggle("p",isT&&!!p)}}
-function post(akt,from,to){return fetch(location.pathname,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({akt:akt,fen:C.fen,i:C.i,from:from,to:to})}).then(function(r){return r.json()})}
-board.addEventListener("click",function(e){var b=e.target.closest("[data-sq]");if(!b||busy||resheno)return;var sq=b.getAttribute("data-sq");
-if(sel&&targets.indexOf(sq)>=0){busy=true;var from=sel;post("move",from,sq).then(function(r){busy=false;sel=null;targets=[];if(r.vid!=="ok"){st.textContent=C.texts.wrong;st.className="wd s err";draw();return}
-C.fen=r.fen;C.i=r.i;last=[from,sq];st.textContent=C.texts.yourMove;st.className="wd s";draw();
-if(!pervyy){pervyy=true;ev({type:"feature_use",source:"cyberchess/board",meta:{feature:"first_move",app:"cyberchess",kontekst:"puzzle"}})}
-if(r.reshena){resheno=true;st.textContent=C.texts.solved;resh.style.display="flex";ev({type:"puzzle_solved",source:"cyberchess/board",meta:{app:"cyberchess",id:C.id,fen:C.ev.fen,rating:C.ev.rating,theme:C.ev.theme,daily:false,surface:"light"}})}
-}).catch(function(){busy=false});return}
-var pcs=fenPieces(C.fen);if(pcs[sq]&&pcs[sq][0]===C.storona){sel=sq;busy=true;post("targets",sq,null).then(function(r){busy=false;targets=r.targets||[];st.className="wd s";draw()}).catch(function(){busy=false});return}
-sel=null;targets=[];draw()});
-})();`;
 
 /** Позиция после i ходов решения — чтобы не верить клиенту на слово. */
 function sostoyanieNaShage(fen: string, sol: string[], i: number) {
@@ -143,5 +123,5 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (b.akt === "targets") return Response.json({ targets: svoyaFigura(s, from) ? tseli(s.fen, from) : [] });
   const r = shag(s, from, to);
   if (r.vid !== "ok") return Response.json({ vid: "wrong" });
-  return Response.json({ vid: "ok", fen: r.sostoyanie.fen, i: r.sostoyanie.i, reshena: r.reshena, otvet: r.otvet });
+  return Response.json({ vid: "ok", fen: r.sostoyanie.fen, i: r.sostoyanie.i, reshena: r.reshena, otvet: r.otvet, movable: r.reshena ? [] : hodyashchie(r.sostoyanie.fen, s.storona) });
 }

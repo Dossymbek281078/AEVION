@@ -40,7 +40,7 @@ describe("лёгкий маршрут задачи — Route Handler без мо
 
   it("знаменатель: маршрут — обработчик и логика, страницы React нет", () => {
     const имена = файлы.map((f) => f.slice(МАРШРУТ.length + 1).replace(/\\/g, "/")).sort();
-    expect(имена).toEqual(["[id]/route.ts", "logikaZadachi.ts", "pzSlova.ts", "yazykZaprosa.ts"]);
+    expect(имена).toEqual(["[id]/route.ts", "klientSkript.ts", "logikaZadachi.ts", "pzSlova.ts", "yazykZaprosa.ts"]);
   });
 
   it("🔴 обработчик не импортирует React, провайдеры сайта и тяжёлые модули шахмат", () => {
@@ -64,7 +64,7 @@ describe("лёгкий маршрут задачи — Route Handler без мо
   });
 
   it("события воронки — те же, что у полной версии, с channel/post из ?c=", () => {
-    const r = readFileSync(join(МАРШРУТ, "[id]/route.ts"), "utf8");
+    const r = readFileSync(join(МАРШРУТ, "[id]/route.ts"), "utf8") + readFileSync(join(МАРШРУТ, "klientSkript.ts"), "utf8");
     for (const s of ['feature:"puzzle_link_open"', 'feature:"first_move"', 'type:"puzzle_solved"', 'source:"cyberchess/board"', 'type:"page_view",source:"cyberchess-p"', "channelFrom(c)", "postFrom(c)", "aevion_gtm_sid", "/api-backend/api/pricing/events"]) expect(r, s).toContain(s);
     expect(r).toContain('og:title');
     expect(r).toContain('data-hydrated');

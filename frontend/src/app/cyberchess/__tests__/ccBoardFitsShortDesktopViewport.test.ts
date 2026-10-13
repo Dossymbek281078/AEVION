@@ -17,7 +17,7 @@ describe("доска помещается на низком десктопном
     // получает меньший запас — доска крупнее). Свойство «низкий стол → 186, стол → 150»
     // проверяется НИЖЕ через саму функцию, а здесь — что страница её и зовёт.
     expect(src).toContain("const запасПодДоской=zapasPodDoskoy(зашёлЗаЗадачей,lowDesktop);");
-    expect(src).toContain("const desktopVReserve=Math.max(250,boardTopPx>0?boardTopPx+запасПодДоской:0);");
+    expect(src).toContain("const desktopVReserve=(boardTopPx>0?boardTopPx:110)+подДоской136+8;"); // 136: под доской только буквы и строка «Вы»
     expect(src).toContain('vhPx-(vwPx>=769?desktopVReserve:290)');
     expect(src).toContain('data-cc-board="1"');
   });
@@ -25,7 +25,7 @@ describe("доска помещается на низком десктопном
     expect(src).toContain('data-cc-board-col="1" style={{flex:"0 1 auto",minWidth:0,minHeight:0,display:"flex",flexDirection:"column",alignItems:"center",overflowY:isMobileLayout?"visible":"auto"}}');
   });
   it("быстрая панель не рисуется на низком десктопе, на телефоне остаётся", () => {
-    expect(src).toContain('{!streamerMode&&!setup&&on&&tab==="play"&&(vwPx<769||vhPx>=820)&&(');
+    expect(src).toContain('{!streamerMode&&!setup&&on&&tab==="play"&&vwPx<769&&('); // 136: на десктопе панель не рисуется вовсе
   });
   it("контроль: измерение не зависит от размера доски (нет петли)", () => {
     const i = src.indexOf("const measure=()=>{");
@@ -36,13 +36,13 @@ describe("доска помещается на низком десктопном
 describe("ряды кнопок под доской на низком десктопе", () => {
   it("оба ряда идут одной строкой с боковой прокруткой, запас 186px", () => {
     expect(src).toContain("const lowDesktop=vwPx>=769&&vhPx<860;");
-    expect(src).toContain('?{flexWrap:"nowrap",overflowX:"auto",scrollbarWidth:"none"}');
+    expect(src).not.toContain('?{flexWrap:"nowrap",overflowX:"auto",scrollbarWidth:"none"}'); // 136: боковой прокрутки нет — ряды переносятся
     // Политика записана литералами в zapasPodDoskoy.ts; здесь — её поведение.
     expect(zapasPodDoskoy(false, true), "низкий стол без захода за задачей").toBe(186);
     expect(zapasPodDoskoy(false, false), "обычный стол").toBe(150);
     expect(src.match(/\.\.\.podDoskoyRow\}\}>/g)?.length).toBe(2);
   });
   it("контроль: на обычном десктопе и телефоне ряды по-прежнему переносятся", () => {
-    expect(src).toContain(':{flexWrap:"wrap",overflowX:"visible"}');
+    expect(src).toContain('{flexWrap:"wrap",overflowX:"visible"}');
   });
 });

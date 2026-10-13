@@ -91,7 +91,7 @@ export default function TurnClock({ getSeconds, ini, isActive, brand, textMute }
   // Circular progress: % оставшегося от ini. Если ini=0 (untimed) — пустое кольцо.
   const pct = ini > 0 ? Math.max(0, Math.min(1, secs / ini)) : 0;
   const color = colorFor(secs, brand, textMute, isActive);
-  const size = 56;
+  const size = 44; // 136 (13.10.2026): строка игрока 60→48 px — высота уходит доске (lichess: полоска 36–40)
   const stroke = 3.5;
   const r = (size - stroke) / 2;
   const circ = 2 * Math.PI * r;

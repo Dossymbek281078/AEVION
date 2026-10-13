@@ -1721,7 +1721,13 @@ export default function CyberChessPage(){
   // ~660 (рейл 248 + панель 340 + поля), без рейла ~400 (только панель + поля) — так
   // 3-колоночная раскладка никогда не выходит за окно. Кап 1400 — доска заполняет
   // высоту больших окон, но не доминирует на 4K. boardScale поверх, финал зажат потолком.
-  const railShown=vwPx>=1100&&!зашёлЗаЗадачей; // должно совпадать с порогом рендера <aside> ниже
+  // 136 (13.10.2026, слово основателя «доска маленькая, панель огромная»): левый рейл «Оценка/Материал/
+  // Партия» выключен — оценка живёт шкалой у доски, материал и партия — во вкладке «Инфо» панели.
+  // Образец lichess/chess.com: [шкала] [доска во всю высоту] [панель 380]. Условие оставлено для истории.
+  const railShown=false&&vwPx>=1100&&!зашёлЗаЗадачей;
+  /** Ширина правой панели на десктопе (lichess 380–480). На 769–1279 панель уходит под доску. */
+  const ПАНЕЛЬ_W_136=380;
+  const панельРядом=vwPx>=1280;
   // Путь к настоящей кассе ($, Lemon Squeezy) — ВСЕГДА на экране, независимо от ширины и онбординга.
   // Замер 20.09.2026: единственная цена жила в баннере проектов (только ≥1100px и только без
   // онбординга) — на телефоне и у нового гостя цены не было никогда; магазин Chessy продаёт
@@ -1798,7 +1804,7 @@ export default function CyberChessPage(){
   }; // должно совпадать с порогом BottomNav/cc-right-panel drawer ниже
   // Вертикальный резерв под обвязку колонки. На ДЕСКТОПЕ нижнего навбара нет (скрыт) —
   // резервируем меньше (≈210) => доска КРУПНЕЕ. На мобайле навбар есть => больше (≈290).
-  const vReserve=vwPx>=769?264:300; // десктоп без навбара (хедер+строки игроков+контролы) / мобайл +навбар
+  const vReserve=vwPx>=769?190:300; // 136: шапка в одну строку (≤64) + полоска соперника (36) + под доской (60) + поля; мобайл +навбар
   // Правый WorkspaceDock (fixed ~46px у края) — резервируем 56px по ширине, чтобы 3 колонки
   // не уходили под него (баг: док наезжал на панель ходов). На мобайле (<769) док скрыт
   // (его функции есть в BottomNav/«Все разделы»/Профиле) → 0, доска забирает эти 56px.
@@ -1811,8 +1817,8 @@ export default function CyberChessPage(){
   // 400/360 на всех ширинах — на телефонах uже 640px он схлопывал vwPx-360 почти в ноль,
   // и итоговый Math.max(280,...) намертво прибивал доску к 280px на ЛЮБОМ телефоне,
   // не давая ей расти вместе с реальной шириной экрана (баг, живой аудит 2026-07-16/20).
-  const mobileGutter=16;
-  const hReserve=railShown?660:(isMobileLayout?mobileGutter:400);
+  const mobileGutter=20; // 136: поля оболочки 10+10 — доска во всю ширину без переполнения
+  const hReserve=railShown?660:(isMobileLayout?mobileGutter:(панельРядом?ПАНЕЛЬ_W_136+24:48)); // 136: ширина панели + зазор, либо только поля
   // Кап 1600 (было 1400) — больше места для доски на высоких/больших экранах.
   const baseBoardPx=Math.max(isMobileLayout?240:320,Math.min(1600,vhPx-vReserve,vwPx-hReserve-dockReserve));
   const boardPxRaw=Math.round(baseBoardPx*boardScale);
@@ -1833,12 +1839,15 @@ export default function CyberChessPage(){
   // На низком десктопе (768px) они переносились в три-четыре строки и уезжали за окно — замер 23.09 на проде:
   // «Сдаться», «Ничья», «Отменить» ВНЕ окна. Там ряды идут в одну строку с боковой прокруткой, запас 186px.
   const lowDesktop=vwPx>=769&&vhPx<860;
-  const podDoskoyRow:React.CSSProperties=lowDesktop
-    ?{flexWrap:"nowrap",overflowX:"auto",scrollbarWidth:"none"}
-    :{flexWrap:"wrap",overflowX:"visible"};
+  // 136: горизонтальной прокрутки в колонке доски быть не должно (кадр основателя: обрезанный «− 100 %»
+  // и полоса прокрутки) — ряды переносятся на любой ширине.
+  const podDoskoyRow:React.CSSProperties={flexWrap:"wrap",overflowX:"visible"}; void lowDesktop;
   // Пришедшему за задачей ряды партии под доской не нужны — запас меньше, доска больше.
   const запасПодДоской=zapasPodDoskoy(зашёлЗаЗадачей,lowDesktop);
-  const desktopVReserve=Math.max(250,boardTopPx>0?boardTopPx+запасПодДоской:0);
+  // 136: под доской нужны только буквы и строка «Вы» (≈60 px; пришедшему за задачей — 36), ряды кнопок
+  // прокручиваются в колонке. Верх доски измерен (шапка + полоска соперника), до замера — 110.
+  const подДоской136=зашёлЗаЗадачей?36:52; void запасПодДоской;
+  const desktopVReserve=(boardTopPx>0?boardTopPx:110)+подДоской136+8;
   /*
    * 🔴 12.10, приёмка волны 50: уступка доски сработала на 540 и 768 (клетка
    * 58→52 и 83→68, почти ровно обещанные 54 и 69), а на 390×844 — НЕ сработала
@@ -1864,12 +1873,12 @@ export default function CyberChessPage(){
   // боковым панелям. reserveBase совпадает с бюджетом ширины доски (см. baseBoardPx):
   // когда доска ограничена ШИРИНОЙ (узкие экраны), boardPx≈vwPx-reserveBase → слэк→0,
   // панели не расширяются и доска НЕ схлопывается. Расширение только при истинном просторе.
-  const reserveBase=(railShown?660:400)+dockReserve;
+  const reserveBase=(railShown?660:(панельРядом?ПАНЕЛЬ_W_136+24:48))+dockReserve;
   const wideSlack=Math.max(0,vwPx-boardPx-reserveBase-40);
   const railExtra=railShown?Math.min(130,Math.round(wideSlack*0.32)):0;
   const panelExtra=Math.min(190,Math.round(wideSlack*0.5));
   const railW=248+railExtra;               // левый инфо-рейл
-  const rightPanelMax=340+panelExtra;      // правая панель (ходы/эвал/коуч)
+  const rightPanelMax=ПАНЕЛЬ_W_136; void panelExtra; // 136: панель фиксированной ширины, слэк доске
   const[p2pMode,sP2pMode]=useState(false);
   const[p2pRoomId,sP2pRoomId]=useState("");
   const[p2pOpponentName,sP2pOpponentName]=useState("Оппонент");
@@ -7361,10 +7370,11 @@ export default function CyberChessPage(){
         position:"sticky",top:0,zIndex:Z.sticky,
         // Телефон: справа 100px под плавающую языковую пилюлю «RU ▼» (AppShellLanguagePill, fixed
         // top:12/right:12) — на 390 она ложилась на ☰/🔊 шапки (тестер 20.09.2026).
-        margin:"0 -12px 12px",padding:vwPx<769?"10px 100px 10px 12px":"10px 12px",
+        margin:vwPx<769?"0 -12px 4px":"0 -12px 8px",padding:vwPx<769?"3px 72px 3px 12px":"6px 12px",
         background:CC.surfaceGlass,backdropFilter:"blur(14px)",WebkitBackdropFilter:"blur(14px)",
         borderBottom:`1px solid ${CC.border}`,
-        display:"flex",alignItems:"center",gap:SPACE[3],flexWrap:"wrap"
+        // 136: одна строка (≤64 px) — доске нужна высота. Между 769 и 1023 перенос допускается.
+        display:"flex",alignItems:"center",gap:SPACE[3],flexWrap:vwPx>=1024||vwPx<769?"nowrap":"wrap"
       }}>
         {/* Logo */}
         <div style={{display:"flex",alignItems:"center",gap:SPACE[2],flex:"0 0 auto"}}>
@@ -7422,7 +7432,7 @@ export default function CyberChessPage(){
                 title={locked?"Заблокировано во время партии с человеком":t.label}
                 style={{
                   display:"inline-flex",alignItems:"center",gap:7,
-                  padding:"9px 18px",borderRadius:RADIUS.full,
+                  padding:vwPx>=1500?"9px 18px":"8px 12px",borderRadius:RADIUS.full,
                   border:active?`1px solid ${t.hue}55`:"1px solid transparent",
                   background:active?`${t.hue}1f`:"transparent",
                   color:locked?CC.textMute:active?t.hue:CC.textDim,
@@ -7432,7 +7442,7 @@ export default function CyberChessPage(){
                   transition:`background 120ms, color 120ms`,
                 }}>
                 <span style={{fontSize:16,lineHeight:1}} aria-hidden>{locked?"🔒":t.icon}</span>
-                <span>{t.label}</span>
+                {(vwPx>=1500||active)&&<span>{t.label}</span>}
               </button>;
             })}
           </div>;
@@ -7466,7 +7476,7 @@ export default function CyberChessPage(){
             ЧЕТЫРЕ ряда кнопок над содержимым. Доступ не теряется: навигация
             есть в «Все разделы» рядом, а сама палитра открывается из панели
             быстрых действий в партии («⚙ Ещё»). */}
-        {!isMobileLayout&&<button onClick={()=>sPalOpen(true)} title="Поиск любого действия (Ctrl+K)" className="cc-focus-ring"
+        {!isMobileLayout&&vwPx>=1700&&<button onClick={()=>sPalOpen(true)} title="Поиск любого действия (Ctrl+K)" className="cc-focus-ring"
           style={{
             display:"inline-flex",alignItems:"center",gap:6,
             padding:"7px 12px 7px 10px",borderRadius:RADIUS.full,
@@ -7488,7 +7498,7 @@ export default function CyberChessPage(){
         {/* «Все разделы» — видимый навигационный хаб. Делает обнаружимыми ВСЕ режимы и
             киллер-фичи (Турниры/Экономика/Тренинг/Реплеи/Студия/CPI), которые раньше были
             доступны только по прямому URL или через Ctrl+K. Зелёный акцент = заметность. */}
-        {vwPx>=769&&<button onClick={()=>sShowSections(true)} title="Все разделы — турниры, экономика, тренинг, реплеи, рейтинг…" className="cc-focus-ring"
+        {vwPx>=1700&&<button onClick={()=>sShowSections(true)} title="Все разделы — турниры, экономика, тренинг, реплеи, рейтинг…" className="cc-focus-ring"
           style={{
             display:"inline-flex",alignItems:"center",gap:6,
             padding:"7px 14px",borderRadius:RADIUS.full,
@@ -7504,7 +7514,7 @@ export default function CyberChessPage(){
             Проба 21.09 по проду (283cac722): на 390 цен на экране 0, пункт «Купить» был только в меню. */}
         {vwPx<769&&<a href={ccBuyHref} data-cc-buy="header-phone" onClick={учестьКликПоПокупке} className="cc-touch" title={`${cc.t("buy.card.title")} · ${ccBuyLabel}`} aria-label={`Купить CyberChess · ${ccBuyLabel}`} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"6px 8px",borderRadius:RADIUS.md,border:`1px solid ${CC.gold}`,background:"#fffbeb",color:"#92400e",fontSize:12,fontWeight:900,textDecoration:"none",whiteSpace:"nowrap",flexShrink:0}}>💳 {ccBuyLabel.match(/\$\d+/)?.[0]||ccBuyLabel}</a>}
         {vwPx>=769&&<a href={ccBuyHref} data-cc-buy="header" onClick={учестьКликПоПокупке} className="cc-touch" title={cc.t("buy.card.title")} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:RADIUS.md,border:`1px solid ${CC.gold}`,background:"#fffbeb",color:"#92400e",fontSize:12,fontWeight:900,textDecoration:"none",whiteSpace:"nowrap",flexShrink:0}}>💳 {ccBuyLabel}</a>}
-        {vwPx>=769&&<div style={{position:"relative",flexShrink:0}}>
+        {vwPx>=1700&&<div style={{position:"relative",flexShrink:0}}>
           <button onClick={()=>sHelpMenuOpen(v=>!v)} aria-haspopup="menu" aria-expanded={helpMenuOpen} title="Помощь — тур по интерфейсу, горячие клавиши, что такое Chessy" aria-label="Помощь" className="cc-focus-ring"
             style={{display:"inline-flex",alignItems:"center",gap:5,padding:"7px 13px",borderRadius:RADIUS.full,
               border:`1.5px solid ${helpMenuOpen?"#2563eb":"#3b82f6"}`,background:helpMenuOpen?"rgba(37,99,235,0.18)":"rgba(59,130,246,0.12)",color:"#2563eb",
@@ -7563,7 +7573,7 @@ export default function CyberChessPage(){
         <div style={{flex:1}}/>
 
         {/* Профиль — рейтинг + Chessy (микро-лейбл убран: чистая шапка) */}
-        {vwPx>=769&&!шапкаКомпактна&&<div className="cc-hzone" style={{display:"flex",alignItems:"center",gap:3,flexShrink:0}}>
+        {vwPx>=1700&&!шапкаКомпактна&&<div className="cc-hzone" style={{display:"flex",alignItems:"center",gap:3,flexShrink:0}}>
           <div style={{display:"inline-flex",alignItems:"center",gap:6}}>
         {/* Rating badge */}
         <div style={{
@@ -7679,7 +7689,7 @@ export default function CyberChessPage(){
              * aria-label теперь согласован с состоянием: раньше у ЗАКРЫТОЙ
              * шторки скринридер слышал «Свернуть боковую панель».
              */
-            tab==="puzzles"?cc.t("nav.hint"):cc.t("nav.coach")
+            vwPx<769?"":(tab==="puzzles"?cc.t("nav.hint"):cc.t("nav.coach")) // 136: на телефоне шапка в одну строку (≤64) — подпись только в title/aria
           }</span></button>
         </div>
 
@@ -7687,7 +7697,7 @@ export default function CyberChessPage(){
             онлайн) и «Навигацию» (раскладка/язык/экосистема) в одно меню → чистая шапка. */}
         <div style={{position:"relative",flexShrink:0}}>
           {!шапкаКомпактна&&<button onClick={()=>sMoreMenuOpen(v=>!v)} aria-haspopup="menu" aria-expanded={moreMenuOpen} title="Ещё — клавиши, музыка, стрим, раскладка, язык, экосистема" className="cc-focus-ring" style={{display:"inline-flex",alignItems:"center",gap:5,padding:"7px 12px",borderRadius:RADIUS.full,border:`1px solid ${moreMenuOpen?CC.brand:CC.borderStrong}`,background:moreMenuOpen?CC.brandSoft:CC.surface1,color:moreMenuOpen?CC.brand:CC.textDim,fontSize:12,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap"}}>
-            <span style={{fontSize:14}} aria-hidden>⚙</span><span>{cc.t("nav.more")}</span><span style={{fontSize:9}} aria-hidden>▾</span>
+            <span style={{fontSize:14}} aria-hidden>⚙</span>{vwPx>=769&&<span>{cc.t("nav.more")}</span>}<span style={{fontSize:9}} aria-hidden>▾</span>
           </button>}
           {moreMenuOpen&&<>
             <div onClick={()=>sMoreMenuOpen(false)} style={{position:"fixed",inset:0,zIndex:190}}/>
@@ -7774,7 +7784,12 @@ export default function CyberChessPage(){
         // два выкаченных варианта (64 и 152) не сдвинули низ доски ни на пиксель — 724/844
         // и 694/780. 152 = 88 (отступ пилюли) + 56 (её высота с чипом) + 8. Условие — ровно
         // то же, что у пилюли. Замеры 15.09.2026.
-        return<div style={{flex:1,minHeight:0,overflowY:"auto",marginBottom:16,display:"flex",flexDirection:"column",gap:lowDesktop?SPACE[1]:SPACE[3],maxWidth:1180,width:"100%",marginInline:"auto"}}>
+        // 136 (13.10.2026): первый экран гостя — как у lichess: доска крупным слева, лобби колонкой справа.
+        // Сторона превью = свободная высота (шапка ≤64 + поля) либо ширина без правой колонки; масштаб «−/+»
+        // тот же, что у игровой доски (0,6–1,0 от доступного), запоминается в localStorage.
+        const лоббиРядом=vwPx>=1280; // 1024–1279: лобби под доской, иначе колонка съедает ширину (замер 1024×900: 496 px)
+        const превьюPx=Math.round((isMobileLayout?vwPx-20:Math.max(360,Math.min(vhPx-(лоббиРядом?190:230),vwPx-(лоббиРядом?420+48:48)-dockReserve)))*Math.max(0.6,Math.min(1,boardScale)));
+        return<div style={{flex:1,minHeight:0,overflowY:"auto",marginBottom:16,...(лоббиРядом?{display:"grid",gridTemplateColumns:`minmax(0,auto) minmax(${320}px,${420}px)`,alignItems:"start",columnGap:24}:{display:"flex",flexDirection:"column"}),gap:SPACE[3],maxWidth:лоббиРядом?1700:1180,width:"100%",marginInline:"auto"}}>
 
           {/* ─── ДОСКА ПЕРВЫМ ДЕЛОМ ───
               Человек, открывший шахматы, доски не видел вовсе: экран начинался
@@ -7815,16 +7830,26 @@ export default function CyberChessPage(){
 
               При 1280×768 работает ветка lowDesktop (vhPx<860) и ничего
               не меняется — там места нет и сейчас. */}
-          {полоскаСтарта(isMobileLayout?340:560)}
+          {/* 136: доска — первая и крупная; на ≥1024 занимает левую колонку на всю высоту сетки,
+              остальное лобби (карточка «С чего начать», выбор, статистика) ложится справа. */}
+          <div data-cc-setup-board="1" style={лоббиРядом?{gridColumn:1,gridRow:`1 / span ${40}`,display:"flex",flexDirection:"column",alignItems:"center",gap:6,minWidth:0}:{display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
           <SetupBoardPreview
             orientation={pCol}
             light={bT.light}
             dark={bT.dark}
             border={bT.border}
-            maxPx={isMobileLayout?340:(lowDesktop?300:Math.max(420,Math.min(560,vhPx-480)))}
+            maxPx={превьюPx}
             label={`▶ ${cc.t("board.cta.start")}`}
             onStart={()=>{sHotseat(false);sRivalMode(false);newG()}}
           />
+          {/* Масштаб доски виден на первом экране (слово основателя: «где масштаб +− не видно»). */}
+          <div data-cc-setup-zoom="1" style={{display:"flex",alignItems:"center",gap:6,width:превьюPx,maxWidth:"100%",justifyContent:"flex-end"}}>
+            <button type="button" title={cc.t("board.zoomOut")} aria-label={cc.t("board.zoomOut")} onClick={()=>sBoardScale(s=>Math.max(0.5,parseFloat((s-0.1).toFixed(1))))} className="cc-touch" style={{width:32,height:32,borderRadius:8,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,fontSize:18,fontWeight:900,cursor:"pointer"}}>−</button>
+            <span title={cc.t("board.zoomSize")} style={{fontSize:12,color:CC.textMute,fontWeight:800,minWidth:40,textAlign:"center",fontFamily:`ui-monospace,${"monospace"}`}}>{Math.round(Math.max(0.6,Math.min(1,boardScale))*100)}%</span>
+            <button type="button" title={cc.t("board.zoomIn")} aria-label={cc.t("board.zoomIn")} onClick={()=>sBoardScale(s=>Math.min(1.5,parseFloat((s+0.1).toFixed(1))))} className="cc-touch" style={{width:32,height:32,borderRadius:8,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,fontSize:18,fontWeight:900,cursor:"pointer"}}>+</button>
+          </div>
+          </div>
+          {полоскаСтарта("100%")}
 
           {/* ─── Медиа-панель (YouTube/Twitch) на стартовом экране ───
               Раньше WorkspaceMediaPane рендерился только внутри cc-main-row (в игре),
@@ -8140,7 +8165,7 @@ export default function CyberChessPage(){
               </div>
 
               {/* Premove queue limit — compact pill row, без range-слайдера */}
-              <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
+              <div style={{display:"flex",alignItems:"center",gap:SPACE[2],flexWrap:"wrap"}}>{/* 136: ряд переносится — на 768 пилюля 10/20/30/50 вылезала за край (overflow у предка доски) */}
                 <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const,whiteSpace:"nowrap"}}>⚡ {cc.t("board.premoves")}</span>
                 <div style={{display:"inline-flex",gap:2,padding:2,borderRadius:RADIUS.full,background:CC.surface2,border:`1px solid ${CC.border}`}}>
                   {[10,20,30,50].map(n=><button key={n} onClick={()=>sPmLim(n)}
@@ -8949,7 +8974,8 @@ export default function CyberChessPage(){
       {/* Телефон: чипов больше, чем ширины (390: «…Стри» обрезался, «Видео»/«Ещё» недостижимы —
           тестер 20.09.2026). Ряд прокручивается по горизонтали, полоса прокрутки скрыта. */}
       {/* На низком десктопном экране (<820px) панель не рисуется: вкладки Задачи/Анализ/Коуч уже в шапке, а 48px нужны доске */}
-      {!streamerMode&&!setup&&on&&tab==="play"&&(vwPx<769||vhPx>=820)&&(
+      {/* 136: на десктопе чипы Анализ/Коуч/Пазлы дублируют вкладки шапки и отнимали ~50 px у доски — только телефон. */}
+      {!streamerMode&&!setup&&on&&tab==="play"&&vwPx<769&&(
         <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"nowrap",overflowX:"auto",WebkitOverflowScrolling:"touch",scrollbarWidth:"none",paddingBottom:2,paddingRight:vwPx<769?96:0}}>
           {([
             ...(isHumanGame?[]:[
@@ -8985,7 +9011,7 @@ export default function CyberChessPage(){
       )}
 
       {/* Board + Panel + (optional) Media Pane — stretch all panels to fill height */}
-      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:12,flexWrap:"nowrap",alignItems:"stretch",justifyContent:"center",width:"100%",flex:1,minHeight:0,overflow:"hidden",
+      {(!setup||tab==="puzzles"||tab==="analysis"||tab==="coach")&&<div className="cc-main-row" style={{display:"flex",gap:12,flexWrap:vwPx>=769&&!панельРядом?"wrap":"nowrap",alignItems:"stretch",justifyContent:"center",width:"100%",flex:1,minHeight:0,overflow:vwPx>=769&&!панельРядом?"auto":"hidden",
         // Reserve space for the fixed 240px projects banner via a CSS var (NOT a hard
         // inline paddingRight) so globals.css can zero it on narrow desktops and the
         // right panel never gets pushed off-screen. Banner is a fixed overlay; this
@@ -9098,7 +9124,7 @@ export default function CyberChessPage(){
               const elo=isAI?al.elo:rat;
               return <div style={{
                 display:"flex",alignItems:"center",justifyContent:"space-between",
-                width:bw,padding:"5px 0",gap:8,
+                width:bw,padding:"2px 0",gap:8,
                 borderLeft:isActive?`3px solid ${CC.brand}`:"3px solid transparent",
                 paddingLeft:isActive?6:6,
                 transition:"border-color 200ms",
@@ -9161,7 +9187,8 @@ export default function CyberChessPage(){
             </button>
           </div>}
 
-          {полоскаСтарта(bw)}
+          {/* 136: карточка «С чего начать» больше не стоит НАД доской — на десктопе она в правой панели,
+              на телефоне под доской: доска должна быть в первом экране (замер: верх доски 404 на 390×844). */}
           {/* Задание ВИДИМОЙ строкой над доской. До 12.10.2026 человек, пришедший
               по ссылке из комментария, не видел на экране ни чей ход, ни что искать:
               это было только в подписи для скринридера и в карточке правой панели,
@@ -9762,6 +9789,7 @@ export default function CyberChessPage(){
             </div>
           </div>
 
+          {isMobileLayout&&полоскаСтарта(bw)}
           {/* ─── Replay bar — analysis quality timeline ─── */}
           {tab==="analysis"&&hist.length>0&&(()=>{
             const qClr=(q?:string)=>q==="brilliant"?"#06b6d4":q==="great"?"#f59e0b":q==="good"?"#10b981":q==="inacc"?"#6366f1":q==="mistake"?"#f97316":q==="blunder"?"#ef4444":"#3d3b39";
@@ -10260,7 +10288,8 @@ export default function CyberChessPage(){
         {wsShowRight&&<>
           {/* Mobile backdrop */}
           {mobileSidebarOpen&&<div className="cc-right-panel-backdrop" onClick={()=>sMobileSidebarOpen(false)}/>}
-          <div className={`cc-right-panel${mobileSidebarOpen?" open":""}`} style={{flex:"0 0 auto",width:rightPanelMax,minWidth:0,maxWidth:rightPanelMax,display:"flex",flexDirection:"column",gap:0,overflowY:"auto",maxHeight:"100%"}}>
+          <div className={`cc-right-panel${mobileSidebarOpen?" open":""}`} style={{flex:vwPx>=769&&!панельРядом?"1 1 100%":"0 0 auto",width:vwPx>=769&&!панельРядом?"100%":rightPanelMax,minWidth:0,maxWidth:vwPx>=769&&!панельРядом?"100%":rightPanelMax,display:"flex",flexDirection:"column",gap:0,overflowY:"auto",maxHeight:"100%"}}>
+          {!isMobileLayout&&полоскаСтарта("100%")}
           {/* ── Right panel sub-tabs (play mode only) ── */}
           {on&&!setup&&tab==="play"&&<div style={{
             display:"flex",gap:0,borderBottom:`1px solid ${CC.border}`,

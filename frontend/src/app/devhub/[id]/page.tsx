@@ -135,7 +135,7 @@ const GEN_UI: Record<string, { ph: string; noteContinued: string; noteTruncated:
     busyUndo: "Отменяем…", busyPublish: "⏳ Публикуем…", busyPull: "Забираю из репозитория…",
     deployHintLead: "🚀 Готовы показать людям? Одна кнопка — и проект публикуется на Cloudflare", deployHintOwnDomain: " по вашему адресу *.aevion.app", deployHintPagesDev: " — вы получите общедоступный адрес *.pages.dev", deployHintTail: " — «живым» деплой считается только после того, как страница реально ответила.", deployHintButton: "Опубликовать",
     saveTitle: "Сайт живой. Сохранить его и получить своё имя на aevion.app — оставьте почту", savePlaceholder: "вы@компания.kz", saveButton: "Сохранить сайт", saveSending: "Отправляю…", saveDone: "Ссылка отправлена, имя подключим в течение суток.", saveError: "Не отправилось — проверьте адрес или напишите на data@aevion.app",
-    deployNeedsFiles: "Сначала соберите проект: выкатывать нечего, пока нет файлов", siteLive: "Сайт в интернете", openSite: "Открыть", domainSoon: "свой адрес на aevion.app появится через несколько минут", busyDeploy: "Выкатываю…", busyPlan: "Продумываю…", busyImg: "Генерирую…",
+    deployNeedsFiles: "Сначала соберите проект: выкатывать нечего, пока нет файлов", siteLive: "Сайт в интернете", openSite: "Открыть", domainSoon: "Хотите своё имя на aevion.app? Оставьте почту ниже — подключим в течение суток", busyDeploy: "Выкатываю…", busyPlan: "Продумываю…", busyImg: "Генерирую…",
     busySave: "Сохраняю…", busyApply: "Применяю…", busyPush: "Отправляю…", busySync: "Синхронизирую…",
     busyCompose: "Сочиняю…", busySend: "Отправляю…", busyTranslate: "Перевожу…",
     busyCreate: "Создаю…", busyPreview: "Слушаю образец…", busyUpload: "Загружаю…",
@@ -168,7 +168,7 @@ const GEN_UI: Record<string, { ph: string; noteContinued: string; noteTruncated:
     busyUndo: "Undoing…", busyPublish: "⏳ Publishing…", busyPull: "Pulling…",
     deployHintLead: "🚀 Ready to show it to people? One button publishes the project on Cloudflare", deployHintOwnDomain: " at your own address *.aevion.app", deployHintPagesDev: " — you get a public address *.pages.dev", deployHintTail: " — the deploy counts as live only once the page has actually answered.", deployHintButton: "Publish",
     saveTitle: "Your site is live. Keep it and get your own name on aevion.app — leave your email", savePlaceholder: "you@company.com", saveButton: "Keep my site", saveSending: "Sending…", saveDone: "Link sent — we connect the name within a day.", saveError: "Could not send — check the address or write to data@aevion.app",
-    deployNeedsFiles: "Build the project first: there is nothing to deploy until files exist", siteLive: "Your site is live", openSite: "Open", domainSoon: "your own address on aevion.app will appear in a few minutes", busyDeploy: "Deploying…", busyPlan: "Thinking it through…", busyImg: "Generating…",
+    deployNeedsFiles: "Build the project first: there is nothing to deploy until files exist", siteLive: "Your site is live", openSite: "Open", domainSoon: "Want your own name on aevion.app? Leave your email below — we connect it within a day", busyDeploy: "Deploying…", busyPlan: "Thinking it through…", busyImg: "Generating…",
     busySave: "Saving…", busyApply: "Applying…", busyPush: "Pushing…", busySync: "Syncing…",
     busyCompose: "Composing…", busySend: "Sending…", busyTranslate: "Translating…",
     busyCreate: "Creating…", busyPreview: "Previewing…", busyUpload: "Uploading…",
@@ -201,7 +201,7 @@ const GEN_UI: Record<string, { ph: string; noteContinued: string; noteTruncated:
     busyUndo: "Болдырылмауда…", busyPublish: "⏳ Жариялануда…", busyPull: "Репозиторийден алынуда…",
     deployHintLead: "🚀 Адамдарға көрсетуге дайынсыз ба? Бір түйме — жоба Cloudflare-де жарияланады", deployHintOwnDomain: " сіздің мекенжайыңызда *.aevion.app", deployHintPagesDev: " — жалпыға қолжетімді мекенжай аласыз *.pages.dev", deployHintTail: " — деплой бет шынымен жауап бергеннен кейін ғана «тірі» саналады.", deployHintButton: "Жариялау",
     saveTitle: "Сайт тірі. Оны сақтап, aevion.app-та өз атыңызды алыңыз — поштаңызды қалдырыңыз", savePlaceholder: "siz@kompaniya.kz", saveButton: "Сайтты сақтау", saveSending: "Жіберілуде…", saveDone: "Сілтеме жіберілді, атауды бір тәулік ішінде қосамыз.", saveError: "Жіберілмеді — мекенжайды тексеріңіз немесе data@aevion.app-қа жазыңыз",
-    deployNeedsFiles: "Алдымен жобаны жинаңыз: файлдар жоқ болса, жариялауға ештеңе жоқ", siteLive: "Сайт интернетте", openSite: "Ашу", domainSoon: "aevion.app-тағы өз мекенжайыңыз бірнеше минутта пайда болады", busyDeploy: "Жариялануда…", busyPlan: "Ойластырылуда…", busyImg: "Генерациялануда…",
+    deployNeedsFiles: "Алдымен жобаны жинаңыз: файлдар жоқ болса, жариялауға ештеңе жоқ", siteLive: "Сайт интернетте", openSite: "Ашу", domainSoon: "aevion.app-та өз атыңызды қалайсыз ба? Төменде поштаңызды қалдырыңыз — бір тәулік ішінде қосамыз", busyDeploy: "Жариялануда…", busyPlan: "Ойластырылуда…", busyImg: "Генерациялануда…",
     busySave: "Сақталуда…", busyApply: "Қолданылуда…", busyPush: "Жіберілуде…", busySync: "Синхрондалуда…",
     busyCompose: "Шығарылуда…", busySend: "Жіберілуде…", busyTranslate: "Аударылуда…",
     busyCreate: "Жасалуда…", busyPreview: "Үлгі тыңдалуда…", busyUpload: "Жүктелуде…",
@@ -2878,7 +2878,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
                * по выданному адресу. Про собственный домен говорим спокойно и
                * вторым, а главным — что сайт в интернете.
                */
-              ? `${GL.siteLive}: ${d.liveUrl ?? d.pagesUrl} — ${GL.domainSoon}`
+              ? `${GL.siteLive}: ${d.liveUrl ?? d.pagesUrl}. ${GL.domainSoon}`
               : `${GL.siteLive}: ${d.liveUrl ?? d.pagesUrl}`,
         d.domain && !d.domainReady && !d.domainDns ? "warning" : "success",
       );

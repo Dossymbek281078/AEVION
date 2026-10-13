@@ -29,7 +29,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { языкИзАдреса } from "@/lib/i18n";
+import { useI18nOptional, языкИзАдреса } from "@/lib/i18n";
 import { WaitlistCapture } from "./WaitlistCapture";
 
 /** Помечает источник: видно в выгрузке. Схема сервера режет на 60 знаках. */
@@ -74,8 +74,14 @@ export function FooterWaitlist(props: WaitlistIfMissingProps = {}) {
    * кнопка переводились слоем, а placeholder «вы@почта.рф» — нет (слой идёт по
    * текстовым узлам, атрибуты не трогает), и англоязычный посетитель из пяти
    * каталогов видел кириллицу ровно в поле контакта. Явный проп lang старше.
+   *
+   * 115б (bd, замер локалью en-US): у /devhub префикса нет, а страница английская —
+   * язык берём из ТОГО ЖЕ источника, что и остальная страница (i18n: префикс →
+   * сохранённый выбор → navigator.language); префикс адреса — запасной путь вне
+   * провайдера (тесты, обособленные оболочки).
    */
-  const язык: "ru" | "en" = props.lang ?? (языкИзАдреса(pathname) === "en" ? "en" : "ru");
+  const i18n = useI18nOptional();
+  const язык: "ru" | "en" = props.lang ?? (i18n ? (i18n.lang === "en" ? "en" : "ru") : (языкИзАдреса(pathname) === "en" ? "en" : "ru"));
   const [показывать, установить] = useState(false);
   const [узел, запомнить] = useState<HTMLDivElement | null>(null);
 

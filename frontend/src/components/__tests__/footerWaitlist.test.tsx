@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { footerWaitlistSource, hasOtherEmailField, FooterWaitlist } from "../FooterWaitlist";
+import { I18nProvider } from "@/lib/i18n";
 
 /**
  * Блок приёма адреса в подвале ставится ради страниц БЕЗ своего поля
@@ -103,5 +104,33 @@ describe("🔴 подвал на /en/… говорит по-английски 
     vi.useRealTimers();
     await waitFor(() => expect(screen.queryByTestId("footer-waitlist")).not.toBeNull());
     expect((document.querySelector('input[type="email"]') as HTMLInputElement).placeholder).toBe("вы@почта.рф");
+  });
+});
+
+describe("🔴 115б: без префикса /en язык подвала — тот же, что у страницы (i18n), а не русский по умолчанию", () => {
+  beforeEach(() => { document.body.innerHTML = ""; try { localStorage.clear(); } catch {} });
+
+  async function полеВПровайдере(адрес: string, сохранённыйЯзык: string) {
+    путь = адрес;
+    localStorage.setItem("aevion_lang_v1", сохранённыйЯзык);
+    vi.useFakeTimers();
+    render(<I18nProvider><FooterWaitlist /></I18nProvider>);
+    await vi.advanceTimersByTimeAsync(1000);
+    vi.useRealTimers();
+    await waitFor(() => expect(screen.queryByTestId("footer-waitlist")).not.toBeNull());
+    const input = document.querySelector('input[type="email"]') as HTMLInputElement;
+    return { placeholder: input.placeholder, button: (document.querySelector("button") as HTMLButtonElement).textContent ?? "" };
+  }
+
+  it("/devhub (куда ведут каталоги) у англоязычного гостя: you@example.com и Notify me", async () => {
+    const р = await полеВПровайдере("/devhub", "en");
+    expect(р.placeholder).toBe("you@example.com");
+    expect(р.button).toBe("Notify me");
+  });
+
+  it("КОНТРОЛЬ: тот же /devhub у русскоязычного — русский", async () => {
+    const р = await полеВПровайдере("/devhub", "ru");
+    expect(р.placeholder).toBe("вы@почта.рф");
+    expect(р.button).toBe("Сообщить мне");
   });
 });

@@ -40,4 +40,13 @@ describe("/bureau: герой выше чипа цены, CTA на языке с
     expect(lede, "абзац есть").toBeGreaterThan(hero);
     expect(row).toBeLessThan(lede);
   });
+
+  it("🔴 128в: h1 и подзаголовок героя — из карт ru/en/kk, литералов в JSX нет", () => {
+    expect(СТРАНИЦА).toContain('ru: "Цифровое бюро авторства AEVION"');
+    expect(СТРАНИЦА).toContain('ru: "Криптографическое доказательство авторства и приоритета"');
+    expect(СТРАНИЦА).toContain("{heroTitle}</h1>");
+    expect(СТРАНИЦА).toContain("{heroSub}</p>");
+    expect(СТРАНИЦА).not.toMatch(/>AEVION Digital IP Bureau</);
+    expect(СТРАНИЦА).not.toMatch(/>Cryptographic Proof of Authorship & Prior Art</);
+  });
 });

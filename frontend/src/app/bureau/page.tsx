@@ -201,6 +201,9 @@ function BureauPageInner() {
   const BU = BU_BUSY[buLang] ?? BU_BUSY.en;
   // 128 (13.10.2026): главный CTA бюро — на языке страницы, не литералом (на ru-RU стоял «Protect Your Work» при русском h1).
   const ctaProtect = ({ ru: "🛡️ Защитить работу", kk: "🛡️ Жұмысты қорғау" } as Record<string, string>)[buLang] ?? "🛡️ Protect Your Work";
+  // 128в: h1 и подзаголовок героя — на языке страницы (на ru-RU первый экран бюро был наполовину английским).
+  const heroTitle = ({ ru: "Цифровое бюро авторства AEVION", kk: "AEVION цифрлық авторлық бюросы" } as Record<string, string>)[buLang] ?? "AEVION Digital IP Bureau";
+  const heroSub = ({ ru: "Криптографическое доказательство авторства и приоритета", kk: "Авторлық пен басымдықтың криптографиялық дәлелі" } as Record<string, string>)[buLang] ?? "Cryptographic Proof of Authorship & Prior Art";
   const { showToast } = useToast();
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   // «Сертификатов нет» и «не удалось узнать» — разные вещи. При сбое загрузки
@@ -575,8 +578,8 @@ function BureauPageInner() {
             <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
               <div style={{ width: 52, height: 52, borderRadius: 14, background: "linear-gradient(135deg, #0d9488, #06b6d4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26 }}>⚖️</div>
               <div>
-                <h1 style={{ fontSize: 26, fontWeight: 900, margin: 0, letterSpacing: "-0.02em" }}>AEVION Digital IP Bureau</h1>
-                <p style={{ margin: 0, fontSize: 15.5, opacity: 0.75 }}>Cryptographic Proof of Authorship & Prior Art</p>
+                <h1 style={{ fontSize: 26, fontWeight: 900, margin: 0, letterSpacing: "-0.02em" }}>{heroTitle}</h1>
+                <p style={{ margin: 0, fontSize: 15.5, opacity: 0.75 }}>{heroSub}</p>
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

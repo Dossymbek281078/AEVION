@@ -43,7 +43,7 @@ describe("сторона доски считается от окна польз�
 });
 
 function собратьСтраницу() {
-  const cfg = { id: "li_test", fen: "8/5kp1/7p/3PRK2/r5PP/8/8/8 b - - 0 52", i: 0, storona: "b", movable: ["g7"], texts: { wrong: "x", yourMove: "y", hint: "h", solved: "s", hintShown: "hs", copied: "copied!", shareTitle: "t" }, ev: { channel: "youtube", post: "chess-1", path: "/cyberchess/p/li_test?c=yt-chess-1", rating: 1000, theme: "t", fen: "f" } };
+  const cfg = { id: "li_test", fen: "8/5kp1/7p/3PRK2/r5PP/8/8/8 b - - 0 52", i: 0, storona: "b", movable: ["g7"], texts: { wrong: "x", yourMove: "y", hint: "h", solved: "s", hintShown: "hs", copied: "copied!", shareTitle: "t", solution: "Solution" }, ev: { channel: "youtube", post: "chess-1", path: "/cyberchess/p/li_test?c=yt-chess-1", rating: 1000, theme: "t", fen: "f" } };
   document.body.innerHTML = `<main data-cc-light-puzzle="li_test"><div data-cc-board="1" data-cc-puzzle="li_test"><button type="button" data-sq="g7" class="l"></button></div><div data-cc-status class="wd s"></div><div class="wd zm" data-cc-zoom><button type="button" data-zm="-">−</button><span data-zm-v>100%</span><button type="button" data-zm="+">+</button></div><div class="wd r" data-cc-resheno></div></main><script id="cc-cfg" type="application/json">${JSON.stringify(cfg)}</script>`;
 }
 
@@ -248,5 +248,33 @@ describe("поделиться задачей", () => {
     expect(ROUTE).toContain('<button type="button" data-cc-share>${esc(t("pz.share"))}</button>');
     for (const y of ["ru", "en", "kk"] as const) for (const k of ["pz.share", "pz.copied"]) expect(PZ_SLOVA[y][k], y + k).toBeTruthy();
     expect(PZ_SLOVA.en["pz.share"] + PZ_SLOVA.en["pz.copied"]).not.toMatch(/[А-Яа-яЁё]/);
+  });
+});
+
+import { resheniyeSan } from "../logikaZadachi";
+
+describe("после решения показывается линия решения в SAN", () => {
+  it("resheniyeSan: мат в 1 за чёрных → «25... Qh1#»; серия из двух ходов нумеруется верно; мусор → []", () => {
+    // li_3omqR после хода белых d4f2 (нормализованная позиция: ход чёрных)
+    expect(resheniyeSan("7r/1kp2ppp/1pb5/p1B5/P7/5qP1/1P3Q1P/R3R1K1 b - - 1 25", ["f3h1"])).toEqual(["25... Qh1#"]);
+    expect(resheniyeSan("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", ["e2e4", "e7e5", "g1f3"])).toEqual(["1. e4", "1... e5", "2. Nf3"]);
+    expect(resheniyeSan("8/8/8/8/8/8/8/8 w - - 0 1", ["e2e4"])).toEqual([]);
+  });
+  it("ROUTE отдаёт san только при решении; клиент дописывает «Решение: …» к статусу", () => {
+    expect(ROUTE).toContain("san: r.reshena ? resheniyeSan(pz.fen, pz.sol) : undefined");
+    expect(КЛИЕНТ).toContain('C.texts.solution+": "+r.san.join(" ")');
+    for (const y of ["ru", "en", "kk"] as const) expect(PZ_SLOVA[y]["pz.solution"], y).toBeTruthy();
+    expect(PZ_SLOVA.en["pz.solution"]).not.toMatch(/[А-Яа-яЁё]/);
+  });
+  it("клиент: решено с san → статус содержит линию", async () => {
+    собратьСтраницуСПодсказкой();
+    vi.stubGlobal("fetch", vi.fn(async (_u: string, init?: RequestInit) => {
+      const b = JSON.parse(String(init?.body ?? "{}"));
+      const json = b.akt === "targets" ? { targets: ["g6"] } : { vid: "ok", fen: "8/5k2/6pp/3PRK2/r5PP/8/8/8 w - - 0 53", i: 1, reshena: true, otvet: null, movable: [], san: ["52... Kg6", "53. Rh5"] };
+      return { json: async () => json } as Response;
+    }));
+    new Function(КЛИЕНТ)();
+    клик2("g7"); await тик(); клик2("g6"); await тик();
+    expect(document.querySelector("[data-cc-status]")!.textContent).toContain("52... Kg6 53. Rh5");
   });
 });

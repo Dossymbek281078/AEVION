@@ -16,7 +16,7 @@ import { serverFetch } from "@/lib/apiBase";
 import { channelFrom, postFrom } from "@/lib/products";
 import { pzT, type PzYazyk } from "../pzSlova";
 import { zadachaDlyaEkrana, zadanieNadDoskoy, imyaPoResheniyu, type PzLocale } from "../../puzzleNormalize";
-import { GLIF, hodyashchie, kletki, shag, sozdatSostoyanie, svoyaFigura, tseli } from "../logikaZadachi";
+import { GLIF, hodyashchie, kletki, shag, sozdatSostoyanie, svoyaFigura, tseli, resheniyeSan } from "../logikaZadachi";
 import { yazykZaprosa } from "../yazykZaprosa";
 import { КЛИЕНТ } from "../klientSkript";
 
@@ -75,7 +75,7 @@ function html(p: { id: string; fen: string; zadanie: string; name: string; ratin
     const koord = (r === 7 ? `<i class="c f">${k.sq[0]}</i>` : "") + (c === 0 ? `<i class="c r">${k.sq[1]}</i>` : "");
     return `<button type="button" data-sq="${k.sq}"${cf}${cr} class="${k.dark ? "d" : "l"}${mogut.has(k.sq) ? " m" : ""}" aria-label="${k.sq}">${k.p ? `<span class="${k.p[0] === "w" ? "w" : "b"}">${GLIF[k.p]}</span>` : ""}${koord}</button>`;
   })).join("");
-  const cfg = { id: p.id, fen: p.fen, i: 0, storona: p.storona, movable: [...mogut], texts: { wrong: t("pz.wrong"), yourMove: t("pz.yourMove"), hint: t("pz.hint"), solved: t("pz.solved").replace("{name}", p.name), hintShown: t("pz.hintShown"), copied: t("pz.copied"), shareTitle: p.title }, ev: { channel: p.channel, post: p.post, path: p.path, rating: p.rating, theme: p.theme, fen: p.fen, daily: p.daily } };
+  const cfg = { id: p.id, fen: p.fen, i: 0, storona: p.storona, movable: [...mogut], texts: { wrong: t("pz.wrong"), yourMove: t("pz.yourMove"), hint: t("pz.hint"), solved: t("pz.solved").replace("{name}", p.name), hintShown: t("pz.hintShown"), copied: t("pz.copied"), shareTitle: p.title, solution: t("pz.solution") }, ev: { channel: p.channel, post: p.post, path: p.path, rating: p.rating, theme: p.theme, fen: p.fen, daily: p.daily } };
   return `<!doctype html><html lang="${p.locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>${esc(p.title)}</title><meta name="description" content="${esc(p.description)}"><meta name="robots" content="noindex">
 <link rel="canonical" href="https://aevion.app${esc(p.polnaya)}">
@@ -164,5 +164,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (b.akt === "hint") return Response.json({ from: s.reshena || s.i >= s.sol.length ? null : s.sol[s.i].slice(0, 2) });
   const r = shag(s, from, to);
   if (r.vid !== "ok") return Response.json({ vid: "wrong" });
-  return Response.json({ vid: "ok", fen: r.sostoyanie.fen, i: r.sostoyanie.i, reshena: r.reshena, otvet: r.otvet, movable: r.reshena ? [] : hodyashchie(r.sostoyanie.fen, s.storona) });
+  // после решения — вся линия в SAN (как «Success» у lichess с разбором): человек видит, что именно сработало
+  return Response.json({ vid: "ok", fen: r.sostoyanie.fen, i: r.sostoyanie.i, reshena: r.reshena, otvet: r.otvet, movable: r.reshena ? [] : hodyashchie(r.sostoyanie.fen, s.storona), san: r.reshena ? resheniyeSan(pz.fen, pz.sol) : undefined });
 }

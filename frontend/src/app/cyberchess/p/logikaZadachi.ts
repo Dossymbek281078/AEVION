@@ -116,4 +116,23 @@ export function kletki(fen: string, storona: "w" | "b"): Array<Array<{ sq: strin
   return rows;
 }
 
+/** Решение в SAN с номерами ходов («25... Qh1#»): показывается после решения. Пустой массив при любой ошибке. */
+export function resheniyeSan(fen: string, sol: string[]): string[] {
+  try {
+    const g = new Chess(fen);
+    const out: string[] = [];
+    for (const u of sol) {
+      const m = uciVHod(u);
+      const num = g.moveNumber();
+      const black = g.turn() === "b";
+      const r = g.move({ from: m.from, to: m.to, promotion: m.promotion } as never);
+      if (!r) break;
+      out.push(black ? `${num}... ${r.san}` : `${num}. ${r.san}`);
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 export const GLIF: Record<string, string> = { wk: "♔", wq: "♕", wr: "♖", wb: "♗", wn: "♘", wp: "♙", bk: "♚", bq: "♛", br: "♜", bb: "♝", bn: "♞", bp: "♟" };

@@ -54,6 +54,8 @@ describe("проверки провайдеров покрывают обеща�
     const block = healthBlock();
     const probes = block.split('probe("').length - 1 + (block.includes("zoneProbe()") ? 1 : 0);
     const notSet = block.split("not set").length - 1;
-    expect(notSet, "не у всех проб есть ветка «ключа нет»").toBeGreaterThanOrEqual(probes - 1);
+    // 13.10.2026: порог поднят с probes−1 до probes — «каждая» значит каждая; при probes−1 мутация
+    // «убрать одну ветку» проходила насквозь.
+    expect(notSet, "не у всех проб есть ветка «ключа нет»").toBeGreaterThanOrEqual(probes);
   });
 });

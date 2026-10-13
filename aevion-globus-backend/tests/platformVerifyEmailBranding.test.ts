@@ -42,5 +42,9 @@ describe("подтверждение адреса представляется �
     // Он обслуживает QBuild, и его собственные письма должны остаться прежними.
     expect(MAILER).toContain('function layout(body: string, brand = "AEVION QBuild")');
     expect(MAILER).toContain('const brand = opts.brand || "AEVION QBuild"');
+    // …а платформенный сброс пароля называет платформу ЯВНО — иначе возврат умолчания модулю
+    // вернул бы «AEVION QBuild» в тело письма о пароле (волна 79, 12.10.2026).
+    const сброс = MAILER.slice(MAILER.indexOf("export async function sendPasswordResetEmail"));
+    expect(сброс.slice(0, 2000)).toContain("`, БРЕНД_ПЛАТФОРМЫ),");
   });
 });

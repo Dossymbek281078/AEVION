@@ -1,4 +1,8 @@
 import { Router } from "express";
+import { klassUstroystva, type KlassUstroystva } from "../lib/klassUstroystva";
+/** Час суток по Алматы «00»…«23» — для разрезов по времени дня (та же зона, что denPoMestnomu). */
+const часАлматы = (d: Date): string =>
+  new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Almaty", hour: "2-digit", hourCycle: "h23" }).format(d).slice(0, 2);
 import { denPoMestnomu, vcheraPoMestnomu } from "../lib/denPoMestnomu";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { queryNumber } from "../lib/queryNumber";
@@ -806,6 +810,18 @@ export interface РазрезВоронки {
    * не попадают.
    */
   byLastStep: Record<string, { сессий: number; сессийНаших: number }>;
+  /**
+   * Живые сессии, у которых последний шаг — «открыл страницу» /devhub (ни одного шага
+   * первого экрана): по классу устройства и по часу суток Алматы первого захода.
+   * Строка браузера наружу не отдаётся — только класс. (13.10.2026, вопрос оркестратора:
+   * сеть это или витрина.) Наши пробы — отдельным числом, в разрезы не входят.
+   */
+  devhubUshliBezShaga: {
+    сессий: number;
+    сессийНаших: number;
+    поУстройству: Record<KlassUstroystva, number>;
+    поЧасамАлматы: Record<string, number>;
+  };
   /** Сколько пар «пост × шаг» нашлось ДО обрезки вывода до 50. */
   byPostFeatureВсего: number;
   byChessPlies: Record<string, { сессий: number; сессийНаших: number }>;
@@ -1362,7 +1378,8 @@ export function пустойВход(): РазрезВоронки["byEntryPage"
 }
 
 export function разрезВоронки(
-  events: Array<Pick<AnalyticsEvent, "type" | "path" | "meta" | "sid" | "refHost" | "source">>,
+  // ua и ts — для разреза ушедших без шага (класс устройства и час Алматы), 13.10.2026
+  events: Array<Pick<AnalyticsEvent, "type" | "path" | "meta" | "sid" | "refHost" | "source" | "ua" | "ts">>,
   нашиСессии: ReadonlySet<string> = new Set(),
   пробыОкон: ReadonlySet<string> = new Set(),
 ): РазрезВоронки {
@@ -2623,9 +2640,13 @@ export function разрезВоронки(
    * попадают вовсе.
    */
   const byLastStep = Object.create(null) as РазрезВоронки["byLastStep"];
+  let devhubUshliBezShaga: РазрезВоронки["devhubUshliBezShaga"] = {
+    сессий: 0, сессийНаших: 0, поУстройству: { mobile: 0, tablet: 0, desktop: 0, unknown: 0 }, поЧасамАлматы: {},
+  };
   {
     /** sid → последний шаг (имя), по порядку записи журнала. */
     const последний = new Map<string, string>();
+    const первыйЗаход = new Map<string, { ua?: string; ts?: string }>();
     for (const ev of events) {
       if (!ev.sid) continue;
       const путь = typeof ev.path === "string" ? ev.path : "";
@@ -2643,6 +2664,7 @@ export function разрезВоронки(
         // вернуться на /devhub после генерации, и «открыл» здесь было бы
         // откатом назад. Ставим его только первым, как начальное состояние.
         if (!последний.has(ev.sid)) последний.set(ev.sid, "открыл страницу");
+        if (!первыйЗаход.has(ev.sid)) первыйЗаход.set(ev.sid, { ua: ev.ua, ts: ev.ts });
       }
     }
     const поШагам = new Map<string, Set<string>>();
@@ -2655,6 +2677,21 @@ export function разрезВоронки(
       let наших = 0;
       for (const sid of набор) if (нашЗаход(sid) || заходы.get(sid)?.наш) наших += 1;
       byLastStep[шаг] = { сессий: набор.size, сессийНаших: наших };
+    }
+    {
+      const ушли = поШагам.get("открыл страницу") ?? new Set<string>();
+      const поУстройству: Record<KlassUstroystva, number> = { mobile: 0, tablet: 0, desktop: 0, unknown: 0 };
+      const поЧасамАлматы: Record<string, number> = Object.create(null);
+      let наших = 0;
+      for (const sid of ушли) {
+        if (нашЗаход(sid) || заходы.get(sid)?.наш) { наших += 1; continue; }
+        const з = первыйЗаход.get(sid);
+        поУстройству[klassUstroystva(з?.ua)] += 1;
+        const t = з?.ts ? Date.parse(з.ts) : Number.NaN;
+        const час = Number.isFinite(t) ? часАлматы(new Date(t)) : "??";
+        поЧасамАлматы[час] = (поЧасамАлматы[час] ?? 0) + 1;
+      }
+      devhubUshliBezShaga = { сессий: ушли.size, сессийНаших: наших, поУстройству, поЧасамАлматы };
     }
   }
 
@@ -2693,6 +2730,7 @@ export function разрезВоронки(
     byApp,
     byFeature,
     byLastStep,
+    devhubUshliBezShaga,
     byPostFeature,
     byPostFeatureВсего,
     byPost,
@@ -4136,6 +4174,9 @@ eventsRouter.get("/funnel", (req, res) => {
     // Пересечение «пост × шаг»: ровно тот класс, о котором предупреждает
     // комментарий ниже, — поэтому дописано здесь СРАЗУ, одним заходом с расчётом.
     byLastStep: разрез.byLastStep,
+    devhubUshliBezShaga: разрез.devhubUshliBezShaga,
+    devhubUshliBezShagaNote:
+      "живые сессии /devhub без единого шага первого экрана: по классу устройства (из строки браузера, сама строка не отдаётся) и по часу первого захода по Алматы; наши пробы — отдельным числом",
     byLastStepNote:
       "последний шаг сессии внутри DevHub — где человек остановился; «открыл страницу» значит, что шагов не было вовсе",
     byPostFeature: разрез.byPostFeature,

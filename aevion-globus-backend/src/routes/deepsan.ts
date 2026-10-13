@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 import { pgIntId } from "../lib/queryNumber";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import rateLimit from "express-rate-limit";
@@ -416,7 +417,7 @@ deepSanRouter.get("/stats", async (_req: Request, res: Response) => {
   for (let i = 0; i < 365; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() - i);
-    const key = d.toISOString().slice(0, 10);
+    const key = denPoMestnomu(d);
     if (doneDays.has(key)) streak++;
     else break;
   }

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
+import { denPoMestnomu } from "../src/lib/denPoMestnomu";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -38,8 +39,8 @@ const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/
 const ЧАС = 60 * 60 * 1000;
 const тСегодня = new Date(Date.now() - ЧАС).toISOString();
 const тВчера = new Date(Date.now() - 26 * ЧАС).toISOString();
-const дСегодня = тСегодня.slice(0, 10);
-const дВчера = тВчера.slice(0, 10);
+const дСегодня = denPoMestnomu(new Date(тСегодня));
+const дВчера = denPoMestnomu(new Date(тВчера));
 
 function журнал(события: Array<Record<string, unknown>>) {
   writeFileSync(файл, события.map((о) => JSON.stringify({ ua: UA, ...о })).join("\n") + "\n");
@@ -219,7 +220,20 @@ describe("byDay знает ступени «доиграли», «нажали»
     const r = await request(await приложение()).get("/api/pricing/events/funnel?days=3");
     expect(typeof r.body.byDayUnits, "у byDay нет подписи единиц").toBe("string");
     expect(r.body.byDayUnits).toMatch(/сесси/);
-    expect(r.body.byDayUnits, "не сказано, по какой зоне режутся сутки").toMatch(/UTC/);
-    expect(r.body.byDayUnits, "не сказано, что сводка дня считает иначе").toMatch(/day|Алматы/);
+    // С волны 109 (13.10.2026) сутки byDay — по Алматы, как у сводки /day; подпись и поле
+    // обязаны это называть, иначе читатель сложит дни по старой шкале.
+    expect(r.body.byDayUnits, "не сказано, по какой зоне режутся сутки").toMatch(/Алматы/);
+    expect(r.body.byDayUnits, "подпись всё ещё обещает UTC-сутки").not.toMatch(/режутся по UTC/);
+    expect(r.body.byDayTimezone, "поля byDayTimezone нет — bd ставит по нему засечку в докладах").toBe("Asia/Almaty");
+  });
+
+  it("🔴 событие в 20:30 UTC лежит в СЛЕДУЮЩЕМ дне по Алматы (01:30), а не во вчерашнем", async () => {
+    // 2026-10-12T20:30Z = 13.10 01:30 Алматы. До волны 109 такое событие ложилось в 12.10.
+    const т = "2026-10-12T20:30:00.000Z";
+    журнал([{ type: "page_view", ts: т, sid: "ночной", path: "/cyberchess?c=yt" }]);
+    const r = await request(await приложение()).get("/api/pricing/events/funnel?days=400");
+    const по = (д: string) => (r.body.byDay as Array<{ day: string; visits: number }>).find((x) => x.day === д);
+    expect(по("2026-10-13")?.visits, "визит не попал в 13.10 по Алматы").toBe(1);
+    expect(по("2026-10-12")?.visits ?? 0, "визит остался во вчерашнем UTC-дне").toBe(0);
   });
 });

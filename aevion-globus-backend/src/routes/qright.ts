@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 import crypto from "crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
@@ -695,7 +696,7 @@ qrightRouter.get("/objects.csv", objectsRateLimit, async (req, res) => {
       "createdAt",
     ] as const;
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = denPoMestnomu();
 
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader(
@@ -979,7 +980,7 @@ qrightRouter.get("/badge/:id.svg", embedRateLimit, async (req, res) => {
       return res.status(304).end();
     }
 
-    const dateLabel = createdAt.toISOString().slice(0, 10);
+    const dateLabel = denPoMestnomu(createdAt);
 
     bumpEmbedCounters(req, row.id);
 
@@ -1252,7 +1253,7 @@ qrightRouter.get("/admin/objects.csv", async (req, res) => {
       "lastFetchedAt",
     ] as const;
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = denPoMestnomu();
     const suffix = status === "all" ? "" : `-${status}`;
 
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
@@ -1664,8 +1665,8 @@ qrightRouter.get("/admin/sources", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.json({
       days,
-      windowStart: new Date(Date.now() - days * 86400 * 1000).toISOString().slice(0, 10),
-      windowEnd: new Date().toISOString().slice(0, 10),
+      windowStart: denPoMestnomu(new Date(Date.now() - days * 86400 * 1000)),
+      windowEnd: denPoMestnomu(),
       uniqueHosts: rows.length,
       totalFetches,
       hosts: rows,
@@ -2240,7 +2241,7 @@ qrightRouter.get("/sitemap.xml", embedRateLimit, async (req, res) => {
     const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
     const host = (req.headers.host as string) || "aevion.app";
     const origin = `${proto}://${host}`;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = denPoMestnomu();
 
     const r = await pool.query(
       `SELECT "id","createdAt"

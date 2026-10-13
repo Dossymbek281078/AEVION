@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 import { спроситьИИ } from "../lib/дешёвыйИИ";
 import crypto from "crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
@@ -578,7 +579,7 @@ function nowIso(): string {
 }
 
 function todayDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  return denPoMestnomu();
 }
 
 function classifySymptoms(symptoms: string[]): {
@@ -1788,9 +1789,9 @@ healthaiRouter.get("/cycle/:profileId", async (req: Request, res: Response) => {
   if (lastStart && avgLen) {
     const lastDate = new Date(lastStart + "T00:00:00Z");
     const nextDate = new Date(lastDate.getTime() + avgLen * 24 * 3600 * 1000);
-    predictedNext = nextDate.toISOString().slice(0, 10);
+    predictedNext = denPoMestnomu(nextDate);
     const ovDate = new Date(nextDate.getTime() - 14 * 24 * 3600 * 1000);
-    predictedOv = ovDate.toISOString().slice(0, 10);
+    predictedOv = denPoMestnomu(ovDate);
   }
   res.json({
     entries: sorted.slice(-90),

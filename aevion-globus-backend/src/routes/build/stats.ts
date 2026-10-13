@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { denPoMestnomu } from "../../lib/denPoMestnomu";
 import { buildPool as pool, ok, fail, requireBuildAuth, excludeTestUsers } from "../../lib/build";
 import { безПроб, просятПробы } from "../../lib/probeRows";
 
@@ -136,14 +137,14 @@ statsRouter.get("/timeseries", async (_req, res) => {
       const map = new Map<string, number>();
       for (const r of rows) {
         const d = new Date(r.day);
-        const key = d.toISOString().slice(0, 10);
+        const key = denPoMestnomu(d);
         map.set(key, Number(r.n));
       }
       const now = new Date();
       for (let i = 13; i >= 0; i--) {
         const d = new Date(now);
         d.setUTCDate(d.getUTCDate() - i);
-        const key = d.toISOString().slice(0, 10);
+        const key = denPoMestnomu(d);
         out.push({ day: key, n: map.get(key) ?? 0 });
       }
       return out;

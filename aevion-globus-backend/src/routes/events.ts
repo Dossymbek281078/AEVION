@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { denPoMestnomu, vcheraPoMestnomu } from "../lib/denPoMestnomu";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { queryNumber } from "../lib/queryNumber";
 import { existsSync, mkdirSync, appendFileSync, readFileSync } from "fs";
@@ -3410,7 +3411,7 @@ eventsRouter.get("/by-type", (req, res) => {
    * никто не сравнил «сегодня неполное» с «вчера полным», решив, что упало.
    */
   const конец = границыДняАлматы(
-    последний ?? new Date(Date.now() + СМЕЩЕНИЕ_АЛМАТЫ_МС).toISOString().slice(0, 10),
+    последний ?? denPoMestnomu(),
   );
   const доОкна = конец.до;
   const отОкна = доОкна - дней * 24 * 60 * 60 * 1000;
@@ -3733,7 +3734,7 @@ eventsRouter.get("/funnel", (req, res) => {
     }
 
     событияВоронки.push(ev);
-    const день = new Date(t).toISOString().slice(0, 10);
+    const день = denPoMestnomu(new Date(t));
     const час = new Date(t).toISOString().slice(0, 13); // «2026-09-30T14», UTC
     if (!поДням[день]) поДням[день] = { visits: 0, pricing: 0, checkoutStart: 0, thankYouOpened: 0, paid: 0, paidOurs: 0, checkoutStartOurs: 0 };
     if (!поЧасам[час]) поЧасам[час] = { visits: 0, pricing: 0, checkoutStart: 0, thankYouOpened: 0, paid: 0, paidOurs: 0, checkoutStartOurs: 0 };
@@ -4123,7 +4124,8 @@ eventsRouter.get("/funnel", (req, res) => {
     byDayUnits:
       "единица — уникальная сессия внутри дня; ступени finished/clicked/" +
       "dailyOpened считаются так же, а *Ours — сколько из них наши пробы; " +
-      "сутки режутся по UTC, тогда как сводка /day считает сутки Алматы",
+      "сутки режутся по Алматы (с волны 109, 13.10.2026; раньше — по UTC), " +
+      "как и сводка /day; часовой разрез byHour остаётся в UTC",
     // Разрез по каналу и по приложению. Раньше сводка складывала всех в одну
     // кучу, и вопрос «чей это след» решался перепиской между окнами: 29.09
     // пять начал оплаты оказались пробами одного окна, а запуск на Product Hunt
@@ -4152,6 +4154,9 @@ eventsRouter.get("/funnel", (req, res) => {
     // часовой разрез жил лишь в закрытой ручке, и вопрос решался догадками.
     byHour,
     byHourTimezone: "UTC",
+    // Сутки byDay — по Алматы с волны 109 (13.10.2026): до неё ключ дня был UTC, и события 00:00–05:00
+    // по месту ложились во вчерашний день; часовые ключи byHour остаются UTC.
+    byDayTimezone: "Asia/Almaty",
     // Та же оговорка, что у каналов, и по той же причине: визит уникален В
     // ПРЕДЕЛАХ часа. Сессия, начавшаяся в 23:50 и продолжившаяся после
     // полуночи, попадёт в два часа, поэтому сумма по часам ≥ total.visits.
@@ -4370,13 +4375,13 @@ export function границыДняАлматы(
   const похожа = /^\d{4}-\d{2}-\d{2}$/.test(дата);
   const разобрана = похожа ? Date.parse(`${дата}T00:00:00.000Z`) : Number.NaN;
   const явная =
-    похожа && Number.isFinite(разобрана) && new Date(разобрана).toISOString().slice(0, 10) === дата
+    похожа && Number.isFinite(разобрана) && denPoMestnomu(new Date(разобрана)) === дата
       ? дата
       : null;
   // Без явной даты берём ВЧЕРА по Алматы: отчёт делается про законченный день.
   const местноеСейчас = new Date(сейчас.getTime() + СМЕЩЕНИЕ_АЛМАТЫ_МС);
   const вчера = new Date(местноеСейчас.getTime() - 24 * 60 * 60 * 1000);
-  const д = явная ?? вчера.toISOString().slice(0, 10);
+  const д = явная ?? vcheraPoMestnomu(сейчас);
   const от = Date.parse(`${д}T00:00:00.000Z`) - СМЕЩЕНИЕ_АЛМАТЫ_МС;
   return { дата: д, от, до: от + 24 * 60 * 60 * 1000, явная: явная !== null };
 }

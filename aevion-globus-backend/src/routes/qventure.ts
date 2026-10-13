@@ -12,6 +12,7 @@
  */
 
 import express, { Router, Request, Response } from "express";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 import { учестьДействие, отказПоНорме } from "../lib/freeActionQuota";
 import crypto from "node:crypto";
 import { makeServiceCapture } from "../lib/sentry/platform";
@@ -626,7 +627,7 @@ qventureRouter.get("/analyses/:id/pdf", async (req: Request, res: Response) => {
     // без решения основателя: это состав продукта, а не язык кнопок.
     doc.fontSize(20).font("Helvetica-Bold").fillColor("#0f172a").text("AEVION QVenture — Investment Memo");
     doc.fontSize(9).font("Helvetica").fillColor("#64748b")
-      .text(`Generated ${new Date().toISOString().slice(0, 10)} · AEVION AI Investment Analyst · not investment advice`);
+      .text(`Generated ${denPoMestnomu()} · AEVION AI Investment Analyst · not investment advice`);
     doc.moveDown(0.8);
 
     // Company + verdict banner
@@ -804,7 +805,7 @@ qventureRouter.get("/compare/pdf", async (req: Request, res: Response) => {
     // Header
     doc.fontSize(20).font("Helvetica-Bold").fillColor("#0f172a").text("AEVION QVenture — Deal Comparison");
     doc.fontSize(9).font("Helvetica").fillColor("#64748b")
-      .text(`Generated ${new Date().toISOString().slice(0, 10)} · AEVION AI Investment Analyst · not investment advice`);
+      .text(`Generated ${denPoMestnomu()} · AEVION AI Investment Analyst · not investment advice`);
     doc.moveDown(0.8);
 
     // Two headline blocks
@@ -957,7 +958,7 @@ qventureRouter.get("/funnel/pdf", async (req: Request, res: Response) => {
 
     doc.fontSize(20).font("Helvetica-Bold").fillColor("#0f172a").text("AEVION QVenture - Deal Funnel");
     doc.fontSize(9).font("Helvetica").fillColor("#64748b")
-      .text("Generated " + new Date().toISOString().slice(0, 10) + " | " + deals.length + " deals ranked | AEVION AI Investment Analyst | not investment advice");
+      .text("Generated " + denPoMestnomu() + " | " + deals.length + " deals ranked | AEVION AI Investment Analyst | not investment advice");
     doc.moveDown(0.6);
 
     const invest = deals.filter((d) => d.verdict === "invest").length;

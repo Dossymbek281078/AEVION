@@ -11,6 +11,7 @@
  */
 
 import { Router, type Request, type Response } from "express";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 import { getPool } from "../lib/dbPool";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { ensureQLifeTables, isQLifeDbReady, getQLifeDbError } from "../lib/ensureQLifeTables";
@@ -88,7 +89,7 @@ function memTrends(): Record<string, { type: string; week: string; avg: number; 
     // ISO week approximation: floor to Monday
     const dayMs = 86_400_000;
     const monday = new Date(d.getTime() - ((d.getDay() || 7) - 1) * dayMs);
-    const week = monday.toISOString().slice(0, 10);
+    const week = denPoMestnomu(monday);
     if (!grouped[r.type]) grouped[r.type] = {};
     if (!grouped[r.type][week]) grouped[r.type][week] = { sum: 0, count: 0 };
     grouped[r.type][week].sum += Number(r.value);

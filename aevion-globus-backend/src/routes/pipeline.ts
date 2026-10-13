@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 import { этоНашаПроба, нечитаемыйЗаголовок } from "../lib/publicRegistryProbes";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
@@ -3536,7 +3537,7 @@ pipelineRouter.get("/sitemap.xml", async (req, res) => {
     const proto = (req.headers["x-forwarded-proto"] as string) || (req.protocol as string) || "https";
     const host = (req.headers.host as string) || "aevion.app";
     const origin = `${proto}://${host}`;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = denPoMestnomu();
 
     const r = await pool.query(
       `SELECT "id","protectedAt"

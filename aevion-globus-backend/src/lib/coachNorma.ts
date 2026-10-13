@@ -1,5 +1,6 @@
 import type { Request, RequestHandler } from "express";
 import { clientIp } from "./rateLimit";
+import { denPoMestnomu } from "./denPoMestnomu";
 
 /**
  * Спящая дневная норма ИИ-тренера CyberChess (решение оркестратора 13.10.2026,
@@ -27,10 +28,8 @@ export function normaTreneraVDen(): number | null {
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : null;
 }
 
-export function denAlmaty(now: Date = new Date()): string {
-  // en-CA даёт ГГГГ-ММ-ДД; зона та же, что у разрезов воронки
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Almaty", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
-}
+/** День нормы — общий помощник платформы (волна 109); имя оставлено ради вызывающих. */
+export const denAlmaty = denPoMestnomu;
 
 const счёт = new Map<string, number>();
 

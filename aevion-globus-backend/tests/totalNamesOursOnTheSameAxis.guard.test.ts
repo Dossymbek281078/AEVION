@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from "vitest";
+import { denPoMestnomu } from "../src/lib/denPoMestnomu";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -34,8 +35,8 @@ const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/
 const ЧАС = 60 * 60 * 1000;
 const тСегодня = new Date(Date.now() - ЧАС).toISOString();
 const тВчера = new Date(Date.now() - 26 * ЧАС).toISOString();
-const дСегодня = тСегодня.slice(0, 10);
-const дВчера = тВчера.slice(0, 10);
+const дСегодня = denPoMestnomu(new Date(тСегодня));
+const дВчера = denPoMestnomu(new Date(тВчера));
 
 function журнал(события: Array<Record<string, unknown>>) {
   writeFileSync(файл, события.map((о) => JSON.stringify({ ua: UA, ...о })).join("\n") + "\n");

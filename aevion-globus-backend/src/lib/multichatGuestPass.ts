@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 import type { RequestHandler } from "express";
 /**
  * Живой консилиум ГОСТЮ — без входа, но по счёту.
@@ -34,7 +35,7 @@ export function гостевойЛимит(): number {
 
 /** Ключ суток — норма обновляется в полночь UTC, а не «через 24 часа». */
 function сутки(now = new Date()): string {
-  return now.toISOString().slice(0, 10);
+  return denPoMestnomu(now);
 }
 
 const счёт = new Map<string, number>();

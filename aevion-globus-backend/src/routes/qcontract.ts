@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 import { randomUUID, createHash } from "node:crypto";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { getPool } from "../lib/dbPool";
@@ -539,7 +540,7 @@ qcontractRouter.get("/documents/:id/log.csv", async (req, res) => {
 
   const safeTitle = doc.rows[0].title.replace(/[^\w-]/g, "_").slice(0, 40);
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
-  res.setHeader("Content-Disposition", `attachment; filename="qcontract-${safeTitle}-log-${new Date().toISOString().slice(0,10)}.csv"`);
+  res.setHeader("Content-Disposition", `attachment; filename="qcontract-${safeTitle}-log-${denPoMestnomu()}.csv"`);
   res.send(header + "\n" + rows.join("\n"));
 });
 

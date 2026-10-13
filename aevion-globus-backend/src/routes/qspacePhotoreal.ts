@@ -16,6 +16,7 @@
  * стоит денег.
  */
 import { Router } from "express";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 import { rateLimit } from "../lib/rateLimit";
 import { captureException } from "../lib/sentry";
 
@@ -116,7 +117,7 @@ let кадровЗаДень = 0;
 
 /** Сколько кадров уже нарисовано сегодня (по UTC-дате). */
 export function расходЗаСутки(сейчас = new Date()): { день: string; кадров: number; предел: number } {
-  const день = сейчас.toISOString().slice(0, 10);
+  const день = denPoMestnomu(сейчас);
   if (день !== деньСчёта) { деньСчёта = день; кадровЗаДень = 0; }
   return { день, кадров: кадровЗаДень, предел: суточныйПредел() };
 }

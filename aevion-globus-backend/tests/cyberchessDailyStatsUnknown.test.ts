@@ -1,4 +1,5 @@
 import { describe, test, expect, afterAll, vi } from "vitest";
+import { denPoMestnomu } from "../src/lib/denPoMestnomu";
 import * as realFs from "node:fs";
 import express from "express";
 import request from "supertest";
@@ -41,7 +42,7 @@ app.use("/api/cyberchess-daily", dailyRouter);
 // Ходы и день берём у самого сервера: с 19.08.2026 /solve сверяет решение, а
 // зашитая дата не совпала бы с задачей, которую сервер выдаёт СЕГОДНЯ.
 // Утверждения ниже — про сохранность и статистику, дата в них роли не играет.
-const тестовыйДень = () => new Date().toISOString().slice(0, 10);
+const тестовыйДень = () => denPoMestnomu();
 const тестовыеХоды = async (): Promise<string[]> => {
   const r = await request(app).get("/api/cyberchess-daily/puzzle");
   return (r.body?.puzzle?.sol ?? []) as string[];

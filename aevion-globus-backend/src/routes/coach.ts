@@ -357,7 +357,9 @@ const anonCoachCeiling = rateLimit({
   message: "rate_limit_exceeded: too many anonymous coach requests platform-wide, sign in to continue",
 });
 
-coachRouter.post("/chat", normaTrenera, anonCoachCeiling, generationLimit("coach_chat"), async (req: Request, res: Response) => {
+// Порядок слоёв: потолок анонимов (защита платформы) → лимит генераций → дневная норма (спящая).
+// 13.10: норма стояла первой и ломала сторож anonChatCeiling; по существу потолок и лимит — раньше нормы.
+coachRouter.post("/chat", anonCoachCeiling, generationLimit("coach_chat"), normaTrenera, async (req: Request, res: Response) => {
   try {
     // Ключ именно Anthropic больше не обязателен: ответить может любой
     // настроенный поставщик. Отказ здесь означает, что не настроен НИ ОДИН.
@@ -482,9 +484,13 @@ coachRouter.post("/chat", normaTrenera, anonCoachCeiling, generationLimit("coach
         /* останемся с прежним ответом и отдадим отказ ниже */
       }
       if (языкНеТот(вопросЧеловека, итог.reply) || ответОгрызок(итог.reply)) {
-        console.error("[coach] ответ отбракован дважды — отдаём отказ");
-        return res.status(502).json({
-          error:
+        console.warn("[coach] ответ отбракован дважды — отдаём разбор движком (fallback)");
+        /* Не авария, а отказ по смыслу: 200 с fallback — решение оркестратора 13.10.2026;
+           5xx здесь поднимал мониторинг зря (§15: 5xx значит «у нас сломалось»). */
+        return res.status(200).json({
+          fallback: "engine",
+          reason: языкНеТот(вопросЧеловека, итог.reply) ? "wrong-language" : "fragment",
+          message:
             "Тренер ответил не по делу — показываю разбор движком. Партия и задачи работают.",
         });
       }
@@ -514,7 +520,7 @@ coachRouter.post("/chat", normaTrenera, anonCoachCeiling, generationLimit("coach
 // токен за токеном (живая печать, lichess/ChatGPT-стиль). Фронт парсит
 // content_block_delta (delta.type==="text_delta") и дописывает текст.
 // Без thinking — быстрый первый токен для коротких подсказок.
-coachRouter.post("/chat/stream", normaTrenera, anonCoachCeiling, generationLimit("coach_chat_stream"), async (req: Request, res: Response) => {
+coachRouter.post("/chat/stream", anonCoachCeiling, generationLimit("coach_chat_stream"), normaTrenera, async (req: Request, res: Response) => {
   try {
     // Ключ именно Anthropic больше не обязателен: поток может выдать любой
     // настроенный поставщик. Отказ здесь — «не настроен НИ ОДИН».

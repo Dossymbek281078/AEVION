@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 import { rateLimit } from "../lib/rateLimit";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import crypto from "node:crypto";
@@ -426,7 +427,7 @@ async function bookmarksOf(
  * удалось — след без этих двух вещей бесполезен.
  */
 async function activityRecord(userId: string): Promise<void> {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = denPoMestnomu();
   if (isQLearnDbReady()) {
     try {
       await pool.query(
@@ -456,7 +457,7 @@ async function activityDays(
         [userId],
       );
       const days = new Set<string>(
-        rows.map((r: { day: unknown }) => new Date(String(r.day)).toISOString().slice(0, 10)),
+        rows.map((r: { day: unknown }) => denPoMestnomu(new Date(String(r.day)))),
       );
       const lastTouched = rows[0] ? new Date(String(rows[0].touchedAt)).toISOString() : null;
       return { days, lastTouched, failed: false };
@@ -572,8 +573,8 @@ const memEnrollmentActivity = new Map<string, string>();
 function computeStreak(days: Set<string>): { current: number; longest: number; totalDays: number } {
   if (days.size === 0) return { current: 0, longest: 0, totalDays: 0 };
   const sorted = Array.from(days).sort();
-  const today = new Date().toISOString().slice(0, 10);
-  const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  const today = denPoMestnomu();
+  const yesterday = denPoMestnomu(new Date(Date.now() - 86_400_000));
 
   // Longest run of consecutive days
   let longest = 1;
@@ -595,7 +596,7 @@ function computeStreak(days: Set<string>): { current: number; longest: number; t
   while (cursorIso && days.has(cursorIso)) {
     current++;
     const prev = new Date(new Date(cursorIso + "T00:00:00Z").getTime() - 86_400_000);
-    cursorIso = prev.toISOString().slice(0, 10);
+    cursorIso = denPoMestnomu(prev);
   }
 
   return { current, longest, totalDays: days.size };
@@ -1243,7 +1244,7 @@ qlearnRouter.get("/me/streak", async (req: Request, res: Response) => {
     // «Серия 0» — утверждение о человеке. Неотвеченный вопрос им не является.
     res.status(503).json({ error: "storage_unavailable", warning: WARN }); return;
   }
-  const today = new Date().toISOString().slice(0, 10);
+  const today = denPoMestnomu();
   if (days.size === 0) {
     res.json({ current: 0, longest: 0, totalDays: 0, lastActiveAt: null, today, activeToday: false });
     return;

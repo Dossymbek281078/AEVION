@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { denPoMestnomu } from "../lib/denPoMestnomu";
 import crypto from "crypto";
 import { CITY, CityData } from "./qskyway.city";
 import { CITY_NYC } from "./qskyway.city.nyc";
@@ -1392,7 +1393,7 @@ async function bookSlot(
         await client.query("ROLLBACK");
         return { ok: false, reason: "capacity", concurrent };
       }
-      const rec: Slot = { id: "slot-" + crypto.randomUUID().slice(0, 8), routeId, t0, t1, holder, issued: new Date().toISOString().slice(0, 10), receipt: "" };
+      const rec: Slot = { id: "slot-" + crypto.randomUUID().slice(0, 8), routeId, t0, t1, holder, issued: denPoMestnomu(), receipt: "" };
       rec.receipt = slotReceipt(rec);
       await client.query(
         `INSERT INTO qskyway_slots (id, route_id, t0, t1, holder, issued, receipt) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
@@ -1413,7 +1414,7 @@ async function bookSlot(
   }
   const concurrent = memSlots.filter((s) => s.routeId === routeId && overlaps(a0, a1, Date.parse(s.t0), Date.parse(s.t1))).length;
   if (concurrent >= SLOT_CAPACITY) return { ok: false, reason: "capacity", concurrent };
-  const rec: Slot = { id: "slot-" + (memSlots.length + 1), routeId, t0, t1, holder, issued: new Date().toISOString().slice(0, 10), receipt: "" };
+  const rec: Slot = { id: "slot-" + (memSlots.length + 1), routeId, t0, t1, holder, issued: denPoMestnomu(), receipt: "" };
   rec.receipt = slotReceipt(rec);
   memSlots.push(rec);
   return { ok: true, slot: rec };

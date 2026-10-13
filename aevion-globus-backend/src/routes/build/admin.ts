@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { denPoMestnomu } from "../../lib/denPoMestnomu";
 import crypto from "crypto";
 import { buildPool as pool, ok, fail, requireBuildAuth, safeParseJson } from "../../lib/build";
 
@@ -259,7 +260,7 @@ adminRouter.get("/leads.csv", async (req, res) => {
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename="qbuild-leads-${new Date().toISOString().slice(0, 10)}.csv"`,
+      `attachment; filename="qbuild-leads-${denPoMestnomu()}.csv"`,
     );
     return res.send(`${header}\n${body}`);
   } catch (err: unknown) {

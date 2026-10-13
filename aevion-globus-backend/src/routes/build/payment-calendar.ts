@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { denPoMestnomu } from "../../lib/denPoMestnomu";
 import crypto from "crypto";
 import {
   buildPool as pool,
@@ -95,7 +96,7 @@ paymentCalendarRouter.get("/my", async (req, res) => {
     let due = 0;
     let paid = 0;
     let overdue = 0;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = denPoMestnomu();
     for (const row of r.rows as Array<{ status: string; amount: number; dueDate: string }>) {
       if (row.status === "PAID") paid += Number(row.amount);
       else if (row.status === "PENDING" && row.dueDate < today) overdue += Number(row.amount);

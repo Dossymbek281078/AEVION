@@ -9838,6 +9838,8 @@ devhubRouter.get("/projects/:id/domain/status", async (req, res) => {
 // model we sent. Only free, side-effect-free endpoints are used — nothing
 // here sends a message, spends credit, or creates anything.
 devhubRouter.get("/providers/health", async (_req, res) => {
+  /* Есть ли хоть один ключ поставщика моделей — для проб семейства моделей (см. ниже). */
+  const ключейПоставщиков = () => ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"].filter((k) => !!process.env[k]).length;
   const probe = async (name: string, run: () => Promise<{ ok: boolean; detail: string }>) => {
     try {
       const r = await run();
@@ -9935,14 +9937,13 @@ devhubRouter.get("/providers/health", async (_req, res) => {
         /* Две пробы семейства моделей — не про ключ, а про каталог и умолчания; но без единого ключа
        поставщика им нечего проверять, и «упало» читалось бы как «ключ не подошёл». Поэтому у них
        тот же исход «not set», что у ключевых проб (сторож providerChecksCoverTheCapabilities). */
-    const ключейПоставщиков = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"].filter((k) => !!process.env[k]).length;
-    probe("models_declared", async () => ключейПоставщиков === 0 ? { ok: false, detail: "provider keys not set — nothing to declare" } : проверитьИменаМоделей()),
+    probe("models_declared", async () => ключейПоставщиков() === 0 ? { ok: false, detail: "provider keys not set — nothing to declare" } : проверитьИменаМоделей()),
     // Вторая проба того же семейства, и она ДРУГОЙ вопрос — сегодняшний урок
     // в том, что две разные нужды, исполненные одним движением, передавливают
     // одну из них. Разница измерена: `gemini-2.0-flash-001` ИСЧЕЗ из каталога
     // (ловит проверка имён), а `gemini-2.5-pro` в каталоге ЕСТЬ и отвечает 404
     // (ловит только вызов). Зовём ровно умолчания и ровно один токен.
-    probe("default_model_answers", async () => ключейПоставщиков === 0 ? { ok: false, detail: "provider keys not set — nothing to call" } : проверитьУмолчанияВызовом()),
+    probe("default_model_answers", async () => ключейПоставщиков() === 0 ? { ok: false, detail: "provider keys not set — nothing to call" } : проверитьУмолчанияВызовом()),
     probe("deepl", async () => {
       if (!process.env.DEEPL_API_KEY) return { ok: false, detail: "DEEPL_API_KEY not set" };
       const r = await fetch("https://api-free.deepl.com/v2/usage", {

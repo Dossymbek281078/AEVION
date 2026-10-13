@@ -43,7 +43,7 @@ describe("сторона доски считается от окна польз�
 });
 
 function собратьСтраницу() {
-  const cfg = { id: "li_test", fen: "8/5kp1/7p/3PRK2/r5PP/8/8/8 b - - 0 52", i: 0, storona: "b", movable: ["g7"], texts: { wrong: "x", yourMove: "y", hint: "h", solved: "s" }, ev: { channel: "youtube", post: "chess-1", path: "/cyberchess/p/li_test?c=yt-chess-1", rating: 1000, theme: "t", fen: "f" } };
+  const cfg = { id: "li_test", fen: "8/5kp1/7p/3PRK2/r5PP/8/8/8 b - - 0 52", i: 0, storona: "b", movable: ["g7"], texts: { wrong: "x", yourMove: "y", hint: "h", solved: "s", hintShown: "hs", copied: "copied!", shareTitle: "t" }, ev: { channel: "youtube", post: "chess-1", path: "/cyberchess/p/li_test?c=yt-chess-1", rating: 1000, theme: "t", fen: "f" } };
   document.body.innerHTML = `<main data-cc-light-puzzle="li_test"><div data-cc-board="1" data-cc-puzzle="li_test"><button type="button" data-sq="g7" class="l"></button></div><div data-cc-status class="wd s"></div><div class="wd zm" data-cc-zoom><button type="button" data-zm="-">−</button><span data-zm-v>100%</span><button type="button" data-zm="+">+</button></div><div class="wd r" data-cc-resheno></div></main><script id="cc-cfg" type="application/json">${JSON.stringify(cfg)}</script>`;
 }
 
@@ -224,5 +224,29 @@ describe("задача дня по стабильному адресу /cyberche
     expect(КЛИЕНТ).toContain("daily:!!C.ev.daily");
     for (const y of ["ru", "en", "kk"] as const) expect(PZ_SLOVA[y]["pz.daily"], y).toBeTruthy();
     expect(PZ_SLOVA.en["pz.daily"]).not.toMatch(/[А-Яа-яЁё]/);
+  });
+});
+
+describe("поделиться задачей", () => {
+  it("кнопка в блоке «решено»; без navigator.share — копирует ссылку с ?c=tg-share, статус «скопировано», событие puzzle_share", async () => {
+    собратьСтраницуСПодсказкой();
+    document.querySelector("[data-cc-resheno]")!.insertAdjacentHTML("beforeend", '<button type="button" data-cc-share>Share</button>');
+    const written: string[] = [];
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (t: string) => { written.push(t); } } });
+    Object.defineProperty(navigator, "share", { configurable: true, value: undefined });
+    new Function(КЛИЕНТ)();
+    (document.querySelector("[data-cc-share]") as HTMLButtonElement).click();
+    await тик();
+    expect(written.length).toBe(1);
+    expect(written[0]).toMatch(/\/cyberchess\/p\/.*\?c=tg-share$/);
+    expect(document.querySelector("[data-cc-status]")!.textContent).toBe("copied!");
+    const sh = отправлено.find((e) => e.type === "feature_use" && e.meta?.feature === "puzzle_share");
+    expect(sh?.meta?.how).toBe("copy");
+    expect(sh?.meta?.surface).toBe("light");
+  });
+  it("слова на трёх языках, en без кириллицы; кнопка в HTML маршрута", () => {
+    expect(ROUTE).toContain('<button type="button" data-cc-share>${esc(t("pz.share"))}</button>');
+    for (const y of ["ru", "en", "kk"] as const) for (const k of ["pz.share", "pz.copied"]) expect(PZ_SLOVA[y][k], y + k).toBeTruthy();
+    expect(PZ_SLOVA.en["pz.share"] + PZ_SLOVA.en["pz.copied"]).not.toMatch(/[А-Яа-яЁё]/);
   });
 });

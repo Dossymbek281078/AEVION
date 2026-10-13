@@ -75,7 +75,7 @@ function html(p: { id: string; fen: string; zadanie: string; name: string; ratin
     const koord = (r === 7 ? `<i class="c f">${k.sq[0]}</i>` : "") + (c === 0 ? `<i class="c r">${k.sq[1]}</i>` : "");
     return `<button type="button" data-sq="${k.sq}"${cf}${cr} class="${k.dark ? "d" : "l"}${mogut.has(k.sq) ? " m" : ""}" aria-label="${k.sq}">${k.p ? `<span class="${k.p[0] === "w" ? "w" : "b"}">${GLIF[k.p]}</span>` : ""}${koord}</button>`;
   })).join("");
-  const cfg = { id: p.id, fen: p.fen, i: 0, storona: p.storona, movable: [...mogut], texts: { wrong: t("pz.wrong"), yourMove: t("pz.yourMove"), hint: t("pz.hint"), solved: t("pz.solved").replace("{name}", p.name), hintShown: t("pz.hintShown") }, ev: { channel: p.channel, post: p.post, path: p.path, rating: p.rating, theme: p.theme, fen: p.fen, daily: p.daily } };
+  const cfg = { id: p.id, fen: p.fen, i: 0, storona: p.storona, movable: [...mogut], texts: { wrong: t("pz.wrong"), yourMove: t("pz.yourMove"), hint: t("pz.hint"), solved: t("pz.solved").replace("{name}", p.name), hintShown: t("pz.hintShown"), copied: t("pz.copied"), shareTitle: p.title }, ev: { channel: p.channel, post: p.post, path: p.path, rating: p.rating, theme: p.theme, fen: p.fen, daily: p.daily } };
   return `<!doctype html><html lang="${p.locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>${esc(p.title)}</title><meta name="description" content="${esc(p.description)}"><meta name="robots" content="noindex">
 <link rel="canonical" href="https://aevion.app${esc(p.polnaya)}">
@@ -99,7 +99,7 @@ main{min-height:100dvh;display:grid;grid-template-columns:1fr;justify-items:cent
 .b .w{color:#fff;text-shadow:0 0 2px #000,0 0 1px #000}.b .bk,.b .b{color:#111}
 .b .t::after{content:"";position:absolute;width:30%;height:30%;border-radius:50%;background:rgba(20,20,20,.3)}.b .t.p::after{width:86%;height:86%;background:transparent;border:4px solid rgba(20,20,20,.35)}
 .s{min-height:24px;font-size:14px;font-weight:700;color:#a7f3d0}.s.err{color:#fca5a5}
-.r{display:none;gap:10px;flex-wrap:wrap}.r a{padding:10px 16px;border-radius:8px;background:#059669;color:#fff;font-weight:900;text-decoration:none}
+.r{display:none;gap:10px;flex-wrap:wrap}.r a{padding:10px 16px;border-radius:8px;background:#059669;color:#fff;font-weight:900;text-decoration:none}.r button{padding:10px 14px;border:1px solid #475569;border-radius:8px;background:#1e293b;color:#f1f5f9;font-weight:800;cursor:pointer}
 .f{font-size:13px;color:#93c5fd;text-decoration:underline}
 </style></head><body><main data-cc-light-puzzle="${esc(p.id)}">
 <div class="wd hdr"><b>♞ CyberChess</b><small>★ ${p.rating} · 🔥 <b data-cc-streak>0</b> ${esc(t("pz.streak"))}</small></div>
@@ -108,7 +108,7 @@ main{min-height:100dvh;display:grid;grid-template-columns:1fr;justify-items:cent
 <div class="wd s" data-cc-status>${esc(t("pz.yourMove"))}</div>
 <div class="wd hb"><button type="button" data-cc-podskazka>${esc(t("pz.hintBtn"))}</button></div>
 <div class="wd zm" data-cc-zoom><button type="button" data-zm="-" aria-label="${esc(t("pz.zoomOut"))}" title="${esc(t("pz.zoomOut"))}">−</button><span data-zm-v>100%</span><button type="button" data-zm="+" aria-label="${esc(t("pz.zoomIn"))}" title="${esc(t("pz.zoomIn"))}">+</button><small>${esc(t("pz.zoomLabel"))}</small></div>
-<div class="wd r" data-cc-resheno><a data-cc-next href="${esc(p.sleduyushchaya)}">${esc(t("pz.next"))}</a></div>
+<div class="wd r" data-cc-resheno><a data-cc-next href="${esc(p.sleduyushchaya)}">${esc(t("pz.next"))}</a><button type="button" data-cc-share>${esc(t("pz.share"))}</button></div>
 <a class="wd f" data-cc-full href="${esc(p.polnaya)}">${esc(t("pz.fullVersion"))}</a>
 </main>
 <script id="cc-cfg" type="application/json">${JSON.stringify(cfg).replace(/</g, "\\u003c")}</script>

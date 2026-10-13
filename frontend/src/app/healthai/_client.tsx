@@ -1090,7 +1090,9 @@ export default function HealthAIPage() {
       });
       const j = await r.json();
       if (!r.ok) {
-        showToast(t("toast_check_failed", lang));
+        // 402 — бесплатная норма: окно тарифа показывает общий перехватчик
+        // (lib/paywall.ts), тост «Не удалось» поверх него был бы неправдой.
+        if (r.status !== 402) showToast(t("toast_check_failed", lang));
         return;
       }
       setLastCheck(j.check);

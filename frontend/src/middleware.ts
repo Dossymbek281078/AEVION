@@ -109,47 +109,6 @@ function битыйАдрес(): NextResponse {
   });
 }
 
-/**
- * Адрес гостя для бэкенда за прокси `/api-backend`.
- *
- * ПОВОД (замер 13.10.2026, окно Приложения-31.12). Railway перезаписывает
- * X-Forwarded-For адресом соединения, а соединение через rewrite идёт от
- * Vercel — бэкенд видел всех гостей сайта под одним-двумя адресами Vercel, и
- * бесплатная норма (freeActionQuota) делилась между ними: счёт 2,3,2,3,4.
- *
- * Vercel пишет настоящий адрес гостя первым в X-Forwarded-For; передаём его
- * своим заголовком вместе с секретом, которому верит бэкенд. Присланные
- * гостем одноимённые заголовки затираются. Без секрета — null, ничего не меняем.
- */
-export function заголовкиДляБэкенда(вход: Headers, секрет: string | undefined): Headers | null {
-  if (!секрет || секрет.length < 16) return null;
-  const адрес = (вход.get("x-forwarded-for") || "").split(",")[0].trim() || (вход.get("x-real-ip") || "").trim();
-  const выход = new Headers(вход);
-  выход.delete("x-aevion-client-ip");
-  выход.delete("x-aevion-edge-key");
-  if (!адрес) return выход;
-  выход.set("x-aevion-client-ip", адрес);
-  выход.set("x-aevion-edge-key", секрет);
-  return выход;
-}
-
-/** Пути с бесплатной нормой действий (бэкенд freeActionQuota) — только POST. */
-const ПУТИ_С_НОРМОЙ = ["/api/healthai/", "/api/bureau/verify/start", "/api/qventure/", "/api/qsign/", "/api/qright/"];
-
-/** Куда middleware сам проксирует запрос с адресом гостя, или null — прежний путь. */
-export function адресНаБэкенде(
-  метод: string,
-  путь: string,
-  запрос: string,
-  цель: string | undefined,
-): URL | null {
-  const база = (цель || "").trim().replace(/\/+$/, "");
-  if (метод !== "POST" || !/^https:\/\//.test(база)) return null;
-  const хвост = путь.slice("/api-backend".length);
-  if (!ПУТИ_С_НОРМОЙ.some((п) => хвост.startsWith(п))) return null;
-  return new URL(база + хвост + запрос);
-}
-
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (!isDecodablePath(pathname)) {
@@ -165,21 +124,6 @@ export function middleware(req: NextRequest) {
     // иначе человек приедет на русскую страницу без признака английского.
     ответ.cookies.set("aevion_lang_v1", "en", { path: "/", maxAge: 60 * 60 * 24 * 365 });
     return ответ;
-  }
-
-  if (pathname.startsWith("/api-backend/")) {
-    // Замер прода 13.10.2026 (/health → guestIpFromSite.noKey): заголовки из
-    // NextResponse.next() до бэкенда НЕ доходят — внешний rewrite из
-    // next.config их теряет. Поэтому для действий с бесплатной нормой
-    // middleware проксирует сам; остальной трафик API идёт прежним путём.
-    const куда = адресНаБэкенде(req.method, pathname, req.nextUrl.search, process.env.BACKEND_PROXY_TARGET);
-    const заголовки = куда ? заголовкиДляБэкенда(req.headers, process.env.AEVION_EDGE_KEY) : null;
-    if (куда && заголовки) {
-      заголовки.delete("host");
-      const ответ = NextResponse.rewrite(куда, { request: { headers: заголовки } });
-      ответ.headers.set("x-aevion-edge", "guest-ip");
-      return ответ;
-    }
   }
 
   return NextResponse.next();

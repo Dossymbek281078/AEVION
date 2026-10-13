@@ -1,0 +1,263 @@
+{
+  "note": "Sample delivery manifest. The signed records are embedded below, so this runs with NO network at all: node verify-aevion.mjs manifest-sample.json. The embedded copy carries the revocation state as of the date in createdAt/checkedAt; to re-read the live registry run refresh-sample.mjs.",
+  "apiBase": "https://api.aevion.app",
+  "publicKey": "63fd4f60e1839498443a99cd69710fe3c7089606fb2188b75246f9903c0b36b8",
+  "records": [
+    {
+      "file": "live-record-1",
+      "id": "ce697809-c8c9-42a5-8d13-8c31de82fac6",
+      "record": {
+        "id": "ce697809-c8c9-42a5-8d13-8c31de82fac6",
+        "algoVersion": "qsign-v2.0",
+        "canonicalization": "RFC8785",
+        "createdAt": "2026-07-27T06:21:28.567Z",
+        "valid": true,
+        "revoked": false,
+        "revokedAt": null,
+        "revocationReason": null,
+        "payload": {
+          "idem": "test",
+          "n": 1
+        },
+        "payloadCanonical": "{\"idem\":\"test\",\"n\":1}",
+        "payloadHash": "f32281561bc8294fe65ab2fc96961a95983bcab5fc03166207d627135037506b",
+        "hmac": {
+          "kid": "qsign-hmac-v1",
+          "algo": "HMAC-SHA256",
+          "signature": "8e03a690ad0cbb0bcd70e9321f1a124af1a2080127153727e521f4ec5614e1e7",
+          "valid": true
+        },
+        "ed25519": {
+          "kid": "qsign-ed25519-v1",
+          "algo": "Ed25519",
+          "signature": "f7c87d18b1a2c50f3ddcb16c8dd1ccbab8349ba465e786cd9b27d04acd015c7fd2943ee638969190ea0f62ad87799578154aeb3fe0c38d0813b6606020c05d0f",
+          "publicKey": "63fd4f60e1839498443a99cd69710fe3c7089606fb2188b75246f9903c0b36b8",
+          "valid": true
+        },
+        "dilithium": {
+          "algo": "ML-DSA-65",
+          "kid": "qsign-dilithium-mldsa65-preview-v1",
+          "mode": "preview",
+          "digest": "7fd42d83f7d7b2b87728985e5cc92a644d8c38d4d40d2b1281fa17706170d285a79f4c8899ab8d3cc2cbd8a635d0bfff935d71ed52cb36697c7fccc7c9788a26",
+          "valid": null,
+          "note": "Preview slot reserved for ML-DSA-65 (Dilithium-3) post-quantum signatures. The `digest` field is a deterministic SHA-512 fingerprint of canonical||kid — NOT a cryptographic signature. Set QSIGN_DILITHIUM_V1_SEED to activate real ML-DSA-65 signatures."
+        },
+        "issuer": {
+          "email": "q***@a***.test"
+        },
+        "geo": {
+          "source": "ip",
+          "country": "CN",
+          "city": null,
+          "lat": null,
+          "lng": null
+        }
+      }
+    },
+    {
+      "file": "live-record-2",
+      "id": "87d84e00-1825-4732-8bef-db54ca7ab386",
+      "record": {
+        "id": "87d84e00-1825-4732-8bef-db54ca7ab386",
+        "algoVersion": "qsign-v2.0",
+        "canonicalization": "RFC8785",
+        "createdAt": "2026-07-22T10:44:34.452Z",
+        "valid": true,
+        "revoked": false,
+        "revokedAt": null,
+        "revocationReason": null,
+        "payload": {
+          "idem": "test",
+          "n": 1
+        },
+        "payloadCanonical": "{\"idem\":\"test\",\"n\":1}",
+        "payloadHash": "f32281561bc8294fe65ab2fc96961a95983bcab5fc03166207d627135037506b",
+        "hmac": {
+          "kid": "qsign-hmac-v1",
+          "algo": "HMAC-SHA256",
+          "signature": "8e03a690ad0cbb0bcd70e9321f1a124af1a2080127153727e521f4ec5614e1e7",
+          "valid": true
+        },
+        "ed25519": {
+          "kid": "qsign-ed25519-v1",
+          "algo": "Ed25519",
+          "signature": "f7c87d18b1a2c50f3ddcb16c8dd1ccbab8349ba465e786cd9b27d04acd015c7fd2943ee638969190ea0f62ad87799578154aeb3fe0c38d0813b6606020c05d0f",
+          "publicKey": "63fd4f60e1839498443a99cd69710fe3c7089606fb2188b75246f9903c0b36b8",
+          "valid": true
+        },
+        "dilithium": {
+          "algo": "ML-DSA-65",
+          "kid": "qsign-dilithium-mldsa65-preview-v1",
+          "mode": "preview",
+          "digest": "7fd42d83f7d7b2b87728985e5cc92a644d8c38d4d40d2b1281fa17706170d285a79f4c8899ab8d3cc2cbd8a635d0bfff935d71ed52cb36697c7fccc7c9788a26",
+          "valid": null,
+          "note": "Preview slot reserved for ML-DSA-65 (Dilithium-3) post-quantum signatures. The `digest` field is a deterministic SHA-512 fingerprint of canonical||kid — NOT a cryptographic signature. Set QSIGN_DILITHIUM_V1_SEED to activate real ML-DSA-65 signatures."
+        },
+        "issuer": {
+          "email": "q***@a***.test"
+        },
+        "geo": {
+          "source": "ip",
+          "country": "US",
+          "city": null,
+          "lat": null,
+          "lng": null
+        }
+      }
+    },
+    {
+      "file": "live-record-3",
+      "id": "9d21fa71-49a9-4bec-9ba3-e8bde60d26a8",
+      "record": {
+        "id": "9d21fa71-49a9-4bec-9ba3-e8bde60d26a8",
+        "algoVersion": "qsign-v2.0",
+        "canonicalization": "RFC8785",
+        "createdAt": "2026-07-22T09:59:02.657Z",
+        "valid": true,
+        "revoked": false,
+        "revokedAt": null,
+        "revocationReason": null,
+        "payload": {
+          "idem": "test",
+          "n": 1
+        },
+        "payloadCanonical": "{\"idem\":\"test\",\"n\":1}",
+        "payloadHash": "f32281561bc8294fe65ab2fc96961a95983bcab5fc03166207d627135037506b",
+        "hmac": {
+          "kid": "qsign-hmac-v1",
+          "algo": "HMAC-SHA256",
+          "signature": "8e03a690ad0cbb0bcd70e9321f1a124af1a2080127153727e521f4ec5614e1e7",
+          "valid": true
+        },
+        "ed25519": {
+          "kid": "qsign-ed25519-v1",
+          "algo": "Ed25519",
+          "signature": "f7c87d18b1a2c50f3ddcb16c8dd1ccbab8349ba465e786cd9b27d04acd015c7fd2943ee638969190ea0f62ad87799578154aeb3fe0c38d0813b6606020c05d0f",
+          "publicKey": "63fd4f60e1839498443a99cd69710fe3c7089606fb2188b75246f9903c0b36b8",
+          "valid": true
+        },
+        "dilithium": {
+          "algo": "ML-DSA-65",
+          "kid": "qsign-dilithium-mldsa65-preview-v1",
+          "mode": "preview",
+          "digest": "7fd42d83f7d7b2b87728985e5cc92a644d8c38d4d40d2b1281fa17706170d285a79f4c8899ab8d3cc2cbd8a635d0bfff935d71ed52cb36697c7fccc7c9788a26",
+          "valid": null,
+          "note": "Preview slot reserved for ML-DSA-65 (Dilithium-3) post-quantum signatures. The `digest` field is a deterministic SHA-512 fingerprint of canonical||kid — NOT a cryptographic signature. Set QSIGN_DILITHIUM_V1_SEED to activate real ML-DSA-65 signatures."
+        },
+        "issuer": {
+          "email": "q***@a***.test"
+        },
+        "geo": {
+          "source": "ip",
+          "country": "US",
+          "city": null,
+          "lat": null,
+          "lng": null
+        }
+      }
+    },
+    {
+      "file": "live-record-4",
+      "id": "239588a3-30b8-440c-b56d-c81d26b8f9cc",
+      "record": {
+        "id": "239588a3-30b8-440c-b56d-c81d26b8f9cc",
+        "algoVersion": "qsign-v2.0",
+        "canonicalization": "RFC8785",
+        "createdAt": "2026-07-22T07:58:59.428Z",
+        "valid": true,
+        "revoked": false,
+        "revokedAt": null,
+        "revocationReason": null,
+        "payload": {
+          "idem": "test",
+          "n": 1
+        },
+        "payloadCanonical": "{\"idem\":\"test\",\"n\":1}",
+        "payloadHash": "f32281561bc8294fe65ab2fc96961a95983bcab5fc03166207d627135037506b",
+        "hmac": {
+          "kid": "qsign-hmac-v1",
+          "algo": "HMAC-SHA256",
+          "signature": "8e03a690ad0cbb0bcd70e9321f1a124af1a2080127153727e521f4ec5614e1e7",
+          "valid": true
+        },
+        "ed25519": {
+          "kid": "qsign-ed25519-v1",
+          "algo": "Ed25519",
+          "signature": "f7c87d18b1a2c50f3ddcb16c8dd1ccbab8349ba465e786cd9b27d04acd015c7fd2943ee638969190ea0f62ad87799578154aeb3fe0c38d0813b6606020c05d0f",
+          "publicKey": "63fd4f60e1839498443a99cd69710fe3c7089606fb2188b75246f9903c0b36b8",
+          "valid": true
+        },
+        "dilithium": {
+          "algo": "ML-DSA-65",
+          "kid": "qsign-dilithium-mldsa65-preview-v1",
+          "mode": "preview",
+          "digest": "7fd42d83f7d7b2b87728985e5cc92a644d8c38d4d40d2b1281fa17706170d285a79f4c8899ab8d3cc2cbd8a635d0bfff935d71ed52cb36697c7fccc7c9788a26",
+          "valid": null,
+          "note": "Preview slot reserved for ML-DSA-65 (Dilithium-3) post-quantum signatures. The `digest` field is a deterministic SHA-512 fingerprint of canonical||kid — NOT a cryptographic signature. Set QSIGN_DILITHIUM_V1_SEED to activate real ML-DSA-65 signatures."
+        },
+        "issuer": {
+          "email": "q***@a***.test"
+        },
+        "geo": {
+          "source": "ip",
+          "country": "US",
+          "city": null,
+          "lat": null,
+          "lng": null
+        }
+      }
+    },
+    {
+      "file": "live-record-5",
+      "id": "0042f7af-76df-42e3-b442-1661f4b100e8",
+      "record": {
+        "id": "0042f7af-76df-42e3-b442-1661f4b100e8",
+        "algoVersion": "qsign-v2.0",
+        "canonicalization": "RFC8785",
+        "createdAt": "2026-07-22T07:51:36.063Z",
+        "valid": true,
+        "revoked": false,
+        "revokedAt": null,
+        "revocationReason": null,
+        "payload": {
+          "idem": "test",
+          "n": 1
+        },
+        "payloadCanonical": "{\"idem\":\"test\",\"n\":1}",
+        "payloadHash": "f32281561bc8294fe65ab2fc96961a95983bcab5fc03166207d627135037506b",
+        "hmac": {
+          "kid": "qsign-hmac-v1",
+          "algo": "HMAC-SHA256",
+          "signature": "8e03a690ad0cbb0bcd70e9321f1a124af1a2080127153727e521f4ec5614e1e7",
+          "valid": true
+        },
+        "ed25519": {
+          "kid": "qsign-ed25519-v1",
+          "algo": "Ed25519",
+          "signature": "f7c87d18b1a2c50f3ddcb16c8dd1ccbab8349ba465e786cd9b27d04acd015c7fd2943ee638969190ea0f62ad87799578154aeb3fe0c38d0813b6606020c05d0f",
+          "publicKey": "63fd4f60e1839498443a99cd69710fe3c7089606fb2188b75246f9903c0b36b8",
+          "valid": true
+        },
+        "dilithium": {
+          "algo": "ML-DSA-65",
+          "kid": "qsign-dilithium-mldsa65-preview-v1",
+          "mode": "preview",
+          "digest": "7fd42d83f7d7b2b87728985e5cc92a644d8c38d4d40d2b1281fa17706170d285a79f4c8899ab8d3cc2cbd8a635d0bfff935d71ed52cb36697c7fccc7c9788a26",
+          "valid": null,
+          "note": "Preview slot reserved for ML-DSA-65 (Dilithium-3) post-quantum signatures. The `digest` field is a deterministic SHA-512 fingerprint of canonical||kid — NOT a cryptographic signature. Set QSIGN_DILITHIUM_V1_SEED to activate real ML-DSA-65 signatures."
+        },
+        "issuer": {
+          "email": "q***@a***.test"
+        },
+        "geo": {
+          "source": "ip",
+          "country": "US",
+          "city": null,
+          "lat": null,
+          "lng": null
+        }
+      }
+    }
+  ],
+  "checkedAt": "2026-10-11"
+}

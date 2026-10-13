@@ -68,6 +68,31 @@ export function isPaywallPayload(x: unknown): x is PaywallPayload {
 }
 
 /**
+ * Отказ по бесплатной норме действий (бэкенд `freeActionQuota.отказПоНорме`,
+ * 402 `free_quota_exceeded`) — в форму стены, чтобы его показало то же окно.
+ *
+ * 🔴 13.10.2026, повод (окно Приложения-31.12): на проде включены нормы бюро,
+ * HealthAI и QVenture, а перехватчик ловил только `upgrade_required`. Гость на
+ * второй проверке HealthAI видел «проверка не удалась», в бюро — голый код
+ * `free_quota_exceeded`; ссылки на оплату не было ни там, ни там.
+ */
+export function стенаИзНормы(x: unknown): PaywallPayload | null {
+  if (!x || typeof x !== "object") return null;
+  const o = x as Record<string, unknown>;
+  if (o.error !== "free_quota_exceeded" || typeof o.module !== "string" || typeof o.upgradeUrl !== "string") {
+    return null;
+  }
+  return {
+    error: "upgrade_required",
+    module: o.module,
+    plan: "free",
+    requiredTiers: ["lite", "medium", "full"],
+    upgradeUrl: o.upgradeUrl,
+    message: typeof o.message === "string" ? o.message : "Бесплатная норма на этот месяц исчерпана.",
+  };
+}
+
+/**
  * Server-side helper: fetch an API path and either return the parsed JSON,
  * or return `{ paywall: PaywallPayload }` if the gate blocked the request.
  *
@@ -287,7 +312,8 @@ export function installPaywallInterceptor(): void {
     if (res.status !== 402) return res;
     try {
       const body = await res.clone().json();
-      if (isPaywallPayload(body)) triggerPaywall(body, userInitiated);
+      const стена = isPaywallPayload(body) ? body : стенаИзНормы(body);
+      if (стена) triggerPaywall(стена, userInitiated);
     } catch {
       /* not a JSON upgrade_required body — leave it to the caller */
     }

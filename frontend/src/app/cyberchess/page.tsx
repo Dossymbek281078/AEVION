@@ -41,7 +41,7 @@ import Piece, { PIECE_SETS, useActivePieceSet, setActivePieceSet } from "./Piece
 import SetupBoardPreview from "./SetupBoardPreview";
 const AiCoach = dynamic(() => import("./AiCoach"), { ssr: false });
 const CoachKnowledge = dynamic(() => import("./CoachKnowledgeModal"), { ssr: false });
-import { COACH_KNOWLEDGE } from "./coachKnowledge";
+import type { KnowledgeCategory as CoachKnowledgeCategory } from "./coachKnowledge";
 // Ленивые: код уезжает отдельным чанком и не утяжеляет первый экран.
 // Замер 28.08.2026: страница тянет 1.26 МБ, и на медленном 3G кнопка
 // «ИГРАТЬ» становится нажимаемой через 38 секунд. Эти три панели
@@ -178,7 +178,7 @@ import PoloskaStarta from "./PoloskaStarta";
 import { наградаЗаВозврат } from "./dailyReward";
 import { новыйРейтинг } from "./rating";
 import { tournamentUserId, tournamentDisplayName } from "./tournaments/playerIdentity";
-import { getDueReminders, dismissReminder } from "./coachKnowledge";
+import { getDueReminders, dismissReminder } from "./coachReminders";
 import WorkspacePiP, { useWorkspacePiP } from "./WorkspacePiP";
 import { makeDuelConfig, getGhostMoveAt, checkDivergence, formatPastDate, type GhostDuelConfig, type GhostSourceGame } from "./ghostDuel";
 import Link from "next/link";
@@ -2010,6 +2010,9 @@ export default function CyberChessPage(){
   },[coachChat,coachChatLoading]);
   const[showKnowledge,sShowKnowledge]=useState(false);
   const[showFlashcards,sShowFlashcards]=useState(false);
+  // 122: знания тренера (160 КБ текста) грузятся только когда открыли карточки, а не до первого хода.
+  const[coachKnowledge,sCoachKnowledge]=useState<CoachKnowledgeCategory[]|null>(null);
+  useEffect(()=>{if(showFlashcards&&!coachKnowledge){import("./coachKnowledge").then(m=>sCoachKnowledge(m.COACH_KNOWLEDGE)).catch(()=>{});}},[showFlashcards,coachKnowledge]);
   const[flashcardIdx,sFlashcardIdx]=useState(0);
   const[flashcardFlipped,sFlashcardFlipped]=useState(false);
   const[dailyReward,sDailyReward]=useState<{bonus:number;streak:number;isWelcome:boolean}|null>(null);
@@ -7404,7 +7407,7 @@ export default function CyberChessPage(){
         {!streamerMode&&vwPx>=769&&(()=>{
           const navLocked=on&&!over&&isHumanGame;
           const TABS:{k:"play"|"puzzles"|"analysis"|"coach";label:string;icon:string;hue:string}[]=
-            (["play","puzzles","analysis","coach"] as const).map(k=>({k,label:TAB_META[k].label,icon:TAB_META[k].icon,hue:TAB_META[k].hue}));
+            (["play","puzzles","analysis","coach"] as const).map(k=>({k,label:cc.t(k==="coach"?"nav.coachShort":"nav."+k),icon:TAB_META[k].icon,hue:TAB_META[k].hue}));
           const goTab=(k:"play"|"puzzles"|"analysis"|"coach")=>{
             if(k==="play"){ sTab("play"); if(!on&&!over)sSetup(true); return; }
             if(navLocked){ showToast("🔒 Нельзя во время партии с человеком","info"); return; }
@@ -7471,7 +7474,7 @@ export default function CyberChessPage(){
             fontSize:12,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap",
           }}>
           <span style={{fontSize:14}}>⌕</span>
-          <span>Команды</span>
+          <span>{cc.t("nav.commands")}</span>
           {/* Подсказка сочетания клавиш — только там, где клавиатура есть.
               На телефоне «⌃K» не подсказка, а шум: нажать это нечем, а место
               в шапке первого экрана стоит дорого. Замер 27.08 на 375px: шапка
@@ -7493,7 +7496,7 @@ export default function CyberChessPage(){
             fontSize:12,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap",
           }}>
           <span style={{fontSize:14}}>☰</span>
-          <span>Все разделы</span>
+          <span>{cc.t("nav.sections")}</span>
         </button>}
         {/* Единое «? Помощь» — обзорный тур / горячие клавиши / что такое Chessy. Собрано из
             4 разрозненных help-входов, чтобы новичок не гадал, какой «?» куда ведёт. */}
@@ -7507,7 +7510,7 @@ export default function CyberChessPage(){
               border:`1.5px solid ${helpMenuOpen?"#2563eb":"#3b82f6"}`,background:helpMenuOpen?"rgba(37,99,235,0.18)":"rgba(59,130,246,0.12)",color:"#2563eb",
               fontSize:12,fontWeight:900,cursor:"pointer",whiteSpace:"nowrap"}}>
             <span style={{fontSize:14,lineHeight:1}} aria-hidden>?</span>
-            <span>Помощь</span>
+            <span>{cc.t("nav.help")}</span>
             <span style={{fontSize:9}} aria-hidden>▾</span>
           </button>
           {helpMenuOpen&&<>
@@ -7697,7 +7700,7 @@ export default function CyberChessPage(){
                   ...(ccAuth.checked&&!ccAuth.user?[{ic:<span style={{fontSize:14}} aria-hidden>👤</span>,lbl:"Войти в аккаунт AEVION",act:()=>{window.location.href="/auth?next=/cyberchess"}}]:[]),
                   ...(ccAuth.user?[{ic:<span style={{fontSize:14}} aria-hidden>👤</span>,lbl:"Мой аккаунт AEVION",act:()=>{window.location.href="/account"}}]:[]),
                   {ic:<span style={{fontSize:14}} aria-hidden>◆</span>,lbl:`Рейтинг ${rat} · Chessy ${chessy.balance}`,act:()=>sShowStatsDashboard(true)},
-                  {ic:<span style={{fontSize:14}} aria-hidden>☰</span>,lbl:"Все разделы",act:()=>sShowSections(true)},
+                  {ic:<span style={{fontSize:14}} aria-hidden>☰</span>,lbl:cc.t("nav.sections"),act:()=>sShowSections(true)},
                 ] : []),
                 {ic:<span style={{fontSize:14}} aria-hidden>✉</span>,lbl:"Написать мне о запуске",act:()=>sShowWaitlist(true)},
                 {ic:<Icon.Help width={16} height={16}/>,lbl:"Горячие клавиши",act:()=>sShowHelp(true)},
@@ -8341,7 +8344,7 @@ export default function CyberChessPage(){
           {/* Совет дня убран с главного экрана — доступен в разделе Коуч → Knowledge */}
           {false&&(()=>{
             const now=new Date();const seed=now.getFullYear()*10000+now.getMonth()*100+now.getDate();
-            const allEntries=COACH_KNOWLEDGE.flatMap(c=>c.entries.map(e=>({...e,catTitle:c.title})));
+            const allEntries=(coachKnowledge??[]).flatMap(c=>c.entries.map(e=>({...e,catTitle:c.title})));
             if(allEntries.length===0)return null;
             const tip=allEntries[seed%allEntries.length];
             const shortBody=typeof tip.description==="string"?tip.description.slice(0,120)+(tip.description.length>120?"…":""):String(tip.description).slice(0,120);
@@ -13510,7 +13513,7 @@ ${question.trim()}`;
             }}
           />
 
-          {showFlashcards&&(()=>{const cards=COACH_KNOWLEDGE.flatMap(c=>c.entries.filter(e=>!!e.bestMove&&!!e.fen).map(e=>({t:e.title,f:e.fen!,b:e.bestMove!,ex:typeof e.explanation==="string"?e.explanation.slice(0,180):String(e.explanation).slice(0,180),cat:c.title})));if(!cards.length)return null;const card=cards[flashcardIdx%cards.length];return<div onClick={()=>sShowFlashcards(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.65)",backdropFilter:"blur(3px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:220,padding:16}}><div onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Флеш-карточки коуча" style={{background:"linear-gradient(135deg,#0f172a,#1e1b4b)",color:"#fff",borderRadius:16,maxWidth:460,width:"100%",padding:"24px",border:"1px solid rgba(167,139,250,0.3)",boxShadow:"0 24px 64px rgba(0,0,0,0.5)"}}>
+          {showFlashcards&&coachKnowledge&&(()=>{const cards=coachKnowledge.flatMap(c=>c.entries.filter(e=>!!e.bestMove&&!!e.fen).map(e=>({t:e.title,f:e.fen!,b:e.bestMove!,ex:typeof e.explanation==="string"?e.explanation.slice(0,180):String(e.explanation).slice(0,180),cat:c.title})));if(!cards.length)return null;const card=cards[flashcardIdx%cards.length];return<div onClick={()=>sShowFlashcards(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.65)",backdropFilter:"blur(3px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:220,padding:16}}><div onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Флеш-карточки коуча" style={{background:"linear-gradient(135deg,#0f172a,#1e1b4b)",color:"#fff",borderRadius:16,maxWidth:460,width:"100%",padding:"24px",border:"1px solid rgba(167,139,250,0.3)",boxShadow:"0 24px 64px rgba(0,0,0,0.5)"}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}><span>🃏</span><span style={{fontSize:11,fontWeight:900,letterSpacing:1,color:"#a78bfa",textTransform:"uppercase" as const}}>Флеш-карточки</span><span style={{marginLeft:"auto",fontSize:11,color:"#94a3b8"}}>{(flashcardIdx%cards.length)+1}/{cards.length}</span><button onClick={()=>sShowFlashcards(false)} style={{padding:"2px 7px",borderRadius:4,border:"1px solid rgba(255,255,255,0.15)",background:"transparent",color:"#94a3b8",fontSize:11,cursor:"pointer"}}>✕</button></div>
             <div style={{textAlign:"center",marginBottom:12}}><div style={{fontSize:16,fontWeight:900,color:"#f1f5f9",marginBottom:4}}>{card.t}</div><div style={{fontSize:11,color:"#a78bfa",padding:"1px 8px",borderRadius:999,background:"rgba(124,58,237,0.15)",display:"inline-block"}}>{card.cat}</div></div>
             <button onClick={()=>sFlashcardFlipped(v=>!v)} style={{width:"100%",padding:"12px",borderRadius:10,border:"1px solid rgba(167,139,250,0.4)",background:flashcardFlipped?"rgba(124,58,237,0.18)":"transparent",color:"#e9d5ff",fontSize:13,fontWeight:800,cursor:"pointer",marginBottom:10}}>{flashcardFlipped?`✓ Ход: ${card.b}`:"👁 Показать ответ"}</button>

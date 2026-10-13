@@ -8121,7 +8121,7 @@ export default function CyberChessPage(){
               <div>
                 <div style={{display:"flex",alignItems:"center",gap:SPACE[2]}}>
                   <span style={{fontSize:10,fontWeight:900,color:CC.textDim,letterSpacing:1.4,textTransform:"uppercase" as const}}>{cc.t("ai.label")}</span>
-                  <input type="range" aria-label="Сила соперника" min={0} max={(chessy.owned.master_ai||isPro)?6:4}
+                  <input type="range" aria-label={cc.t("ai.strength.aria")} min={0} max={(chessy.owned.master_ai||isPro)?6:4}
                     value={Math.min(aiI,(chessy.owned.master_ai||isPro)?6:4)}
                     onChange={e=>{const v=+e.target.value;if(v>=5&&!(chessy.owned.master_ai||isPro)){showToast("Master/Stockfish — платный уровень. Купи в Chessy-магазине","info");sShowShop(true);return}sAiI(v)}}
                     style={{flex:1,accentColor:lv.color}}/>
@@ -8243,7 +8243,7 @@ export default function CyberChessPage(){
                 </button>
                 <button onClick={()=>{sTab("puzzles");sPzMode("rush" as any);if(fPz.length)ldPz(rushStartIdx())}}
                   className="cc-focus-ring"
-                  aria-label="Запустить Puzzle Rush"
+                  aria-label={cc.t("rush.start.aria")}
                   translate="no"
                   style={{padding:"6px 12px",borderRadius:RADIUS.full,
                     border:`1px solid #fcd34d`,background:"linear-gradient(135deg,#fffbeb,#fef3c7)",color:"#92400e",

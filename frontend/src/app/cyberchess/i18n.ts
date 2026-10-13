@@ -101,6 +101,8 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "chip.rating": "Рейтинг",
     "chip.history": "История",
     "chip.history.aria": "История онлайн-матчей",
+    "ai.strength.aria": "Сила соперника",
+    "rush.start.aria": "Запустить Puzzle Rush",
     // Названия уровней ИИ. Ключ — поле name из таблицы ALS в нижнем регистре.
     "ai.beginner": "Новичок",
     "ai.casual": "Любитель",
@@ -384,6 +386,8 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "chip.rating": "Rating",
     "chip.history": "History",
     "chip.history.aria": "Online match history",
+    "ai.strength.aria": "Opponent strength",
+    "rush.start.aria": "Start Puzzle Rush",
     "ai.beginner": "Beginner",
     "ai.casual": "Casual",
     "ai.club": "Club",
@@ -655,6 +659,8 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
     "chip.rating": "Рейтинг",
     "chip.history": "Тарих",
     "chip.history.aria": "Онлайн ойындар тарихы",
+    "ai.strength.aria": "Қарсылас күші",
+    "rush.start.aria": "Puzzle Rush бастау",
     // Коротко намеренно: подпись стоит рядом с рейтингом в строке без переноса.
     // «Жаңадан бастаушы» (16 знаков) эту строку развалило бы.
     "ai.beginner": "Бастаушы",

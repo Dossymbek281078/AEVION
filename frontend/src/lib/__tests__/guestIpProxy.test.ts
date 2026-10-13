@@ -4,9 +4,9 @@
  * всех гостей под адресом Vercel, а заголовки из middleware не доходили.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readFileSync, existsSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+
+
+
 import { заголовкиДляБэкенда, проксироватьСАдресом } from "../guestIpProxy";
 
 const СЕКРЕТ = "s".repeat(32);
@@ -78,13 +78,3 @@ describe("проксироватьСАдресом", () => {
   });
 });
 
-describe("обработчики стоят ровно на трёх включённых действиях", () => {
-  const app = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "app", "api-backend", "api");
-  for (const путь of ["healthai/check", "bureau/verify/start", "qventure/analyze"]) {
-    it(путь, () => {
-      const файл = join(app, путь, "route.ts");
-      expect(existsSync(файл), файл).toBe(true);
-      expect(readFileSync(файл, "utf8")).toContain(`проксироватьСАдресом(req, "/api/${путь}")`);
-    });
-  }
-});

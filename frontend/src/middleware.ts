@@ -133,6 +133,23 @@ export function заголовкиДляБэкенда(вход: Headers, сек
   return выход;
 }
 
+/** Пути с бесплатной нормой действий (бэкенд freeActionQuota) — только POST. */
+const ПУТИ_С_НОРМОЙ = ["/api/healthai/", "/api/bureau/verify/start", "/api/qventure/", "/api/qsign/", "/api/qright/"];
+
+/** Куда middleware сам проксирует запрос с адресом гостя, или null — прежний путь. */
+export function адресНаБэкенде(
+  метод: string,
+  путь: string,
+  запрос: string,
+  цель: string | undefined,
+): URL | null {
+  const база = (цель || "").trim().replace(/\/+$/, "");
+  if (метод !== "POST" || !/^https:\/\//.test(база)) return null;
+  const хвост = путь.slice("/api-backend".length);
+  if (!ПУТИ_С_НОРМОЙ.some((п) => хвост.startsWith(п))) return null;
+  return new URL(база + хвост + запрос);
+}
+
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (!isDecodablePath(pathname)) {
@@ -151,8 +168,18 @@ export function middleware(req: NextRequest) {
   }
 
   if (pathname.startsWith("/api-backend/")) {
-    const заголовки = заголовкиДляБэкенда(req.headers, process.env.AEVION_EDGE_KEY);
-    if (заголовки) return NextResponse.next({ request: { headers: заголовки } });
+    // Замер прода 13.10.2026 (/health → guestIpFromSite.noKey): заголовки из
+    // NextResponse.next() до бэкенда НЕ доходят — внешний rewrite из
+    // next.config их теряет. Поэтому для действий с бесплатной нормой
+    // middleware проксирует сам; остальной трафик API идёт прежним путём.
+    const куда = адресНаБэкенде(req.method, pathname, req.nextUrl.search, process.env.BACKEND_PROXY_TARGET);
+    const заголовки = куда ? заголовкиДляБэкенда(req.headers, process.env.AEVION_EDGE_KEY) : null;
+    if (куда && заголовки) {
+      заголовки.delete("host");
+      const ответ = NextResponse.rewrite(куда, { request: { headers: заголовки } });
+      ответ.headers.set("x-aevion-edge", "guest-ip");
+      return ответ;
+    }
   }
 
   return NextResponse.next();

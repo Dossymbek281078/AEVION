@@ -63,3 +63,18 @@ describe("гость сайта считается по адресу от про
     expect(адресОтПроксиСайта({ headers: { "x-aevion-client-ip": "2a02:6b8::1", "x-aevion-edge-key": СЕКРЕТ } } as never)).toBe("2a02:6b8::1");
   });
 });
+
+describe("счётчик адреса гостя называет причину отказа", () => {
+  test("принят / ключ не совпал / ключа нет считаются раздельно", async () => {
+    const { сводкаАдресаГостя } = await import("../src/lib/freeActionQuota");
+    const до = сводкаАдресаГостя();
+    адресОтПроксиСайта({ headers: { "x-aevion-client-ip": "1.2.3.4", "x-aevion-edge-key": СЕКРЕТ } } as never);
+    адресОтПроксиСайта({ headers: { "x-aevion-client-ip": "1.2.3.4", "x-aevion-edge-key": "y".repeat(32) } } as never);
+    адресОтПроксиСайта({ headers: { "x-aevion-client-ip": "1.2.3.4" } } as never);
+    const после = сводкаАдресаГостя();
+    expect(после.edgeKeyConfigured).toBe(true);
+    expect(после.accepted - до.accepted).toBe(1);
+    expect(после.keyMismatch - до.keyMismatch).toBe(1);
+    expect(после.noKey - до.noKey).toBe(1);
+  });
+});

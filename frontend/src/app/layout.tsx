@@ -256,11 +256,18 @@ export default function RootLayout({
           считать; отключается сам, как только решил, и в любом случае через 15
           секунд, чтобы не жить на странице вечно.
 
+          120 (13.10.2026, оркестратор): эвристика по доле кириллицы УСТУПАЕТ явному
+          выбору — адресу /en/ и /kk/, куке aevion_lang_v1 и решению провайдера
+          (I18nProvider ставит data-lang-src="provider", когда язык определён).
+          Повод: на /cyberchess для гостя en-US провайдер ставил en, а скрипт через
+          0,4 с переписывал в ru по сотням русских литералов — и живой слой перевода
+          для англоязычного гостя из Shorts замолкал.
+
           Почему это не косметика: среди пострадавших /pricing/paddle — страница
           ОПЛАТЫ. Браузер, увидев английский язык при русском тексте, предлагает
           машинный перевод, а местами переводит сам.
         */}
-        <script dangerouslySetInnerHTML={{ __html: "(function(){try{var d=document.documentElement;function seen(){var w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,null),s='',n,t;while((n=w.nextNode())){t=n.parentNode&&n.parentNode.nodeName;if(t==='SCRIPT'||t==='STYLE'||t==='NOSCRIPT'||t==='TEMPLATE')continue;s+=n.nodeValue;if(s.length>20000)break;}return s;}function decide(){if(d.getAttribute('data-lang-src'))return true;if(location.pathname==='/en'||location.pathname.indexOf('/en/')===0){d.setAttribute('data-lang-src','path');return true;}var t=seen(),c=0,l=0,i,k;for(i=0;i<t.length;i++){k=t.charCodeAt(i);if((k>=1040&&k<=1103)||k===1025||k===1105)c++;else if((k>=65&&k<=90)||(k>=97&&k<=122))l++;}if(c>l*0.5&&c>40){d.lang='ru';d.setAttribute('data-lang-src','content');return true;}return false;}if(decide())return;document.addEventListener('DOMContentLoaded',decide);window.addEventListener('load',decide);var mo=new MutationObserver(function(){if(decide()){mo.disconnect();}});mo.observe(document.body,{childList:true,subtree:true,characterData:true});setTimeout(function(){mo.disconnect();},15000);}catch(e){}})()" }} />
+        <script dangerouslySetInnerHTML={{ __html: "(function(){try{var d=document.documentElement;function seen(){var w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,null),s='',n,t;while((n=w.nextNode())){t=n.parentNode&&n.parentNode.nodeName;if(t==='SCRIPT'||t==='STYLE'||t==='NOSCRIPT'||t==='TEMPLATE')continue;s+=n.nodeValue;if(s.length>20000)break;}return s;}function decide(){if(d.getAttribute('data-lang-src'))return true;var pn=location.pathname;if(pn==='/en'||pn.indexOf('/en/')===0||pn==='/kk'||pn.indexOf('/kk/')===0){d.setAttribute('data-lang-src','path');return true;}var t=seen(),c=0,l=0,i,k;for(i=0;i<t.length;i++){k=t.charCodeAt(i);if((k>=1040&&k<=1103)||k===1025||k===1105)c++;else if((k>=65&&k<=90)||(k>=97&&k<=122))l++;}if(c>l*0.5&&c>40){d.lang='ru';d.setAttribute('data-lang-src','content');return true;}return false;}if(decide())return;document.addEventListener('DOMContentLoaded',decide);window.addEventListener('load',decide);var mo=new MutationObserver(function(){if(decide()){mo.disconnect();}});mo.observe(document.body,{childList:true,subtree:true,characterData:true});setTimeout(function(){mo.disconnect();},15000);}catch(e){}})()" }} />
       </body>
     </html>
   );

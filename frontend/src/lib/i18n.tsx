@@ -399,8 +399,14 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     if (typeof document !== "undefined") {
       document.documentElement.lang = lang;
       document.documentElement.dir = LANG_RTL[lang] ? "rtl" : "ltr";
+      // 120 (13.10.2026): решение провайдера — явный выбор. Инлайн-скрипт корневого
+      // layout (html lang по доле кириллицы) при этой метке lang не переписывает:
+      // на /cyberchess он через 0,4 с после нас ставил ru гостю en-US, и живой слой
+      // перевода замолкал. Метка только когда язык определён (langReady), иначе
+      // стартовое "en" из useState сошло бы за решение.
+      if (langReady) document.documentElement.setAttribute("data-lang-src", "provider");
     }
-  }, [lang]);
+  }, [lang, langReady]);
 
   const t = useCallback(
     (key: string, vars?: Record<string, string | number>): string => {

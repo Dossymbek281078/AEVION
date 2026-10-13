@@ -46,4 +46,14 @@ describe("гость Мультичата видит остаток и стен�
     expect(ряд, "ряд кнопок с отступом 4").toBeGreaterThan(-1);
     expect(ИСХОДНИК.slice(ряд, ряд + 500)).toContain('padding: "7px 18px"');
   });
+  it("🔴 124: первое действие гостя считается — вопрос и пример шлют feature_use в воронку (ступень «попробовали»)", () => {
+    // повод: 14 дн., youtube|/multichat-engine — 15 живых сессий, внимание 6, попробовали 0: страница не слала событий вовсе
+    expect(ИСХОДНИК).toContain('import { track } from "@/lib/track";');
+    const ask = ИСХОДНИК.slice(ИСХОДНИК.indexOf("async function ask()"), ИСХОДНИК.indexOf("async function runExample()"));
+    expect(ask).toContain('feature: "council_ask"');
+    expect(ask.indexOf("track({")).toBeLessThan(ask.indexOf("await fetch("));
+    const ex = ИСХОДНИК.slice(ИСХОДНИК.indexOf("async function runExample()"));
+    expect(ex).toContain('feature: "council_example"');
+    expect((ИСХОДНИК.match(/type: "feature_use"/g) || []).length).toBeGreaterThanOrEqual(2);
+  });
 });

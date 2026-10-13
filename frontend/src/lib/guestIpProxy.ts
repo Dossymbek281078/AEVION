@@ -13,8 +13,13 @@
  */
 
 /** Заголовки для бэкенда: адрес гостя + секрет; подделка гостя затирается. */
-export function заголовкиДляБэкенда(вход: Headers, секрет: string | undefined): Headers | null {
-  if (!секрет || секрет.length < 16) return null;
+export function заголовкиДляБэкенда(вход: Headers, сырой: string | undefined): Headers | null {
+  // 13.10.2026: секрет, заведённый через конвейер PowerShell, пришёл с BOM
+  // (U+FEFF) — Headers.set бросал «Cannot convert argument to a ByteString»,
+  // и три платных действия отвечали 500. trim() снимает и BOM (U+FEFF — пробел
+  // по стандарту), дальше допускаем только печатный ASCII.
+  const секрет = (сырой || "").trim();
+  if (секрет.length < 16 || !/^[\x21-\x7e]+$/.test(секрет)) return null;
   const адрес = (вход.get("x-forwarded-for") || "").split(",")[0].trim() || (вход.get("x-real-ip") || "").trim();
   const выход = new Headers(вход);
   выход.delete("x-aevion-client-ip");

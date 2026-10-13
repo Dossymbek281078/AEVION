@@ -4,9 +4,9 @@
  * всех гостей под адресом Vercel, а заголовки из middleware не доходили.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-
-
-
+import { readFileSync, existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { заголовкиДляБэкенда, проксироватьСАдресом } from "../guestIpProxy";
 
 const СЕКРЕТ = "s".repeat(32);
@@ -31,6 +31,13 @@ describe("заголовкиДляБэкенда", () => {
     const h = заголовкиДляБэкенда(new Headers({ "x-aevion-client-ip": "6.6.6.6" }), СЕКРЕТ)!;
     expect(h.get("x-aevion-client-ip")).toBeNull();
     expect(h.get("x-aevion-edge-key")).toBeNull();
+  });
+
+  it("секрет с BOM и переводом строки очищается; не-ASCII — механизм спит, а не роняет запрос", () => {
+    // Замер прода 13.10.2026: секрет с BOM ронял Headers.set — три действия отвечали 500.
+    const h = заголовкиДляБэкенда(new Headers({ "x-forwarded-for": "1.2.3.4" }), "\uFEFF" + СЕКРЕТ + "\n")!;
+    expect(h.get("x-aevion-edge-key")).toBe(СЕКРЕТ);
+    expect(заголовкиДляБэкенда(new Headers({ "x-forwarded-for": "1.2.3.4" }), "ключ".repeat(8))).toBeNull();
   });
 
   it("КОНТРОЛЬ: без секрета ничего не добавляет", () => {
@@ -78,3 +85,14 @@ describe("проксироватьСАдресом", () => {
   });
 });
 
+
+describe("обработчики стоят ровно на трёх включённых действиях", () => {
+  const app = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "app", "api-backend", "api");
+  for (const путь of ["healthai/check", "bureau/verify/start", "qventure/analyze"]) {
+    it(путь, () => {
+      const файл = join(app, путь, "route.ts");
+      expect(existsSync(файл), файл).toBe(true);
+      expect(readFileSync(файл, "utf8")).toContain(`проксироватьСАдресом(req, "/api/${путь}")`);
+    });
+  }
+});

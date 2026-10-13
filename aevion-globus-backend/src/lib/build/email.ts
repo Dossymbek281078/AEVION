@@ -47,6 +47,8 @@ function getTransport() {
  * нельзя.
  */
 export const БРЕНД_ПЛАТФОРМЫ = "AEVION";
+/** Имя модуля найма в ЕГО письмах — и в теле, и у отправителя: два имени в одном письме читаются как подделка (13.10.2026). */
+export const БРЕНД_МОДУЛЯ = "AEVION QBuild";
 
 /** Почтовый адрес из `SMTP_FROM` — без имени. Нет настройки — наш noreply. */
 export function adresOtpravitelya(): string {
@@ -210,7 +212,8 @@ export function sendNewApplication(opts: {
       <h2>Новый отклик на вашу вакансию</h2>
       <p><strong>${opts.workerName}</strong> откликнулся на вакансию <strong>${opts.vacancyTitle}</strong> в проекте <strong>${opts.projectTitle}</strong>.</p>
       <a class="btn" href="${BASE}/build">Посмотреть отклики</a>
-    `),
+    `, БРЕНД_МОДУЛЯ),
+    БРЕНД_МОДУЛЯ,
   );
 }
 
@@ -235,7 +238,8 @@ export function sendApplicationAccepted(opts: {
       ${feeNote}
       <p>Свяжитесь с работодателем через встроенный чат и уточните детали.</p>
       <a class="btn" href="${BASE}/build/profile">Мои отклики</a>
-    `),
+    `, БРЕНД_МОДУЛЯ),
+    БРЕНД_МОДУЛЯ,
   );
 }
 
@@ -253,7 +257,8 @@ export function sendApplicationRejected(opts: {
       <p>Работодатель не принял ваш отклик на вакансию <strong>${opts.vacancyTitle}</strong> в проекте <strong>${opts.projectTitle}</strong>.</p>
       <p>Не расстраивайтесь — новые вакансии появляются каждый день.</p>
       <a class="btn" href="${BASE}/build/vacancies">Смотреть вакансии</a>
-    `),
+    `, БРЕНД_МОДУЛЯ),
+    БРЕНД_МОДУЛЯ,
   );
 }
 
@@ -273,7 +278,8 @@ export function sendNewMessage(opts: {
       <p><strong>${opts.senderName}</strong> написал вам:</p>
       <blockquote style="border-left:3px solid #10b981;margin:0 0 16px;padding:8px 16px;color:#94a3b8;font-style:italic">${shortPreview}</blockquote>
       <a class="btn" href="${BASE}/build/messages">Открыть чат</a>
-    `),
+    `, БРЕНД_МОДУЛЯ),
+    БРЕНД_МОДУЛЯ,
   );
 }
 
@@ -297,7 +303,8 @@ export function sendTrialTaskProposed(opts: {
         ? `<p>Оплата: <strong style="color:#10b981">${opts.paymentAmount.toLocaleString()} ${opts.currency}</strong></p>`
         : "<p>Без оплаты (ознакомительное)</p>"}
       <a class="btn" href="${BASE}/build/profile">Принять или отклонить</a>
-    `),
+    `, БРЕНД_МОДУЛЯ),
+    БРЕНД_МОДУЛЯ,
   );
 }
 
@@ -317,7 +324,8 @@ export function sendTrialTaskApproved(opts: {
         ? `<p>Оплата <strong style="color:#10b981">${opts.paymentAmount.toLocaleString()} ${opts.currency}</strong> будет переведена согласно договорённости.</p>`
         : ""}
       <a class="btn" href="${BASE}/build/profile">Перейти в профиль</a>
-    `),
+    `, БРЕНД_МОДУЛЯ),
+    БРЕНД_МОДУЛЯ,
   );
 }
 
@@ -397,6 +405,7 @@ export function sendAvailabilityExpiringSoon(opts: {
       <p>Привет, <strong>${opts.workerName}</strong>! Ваш статус доступности истекает через 30 минут.</p>
       <p>Если вы всё ещё готовы выйти на объект — продлите статус в приложении.</p>
       <a class="btn" href="${BASE}/build/available">Продлить статус</a>
-    `),
+    `, БРЕНД_МОДУЛЯ),
+    БРЕНД_МОДУЛЯ,
   );
 }

@@ -2,6 +2,7 @@
 
 import { track } from "@/lib/track";
 import { PilotOrderForm } from "./PilotOrderForm";
+import { PilotPayButton } from "./PilotPayButton";
 import {
   PILOT_USD,
   PILOT_RECORDS,
@@ -88,10 +89,12 @@ export function ProofPilotBlock() {
         your records, we do not sell ours.
       </p>
       <p style={{ color: "#334155", fontSize: 15, lineHeight: 1.7, marginBottom: 16 }}>
-        <b>How to order.</b> Tell us the delivery you have in mind and its record count. We
-        reply with the format we need and a fixed date. Nothing is charged on this page: the
-        invoice comes after we agree the scope.
+        <b>How to order.</b> Two ways. Pay ${PILOT_USD} now by card — we email you within 24
+        hours to agree the scope (the record format and a fixed date). Or send the request
+        first: we reply with the format we need and a fixed date, and the invoice comes after
+        we agree the scope. Nothing is charged by the request form.
       </p>
+      <PilotPayButton />
       <PilotOrderForm />
       <p style={{ margin: "0 0 8px", fontSize: 13, color: "#475569" }}>Prefer email? The same request as a letter:</p>
       <a

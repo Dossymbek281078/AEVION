@@ -216,12 +216,29 @@ export const BUREAU_VERIFIED_REFERENCE = "bureau_verified";
 /** Переменная с вариантом этого товара. Заводит основатель в кабинете кассы. */
 export const BUREAU_VERIFIED_VARIANT_ENV = "LEMON_SQUEEZY_VARIANT_BUREAU_VERIFIED";
 
+/**
+ * Пилот $490 с /proof (волна 129б, 13.10.2026): свой разовый товар вне лестницы
+ * сроков. Заведён в кабинете кассы оркестратором 13.10: товар 1436015, вариант
+ * 2242340, 49 000 центов. Id публичный (он же в ссылке checkout/buy), поэтому
+ * лежит в коде умолчанием; переменная ниже позволяет подменить его без выкатки.
+ * Покупка — вебхук order_created по этому варианту: письмо на data@ + журнал
+ * заявок (routes/proofPilot.ts), доступов не выдаёт.
+ */
+export const PILOT_490_REFERENCE = "pilot_490";
+export const PILOT_490_VARIANT_ENV = "LEMON_SQUEEZY_VARIANT_PILOT_490";
+export const PILOT_490_VARIANT_DEFAULT = "2242340";
+export const PILOT_490_USD = 490;
+export function pilot490VariantId(): string {
+  return process.env[PILOT_490_VARIANT_ENV]?.trim() || PILOT_490_VARIANT_DEFAULT;
+}
+
 export function resolveLemonSqueezyVariant(reference: string): string | null {
   // Отметка Verified — свой товар, вне лестницы сроков: у неё нет ни ступени, ни
   // периода, поэтому в TERM_REFERENCES она не входит и спрашивается отдельно.
   if (reference === BUREAU_VERIFIED_REFERENCE) {
     return process.env[BUREAU_VERIFIED_VARIANT_ENV]?.trim() || null;
   }
+  if (reference === PILOT_490_REFERENCE) return pilot490VariantId();
   if (!isReference(reference)) return null;
   const id = process.env[TIER_VARIANT_ENV[reference]]?.trim();
   return id || null;
@@ -302,6 +319,8 @@ export function lemonSqueezyVariantStatus(): Record<LemonSqueezyReference, boole
   for (const ref of Object.keys(TIER_VARIANT_ENV) as LemonSqueezyReference[]) {
     out[ref] = Boolean(process.env[TIER_VARIANT_ENV[ref]]?.trim());
   }
+  // Пилот $490 — вне лестницы, но /health обязан показывать, что товар в каталоге.
+  (out as Record<string, boolean>)[PILOT_490_REFERENCE] = Boolean(pilot490VariantId());
   return out;
 }
 

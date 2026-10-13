@@ -124,6 +124,9 @@ function SuccessInner() {
   // чем объект без прототипа: незнакомое имя обязано давать пустоту.
   const processor = изСправочника(PROCESSOR_LABEL, provider) ?? null;
   const stub = sp.get("stub") === "true";
+  // 129б (13.10.2026): пилот $490 с /proof — разовый товар без выдачи доступа; обещание
+  // ровно то, что на /proof: письмо в течение 24 часов о формате записей и дате.
+  const пилот = sp.get("ref") === "pilot_490";
   const tier = sp.get("tier") ?? sp.get("tierId");
   // Срок подписки в месяцах (с 15.09.2026 вместо period=monthly|annual). Значение
   // из адреса проходит через закрытый список: подобранное `?term=` не печатается.
@@ -377,7 +380,9 @@ function SuccessInner() {
 
         {/* Title */}
         <h1 style={{ fontSize: 30, fontWeight: 900, margin: "0 0 12px", letterSpacing: "-0.02em" }}>
-          {stub
+          {пилот
+            ? "Payment received — thank you"
+            : stub
             ? t("pricing.checkoutSuccess.titleStub")
             : trialDays > 0 && confirmed === true
               ? tierName
@@ -410,7 +415,9 @@ function SuccessInner() {
 
         {/* Subtitle */}
         <p style={{ fontSize: 15, lineHeight: 1.6, margin: "0 0 20px", opacity: 0.92, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }}>
-          {stub
+          {пилот
+            ? "Your $490 pilot is booked. We email you within 24 hours to agree the scope — the record format we need and a fixed delivery date. The receipt comes from Lemon Squeezy; reply to data@aevion.app with any details."
+            : stub
             ? t("pricing.checkoutSuccess.subtitleStub")
             : trialDays > 0 && confirmed === true
               ? t("pricing.checkoutSuccess.subtitleTrial", { date: trialEndDate ?? "" })

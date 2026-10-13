@@ -68,7 +68,7 @@ export function PilotOrderForm() {
         {s === "sending" ? "Sending…" : s === "done" ? "Request received ✓" : `Order the pilot — $${PILOT_USD}`}
       </button>
       {note && <p data-pilot-order-note role="status" style={{ margin: 0, fontSize: 14, color: s === "error" ? "#b91c1c" : "#065f46" }}>{note}</p>}
-      <p style={{ margin: 0, fontSize: 13, color: "#475569" }}>Nothing is charged on this page: the invoice comes after we agree the scope.</p>
+      <p style={{ margin: 0, fontSize: 13, color: "#475569" }}>Nothing is charged by this form: the invoice comes after we agree the scope.</p>
     </form>
   );
 }

@@ -53,6 +53,7 @@ import {
   tierForLemonSqueezyReference,
   priceForReference,
   legacyStudioProVariantId,
+  PILOT_490_REFERENCE,
   isAppReference,
   appSlugForReference,
   type LemonSqueezyReference,
@@ -65,6 +66,7 @@ import { safeErrorText } from "../lib/safeError";
 import { upsertAppSubscription } from "../lib/appEntitlements";
 import { записатьСобытиеОтСервера, СОБЫТИЕ_ОПЛАТА_ПОДТВЕРЖДЕНА } from "./events";
 import { записатьПодтверждённуюОплату } from "../lib/payment/paymentConfirmedEvent";
+import { obrabotatZakazPilota } from "./proofPilot";
 
 /**
  * Запись прав живёт в lib/appEntitlements и НЕ дублируется здесь.
@@ -316,6 +318,24 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
     // подписки, и половинчатая выдача без срока создала бы право без конца.
     // Правильное действие — переделать товар в кабинете в подписку; наша
     // задача сделать это ВИДИМЫМ немедленно.
+    // 129б: пилот $490 с /proof — разовый товар, доступов не выдаёт: письмо на data@,
+    // строка в журнал заявок, событие оплаты в воронку. Сверка по id варианта.
+    const пилот = resolveLemonSqueezyVariant(PILOT_490_REFERENCE);
+    if (пилот && variantId === пилот) {
+      const custom = (payload.meta?.custom_data ?? {}) as { channel?: string; post?: string };
+      const итог = await obrabotatZakazPilota({
+        event,
+        revoke,
+        email,
+        orderId: payload.data?.id ?? null,
+        totalCents: attrs.total != null && Number.isFinite(Number(attrs.total)) ? Number(attrs.total) : null,
+        channel: custom.channel ?? null,
+        post: custom.post ?? null,
+        testMode: Boolean(payload.meta?.test_mode),
+      });
+      console.log(`[ls/webhook] ${event} pilot_490 → ${revoke ? "refunded" : "paid"} ${email || "(без почты)"} mailed=${итог.mailed} journaled=${итог.journaled}`);
+      return res.json({ ok: true, action: revoke ? "pilot_490_refunded" : "pilot_490_paid", email, ...итог });
+    }
     const позиция = referenceForVariantId(variantId);
     if (позиция && !revoke) {
       const беда = new Error(

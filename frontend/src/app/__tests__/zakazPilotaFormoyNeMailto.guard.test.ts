@@ -19,7 +19,7 @@ describe("заказ пилота формой", () => {
     for (const f of ["email", "records", "days", "data", "website", "channel", "post", "path"]) expect(ФОРМА, f).toMatch(new RegExp(`\\b${f}\\b`));
     expect(ФОРМА).toContain('name="website"');
     expect(ФОРМА).toContain('type: "feature_use", source: "proof", meta: { feature: PILOT_FEATURE');
-    expect(ФОРМА).toContain("Nothing is charged on this page");
+    expect(ФОРМА).toContain("Nothing is charged by this form");
   });
 
   it("отказы не молчат: сеть, код ошибки и неудача письма — словами в note", () => {

@@ -29,10 +29,12 @@ async function zagruzit(id: string): Promise<Syraya | null> {
   const k = КЭШ.get(id);
   if (k && Date.now() - k.t < 10 * 60_000) return k.pz;
   let pz: Syraya | null = null;
-  const r = await serverFetch(`/api/cyberchess-puzzles/${encodeURIComponent(id)}`, { timeoutMs: 4000, retries: 1 });
+  // «daily» — задача дня: стабильная ссылка для роликов (/cyberchess/p/daily), сама задача меняется в полночь Алматы
+  const r = await serverFetch(id === "daily" ? "/api/cyberchess-daily/puzzle" : `/api/cyberchess-puzzles/${encodeURIComponent(id)}`, { timeoutMs: 4000, retries: 1 });
   if (r && r.ok) {
     try {
-      const p = ((await r.json()) as { puzzle?: Partial<Syraya> })?.puzzle;
+      const raw = ((await r.json()) as { puzzle?: Partial<Syraya> & { rating?: number } })?.puzzle;
+      const p = raw && id === "daily" ? { ...raw, r: raw.r ?? raw.rating } : raw;
       if (p?.fen && Array.isArray(p.sol) && p.sol.length > 0) pz = { fen: p.fen, sol: p.sol, name: p.name, r: p.r, theme: p.theme };
     } catch { /* тело не JSON — задачи нет */ }
   }
@@ -62,7 +64,7 @@ const esc = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;"
  * доска по высоте окна слева, справа панель задания/статуса 290–360 px — разметка lichess. --zm — ручной масштаб 0,6…1
  * («−/+»), помнится в localStorage. Комментарий здесь, а не в <style>: в en/kk-страницу кириллица не уезжает.
  */
-function html(p: { id: string; fen: string; zadanie: string; name: string; rating: number; theme: string; locale: PzYazyk; storona: "w" | "b"; polnaya: string; sleduyushchaya: string; channel: string | null; post: string | null; path: string; title: string; description: string }): string {
+function html(p: { id: string; fen: string; zadanie: string; name: string; rating: number; theme: string; locale: PzYazyk; storona: "w" | "b"; polnaya: string; sleduyushchaya: string; daily: boolean; channel: string | null; post: string | null; path: string; title: string; description: string }): string {
   const t = (k: string) => pzT(p.locale, k);
   const ryady = kletki(p.fen, p.storona);
   const mogut = new Set(hodyashchie(p.fen, p.storona));
@@ -73,7 +75,7 @@ function html(p: { id: string; fen: string; zadanie: string; name: string; ratin
     const koord = (r === 7 ? `<i class="c f">${k.sq[0]}</i>` : "") + (c === 0 ? `<i class="c r">${k.sq[1]}</i>` : "");
     return `<button type="button" data-sq="${k.sq}"${cf}${cr} class="${k.dark ? "d" : "l"}${mogut.has(k.sq) ? " m" : ""}" aria-label="${k.sq}">${k.p ? `<span class="${k.p[0] === "w" ? "w" : "b"}">${GLIF[k.p]}</span>` : ""}${koord}</button>`;
   })).join("");
-  const cfg = { id: p.id, fen: p.fen, i: 0, storona: p.storona, movable: [...mogut], texts: { wrong: t("pz.wrong"), yourMove: t("pz.yourMove"), hint: t("pz.hint"), solved: t("pz.solved").replace("{name}", p.name), hintShown: t("pz.hintShown") }, ev: { channel: p.channel, post: p.post, path: p.path, rating: p.rating, theme: p.theme, fen: p.fen } };
+  const cfg = { id: p.id, fen: p.fen, i: 0, storona: p.storona, movable: [...mogut], texts: { wrong: t("pz.wrong"), yourMove: t("pz.yourMove"), hint: t("pz.hint"), solved: t("pz.solved").replace("{name}", p.name), hintShown: t("pz.hintShown") }, ev: { channel: p.channel, post: p.post, path: p.path, rating: p.rating, theme: p.theme, fen: p.fen, daily: p.daily } };
   return `<!doctype html><html lang="${p.locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>${esc(p.title)}</title><meta name="description" content="${esc(p.description)}"><meta name="robots" content="noindex">
 <link rel="canonical" href="https://aevion.app${esc(p.polnaya)}">
@@ -85,7 +87,7 @@ main{min-height:100dvh;display:grid;grid-template-columns:1fr;justify-items:cent
 @media(min-width:1024px){:root{--side:min(100dvh - 120px,100vw - 360px)}main{grid-template-columns:auto 290px;grid-template-rows:repeat(7,min-content) 1fr;justify-content:center;align-items:start;column-gap:20px;padding-top:16px}
 .b.wd{grid-column:1;grid-row:1/span 8}.hdr,.z,.s,.hb,.zm,.r,.f{grid-column:2;width:290px}.hdr{grid-row:1}.z{grid-row:2;font-size:18px}.s{grid-row:3}.hb{grid-row:4}.zm{grid-row:5}.r{grid-row:6}.f{grid-row:7}}
 @media(min-width:1280px){:root{--side:min(100dvh - 120px,100vw - 440px)}main{grid-template-columns:auto 360px;column-gap:28px}.hdr,.z,.s,.hb,.zm,.r,.f{width:360px}}
-.z{font-size:15px;font-weight:800}.b .m::before{content:"";position:absolute;inset:6%;border-radius:50%;box-shadow:0 0 0 3px rgba(5,150,105,.75) inset}
+.z{font-size:15px;font-weight:800}.z .dl{color:#fbbf24}.b .m::before{content:"";position:absolute;inset:6%;border-radius:50%;box-shadow:0 0 0 3px rgba(5,150,105,.75) inset}
 .b{aspect-ratio:1/1;display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);border-radius:8px;overflow:hidden;box-shadow:0 4px 18px rgba(0,0,0,.4);touch-action:none;user-select:none}
 .b i.c{position:absolute;font-style:normal;font-weight:800;opacity:.8;pointer-events:none;font-size:calc(var(--zm)*var(--side)/8*.22);line-height:1}.b i.f{right:4%;bottom:3%}.b i.r{left:5%;top:4%}.b .l i.c{color:#b58863}.b .d i.c{color:#f0d9b5}
 .ghost{position:fixed;left:0;top:0;pointer-events:none;z-index:9;transform:translate(-50%,-50%);font-size:calc(var(--zm)*var(--side)/8*.9);line-height:1;filter:drop-shadow(0 6px 8px rgba(0,0,0,.5))}.ghost.w{color:#fff;text-shadow:0 0 2px #000}.ghost.b{color:#111}
@@ -101,7 +103,7 @@ main{min-height:100dvh;display:grid;grid-template-columns:1fr;justify-items:cent
 .f{font-size:13px;color:#93c5fd;text-decoration:underline}
 </style></head><body><main data-cc-light-puzzle="${esc(p.id)}">
 <div class="wd hdr"><b>♞ CyberChess</b><small>★ ${p.rating} · 🔥 <b data-cc-streak>0</b> ${esc(t("pz.streak"))}</small></div>
-<div class="wd z" data-cc-zadanie>${esc(p.zadanie)}</div>
+<div class="wd z" data-cc-zadanie>${p.daily ? `<span class="dl">☀ ${esc(t("pz.daily"))}</span> · ` : ""}${esc(p.zadanie)}</div>
 <div class="wd b" data-cc-board="1" data-cc-puzzle="${esc(p.id)}" role="grid" aria-label="${esc(p.zadanie)}">${kletkiHtml}</div>
 <div class="wd s" data-cc-status>${esc(t("pz.yourMove"))}</div>
 <div class="wd hb"><button type="button" data-cc-podskazka>${esc(t("pz.hintBtn"))}</button></div>
@@ -137,12 +139,13 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   const name = imyaPoResheniyu(pz, locale) ?? (syraya.name || "");
   const keep = new URLSearchParams();
   for (const k of ["c", "probe", "p"]) { const v = url.searchParams.get(k); if (v) keep.set(k, v); }
-  const polnaya = `/cyberchess?puzzle=${encodeURIComponent(id)}${keep.toString() ? "&" + keep.toString() : ""}`;
+  const daily = id === "daily";
+  const polnaya = daily ? `/cyberchess/daily${keep.toString() ? "?" + keep.toString() : ""}` : `/cyberchess?puzzle=${encodeURIComponent(id)}${keep.toString() ? "&" + keep.toString() : ""}`;
   const sleduyushchaya = await sleduyushchayaZadacha(id, pz.r ?? 1200, keep, polnaya);
   const c = url.searchParams.get("c") ?? undefined;
-  const title = `${zadanie} · CyberChess`;
+  const title = `${daily ? pzT(locale, "pz.daily") + " · " : ""}${zadanie} · CyberChess`;
   const description = locale === "ru" ? "Реши задачу прямо здесь — без регистрации. Полная версия: тренер, подсказки, 500 000 задач." : locale === "kk" ? "Есепті осы жерде шеш — тіркеусіз. Толық нұсқа: жаттықтырушы, кеңестер, 500 000 есеп." : "Solve it right here — no sign-up. Full version: coach, hints, 500,000 puzzles.";
-  const body = html({ id, fen: pz.fen, zadanie, name, rating: pz.r ?? 1200, theme: pz.theme ?? "", locale, storona: sozdatSostoyanie(pz.fen, pz.sol).storona, polnaya, sleduyushchaya, channel: channelFrom(c), post: postFrom(c), path: url.pathname + url.search, title, description });
+  const body = html({ id, fen: pz.fen, zadanie, name, rating: pz.r ?? 1200, theme: pz.theme ?? "", locale, storona: sozdatSostoyanie(pz.fen, pz.sol).storona, polnaya, sleduyushchaya, daily, channel: channelFrom(c), post: postFrom(c), path: url.pathname + url.search, title, description });
   return new Response(body, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "private, no-store", "Vary": "Accept-Language, Cookie" } });
 }
 

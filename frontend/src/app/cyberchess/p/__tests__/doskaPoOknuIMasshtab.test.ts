@@ -213,3 +213,16 @@ describe("подсказка и серия решённых подряд", () =>
     expect(PZ_SLOVA.en["pz.hintBtn"] + PZ_SLOVA.en["pz.hintShown"] + PZ_SLOVA.en["pz.streak"]).not.toMatch(/[А-Яа-яЁё]/);
   });
 });
+
+describe("задача дня по стабильному адресу /cyberchess/p/daily", () => {
+  it("id «daily» грузится из /api/cyberchess-daily/puzzle, рейтинг берётся из rating, полная версия — /cyberchess/daily, в заголовке «Задача дня»", () => {
+    expect(ROUTE).toContain('id === "daily" ? "/api/cyberchess-daily/puzzle" : `/api/cyberchess-puzzles/${encodeURIComponent(id)}`');
+    expect(ROUTE).toContain("r: raw.r ?? raw.rating");
+    expect(ROUTE).toContain('const polnaya = daily ? `/cyberchess/daily${keep.toString() ? "?" + keep.toString() : ""}`');
+    expect(ROUTE).toContain('${daily ? pzT(locale, "pz.daily") + " · " : ""}${zadanie} · CyberChess');
+    expect(ROUTE).toContain('fen: p.fen, daily: p.daily }');
+    expect(КЛИЕНТ).toContain("daily:!!C.ev.daily");
+    for (const y of ["ru", "en", "kk"] as const) expect(PZ_SLOVA[y]["pz.daily"], y).toBeTruthy();
+    expect(PZ_SLOVA.en["pz.daily"]).not.toMatch(/[А-Яа-яЁё]/);
+  });
+});

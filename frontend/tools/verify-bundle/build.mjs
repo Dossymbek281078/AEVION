@@ -59,7 +59,12 @@ function собрать() {
   let смещение = 0;
 
   for (const имя of имена) {
-    const тело = readFileSync(join(ИСХОДНИКИ, имя));
+    // Концы строк — всегда LF: иначе архив зависит от машины сборщика (13.10: на
+    // checkout с CRLF verify-aevion.mjs уехал на 331 байт толще, и сторож дрейфа покраснел у соседа).
+    const сырое = readFileSync(join(ИСХОДНИКИ, имя));
+    const CR = String.fromCharCode(13), LF = String.fromCharCode(10);
+    const текстовый = /\.(mjs|js|json|md|txt)$/i.test(имя);
+    const тело = текстовый ? Buffer.from(сырое.toString("utf8").split(CR + LF).join(LF), "utf8") : сырое;
     const сжатое = deflateRawSync(тело, { level: 9 });
     const crc = crc32(тело);
     const имяБуф = Buffer.from(имя, "utf8");

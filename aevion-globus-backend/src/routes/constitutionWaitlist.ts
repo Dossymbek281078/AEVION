@@ -28,6 +28,40 @@ import {
   меткаДляЖурнала,
 } from "../lib/waitlistUnsubToken";
 import { похожеНаПробу, просятПробы } from "../lib/probeRows";
+import { sendEmail } from "./provisioning";
+import { leadsFile } from "../lib/leadsFile";
+import { appendFileSync, existsSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
+
+/**
+ * 132б (13.10.2026): гость DevHub после живого адреса оставляет почту, чтобы сохранить сайт и получить
+ * имя на aevion.app. Это первая заявка с действием на пути из Shorts, поэтому она не только ложится в
+ * лист, но и сразу приходит письмом на data@ (тот же отправитель, что у форм) и строкой в журнал заявок.
+ * Отказ письма не роняет подписку, но называется в ответе (mailed:false) и в журнале сервера (§16).
+ */
+export const DEVHUB_GUEST_SOURCE = /^devhub-guest/i;
+export const DEVHUB_GUEST_TO = "data@aevion.app";
+export function pismoGostyuDevHub(z: { email: string; source: string; channel: string | null; projectId: string | null }) {
+  const проект = z.projectId ? `https://aevion.app/devhub/${z.projectId}` : "—";
+  const text = [
+    "DevHub guest wants to keep the site",
+    "",
+    `Email:    ${z.email}`,
+    `Project:  ${проект}`,
+    `Source:   ${z.source} · channel: ${z.channel ?? "—"}`,
+    "",
+    "Promised on the page: the link is sent and the own name on aevion.app is connected within a day.",
+  ].join("\n");
+  return { to: DEVHUB_GUEST_TO, subject: `DevHub guest — keep the site — ${z.email}`, text, html: `<pre style="font:14px/1.5 ui-monospace,monospace">${text.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</pre>` };
+}
+function zapisatZayavkuGostya(lead: Record<string, unknown>): string | null {
+  try {
+    const f = leadsFile(); const d = dirname(f);
+    if (!existsSync(d)) mkdirSync(d, { recursive: true });
+    appendFileSync(f, JSON.stringify(lead) + "\n", "utf8");
+    return null;
+  } catch (err) { return err instanceof Error ? err.message : String(err); }
+}
 
 const capture = makeServiceCapture("constitutionWaitlist");
 
@@ -175,7 +209,8 @@ constitutionWaitlistRouter.post(
   validate(WaitlistSubscribeSchema),
   async (req: Request, res: Response) => {
     try {
-      const body = req.body as { email: string; source?: string; channel?: string };
+      const body = req.body as { email: string; source?: string; channel?: string; projectId?: string };
+      const projectId = body.projectId ? String(body.projectId).slice(0, 64) : null;
       const emailRaw = body.email.trim().toLowerCase();
       const sourceRaw = (body.source ?? "unknown").slice(0, 60);
       // Пусто — это «не знаем», а не «прямой заход»: выдуманный «direct»
@@ -275,7 +310,15 @@ constitutionWaitlistRouter.post(
         })
         .catch((mailErr) => capture(mailErr, { where: "waitlist.confirmEmail" }));
 
-      res.status(201).json({ ok: true, storage });
+      let mailed: boolean | undefined;
+      if (DEVHUB_GUEST_SOURCE.test(sourceRaw)) {
+        const письмо = await sendEmail(pismoGostyuDevHub({ email: row.email, source: sourceRaw, channel: channelRaw, projectId }));
+        mailed = письмо.ok;
+        if (!письмо.ok) console.error("[waitlist] письмо о госте DevHub НЕ ушло на data@:", письмо.error ?? "failed");
+        const журнал = zapisatZayavkuGostya({ ts: row.createdAt, kind: "devhub_save_email", email: row.email, source: sourceRaw, channel: channelRaw, projectId, mailed });
+        if (журнал) console.error("[waitlist] журнал заявок:", журнал);
+      }
+      res.status(201).json({ ok: true, storage, ...(mailed === undefined ? {} : { mailed }) });
     } catch (err) {
       capture(err);
       res.status(500).json({

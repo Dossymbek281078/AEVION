@@ -18,6 +18,8 @@ import { assetSnippet, appendSnippet, type AssetKind } from "@/lib/devhubAssetSn
 import { newFilePathError, renamePathError, normalizeFilePath } from "@/lib/devhubFilePaths";
 import { devhubServerError, useDevhubServerError } from "@/lib/devhubServerError";
 import { track } from "@/lib/track";
+import { postNow } from "@/lib/channelNow";
+import { pokazyvatKartochkuSokhraneniya, klyuchSokhraneniya, kanalDlyaLista, DEVHUB_SAVE_SOURCE, DEVHUB_SAVE_FEATURE } from "@/lib/devhubSaveCard";
 import { useI18nOptional } from "@/lib/i18n";
 import { tDevhub, type DevhubKey } from "../i18n";
 import { termPricePerMonth, termTotal, TERM_MONTHS, СРОК_ПО_УМОЛЧАНИЮ } from "@/lib/termPricing";
@@ -113,7 +115,7 @@ const PODPIS_VKLADKI: Record<Vkladka, string> = {
 // словарь IDE (~400 строк) ждёт языкового решения основателя; здесь
 // НАМЕРЕННО только замеренный поимённо остаток пути новичка (проба
 // en-newcomer-probe, 06.09.2026: 66 знаков до генерации + тосты после).
-const GEN_UI: Record<string, { ph: string; noteContinued: string; noteTruncated: string; noteNoProvider: string; noteSyntax: string; created: string; noChanges: string; syntaxWarn: string; memoryWarn: string; runCost: string; runTokens: string; stCalling: string; stWriting: string; stContinue: string; stSyntax: string; stSelfFix: string; stSaving: string; busyDb: string; busyDesign: string; busyGen: string; busyUndo: string; busyPublish: string; busyPull: string; busyDeploy: string; busyPlan: string; busyImg: string; busySave: string; busyApply: string; busyPush: string; busySync: string; busyCompose: string; busySend: string; busyTranslate: string; busyCreate: string; busyPreview: string; busyUpload: string; busyStt: string; busyAgent: string; busySetup: string; deployNeedsFiles: string; siteLive: string; openSite: string; domainSoon: string; confirmDelFile: string; btnGenerate: string; btnDeploy: string; btnDeployVercel: string; emptyEditor: string; deployWhatHappens: string; storageNote: string }> = {
+const GEN_UI: Record<string, { ph: string; noteContinued: string; noteTruncated: string; noteNoProvider: string; noteSyntax: string; created: string; noChanges: string; syntaxWarn: string; memoryWarn: string; runCost: string; runTokens: string; stCalling: string; stWriting: string; stContinue: string; stSyntax: string; stSelfFix: string; stSaving: string; busyDb: string; busyDesign: string; busyGen: string; busyUndo: string; busyPublish: string; busyPull: string; deployHintLead: string; deployHintOwnDomain: string; deployHintPagesDev: string; deployHintTail: string; deployHintButton: string; saveTitle: string; savePlaceholder: string; saveButton: string; saveSending: string; saveDone: string; saveError: string; busyDeploy: string; busyPlan: string; busyImg: string; busySave: string; busyApply: string; busyPush: string; busySync: string; busyCompose: string; busySend: string; busyTranslate: string; busyCreate: string; busyPreview: string; busyUpload: string; busyStt: string; busyAgent: string; busySetup: string; deployNeedsFiles: string; siteLive: string; openSite: string; domainSoon: string; confirmDelFile: string; btnGenerate: string; btnDeploy: string; btnDeployVercel: string; emptyEditor: string; deployWhatHappens: string; storageNote: string }> = {
   ru: {
     ph: "Опишите, что нужно построить…\nНапример: «REST API с входом пользователей и ручкой товаров»",
     noteContinued: "Ответ упёрся в предел длины — недостающие файлы дозагружены отдельным вызовом",
@@ -131,6 +133,8 @@ const GEN_UI: Record<string, { ph: string; noteContinued: string; noteTruncated:
     stSaving: "💾 Сохраняю файлы…",
     busyDb: "Создаю базу…", busyDesign: "Проектирую…", busyGen: "Генерируем…",
     busyUndo: "Отменяем…", busyPublish: "⏳ Публикуем…", busyPull: "Забираю из репозитория…",
+    deployHintLead: "🚀 Готовы показать людям? Одна кнопка — и проект публикуется на Cloudflare", deployHintOwnDomain: " по вашему адресу *.aevion.app", deployHintPagesDev: " — вы получите общедоступный адрес *.pages.dev", deployHintTail: " — «живым» деплой считается только после того, как страница реально ответила.", deployHintButton: "Опубликовать",
+    saveTitle: "Сайт живой. Сохранить его и получить своё имя на aevion.app — оставьте почту", savePlaceholder: "вы@компания.kz", saveButton: "Сохранить сайт", saveSending: "Отправляю…", saveDone: "Ссылка отправлена, имя подключим в течение суток.", saveError: "Не отправилось — проверьте адрес или напишите на data@aevion.app",
     deployNeedsFiles: "Сначала соберите проект: выкатывать нечего, пока нет файлов", siteLive: "Сайт в интернете", openSite: "Открыть", domainSoon: "свой адрес на aevion.app появится через несколько минут", busyDeploy: "Выкатываю…", busyPlan: "Продумываю…", busyImg: "Генерирую…",
     busySave: "Сохраняю…", busyApply: "Применяю…", busyPush: "Отправляю…", busySync: "Синхронизирую…",
     busyCompose: "Сочиняю…", busySend: "Отправляю…", busyTranslate: "Перевожу…",
@@ -162,6 +166,8 @@ const GEN_UI: Record<string, { ph: string; noteContinued: string; noteTruncated:
     stSaving: "💾 Saving files…",
     busyDb: "Creating the database…", busyDesign: "Designing…", busyGen: "Generating…",
     busyUndo: "Undoing…", busyPublish: "⏳ Publishing…", busyPull: "Pulling…",
+    deployHintLead: "🚀 Ready to show it to people? One button publishes the project on Cloudflare", deployHintOwnDomain: " at your own address *.aevion.app", deployHintPagesDev: " — you get a public address *.pages.dev", deployHintTail: " — the deploy counts as live only once the page has actually answered.", deployHintButton: "Publish",
+    saveTitle: "Your site is live. Keep it and get your own name on aevion.app — leave your email", savePlaceholder: "you@company.com", saveButton: "Keep my site", saveSending: "Sending…", saveDone: "Link sent — we connect the name within a day.", saveError: "Could not send — check the address or write to data@aevion.app",
     deployNeedsFiles: "Build the project first: there is nothing to deploy until files exist", siteLive: "Your site is live", openSite: "Open", domainSoon: "your own address on aevion.app will appear in a few minutes", busyDeploy: "Deploying…", busyPlan: "Thinking it through…", busyImg: "Generating…",
     busySave: "Saving…", busyApply: "Applying…", busyPush: "Pushing…", busySync: "Syncing…",
     busyCompose: "Composing…", busySend: "Sending…", busyTranslate: "Translating…",
@@ -193,6 +199,8 @@ const GEN_UI: Record<string, { ph: string; noteContinued: string; noteTruncated:
     stSaving: "💾 Файлдарды сақтап жатырмын…",
     busyDb: "Дерекқор жасалуда…", busyDesign: "Жобалануда…", busyGen: "Генерациялануда…",
     busyUndo: "Болдырылмауда…", busyPublish: "⏳ Жариялануда…", busyPull: "Репозиторийден алынуда…",
+    deployHintLead: "🚀 Адамдарға көрсетуге дайынсыз ба? Бір түйме — жоба Cloudflare-де жарияланады", deployHintOwnDomain: " сіздің мекенжайыңызда *.aevion.app", deployHintPagesDev: " — жалпыға қолжетімді мекенжай аласыз *.pages.dev", deployHintTail: " — деплой бет шынымен жауап бергеннен кейін ғана «тірі» саналады.", deployHintButton: "Жариялау",
+    saveTitle: "Сайт тірі. Оны сақтап, aevion.app-та өз атыңызды алыңыз — поштаңызды қалдырыңыз", savePlaceholder: "siz@kompaniya.kz", saveButton: "Сайтты сақтау", saveSending: "Жіберілуде…", saveDone: "Сілтеме жіберілді, атауды бір тәулік ішінде қосамыз.", saveError: "Жіберілмеді — мекенжайды тексеріңіз немесе data@aevion.app-қа жазыңыз",
     deployNeedsFiles: "Алдымен жобаны жинаңыз: файлдар жоқ болса, жариялауға ештеңе жоқ", siteLive: "Сайт интернетте", openSite: "Ашу", domainSoon: "aevion.app-тағы өз мекенжайыңыз бірнеше минутта пайда болады", busyDeploy: "Жариялануда…", busyPlan: "Ойластырылуда…", busyImg: "Генерациялануда…",
     busySave: "Сақталуда…", busyApply: "Қолданылуда…", busyPush: "Жіберілуде…", busySync: "Синхрондалуда…",
     busyCompose: "Шығарылуда…", busySend: "Жіберілуде…", busyTranslate: "Аударылуда…",
@@ -1051,6 +1059,26 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
   const [buildLog, setBuildLog] = useState<string[]>([]);
   const [buildDone, setBuildDone] = useState(false);
   const [buildLiveUrl, setBuildLiveUrl] = useState<string | null>(null);
+  // 132б: почта после адреса — единственный следующий шаг гостя в кадре.
+  const [saveEmail, setSaveEmail] = useState("");
+  const [saveState, setSaveState] = useState<"idle" | "sending" | "done" | "error">("idle");
+  const [saveHidden, setSaveHidden] = useState(false);
+  useEffect(() => { try { if (localStorage.getItem(klyuchSokhraneniya(id)) === "1") setSaveHidden(true); } catch { /* приватное окно */ } }, [id]);
+  const otpravitPochtuSokhraneniya = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (saveState === "sending") return;
+    const адрес = saveEmail.trim();
+    if (!/^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(адрес)) { setSaveState("error"); return; }
+    setSaveState("sending");
+    const post = postNow();
+    track({ type: "feature_use", source: "devhub", meta: { feature: DEVHUB_SAVE_FEATURE, projectId: id, ...(post ? { post, channel: post } : {}) } });
+    try {
+      const канал = kanalDlyaLista(post);
+      const r = await fetch(apiUrl("/api/constitution/waitlist/subscribe"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: адрес, source: DEVHUB_SAVE_SOURCE, projectId: id, ...(канал ? { channel: канал } : {}) }) });
+      if (r.ok) { setSaveState("done"); try { localStorage.setItem(klyuchSokhraneniya(id), "1"); } catch { /* приватное окно */ } }
+      else setSaveState("error");
+    } catch { setSaveState("error"); }
+  };
   const [showBuildLog, setShowBuildLog] = useState(false);
   // Ширина окна — ради раскладки рабочего окна на телефоне (см. devhubMaket.ts).
   // Начальное значение широкое: на сервере окна нет, а расхождение разметки
@@ -4237,6 +4265,23 @@ if (/Месячная норма исчерпана|Месячный лимит[
 
         {/* Editor + AI panel */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          {/* 132б (13.10.2026): после живого адреса — следующий шаг в кадре: оставить почту, сохранить сайт
+              и получить имя на aevion.app. До этого после адреса в кадре не было ничего (замер пути из Shorts). */}
+          {(() => {
+            const адресСайта = pagesResult?.liveUrl ?? pagesResult?.pagesUrl ?? buildLiveUrl ?? (project?.deployUrl && /pages\.dev|aevion\.app/.test(project.deployUrl) ? project.deployUrl : null);
+            if (saveState === "done") return <div data-devhub-save-done role="status" style={{ background: "#ecfdf5", borderBottom: "1px solid #a7f3d0", padding: "8px 12px", fontSize: 13, color: "#065f46", fontWeight: 600 }}>{GL.saveDone}</div>;
+            if (!pokazyvatKartochkuSokhraneniya({ address: адресСайта, saved: saveHidden })) return null;
+            return (
+              <form data-devhub-save-card onSubmit={otpravitPochtuSokhraneniya} style={{ background: "#fffbeb", borderBottom: "1px solid #fcd34d", padding: "8px 12px", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 13 }}>
+                <span style={{ fontWeight: 700, color: "#0f172a", flex: "1 1 220px" }}>{GL.saveTitle}</span>
+                <input type="email" required data-devhub-save-email value={saveEmail} onChange={(e) => setSaveEmail(e.target.value)} placeholder={GL.savePlaceholder} autoComplete="email" style={{ flex: "1 1 160px", minWidth: 140, padding: "7px 10px", borderRadius: 8, border: "1px solid #fcd34d", fontSize: 13 }} />
+                <button type="submit" data-devhub-save-submit disabled={saveState === "sending"} style={{ padding: "7px 14px", background: "#0d9488", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 12.5, cursor: saveState === "sending" ? "wait" : "pointer" }}>
+                  {saveState === "sending" ? GL.saveSending : GL.saveButton}
+                </button>
+                {saveState === "error" && <span role="status" style={{ color: "#b91c1c", flexBasis: "100%" }}>{GL.saveError}</span>}
+              </form>
+            );
+          })()}
           {/* Editor — top 60% */}
           <div style={{ flex: "0 0 60%", display: "flex", flexDirection: "column", borderBottom: "1px solid rgba(15,23,42,0.1)" }}>
             {activeTab === "visual" ? (
@@ -4426,21 +4471,19 @@ if (/Месячная норма исчерпана|Месячный лимит[
                               </button>
                             </div>
                           ) : msg.kind === "deploy" ? (
-                            <div key={mi} style={{ alignSelf: "flex-start", maxWidth: "95%", background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>
+                            <div key={mi} data-devhub-deploy-hint="chat" style={{ alignSelf: "flex-start", maxWidth: "95%", background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 10, padding: "10px 12px", fontSize: 13 }}>
                               <div style={{ color: "#0f766e", marginBottom: 8, lineHeight: 1.45 }}>
                                 {/* The aevion.build promise is only made when the
                                     server says that domain actually works. The
                                     zone was never delegated, so for months this
                                     card promised an address that failed DNS. */}
-                                🚀 Готовы показать людям? Одна кнопка — и проект публикуется на Cloudflare{domainCapabilityWorks
-                                  ? <> по вашему адресу <span style={{ fontFamily: "monospace" }}>*.aevion.app</span></>
-                                  : <> — вы получите общедоступный адрес <span style={{ fontFamily: "monospace" }}>*.pages.dev</span></>} — «живым» деплой считается только после того, как страница реально ответила.
+                                {GL.deployHintLead}{domainCapabilityWorks ? GL.deployHintOwnDomain : GL.deployHintPagesDev}{GL.deployHintTail}
                               </div>
                               <button
                                 onClick={() => { setChatHistory((h) => h.filter((m) => !(m.role === "hint" && m.kind === "deploy"))); deployToPages(); setActiveTab("deployments"); }}
                                 style={{ padding: "7px 14px", background: "#0d9488", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}
                               >
-                                Опубликовать
+                                {GL.deployHintButton}
                               </button>
                             </div>
                           ) : (

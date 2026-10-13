@@ -123,6 +123,8 @@ export const AiSuggestSchema = z.object({
 export const WaitlistSubscribeSchema = z.object({
   email:  z.string().email("неверный формат email").max(120),
   source: z.string().max(60).optional(),
+  /** 132б (13.10.2026): гость DevHub оставляет почту после живого адреса — id проекта для письма на data@. */
+  projectId: z.string().max(64).regex(/^[A-Za-z0-9_-]+$/, "неверный id проекта").optional(),
   /*
    * Канал привлечения — ОТДЕЛЬНО от source.
    *

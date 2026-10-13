@@ -14,9 +14,10 @@
  */
 import { serverFetch } from "@/lib/apiBase";
 import { channelFrom, postFrom } from "@/lib/products";
-import { tFor, type CcLocale } from "../../i18n";
+import { pzT, type PzYazyk } from "../pzSlova";
 import { zadachaDlyaEkrana, zadanieNadDoskoy, imyaPoResheniyu, type PzLocale } from "../../puzzleNormalize";
 import { GLIF, kletki, shag, sozdatSostoyanie, svoyaFigura, tseli } from "../logikaZadachi";
+import { yazykZaprosa } from "../yazykZaprosa";
 
 export const dynamic = "force-dynamic";
 
@@ -38,17 +39,10 @@ async function zagruzit(id: string): Promise<Syraya | null> {
   return pz;
 }
 
-/** Язык по правилу 120: явный выбор (кука, ?lang) старше догадки по Accept-Language. */
-export function yazykZaprosa(cookie: string | null, langParam: string | null, acceptLanguage: string | null): PzLocale {
-  const ok = (v: string | null | undefined): PzLocale | null => (v === "ru" || v === "en" || v === "kk" ? v : v === "kz" ? "kk" : null);
-  const m = /(?:^|;\s*)aevion_lang_v1=([a-z]{2})/.exec(cookie ?? "");
-  return ok(langParam?.toLowerCase()) ?? ok(m?.[1]) ?? ok((acceptLanguage ?? "").split(",")[0]?.trim().slice(0, 2).toLowerCase()) ?? "en";
-}
-
 const esc = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-function html(p: { id: string; fen: string; zadanie: string; name: string; rating: number; theme: string; locale: CcLocale; storona: "w" | "b"; polnaya: string; channel: string | null; post: string | null; path: string; title: string; description: string }): string {
-  const t = (k: string) => tFor(p.locale, k);
+function html(p: { id: string; fen: string; zadanie: string; name: string; rating: number; theme: string; locale: PzYazyk; storona: "w" | "b"; polnaya: string; channel: string | null; post: string | null; path: string; title: string; description: string }): string {
+  const t = (k: string) => pzT(p.locale, k);
   const ryady = kletki(p.fen, p.storona);
   const kletkiHtml = ryady.flat().map((k) => `<button type="button" data-sq="${k.sq}" class="${k.dark ? "d" : "l"}" aria-label="${k.sq}">${k.p ? `<span class="${k.p[0] === "w" ? "w" : "b"}">${GLIF[k.p]}</span>` : ""}</button>`).join("");
   const cfg = { id: p.id, fen: p.fen, i: 0, storona: p.storona, texts: { wrong: t("pz.wrong"), yourMove: t("pz.yourMove"), solved: t("pz.solved").replace("{name}", p.name) }, ev: { channel: p.channel, post: p.post, path: p.path, rating: p.rating, theme: p.theme, fen: p.fen } };

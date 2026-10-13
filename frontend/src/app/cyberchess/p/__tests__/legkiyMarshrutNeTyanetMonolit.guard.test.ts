@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync, statSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { yazykZaprosa } from "../[id]/route";
+import { yazykZaprosa } from "../yazykZaprosa";
 
 /*
  * 🔴 Лёгкий маршрут /cyberchess/p/<id> не тянет ни монолит шахмат, ни корневой макет.
@@ -40,7 +40,7 @@ describe("лёгкий маршрут задачи — Route Handler без мо
 
   it("знаменатель: маршрут — обработчик и логика, страницы React нет", () => {
     const имена = файлы.map((f) => f.slice(МАРШРУТ.length + 1).replace(/\\/g, "/")).sort();
-    expect(имена).toEqual(["[id]/route.ts", "logikaZadachi.ts"]);
+    expect(имена).toEqual(["[id]/route.ts", "logikaZadachi.ts", "pzSlova.ts", "yazykZaprosa.ts"]);
   });
 
   it("🔴 обработчик не импортирует React, провайдеры сайта и тяжёлые модули шахмат", () => {

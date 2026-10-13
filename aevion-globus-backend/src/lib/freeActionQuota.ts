@@ -19,6 +19,7 @@
  *     пропуска) — но пишет в журнал слепоты, иначе мы не узнаем, что не считаем.
  */
 import type { Request, Response } from "express";
+import { timingSafeEqual } from "node:crypto";
 import { getPool } from "./dbPool";
 import { resolveUserPlan } from "./planGate";
 import { clientIp } from "./rateLimit";
@@ -65,13 +66,32 @@ export function бесплатноВМесяц(действие: string): number
 function ктоЭто(req: Request): string {
   const план = resolveUserPlan(req);
   if (план.email) return "email:" + план.email.trim().toLowerCase();
-  // Левый элемент X-Forwarded-For — адрес самого гостя. clientIp за прокси
-  // Railway даёт несколько общих адресов, и одна бесплатная норма делилась
-  // между многими гостями (замер прода 13.10.2026: при норме 1 гость прошёл
-  // 3 проверки). Подделка заголовка даёт гостю лишь лишнюю бесплатную
-  // попытку — решение основателя 13.10.2026 («путь 1», «выкатывай сам все»).
+  // Гость, пришедший через прокси сайта (/api-backend): адрес соединения —
+  // общий адрес Vercel, поэтому адрес гостя кладёт сам прокси (middleware.ts)
+  // и подтверждает общим секретом. Без верного секрета заголовку не верим:
+  // иначе любой в обход сайта подставит чужой адрес.
+  const сКрая = адресОтПроксиСайта(req);
+  if (сКрая) return "ip:" + сКрая;
+  // Прямой заход: Railway ПЕРЕЗАПИСЫВАЕТ X-Forwarded-For адресом соединения
+  // (замер 13.10.2026, /api/veilnetx/inspect: поддельный заголовок не доходит),
+  // так что левый элемент — настоящий адрес человека.
   const левый = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim();
   return "ip:" + (левый || clientIp(req) || "неизвестно");
+}
+
+/** Адрес гостя от прокси сайта — только при совпавшем секрете AEVION_EDGE_KEY. */
+export function адресОтПроксиСайта(req: Pick<Request, "headers">): string | null {
+  const секрет = process.env.AEVION_EDGE_KEY || "";
+  if (секрет.length < 16) return null;
+  const ключ = req.headers["x-aevion-edge-key"];
+  if (typeof ключ !== "string") return null;
+  const а = Buffer.from(ключ);
+  const б = Buffer.from(секрет);
+  if (а.length !== б.length || !timingSafeEqual(а, б)) return null;
+  const адрес = req.headers["x-aevion-client-ip"];
+  if (typeof адрес !== "string") return null;
+  const чистый = адрес.trim();
+  return /^[0-9a-fA-F.:]{3,45}$/.test(чистый) ? чистый : null;
 }
 
 function текущийМесяц(): string {

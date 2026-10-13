@@ -109,6 +109,30 @@ function битыйАдрес(): NextResponse {
   });
 }
 
+/**
+ * Адрес гостя для бэкенда за прокси `/api-backend`.
+ *
+ * ПОВОД (замер 13.10.2026, окно Приложения-31.12). Railway перезаписывает
+ * X-Forwarded-For адресом соединения, а соединение через rewrite идёт от
+ * Vercel — бэкенд видел всех гостей сайта под одним-двумя адресами Vercel, и
+ * бесплатная норма (freeActionQuota) делилась между ними: счёт 2,3,2,3,4.
+ *
+ * Vercel пишет настоящий адрес гостя первым в X-Forwarded-For; передаём его
+ * своим заголовком вместе с секретом, которому верит бэкенд. Присланные
+ * гостем одноимённые заголовки затираются. Без секрета — null, ничего не меняем.
+ */
+export function заголовкиДляБэкенда(вход: Headers, секрет: string | undefined): Headers | null {
+  if (!секрет || секрет.length < 16) return null;
+  const адрес = (вход.get("x-forwarded-for") || "").split(",")[0].trim() || (вход.get("x-real-ip") || "").trim();
+  const выход = new Headers(вход);
+  выход.delete("x-aevion-client-ip");
+  выход.delete("x-aevion-edge-key");
+  if (!адрес) return выход;
+  выход.set("x-aevion-client-ip", адрес);
+  выход.set("x-aevion-edge-key", секрет);
+  return выход;
+}
+
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (!isDecodablePath(pathname)) {
@@ -124,6 +148,11 @@ export function middleware(req: NextRequest) {
     // иначе человек приедет на русскую страницу без признака английского.
     ответ.cookies.set("aevion_lang_v1", "en", { path: "/", maxAge: 60 * 60 * 24 * 365 });
     return ответ;
+  }
+
+  if (pathname.startsWith("/api-backend/")) {
+    const заголовки = заголовкиДляБэкенда(req.headers, process.env.AEVION_EDGE_KEY);
+    if (заголовки) return NextResponse.next({ request: { headers: заголовки } });
   }
 
   return NextResponse.next();

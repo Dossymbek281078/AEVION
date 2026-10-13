@@ -37,6 +37,13 @@ describe("знания тренера не грузятся до первого 
     expect(СТРАНИЦА.split("COACH_KNOWLEDGE").length - 1).toBe(СТРАНИЦА.split("m.COACH_KNOWLEDGE").length - 1);
   });
 
+  it("🔴 122б: модал знаний монтируется только открытым — его чанк не уходит в сеть на старте", () => {
+    // замер прода 13.10: чанк модала (90 КБ сырого) стартовал за 90–370 мс до готовности доски,
+    // потому что <CoachKnowledge> рендерился всегда (visible=false внутри — чанк всё равно нужен)
+    expect(СТРАНИЦА).toContain("{showKnowledge&&<CoachKnowledge");
+    expect(СТРАНИЦА).not.toMatch(/\n\s*<CoachKnowledge\n/);
+  });
+
   it("напоминания живут отдельно и не тянут данные", () => {
     const p = join(КОРЕНЬ, "coachReminders.ts");
     expect(existsSync(p)).toBe(true);

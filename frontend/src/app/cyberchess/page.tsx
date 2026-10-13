@@ -13499,7 +13499,8 @@ ${question.trim()}`;
             quickEval={quickEvalPromise}
           />}
 
-          <CoachKnowledge
+          {/* 122б: модал знаний монтируется только открытым — иначе его чанк (90 КБ) уезжал в сеть сразу после монтирования, в последние метры до первого хода. */}
+          {showKnowledge&&<CoachKnowledge
             visible={showKnowledge}
             onClose={()=>sShowKnowledge(false)}
             onLoadPosition={(fen:string,hint?:string)=>{
@@ -13511,7 +13512,7 @@ ${question.trim()}`;
                 else showToast("Позиция загружена","success");
               }catch{showToast("Неверная позиция","error")}
             }}
-          />
+          />}
 
           {showFlashcards&&coachKnowledge&&(()=>{const cards=coachKnowledge.flatMap(c=>c.entries.filter(e=>!!e.bestMove&&!!e.fen).map(e=>({t:e.title,f:e.fen!,b:e.bestMove!,ex:typeof e.explanation==="string"?e.explanation.slice(0,180):String(e.explanation).slice(0,180),cat:c.title})));if(!cards.length)return null;const card=cards[flashcardIdx%cards.length];return<div onClick={()=>sShowFlashcards(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.65)",backdropFilter:"blur(3px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:220,padding:16}}><div onClick={e=>e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Флеш-карточки коуча" style={{background:"linear-gradient(135deg,#0f172a,#1e1b4b)",color:"#fff",borderRadius:16,maxWidth:460,width:"100%",padding:"24px",border:"1px solid rgba(167,139,250,0.3)",boxShadow:"0 24px 64px rgba(0,0,0,0.5)"}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}><span>🃏</span><span style={{fontSize:11,fontWeight:900,letterSpacing:1,color:"#a78bfa",textTransform:"uppercase" as const}}>Флеш-карточки</span><span style={{marginLeft:"auto",fontSize:11,color:"#94a3b8"}}>{(flashcardIdx%cards.length)+1}/{cards.length}</span><button onClick={()=>sShowFlashcards(false)} style={{padding:"2px 7px",borderRadius:4,border:"1px solid rgba(255,255,255,0.15)",background:"transparent",color:"#94a3b8",fontSize:11,cursor:"pointer"}}>✕</button></div>

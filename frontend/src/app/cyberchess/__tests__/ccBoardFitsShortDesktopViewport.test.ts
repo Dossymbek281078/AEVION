@@ -17,7 +17,7 @@ describe("доска помещается на низком десктопном
     // получает меньший запас — доска крупнее). Свойство «низкий стол → 186, стол → 150»
     // проверяется НИЖЕ через саму функцию, а здесь — что страница её и зовёт.
     expect(src).toContain("const запасПодДоской=zapasPodDoskoy(зашёлЗаЗадачей,lowDesktop);");
-    expect(src).toContain("const desktopVReserve=(boardTopPx>0?boardTopPx:110)+подДоской136+8;"); // 136: под доской только буквы и строка «Вы»
+    expect(src).toContain("const desktopVReserve=(boardTopPx>0?boardTopPx:110)+подДоской139+8;"); // 136: под доской только буквы и строка «Вы»
     expect(src).toContain('vhPx-(vwPx>=769?desktopVReserve:290)');
     expect(src).toContain('data-cc-board="1"');
   });

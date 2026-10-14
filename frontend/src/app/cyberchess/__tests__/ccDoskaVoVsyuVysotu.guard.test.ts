@@ -13,10 +13,10 @@ import { join } from "node:path";
 const src = readFileSync(join(__dirname, "..", "page.tsx"), "utf8");
 
 describe("доска во всю доступную высоту (136)", () => {
-  it("🔴 резервы: шапка+полоска+под доской, без 150–186 px и без max(250)", () => {
-    expect(src).toContain("const vReserve=vwPx>=769?190:300;");
-    expect(src).toContain("const подДоской136=зашёлЗаЗадачей?36:52;");
-    expect(src).toContain("const desktopVReserve=(boardTopPx>0?boardTopPx:110)+подДоской136+8;");
+  it("🔴 резервы: шапка+полоска+под доской, без 150–186 px и без max(250); 139: предкап = измеренный бюджет", () => {
+    expect(src).toContain("const vReserve=vwPx>=769?desktopVReserve:300;");
+    expect(src).toContain("const подДоской139=зашёлЗаЗадачей?36:26+строкаИгрокаPx;");
+    expect(src).toContain("const desktopVReserve=(boardTopPx>0?boardTopPx:110)+подДоской139+8;");
     expect(src).not.toContain("const desktopVReserve=Math.max(250,");
   });
   it("🔴 левый рейл выключен, панель 380, на 769–1279 панель под доской", () => {

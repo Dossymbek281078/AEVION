@@ -19,6 +19,7 @@ type Props = {
   isActive: boolean; // чей сейчас ход
   brand: string;
   textMute: string;
+  size?: number; // 139: диаметр кольца; строка игрока 40 px на низком окне → 36, иначе 44
 };
 
 const RED_AT = 10;
@@ -41,7 +42,7 @@ function colorFor(s: number, brand: string, mute: string, isActive: boolean): st
   return brand;
 }
 
-export default function TurnClock({ getSeconds, ini, isActive, brand, textMute }: Props) {
+export default function TurnClock({ getSeconds, ini, isActive, brand, textMute, size: sizeProp }: Props) {
   // Local display state — polled from getSeconds(), not driven by a parent prop.
   const [secs, setSecs] = useState(getSeconds);
 
@@ -91,7 +92,7 @@ export default function TurnClock({ getSeconds, ini, isActive, brand, textMute }
   // Circular progress: % оставшегося от ini. Если ini=0 (untimed) — пустое кольцо.
   const pct = ini > 0 ? Math.max(0, Math.min(1, secs / ini)) : 0;
   const color = colorFor(secs, brand, textMute, isActive);
-  const size = 44; // 136 (13.10.2026): строка игрока 60→48 px — высота уходит доске (lichess: полоска 36–40)
+  const size = sizeProp ?? 44; // 136 (13.10.2026): строка игрока 60→48 px — высота уходит доске (lichess: полоска 36–40); 139: 36 на низком окне
   const stroke = 3.5;
   const r = (size - stroke) / 2;
   const circ = 2 * Math.PI * r;
@@ -133,7 +134,7 @@ export default function TurnClock({ getSeconds, ini, isActive, brand, textMute }
         />
       </svg>
       <div style={{
-        fontSize: secs < 60 ? 13 : 12,
+        fontSize: size < 44 ? 11 : secs < 60 ? 13 : 12,
         fontWeight: 900,
         fontFamily: "ui-monospace,monospace",
         letterSpacing: -0.4,

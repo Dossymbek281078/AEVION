@@ -18,8 +18,11 @@ name: DevHub E2E (browser)
 # that does not fire is indistinguishable from a gate that passed.
 on:
   workflow_dispatch:
+  # 14.10.2026: the list is written out twice on purpose. It used to be a YAML anchor (&gate_paths / *gate_paths),
+  # and GitHub Actions does not expand anchors: every push since 27.08 produced a run with 0 jobs named after this
+  # file path, i.e. the gate never ran. Keep both copies identical.
   pull_request:
-    paths: &gate_paths
+    paths:
       - "frontend/src/app/devhub/**"
       - "frontend/src/lib/devhub*"
       - "frontend/src/lib/i18n*"
@@ -37,7 +40,22 @@ on:
       - ".github/workflows/devhub-e2e.yml"
   push:
     branches: [main]
-    paths: *gate_paths
+    paths:
+      - "frontend/src/app/devhub/**"
+      - "frontend/src/lib/devhub*"
+      - "frontend/src/lib/i18n*"
+      - "frontend/src/components/AutoTranslate.tsx"
+      - "frontend/e2e/devhub-*"
+      - "frontend/e2e/i18n-*"
+      - "frontend/e2e/translation-*"
+      - "frontend/e2e/language-*"
+      - "frontend/e2e/page-weight*"
+      - "frontend/e2e/globe-lazy*"
+      # The Studio usage panel renders DevHub's credit meter, so it belongs to
+      # this gate even though it lives under another route.
+      - "frontend/src/app/studio/**"
+      - "frontend/e2e/studio-*"
+      - ".github/workflows/devhub-e2e.yml"
 
 jobs:
   devhub-e2e:

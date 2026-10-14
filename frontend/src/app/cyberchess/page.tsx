@@ -3530,15 +3530,19 @@ export default function CyberChessPage(){
     // Замер 27.08 на 375px: поверх интерфейса у новичка одновременно висели
     // окно, плашка установки, два уведомления и эта подсказка.
     if(isMobileLayout)return;
+    // 139в (14.10.2026): и не на первом экране, и не на пути задачи — замер на проде 1024×900 (?puzzle=):
+    // тост 2,4–4 с накрывал кнопки масштаба под доской. Подсказка — один раз после первой доигранной партии:
+    // человек уже нашёл доску и ходы, теперь ему уместно узнать про палитру.
+    if(зашёлЗаЗадачей||!over)return;
     try{
-      if(localStorage.getItem("aevion_chess_palette_hint_v1")==="1")return;
+      if(localStorage.getItem("aevion_chess_palette_hint_v2")==="1")return;
       const t=window.setTimeout(()=>{
         showToast("⌕ Жми Ctrl+K чтобы найти любую команду — игру, задачу, анализ, стрим…","info");
-        try{localStorage.setItem("aevion_chess_palette_hint_v1","1")}catch{}
-      },2400);
+        try{localStorage.setItem("aevion_chess_palette_hint_v2","1")}catch{}
+      },1500);
       return()=>window.clearTimeout(t);
     }catch{}
-  },[showToast,isMobileLayout]);
+  },[showToast,isMobileLayout,зашёлЗаЗадачей,over]);
   // Opening Explorer + Tablebase: fetch when on Analysis tab + position changes
   useEffect(()=>{
     if(tab!=="analysis"||!showOpeningExp){sOpeningData(null);return}

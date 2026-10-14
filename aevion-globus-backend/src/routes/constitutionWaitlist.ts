@@ -30,6 +30,8 @@ import {
 import { похожеНаПробу, просятПробы } from "../lib/probeRows";
 import { sendEmail } from "./provisioning";
 import { leadsFile } from "../lib/leadsFile";
+import { zaplanirovatProverkuDostavki } from "../lib/resendDostavka";
+import { readFileSync } from "node:fs";
 import { appendFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
@@ -40,7 +42,14 @@ import { dirname } from "node:path";
  * Отказ письма не роняет подписку, но называется в ответе (mailed:false) и в журнале сервера (§16).
  */
 export const DEVHUB_GUEST_SOURCE = /^devhub-guest/i;
-export const DEVHUB_GUEST_TO = "data@aevion.app";
+/** 135б: уведомления о госте — на ящик из переменной (gmail основателя напрямую), иначе data@. */
+export const DEVHUB_GUEST_TO = process.env.DEVHUB_GUEST_NOTIFY_TO?.trim() || "data@aevion.app";
+/** Метка сайта для темы письма: coffee-3b67f3 из домена или из адреса pages.dev. */
+export function metkaSayta(siteUrl: string | null | undefined, domain: string | null | undefined): string | null {
+  if (domain) return domain.replace(/\.aevion\.app$/, "");
+  const m = /^https:\/\/([a-z0-9.-]+)\.pages\.dev/.exec(siteUrl ?? "");
+  return m ? m[1].replace(/^aevion-/, "") : null;
+}
 export function pismoGostyuDevHub(z: { email: string; source: string; channel: string | null; projectId: string | null; siteUrl?: string | null; domain?: string | null }) {
   const проект = z.projectId ? `https://aevion.app/devhub/${z.projectId}` : "—";
   const text = [
@@ -63,6 +72,8 @@ export function pismoGostyuDevHub(z: { email: string; source: string; channel: s
  */
 export function pismoGostyuNaEgoYazyke(z: { email: string; lang: "ru" | "en" | "kk"; siteUrl: string | null; domain: string | null }) {
   const own = z.domain ? `https://${z.domain}` : null;
+  // 135б: имя сайта в теме — письма одному адресату не склеиваются в один тред и различимы в ящике.
+  const метка = metkaSayta(z.siteUrl, z.domain);
   const T = {
     en: { subject: "Your site on AEVION DevHub: link and address", live: "Your site is live:", own: "Your own address:", connecting: "it is being connected now; we confirm by email within a day.", keep: "Keep this email — the links stay valid.", reply: "Reply to data@aevion.app with any question. — AEVION" },
     ru: { subject: "Ваш сайт в AEVION DevHub: ссылка и адрес", live: "Ваш сайт в интернете:", own: "Ваш собственный адрес:", connecting: "он подключается сейчас; подтвердим письмом в течение суток.", keep: "Сохраните это письмо — ссылки остаются действительными.", reply: "На любой вопрос ответим: data@aevion.app. — AEVION" },
@@ -75,7 +86,7 @@ export function pismoGostyuNaEgoYazyke(z: { email: string; lang: "ru" | "en" | "
     T.keep,
     T.reply,
   ].filter((l, i) => l !== "" || i === 2).join("\n");
-  return { to: z.email, subject: T.subject, text, html: `<pre style="font:14px/1.5 ui-monospace,monospace">${text.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</pre>` };
+  return { to: z.email, subject: метка ? `${T.subject} — ${метка}` : T.subject, text, html: `<pre style="font:14px/1.5 ui-monospace,monospace">${text.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</pre>` };
 }
 function zapisatZayavkuGostya(lead: Record<string, unknown>): string | null {
   try {
@@ -339,12 +350,18 @@ constitutionWaitlistRouter.post(
       if (гостьDevHub) {
         const siteUrl = body.siteUrl ?? null;
         const domain = body.domain ?? null;
-        const письмо = await sendEmail(pismoGostyuDevHub({ email: row.email, source: sourceRaw, channel: channelRaw, projectId, siteUrl, domain }));
-        mailed = письмо.ok;
-        if (!письмо.ok) console.error("[waitlist] письмо о госте DevHub НЕ ушло на data@:", письмо.error ?? "failed");
-        const гостю = await sendEmail(pismoGostyuNaEgoYazyke({ email: row.email, lang: body.lang ?? "en", siteUrl, domain }));
+        // 135б: письмо ГОСТЮ — первым (единственная нить к живому человеку), уведомление нам — вторым;
+        // через 60 с проверяем доставку у Resend и при отказе повторяем через Brevo (14.10: отскок SpamCop).
+        const письмоГостю = pismoGostyuNaEgoYazyke({ email: row.email, lang: body.lang ?? "en", siteUrl, domain });
+        const гостю = await sendEmail(письмоГостю);
         guestMailed = гостю.ok;
         if (!гостю.ok) console.error("[waitlist] письмо ГОСТЮ DevHub НЕ ушло:", гостю.error ?? "failed");
+        else if (гостю.mode === "real") zaplanirovatProverkuDostavki({ id: гостю.id, pismo: письмоГостю });
+        const письмоНам = pismoGostyuDevHub({ email: row.email, source: sourceRaw, channel: channelRaw, projectId, siteUrl, domain });
+        const письмо = await sendEmail(письмоНам);
+        mailed = письмо.ok;
+        if (!письмо.ok) console.error(`[waitlist] письмо о госте DevHub НЕ ушло на ${DEVHUB_GUEST_TO}:`, письмо.error ?? "failed");
+        else if (письмо.mode === "real") zaplanirovatProverkuDostavki({ id: письмо.id, pismo: письмоНам });
         const журнал = zapisatZayavkuGostya({ ts: row.createdAt, kind: "devhub_save_email", email: row.email, source: sourceRaw, channel: channelRaw, projectId, siteUrl, domain, lang: body.lang ?? "en", mailed, guestMailed });
         if (журнал) console.error("[waitlist] журнал заявок:", журнал);
       }
@@ -554,6 +571,27 @@ constitutionWaitlistRouter.get(
   },
 );
 
+/**
+ * 135б: заявки гостей DevHub и пилота за N часов из журнала заявок (leads.jsonl) — Почта сверяет
+ * «что отправлено» с «что дошло». Только админ. Поля журнала как есть (email, projectId, mailed…).
+ */
+constitutionWaitlistAdminRouter.get(
+  "/guest-leads",
+  readLimit as unknown as (req: Request, res: Response, next: NextFunction) => void,
+  (req: Request, res: Response) => {
+    if (!isAdmin(req)) return res.status(403).json({ error: "admin_required" });
+    const hours = Math.max(1, Math.min(24 * 14, Number(req.query.hours) || 24));
+    const since = Date.now() - hours * 3600_000;
+    let items: Array<Record<string, unknown>> = [];
+    let ошибка: string | null = null;
+    try {
+      const raw = readFileSync(leadsFile(), "utf8");
+      items = raw.split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l) as Record<string, unknown>; } catch { return null; } })
+        .filter((x): x is Record<string, unknown> => !!x && typeof x.kind === "string" && /^(devhub_|pilot_)/.test(x.kind) && typeof x.ts === "string" && Date.parse(x.ts) >= since);
+    } catch (e) { ошибка = e instanceof Error ? e.message : String(e); }
+    return res.json({ ok: !ошибка, hours, count: items.length, items, ...(ошибка ? { error: ошибка } : {}) });
+  },
+);
 constitutionWaitlistAdminRouter.get(
   "/list",
   readLimit as unknown as (req: Request, res: Response, next: NextFunction) => void,

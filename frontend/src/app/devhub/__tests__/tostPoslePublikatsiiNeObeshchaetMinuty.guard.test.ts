@@ -30,7 +30,13 @@ describe("тост после публикации: настоящее обещ�
       }
     }
     const en = блокЯзыка("en").match(/domainConnecting: "([^"]+)"/)![1];
-    expect(en).toMatch(/usually within (minutes|an hour)/);
+    // Срок — из замера Deploy→200 на поддомене 13–14.10 (две пробы: 134 с и 166 с, обе ≤ 5 мин): «минуты» во всех трёх
+    // языках. Сменится замер — менять словарь И эту строку вместе, с новыми числами в комментарии.
+    expect(en).toContain("usually within minutes");
+    expect(блокЯзыка("ru").match(/domainConnecting: "([^"]+)"/)![1]).toContain("обычно за несколько минут");
+    expect(блокЯзыка("kk").match(/domainConnecting: "([^"]+)"/)![1]).toContain("әдетте бірнеше минут ішінде");
+    // карточка адреса под кнопкой — та же ветка словаря с подставленным адресом, не отдельный текст
+    expect(СТРАНИЦА).toContain("GL.domainConnecting.replace(\"{domain}\", `https://${project.customDomain}`)");
     expect(СТРАНИЦА).not.toMatch(/domainSoon: "/);
   });
 

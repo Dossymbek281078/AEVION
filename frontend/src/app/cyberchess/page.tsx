@@ -9817,7 +9817,9 @@ export default function CyberChessPage(){
             </div>
           </div>
 
-          {isMobileLayout&&полоскаСтарта(bw)}
+          {/* 139б: во время партии карточку онбординга под доской не рисуем — она отодвигала строку «Вы» с часами
+              за нижний край (768×1024: 1092 при 1024; 390×844: 782). После партии и вне её — как была. */}
+          {isMobileLayout&&!(on&&!over)&&полоскаСтарта(bw)}
           {/* ─── Replay bar — analysis quality timeline ─── */}
           {tab==="analysis"&&hist.length>0&&(()=>{
             const qClr=(q?:string)=>q==="brilliant"?"#06b6d4":q==="great"?"#f59e0b":q==="good"?"#10b981":q==="inacc"?"#6366f1":q==="mistake"?"#f97316":q==="blunder"?"#ef4444":"#3d3b39";

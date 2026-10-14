@@ -44,19 +44,65 @@ async function zagruzit(id: string): Promise<Syraya | null> {
 
 /** Следующая лёгкая задача близкого рейтинга (±150), случайная; при отказе бэкенда — полная версия.
  * Повод 13.10: после решения ссылка вела в монолит (900 КБ JS, 7 с на Fast 3G) — серия обрывалась на первой задаче. */
-async function sleduyushchayaZadacha(tekId: string, rating: number, keep: URLSearchParams, polnaya: string): Promise<string> {
+async function sleduyushchiyId(tekId: string, rating: number): Promise<string | null> {
   const q = new URLSearchParams({ shuffle: "1", limit: "3", minRating: String(Math.max(0, rating - 150)), maxRating: String(rating + 150) });
   const r = await serverFetch(`/api/cyberchess-puzzles?${q.toString()}`, { timeoutMs: 2500, retries: 0 });
-  if (!r || !r.ok) return polnaya;
+  if (!r || !r.ok) return null;
   try {
     const list = ((await r.json()) as { puzzles?: Array<{ id?: string }> })?.puzzles ?? [];
-    const next = list.map((x) => String(x?.id ?? "")).find((x) => x && x !== tekId);
-    if (!next) return polnaya;
-    return `/cyberchess/p/${encodeURIComponent(next)}${keep.toString() ? "?" + keep.toString() : ""}`;
-  } catch { return polnaya; }
+    return list.map((x) => String(x?.id ?? "")).find((x) => x && x !== tekId) ?? null;
+  } catch { return null; }
+}
+const adresZadachi = (id: string, keep: URLSearchParams) => `/cyberchess/p/${encodeURIComponent(id)}${keep.toString() ? "?" + keep.toString() : ""}`;
+async function sleduyushchayaZadacha(tekId: string, rating: number, keep: URLSearchParams, polnaya: string): Promise<string> {
+  const next = await sleduyushchiyId(tekId, rating);
+  return next ? adresZadachi(next, keep) : polnaya;
+}
+
+/** Параметры, которые едут из задачи в задачу: метка канала, проба, пост. */
+function keepIz(url: URL): URLSearchParams {
+  const keep = new URLSearchParams();
+  for (const k of ["c", "probe", "p"]) { const v = url.searchParams.get(k); if (v) keep.set(k, v); }
+  return keep;
 }
 
 const esc = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+type Vid = { id: string; fen: string; zadanie: string; name: string; rating: number; theme: string; locale: PzYazyk; storona: "w" | "b"; polnaya: string; sleduyushchaya: string; daily: boolean; channel: string | null; post: string | null; path: string; title: string; description: string };
+
+/** Клетки доски готовым HTML — один источник для первого экрана (GET) и для «следующей» без перезагрузки (POST akt=next, очередь 14.10 п.1). */
+function kletkiRazmetka(fen: string, storona: "w" | "b"): string {
+  const ryady = kletki(fen, storona);
+  const mogut = new Set(hodyashchie(fen, storona));
+  // Координаты как у lichess: буква на нижнем ряду, цифра в левом столбце (в атрибутах — draw() их перерисовывает).
+  return ryady.flatMap((ryad, r) => ryad.map((k, c) => {
+    const cf = r === 7 ? ` data-cf="${k.sq[0]}"` : "";
+    const cr = c === 0 ? ` data-cr="${k.sq[1]}"` : "";
+    const koord = (r === 7 ? `<i class="c f">${k.sq[0]}</i>` : "") + (c === 0 ? `<i class="c r">${k.sq[1]}</i>` : "");
+    return `<button type="button" data-sq="${k.sq}"${cf}${cr} class="${k.dark ? "d" : "l"}${mogut.has(k.sq) ? " m" : ""}" aria-label="${k.sq}">${k.p ? `<span class="${k.p[0] === "w" ? "w" : "b"}">${GLIF[k.p]}</span>` : ""}${koord}</button>`;
+  })).join("");
+}
+
+/** Конфигурация инлайн-клиента (#cc-cfg) — та же для GET и для JSON «следующей». */
+function konfigKlienta(p: Vid) {
+  const t = (k: string) => pzT(p.locale, k);
+  return { id: p.id, fen: p.fen, i: 0, storona: p.storona, movable: hodyashchie(p.fen, p.storona), texts: { wrong: t("pz.wrong"), yourMove: t("pz.yourMove"), hint: t("pz.hint"), solved: t("pz.solved").replace("{name}", p.name), hintShown: t("pz.hintShown"), copied: t("pz.copied"), shareTitle: p.title, solution: t("pz.solution") }, ev: { channel: p.channel, post: p.post, path: p.path, rating: p.rating, theme: p.theme, fen: p.fen, daily: p.daily } };
+}
+
+/** Всё, что нужно экрану задачи, из сырой задачи бэкенда: задание, имя, адреса «полной» и «следующей», заголовок. */
+async function sobratVid(id: string, syraya: Syraya, locale: PzYazyk, url: URL): Promise<Vid> {
+  const pz = zadachaDlyaEkrana({ fen: syraya.fen, sol: syraya.sol, name: syraya.name ?? "", r: syraya.r ?? 1200, theme: syraya.theme ?? "" });
+  const zadanie = zadanieNadDoskoy(pz, locale);
+  const name = imyaPoResheniyu(pz, locale) ?? (syraya.name || "");
+  const keep = keepIz(url);
+  const daily = id === "daily";
+  const polnaya = daily ? `/cyberchess/daily${keep.toString() ? "?" + keep.toString() : ""}` : `/cyberchess?puzzle=${encodeURIComponent(id)}${keep.toString() ? "&" + keep.toString() : ""}`;
+  const sleduyushchaya = await sleduyushchayaZadacha(id, pz.r ?? 1200, keep, polnaya);
+  const c = url.searchParams.get("c") ?? undefined;
+  const title = `${daily ? pzT(locale, "pz.daily") + " · " : ""}${zadanie} · CyberChess`;
+  const description = locale === "ru" ? "Реши задачу прямо здесь — без регистрации. Полная версия: тренер, подсказки, 500 000 задач." : locale === "kk" ? "Есепті осы жерде шеш — тіркеусіз. Толық нұсқа: жаттықтырушы, кеңестер, 500 000 есеп." : "Solve it right here — no sign-up. Full version: coach, hints, 500,000 puzzles.";
+  return { id, fen: pz.fen, zadanie, name, rating: pz.r ?? 1200, theme: pz.theme ?? "", locale, storona: sozdatSostoyanie(pz.fen, pz.sol).storona, polnaya, sleduyushchaya, daily, channel: channelFrom(c), post: postFrom(c), path: url.pathname + url.search, title, description };
+}
 
 /*
  * Разметка лёгкой задачи. Доска — главный объект: её сторона считается от ОКНА ПОЛЬЗОВАТЕЛЯ (слово основателя
@@ -64,18 +110,10 @@ const esc = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;"
  * доска по высоте окна слева, справа панель задания/статуса 290–360 px — разметка lichess. --zm — ручной масштаб 0,6…1
  * («−/+»), помнится в localStorage. Комментарий здесь, а не в <style>: в en/kk-страницу кириллица не уезжает.
  */
-function html(p: { id: string; fen: string; zadanie: string; name: string; rating: number; theme: string; locale: PzYazyk; storona: "w" | "b"; polnaya: string; sleduyushchaya: string; daily: boolean; channel: string | null; post: string | null; path: string; title: string; description: string }): string {
+function html(p: Vid): string {
   const t = (k: string) => pzT(p.locale, k);
-  const ryady = kletki(p.fen, p.storona);
-  const mogut = new Set(hodyashchie(p.fen, p.storona));
-  // Координаты как у lichess: буква на нижнем ряду, цифра в левом столбце (в атрибутах — draw() их перерисовывает).
-  const kletkiHtml = ryady.flatMap((ryad, r) => ryad.map((k, c) => {
-    const cf = r === 7 ? ` data-cf="${k.sq[0]}"` : "";
-    const cr = c === 0 ? ` data-cr="${k.sq[1]}"` : "";
-    const koord = (r === 7 ? `<i class="c f">${k.sq[0]}</i>` : "") + (c === 0 ? `<i class="c r">${k.sq[1]}</i>` : "");
-    return `<button type="button" data-sq="${k.sq}"${cf}${cr} class="${k.dark ? "d" : "l"}${mogut.has(k.sq) ? " m" : ""}" aria-label="${k.sq}">${k.p ? `<span class="${k.p[0] === "w" ? "w" : "b"}">${GLIF[k.p]}</span>` : ""}${koord}</button>`;
-  })).join("");
-  const cfg = { id: p.id, fen: p.fen, i: 0, storona: p.storona, movable: [...mogut], texts: { wrong: t("pz.wrong"), yourMove: t("pz.yourMove"), hint: t("pz.hint"), solved: t("pz.solved").replace("{name}", p.name), hintShown: t("pz.hintShown"), copied: t("pz.copied"), shareTitle: p.title, solution: t("pz.solution") }, ev: { channel: p.channel, post: p.post, path: p.path, rating: p.rating, theme: p.theme, fen: p.fen, daily: p.daily } };
+  const kletkiHtml = kletkiRazmetka(p.fen, p.storona);
+  const cfg = konfigKlienta(p);
   return `<!doctype html><html lang="${p.locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>${esc(p.title)}</title><meta name="description" content="${esc(p.description)}"><meta name="robots" content="noindex">
 <link rel="canonical" href="https://aevion.app${esc(p.polnaya)}">
@@ -134,18 +172,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   const syraya = await zagruzit(id);
   if (!syraya) return new Response("puzzle not found", { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } });
   const locale = yazykZaprosa(req.headers.get("cookie"), url.searchParams.get("lang"), req.headers.get("accept-language"));
-  const pz = zadachaDlyaEkrana({ fen: syraya.fen, sol: syraya.sol, name: syraya.name ?? "", r: syraya.r ?? 1200, theme: syraya.theme ?? "" });
-  const zadanie = zadanieNadDoskoy(pz, locale);
-  const name = imyaPoResheniyu(pz, locale) ?? (syraya.name || "");
-  const keep = new URLSearchParams();
-  for (const k of ["c", "probe", "p"]) { const v = url.searchParams.get(k); if (v) keep.set(k, v); }
-  const daily = id === "daily";
-  const polnaya = daily ? `/cyberchess/daily${keep.toString() ? "?" + keep.toString() : ""}` : `/cyberchess?puzzle=${encodeURIComponent(id)}${keep.toString() ? "&" + keep.toString() : ""}`;
-  const sleduyushchaya = await sleduyushchayaZadacha(id, pz.r ?? 1200, keep, polnaya);
-  const c = url.searchParams.get("c") ?? undefined;
-  const title = `${daily ? pzT(locale, "pz.daily") + " · " : ""}${zadanie} · CyberChess`;
-  const description = locale === "ru" ? "Реши задачу прямо здесь — без регистрации. Полная версия: тренер, подсказки, 500 000 задач." : locale === "kk" ? "Есепті осы жерде шеш — тіркеусіз. Толық нұсқа: жаттықтырушы, кеңестер, 500 000 есеп." : "Solve it right here — no sign-up. Full version: coach, hints, 500,000 puzzles.";
-  const body = html({ id, fen: pz.fen, zadanie, name, rating: pz.r ?? 1200, theme: pz.theme ?? "", locale, storona: sozdatSostoyanie(pz.fen, pz.sol).storona, polnaya, sleduyushchaya, daily, channel: channelFrom(c), post: postFrom(c), path: url.pathname + url.search, title, description });
+  const body = html(await sobratVid(id, syraya, locale, url));
   return new Response(body, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "private, no-store", "Vary": "Accept-Language, Cookie" } });
 }
 
@@ -153,8 +180,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   const syraya = await zagruzit(id);
   if (!syraya) return Response.json({ vid: "wrong", error: "puzzle not found" }, { status: 404 });
-  let b: { akt?: string; fen?: string; i?: number; from?: string; to?: string } = {};
+  let b: { akt?: string; fen?: string; i?: number; from?: string; to?: string; lang?: string } = {};
   try { b = (await req.json()) as typeof b; } catch { return Response.json({ vid: "wrong", error: "bad json" }, { status: 400 }); }
+  if (b.akt === "next") {
+    // «Следующая» одним тапом без перезагрузки (очередь 14.10 п.1): клетки и конфиг — те же, что в GET, но JSON-ом;
+    // клиент шлёт сюда ?c=/probe из своего адреса, чтобы метка канала ехала дальше по серии. Нет следующей — 404, клиент идёт по ссылке.
+    const url = new URL(req.url);
+    const locale = yazykZaprosa(req.headers.get("cookie"), typeof b.lang === "string" ? b.lang : url.searchParams.get("lang"), req.headers.get("accept-language"));
+    const nextId = await sleduyushchiyId(id, syraya.r ?? 1200);
+    const nextSyraya = nextId ? await zagruzit(nextId) : null;
+    if (!nextId || !nextSyraya) return Response.json({ vid: "wrong", error: "no next puzzle" }, { status: 404 });
+    const nurl = new URL(adresZadachi(nextId, keepIz(url)), url.origin);
+    const vid = await sobratVid(nextId, nextSyraya, locale, nurl);
+    return Response.json({ id: vid.id, url: nurl.pathname + nurl.search, html: kletkiRazmetka(vid.fen, vid.storona), cfg: konfigKlienta(vid), zadanie: vid.zadanie, title: vid.title, next: vid.sleduyushchaya, polnaya: vid.polnaya });
+  }
   const pz = zadachaDlyaEkrana({ fen: syraya.fen, sol: syraya.sol, name: syraya.name ?? "", r: syraya.r ?? 1200, theme: syraya.theme ?? "" });
   const i = Number.isInteger(b.i) && (b.i as number) >= 0 ? (b.i as number) : 0;
   const s = sostoyanieNaShage(pz.fen, pz.sol, i);

@@ -868,6 +868,23 @@ function sqLuma(hex:string):number{
   return 0.299*r+0.587*g+0.114*b;
 }
 
+/* 140б (16.10.2026): палитра тем и масштаб «− 100 % +» — один компонент на два места:
+   под доской (как было) и в верху правой панели на низком десктопе с боковой панелью
+   (1463×724: ряд под доской стоил 26 px, доска 538 = 74 % vh при планке lichess 76 %). */
+type PalitraProps={boardTheme:number;onTheme:(i:number)=>void;boardScale:number;onScale:(f:(s:number)=>number)=>void;cc:{text:string;textMute:string;border:string;surface1:string}};
+const PalitraIMasshtab=React.memo(function PalitraIMasshtab({boardTheme,onTheme,boardScale,onScale,cc:CC}:PalitraProps){
+  const sBoardTheme=onTheme,sBoardScale=onScale;
+  return (
+    <div data-cc-palitra="1" style={{display:"flex",gap:3,flexShrink:0,alignItems:"center"}}>
+      {BOARD_THEMES.slice(0,8).map((th,i)=><button key={i} title={`Тема: ${th.name}`} aria-label={`Тема доски: ${th.name}`} aria-pressed={boardTheme===i} onClick={()=>sBoardTheme(i)} style={{width:22,height:22,borderRadius:"50%",border:boardTheme===i?`2px solid ${CC.text}`:`2px solid ${CC.border}`,background:th.dark,cursor:"pointer",padding:0,flexShrink:0,outline:"none",transition:"transform 120ms",transform:boardTheme===i?"scale(1.18)":"scale(1)"}}/>)}
+      <div style={{width:1,height:12,background:CC.border,margin:"0 2px"}}/>
+      <button title="Уменьшить доску (Ctrl+-)" aria-label="Уменьшить доску" onClick={()=>sBoardScale(s=>Math.max(0.5,parseFloat((s-0.1).toFixed(1))))} style={{width:26,height:26,borderRadius:4,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,fontSize:15,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>−</button>
+      <span title="Размер доски" style={{fontSize:9.5,color:CC.textMute,fontWeight:800,minWidth:28,textAlign:"center",fontFamily:"ui-monospace,monospace"}}>{Math.round(boardScale*100)}%</span>
+      <button title="Увеличить доску (Ctrl+=)" aria-label="Увеличить доску" onClick={()=>sBoardScale(s=>Math.min(1.5,parseFloat((s+0.1).toFixed(1))))} style={{width:26,height:26,borderRadius:4,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,fontSize:15,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>+</button>
+    </div>
+  );
+});
+
 type CellProps={
   sq:Square;
   pieceType:"p"|"n"|"b"|"r"|"q"|"k"|null;
@@ -1836,7 +1853,10 @@ export default function CyberChessPage(){
     return()=>{clearInterval(id);window.removeEventListener("resize",measure)};
   },[vwPx,vhPx]);
   const строкаИгрокаPx=vhPx<800?40:48;                       // 139: аватар 32 / часы 36 или 44, + поля 2+2
-  const подДоской139=зашёлЗаЗадачей?36:26+строкаИгрокаPx;     // буквы 26 + строка «Вы» (пришедшему за задачей — только буквы)
+  // 140б: на низком десктопе с боковой панелью (≥1280 и <860) ряд «буквы · палитра · масштаб» уходит в панель:
+  // буквы и так в клетках, а 26 px ряда отдаются доске (1463×724: 538 → 564, 74 → 78 % vh; lichess 76–79).
+  const рядМасштабаВПанели=панельРядом&&vhPx<860&&!зашёлЗаЗадачей;
+  const подДоской139=зашёлЗаЗадачей?36:(рядМасштабаВПанели?0:26)+строкаИгрокаPx;     // буквы 26 + строка «Вы» (пришедшему за задачей — только буквы)
   const desktopVReserve=(boardTopPx>0?boardTopPx:110)+подДоской139+8;
   const vReserve=vwPx>=769?desktopVReserve:300;
   const evalБарВиден=sfOk&&!p2pMode&&(tab==="analysis"||tab==="play"||tab==="coach");
@@ -7829,7 +7849,7 @@ export default function CyberChessPage(){
         // Сторона превью = свободная высота (шапка ≤64 + поля) либо ширина без правой колонки; масштаб «−/+»
         // тот же, что у игровой доски (0,6–1,0 от доступного), запоминается в localStorage.
         const лоббиРядом=vwPx>=1280; // 1024–1279: лобби под доской, иначе колонка съедает ширину (замер 1024×900: 496 px)
-        const превьюPx=Math.round((isMobileLayout?vwPx-20:Math.max(360,Math.min(vhPx-(лоббиРядом?190:230),vwPx-(лоббиРядом?420+48:48)-dockReserve)))*Math.max(0.6,Math.min(1,boardScale)));
+        const превьюPx=Math.round((isMobileLayout?vwPx-20:Math.max(360,Math.min(vhPx-(лоббиРядом?160:200),vwPx-(лоббиРядом?420+48:48)-dockReserve)))*Math.max(0.6,Math.min(1,boardScale)));
         return<div style={{flex:1,minHeight:0,overflowY:"auto",marginBottom:16,...(лоббиРядом?{display:"grid",gridTemplateColumns:`minmax(0,auto) minmax(${320}px,${420}px)`,alignItems:"start",columnGap:24}:{display:"flex",flexDirection:"column"}),gap:SPACE[3],maxWidth:лоббиРядом?1700:1180,width:"100%",marginInline:"auto"}}>
 
           {/* ─── ДОСКА ПЕРВЫМ ДЕЛОМ ───
@@ -9827,16 +9847,11 @@ export default function CyberChessPage(){
           </div>
           {/* Телефон: палитра тем и масштаб уходят на вторую строку, а буквы a–h занимают всю ширину
               доски — иначе на 390 сетка букв сжималась до ~70px и «ABCDEFGH» слипалось слева (тестер 20.09.2026). */}
-          <div style={{display:"flex",alignItems:"center",paddingLeft:обвязкаДоскиPx+3,width:bw,gap:4,flexWrap:vwPx<769?"wrap":"nowrap"}}>
+          {/* 140б: на низком десктопе с боковой панелью ряд не нужен — буквы уже в клетках (coordFile), палитра и масштаб в панели. */}
+          {!рядМасштабаВПанели&&<div style={{display:"flex",alignItems:"center",paddingLeft:обвязкаДоскиPx+3,width:bw,gap:4,flexWrap:vwPx<769?"wrap":"nowrap"}}>
             <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:vwPx<769?"1 1 100%":1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div>
-            <div style={{display:"flex",gap:3,flexShrink:0,alignItems:"center"}}>
-              {BOARD_THEMES.slice(0,8).map((th,i)=><button key={i} title={`Тема: ${th.name}`} aria-label={`Тема доски: ${th.name}`} aria-pressed={boardTheme===i} onClick={()=>sBoardTheme(i)} style={{width:22,height:22,borderRadius:"50%",border:boardTheme===i?`2px solid ${CC.text}`:`2px solid ${CC.border}`,background:th.dark,cursor:"pointer",padding:0,flexShrink:0,outline:"none",transition:"transform 120ms",transform:boardTheme===i?"scale(1.18)":"scale(1)"}}/>)}
-              <div style={{width:1,height:12,background:CC.border,margin:"0 2px"}}/>
-              <button title="Уменьшить доску (Ctrl+-)" aria-label="Уменьшить доску" onClick={()=>sBoardScale(s=>Math.max(0.5,parseFloat((s-0.1).toFixed(1))))} style={{width:26,height:26,borderRadius:4,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,fontSize:15,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>−</button>
-              <span title="Размер доски" style={{fontSize:9.5,color:CC.textMute,fontWeight:800,minWidth:28,textAlign:"center",fontFamily:"ui-monospace,monospace"}}>{Math.round(boardScale*100)}%</span>
-              <button title="Увеличить доску (Ctrl+=)" aria-label="Увеличить доску" onClick={()=>sBoardScale(s=>Math.min(1.5,parseFloat((s+0.1).toFixed(1))))} style={{width:26,height:26,borderRadius:4,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,fontSize:15,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>+</button>
-            </div>
-          </div>
+            <PalitraIMasshtab boardTheme={boardTheme} onTheme={sBoardTheme} boardScale={boardScale} onScale={sBoardScale} cc={CC}/>
+          </div>}
 
           {/* 139б: во время партии карточку онбординга под доской не рисуем — она отодвигала строку «Вы» с часами
               за нижний край (768×1024: 1092 при 1024; 390×844: 782). После партии и вне её — как была. */}
@@ -10341,6 +10356,7 @@ export default function CyberChessPage(){
           {mobileSidebarOpen&&<div className="cc-right-panel-backdrop" onClick={()=>sMobileSidebarOpen(false)}/>}
           <div className={`cc-right-panel${mobileSidebarOpen?" open":""}`} style={{flex:vwPx>=769&&!панельРядом?"1 1 100%":"0 0 auto",width:vwPx>=769&&!панельРядом?"100%":rightPanelMax,minWidth:0,maxWidth:vwPx>=769&&!панельРядом?"100%":rightPanelMax,display:"flex",flexDirection:"column",gap:0,overflowY:"auto",maxHeight:"100%"}}>
           {!isMobileLayout&&полоскаСтарта("100%")}
+          {рядМасштабаВПанели&&<div data-cc-masshtab-v-paneli="1" style={{display:"flex",justifyContent:"flex-end",padding:"6px 8px 2px",flexShrink:0}}><PalitraIMasshtab boardTheme={boardTheme} onTheme={sBoardTheme} boardScale={boardScale} onScale={sBoardScale} cc={CC}/></div>}
           {/* ── Right panel sub-tabs (play mode only) ── */}
           {on&&!setup&&tab==="play"&&<div style={{
             display:"flex",gap:0,borderBottom:`1px solid ${CC.border}`,

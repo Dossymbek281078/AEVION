@@ -15,7 +15,7 @@ const src = readFileSync(join(__dirname, "..", "page.tsx"), "utf8");
 describe("доска во всю доступную высоту (136)", () => {
   it("🔴 резервы: шапка+полоска+под доской, без 150–186 px и без max(250); 139: предкап = измеренный бюджет", () => {
     expect(src).toContain("const vReserve=vwPx>=769?desktopVReserve:300;");
-    expect(src).toContain("const подДоской139=зашёлЗаЗадачей?36:26+строкаИгрокаPx;");
+    expect(src).toContain("const подДоской139=зашёлЗаЗадачей?36:(рядМасштабаВПанели?0:26)+строкаИгрокаPx;"); // 140б: ряд в панели — 26 доске
     expect(src).toContain("const desktopVReserve=(boardTopPx>0?boardTopPx:110)+подДоской139+8;");
     expect(src).not.toContain("const desktopVReserve=Math.max(250,");
   });
@@ -46,7 +46,7 @@ describe("доска во всю доступную высоту (136)", () => {
   });
   it("🔴 первый экран (настройка): превью по высоте окна, лобби колонкой справа с 1280, масштаб −/+ под превью, карточка после доски", () => {
     expect(src).toContain("const лоббиРядом=vwPx>=1280;");
-    expect(src).toContain("const превьюPx=Math.round((isMobileLayout?vwPx-20:Math.max(360,Math.min(vhPx-(лоббиРядом?190:230),vwPx-(лоббиРядом?420+48:48)-dockReserve)))*Math.max(0.6,Math.min(1,boardScale)));");
+    expect(src).toContain("const превьюPx=Math.round((isMobileLayout?vwPx-20:Math.max(360,Math.min(vhPx-(лоббиРядом?160:200),vwPx-(лоббиРядом?420+48:48)-dockReserve)))*Math.max(0.6,Math.min(1,boardScale)));");
     expect(src).toContain('maxPx={превьюPx}');
     expect(src).toContain('data-cc-setup-zoom="1"');
     expect(src).toContain("gridTemplateColumns:`minmax(0,auto) minmax(${320}px,${420}px)`");

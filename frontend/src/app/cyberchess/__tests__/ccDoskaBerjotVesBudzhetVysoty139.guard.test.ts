@@ -19,7 +19,7 @@ const раз = (s: string, образец: string) => s.split(образец).le
 describe("доска берёт весь измеренный бюджет высоты (139)", () => {
   it("🔴 предкап и бюджет — одно число из замера верха; под доской буквы + строка игрока", () => {
     expect(src).toContain("const строкаИгрокаPx=vhPx<800?40:48;");
-    expect(src).toContain("const подДоской139=зашёлЗаЗадачей?36:26+строкаИгрокаPx;");
+    expect(src).toContain("const подДоской139=зашёлЗаЗадачей?36:(рядМасштабаВПанели?0:26)+строкаИгрокаPx;"); // 140б: ряд в панели — 26 доске
     expect(src).toContain("const desktopVReserve=(boardTopPx>0?boardTopPx:110)+подДоской139+8;");
     expect(src).toContain("const vReserve=vwPx>=769?desktopVReserve:300;");
     expect(src).not.toContain("const vReserve=vwPx>=769?190:300;");

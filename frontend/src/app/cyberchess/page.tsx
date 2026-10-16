@@ -6989,7 +6989,9 @@ export default function CyberChessPage(){
      * автоперехода — панель «Решено!» с кнопкой «Следующая задача» и событие
      * next_clicked: доля «взялись за вторую» станет измеримой. Rush не трогаем.
      */
-    if(зашёлЗаЗадачей&&pzMode!=="rush")return;
+    // 16.10: и после задачи дня — панель «Решено!» с полем отзыва вместо автоперехода (замер прода: через
+    // 1,1 с доска уже показывала другую задачу, панели не было, окно подписки шло первым).
+    if((зашёлЗаЗадачей||этоЗадачаДня)&&pzMode!=="rush")return;
     const delay=pzMode==="rush"?550:pzMode==="learn"?1100:1200;
     const t=setTimeout(()=>{loadNextPuzzleRef.current();},delay);
     return()=>clearTimeout(t);

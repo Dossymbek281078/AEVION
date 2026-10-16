@@ -3,7 +3,8 @@ import { стримГоден } from "./ответНеГоден";
 import { лимитПровайдера, когдаВернётся as срокВозврата, тренерОтветил, пометкаОВыключенномРазборе, пометкаЗапаснойМодели, общаяОчередьАнонимов } from "./coachOutage";
 import { главныйВыдуманныйХод, дополнитьХодомДвижка, текстВместоОтвета } from "./проверьХодыОтвета";
 import { denPoMestnomu, vcheraPoMestnomu } from "./denPoMestnomu";
-import { otmetitPervyyHod } from "./pervyyHod";
+import { otmetitPervyyHod, pervyyHodSdelan } from "./pervyyHod";
+import { verhTostaNaTelefone } from "./tostPodDoskoy";
 import { soobschenieONorme } from "./normaTrenera";
 import { track } from "@/lib/track";
 import { ishodDlyaCPI, resheniePoKontsuPartii } from "./ishodPartii";
@@ -880,9 +881,11 @@ type CellProps={
   pmIdx?:number;
   coordFile?:string;
   coordRank?:number;
+  /** 140: фигура ходящей стороны до первого хода в задаче — дышащее кольцо «нажми меня». */
+  iNudge?:boolean;
 };
 
-const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk,iPM,iPS,iL,isShadow,isAnimDest,isDragOrigin,iHover,iHoverCap,iSH,dotOnDark,pmIdx,coordFile,coordRank}:CellProps){
+const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk,iPM,iPS,iL,isShadow,isAnimDest,isDragOrigin,iHover,iHoverCap,iSH,dotOnDark,pmIdx,coordFile,coordRank,iNudge}:CellProps){
   void iPM;
   const hasPiece=pieceType&&pieceColor;
   const isLifted=(iS||iPS)&&!isDragOrigin;
@@ -920,6 +923,10 @@ const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk
         (bg-тинта T.last мало: фигура занимает 88% клетки). Не рисуем на клетке
         шаха (там свой red pulse-glow) чтобы маркеры не наслаивались. */}
     {iL&&!iCk&&<div style={{position:"absolute",inset:0,boxShadow:"inset 0 0 0 clamp(2px,4%,5px) rgba(217,119,6,0.92)",pointerEvents:"none",zIndex:1}}/>}
+    {/* 140: до первого хода в задаче фигуры ходящей стороны дышат синим кольцом —
+        «нажми меня». Гаснет после первого хода (pervyyHodSdelan), не рисуется на
+        выбранной клетке — там своя подсветка. */}
+    {iNudge&&!iS&&<div className="cc-nudge-ring" data-cc-nudge="1" style={{position:"absolute",inset:0,pointerEvents:"none",zIndex:1}}/>}
     {/* Strip-hover sync — sky-blue ring на from/to наведённого хода (analysis bar) */}
     {iSH&&<div style={{position:"absolute",inset:0,boxShadow:"inset 0 0 0 clamp(2px,4%,5px) rgba(56,189,248,0.95)",pointerEvents:"none",zIndex:1}}/>}
     {coordRank!==undefined&&<div style={{position:"absolute",top:"6%",left:"6%",fontSize:"clamp(8px,1.1vw,12px)",fontWeight:800,color:coordCol,pointerEvents:"none",lineHeight:1,userSelect:"none",zIndex:2}}>{coordRank}</div>}
@@ -1706,7 +1713,11 @@ export default function CyberChessPage(){
   // прокрученный к верху ряд чипов («📡 Стрим» под «RU ▼», тестер 20.09, низ страницы).
   useEffect(()=>{const r=document.documentElement.style;
     const apply=()=>{try{
-      if(vwPx<769){const rc=document.querySelector("[data-cc-header]")?.getBoundingClientRect();const h=rc?Math.max(rc.bottom,rc.height):56;r.setProperty("--aevion-toast-top",`${Math.round(Math.max(56,h))+8}px`);r.setProperty("--aevion-toast-bottom","auto");r.setProperty("--aevion-toast-lift","0px");}
+      if(vwPx<769){const rc=document.querySelector("[data-cc-header]")?.getBoundingClientRect();const h=rc?Math.max(rc.bottom,rc.height):56;
+        // 140 (16.10.2026): тост под шапкой закрывал строку задания и верх доски те 5 с, когда
+        // новичок решает, что нажать. Доска в кадре и под ней есть место — тост ПОД доску.
+        const bd=document.querySelector("[data-cc-board]")?.getBoundingClientRect();
+        r.setProperty("--aevion-toast-top",`${verhTostaNaTelefone({shapkaNiz:h,doskaNiz:bd?bd.bottom:null,vh:window.innerHeight})}px`);r.setProperty("--aevion-toast-bottom","auto");r.setProperty("--aevion-toast-lift","0px");}
       else{r.removeProperty("--aevion-toast-top");r.removeProperty("--aevion-toast-bottom");r.setProperty("--aevion-toast-lift","0px");}
     }catch{}};
     apply();
@@ -3565,6 +3576,10 @@ export default function CyberChessPage(){
   const tc:TC=useCustom?{name:`${customMin}+${customInc}`,ini:customMin*60,inc:customInc,cat:customMin<3?"Bullet":customMin<8?"Blitz":customMin<20?"Rapid":"Classical"}:TCS[tcI];
   const lv=ALS[aiI],rk=gRank(rat);
   const aiC:ChessColor=pCol==="w"?"b":"w",myT=game.turn()===pCol,chk=game.isCheck(),useSF=aiI>=3;
+  // 140 (16.10.2026): чья сторона «дышит» кольцом до первого хода в задаче. null — подсказки нет:
+  // не задача, ход уже был (pervyyHodSdelan по памяти события first_move), просмотр истории,
+  // попытка уже оценена. Ref читается на рендере: ход меняет lm/hist, и рендер приходит сам.
+  const nudgeSide:ChessColor|null=tab==="puzzles"&&!!pzCurrent&&pzAttempt==="idle"&&browseIdx<0&&!pervyyHodSdelan(pervyyHodOtpravlenRef,pzCurrent.id)?game.turn():null;
   // Текстовое описание позиции для screen-reader (сама доска рисуется пиксельно, без
   // per-square DOM — поэтому даём role="img" + это описание и live-регион на ход).
   const boardA11y=(()=>{
@@ -9214,7 +9229,7 @@ export default function CyberChessPage(){
               по ссылке из комментария, не видел на экране ни чей ход, ни что искать:
               это было только в подписи для скринридера и в карточке правой панели,
               а она на телефоне — закрытая шторка. Число ходов из РЕШЕНИЯ, не из тега. */}
-          {tab==="puzzles"&&pzCurrent&&<div style={{width:bw,paddingLeft:обвязкаДоскиPx+3,fontSize:13,fontWeight:800,color:CC.text,lineHeight:1.25,marginBottom:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{zadanieNadDoskoy(pzCurrent,cc.locale)}</div>}
+          {tab==="puzzles"&&pzCurrent&&<div style={{width:bw,paddingLeft:обвязкаДоскиPx+3,fontSize:13,fontWeight:800,color:CC.text,lineHeight:1.25,marginBottom:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{zadanieNadDoskoy(pzCurrent,cc.locale)}{/* 140: до первого хода — призыв нажать подсвеченную фигуру (та же фраза, что в лёгкой задаче /p) */}{nudgeSide!==null&&<span data-cc-nudge-text="1" style={{color:"#2563eb"}}>{" · "+cc.t("pz.hint")}</span>}</div>}
           <div translate="no" style={{display:"flex",width:bw,gap:4,position:"relative"}}>
             {/* Eval bar — with W/B labels + centered numeric badge.
                 Hidden in P2P mode (no analysis surface during human matches). */}
@@ -9529,6 +9544,7 @@ export default function CyberChessPage(){
                 const isLeftCol=c===(flip?7:0);
                 const isBottomRow=r===(flip?0:7);
                 return <Cell key={sq} sq={sq}
+                  iNudge={nudgeSide!==null&&p?.color===nudgeSide}
                   pieceType={(p?.type as any)||null}
                   pieceColor={(p?.color as any)||null}
                   bg={bg} cursor={!over&&p?.color===pCol?"grab":"default"}

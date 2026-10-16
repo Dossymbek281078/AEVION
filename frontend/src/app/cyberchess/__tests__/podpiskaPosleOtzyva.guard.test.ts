@@ -1,6 +1,7 @@
-// 🔴 16.10.2026: после партии первым идёт отзыв, окно подписки на запуск — после «Отправить»
-// или после закрытия плашки. Решение оркестратора по данным: за 7 дней окно после партии
-// дало 0 живых адресов (waitlist_submit source=cyberchess-game-over — 0; живых концов партии 1 из 26).
+// 🔴 16.10.2026: после партии и после зачтённой задачи дня первым идёт отзыв, окно подписки на
+// запуск — после «Отправить» или после закрытия плашки/панели. Решение оркестратора по данным
+// (скан журнала событий за 7 дней): waitlist_submit source=cyberchess-game-over — 0, source=…-daily-solved — 0;
+// живых концов партии 1 из 26, живых зачётов задачи дня 0 из 1 (остальное — пробы).
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -15,28 +16,31 @@ describe("окно подписки ждёт отзыв", () => {
     expect(podpiskaPora({ ждёт: true, otzyvOtpravlen: false, plashkaOtkryta: false })).toBe(true);
   });
 
-  it("не ждёт (уже показывали / повод не game-over) — окна нет ни при каких условиях", () => {
+  it("не ждёт (уже показывали / повод не наш) — окна нет ни при каких условиях", () => {
     expect(podpiskaPora({ ждёт: false, otzyvOtpravlen: true, plashkaOtkryta: true })).toBe(false);
     expect(podpiskaPora({ ждёт: false, otzyvOtpravlen: false, plashkaOtkryta: false })).toBe(false);
   });
 
-  it("🔴 страница: таймера 2,2 с после конца партии больше нет, ожидание ставится в ref", () => {
+  it("🔴 страница: таймеров 2,2 с (партия) и 1,4 с (задача дня) больше нет, повод ждёт в ref", () => {
     expect(СТРАНИЦА).not.toContain('sShowWaitlist(true);try{localStorage.setItem("aevion_chess_waitlist_seen","1")}catch{}},2200)');
-    expect(СТРАНИЦА).toContain("подпискаЖдётОтзываRef.current=true;\n  },[over]);");
+    expect(СТРАНИЦА).not.toContain('sShowWaitlist(true);try{localStorage.setItem("aevion_chess_waitlist_seen","1")}catch{}},1400)');
+    expect(СТРАНИЦА).toContain('подпискаЖдётОтзываRef.current="game-over";sПодпискаТик(t=>t+1);\n  },[over]);');
+    expect(СТРАНИЦА).toContain('подпискаЖдётОтзываRef.current="daily-solved";sПодпискаТик(t=>t+1);');
   });
 
-  it("страница: показ — один раз (ref сбрасывается) и с отметкой «один раз на устройство»", () => {
+  it("страница: показ — один раз (ref сбрасывается), повод из ref, отметка «один раз на устройство»", () => {
     const i = СТРАНИЦА.indexOf("const показатьПодпискуПослеОтзыва=()=>{");
     expect(i).toBeGreaterThan(0);
     const тело = СТРАНИЦА.slice(i, СТРАНИЦА.indexOf("\n", i));
-    expect(тело).toContain("if(!подпискаЖдётОтзываRef.current)return;подпискаЖдётОтзываRef.current=false;");
-    expect(тело).toContain('sПоводПодписки("game-over");sShowWaitlist(true);');
+    expect(тело).toContain("const повод=подпискаЖдётОтзываRef.current;if(!повод)return;подпискаЖдётОтзываRef.current=null;sПоводПодписки(повод);sShowWaitlist(true);");
     expect(тело).toContain('localStorage.setItem("aevion_chess_waitlist_seen","1")');
   });
 
-  it("страница: плашка закрыта — условие то же, что у самой плашки; отправка отзыва зовёт показ", () => {
-    expect(СТРАНИЦА).toContain('podpiskaPora({ждёт:подпискаЖдётОтзываRef.current,otzyvOtpravlen:false,plashkaOtkryta:!!over&&!setup&&tab==="play"&&!showGameOver})');
+  it("страница: «плашка открыта» — те же условия, что у плашки после партии и у панели «Решено!»; отправка отзыва зовёт показ в трёх местах", () => {
+    expect(СТРАНИЦА).toContain('const плашкаСОтзывомОткрыта=(!!over&&!setup&&tab==="play"&&!showGameOver)||(зашёлЗаЗадачей&&pzAttempt==="correct"&&!!pzCurrent&&pzMode!=="rush");');
+    expect(СТРАНИЦА).toContain("podpiskaPora({ждёт:!!подпискаЖдётОтзываRef.current,otzyvOtpravlen:false,plashkaOtkryta:плашкаСОтзывомОткрыта})");
     expect(СТРАНИЦА).toContain('{over&&!setup&&tab==="play"&&!showGameOver&&(()=>{'); // условие плашки
-    expect(СТРАНИЦА.split("onSent={показатьПодпискуПослеОтзыва}").length - 1).toBe(2);
+    expect(СТРАНИЦА).toContain('{зашёлЗаЗадачей&&pzAttempt==="correct"&&pzCurrent&&pzMode!=="rush"&&<div data-cc-resheno="1"'); // условие панели
+    expect(СТРАНИЦА.split("onSent={показатьПодпискуПослеОтзыва}").length - 1).toBe(3); // плашка, окно «Итог», панель «Решено!»
   });
 });

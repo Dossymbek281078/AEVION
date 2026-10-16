@@ -2636,8 +2636,11 @@ export default function CyberChessPage(){
   const предлагалиПодпискуRef=useRef(false);
   // 16.10 (решение оркестратора по данным: 0 живых адресов из окна после партии за 7 дней): первым после
   // партии идёт отзыв, окно подписки — после «Отправить» или после закрытия плашки (podpiskaPosleOtzyva.ts).
-  const подпискаЖдётОтзываRef=useRef(false);
-  const показатьПодпискуПослеОтзыва=()=>{if(!подпискаЖдётОтзываRef.current)return;подпискаЖдётОтзываRef.current=false;sПоводПодписки("game-over");sShowWaitlist(true);try{localStorage.setItem("aevion_chess_waitlist_seen","1")}catch{}};
+  // Повод хранится в ref (game-over | daily-solved); тик — чтобы эффект ниже пересчитался после установки ref
+  // из async-ветки (зачёт задачи дня приходит после ответа сервера, без своего ре-рендера).
+  const подпискаЖдётОтзываRef=useRef<null|"game-over"|"daily-solved">(null);
+  const[подпискаТик,sПодпискаТик]=useState(0);
+  const показатьПодпискуПослеОтзыва=()=>{const повод=подпискаЖдётОтзываRef.current;if(!повод)return;подпискаЖдётОтзываRef.current=null;sПоводПодписки(повод);sShowWaitlist(true);try{localStorage.setItem("aevion_chess_waitlist_seen","1")}catch{}};
   useEffect(()=>{
     if(!over||предлагалиПодпискуRef.current)return;
     предлагалиПодпискуRef.current=true;
@@ -2652,7 +2655,7 @@ export default function CyberChessPage(){
     // а не потерять адрес совсем. Падать надо в сторону работы.
     if (povodPredlozhitAdres({партияОкончена:true,задачаДняЗачтена:false}) !== "game-over") return;
     // 16.10: не таймер 2,2 с, а ожидание отзыва — см. эффект podpiskaPora ниже (после объявления setup/showGameOver).
-    подпискаЖдётОтзываRef.current=true;
+    подпискаЖдётОтзываRef.current="game-over";sПодпискаТик(t=>t+1);
   },[over]);
   const[showClockDrill,sShowClockDrill]=useState(false);
   const[showGameDna,sShowGameDna]=useState(false);
@@ -3611,7 +3614,9 @@ export default function CyberChessPage(){
   const nudgeSide:ChessColor|null=tab==="puzzles"&&!!pzCurrent&&pzAttempt==="idle"&&browseIdx<0&&!pervyyHodSdelan(pervyyHodOtpravlenRef,pzCurrent.id)?game.turn():null;
   // 140: тост на телефоне пересчитать, когда доска появилась или сменила размер (см. toastApplyRef выше).
   // 16.10: окно подписки — когда плашка после партии закрылась без отзыва (реванш, новая, разбор, окно «Итог»).
-  useEffect(()=>{if(podpiskaPora({ждёт:подпискаЖдётОтзываRef.current,otzyvOtpravlen:false,plashkaOtkryta:!!over&&!setup&&tab==="play"&&!showGameOver}))показатьПодпискуПослеОтзыва();},[over,setup,tab,showGameOver]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Плашка после партии ИЛИ панель «Решено!» (условия те же, что у самой разметки).
+  const плашкаСОтзывомОткрыта=(!!over&&!setup&&tab==="play"&&!showGameOver)||(зашёлЗаЗадачей&&pzAttempt==="correct"&&!!pzCurrent&&pzMode!=="rush");
+  useEffect(()=>{if(podpiskaPora({ждёт:!!подпискаЖдётОтзываRef.current,otzyvOtpravlen:false,plashkaOtkryta:плашкаСОтзывомОткрыта}))показатьПодпискуПослеОтзыва();},[плашкаСОтзывомОткрыта,подпискаТик]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(()=>{toastApplyRef.current();const b=document.querySelector("[data-cc-board]");if(!b||typeof ResizeObserver==="undefined")return;const ro=new ResizeObserver(()=>toastApplyRef.current());ro.observe(b);return()=>ro.disconnect();},[boardPx,tab,pzCurrent,isMobileLayout]);
   // Текстовое описание позиции для screen-reader (сама доска рисуется пиксельно, без
   // per-square DOM — поэтому даём role="img" + это описание и live-регион на ход).
@@ -3853,7 +3858,9 @@ export default function CyberChessPage(){
              прилетит к человеку, которому только что сказали «не засчитано». */
           if(povodPredlozhitAdres({партияОкончена:false,задачаДняЗачтена:true})==="daily-solved"){
             предлагалиПодпискуRef.current=true;
-            setTimeout(()=>{sПоводПодписки("daily-solved");sShowWaitlist(true);try{localStorage.setItem("aevion_chess_waitlist_seen","1")}catch{}},1400);
+            // 16.10 (шаг 2б оркестратора, по данным: 0 живых адресов из окна после задачи дня за 7 дней): не таймер
+            // 1,4 с, а после «Отправить» в поле отзыва панели «Решено!» или после её закрытия (эффект podpiskaPora).
+            подпискаЖдётОтзываRef.current="daily-solved";sПодпискаТик(t=>t+1);
           }
         }
       }catch{
@@ -9401,7 +9408,7 @@ export default function CyberChessPage(){
                   style={{padding:"9px 16px",borderRadius:RADIUS.md,border:"none",background:CC.accent,color:"#fff",fontWeight:900,fontSize:14,cursor:"pointer"}}>{cc.t("pz.next")}</button>
                 <div style={{fontSize:13,color:"#047857",fontWeight:700}}>{strokaTsennosti(pzTotal,cc.locale)}</div>
                 {/* 16.10: отзыв одной строкой — путь к ≥ 3 отзывам к 20.10; пишется событием otzyv в журнал воронки */}
-                <OtzyvPosleRezultata kontekst="puzzle" t={cc.t} otpravit={track}/>
+                <OtzyvPosleRezultata kontekst="puzzle" t={cc.t} otpravit={track} onSent={показатьПодпискуПослеОтзыва}/>
               </div>}
               {/* Threat Heatmap overlay (killer #12) */}
               {showThreatMap&&(()=>{

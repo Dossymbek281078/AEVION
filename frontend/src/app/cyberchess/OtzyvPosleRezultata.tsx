@@ -39,9 +39,11 @@ type Props = {
   otpravit: typeof trackFn;
   /** Тёмный фон (окно «Итог партии») — поле и кнопка светлые на тёмном. */
   tyomnyy?: boolean;
+  /** После «Отправить» — например, показать окно подписки, которое ждало отзыва. */
+  onSent?: () => void;
 };
 
-export function OtzyvPosleRezultata({ kontekst, t, otpravit, tyomnyy }: Props) {
+export function OtzyvPosleRezultata({ kontekst, t, otpravit, tyomnyy, onSent }: Props) {
   const [text, sText] = useState("");
   const [sent, sSent] = useState(false);
   const fg = tyomnyy ? "#f5f5f4" : "#065f46";
@@ -52,7 +54,7 @@ export function OtzyvPosleRezultata({ kontekst, t, otpravit, tyomnyy }: Props) {
   }
   const goden = tekstOtzyvaGoden(text);
   return (
-    <form data-cc-otzyv={kontekst} onSubmit={(e) => { e.preventDefault(); if (!goden) return; otpravit(sobytieOtzyva(kontekst, text)); sSent(true); }}
+    <form data-cc-otzyv={kontekst} onSubmit={(e) => { e.preventDefault(); if (!goden) return; otpravit(sobytieOtzyva(kontekst, text)); sSent(true); onSent?.(); }}
       /* Плашка после партии лежит ВНУТРИ доски, а доска на pointerdown зовёт preventDefault
          (useBoardInput): без остановки всплытия тап по полю не даёт фокус, клик по кнопке
          висит (замер Playwright 16.10 на проде: locator.click не завершался). */

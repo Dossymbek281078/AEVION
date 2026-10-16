@@ -6,6 +6,7 @@ import { denPoMestnomu, vcheraPoMestnomu } from "./denPoMestnomu";
 import { otmetitPervyyHod, pervyyHodSdelan } from "./pervyyHod";
 import { verhTostaNaTelefone } from "./tostPodDoskoy";
 import { OtzyvPosleRezultata } from "./OtzyvPosleRezultata";
+import { podpiskaPora } from "./podpiskaPosleOtzyva";
 import { soobschenieONorme } from "./normaTrenera";
 import { track } from "@/lib/track";
 import { ishodDlyaCPI, resheniePoKontsuPartii } from "./ishodPartii";
@@ -2633,6 +2634,10 @@ export default function CyberChessPage(){
      («cyberchess-app»), поэтому различить было нечего. */
   const[поводПодписки,sПоводПодписки]=useState<"daily-solved"|"game-over">("game-over");
   const предлагалиПодпискуRef=useRef(false);
+  // 16.10 (решение оркестратора по данным: 0 живых адресов из окна после партии за 7 дней): первым после
+  // партии идёт отзыв, окно подписки — после «Отправить» или после закрытия плашки (podpiskaPosleOtzyva.ts).
+  const подпискаЖдётОтзываRef=useRef(false);
+  const показатьПодпискуПослеОтзыва=()=>{if(!подпискаЖдётОтзываRef.current)return;подпискаЖдётОтзываRef.current=false;sПоводПодписки("game-over");sShowWaitlist(true);try{localStorage.setItem("aevion_chess_waitlist_seen","1")}catch{}};
   useEffect(()=>{
     if(!over||предлагалиПодпискуRef.current)return;
     предлагалиПодпискуRef.current=true;
@@ -2646,8 +2651,8 @@ export default function CyberChessPage(){
     // её прочитать — предлагаем; худшее последствие — предложить дважды,
     // а не потерять адрес совсем. Падать надо в сторону работы.
     if (povodPredlozhitAdres({партияОкончена:true,задачаДняЗачтена:false}) !== "game-over") return;
-    const t=setTimeout(()=>{sПоводПодписки("game-over");sShowWaitlist(true);try{localStorage.setItem("aevion_chess_waitlist_seen","1")}catch{}},2200);
-    return()=>clearTimeout(t);
+    // 16.10: не таймер 2,2 с, а ожидание отзыва — см. эффект podpiskaPora ниже (после объявления setup/showGameOver).
+    подпискаЖдётОтзываRef.current=true;
   },[over]);
   const[showClockDrill,sShowClockDrill]=useState(false);
   const[showGameDna,sShowGameDna]=useState(false);
@@ -3605,6 +3610,8 @@ export default function CyberChessPage(){
   // попытка уже оценена. Ref читается на рендере: ход меняет lm/hist, и рендер приходит сам.
   const nudgeSide:ChessColor|null=tab==="puzzles"&&!!pzCurrent&&pzAttempt==="idle"&&browseIdx<0&&!pervyyHodSdelan(pervyyHodOtpravlenRef,pzCurrent.id)?game.turn():null;
   // 140: тост на телефоне пересчитать, когда доска появилась или сменила размер (см. toastApplyRef выше).
+  // 16.10: окно подписки — когда плашка после партии закрылась без отзыва (реванш, новая, разбор, окно «Итог»).
+  useEffect(()=>{if(podpiskaPora({ждёт:подпискаЖдётОтзываRef.current,otzyvOtpravlen:false,plashkaOtkryta:!!over&&!setup&&tab==="play"&&!showGameOver}))показатьПодпискуПослеОтзыва();},[over,setup,tab,showGameOver]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(()=>{toastApplyRef.current();const b=document.querySelector("[data-cc-board]");if(!b||typeof ResizeObserver==="undefined")return;const ro=new ResizeObserver(()=>toastApplyRef.current());ro.observe(b);return()=>ro.disconnect();},[boardPx,tab,pzCurrent,isMobileLayout]);
   // Текстовое описание позиции для screen-reader (сама доска рисуется пиксельно, без
   // per-square DOM — поэтому даём role="img" + это описание и live-регион на ход).
@@ -9795,7 +9802,7 @@ export default function CyberChessPage(){
                       return null;
                     })()}
                     {/* 16.10: отзыв одной строкой — здесь человек оказывается после партии чаще всего (окно «Итог» — по кнопке) */}
-                    <OtzyvPosleRezultata kontekst="game" t={cc.t} otpravit={track} tyomnyy/>
+                    <OtzyvPosleRezultata kontekst="game" t={cc.t} otpravit={track} tyomnyy onSent={показатьПодпискуПослеОтзыва}/>
                     {/* Разбор партии — самое частое действие после партии; ведёт прямо
                         в режим анализа с прокруткой ходов и оценкой движка. */}
                     <button onClick={()=>{sTab("analysis");sBrowseIdx(0);}}
@@ -17062,7 +17069,7 @@ ${question.trim()}`;
             </div>}
 
             {/* 16.10: отзыв одной строкой после партии (см. OtzyvPosleRezultata) */}
-            <div style={{padding:"0 24px 12px"}}><OtzyvPosleRezultata kontekst="game" t={cc.t} otpravit={track} tyomnyy/></div>
+            <div style={{padding:"0 24px 12px"}}><OtzyvPosleRezultata kontekst="game" t={cc.t} otpravit={track} tyomnyy onSent={показатьПодпискуПослеОтзыва}/></div>
             {/* Buttons */}
             <div style={{padding:"0 24px 20px",display:"flex",gap:8,flexWrap:"wrap"}}>
               <button onClick={()=>{sShowGameOver(false);const swapped=pCol==="w"?"b":"w" as ChessColor;newG(swapped);}} style={{

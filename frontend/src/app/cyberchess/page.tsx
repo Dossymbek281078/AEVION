@@ -1711,6 +1711,9 @@ export default function CyberChessPage(){
   // полосы оболочки (~70px), и «высота+8» клала тост на «Вернуться к партии» (тестер 20.09, 390 puzzles).
   // Плашка языка на телефоне — position:absolute (правило в <style> ниже): фиксированная закрывала
   // прокрученный к верху ряд чипов («📡 Стрим» под «RU ▼», тестер 20.09, низ страницы).
+  // 140: apply() ниже вызывается ещё раз, когда доска появляется/меняет размер (эффект после nudgeSide):
+  // первый экран — настройка, доска монтируется позже, и без этого тост оставался под шапкой (замер 16.10: 64px).
+  const toastApplyRef=useRef<()=>void>(()=>{});
   useEffect(()=>{const r=document.documentElement.style;
     const apply=()=>{try{
       if(vwPx<769){const rc=document.querySelector("[data-cc-header]")?.getBoundingClientRect();const h=rc?Math.max(rc.bottom,rc.height):56;
@@ -1720,7 +1723,7 @@ export default function CyberChessPage(){
         r.setProperty("--aevion-toast-top",`${verhTostaNaTelefone({shapkaNiz:h,doskaNiz:bd?bd.bottom:null,vh:window.innerHeight})}px`);r.setProperty("--aevion-toast-bottom","auto");r.setProperty("--aevion-toast-lift","0px");}
       else{r.removeProperty("--aevion-toast-top");r.removeProperty("--aevion-toast-bottom");r.setProperty("--aevion-toast-lift","0px");}
     }catch{}};
-    apply();
+    apply();toastApplyRef.current=apply;
     const el=document.querySelector("[data-cc-header]");
     const ro=(el&&typeof ResizeObserver!=="undefined")?new ResizeObserver(apply):null; if(el&&ro)ro.observe(el);
     window.addEventListener("scroll",apply,{passive:true}); // низ шапки в окне меняется прокруткой, а не только размером
@@ -3580,6 +3583,8 @@ export default function CyberChessPage(){
   // не задача, ход уже был (pervyyHodSdelan по памяти события first_move), просмотр истории,
   // попытка уже оценена. Ref читается на рендере: ход меняет lm/hist, и рендер приходит сам.
   const nudgeSide:ChessColor|null=tab==="puzzles"&&!!pzCurrent&&pzAttempt==="idle"&&browseIdx<0&&!pervyyHodSdelan(pervyyHodOtpravlenRef,pzCurrent.id)?game.turn():null;
+  // 140: тост на телефоне пересчитать, когда доска появилась или сменила размер (см. toastApplyRef выше).
+  useEffect(()=>{toastApplyRef.current();},[boardPx,tab,pzCurrent,isMobileLayout]);
   // Текстовое описание позиции для screen-reader (сама доска рисуется пиксельно, без
   // per-square DOM — поэтому даём role="img" + это описание и live-регион на ход).
   const boardA11y=(()=>{
@@ -9229,7 +9234,7 @@ export default function CyberChessPage(){
               по ссылке из комментария, не видел на экране ни чей ход, ни что искать:
               это было только в подписи для скринридера и в карточке правой панели,
               а она на телефоне — закрытая шторка. Число ходов из РЕШЕНИЯ, не из тега. */}
-          {tab==="puzzles"&&pzCurrent&&<div style={{width:bw,paddingLeft:обвязкаДоскиPx+3,fontSize:13,fontWeight:800,color:CC.text,lineHeight:1.25,marginBottom:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{zadanieNadDoskoy(pzCurrent,cc.locale)}{/* 140: до первого хода — призыв нажать подсвеченную фигуру (та же фраза, что в лёгкой задаче /p) */}{nudgeSide!==null&&<span data-cc-nudge-text="1" style={{color:"#2563eb"}}>{" · "+cc.t("pz.hint")}</span>}</div>}
+          {tab==="puzzles"&&pzCurrent&&<div style={{width:bw,paddingLeft:обвязкаДоскиPx+3,fontSize:13,fontWeight:800,color:CC.text,lineHeight:1.25,marginBottom:2,whiteSpace:nudgeSide!==null&&isMobileLayout?"normal":"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{zadanieNadDoskoy(pzCurrent,cc.locale)}{/* 140: до первого хода — призыв нажать подсвеченную фигуру (та же фраза, что в лёгкой задаче /p) */}{nudgeSide!==null&&<span data-cc-nudge-text="1" style={{color:"#2563eb"}}>{" · "+cc.t("pz.hint")}</span>}</div>}
           <div translate="no" style={{display:"flex",width:bw,gap:4,position:"relative"}}>
             {/* Eval bar — with W/B labels + centered numeric badge.
                 Hidden in P2P mode (no analysis surface during human matches). */}

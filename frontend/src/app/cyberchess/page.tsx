@@ -9794,6 +9794,8 @@ export default function CyberChessPage(){
                       </div>;
                       return null;
                     })()}
+                    {/* 16.10: отзыв одной строкой — здесь человек оказывается после партии чаще всего (окно «Итог» — по кнопке) */}
+                    <OtzyvPosleRezultata kontekst="game" t={cc.t} otpravit={track} tyomnyy/>
                     {/* Разбор партии — самое частое действие после партии; ведёт прямо
                         в режим анализа с прокруткой ходов и оценкой движка. */}
                     <button onClick={()=>{sTab("analysis");sBrowseIdx(0);}}

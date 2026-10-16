@@ -41,9 +41,12 @@ describe("отзыв после результата", () => {
     }
   });
 
-  it("🔴 страница ставит поле в двух местах: панель «Решено!» и окно «Итог партии»", () => {
+  it("🔴 страница ставит поле после результата: панель «Решено!», плашка после партии, окно «Итог партии»", () => {
     expect(СТРАНИЦА.split('<OtzyvPosleRezultata kontekst="puzzle" t={cc.t} otpravit={track}/>').length - 1).toBe(1);
-    expect(СТРАНИЦА.split('<OtzyvPosleRezultata kontekst="game" t={cc.t} otpravit={track} tyomnyy/>').length - 1).toBe(1);
+    // партия: плашка на доске (там человек оказывается сразу) и окно «Итог партии» (по кнопке)
+    expect(СТРАНИЦА.split('<OtzyvPosleRezultata kontekst="game" t={cc.t} otpravit={track} tyomnyy/>').length - 1).toBe(2);
+    const k = СТРАНИЦА.indexOf("📊 Разобрать партию");
+    expect(СТРАНИЦА.slice(k - 900, k)).toContain('<OtzyvPosleRezultata kontekst="game"');
     const i = СТРАНИЦА.indexOf('data-cc-resheno="1"');
     expect(СТРАНИЦА.slice(i, i + 2500)).toContain('<OtzyvPosleRezultata kontekst="puzzle"');
     const j = СТРАНИЦА.indexOf('aria-label="Итог партии"');

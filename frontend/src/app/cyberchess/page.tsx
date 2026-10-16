@@ -5,6 +5,7 @@ import { главныйВыдуманныйХод, дополнитьХодом�
 import { denPoMestnomu, vcheraPoMestnomu } from "./denPoMestnomu";
 import { otmetitPervyyHod, pervyyHodSdelan } from "./pervyyHod";
 import { verhTostaNaTelefone } from "./tostPodDoskoy";
+import { OtzyvPosleRezultata } from "./OtzyvPosleRezultata";
 import { soobschenieONorme } from "./normaTrenera";
 import { track } from "@/lib/track";
 import { ishodDlyaCPI, resheniePoKontsuPartii } from "./ishodPartii";
@@ -9392,6 +9393,8 @@ export default function CyberChessPage(){
                 <button type="button" className="cc-touch" onClick={()=>{track({type:"feature_use",source:"cyberchess/puzzle",meta:{feature:"next_clicked",app:"cyberchess"}});loadNextPuzzleRef.current();}}
                   style={{padding:"9px 16px",borderRadius:RADIUS.md,border:"none",background:CC.accent,color:"#fff",fontWeight:900,fontSize:14,cursor:"pointer"}}>{cc.t("pz.next")}</button>
                 <div style={{fontSize:13,color:"#047857",fontWeight:700}}>{strokaTsennosti(pzTotal,cc.locale)}</div>
+                {/* 16.10: отзыв одной строкой — путь к ≥ 3 отзывам к 20.10; пишется событием otzyv в журнал воронки */}
+                <OtzyvPosleRezultata kontekst="puzzle" t={cc.t} otpravit={track}/>
               </div>}
               {/* Threat Heatmap overlay (killer #12) */}
               {showThreatMap&&(()=>{
@@ -17056,6 +17059,8 @@ ${question.trim()}`;
 
             </div>}
 
+            {/* 16.10: отзыв одной строкой после партии (см. OtzyvPosleRezultata) */}
+            <div style={{padding:"0 24px 12px"}}><OtzyvPosleRezultata kontekst="game" t={cc.t} otpravit={track} tyomnyy/></div>
             {/* Buttons */}
             <div style={{padding:"0 24px 20px",display:"flex",gap:8,flexWrap:"wrap"}}>
               <button onClick={()=>{sShowGameOver(false);const swapped=pCol==="w"?"b":"w" as ChessColor;newG(swapped);}} style={{

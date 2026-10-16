@@ -1266,7 +1266,7 @@ footer {
 .cc-nudge-ring {
   border-radius: 6px;
   /* % в box-shadow не допускается — clamp(2px,4%,5px) ронял всю декларацию (boxShadow «none», замер 16.10). */
-  box-shadow: inset 0 0 0 clamp(2px, 0.4vw, 4px) rgba(37, 99, 235, 0.95);
+  box-shadow: inset 0 0 0 clamp(3px, 0.4vw, 4px) rgba(37, 99, 235, 0.95);
   animation: cc-nudge-ring 1100ms ease-in-out infinite;
 }
 @media (prefers-reduced-motion: reduce) {

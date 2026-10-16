@@ -3584,7 +3584,7 @@ export default function CyberChessPage(){
   // попытка уже оценена. Ref читается на рендере: ход меняет lm/hist, и рендер приходит сам.
   const nudgeSide:ChessColor|null=tab==="puzzles"&&!!pzCurrent&&pzAttempt==="idle"&&browseIdx<0&&!pervyyHodSdelan(pervyyHodOtpravlenRef,pzCurrent.id)?game.turn():null;
   // 140: тост на телефоне пересчитать, когда доска появилась или сменила размер (см. toastApplyRef выше).
-  useEffect(()=>{toastApplyRef.current();},[boardPx,tab,pzCurrent,isMobileLayout]);
+  useEffect(()=>{toastApplyRef.current();const b=document.querySelector("[data-cc-board]");if(!b||typeof ResizeObserver==="undefined")return;const ro=new ResizeObserver(()=>toastApplyRef.current());ro.observe(b);return()=>ro.disconnect();},[boardPx,tab,pzCurrent,isMobileLayout]);
   // Текстовое описание позиции для screen-reader (сама доска рисуется пиксельно, без
   // per-square DOM — поэтому даём role="img" + это описание и live-регион на ход).
   const boardA11y=(()=>{

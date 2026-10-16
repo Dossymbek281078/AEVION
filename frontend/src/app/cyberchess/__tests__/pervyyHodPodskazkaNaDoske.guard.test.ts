@@ -94,7 +94,7 @@ describe("страница подключает подсказку и разме
     // animationName был, boxShadow «none»), дышит прозрачность.
     const k = CSS.indexOf(".cc-nudge-ring {");
     expect(k, "класс кольца").toBeGreaterThan(0);
-    expect(CSS.slice(k, CSS.indexOf("}", k))).toContain("box-shadow: inset 0 0 0 clamp(2px, 0.4vw, 4px) rgba(37, 99, 235"); // не %: box-shadow их не принимает
+    expect(CSS.slice(k, CSS.indexOf("}", k))).toContain("box-shadow: inset 0 0 0 clamp(3px, 0.4vw, 4px) rgba(37, 99, 235"); // не %: box-shadow их не принимает
     const i = CSS.indexOf("prefers-reduced-motion: reduce) {\n  .cc-nudge-ring");
     expect(i, "reduced-motion правило для кольца").toBeGreaterThan(0);
     expect(CSS.slice(i, i + 200)).toContain("animation: none");
@@ -103,9 +103,10 @@ describe("страница подключает подсказку и разме
 
   it("тост пересчитывается, когда доска появляется (первый экран — настройка, доска монтируется позже)", () => {
     expect(СТРАНИЦА.split("toastApplyRef.current=apply;").length - 1).toBe(1);
-    const i = СТРАНИЦА.indexOf("useEffect(()=>{toastApplyRef.current();},[");
+    const i = СТРАНИЦА.indexOf("useEffect(()=>{toastApplyRef.current();const b=document.querySelector(\"[data-cc-board]\");");
     expect(i, "второй эффект зовёт apply по смене доски").toBeGreaterThan(0);
-    expect(СТРАНИЦА.slice(i, i + 160)).toContain("boardPx");
+    expect(СТРАНИЦА.slice(i, i + 400)).toContain("new ResizeObserver(()=>toastApplyRef.current())");
+    expect(СТРАНИЦА.slice(i, i + 400)).toContain("boardPx");
   });
 
   it("тост на телефоне считается через verhTostaNaTelefone с низом доски", () => {

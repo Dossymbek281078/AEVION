@@ -3615,7 +3615,7 @@ export default function CyberChessPage(){
   // 140: тост на телефоне пересчитать, когда доска появилась или сменила размер (см. toastApplyRef выше).
   // 16.10: окно подписки — когда плашка после партии закрылась без отзыва (реванш, новая, разбор, окно «Итог»).
   // Плашка после партии ИЛИ панель «Решено!» (условия те же, что у самой разметки).
-  const плашкаСОтзывомОткрыта=(!!over&&!setup&&tab==="play"&&!showGameOver)||(зашёлЗаЗадачей&&pzAttempt==="correct"&&!!pzCurrent&&pzMode!=="rush");
+  const плашкаСОтзывомОткрыта=(!!over&&!setup&&tab==="play"&&!showGameOver)||((зашёлЗаЗадачей||этоЗадачаДня)&&pzAttempt==="correct"&&!!pzCurrent&&pzMode!=="rush");
   useEffect(()=>{if(podpiskaPora({ждёт:!!подпискаЖдётОтзываRef.current,otzyvOtpravlen:false,plashkaOtkryta:плашкаСОтзывомОткрыта}))показатьПодпискуПослеОтзыва();},[плашкаСОтзывомОткрыта,подпискаТик]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(()=>{toastApplyRef.current();const b=document.querySelector("[data-cc-board]");if(!b||typeof ResizeObserver==="undefined")return;const ro=new ResizeObserver(()=>toastApplyRef.current());ro.observe(b);return()=>ro.disconnect();},[boardPx,tab,pzCurrent,isMobileLayout]);
   // Текстовое описание позиции для screen-reader (сама доска рисуется пиксельно, без
@@ -9401,7 +9401,8 @@ export default function CyberChessPage(){
                   накрывало нижнее меню (приёмка bd: rect + elementFromPoint без прокрутки).
                   Доска же на обеих парах целиком в первом экране — значит всё, что
                   внутри неё, достижимо. Только для пришедшего по ссылке на задачу. */}
-              {зашёлЗаЗадачей&&pzAttempt==="correct"&&pzCurrent&&pzMode!=="rush"&&<div data-cc-resheno="1" role="status"
+              {/* 16.10: и для задачи дня из монолита (кнопка «☀ Задача дня») — иначе на этом пути нет ни панели, ни поля отзыва, и окно подписки идёт первым */}
+              {(зашёлЗаЗадачей||этоЗадачаДня)&&pzAttempt==="correct"&&pzCurrent&&pzMode!=="rush"&&<div data-cc-resheno="1" role="status"
                 style={{position:"absolute",left:8,right:8,bottom:8,zIndex:6,padding:"12px 14px",borderRadius:RADIUS.md,background:"rgba(236,253,245,0.97)",border:"1px solid #a7f3d0",boxShadow:"0 6px 24px rgba(0,0,0,0.25)",display:"flex",flexWrap:"wrap",alignItems:"center",gap:10}}>
                 <div style={{fontWeight:900,fontSize:16,color:"#065f46"}}>{cc.t("pz.solved").replace("{name}",pzCurrent.name)}</div>
                 <button type="button" className="cc-touch" onClick={()=>{track({type:"feature_use",source:"cyberchess/puzzle",meta:{feature:"next_clicked",app:"cyberchess"}});loadNextPuzzleRef.current();}}

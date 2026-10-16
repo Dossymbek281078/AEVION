@@ -37,10 +37,11 @@ describe("окно подписки ждёт отзыв", () => {
   });
 
   it("страница: «плашка открыта» — те же условия, что у плашки после партии и у панели «Решено!»; отправка отзыва зовёт показ в трёх местах", () => {
-    expect(СТРАНИЦА).toContain('const плашкаСОтзывомОткрыта=(!!over&&!setup&&tab==="play"&&!showGameOver)||(зашёлЗаЗадачей&&pzAttempt==="correct"&&!!pzCurrent&&pzMode!=="rush");');
+    expect(СТРАНИЦА).toContain('const плашкаСОтзывомОткрыта=(!!over&&!setup&&tab==="play"&&!showGameOver)||((зашёлЗаЗадачей||этоЗадачаДня)&&pzAttempt==="correct"&&!!pzCurrent&&pzMode!=="rush");');
     expect(СТРАНИЦА).toContain("podpiskaPora({ждёт:!!подпискаЖдётОтзываRef.current,otzyvOtpravlen:false,plashkaOtkryta:плашкаСОтзывомОткрыта})");
     expect(СТРАНИЦА).toContain('{over&&!setup&&tab==="play"&&!showGameOver&&(()=>{'); // условие плашки
-    expect(СТРАНИЦА).toContain('{зашёлЗаЗадачей&&pzAttempt==="correct"&&pzCurrent&&pzMode!=="rush"&&<div data-cc-resheno="1"'); // условие панели
+    // панель «Решено!» — и по ссылке, и для задачи дня из монолита (замер 16.10: на пути задачи дня не было ни панели, ни поля)
+    expect(СТРАНИЦА).toContain('{(зашёлЗаЗадачей||этоЗадачаДня)&&pzAttempt==="correct"&&pzCurrent&&pzMode!=="rush"&&<div data-cc-resheno="1"'); // условие панели
     expect(СТРАНИЦА.split("onSent={показатьПодпискуПослеОтзыва}").length - 1).toBe(3); // плашка, окно «Итог», панель «Решено!»
   });
 });

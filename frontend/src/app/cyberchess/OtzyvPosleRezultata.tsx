@@ -53,6 +53,10 @@ export function OtzyvPosleRezultata({ kontekst, t, otpravit, tyomnyy }: Props) {
   const goden = tekstOtzyvaGoden(text);
   return (
     <form data-cc-otzyv={kontekst} onSubmit={(e) => { e.preventDefault(); if (!goden) return; otpravit(sobytieOtzyva(kontekst, text)); sSent(true); }}
+      /* Плашка после партии лежит ВНУТРИ доски, а доска на pointerdown зовёт preventDefault
+         (useBoardInput): без остановки всплытия тап по полю не даёт фокус, клик по кнопке
+         висит (замер Playwright 16.10 на проде: locator.click не завершался). */
+      onPointerDown={(e) => e.stopPropagation()}
       style={{ width: "100%", display: "flex", gap: 6, alignItems: "center" }}>
       <input value={text} onChange={(e) => sText(e.target.value)} maxLength={ОТЗЫВ_МАКС} placeholder={t("pz.otzyv.ask")} aria-label={t("pz.otzyv.ask")}
         style={{ flex: 1, minWidth: 0, padding: "8px 10px", borderRadius: 8, border: `1px solid ${border}`, background: bg, color: tyomnyy ? "#fff" : "#1f2937", fontSize: 13 }} />

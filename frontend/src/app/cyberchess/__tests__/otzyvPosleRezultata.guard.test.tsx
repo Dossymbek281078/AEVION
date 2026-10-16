@@ -35,6 +35,12 @@ describe("отзыв после результата", () => {
     expect(/[а-яА-ЯёЁ]/.test(html), "en без кириллицы").toBe(false);
   });
 
+  it("🔴 форма не отдаёт pointerdown доске (иначе поле на плашке после партии не фокусируется)", () => {
+    const src = readFileSync(join(process.cwd(), "src/app/cyberchess/OtzyvPosleRezultata.tsx"), "utf8");
+    const i = src.indexOf("<form data-cc-otzyv={kontekst}");
+    expect(src.slice(i, src.indexOf(">", src.indexOf("style=", i)))).toContain("onPointerDown={(e) => e.stopPropagation()}");
+  });
+
   it("ключи pz.otzyv.* есть во всех трёх языках", () => {
     for (const k of ["pz.otzyv.ask", "pz.otzyv.send", "pz.otzyv.thanks"]) {
       for (const loc of ["ru", "en", "kk"] as const) expect(tFor(loc, k), `${loc}:${k}`).not.toBe(k);

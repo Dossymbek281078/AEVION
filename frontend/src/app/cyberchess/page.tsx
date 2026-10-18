@@ -1865,7 +1865,13 @@ export default function CyberChessPage(){
   const dannyeOshibki=()=>({fen:(()=>{try{return game.fen()}catch{return ""}})(),puzzleId:pzCurrent?.id??null,kontekst:(setup?"setup":tab==="puzzles"?"puzzle":tab==="analysis"?"analysis":"game") as "setup"|"puzzle"|"analysis"|"game"});
   const подДоской139=зашёлЗаЗадачей?36:(рядМасштабаВПанели?0:26)+строкаИгрокаPx;     // буквы 26 + строка «Вы» (пришедшему за задачей — только буквы)
   const desktopVReserve=(boardTopPx>0?boardTopPx:110)+подДоской139+8;
-  const vReserve=vwPx>=769?desktopVReserve:300;
+  /* 143г (18.10.2026): на телефонной раскладке резерв тоже от ИЗМЕРЕННОГО верха доски, а не 300. Замер на проде
+   * eaca8fb62 (768×1024, игра): верх доски 157, доска vh−300=724, ряд «буквы · масштаб · Нашли ошибку?» 881..950, а
+   * закреплённая панель «Сдаться · Ничья…» 894..946 накрывала и масштаб, и кнопку (elementFromPoint → панель).
+   * Под доской на телефоне: буквы 26 + ряд масштаба 44 + 8, панель действий 52 + 8, нижняя навигация 70 + 8 = 216.
+   * На 390×844 и 540×900 доску держит ширина (370/520 < vh−резерв), поэтому там ничего не меняется. */
+  const ПОД_ДОСКОЙ_ТЕЛЕФОН=216;
+  const vReserve=vwPx>=769?desktopVReserve:(boardTopPx>0?boardTopPx:157)+ПОД_ДОСКОЙ_ТЕЛЕФОН;
   const evalБарВиден=sfOk&&!p2pMode&&(tab==="analysis"||tab==="play"||tab==="coach");
   // Обвязка слева от доски в том же ряду: на десктопе цифры рангов (16+4) и eval-бар (32+4); на телефоне
   // цифры внутри клеток, eval-бар — полоска 7 px поверх края доски, то есть ряд = доска.
@@ -7926,10 +7932,12 @@ export default function CyberChessPage(){
             onStart={()=>{sHotseat(false);sRivalMode(false);newG()}}
           />
           {/* Масштаб доски виден на первом экране (слово основателя: «где масштаб +− не видно»). */}
-          <div data-cc-setup-zoom="1" style={{display:"flex",alignItems:"center",gap:6,width:превьюPx,maxWidth:"100%",justifyContent:"flex-end"}}>
+          <div data-cc-setup-zoom="1" style={{display:"flex",alignItems:"center",gap:6,width:превьюPx,maxWidth:"100%",justifyContent:"flex-end",flexWrap:"wrap"}}>
             <button type="button" title={cc.t("board.zoomOut")} aria-label={cc.t("board.zoomOut")} onClick={()=>sBoardScale(s=>Math.max(0.5,parseFloat((s-0.1).toFixed(1))))} className="cc-touch" style={{width:32,height:32,borderRadius:8,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,fontSize:18,fontWeight:900,cursor:"pointer"}}>−</button>
             <span title={cc.t("board.zoomSize")} style={{fontSize:12,color:CC.textMute,fontWeight:800,minWidth:40,textAlign:"center",fontFamily:`ui-monospace,${"monospace"}`}}>{Math.round(Math.max(0.6,Math.min(1,boardScale))*100)}%</span>
             <button type="button" title={cc.t("board.zoomIn")} aria-label={cc.t("board.zoomIn")} onClick={()=>sBoardScale(s=>Math.min(1.5,parseFloat((s+0.1).toFixed(1))))} className="cc-touch" style={{width:32,height:32,borderRadius:8,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,fontSize:18,fontWeight:900,cursor:"pointer"}}>+</button>
+            {/* 143д (18.10.2026): «Нашли ошибку?» и на экране настройки — сюда ведут ссылки тестировщиков (?c=yt-testers, testers-*), замер Продаж 14:40: на /cyberchess кнопок «ошибк» 0 при обоих окнах */}
+            <OshibkaForma dannye={dannyeOshibki} t={cc.t} cc={CC} width="100%"/>
           </div>
           </div>
           {полоскаСтарта("100%")}

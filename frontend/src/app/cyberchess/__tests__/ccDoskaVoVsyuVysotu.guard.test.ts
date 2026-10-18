@@ -14,7 +14,7 @@ const src = readFileSync(join(__dirname, "..", "page.tsx"), "utf8");
 
 describe("доска во всю доступную высоту (136)", () => {
   it("🔴 резервы: шапка+полоска+под доской, без 150–186 px и без max(250); 139: предкап = измеренный бюджет", () => {
-    expect(src).toContain("const vReserve=vwPx>=769?desktopVReserve:300;");
+    expect(src).toContain("const vReserve=vwPx>=769?desktopVReserve:(boardTopPx>0?boardTopPx:157)+ПОД_ДОСКОЙ_ТЕЛЕФОН;"); // 143г: телефон тоже от замера
     expect(src).toContain("const подДоской139=зашёлЗаЗадачей?36:(рядМасштабаВПанели?0:26)+строкаИгрокаPx;"); // 140б: ряд в панели — 26 доске
     expect(src).toContain("const desktopVReserve=(boardTopPx>0?boardTopPx:110)+подДоской139+8;");
     expect(src).not.toContain("const desktopVReserve=Math.max(250,");

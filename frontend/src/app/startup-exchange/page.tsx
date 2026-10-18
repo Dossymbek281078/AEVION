@@ -177,9 +177,6 @@ export default function StartupExchangePage() {
       <PageTracking page="startup-exchange" />
       <Wave1Nav />
       <ProductPageShell>
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-          <ModulePricingChip moduleId="startup-exchange" theme="light" />
-        </div>
 
         {/* ── Hero ─────────────────────────────────────────────────────────── */}
         <header style={{ marginBottom: 22 }}>
@@ -202,17 +199,15 @@ export default function StartupExchangePage() {
           <h1 style={{ margin: "0 0 10px", fontSize: 32, fontWeight: 800, color: "#0f172a", lineHeight: 1.2, maxWidth: 760 }}>
             Идея, MVP или готовый продукт — с ценой, долей и бесплатным разбором
           </h1>
-          <p style={{ margin: "0 0 16px", fontSize: 14.5, color: "#475569", lineHeight: 1.65, maxWidth: 720 }}>
-            Хорошие идеи гибнут не потому, что они плохие, а потому, что их не с чем сравнить: инвестор
-            видит текст без условий и не понимает, о чём разговор. Здесь у каждой заявки есть уровень,
-            названные условия сделки и бесплатный разбор, который сравнивает эти условия с рынком.
-          </p>
-
+          {/* 144 (18.10.2026): действие гостя — сразу под заголовком, абзац и плашка цены ниже. Замер на проде
+              eaca8fb62, 390×844: плашка 262, заголовок 467..659, кнопка за кадром (844); в кадре были только
+              «Входит в подписку», «Обсудить доступ» и адрес поддержки — ни одного действия гостя. */}
           {!showWizard && (
             <button
               type="button"
               onClick={() => setShowWizard(true)}
               style={{
+                margin: "4px 0 14px",
                 padding: "13px 24px",
                 borderRadius: 11,
                 border: "none",
@@ -226,7 +221,15 @@ export default function StartupExchangePage() {
               Опишите проект — покажу бесплатный разбор
             </button>
           )}
+          <p style={{ margin: 0, fontSize: 14.5, color: "#475569", lineHeight: 1.65, maxWidth: 720 }}>
+            Хорошие идеи гибнут не потому, что они плохие, а потому, что их не с чем сравнить: инвестор
+            видит текст без условий и не понимает, о чём разговор. Здесь у каждой заявки есть уровень,
+            названные условия сделки и бесплатный разбор, который сравнивает эти условия с рынком.
+          </p>
         </header>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+          <ModulePricingChip moduleId="startup-exchange" theme="light" />
+        </div>
 
         {/* ── Tier explainer ───────────────────────────────────────────────── */}
         {tiers.length > 0 && !showWizard && (

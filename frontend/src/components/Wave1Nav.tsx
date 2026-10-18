@@ -123,7 +123,10 @@ export function Wave1Nav({ hidePlanet = false, variant = "light" }: Props) {
   const shield = variant === "dark" ? "#7dd3fc" : "#0369a1";
   const qcore = variant === "dark" ? "#c4b5fd" : "#6d28d9";
   return (
-    <nav style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14, fontSize: 13, alignItems: "center" }} aria-label="Wave 1 navigation">
+    // 144 (18.10.2026): на телефоне (≤768) этот блок переносился в 7 строк и занимал 162 px первого экрана
+    // (замер /startup-exchange 390×844 на проде eaca8fb62: nav 55..217), действие гостя уезжало за кадр.
+    // Класс aevion-wave1nav (globals.css): одна строка с боковой прокруткой — все ссылки на месте, высота ~26 px.
+    <nav className="aevion-wave1nav" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14, fontSize: 13, alignItems: "center" }} aria-label="Wave 1 navigation">
       <Link href="/" style={{ color: globus, fontWeight: 800 }}>← Globus</Link>
       <span style={{ color: sep }} aria-hidden>|</span>
       <Link href="/demo" style={{ color: demoLink, fontWeight: 800 }}>Demo</Link>

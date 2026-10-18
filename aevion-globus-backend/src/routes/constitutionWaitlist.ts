@@ -181,7 +181,12 @@ const ADMIN_ALLOWLIST = (process.env.CONSTITUTION_ADMIN_ALLOWLIST || "yahiin1978
 // ВЫКЛЮЧАЕТ охрану для пункта. Подсказала соседняя вкладка: у неё 13 из 15
 // прощённых оказались ложными.
 function isAdmin(req: Request): boolean {
-  return isAdminRequest(req);
+  // 143в (18.10.2026): выгрузку /guest-leads читают окна скриптом без пользовательского входа — как
+  // /api/pricing/events/recent и импорт разборов (142б): JWT из allowlist ИЛИ служебный X-Admin-Token.
+  // Замер 18.10: с ADMIN_TOKEN в заголовке ручка отвечала 403, и строки отчётов об ошибке были невидимы.
+  const служебный = process.env.ADMIN_TOKEN?.trim();
+  const got = typeof req.headers["x-admin-token"] === "string" ? (req.headers["x-admin-token"] as string).trim() : "";
+  return isAdminRequest(req) || !!(служебный && got && got === служебный);
 }
 
 // Формат email проверяется Zod-схемой WaitlistSubscribeSchema

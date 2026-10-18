@@ -1272,3 +1272,25 @@ footer {
 @media (prefers-reduced-motion: reduce) {
   .cc-nudge-ring { animation: none !important; opacity: 1 !important; }
 }
+
+/* ── 144 (18.10.2026): первый экран приложения на телефоне — действие гостя первым ──
+   Замер на проде eaca8fb62, 390×844, /startup-exchange: шапка 55, навигация Wave1Nav 162 (7 строк переносов),
+   плашка цены с предупреждением ~150, заголовок 467..659 — кнопка гостя за кадром. На ≤768 навигация — одна
+   строка с боковой прокруткой (все ссылки на месте), предупреждение о разработке свёрнуто в <details>
+   (полный текст — одним нажатием, на десктопе показан целиком, как раньше). */
+.aevion-razrabotka-kratko { display: none; }
+@media (max-width: 768px) {
+  .aevion-wave1nav {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    white-space: nowrap;
+    margin-bottom: 10px !important;
+    padding-bottom: 2px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .aevion-wave1nav::-webkit-scrollbar { display: none; }
+  .aevion-wave1nav > * { flex: 0 0 auto; }
+  .aevion-razrabotka-polno { display: none; }
+  .aevion-razrabotka-kratko { display: block; }
+}

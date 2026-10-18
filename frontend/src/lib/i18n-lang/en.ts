@@ -7420,6 +7420,7 @@ const en: Record<string, string> = {
   "moduleChip.requestAccessTitle": "Not sold separately yet — write to us and we will arrange access",
   "razrabotka.notice": "AEVION is under active development: technical failures are possible. We fix them, and any time a paid feature was down through our fault we compensate by extending your subscription.",
   "razrabotka.write": "Write to",
+  "razrabotka.kratko": "AEVION is under active development — details",
 };
 
 export default en;

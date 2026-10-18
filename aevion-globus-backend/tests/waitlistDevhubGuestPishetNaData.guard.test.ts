@@ -118,4 +118,19 @@ describe("GET /api/admin/constitution/waitlist/guest-leads — выгрузка 
     const r2 = await request(app).get("/api/admin/constitution/waitlist/guest-leads?hours=48");
     expect(r2.body.count).toBe(4);
   });
+
+  it("🔴 143в: служебный X-Admin-Token (ADMIN_TOKEN) открывает выгрузку без JWT; чужой токен и пустой ADMIN_TOKEN — 403", async () => {
+    writeFileSync(process.env.LEADS_FILE!, JSON.stringify({ ts: new Date().toISOString(), kind: "cyberchess_oshibka", text: "проба" }) + "\n");
+    const app = await приложение();
+    адм.ok = false;
+    process.env.ADMIN_TOKEN = "sluzhebnyy-token-test";
+    try {
+      const ok = await request(app).get("/api/admin/constitution/waitlist/guest-leads?hours=1").set("X-Admin-Token", "sluzhebnyy-token-test");
+      expect(ok.status).toBe(200);
+      expect(ok.body.items.map((x: { kind: string }) => x.kind)).toEqual(["cyberchess_oshibka"]);
+      expect((await request(app).get("/api/admin/constitution/waitlist/guest-leads?hours=1").set("X-Admin-Token", "chuzhoy")).status).toBe(403);
+      process.env.ADMIN_TOKEN = "   ";
+      expect((await request(app).get("/api/admin/constitution/waitlist/guest-leads?hours=1").set("X-Admin-Token", "   ")).status).toBe(403);
+    } finally { delete process.env.ADMIN_TOKEN; }
+  });
 });

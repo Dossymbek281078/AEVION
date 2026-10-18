@@ -45,7 +45,10 @@ function dictKeys(): Set<string> {
   // модулем, чтобы не конфликтовать в общем файле на 23 тысячи строк). Не
   // прочитав их, проверка объявила бы потерянными 146 живых ключей.
   for (const f of walk(APP)) {
-    if (!basename(f).startsWith("i18n.")) continue;   // без регулярки: путь на Windows с обратной косой
+    // 143е (18.10.2026): у лёгкой страницы задачи (/cyberchess/p) словарь — pzSlova.ts (ключи pz.*, ru/en/kk в одной
+    // строке). Без него проверка краснела 45 живыми ключами (pz.hint, pz.oshibka.*, pz.otzyv.*), и красный сторож,
+    // который никто не читает, слеп к настоящей потере ключа.
+    if (!basename(f).startsWith("i18n.") && basename(f) !== "pzSlova.ts") continue;   // без регулярки: путь на Windows с обратной косой
     for (const m of readFileSync(f, "utf8").matchAll(/"([a-z][a-zA-Z0-9_.]{2,})"\s*:/g)) keys.add(m[1]);
   }
   for (const m of readFileSync(join(LIB, "i18n-data.ts"), "utf8").matchAll(/"([a-z][a-zA-Z0-9_.]{2,})"\s*:/g)) {

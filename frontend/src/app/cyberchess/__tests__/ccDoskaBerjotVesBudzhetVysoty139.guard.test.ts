@@ -21,7 +21,7 @@ describe("доска берёт весь измеренный бюджет вы�
     expect(src).toContain("const строкаИгрокаPx=vhPx<800?40:48;");
     expect(src).toContain("const подДоской139=зашёлЗаЗадачей?36:(рядМасштабаВПанели?0:26)+строкаИгрокаPx;"); // 140б: ряд в панели — 26 доске
     expect(src).toContain("const desktopVReserve=(boardTopPx>0?boardTopPx:110)+подДоской139+8;");
-    expect(src).toContain("const vReserve=vwPx>=769?desktopVReserve:300;");
+    expect(src).toContain("const vReserve=vwPx>=769?desktopVReserve:(boardTopPx>0?boardTopPx:157)+ПОД_ДОСКОЙ_ТЕЛЕФОН;"); // 143г: телефон тоже от замера
     expect(src).not.toContain("const vReserve=vwPx>=769?190:300;");
     // замер верха объявлен ДО предкапа — иначе TDZ, и tsc бы не пропустил; пин держит порядок
     expect(src.indexOf("const[boardTopPx,sBoardTopPx]=useState(0);")).toBeLessThan(src.indexOf("const vReserve="));

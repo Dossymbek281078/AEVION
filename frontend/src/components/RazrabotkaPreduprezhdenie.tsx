@@ -53,13 +53,26 @@ export function RazrabotkaPreduprezhdenie({
    * себя одинаково и внутри строки, и в блоке.
    */
   if (вид === "строка") {
-    return (
-      <span style={{ display: "block", marginTop: отступСверху, fontSize: 12, lineHeight: 1.6, color: "#92400e" }}>
+    // 144 (18.10.2026): на телефоне (≤768, globals.css) полный текст занимал 4–5 строк первого экрана на 40+ страницах
+    // модулей; там он свёрнут в <details> — одна строка, полный текст и адрес одним нажатием. На десктопе — как был.
+    // Оба варианта в разметке: решает CSS, без matchMedia и расхождения серверной и клиентской отрисовки.
+    const кратко = tr("razrabotka.kratko", "AEVION в активной разработке — подробнее");
+    const полный = (
+      <>
         {текст}{" "}
         {напишите}{" "}
         <a href={`mailto:${ADRES_PODDERZHKI}`} style={{ color: "#92400e", fontWeight: 700 }}>
           {ADRES_PODDERZHKI}
         </a>
+      </>
+    );
+    return (
+      <span style={{ display: "block", marginTop: отступСверху, fontSize: 12, lineHeight: 1.6, color: "#92400e" }}>
+        <span className="aevion-razrabotka-polno">{полный}</span>
+        <details className="aevion-razrabotka-kratko">
+          <summary style={{ cursor: "pointer", fontWeight: 700 }}>{кратко}</summary>
+          <span style={{ display: "block", marginTop: 4 }}>{полный}</span>
+        </details>
       </span>
     );
   }

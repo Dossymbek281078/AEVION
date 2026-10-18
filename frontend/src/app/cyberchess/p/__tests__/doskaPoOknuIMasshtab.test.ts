@@ -116,8 +116,8 @@ describe("после решения — следующая ЛЁГКАЯ зада
 describe("перетаскивание фигуры (как lichess) и координаты", () => {
   it("координаты: буквы на нижнем ряду, цифры в левом столбце; draw() их не стирает", () => {
     expect(ROUTE).toContain('data-cf="${k.sq[0]}"');
-    expect(ROUTE).toContain('<i class="c f">${k.sq[0]}</i>');
-    expect(ROUTE).toContain('<i class="c r">${k.sq[1]}</i>');
+    expect(ROUTE).toContain('<i class="c kf">${k.sq[0]}</i>');
+    expect(ROUTE).toContain('<i class="c kr">${k.sq[1]}</i>');
     expect(КЛИЕНТ).toContain('b.getAttribute("data-cf")');
     expect(ROUTE).toContain("touch-action:none"); // иначе палец прокручивает страницу вместо фигуры
   });

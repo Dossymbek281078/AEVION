@@ -80,7 +80,7 @@ function kletkiRazmetka(fen: string, storona: "w" | "b"): string {
   return ryady.flatMap((ryad, r) => ryad.map((k, c) => {
     const cf = r === 7 ? ` data-cf="${k.sq[0]}"` : "";
     const cr = c === 0 ? ` data-cr="${k.sq[1]}"` : "";
-    const koord = (r === 7 ? `<i class="c f">${k.sq[0]}</i>` : "") + (c === 0 ? `<i class="c r">${k.sq[1]}</i>` : "");
+    const koord = (r === 7 ? `<i class="c kf">${k.sq[0]}</i>` : "") + (c === 0 ? `<i class="c kr">${k.sq[1]}</i>` : "");
     return `<button type="button" data-sq="${k.sq}"${cf}${cr} class="${k.dark ? "d" : "l"}${mogut.has(k.sq) ? " m" : ""}" aria-label="${k.sq}">${k.p ? `<span class="${k.p[0] === "w" ? "w" : "b"}">${GLIF[k.p]}</span>` : ""}${koord}</button>`;
   })).join("");
 }
@@ -129,7 +129,7 @@ main{min-height:100dvh;display:grid;grid-template-columns:1fr;justify-items:cent
 @media(min-width:1280px){:root{--side:min(100dvh - 120px,100vw - 440px)}main{grid-template-columns:auto 360px;column-gap:28px}.hdr,.z,.s,.hb,.of,.zm,.r,.f{width:360px}}
 .s .rz{font-size:14px;font-weight:500;line-height:1.45;color:#cbd5e1;margin-top:8px}.z{font-size:15px;font-weight:800}.z .dl{color:#fbbf24}.b .m::before{content:"";position:absolute;inset:6%;border-radius:50%;box-shadow:0 0 0 3px rgba(5,150,105,.75) inset}
 .b{aspect-ratio:1/1;display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);border-radius:8px;overflow:hidden;box-shadow:0 4px 18px rgba(0,0,0,.4);touch-action:none;user-select:none}
-.b i.c{position:absolute;font-style:normal;font-weight:800;opacity:.8;pointer-events:none;font-size:calc(var(--zm)*var(--side)/8*.22);line-height:1}.b i.f{right:4%;bottom:3%}.b i.r{left:5%;top:4%}.b .l i.c{color:#b58863}.b .d i.c{color:#f0d9b5}
+.b i.c{position:absolute;font-style:normal;font-weight:800;opacity:.8;pointer-events:none;font-size:calc(var(--zm)*var(--side)/8*.22);line-height:1}.b i.kf{right:4%;bottom:3%}.b i.kr{left:5%;top:4%}.b .l i.c{color:#b58863}.b .d i.c{color:#f0d9b5}
 .ghost{position:fixed;left:0;top:0;pointer-events:none;z-index:9;transform:translate(-50%,-50%);font-size:calc(var(--zm)*var(--side)/8*.9);line-height:1;filter:drop-shadow(0 6px 8px rgba(0,0,0,.5))}.ghost.w{color:#fff;text-shadow:0 0 2px #000}.ghost.b{color:#111}
 .b button{position:relative;border:0;padding:0;margin:0;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:calc(var(--zm)*var(--side)/8*.78);line-height:1}
 .hb{display:flex;gap:8px;flex-wrap:wrap}.hb button{padding:8px 14px;border:1px solid #475569;border-radius:8px;background:#1e293b;color:#f1f5f9;font-weight:800;cursor:pointer}.hb button.osh{background:transparent;color:#94a3b8;font-weight:700;font-size:13px}.of{display:flex;flex-direction:column;gap:6px;padding:10px;border:1px solid #475569;border-radius:10px;background:#1e293b}.of[hidden]{display:none}.of textarea,.of input[type=email]{width:100%;box-sizing:border-box;padding:8px 10px;border-radius:8px;border:1px solid #475569;background:#0f172a;color:#f1f5f9;font:inherit;font-size:14px}.of label{font-size:13px;color:#cbd5e1;display:flex;gap:6px;align-items:center}.of .ofe{margin:0;font-size:13px;color:#fca5a5}.of .ofe.ok{color:#86efac}.of .ofe a{color:#fca5a5}.of .ofb{display:flex;gap:8px}.of .ofb button{padding:8px 14px;border-radius:8px;border:1px solid #475569;background:#334155;color:#f1f5f9;font-weight:800;cursor:pointer}.of .ofb button[type=submit]{background:#059669;border-color:#059669}.hb button:hover{background:#334155}.hb button[disabled]{opacity:.5;cursor:default}

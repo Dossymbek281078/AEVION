@@ -783,7 +783,8 @@ qrightRouter.get("/embed/:id", embedRateLimit, async (req, res) => {
       );
     }
 
-    if (result.rowCount === 0) {
+    // 157б: наша проба (smoke-/probe-) на публичной поверхности — как несуществующая запись
+    if (result.rowCount === 0 || пробаРеестра(result.rows[0] as { id?: unknown; title?: unknown; ownerName?: unknown })) {
       // Use 200 with explicit status so embeds can render a "not found" badge
       // without tripping the consumer's error-handler.
       res.setHeader("Cache-Control", "public, max-age=30");
@@ -915,7 +916,7 @@ qrightRouter.get("/badge/:id.svg", embedRateLimit, async (req, res) => {
     const theme = String(req.query.theme || "dark").toLowerCase() === "light" ? "light" : "dark";
 
     const result = await pool.query(
-      `SELECT id, kind, "contentHash", "createdAt", "revokedAt"
+      `SELECT id, title, "ownerName", kind, "contentHash", "createdAt", "revokedAt"
        FROM "QRightObject" WHERE "id" = $1 LIMIT 1`,
       [id]
     );
@@ -965,7 +966,8 @@ qrightRouter.get("/badge/:id.svg", embedRateLimit, async (req, res) => {
     res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
     res.setHeader("Access-Control-Allow-Origin", "*");
 
-    if (result.rowCount === 0) {
+    // 157б: наша проба — значок «not found», как у несуществующей записи
+    if (result.rowCount === 0 || пробаРеестра(result.rows[0] as { id?: unknown; title?: unknown; ownerName?: unknown })) {
       res.setHeader("Cache-Control", "public, max-age=30");
       return res.send(svgShell("AEVION QRIGHT", "not found", "#94a3b8"));
     }

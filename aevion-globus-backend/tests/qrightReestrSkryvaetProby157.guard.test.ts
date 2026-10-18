@@ -23,7 +23,7 @@ vi.mock("../src/lib/dbPool", () => ({
     query: async (sql?: string, params?: unknown[]) => {
       const s = String(sql ?? "");
       if (!s.includes("QRightObject") || !s.trim().startsWith("SELECT")) return { rows: [], rowCount: 0 };
-      if (s.includes('WHERE "id" = $1')) {
+      if (s.includes('"id" = $1')) {
         const rows = ВСЕ.filter((r) => r.id === params?.[0]);
         return { rows, rowCount: rows.length };
       }
@@ -86,6 +86,23 @@ describe("157: публичный реестр QRight прячет наши пр
     const живая = await request(app()).get("/api/qright/objects/obj-live");
     expect(живая.status).toBe(200);
     expect(JSON.stringify(живая.body)).toContain("Протокол долголетия");
+  });
+
+  it("🔴 /embed/:id и /badge/:id.svg (157б): проба → как несуществующая, живая → отдаётся", async () => {
+    const embedПроба = await request(app()).get("/api/qright/embed/obj-probe-title");
+    expect(embedПроба.status).toBe(404);
+    expect(embedПроба.body.status).toBe("not_found");
+    const embedЖивая = await request(app()).get("/api/qright/embed/obj-live");
+    expect(embedЖивая.status).toBe(200);
+    expect(JSON.stringify(embedЖивая.body)).toContain("Протокол долголетия");
+    const badgeПроба = await request(app()).get("/api/qright/badge/obj-probe-author.svg");
+    expect(badgeПроба.status).toBe(200);
+    const svgТекст = (r: { text?: string; body: unknown }) => r.text || (Buffer.isBuffer(r.body) ? r.body.toString("utf8") : String(r.body ?? ""));
+    expect(svgТекст(badgeПроба)).toContain("not found");
+    const badgeЖивая = await request(app()).get("/api/qright/badge/obj-live.svg");
+    expect(badgeЖивая.status).toBe(200);
+    expect(svgТекст(badgeЖивая)).not.toContain("not found");
+    expect(svgТекст(badgeЖивая)).toContain("<svg");
   });
 
   it("публичная проверка pipeline /verify/:certId тоже закрыта для проб (по исходнику: фильтр стоит до счётчика проверок)", () => {

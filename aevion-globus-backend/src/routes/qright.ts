@@ -9,6 +9,7 @@ import { rateLimit } from "../lib/rateLimit";
 import { deliverWebhook } from "../lib/webhookDelivery";
 import { applyOgEtag, applyEtag } from "../lib/ogEtag";
 import { csvNeutralizeFormula } from "../lib/csv";
+import { этоНашаПроба } from "../lib/publicRegistryProbes";
 
 const QRIGHT_WEBHOOK_DELIVERY_CFG = {
   webhookTable: "QRightWebhook",
@@ -381,6 +382,19 @@ function isQRightAdmin(auth: { role?: string; email?: string } | null): boolean 
  */
 const SMOKE_OWNER = "smoke-test";
 
+/**
+ * 157 (18.10.2026). Публичные поверхности реестра не показывают НАШИ пробы: записи, у которых название или автор
+ * помечены smoke-/probe- (общее правило lib/publicRegistryProbes, то же, что у /api/pipeline/certificates).
+ * Повод: 5 сертификатов smoke-probe-user-99-qright-* прогона полного пути 18.10 попали в публичный список /qright
+ * (after-deploy: «проб 5 из 8»), отозвать их без Bearer владельца нельзя. Записи в базе не трогаем — скрываем.
+ */
+function пробаРеестра(row: { id?: unknown; title?: unknown; ownerName?: unknown }): boolean {
+  return этоНашаПроба({ id: row.id, title: row.title, author: row.ownerName });
+}
+function безПроб<T extends { id?: unknown; title?: unknown; ownerName?: unknown }>(rows: T[]): T[] {
+  return rows.filter((r) => !пробаРеестра(r));
+}
+
 qrightRouter.get("/objects", objectsRateLimit, async (req, res) => {
   try {
     await ensureQRightTable();
@@ -438,9 +452,10 @@ qrightRouter.get("/objects", objectsRateLimit, async (req, res) => {
       [SMOKE_OWNER],
     );
 
+    const items = безПроб(result.rows); // 157
     res.json({
-      items: result.rows,
-      total: result.rowCount,
+      items,
+      total: items.length,
       scope: "all",
     });
   } catch (err: any) {
@@ -487,11 +502,12 @@ qrightRouter.get("/objects/search", objectsRateLimit, async (req, res) => {
       params
     );
 
+    const items = безПроб(result.rows); // 157
     res.json({
       query: q,
       kind: kind || null,
-      total: result.rowCount,
-      items: result.rows,
+      total: items.length,
+      items,
     });
   } catch (err: any) {
     captureQrightError(err, { route: "DB error" });
@@ -630,6 +646,10 @@ qrightRouter.get("/objects/:id", objectsRateLimit, async (req, res) => {
     }
 
     const row = result.rows[0];
+    if (пробаРеестра(row)) {
+      // 157: публичная проверка нашей пробы отвечает как о несуществующей записи
+      return res.status(404).json({ error: "Not found" });
+    }
     const etag = `W/"qright-${id}-${
       row.createdAt instanceof Date ? row.createdAt.getTime() : row.createdAt
     }"`;
@@ -706,7 +726,7 @@ qrightRouter.get("/objects.csv", objectsRateLimit, async (req, res) => {
     res.setHeader("Cache-Control", "public, max-age=60");
 
     const header = columns.join(",");
-    const rows = result.rows.map((row: Record<string, unknown>) =>
+    const rows = безПроб(result.rows as Array<Record<string, unknown>>).map((row: Record<string, unknown>) => // 157
       columns.map((col) => csvField(row[col])).join(",")
     );
     res.send([header, ...rows].join("\r\n"));

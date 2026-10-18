@@ -1407,6 +1407,10 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
     }
 
     const cert = rows[0];
+    if (этоНашаПроба({ id: cert.id, title: cert.title, author: cert.authorName })) {
+      // 157 (18.10.2026): публичная проверка НАШЕЙ пробы — как несуществующий сертификат, счётчик не трогаем
+      return res.status(404).json({ valid: false, error: "Certificate not found" });
+    }
 
     /* Increment verify count — gated by per-(IP, certId) rate limit above. */
     if (!skipIncrement) {

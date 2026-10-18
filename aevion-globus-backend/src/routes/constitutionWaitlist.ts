@@ -587,7 +587,7 @@ constitutionWaitlistAdminRouter.get(
     try {
       const raw = readFileSync(leadsFile(), "utf8");
       items = raw.split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l) as Record<string, unknown>; } catch { return null; } })
-        .filter((x): x is Record<string, unknown> => !!x && typeof x.kind === "string" && /^(devhub_|pilot_)/.test(x.kind) && typeof x.ts === "string" && Date.parse(x.ts) >= since);
+        .filter((x): x is Record<string, unknown> => !!x && typeof x.kind === "string" && /^(devhub_|pilot_|cyberchess_)/.test(x.kind) && typeof x.ts === "string" && Date.parse(x.ts) >= since);
     } catch (e) { ошибка = e instanceof Error ? e.message : String(e); }
     return res.json({ ok: !ошибка, hours, count: items.length, items, ...(ошибка ? { error: ошибка } : {}) });
   },

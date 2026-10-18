@@ -10,10 +10,10 @@ const src = readFileSync(join(__dirname, "..", "page.tsx"), "utf8");
 
 describe("ряд букв a–h под доской на телефоне", () => {
   it("контейнер переносит строки на <769, сетка букв — на всю ширину", () => {
-    expect(src).toContain('paddingLeft:23,width:bw,gap:4,flexWrap:vwPx<769?"wrap":"nowrap"}}>');
+    expect(src).toContain('paddingLeft:обвязкаДоскиPx+3,width:bw,gap:4,flexWrap:PERENOS_RYADA}}>'); // 139: отступ = обвязка; 143: ряд переносится всегда (форма «Нашли ошибку?» строкой ниже)
     expect(src).toContain('gridTemplateColumns:"repeat(8,1fr)",flex:vwPx<769?"1 1 100%":1,marginTop:4}}>');
   });
   it("прежняя форма (одна строка на любой ширине) не вернулась", () => {
-    expect(src).not.toContain('paddingLeft:23,width:bw,gap:4}}>');
+    expect(src).not.toContain('paddingLeft:обвязкаДоскиPx+3,width:bw,gap:4}}>');
   });
 });

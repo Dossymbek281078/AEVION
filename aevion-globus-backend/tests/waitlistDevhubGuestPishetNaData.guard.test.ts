@@ -106,15 +106,16 @@ describe("GET /api/admin/constitution/waitlist/guest-leads — выгрузка 
       JSON.stringify({ ts: new Date(сейчас - 30 * 3600_000).toISOString(), kind: "devhub_save_email", email: "old@x.io" }),
       JSON.stringify({ ts: new Date(сейчас - 600_000).toISOString(), kind: "pilot_490", email: "b@x.io" }),
       JSON.stringify({ ts: new Date(сейчас - 600_000).toISOString(), kind: "other_kind", email: "c@x.io" }),
+      JSON.stringify({ ts: new Date(сейчас - 300_000).toISOString(), kind: "cyberchess_oshibka_undelivered", stage: "delivery", lastEvent: "bounced" }),
     ].join("\n") + "\n");
     const app = await приложение();
     expect((await request(app).get("/api/admin/constitution/waitlist/guest-leads?hours=24")).status).toBe(403);
     адм.ok = true;
     const r = await request(app).get("/api/admin/constitution/waitlist/guest-leads?hours=24");
     expect(r.status).toBe(200);
-    expect(r.body.count).toBe(2);
-    expect(r.body.items.map((x: { email: string }) => x.email).sort()).toEqual(["a@x.io", "b@x.io"]);
+    expect(r.body.count).toBe(3); // 143: отчёты об ошибке и их недоставка тоже в выгрузке
+    expect(r.body.items.map((x: { kind: string }) => x.kind).sort()).toEqual(["cyberchess_oshibka_undelivered", "devhub_save_email", "pilot_490"]);
     const r2 = await request(app).get("/api/admin/constitution/waitlist/guest-leads?hours=48");
-    expect(r2.body.count).toBe(3);
+    expect(r2.body.count).toBe(4);
   });
 });

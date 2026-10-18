@@ -5,8 +5,6 @@ import { главныйВыдуманныйХод, дополнитьХодом�
 import { denPoMestnomu, vcheraPoMestnomu } from "./denPoMestnomu";
 import { otmetitPervyyHod, pervyyHodSdelan } from "./pervyyHod";
 import { verhTostaNaTelefone } from "./tostPodDoskoy";
-import { OtzyvPosleRezultata } from "./OtzyvPosleRezultata";
-import { OshibkaForma } from "./OshibkaForma";
 import { podpiskaPora } from "./podpiskaPosleOtzyva";
 import { soobschenieONorme } from "./normaTrenera";
 import { track } from "@/lib/track";
@@ -51,6 +49,9 @@ import type { KnowledgeCategory as CoachKnowledgeCategory } from "./coachKnowled
 // «ИГРАТЬ» становится нажимаемой через 38 секунд. Эти три панели
 // открываются по действию, на первом экране их код не нужен.
 const CoachLessonsModal = dynamic(() => import("./CoachLessonsModal"), { ssr: false });
+// 143: отзыв и форма «Нашли ошибку?» нужны только после действия человека — лениво, чтобы не расти статикой (храповик знаний тренера)
+const OtzyvPosleRezultata = dynamic(() => import("./OtzyvPosleRezultata").then((m) => m.OtzyvPosleRezultata), { ssr: false });
+const OshibkaForma = dynamic(() => import("./OshibkaForma").then((m) => m.OshibkaForma), { ssr: false });
 import { LESSONS, loadLessons, isLessonComplete, type Lesson } from "./coachLessons";
 import { SYM, SymTab, SymBadge, SymCrest } from "./symbols";
 import { detectPhase, PHASE_TIPS } from "./coachPhase";
@@ -9881,8 +9882,7 @@ export default function CyberChessPage(){
             <OshibkaForma dannye={dannyeOshibki} t={cc.t} cc={CC} width="100%"/>
           </div>}
 
-          {/* 139б: во время партии карточку онбординга под доской не рисуем — она отодвигала строку «Вы» с часами
-              за нижний край (768×1024: 1092 при 1024; 390×844: 782). После партии и вне её — как была. */}
+          {/* 139б: в партии карточку под доской не рисуем — отодвигала строку «Вы» за край */}
           {isMobileLayout&&!(on&&!over)&&полоскаСтарта(bw)}
           {/* ─── Replay bar — analysis quality timeline ─── */}
           {tab==="analysis"&&hist.length>0&&(()=>{

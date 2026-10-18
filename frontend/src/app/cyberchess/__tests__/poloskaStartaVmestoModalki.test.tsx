@@ -97,12 +97,13 @@ describe("страница шахмат показывает полоску вм
     const колонка = СТРАНИЦА.indexOf('data-cc-board-col="1"');
     const доска = СТРАНИЦА.indexOf('data-cc-board="1"');
     expect(СТРАНИЦА.slice(колонка, доска)).not.toContain("полоскаСтарта(");
-    expect(СТРАНИЦА.indexOf("{isMobileLayout&&полоскаСтарта(bw)}"), "телефон: под доской").toBeGreaterThan(доска);
+    expect(СТРАНИЦА.indexOf("{isMobileLayout&&!(on&&!over)&&полоскаСтарта(bw)}"), "телефон: под доской").toBeGreaterThan(доска);
     const панель = СТРАНИЦА.indexOf("Right panel sub-tabs (play mode only)");
     const вПанели = СТРАНИЦА.indexOf('{!isMobileLayout&&полоскаСтарта("100%")}');
     expect(вПанели, "десктоп: в панели").toBeGreaterThan(-1);
     expect(панель - вПанели).toBeGreaterThan(0);
-    expect(панель - вПанели).toBeLessThan(200);
+    // 143: между карточкой и подвкладками теперь стоит ряд масштаба на низком desktop (139) с кнопкой «Нашли ошибку?» — ~450 знаков
+    expect(панель - вПанели).toBeLessThan(600);
   });
 
   it("🔴 закрытие и каждый вход помечают показ сделанным — иначе полоска вернётся", () => {

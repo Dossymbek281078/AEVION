@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { ТИХАЯ_СТЕНА } from "@/lib/paywall";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import MvpConceptBoard from "@/components/MvpConceptBoard";
@@ -347,7 +348,8 @@ export default function QNewsPage() {
       if (q.trim()) params.set("q", q.trim());
       params.set("limit", "100");
       const url = apiUrl("/api/qnews/articles") + `?${params.toString()}`;
-      const resp = await fetch(url, { headers: getAuthHeaders() });
+      // 146 (18.10.2026): запрос загрузки — отказ показывает сама страница (articlesState "paywall"), модалка не нужна
+      const resp = await fetch(url, { headers: getAuthHeaders(), ...ТИХАЯ_СТЕНА });
       if (resp.ok) {
         const data = await resp.json() as { articles: NewsItem[] };
         setArticles(data.articles ?? []);
@@ -371,7 +373,7 @@ export default function QNewsPage() {
 
   async function fetchTrending() {
     try {
-      const resp = await fetch(apiUrl("/api/qnews/trending"), { headers: getAuthHeaders() });
+      const resp = await fetch(apiUrl("/api/qnews/trending"), { headers: getAuthHeaders(), ...ТИХАЯ_СТЕНА });
       if (resp.ok) {
         const data = await resp.json() as { articles: NewsItem[] };
         setTrending(data.articles ?? []);
@@ -381,7 +383,7 @@ export default function QNewsPage() {
 
   async function fetchStats() {
     try {
-      const resp = await fetch(apiUrl("/api/qnews/stats"), { headers: getAuthHeaders() });
+      const resp = await fetch(apiUrl("/api/qnews/stats"), { headers: getAuthHeaders(), ...ТИХАЯ_СТЕНА });
       if (resp.ok) setStats(await resp.json());
     } catch { /* ignore */ }
   }

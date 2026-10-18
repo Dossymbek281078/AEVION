@@ -1300,3 +1300,11 @@ footer {
 @media (max-width: 768px) {
   .aevion-h1-geroj { font-size: 30px !important; line-height: 1.15 !important; }
 }
+
+/* 145 (18.10.2026): шапка сайта липкая (sticky, высоту публикует SiteHeader в --aevion-header-h). Любая прокрутка к цели —
+   переход по якорю #id, scrollIntoView к полю, автопрокрутка браузера к сфокусированному полю — ставила верх цели на 0,
+   то есть ПОД шапку (замер /devhub на проде 5aa03bb5e: поле на 0, elementFromPoint — шапка 55 px на 390, 51 на 1463).
+   scroll-margin-top работает только для цели прокрутки и не двигает вёрстку. */
+[id], input, textarea, select {
+  scroll-margin-top: calc(var(--aevion-header-h, 0px) + 12px);
+}

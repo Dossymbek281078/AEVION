@@ -296,6 +296,9 @@ function isUserGesture(): boolean {
 const INSTALLED = Symbol.for("aevion.paywall.fetchPatched");
 
 /** Monkeypatch window.fetch once. Idempotent and SSR-safe. */
+/** Пометка запроса загрузки, на 402 которого модалку поднимать не нужно: страница покажет отказ сама (см. 146). */
+export const ТИХАЯ_СТЕНА = { aevionPaywall: "silent" } as const;
+
 export function installPaywallInterceptor(): void {
   if (typeof window === "undefined") return;
   const w = window as unknown as Record<symbol, boolean> & { fetch: typeof fetch };
@@ -305,11 +308,17 @@ export function installPaywallInterceptor(): void {
   const original = window.fetch.bind(window);
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const userInitiated = isUserGesture();
+    // 146 (18.10.2026): страница, которая САМА показывает отказ в доступе на своём месте (qnews: «нужен доступ» вместо
+    // ленты), помечает запросы загрузки ТИХАЯ_СТЕНА — модалка на них не поднимается. Замер на проде 5aa03bb5e:
+    // гость на /qnews при 390×844 и 1463×724 видел в первом экране только «Войти под почтой оплаты / Перейти к
+    // тарифам / Позже» — запрос ленты при монтировании отвечал 402, перехватчик поднимал модалку без жеста человека.
+    // Признак — поле init, не заголовок: заголовок ушёл бы в сеть и потребовал бы preflight у CORS.
+    const тихо = (init as (RequestInit & { aevionPaywall?: string }) | undefined)?.aevionPaywall === "silent";
     const [вход, настройки] = сВходом(input, init);
     const res = await original(вход, настройки);
     // Only 402s are interesting; everything else passes straight through
     // untouched (no clone → no overhead, streaming responses unaffected).
-    if (res.status !== 402) return res;
+    if (res.status !== 402 || тихо) return res;
     try {
       const body = await res.clone().json();
       const стена = isPaywallPayload(body) ? body : стенаИзНормы(body);

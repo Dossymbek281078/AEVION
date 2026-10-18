@@ -698,7 +698,11 @@ export default function DevHubPage() {
           <div style={{ fontSize: "clamp(17px, 5vw, 20px)", fontWeight: 800, color: "#fff", marginBottom: 6 }}>
             {t("hero.title")}
           </div>
-          <div ref={ideaFieldRef} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {/* 145 (18.10.2026): при прокрутке к полю (пример, якорь, фокус) верх поля уезжал под липкую шапку сайта
+              (замер на проде 5aa03bb5e: после scrollIntoView поле на 0, в точке поля — шапка 55/51 px; Продажи видели
+              86 px). Отступ прокрутки — от измеренной высоты шапки (--aevion-header-h), то же правило для всех полей
+              и якорей в globals.css. */}
+          <div ref={ideaFieldRef} style={{ display: "flex", gap: 10, flexWrap: "wrap", scrollMarginTop: "calc(var(--aevion-header-h, 56px) + 12px)" }}>
             {/* Оба атрибута нужны, и это не компромисс при сведении:
                 признак гидратации читает сторож предзаполнения, доступное имя —
                 читалка экрана. Взять одну сторону значило бы молча потерять

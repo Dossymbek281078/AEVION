@@ -14,6 +14,8 @@
  */
 
 import IdeaMarket from "./IdeaMarket";
+import TopIdeas from "./TopIdeas";
+import { VenturesInterestProvider } from "./VenturesInterest";
 
 export const metadata = {
   title: "AEVION Ventures — Идея-Маркет",
@@ -23,6 +25,7 @@ export const metadata = {
 
 export default function VenturesPage() {
   return (
+    <VenturesInterestProvider>
     <div className="vtx">
       <style>{CSS}</style>
 
@@ -38,6 +41,8 @@ export default function VenturesPage() {
             <b>AEVIA</b> — longevity-гамми под зонтом AEVION с потолком в Китае
             до <b>$1B</b>.
           </p>
+          {/* 152: первое действие гостя — три замысла с «👍 интересно», без входа */}
+          <TopIdeas />
         </div>
       </header>
 
@@ -259,6 +264,7 @@ export default function VenturesPage() {
         </div>
       </footer>
     </div>
+    </VenturesInterestProvider>
   );
 }
 
@@ -273,6 +279,15 @@ const CSS = `
 .vtx-h1{font-size:clamp(30px,5.6vw,58px);line-height:1.03;letter-spacing:-.03em;font-weight:800;margin:0 0 20px;color:#f6f3ec;text-wrap:balance;}
 .vtx-lede{font-size:clamp(16px,2.2vw,20px);color:#c9c5b8;max-width:48ch;margin:0;}
 .vtx-lede b{color:var(--amberS);font-weight:600;}
+/* 152: три замысла в шапке — первый экран гостя */
+.vtx-top3{margin-top:22px;max-width:820px;}
+.vtx-top3-hint{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;letter-spacing:.04em;color:#c9c5b8;margin:0 0 10px;}
+.vtx-top3-list{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.vtx-top3-card{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid rgba(231,189,100,.45);border-radius:12px;background:rgba(255,255,255,.04);min-width:0;}
+.vtx-top3-num{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:var(--amber);flex:none;}
+.vtx-top3-name{font-size:14px;line-height:1.25;color:#f6f3ec;flex:1 1 auto;min-width:0;}
+.vtx-top3-card button{flex:none;}
+@media (max-width:860px){.vtx-top3-list{grid-template-columns:1fr;}.vtx-top{padding:40px 0 32px;}}
 .vtx-sec{padding:52px 0;border-top:1px solid var(--line);}
 .vtx-label{font-family:ui-monospace,Menlo,monospace;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--soft);margin:0 0 8px;}
 .vtx-label .vtx-n{color:var(--amber);}

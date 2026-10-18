@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import IdeaMarket from "../IdeaMarket";
+import { VenturesInterestProvider } from "../VenturesInterest"; // 152: состояние голосов живёт в провайдере
 
 /**
  * Форма подачи идеи в венчурный маркет не имеет права показывать успех и
@@ -43,7 +44,7 @@ afterEach(() => { vi.unstubAllGlobals(); });
 describe("венчурный маркет: успех только при постоянном сохранении", () => {
   it("контроль прибора: при сохранении в базу показывается подтверждение", async () => {
     vi.stubGlobal("fetch", reply(payload("db")));
-    render(<IdeaMarket />);
+    render(<VenturesInterestProvider><IdeaMarket /></VenturesInterestProvider>);
     await submitIdea();
     await waitFor(() => {
       expect(document.body.textContent ?? "").toContain("Идея принята");
@@ -52,7 +53,7 @@ describe("венчурный маркет: успех только при пос
 
   it("при сохранении в память НЕ показывает «Идея принята» и не стирает текст", async () => {
     vi.stubGlobal("fetch", reply(payload("memory")));
-    render(<IdeaMarket />);
+    render(<VenturesInterestProvider><IdeaMarket /></VenturesInterestProvider>);
     await submitIdea();
     await waitFor(() => {
       const t = document.body.textContent ?? "";

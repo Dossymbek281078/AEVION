@@ -497,6 +497,85 @@ describe("подозрение «пара на метку»", () => {
     expect(r.body.sessionsSuspectedPairPattern, "окно времени не проверяется").toBe(0);
   });
 
+  /*
+   * 🔴 141 (18.10.2026): близнецы отличаются ВЕРСИЕЙ браузера. Замер хвоста /recent за 7 дней: 11 меток с ровно
+   * двумя сессиями в пределах 0–31 с без единого человеческого шага; точная строка UA совпала у 3, у остальных
+   * Windows/Chrome 152 против 148, 153 против 146 и т. п. Прежнее условие «строка равна» отвергало их
+   * (RejectedDifferentUA 54) и оставляло «живыми» — youtube 110 «живых» при 1–2 ходах. Теперь сравнивается
+   * платформа (ОС + семейство + телефон/стол), окно 2 минуты, и подозреваемые считаются по каналу.
+   */
+  const UA_CHROME = (v: number, ос = "Windows NT 10.0; Win64; x64") =>
+    `Mozilla/5.0 (${ос}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${v}.0.0.0 Safari/537.36`;
+  const собUA = (sid: string, type: string, пост: string, ts: string, ua: string) => ({ ...соб(sid, type, пост, ts), ua });
+
+  it("🔴 141: близнецы с РАЗНЫМИ версиями Chrome на одной платформе — подозрение, и канал назван", async () => {
+    const t0 = минутуНазад(30);
+    const t1 = new Date(Date.parse(t0) + 5_000).toISOString();
+    журнал([
+      собUA("бл1", "page_view", "chess-4", t0, UA_CHROME(152)),
+      собUA("бл1", "feature_use", "chess-4", t0, UA_CHROME(152)),
+      собUA("бл1", "engaged", "chess-4", t0, UA_CHROME(152)),
+      собUA("бл2", "page_view", "chess-4", t1, UA_CHROME(148)),
+      собUA("бл2", "feature_use", "chess-4", t1, UA_CHROME(148)),
+    ]);
+    const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");
+    expect(r.body.sessionsSuspectedPairPattern, "близнецы с разными версиями не замечены").toBe(2);
+    expect(r.body.sessionsSuspectedPairPatternTags).toContain("chess-4");
+    expect(r.body.sessionsSuspectedPairPatternByChannel).toEqual({ youtube: 2 });
+    expect(r.body.sessionsSuspectedPairPatternExactUaPairs).toBe(0);
+    expect(r.body.sessionsSuspectedPairPatternRejectedDifferentUA).toBe(0);
+    // визиты НЕ отсеяны: вычитание — дело читателя по ByChannel
+    expect(r.body.byChannel.youtube.visits).toBe(2);
+  });
+
+  it("🔴 141 КОНТРОЛЬ: то же, но старты разнесены на 3 минуты — живые, подозрения нет", async () => {
+    const t0 = минутуНазад(30);
+    const t1 = new Date(Date.parse(t0) + 3 * 60_000).toISOString();
+    журнал([
+      собUA("мн1", "page_view", "chess-4", t0, UA_CHROME(152)),
+      собUA("мн2", "page_view", "chess-4", t1, UA_CHROME(148)),
+    ]);
+    const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");
+    expect(r.body.sessionsSuspectedPairPattern).toBe(0);
+    expect(r.body.sessionsSuspectedPairPatternByChannel).toEqual({});
+  });
+
+  it("🔴 141 КОНТРОЛЬ: то же, но платформы разные (Android против Windows) — не подозрение, и это посчитано", async () => {
+    const t0 = минутуНазад(30);
+    const t1 = new Date(Date.parse(t0) + 5_000).toISOString();
+    журнал([
+      собUA("пл1", "page_view", "chess-4", t0, UA_CHROME(152)),
+      собUA("пл2", "page_view", "chess-4", t1, UA_CHROME(152, "Linux; Android 14; Pixel 8") + " Mobile"),
+    ]);
+    const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");
+    expect(r.body.sessionsSuspectedPairPattern).toBe(0);
+    expect(r.body.sessionsSuspectedPairPatternRejectedDifferentUA).toBe(1);
+  });
+
+  it("141 КОНТРОЛЬ: то же, но у одной сессии человеческий шаг (puzzle_solved) — не подозрение", async () => {
+    const t0 = минутуНазад(30);
+    const t1 = new Date(Date.parse(t0) + 5_000).toISOString();
+    журнал([
+      собUA("шг1", "page_view", "chess-4", t0, UA_CHROME(152)),
+      собUA("шг1", "puzzle_solved", "chess-4", t0, UA_CHROME(152)),
+      собUA("шг2", "page_view", "chess-4", t1, UA_CHROME(148)),
+    ]);
+    const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");
+    expect(r.body.sessionsSuspectedPairPattern).toBe(0);
+  });
+
+  it("141: пары с точно совпавшей строкой считаются отдельно (прежнее условие видно числом)", async () => {
+    const t0 = минутуНазад(30);
+    const t1 = new Date(Date.parse(t0) + 2_000).toISOString();
+    журнал([
+      собUA("тч1", "page_view", "blogger-8b", t0, UA_CHROME(139)),
+      собUA("тч2", "page_view", "blogger-8b", t1, UA_CHROME(139)),
+    ]);
+    const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");
+    expect(r.body.sessionsSuspectedPairPattern).toBe(2);
+    expect(r.body.sessionsSuspectedPairPatternExactUaPairs).toBe(1);
+  });
+
   it("КОНТРОЛЬ: пара, ходившая по двум адресам, под подозрение не идёт", async () => {
     журнал([
       соб("х1", "page_view", "komm-hodil", минутуНазад(3)),

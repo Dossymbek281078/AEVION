@@ -355,7 +355,12 @@ export function платформаБраузера(ua: string): string {
   return `${ос}/${браузер}${/Mobile|Android|iPhone/.test(ua) ? "/моб" : ""}`;
 }
 
-export function парыНаМетку(content: string): {
+/**
+ * 141б: считается по событиям, уже прошедшим отбор воронки (время, не робот, не webdriver), и БЕЗ наших сессий
+ * (`нашЗаход`). Иначе наши же браузерные пробы — одна метка в двух окнах подряд — выглядят близнецами, и
+ * замер 18.10 на проде дал «youtube: близнецов 154 при 110 живых визитах».
+ */
+export function парыНаМетку(события: readonly AnalyticsEvent[], нашЗаход: (sid: string) => boolean = () => false): {
   сессии: Set<string>;
   метки: Map<string, number>;
   /** 141: подозреваемые сессии по каналу (meta.channel первого события) — чтобы вычесть их из visits канала. */
@@ -398,15 +403,9 @@ export function парыНаМетку(content: string): {
   const поМетке = new Map<string, Map<string, С>>();
   const меткаСессии = new Map<string, string>();
 
-  for (const line of content.split(String.fromCharCode(10))) {
-    if (!line.trim()) continue;
-    let ev: AnalyticsEvent;
-    try {
-      ev = JSON.parse(line) as AnalyticsEvent;
-    } catch {
-      continue;
-    }
+  for (const ev of события) {
     if (!ev.sid) continue;
+    if (нашЗаход(ev.sid)) continue; // 141б: наши заходы и пробы окон близнецами не считаются
     const t = Date.parse(ev.ts || "");
     if (!Number.isFinite(t)) continue;
     const сыройПост = ev.meta?.post;
@@ -3761,7 +3760,6 @@ eventsRouter.get("/funnel", (req, res) => {
    */
   const обход = обходчики(content);
   // Подозрение «пара на метку» считается здесь же, одним проходом по журналу.
-  const пары = парыНаМетку(content);
 
   for (const line of content.split(String.fromCharCode(10))) {
     if (!line.trim()) continue;
@@ -4052,6 +4050,8 @@ eventsRouter.get("/funnel", (req, res) => {
     }));
 
   const разрез = разрезВоронки(событияВоронки, нашиСессии, пробыОкон);
+  // 141б: близнецы — по тем же событиям и с тем же понятием «наш заход», что и разрез по каналам.
+  const пары = парыНаМетку(событияВоронки, (sid) => нашиСессии.has(sid) || пробыОкон.has(sid));
 
   const итог = byDay.reduce(
     (a, b) => ({

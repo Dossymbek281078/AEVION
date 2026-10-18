@@ -564,6 +564,29 @@ describe("подозрение «пара на метку»", () => {
     expect(r.body.sessionsSuspectedPairPattern).toBe(0);
   });
 
+  it("🔴 141б: близнецы с webdriver:true (наша браузерная проба в двух окнах) — НЕ подозрение и не визиты", async () => {
+    const t0 = минутуНазад(30);
+    const t1 = new Date(Date.parse(t0) + 4_000).toISOString();
+    журнал([
+      { ...собUA("вд1", "page_view", "chess-4", t0, UA_CHROME(151)), webdriver: true },
+      { ...собUA("вд2", "page_view", "chess-4", t1, UA_CHROME(151)), webdriver: true },
+    ]);
+    const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");
+    expect(r.body.sessionsSuspectedPairPattern).toBe(0);
+    expect(r.body.byChannel.youtube ?? { visits: 0 }).toMatchObject({ visits: 0 });
+  });
+
+  it("🔴 141б: близнецы с ?probe=<окно> (наш заход) — считаются нашими, под подозрение не идут", async () => {
+    const t0 = минутуНазад(30);
+    const t1 = new Date(Date.parse(t0) + 4_000).toISOString();
+    const наш = (sid: string, ts: string, ua: string) => ({ type: "page_view", ts, sid, ua, path: "/cyberchess?c=yt&probe=user-99", meta: { channel: "youtube", post: "chess-4" } });
+    журнал([наш("пр1", t0, UA_CHROME(152)), наш("пр2", t1, UA_CHROME(148))]);
+    const r = await request(await приложение()).get("/api/pricing/events/funnel?days=1");
+    expect(r.body.byChannel.youtube).toMatchObject({ visits: 2, visitsOurs: 2 });
+    expect(r.body.sessionsSuspectedPairPattern, "наши заходы зачтены близнецами").toBe(0);
+    expect(r.body.sessionsSuspectedPairPatternByChannel).toEqual({});
+  });
+
   it("141: пары с точно совпавшей строкой считаются отдельно (прежнее условие видно числом)", async () => {
     const t0 = минутуНазад(30);
     const t1 = new Date(Date.parse(t0) + 2_000).toISOString();

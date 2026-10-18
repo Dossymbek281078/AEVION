@@ -312,6 +312,16 @@ export default function QRealClient() {
           <p className="text-[11px] uppercase tracking-[0.25em] text-teal-700">{t("qreal.badge")}</p>
           <h1 className="mt-2 font-serif text-5xl leading-tight">QReal Studio</h1>
           <p className="mt-3 max-w-3xl font-serif text-xl leading-relaxed text-neutral-700">{t("qreal.hero.lead")}</p>
+          {/* 151 (18.10.2026): бесплатный демо-фильм — первое действие гостя — сразу под заголовком. Замер на проде
+              638a7b5, 390×844: кнопка стояла на ~1519 (после двух видео сравнения), в кадре гостя не было ни одного
+              действия; фильм идёт из прод-кэша ($0), кнопка та же (watchDemoFilm). */}
+          <button
+            onClick={watchDemoFilm}
+            disabled={busy}
+            className="mt-4 border border-neutral-900 bg-neutral-900 px-5 py-2 text-sm text-white transition hover:bg-teal-800 disabled:opacity-40"
+          >
+            {busy ? t("qreal.brief.cta.busy") : t("qreal.film.watch")}
+          </button>
           <p className="mt-3 max-w-3xl text-sm leading-relaxed text-red-700">{t("qreal.hero.ethics")}</p>
           {/*
             Замер 20.09.2026: QReal был единственным модулем со своей страницей
@@ -342,13 +352,6 @@ export default function QRealClient() {
             </figure>
           </div>
           <p className="mt-3 max-w-3xl text-xs leading-relaxed text-neutral-500">{t("qreal.compare.note")}</p>
-          <button
-            onClick={watchDemoFilm}
-            disabled={busy}
-            className="mt-3 border border-neutral-900 bg-neutral-900 px-5 py-2 text-sm text-white transition hover:bg-teal-800 disabled:opacity-40"
-          >
-            {busy ? t("qreal.brief.cta.busy") : t("qreal.film.watch")}
-          </button>
         </section>
 
         {/* Бриф */}

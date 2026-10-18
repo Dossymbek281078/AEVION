@@ -52,7 +52,7 @@ describe("144в: действие гостя выше чисел, бейджей
     const sh = файл("src/app/shadownet/page.tsx");
     expect(sh).toContain('className="aevion-h1-geroj"');
     const css = файл("src/app/globals.css");
-    expect(css.slice(css.lastIndexOf("@media (max-width: 768px)"))).toContain(".aevion-h1-geroj { font-size: 30px !important;");
+    expect(css.slice(css.indexOf("/* 144г (18.10.2026)"))).toContain(".aevion-h1-geroj { font-size: 30px !important;");
     const qf = файл("src/app/qfusionai/page.tsx");
     expect(qf).toContain('flexWrap: "wrap", // 144г');
     expect(qf).toContain('<div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>\n          <ModulePricingChip moduleId="qfusionai"');

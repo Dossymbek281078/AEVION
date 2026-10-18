@@ -25,7 +25,7 @@ describe("144: навигация и предупреждение не съед�
   test("🔴 Wave1Nav несёт класс aevion-wave1nav, а globals.css на ≤768 делает его одной строкой с прокруткой", () => {
     expect(файл("src/components/Wave1Nav.tsx")).toContain('<nav className="aevion-wave1nav"');
     const css = файл("src/app/globals.css");
-    const медиа = css.slice(css.lastIndexOf("@media (max-width: 768px)"));
+    const медиа = css.slice(css.indexOf("/* ── 144 (18.10.2026)")); // блок 144 и всё после него (147: последний медиа-блок уже не наш)
     expect(медиа).toContain(".aevion-wave1nav {");
     expect(медиа).toContain("flex-wrap: nowrap !important;");
     expect(медиа).toContain("overflow-x: auto;");

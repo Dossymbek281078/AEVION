@@ -165,6 +165,9 @@ export default function ZTidePage() {
         </p>
       </section>
 
+      {/* 147 (18.10.2026): графики с публичным поиском — раньше полосы чисел (первое действие гостя в кадре телефона). */}
+      {/* Dashboard charts — rank distribution, top-tide bars, user lookup */}
+      <TideCharts />
       {/* Stats strip */}
       {stats && (
         <section className="mx-auto max-w-6xl px-5 pb-8">
@@ -184,8 +187,6 @@ export default function ZTidePage() {
         </section>
       )}
 
-      {/* Dashboard charts — rank distribution, top-tide bars, user lookup */}
-      <TideCharts />
 
       {/* My Tide + Rank ladder */}
       <section className="mx-auto max-w-6xl px-5 pb-8 grid grid-cols-1 lg:grid-cols-2 gap-4">

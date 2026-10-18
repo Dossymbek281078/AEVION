@@ -88,7 +88,9 @@ export default function ShadowNetPage() {
         </div>
       </header>
 
-      <section style={{ maxWidth: "1100px", margin: "0 auto", padding: "80px 20px 50px" }}>
+      {/* 147 (18.10.2026): на 390×844 герой начинался с поля 80 px, h1 389..527, первая кнопка выбора угрозы на ~911 —
+          за кадром. Класс aevion-geroj-sekciya на ≤768 режет верхнее поле до 24 px; абзац героя — после выбора угрозы. */}
+      <section className="aevion-geroj-sekciya" style={{ maxWidth: "1100px", margin: "0 auto", padding: "80px 20px 50px" }}>
         <p
           style={{
             color: "#a855f7",
@@ -117,20 +119,6 @@ export default function ShadowNetPage() {
           ShadowNet —{" "}
           <span style={{ color: "#a855f7" }}>concept privacy simulator</span>
         </h1>
-        <p
-          style={{
-            color: "#c4b5fd",
-            fontSize: "17px",
-            maxWidth: "760px",
-            lineHeight: 1.6,
-            margin: 0,
-          }}
-        >
-          Не реальный VPN, а образовательный симулятор приватности. Threat-model
-          selector, симулятор маршрутизации через 3-7 хопов, калькулятор privacy
-          score и end-to-end зашифрованные посты — всё с криптографией в браузере,
-          сервер видит только ciphertext.
-        </p>
       </section>
 
       <section style={{ maxWidth: "1100px", margin: "0 auto", padding: "20px 20px 40px" }}>
@@ -149,6 +137,20 @@ export default function ShadowNetPage() {
           конкретные рекомендации.
         </p>
         <ThreatModelSelector />
+        <p
+          style={{
+            color: "#c4b5fd",
+            fontSize: "17px",
+            maxWidth: "760px",
+            lineHeight: 1.6,
+            margin: 0,
+          }}
+        >
+          Не реальный VPN, а образовательный симулятор приватности. Threat-model
+          selector, симулятор маршрутизации через 3-7 хопов, калькулятор privacy
+          score и end-to-end зашифрованные посты — всё с криптографией в браузере,
+          сервер видит только ciphertext.
+        </p>
       </section>
       {/* 144в (18.10.2026): полоса чисел — после первого действия гостя (выбор модели угроз): на 390×844 первая кнопка
           стояла на ~1457 при кадре 844 (замер на проде 627d18515). */}

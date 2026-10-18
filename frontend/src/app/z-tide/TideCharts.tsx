@@ -80,6 +80,11 @@ export default function TideCharts() {
 
   return (
     <section className="mx-auto max-w-6xl px-5 pb-8 grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* 147 (18.10.2026): публичный поиск — первое действие гостя — ПЕРЕД графиками: на 390×844 поле стояло на ~1632
+          при кадре 844 (замер на проде a74ae8b). На широких экранах — во всю ширину над графиками. */}
+      <div className="lg:col-span-2">
+        <TideLookup />
+      </div>
       {/* Rank distribution */}
       <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-5 backdrop-blur">
         <div className="flex items-center justify-between mb-4">
@@ -122,10 +127,6 @@ export default function TideCharts() {
         </ul>
       </div>
 
-      {/* Tide lookup — spans full width below on large screens */}
-      <div className="lg:col-span-2">
-        <TideLookup />
-      </div>
     </section>
   );
 }

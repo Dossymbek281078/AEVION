@@ -1308,3 +1308,9 @@ footer {
 [id], input, textarea, select {
   scroll-margin-top: calc(var(--aevion-header-h, 0px) + 12px);
 }
+
+/* 147 (18.10.2026): герой с инлайновым верхним полем 60–80 px на телефоне отодвигает первое действие за кадр
+   (shadownet 390×844: кнопка выбора угрозы на ~911). Класс для таких секций; !important — поверх инлайна. */
+@media (max-width: 768px) {
+  .aevion-geroj-sekciya { padding-top: 24px !important; padding-bottom: 24px !important; }
+}

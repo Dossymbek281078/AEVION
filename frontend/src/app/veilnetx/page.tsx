@@ -621,7 +621,7 @@ export default function VeilNetXLanding() {
         <ModulePricingChip moduleId="veilnetx" theme="dark" />
       </header>
 
-      <section className="max-w-5xl mx-auto px-6 py-16 space-y-6">
+      <section className="max-w-5xl mx-auto px-6 py-8 md:py-16 space-y-6">
         <div className="inline-block px-3 py-1 bg-cyan-900/40 border border-cyan-800 rounded-full text-xs text-cyan-300 font-semibold uppercase tracking-wider">
           Privacy network · exposure scanner
         </div>
@@ -631,18 +631,20 @@ export default function VeilNetXLanding() {
             actually exists.
           </span>
         </h1>
-        <p className="text-lg text-slate-400 max-w-2xl leading-relaxed">
-          Не «обещаем» приватность — её невозможно у нас отнять. Серверы не пишут
-          логи. KYC нет. Сканер показывает, что о вас уже видно серверу и что
-          утекает из браузера. Tor-routing — в плане на Q4 2026.
-        </p>
-        <StatusPill onPaywall={setPaywall} />
+        {/* 144в (18.10.2026): форма списка ожидания — сразу под заголовком; абзац и статус ниже. На 390×844 поле
+            почты стояло на ~1204 при кадре 844 (замер на проде 627d18515). */}
         <div id="waitlist" className="space-y-2 pt-2 scroll-mt-24">
           <div className="text-sm text-slate-400">
             Запуск Q4 2026. Подпишитесь — уведомим первыми.
           </div>
           <WaitlistForm />
         </div>
+        <p className="text-lg text-slate-400 max-w-2xl leading-relaxed">
+          Не «обещаем» приватность — её невозможно у нас отнять. Серверы не пишут
+          логи. KYC нет. Сканер показывает, что о вас уже видно серверу и что
+          утекает из браузера. Tor-routing — в плане на Q4 2026.
+        </p>
+        <StatusPill onPaywall={setPaywall} />
         <div className="flex flex-wrap gap-3 pt-2">
           <Link
             href="/veilnetx/ledger"

@@ -168,9 +168,11 @@ export default function QContractHome() {
         <div className="max-w-3xl mx-auto px-6 py-10 md:py-24 text-center">
           {/* 144 (18.10.2026): кнопка «Создать…» сразу под текстом, четыре фишки-преимущества — ниже неё; поле сверху
               py-10 на телефоне. Замер на проде 627d18515, 390×844: ссылка создания на ~1192 при кадре 844. */}
-          <div className="text-6xl mb-6">💣</div>
-          <h1 className="text-4xl font-black mb-4">{t("qcontract.home.hero.title")}</h1>
-          <p className="text-slate-400 text-lg mb-8 leading-relaxed">
+          {/* 144в: на телефоне над кнопкой и так шапка, плашка цены и оговорка (h1 на 573 при кадре 844, замер dbddb2ce7);
+              эмодзи — только с md, заголовок и абзац на телефоне меньше. */}
+          <div className="hidden md:block text-6xl mb-6">💣</div>
+          <h1 className="text-3xl md:text-4xl font-black mb-4">{t("qcontract.home.hero.title")}</h1>
+          <p className="text-slate-400 text-base md:text-lg mb-6 md:mb-8 leading-relaxed">
             {t("qcontract.home.hero.body")}
           </p>
           <Link

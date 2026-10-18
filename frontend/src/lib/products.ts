@@ -626,6 +626,14 @@ export const CHANNELS: Record<string, string> = {
   sb: "startupbase",
   ln: "launchingnext",
   sh: "saashub",
+  // 18.10.2026 (слово оркестратора, до отправки основателем): письма школам и клубам в WhatsApp несут метки
+  // wa-school-<город>; без ключа они падали в byUnknownTag и давали только визиты. Пост = school-<город>.
+  wa: "whatsapp",
+  // 18.10.2026: тестировщики шахмат — метки testers-yt, testers-club-<страна>, testers-uni УЖЕ разосланы
+  // (13 описаний роликов, 19 писем клубам) и тоже лежали в byUnknownTag. Канал «testers», пост — остаток
+  // (club-au, yt, uni). Уже записанные события остаются в byUnknownTag как были: канал ставится в момент
+  // захода, задним числом не переписывается — старые визиты не теряются, новые ложатся в byChannel.
+  testers: "testers",
 };
 
 /**

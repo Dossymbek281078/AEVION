@@ -130,10 +130,6 @@ export default function ShadowNetPage() {
         </p>
       </section>
 
-      <section style={{ maxWidth: "1100px", margin: "0 auto", padding: "0 20px 30px" }}>
-        <StatsStrip />
-      </section>
-
       <section style={{ maxWidth: "1100px", margin: "0 auto", padding: "20px 20px 40px" }}>
         <h2
           style={{
@@ -150,6 +146,11 @@ export default function ShadowNetPage() {
           конкретные рекомендации.
         </p>
         <ThreatModelSelector />
+      </section>
+      {/* 144в (18.10.2026): полоса чисел — после первого действия гостя (выбор модели угроз): на 390×844 первая кнопка
+          стояла на ~1457 при кадре 844 (замер на проде 627d18515). */}
+      <section style={{ maxWidth: "1100px", margin: "0 auto", padding: "0 20px 30px" }}>
+        <StatsStrip />
       </section>
 
       <section style={{ maxWidth: "1100px", margin: "0 auto", padding: "20px 20px 40px" }}>

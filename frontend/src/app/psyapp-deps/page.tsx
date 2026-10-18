@@ -128,9 +128,10 @@ export default function PsyAppDepsPage() {
           Алкоголь, курение или другие зависимости — путь один: маленькие шаги, поддержка и
           честность с собой. Без диагнозов, без осуждения, без следов.
         </p>
-        <CommunityStatsRow />
       </section>
 
+      {/* 144в (18.10.2026): полоса чисел сообщества — после первого действия (онбординг), а не между заголовком и
+          ним: на 390×844 первое поле стояло на ~1119 при кадре 844 (замер на проде 627d18515). */}
       {/* Main flow */}
       <section style={styles.section}>
         {storageWarning && (
@@ -170,6 +171,10 @@ export default function PsyAppDepsPage() {
             </div>
           </div>
         )}
+      </section>
+
+      <section style={styles.section}>
+        <CommunityStatsRow />
       </section>
 
       {/* Care reminder */}

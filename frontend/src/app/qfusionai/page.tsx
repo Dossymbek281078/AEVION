@@ -122,29 +122,6 @@ export default function QFusionAIPage() {
           запроса по стратегии: скорость, качество, стоимость или авторежим.
         </p>
 
-        <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-          {[
-            { label: "5 провайдеров", color: "#00ff88" },
-            { label: "4 стратегии", color: "#00ccff" },
-            { label: "Автовыбор", color: "#cc88ff" },
-            { label: "Live stats", color: "#ffcc00" },
-          ].map((badge) => (
-            <span
-              key={badge.label}
-              style={{
-                padding: "5px 14px",
-                background: `${badge.color}11`,
-                border: `1px solid ${badge.color}33`,
-                color: badge.color,
-                borderRadius: 20,
-                fontSize: 12,
-                fontWeight: 600,
-              }}
-            >
-              {badge.label}
-            </span>
-          ))}
-        </div>
       </section>
 
       {/* Main content: Playground + Side panels */}
@@ -172,6 +149,31 @@ export default function QFusionAIPage() {
           </div>
 
           <FusionPlayground onResult={handleResult} />
+          {/* 144в (18.10.2026): бейджи героя — под площадкой, чтобы кнопки стратегии были в первом экране телефона
+              (на 390×844 стояли на ~1143 при кадре 844, замер на проде 627d18515). */}
+          <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+            {[
+              { label: "5 провайдеров", color: "#00ff88" },
+              { label: "4 стратегии", color: "#00ccff" },
+              { label: "Автовыбор", color: "#cc88ff" },
+              { label: "Live stats", color: "#ffcc00" },
+            ].map((badge) => (
+              <span
+                key={badge.label}
+                style={{
+                  padding: "5px 14px",
+                  background: `${badge.color}11`,
+                  border: `1px solid ${badge.color}33`,
+                  color: badge.color,
+                  borderRadius: 20,
+                  fontSize: 12,
+                  fontWeight: 600,
+                }}
+              >
+                {badge.label}
+              </span>
+            ))}
+          </div>
 
           {/* Stats mini-dashboard */}
           <RequestCard refreshTick={refreshTick} />

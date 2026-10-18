@@ -3,7 +3,10 @@ import { стримГоден } from "./ответНеГоден";
 import { лимитПровайдера, когдаВернётся as срокВозврата, тренерОтветил, пометкаОВыключенномРазборе, пометкаЗапаснойМодели, общаяОчередьАнонимов } from "./coachOutage";
 import { главныйВыдуманныйХод, дополнитьХодомДвижка, текстВместоОтвета } from "./проверьХодыОтвета";
 import { denPoMestnomu, vcheraPoMestnomu } from "./denPoMestnomu";
-import { otmetitPervyyHod } from "./pervyyHod";
+import { otmetitPervyyHod, pervyyHodSdelan } from "./pervyyHod";
+import { verhTostaNaTelefone } from "./tostPodDoskoy";
+import { OtzyvPosleRezultata } from "./OtzyvPosleRezultata";
+import { podpiskaPora } from "./podpiskaPosleOtzyva";
 import { soobschenieONorme } from "./normaTrenera";
 import { track } from "@/lib/track";
 import { ishodDlyaCPI, resheniePoKontsuPartii } from "./ishodPartii";
@@ -867,6 +870,23 @@ function sqLuma(hex:string):number{
   return 0.299*r+0.587*g+0.114*b;
 }
 
+/* 140б (16.10.2026): палитра тем и масштаб «− 100 % +» — один компонент на два места:
+   под доской (как было) и в верху правой панели на низком десктопе с боковой панелью
+   (1463×724: ряд под доской стоил 26 px, доска 538 = 74 % vh при планке lichess 76 %). */
+type PalitraProps={boardTheme:number;onTheme:(i:number)=>void;boardScale:number;onScale:(f:(s:number)=>number)=>void;cc:{text:string;textMute:string;border:string;surface1:string}};
+const PalitraIMasshtab=React.memo(function PalitraIMasshtab({boardTheme,onTheme,boardScale,onScale,cc:CC}:PalitraProps){
+  const sBoardTheme=onTheme,sBoardScale=onScale;
+  return (
+    <div data-cc-palitra="1" style={{display:"flex",gap:3,flexShrink:0,alignItems:"center"}}>
+      {BOARD_THEMES.slice(0,8).map((th,i)=><button key={i} title={`Тема: ${th.name}`} aria-label={`Тема доски: ${th.name}`} aria-pressed={boardTheme===i} onClick={()=>sBoardTheme(i)} style={{width:22,height:22,borderRadius:"50%",border:boardTheme===i?`2px solid ${CC.text}`:`2px solid ${CC.border}`,background:th.dark,cursor:"pointer",padding:0,flexShrink:0,outline:"none",transition:"transform 120ms",transform:boardTheme===i?"scale(1.18)":"scale(1)"}}/>)}
+      <div style={{width:1,height:12,background:CC.border,margin:"0 2px"}}/>
+      <button title="Уменьшить доску (Ctrl+-)" aria-label="Уменьшить доску" onClick={()=>sBoardScale(s=>Math.max(0.5,parseFloat((s-0.1).toFixed(1))))} style={{width:26,height:26,borderRadius:4,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,fontSize:15,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>−</button>
+      <span title="Размер доски" style={{fontSize:9.5,color:CC.textMute,fontWeight:800,minWidth:28,textAlign:"center",fontFamily:"ui-monospace,monospace"}}>{Math.round(boardScale*100)}%</span>
+      <button title="Увеличить доску (Ctrl+=)" aria-label="Увеличить доску" onClick={()=>sBoardScale(s=>Math.min(1.5,parseFloat((s+0.1).toFixed(1))))} style={{width:26,height:26,borderRadius:4,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,fontSize:15,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>+</button>
+    </div>
+  );
+});
+
 type CellProps={
   sq:Square;
   pieceType:"p"|"n"|"b"|"r"|"q"|"k"|null;
@@ -880,9 +900,11 @@ type CellProps={
   pmIdx?:number;
   coordFile?:string;
   coordRank?:number;
+  /** 140: фигура ходящей стороны до первого хода в задаче — дышащее кольцо «нажми меня». */
+  iNudge?:boolean;
 };
 
-const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk,iPM,iPS,iL,isShadow,isAnimDest,isDragOrigin,iHover,iHoverCap,iSH,dotOnDark,pmIdx,coordFile,coordRank}:CellProps){
+const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk,iPM,iPS,iL,isShadow,isAnimDest,isDragOrigin,iHover,iHoverCap,iSH,dotOnDark,pmIdx,coordFile,coordRank,iNudge}:CellProps){
   void iPM;
   const hasPiece=pieceType&&pieceColor;
   const isLifted=(iS||iPS)&&!isDragOrigin;
@@ -920,6 +942,10 @@ const Cell=React.memo(function Cell({sq,pieceType,pieceColor,bg,cursor,iS,iV,iCk
         (bg-тинта T.last мало: фигура занимает 88% клетки). Не рисуем на клетке
         шаха (там свой red pulse-glow) чтобы маркеры не наслаивались. */}
     {iL&&!iCk&&<div style={{position:"absolute",inset:0,boxShadow:"inset 0 0 0 clamp(2px,4%,5px) rgba(217,119,6,0.92)",pointerEvents:"none",zIndex:1}}/>}
+    {/* 140: до первого хода в задаче фигуры ходящей стороны дышат синим кольцом —
+        «нажми меня». Гаснет после первого хода (pervyyHodSdelan), не рисуется на
+        выбранной клетке — там своя подсветка. */}
+    {iNudge&&!iS&&<div className="cc-nudge-ring" data-cc-nudge="1" style={{position:"absolute",inset:0,pointerEvents:"none",zIndex:1}}/>}
     {/* Strip-hover sync — sky-blue ring на from/to наведённого хода (analysis bar) */}
     {iSH&&<div style={{position:"absolute",inset:0,boxShadow:"inset 0 0 0 clamp(2px,4%,5px) rgba(56,189,248,0.95)",pointerEvents:"none",zIndex:1}}/>}
     {coordRank!==undefined&&<div style={{position:"absolute",top:"6%",left:"6%",fontSize:"clamp(8px,1.1vw,12px)",fontWeight:800,color:coordCol,pointerEvents:"none",lineHeight:1,userSelect:"none",zIndex:2}}>{coordRank}</div>}
@@ -1704,12 +1730,19 @@ export default function CyberChessPage(){
   // полосы оболочки (~70px), и «высота+8» клала тост на «Вернуться к партии» (тестер 20.09, 390 puzzles).
   // Плашка языка на телефоне — position:absolute (правило в <style> ниже): фиксированная закрывала
   // прокрученный к верху ряд чипов («📡 Стрим» под «RU ▼», тестер 20.09, низ страницы).
+  // 140: apply() ниже вызывается ещё раз, когда доска появляется/меняет размер (эффект после nudgeSide):
+  // первый экран — настройка, доска монтируется позже, и без этого тост оставался под шапкой (замер 16.10: 64px).
+  const toastApplyRef=useRef<()=>void>(()=>{});
   useEffect(()=>{const r=document.documentElement.style;
     const apply=()=>{try{
-      if(vwPx<769){const rc=document.querySelector("[data-cc-header]")?.getBoundingClientRect();const h=rc?Math.max(rc.bottom,rc.height):56;r.setProperty("--aevion-toast-top",`${Math.round(Math.max(56,h))+8}px`);r.setProperty("--aevion-toast-bottom","auto");r.setProperty("--aevion-toast-lift","0px");}
+      if(vwPx<769){const rc=document.querySelector("[data-cc-header]")?.getBoundingClientRect();const h=rc?Math.max(rc.bottom,rc.height):56;
+        // 140 (16.10.2026): тост под шапкой закрывал строку задания и верх доски те 5 с, когда
+        // новичок решает, что нажать. Доска в кадре и под ней есть место — тост ПОД доску.
+        const bd=document.querySelector("[data-cc-board]")?.getBoundingClientRect();
+        r.setProperty("--aevion-toast-top",`${verhTostaNaTelefone({shapkaNiz:h,doskaNiz:bd?bd.bottom:null,vh:window.innerHeight})}px`);r.setProperty("--aevion-toast-bottom","auto");r.setProperty("--aevion-toast-lift","0px");}
       else{r.removeProperty("--aevion-toast-top");r.removeProperty("--aevion-toast-bottom");r.setProperty("--aevion-toast-lift","0px");}
     }catch{}};
-    apply();
+    apply();toastApplyRef.current=apply;
     const el=document.querySelector("[data-cc-header]");
     const ro=(el&&typeof ResizeObserver!=="undefined")?new ResizeObserver(apply):null; if(el&&ro)ro.observe(el);
     window.addEventListener("scroll",apply,{passive:true}); // низ шапки в окне меняется прокруткой, а не только размером
@@ -1822,7 +1855,10 @@ export default function CyberChessPage(){
     return()=>{clearInterval(id);window.removeEventListener("resize",measure)};
   },[vwPx,vhPx]);
   const строкаИгрокаPx=vhPx<800?40:48;                       // 139: аватар 32 / часы 36 или 44, + поля 2+2
-  const подДоской139=зашёлЗаЗадачей?36:26+строкаИгрокаPx;     // буквы 26 + строка «Вы» (пришедшему за задачей — только буквы)
+  // 140б: на низком десктопе с боковой панелью (≥1280 и <860) ряд «буквы · палитра · масштаб» уходит в панель:
+  // буквы и так в клетках, а 26 px ряда отдаются доске (1463×724: 538 → 564, 74 → 78 % vh; lichess 76–79).
+  const рядМасштабаВПанели=панельРядом&&vhPx<860&&!зашёлЗаЗадачей;
+  const подДоской139=зашёлЗаЗадачей?36:(рядМасштабаВПанели?0:26)+строкаИгрокаPx;     // буквы 26 + строка «Вы» (пришедшему за задачей — только буквы)
   const desktopVReserve=(boardTopPx>0?boardTopPx:110)+подДоской139+8;
   const vReserve=vwPx>=769?desktopVReserve:300;
   const evalБарВиден=sfOk&&!p2pMode&&(tab==="analysis"||tab==="play"||tab==="coach");
@@ -2598,6 +2634,13 @@ export default function CyberChessPage(){
      («cyberchess-app»), поэтому различить было нечего. */
   const[поводПодписки,sПоводПодписки]=useState<"daily-solved"|"game-over">("game-over");
   const предлагалиПодпискуRef=useRef(false);
+  // 16.10 (решение оркестратора по данным: 0 живых адресов из окна после партии за 7 дней): первым после
+  // партии идёт отзыв, окно подписки — после «Отправить» или после закрытия плашки (podpiskaPosleOtzyva.ts).
+  // Повод хранится в ref (game-over | daily-solved); тик — чтобы эффект ниже пересчитался после установки ref
+  // из async-ветки (зачёт задачи дня приходит после ответа сервера, без своего ре-рендера).
+  const подпискаЖдётОтзываRef=useRef<null|"game-over"|"daily-solved">(null);
+  const[подпискаТик,sПодпискаТик]=useState(0);
+  const показатьПодпискуПослеОтзыва=()=>{const повод=подпискаЖдётОтзываRef.current;if(!повод)return;подпискаЖдётОтзываRef.current=null;sПоводПодписки(повод);sShowWaitlist(true);try{localStorage.setItem("aevion_chess_waitlist_seen","1")}catch{}};
   useEffect(()=>{
     if(!over||предлагалиПодпискуRef.current)return;
     предлагалиПодпискуRef.current=true;
@@ -2611,8 +2654,8 @@ export default function CyberChessPage(){
     // её прочитать — предлагаем; худшее последствие — предложить дважды,
     // а не потерять адрес совсем. Падать надо в сторону работы.
     if (povodPredlozhitAdres({партияОкончена:true,задачаДняЗачтена:false}) !== "game-over") return;
-    const t=setTimeout(()=>{sПоводПодписки("game-over");sShowWaitlist(true);try{localStorage.setItem("aevion_chess_waitlist_seen","1")}catch{}},2200);
-    return()=>clearTimeout(t);
+    // 16.10: не таймер 2,2 с, а ожидание отзыва — см. эффект podpiskaPora ниже (после объявления setup/showGameOver).
+    подпискаЖдётОтзываRef.current="game-over";sПодпискаТик(t=>t+1);
   },[over]);
   const[showClockDrill,sShowClockDrill]=useState(false);
   const[showGameDna,sShowGameDna]=useState(false);
@@ -3565,6 +3608,16 @@ export default function CyberChessPage(){
   const tc:TC=useCustom?{name:`${customMin}+${customInc}`,ini:customMin*60,inc:customInc,cat:customMin<3?"Bullet":customMin<8?"Blitz":customMin<20?"Rapid":"Classical"}:TCS[tcI];
   const lv=ALS[aiI],rk=gRank(rat);
   const aiC:ChessColor=pCol==="w"?"b":"w",myT=game.turn()===pCol,chk=game.isCheck(),useSF=aiI>=3;
+  // 140 (16.10.2026): чья сторона «дышит» кольцом до первого хода в задаче. null — подсказки нет:
+  // не задача, ход уже был (pervyyHodSdelan по памяти события first_move), просмотр истории,
+  // попытка уже оценена. Ref читается на рендере: ход меняет lm/hist, и рендер приходит сам.
+  const nudgeSide:ChessColor|null=tab==="puzzles"&&!!pzCurrent&&pzAttempt==="idle"&&browseIdx<0&&!pervyyHodSdelan(pervyyHodOtpravlenRef,pzCurrent.id)?game.turn():null;
+  // 140: тост на телефоне пересчитать, когда доска появилась или сменила размер (см. toastApplyRef выше).
+  // 16.10: окно подписки — когда плашка после партии закрылась без отзыва (реванш, новая, разбор, окно «Итог»).
+  // Плашка после партии ИЛИ панель «Решено!» (условия те же, что у самой разметки).
+  const плашкаСОтзывомОткрыта=(!!over&&!setup&&tab==="play"&&!showGameOver)||((зашёлЗаЗадачей||этоЗадачаДня)&&pzAttempt==="correct"&&!!pzCurrent&&pzMode!=="rush");
+  useEffect(()=>{if(podpiskaPora({ждёт:!!подпискаЖдётОтзываRef.current,otzyvOtpravlen:false,plashkaOtkryta:плашкаСОтзывомОткрыта}))показатьПодпискуПослеОтзыва();},[плашкаСОтзывомОткрыта,подпискаТик]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{toastApplyRef.current();const b=document.querySelector("[data-cc-board]");if(!b||typeof ResizeObserver==="undefined")return;const ro=new ResizeObserver(()=>toastApplyRef.current());ro.observe(b);return()=>ro.disconnect();},[boardPx,tab,pzCurrent,isMobileLayout]);
   // Текстовое описание позиции для screen-reader (сама доска рисуется пиксельно, без
   // per-square DOM — поэтому даём role="img" + это описание и live-регион на ход).
   const boardA11y=(()=>{
@@ -3805,7 +3858,9 @@ export default function CyberChessPage(){
              прилетит к человеку, которому только что сказали «не засчитано». */
           if(povodPredlozhitAdres({партияОкончена:false,задачаДняЗачтена:true})==="daily-solved"){
             предлагалиПодпискуRef.current=true;
-            setTimeout(()=>{sПоводПодписки("daily-solved");sShowWaitlist(true);try{localStorage.setItem("aevion_chess_waitlist_seen","1")}catch{}},1400);
+            // 16.10 (шаг 2б оркестратора, по данным: 0 живых адресов из окна после задачи дня за 7 дней): не таймер
+            // 1,4 с, а после «Отправить» в поле отзыва панели «Решено!» или после её закрытия (эффект podpiskaPora).
+            подпискаЖдётОтзываRef.current="daily-solved";sПодпискаТик(t=>t+1);
           }
         }
       }catch{
@@ -6934,7 +6989,9 @@ export default function CyberChessPage(){
      * автоперехода — панель «Решено!» с кнопкой «Следующая задача» и событие
      * next_clicked: доля «взялись за вторую» станет измеримой. Rush не трогаем.
      */
-    if(зашёлЗаЗадачей&&pzMode!=="rush")return;
+    // 16.10: и после задачи дня — панель «Решено!» с полем отзыва вместо автоперехода (замер прода: через
+    // 1,1 с доска уже показывала другую задачу, панели не было, окно подписки шло первым).
+    if((зашёлЗаЗадачей||этоЗадачаДня)&&pzMode!=="rush")return;
     const delay=pzMode==="rush"?550:pzMode==="learn"?1100:1200;
     const t=setTimeout(()=>{loadNextPuzzleRef.current();},delay);
     return()=>clearTimeout(t);
@@ -7809,7 +7866,7 @@ export default function CyberChessPage(){
         // Сторона превью = свободная высота (шапка ≤64 + поля) либо ширина без правой колонки; масштаб «−/+»
         // тот же, что у игровой доски (0,6–1,0 от доступного), запоминается в localStorage.
         const лоббиРядом=vwPx>=1280; // 1024–1279: лобби под доской, иначе колонка съедает ширину (замер 1024×900: 496 px)
-        const превьюPx=Math.round((isMobileLayout?vwPx-20:Math.max(360,Math.min(vhPx-(лоббиРядом?190:230),vwPx-(лоббиРядом?420+48:48)-dockReserve)))*Math.max(0.6,Math.min(1,boardScale)));
+        const превьюPx=Math.round((isMobileLayout?vwPx-20:Math.max(360,Math.min(vhPx-(лоббиРядом?160:200),vwPx-(лоббиРядом?420+48:48)-dockReserve)))*Math.max(0.6,Math.min(1,boardScale)));
         return<div style={{flex:1,minHeight:0,overflowY:"auto",marginBottom:16,...(лоббиРядом?{display:"grid",gridTemplateColumns:`minmax(0,auto) minmax(${320}px,${420}px)`,alignItems:"start",columnGap:24}:{display:"flex",flexDirection:"column"}),gap:SPACE[3],maxWidth:лоббиРядом?1700:1180,width:"100%",marginInline:"auto"}}>
 
           {/* ─── ДОСКА ПЕРВЫМ ДЕЛОМ ───
@@ -9214,7 +9271,7 @@ export default function CyberChessPage(){
               по ссылке из комментария, не видел на экране ни чей ход, ни что искать:
               это было только в подписи для скринридера и в карточке правой панели,
               а она на телефоне — закрытая шторка. Число ходов из РЕШЕНИЯ, не из тега. */}
-          {tab==="puzzles"&&pzCurrent&&<div style={{width:bw,paddingLeft:обвязкаДоскиPx+3,fontSize:13,fontWeight:800,color:CC.text,lineHeight:1.25,marginBottom:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{zadanieNadDoskoy(pzCurrent,cc.locale)}</div>}
+          {tab==="puzzles"&&pzCurrent&&<div style={{width:bw,paddingLeft:обвязкаДоскиPx+3,fontSize:13,fontWeight:800,color:CC.text,lineHeight:1.25,marginBottom:2,whiteSpace:nudgeSide!==null&&isMobileLayout?"normal":"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{zadanieNadDoskoy(pzCurrent,cc.locale)}{/* 140: до первого хода — призыв нажать подсвеченную фигуру (та же фраза, что в лёгкой задаче /p) */}{nudgeSide!==null&&<span data-cc-nudge-text="1" style={{color:"#2563eb"}}>{" · "+cc.t("pz.hint")}</span>}</div>}
           <div translate="no" style={{display:"flex",width:bw,gap:4,position:"relative"}}>
             {/* Eval bar — with W/B labels + centered numeric badge.
                 Hidden in P2P mode (no analysis surface during human matches). */}
@@ -9346,12 +9403,15 @@ export default function CyberChessPage(){
                   накрывало нижнее меню (приёмка bd: rect + elementFromPoint без прокрутки).
                   Доска же на обеих парах целиком в первом экране — значит всё, что
                   внутри неё, достижимо. Только для пришедшего по ссылке на задачу. */}
-              {зашёлЗаЗадачей&&pzAttempt==="correct"&&pzCurrent&&pzMode!=="rush"&&<div data-cc-resheno="1" role="status"
+              {/* 16.10: и для задачи дня из монолита (кнопка «☀ Задача дня») — иначе на этом пути нет ни панели, ни поля отзыва, и окно подписки идёт первым */}
+              {(зашёлЗаЗадачей||этоЗадачаДня)&&pzAttempt==="correct"&&pzCurrent&&pzMode!=="rush"&&<div data-cc-resheno="1" role="status"
                 style={{position:"absolute",left:8,right:8,bottom:8,zIndex:6,padding:"12px 14px",borderRadius:RADIUS.md,background:"rgba(236,253,245,0.97)",border:"1px solid #a7f3d0",boxShadow:"0 6px 24px rgba(0,0,0,0.25)",display:"flex",flexWrap:"wrap",alignItems:"center",gap:10}}>
                 <div style={{fontWeight:900,fontSize:16,color:"#065f46"}}>{cc.t("pz.solved").replace("{name}",pzCurrent.name)}</div>
                 <button type="button" className="cc-touch" onClick={()=>{track({type:"feature_use",source:"cyberchess/puzzle",meta:{feature:"next_clicked",app:"cyberchess"}});loadNextPuzzleRef.current();}}
                   style={{padding:"9px 16px",borderRadius:RADIUS.md,border:"none",background:CC.accent,color:"#fff",fontWeight:900,fontSize:14,cursor:"pointer"}}>{cc.t("pz.next")}</button>
                 <div style={{fontSize:13,color:"#047857",fontWeight:700}}>{strokaTsennosti(pzTotal,cc.locale)}</div>
+                {/* 16.10: отзыв одной строкой — путь к ≥ 3 отзывам к 20.10; пишется событием otzyv в журнал воронки */}
+                <OtzyvPosleRezultata kontekst="puzzle" t={cc.t} otpravit={track} onSent={показатьПодпискуПослеОтзыва}/>
               </div>}
               {/* Threat Heatmap overlay (killer #12) */}
               {showThreatMap&&(()=>{
@@ -9529,6 +9589,7 @@ export default function CyberChessPage(){
                 const isLeftCol=c===(flip?7:0);
                 const isBottomRow=r===(flip?0:7);
                 return <Cell key={sq} sq={sq}
+                  iNudge={nudgeSide!==null&&p?.color===nudgeSide}
                   pieceType={(p?.type as any)||null}
                   pieceColor={(p?.color as any)||null}
                   bg={bg} cursor={!over&&p?.color===pCol?"grab":"default"}
@@ -9750,6 +9811,8 @@ export default function CyberChessPage(){
                       </div>;
                       return null;
                     })()}
+                    {/* 16.10: отзыв одной строкой — здесь человек оказывается после партии чаще всего (окно «Итог» — по кнопке) */}
+                    <OtzyvPosleRezultata kontekst="game" t={cc.t} otpravit={track} tyomnyy onSent={показатьПодпискуПослеОтзыва}/>
                     {/* Разбор партии — самое частое действие после партии; ведёт прямо
                         в режим анализа с прокруткой ходов и оценкой движка. */}
                     <button onClick={()=>{sTab("analysis");sBrowseIdx(0);}}
@@ -9806,16 +9869,11 @@ export default function CyberChessPage(){
           </div>
           {/* Телефон: палитра тем и масштаб уходят на вторую строку, а буквы a–h занимают всю ширину
               доски — иначе на 390 сетка букв сжималась до ~70px и «ABCDEFGH» слипалось слева (тестер 20.09.2026). */}
-          <div style={{display:"flex",alignItems:"center",paddingLeft:обвязкаДоскиPx+3,width:bw,gap:4,flexWrap:vwPx<769?"wrap":"nowrap"}}>
+          {/* 140б: на низком десктопе с боковой панелью ряд не нужен — буквы уже в клетках (coordFile), палитра и масштаб в панели. */}
+          {!рядМасштабаВПанели&&<div style={{display:"flex",alignItems:"center",paddingLeft:обвязкаДоскиPx+3,width:bw,gap:4,flexWrap:vwPx<769?"wrap":"nowrap"}}>
             <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:vwPx<769?"1 1 100%":1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div>
-            <div style={{display:"flex",gap:3,flexShrink:0,alignItems:"center"}}>
-              {BOARD_THEMES.slice(0,8).map((th,i)=><button key={i} title={`Тема: ${th.name}`} aria-label={`Тема доски: ${th.name}`} aria-pressed={boardTheme===i} onClick={()=>sBoardTheme(i)} style={{width:22,height:22,borderRadius:"50%",border:boardTheme===i?`2px solid ${CC.text}`:`2px solid ${CC.border}`,background:th.dark,cursor:"pointer",padding:0,flexShrink:0,outline:"none",transition:"transform 120ms",transform:boardTheme===i?"scale(1.18)":"scale(1)"}}/>)}
-              <div style={{width:1,height:12,background:CC.border,margin:"0 2px"}}/>
-              <button title="Уменьшить доску (Ctrl+-)" aria-label="Уменьшить доску" onClick={()=>sBoardScale(s=>Math.max(0.5,parseFloat((s-0.1).toFixed(1))))} style={{width:26,height:26,borderRadius:4,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,fontSize:15,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>−</button>
-              <span title="Размер доски" style={{fontSize:9.5,color:CC.textMute,fontWeight:800,minWidth:28,textAlign:"center",fontFamily:"ui-monospace,monospace"}}>{Math.round(boardScale*100)}%</span>
-              <button title="Увеличить доску (Ctrl+=)" aria-label="Увеличить доску" onClick={()=>sBoardScale(s=>Math.min(1.5,parseFloat((s+0.1).toFixed(1))))} style={{width:26,height:26,borderRadius:4,border:`1px solid ${CC.border}`,background:CC.surface1,color:CC.text,fontSize:15,fontWeight:900,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0}}>+</button>
-            </div>
-          </div>
+            <PalitraIMasshtab boardTheme={boardTheme} onTheme={sBoardTheme} boardScale={boardScale} onScale={sBoardScale} cc={CC}/>
+          </div>}
 
           {/* 139б: во время партии карточку онбординга под доской не рисуем — она отодвигала строку «Вы» с часами
               за нижний край (768×1024: 1092 при 1024; 390×844: 782). После партии и вне её — как была. */}
@@ -10320,6 +10378,7 @@ export default function CyberChessPage(){
           {mobileSidebarOpen&&<div className="cc-right-panel-backdrop" onClick={()=>sMobileSidebarOpen(false)}/>}
           <div className={`cc-right-panel${mobileSidebarOpen?" open":""}`} style={{flex:vwPx>=769&&!панельРядом?"1 1 100%":"0 0 auto",width:vwPx>=769&&!панельРядом?"100%":rightPanelMax,minWidth:0,maxWidth:vwPx>=769&&!панельРядом?"100%":rightPanelMax,display:"flex",flexDirection:"column",gap:0,overflowY:"auto",maxHeight:"100%"}}>
           {!isMobileLayout&&полоскаСтарта("100%")}
+          {рядМасштабаВПанели&&<div data-cc-masshtab-v-paneli="1" style={{display:"flex",justifyContent:"flex-end",padding:"6px 8px 2px",flexShrink:0}}><PalitraIMasshtab boardTheme={boardTheme} onTheme={sBoardTheme} boardScale={boardScale} onScale={sBoardScale} cc={CC}/></div>}
           {/* ── Right panel sub-tabs (play mode only) ── */}
           {on&&!setup&&tab==="play"&&<div style={{
             display:"flex",gap:0,borderBottom:`1px solid ${CC.border}`,
@@ -17019,6 +17078,8 @@ ${question.trim()}`;
 
             </div>}
 
+            {/* 16.10: отзыв одной строкой после партии (см. OtzyvPosleRezultata) */}
+            <div style={{padding:"0 24px 12px"}}><OtzyvPosleRezultata kontekst="game" t={cc.t} otpravit={track} tyomnyy onSent={показатьПодпискуПослеОтзыва}/></div>
             {/* Buttons */}
             <div style={{padding:"0 24px 20px",display:"flex",gap:8,flexWrap:"wrap"}}>
               <button onClick={()=>{sShowGameOver(false);const swapped=pCol==="w"?"b":"w" as ChessColor;newG(swapped);}} style={{

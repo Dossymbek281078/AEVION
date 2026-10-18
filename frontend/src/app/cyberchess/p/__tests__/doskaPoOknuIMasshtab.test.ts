@@ -108,7 +108,8 @@ describe("после решения — следующая ЛЁГКАЯ зада
     expect(ROUTE).toMatch(/shuffle: "1"/);
     expect(ROUTE).toMatch(/minRating: String\(Math\.max\(0, rating - 150\)\)/);
     expect(ROUTE).toContain("find((x) => x && x !== tekId)");
-    expect(ROUTE).toContain("return `/cyberchess/p/${encodeURIComponent(next)}${keep.toString()");
+    expect(ROUTE).toContain("const adresZadachi = (id: string, keep: URLSearchParams) => `/cyberchess/p/${encodeURIComponent(id)}${keep.toString()");
+    expect(ROUTE).toContain("return next ? adresZadachi(next, keep) : polnaya");
   });
 });
 

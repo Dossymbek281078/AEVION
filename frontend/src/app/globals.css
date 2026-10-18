@@ -1253,3 +1253,22 @@ footer {
   color: color-mix(in srgb, currentColor 75%, transparent);
   opacity: 1;
 }
+
+/* ── 140 (16.10.2026): кольцо-подсказка на фигурах ходящей стороны до первого хода в задаче.
+   Повод: 0 живых первых ходов за 48 ч при живых заходах по ссылке; на кадре ничего не
+   говорило «нажми фигуру». Гаснет после первого хода (pervyyHodSdelan в page.tsx). ── */
+/* Кольцо — статичная тень, дышит ПРОЗРАЧНОСТЬ: box-shadow с clamp() в keyframes не
+   интерполируется (замер 16.10 на localhost: animationName есть, boxShadow «none»). */
+@keyframes cc-nudge-ring {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.3; }
+}
+.cc-nudge-ring {
+  border-radius: 6px;
+  /* % в box-shadow не допускается — clamp(2px,4%,5px) ронял всю декларацию (boxShadow «none», замер 16.10). */
+  box-shadow: inset 0 0 0 clamp(3px, 0.4vw, 4px) rgba(37, 99, 235, 0.95);
+  animation: cc-nudge-ring 1100ms ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cc-nudge-ring { animation: none !important; opacity: 1 !important; }
+}

@@ -66,10 +66,6 @@ export default function QLifePage() {
         </div>
       </header>
 
-      <div style={{ padding: "12px 24px 0", display: "flex", justifyContent: "flex-end", maxWidth: 1200, margin: "0 auto", width: "100%" }}>
-        <ModulePricingChip moduleId="qlife" theme="dark" />
-      </div>
-
       {/* Hero */}
       <section style={styles.hero}>
         <p style={styles.heroEyebrow}>Longevity & Anti-Aging</p>
@@ -89,17 +85,24 @@ export default function QLifePage() {
         </div>
       </section>
 
-      {/* Stats strip */}
-      <section style={styles.section}>
-        <StatsStrip refreshKey={statsKey} />
-      </section>
-
+      {/* 144 (18.10.2026): действие гостя — форма биомаркера — выше полосы чисел и плашки цены. Замер на проде
+          627d18515, 390×844: плашка 256, заголовок 442, первое поле формы ~930 — за кадром (844); в кадре были
+          только «Входит в подписку», «Купить» и адрес поддержки. */}
       {/* Main grid: form + trends */}
       <section style={styles.section}>
         <div style={styles.twoCol}>
           <BiomarkerForm onLogged={handleLogged} />
           <TrendCard biomarkers={biomarkers} loading={bLoading} />
         </div>
+      </section>
+
+      <div style={{ padding: "0 24px", display: "flex", justifyContent: "flex-end", maxWidth: 1200, margin: "0 auto", width: "100%" }}>
+        <ModulePricingChip moduleId="qlife" theme="dark" />
+      </div>
+
+      {/* Stats strip */}
+      <section style={styles.section}>
+        <StatsStrip refreshKey={statsKey} />
       </section>
 
       {/* Weekly trend charts (uses /biomarkers/trends endpoint) */}

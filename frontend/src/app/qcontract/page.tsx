@@ -165,13 +165,22 @@ export default function QContractHome() {
 
       {/* Hero */}
       {!token && (
-        <div className="max-w-3xl mx-auto px-6 py-24 text-center">
+        <div className="max-w-3xl mx-auto px-6 py-10 md:py-24 text-center">
+          {/* 144 (18.10.2026): кнопка «Создать…» сразу под текстом, четыре фишки-преимущества — ниже неё; поле сверху
+              py-10 на телефоне. Замер на проде 627d18515, 390×844: ссылка создания на ~1192 при кадре 844. */}
           <div className="text-6xl mb-6">💣</div>
           <h1 className="text-4xl font-black mb-4">{t("qcontract.home.hero.title")}</h1>
           <p className="text-slate-400 text-lg mb-8 leading-relaxed">
             {t("qcontract.home.hero.body")}
           </p>
-          <div className="flex items-center justify-center gap-4 flex-wrap mb-10">
+          <Link
+            href="/qcontract/create"
+            className="inline-block px-8 py-4 bg-red-600 hover:bg-red-700 text-white text-base font-bold rounded-xl transition-colors"
+          >
+            {t("qcontract.home.hero.cta")}
+          </Link>
+          <p className="text-xs text-slate-600 mt-4 mb-8">{t("qcontract.home.hero.auth_required")}</p>
+          <div className="flex items-center justify-center gap-4 flex-wrap">
             {[
               ["🔒", t("qcontract.home.hero.feat.password")],
               ["👁", t("qcontract.home.hero.feat.views")],
@@ -184,13 +193,6 @@ export default function QContractHome() {
               </div>
             ))}
           </div>
-          <Link
-            href="/qcontract/create"
-            className="inline-block px-8 py-4 bg-red-600 hover:bg-red-700 text-white text-base font-bold rounded-xl transition-colors"
-          >
-            {t("qcontract.home.hero.cta")}
-          </Link>
-          <p className="text-xs text-slate-600 mt-4">{t("qcontract.home.hero.auth_required")}</p>
         </div>
       )}
 

@@ -196,9 +196,11 @@ export default function MapRealityPage() {
           </p>
         </section>
 
-        <StatsBar refreshKey={refreshKey} />
-
+        {/* 144 (18.10.2026): форма сигнала — первое действие гостя — выше полосы чисел. Замер на проде 627d18515,
+            390×844: первая кнопка формы на ~928 при кадре 844. */}
         <SignalForm authorAlias={alias} onSubmitted={handleSubmitted} />
+
+        <StatsBar refreshKey={refreshKey} />
 
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <Filters value={filters} onChange={setFilters} countries={countries} onNearby={setNearbySignals} />

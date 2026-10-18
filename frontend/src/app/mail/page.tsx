@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { меткаДляПерехода } from "@/lib/shortEntry";
+import { меткаДляПерехода, хвостПерехода } from "@/lib/shortEntry";
 
 import type { Metadata } from "next";
 
@@ -28,7 +28,9 @@ export default async function Page({
 }: {
   searchParams: Promise<{ c?: string | string[] }>;
 }) {
-  const метка = меткаДляПерехода((await searchParams).c, "mail");
-  if (метка !== "mail") redirect(`/bureau?c=${метка}`);
+  const параметры = await searchParams;
+  const метка = меткаДляПерехода(параметры.c, "mail");
+  const хвост = хвостПерехода(параметры);
+  if (метка !== "mail" || хвост) redirect(`/bureau?c=${метка}${хвост}`);
   redirect("/bureau?c=mail");
 }

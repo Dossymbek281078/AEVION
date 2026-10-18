@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { меткаДляПерехода } from "@/lib/shortEntry";
+import { меткаДляПерехода, хвостПерехода } from "@/lib/shortEntry";
 
 import type { Metadata } from "next";
 
@@ -35,7 +35,9 @@ export default async function Page({
   // Ведём на СТРАНИЦУ ПРОДУКТА, а не на общий вход: карточка Product Hunt — тот же продукт («Describe it. Get a deployed project»).
   // Проверено 08.09.2026 — эта страница читает ?c= (channelFrom) и доносит
   // метку до кассы, как /go.
-  const метка = меткаДляПерехода((await searchParams).c, "ph");
-  if (метка !== "ph") redirect(`/en/devhub?c=${метка}`);
+  const параметры = await searchParams;
+  const метка = меткаДляПерехода(параметры.c, "ph");
+  const хвост = хвостПерехода(параметры);
+  if (метка !== "ph" || хвост) redirect(`/en/devhub?c=${метка}${хвост}`);
   redirect("/en/devhub?c=ph");
 }

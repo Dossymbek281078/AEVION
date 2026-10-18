@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { меткаДляПерехода } from "@/lib/shortEntry";
+import { меткаДляПерехода, хвостПерехода } from "@/lib/shortEntry";
 
 import type { Metadata } from "next";
 
@@ -21,7 +21,9 @@ export default async function Page({
 }: {
   searchParams: Promise<{ c?: string | string[] }>;
 }) {
-  const метка = меткаДляПерехода((await searchParams).c, "wa");
-  if (метка !== "wa") redirect(`/cyberchess?c=${метка}`);
+  const параметры = await searchParams;
+  const метка = меткаДляПерехода(параметры.c, "wa");
+  const хвост = хвостПерехода(параметры);
+  if (метка !== "wa" || хвост) redirect(`/cyberchess?c=${метка}${хвост}`);
   redirect("/cyberchess?c=wa");
 }

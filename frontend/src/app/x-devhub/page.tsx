@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { меткаДляПерехода } from "@/lib/shortEntry";
+import { меткаДляПерехода, хвостПерехода } from "@/lib/shortEntry";
 
 import type { Metadata } from "next";
 
@@ -28,7 +28,9 @@ export default async function Page({
 }: {
   searchParams: Promise<{ c?: string | string[] }>;
 }) {
-  const метка = меткаДляПерехода((await searchParams).c, "x-devhub");
-  if (метка !== "x-devhub") redirect(`/devhub?c=${метка}`);
+  const параметры = await searchParams;
+  const метка = меткаДляПерехода(параметры.c, "x-devhub");
+  const хвост = хвостПерехода(параметры);
+  if (метка !== "x-devhub" || хвост) redirect(`/devhub?c=${метка}${хвост}`);
   redirect("/devhub?c=x-devhub");
 }

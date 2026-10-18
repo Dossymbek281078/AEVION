@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { меткаДляПерехода } from "@/lib/shortEntry";
+import { меткаДляПерехода, хвостПерехода } from "@/lib/shortEntry";
 
 import type { Metadata } from "next";
 
@@ -35,7 +35,9 @@ export default async function Page({
   // Ведём на СТРАНИЦУ ПРОДУКТА, а не на общий вход: объявление Show HN — про DevHub («describe an app in plain words»), и вести его надо на страницу DevHub, а не на общий вход «что почитать и попробовать».
   // Проверено 08.09.2026 — эта страница читает ?c= (channelFrom) и доносит
   // метку до кассы, как /go.
-  const метка = меткаДляПерехода((await searchParams).c, "hn");
-  if (метка !== "hn") redirect(`/en/devhub?c=${метка}`);
+  const параметры = await searchParams;
+  const метка = меткаДляПерехода(параметры.c, "hn");
+  const хвост = хвостПерехода(параметры);
+  if (метка !== "hn" || хвост) redirect(`/en/devhub?c=${метка}${хвост}`);
   redirect("/en/devhub?c=hn");
 }

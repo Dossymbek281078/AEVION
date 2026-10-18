@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { меткаДляПерехода } from "@/lib/shortEntry";
+import { меткаДляПерехода, хвостПерехода } from "@/lib/shortEntry";
 
 import type { Metadata } from "next";
 
@@ -45,7 +45,9 @@ export default async function Page({
    * каталожная публика смотрит, а не покупает, — и это решается предложением,
    * а не перенаправлением.
    */
-  const метка = меткаДляПерехода((await searchParams).c, "un");
-  if (метка !== "un") redirect(`/en/devhub?c=${метка}`);
+  const параметры = await searchParams;
+  const метка = меткаДляПерехода(параметры.c, "un");
+  const хвост = хвостПерехода(параметры);
+  if (метка !== "un" || хвост) redirect(`/en/devhub?c=${метка}${хвост}`);
   redirect("/en/devhub?c=un");
 }

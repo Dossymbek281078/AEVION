@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { меткаДляПерехода } from "@/lib/shortEntry";
+import { меткаДляПерехода, хвостПерехода } from "@/lib/shortEntry";
 
 import type { Metadata } from "next";
 
@@ -35,7 +35,9 @@ export default async function Page({
   // Ведём на СТРАНИЦУ ПРОДУКТА, а не на общий вход: объявление — про DevHub,
   // и человек из него должен попасть туда, о чём объявление. Страница читает
   // ?c= (channelFrom) и доносит метку до кассы, как /go.
-  const метка = меткаДляПерехода((await searchParams).c, "habr");
-  if (метка !== "habr") redirect(`/devhub?c=${метка}`);
+  const параметры = await searchParams;
+  const метка = меткаДляПерехода(параметры.c, "habr");
+  const хвост = хвостПерехода(параметры);
+  if (метка !== "habr" || хвост) redirect(`/devhub?c=${метка}${хвост}`);
   redirect("/devhub?c=habr");
 }

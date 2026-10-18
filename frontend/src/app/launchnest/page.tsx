@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { меткаДляПерехода } from "@/lib/shortEntry";
+import { меткаДляПерехода, хвостПерехода } from "@/lib/shortEntry";
 
 import type { Metadata } from "next";
 
@@ -37,7 +37,9 @@ export default async function Page({
   // как DevHub, и человек идёт смотреть именно его. Английская версия —
   // потому что каталог англоязычный. Страница читает ?c= (channelFrom) и
   // доносит метку до кассы.
-  const метка = меткаДляПерехода((await searchParams).c, "launchnest");
-  if (метка !== "launchnest") redirect(`/en/devhub?c=${метка}`);
+  const параметры = await searchParams;
+  const метка = меткаДляПерехода(параметры.c, "launchnest");
+  const хвост = хвостПерехода(параметры);
+  if (метка !== "launchnest" || хвост) redirect(`/en/devhub?c=${метка}${хвост}`);
   redirect("/en/devhub?c=launchnest");
 }

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { меткаДляПерехода } from "@/lib/shortEntry";
+import { меткаДляПерехода, хвостПерехода } from "@/lib/shortEntry";
 
 import type { Metadata } from "next";
 
@@ -48,7 +48,9 @@ export default async function Page({
    * «начал генерацию» (событие feature_use), а публичная воронка его не отдаёт.
    * Если каталог даст ту же картину, вопрос будет не к перенаправлению.
    */
-  const метка = меткаДляПерехода((await searchParams).c, "bl");
-  if (метка !== "bl") redirect(`/en/devhub?c=${метка}`);
+  const параметры = await searchParams;
+  const метка = меткаДляПерехода(параметры.c, "bl");
+  const хвост = хвостПерехода(параметры);
+  if (метка !== "bl" || хвост) redirect(`/en/devhub?c=${метка}${хвост}`);
   redirect("/en/devhub?c=bl");
 }

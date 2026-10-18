@@ -35,6 +35,7 @@ import {
   termSavingPercent,
   termTotal,
   type TermTier, СРОК_ПО_УМОЛЧАНИЮ } from "@/lib/termPricing";
+import { тарифИзАдреса } from "./tarifIzAdresa";
 import { useI18n } from "@/lib/i18n";
 import { useABVariant, getAllVariants } from "@/lib/abVariant";
 import AskAi from "@/components/AskAi";
@@ -635,6 +636,10 @@ export default function PricingPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
+    // 🔴 154 (18.10.2026): тариф со страницы /pricing/<tier> доезжает до сметы. До этого «Выбрать Lite» вела на
+    // /pricing#calculator без тарифа, и смета всегда была Medium $1 050 (см. tarifIzAdresa.ts).
+    const тарифИзСсылки = тарифИзАдреса(params.get("tier"));
+    if (тарифИзСсылки) setCalcTier(тарифИзСсылки);
     /*
      * 🔴 `?app=<слаг>` ТОЖЕ поднимает карточку наверх (12.10.2026).
      *

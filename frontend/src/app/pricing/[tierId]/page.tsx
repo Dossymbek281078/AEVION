@@ -434,7 +434,7 @@ export default function TierDetailPage() {
                 // checkout, so the funnel step is cta_click — without it the
                 // dashboard cannot tell which tier page sent someone to buy.
                 track({ type: "cta_click", tier: tierId, source: "pricing/[tierId]", meta: { termMonths: tier.termMonths, currency } });
-                router.push(`/pricing#calculator`);
+                router.push(`/pricing?tier=${tierId}#calculator`); // 154: тариф едет в смету
               }}
               style={{
                 padding: "12px 28px",
@@ -660,7 +660,7 @@ export default function TierDetailPage() {
             <button
               onClick={() => {
                 track({ type: "cta_click", tier: tierId, source: "pricing/[tierId]#final", meta: { termMonths: tier.termMonths, currency } });
-                router.push("/pricing#calculator");
+                router.push(`/pricing?tier=${tierId}#calculator`); // 154: тариф едет в смету
               }}
               style={{
                 padding: "12px 24px",

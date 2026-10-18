@@ -705,6 +705,8 @@ export interface РазрезВоронки {
     checkoutStart: number;
     checkoutStartOurs: number;
     thankYouOpened: number;
+    /** 155 (18.10.2026): из них открытия НАШИМИ сессиями (метка probe-*). При paid 0 шаг «спасибо» иначе не отделить от живых. */
+    thankYouOpenedOurs: number;
     paid: number;
     paidOurs: number;
     /**
@@ -872,6 +874,8 @@ export interface РазрезВоронки {
       checkoutStart: number;
       checkoutStartOurs: number;
       thankYouOpened: number;
+      /** 155 (18.10.2026): из них открытия НАШИМИ сессиями (метка probe-*). При paid 0 шаг «спасибо» иначе не отделить от живых. */
+      thankYouOpenedOurs: number;
       paid: number;
       paidOurs: number;
       /**
@@ -1303,6 +1307,7 @@ export function пустойКанал(): РазрезВоронки["byChannel"
     checkoutStart: 0,
     checkoutStartOurs: 0,
     thankYouOpened: 0,
+    thankYouOpenedOurs: 0,
     paid: 0,
     paidOurs: 0,
     tried: 0,
@@ -1476,6 +1481,7 @@ export function разрезВоронки(
     checkoutStart: 0,
     checkoutStartOurs: 0,
     thankYouOpened: 0,
+    thankYouOpenedOurs: 0,
     paid: 0,
     paidOurs: 0,
     tried: 0,
@@ -1566,6 +1572,7 @@ export function разрезВоронки(
       if (ev.sid && нашиСессии.has(ev.sid)) итог.checkoutStartOurs += 1;
     } else if (ev.type === "checkout_success") {
       итог.thankYouOpened += 1;
+      if (ev.sid && нашиСессии.has(ev.sid)) итог.thankYouOpenedOurs += 1;
     } else if (ev.type === СОБЫТИЕ_ОПЛАТА_ПОДТВЕРЖДЕНА) {
       /*
        * 🔴 ОПЛАТА — ТОЛЬКО ПО ИМЕНИ СОБЫТИЯ, НИКАКИХ «ИНАЧЕ».
@@ -1728,6 +1735,7 @@ export function разрезВоронки(
       // то есть отвечал ложью на главный вопрос. Открытия страницы возврата
       // теперь живут своим полем, как и в итоге.
       к.thankYouOpened += 1;
+      if (ev.sid && нашиСессии.has(ev.sid)) к.thankYouOpenedOurs += 1;
     } else if (ev.type === СОБЫТИЕ_ОПЛАТА_ПОДТВЕРЖДЕНА) {
       /*
        * Имя события названо прямо, хотя здесь `else` был БЕЗОПАСЕН: двадцатью
@@ -3685,6 +3693,8 @@ eventsRouter.get("/funnel", (req, res) => {
     pricing: number;
     checkoutStart: number;
     thankYouOpened: number;
+    /** 155 (18.10.2026): из них открытия НАШИМИ сессиями (метка probe-*). При paid 0 шаг «спасибо» иначе не отделить от живых. */
+    thankYouOpenedOurs: number;
     paid: number;
     /** Из них НАШИ — заходы с нашей меткой канала (см. НАШИ_МЕТКИ_КАНАЛА). */
     checkoutStartOurs: number;
@@ -3817,8 +3827,8 @@ eventsRouter.get("/funnel", (req, res) => {
     событияВоронки.push(ev);
     const день = denPoMestnomu(new Date(t));
     const час = new Date(t).toISOString().slice(0, 13); // «2026-09-30T14», UTC
-    if (!поДням[день]) поДням[день] = { visits: 0, pricing: 0, checkoutStart: 0, thankYouOpened: 0, paid: 0, paidOurs: 0, checkoutStartOurs: 0 };
-    if (!поЧасам[час]) поЧасам[час] = { visits: 0, pricing: 0, checkoutStart: 0, thankYouOpened: 0, paid: 0, paidOurs: 0, checkoutStartOurs: 0 };
+    if (!поДням[день]) поДням[день] = { visits: 0, pricing: 0, checkoutStart: 0, thankYouOpened: 0, thankYouOpenedOurs: 0, paid: 0, paidOurs: 0, checkoutStartOurs: 0 };
+    if (!поЧасам[час]) поЧасам[час] = { visits: 0, pricing: 0, checkoutStart: 0, thankYouOpened: 0, thankYouOpenedOurs: 0, paid: 0, paidOurs: 0, checkoutStartOurs: 0 };
     if (!людиПоЧасам[час]) людиПоЧасам[час] = new Set<string>();
     if (!порогПоЧасам[час]) порогПоЧасам[час] = new Set<string>();
     if (!задачаРешенаПоЧасам[час]) задачаРешенаПоЧасам[час] = new Set<string>();
@@ -3922,6 +3932,10 @@ eventsRouter.get("/funnel", (req, res) => {
     } else if (ev.type === "checkout_success") {
       ст.thankYouOpened += 1;
       чс.thankYouOpened += 1;
+      if (ev.sid && нашиСессии.has(ev.sid)) {
+        ст.thankYouOpenedOurs += 1;
+        чс.thankYouOpenedOurs += 1;
+      }
     } else if (ev.type === СОБЫТИЕ_ОПЛАТА_ПОДТВЕРЖДЕНА) {
       ст.paid += 1;
       чс.paid += 1;
@@ -3982,6 +3996,7 @@ eventsRouter.get("/funnel", (req, res) => {
       checkoutStart: поЧасам[ч].checkoutStart,
       checkoutStartOurs: поЧасам[ч].checkoutStartOurs,
       thankYouOpened: поЧасам[ч].thankYouOpened,
+      thankYouOpenedOurs: поЧасам[ч].thankYouOpenedOurs,
       paid: измерялосьЛи(ч.slice(0, 10)) ? поЧасам[ч].paid : null,
       paidOurs: измерялосьЛи(ч.slice(0, 10)) ? поЧасам[ч].paidOurs : null,
       /*
@@ -4048,6 +4063,7 @@ eventsRouter.get("/funnel", (req, res) => {
       pricingOurs: нашиПросмотры(ценыПоДням[д]),
       checkoutStart: поДням[д].checkoutStart,
       thankYouOpened: поДням[д].thankYouOpened,
+      thankYouOpenedOurs: поДням[д].thankYouOpenedOurs,
       paid: измерялосьЛи(д) ? поДням[д].paid : null,
       paidOurs: измерялосьЛи(д) ? поДням[д].paidOurs : null,
       checkoutStartOurs: поДням[д].checkoutStartOurs,
@@ -4071,9 +4087,10 @@ eventsRouter.get("/funnel", (req, res) => {
       pricingOurs: a.pricingOurs + b.pricingOurs,
       checkoutStart: a.checkoutStart + b.checkoutStart,
       thankYouOpened: a.thankYouOpened + b.thankYouOpened,
+      thankYouOpenedOurs: a.thankYouOpenedOurs + b.thankYouOpenedOurs,
       checkoutStartOurs: a.checkoutStartOurs + b.checkoutStartOurs,
     }),
-    { visits: 0, visitsOurs: 0, pricing: 0, pricingOurs: 0, checkoutStart: 0, thankYouOpened: 0, checkoutStartOurs: 0 },
+    { visits: 0, visitsOurs: 0, pricing: 0, pricingOurs: 0, checkoutStart: 0, thankYouOpened: 0, thankYouOpenedOurs: 0, checkoutStartOurs: 0 },
   );
 
   // Сумма по измеренным дням. Складывать вперемешку с null нельзя: null + число

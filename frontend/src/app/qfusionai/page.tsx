@@ -37,6 +37,8 @@ export default function QFusionAIPage() {
         alignItems: "center",
         justifyContent: "space-between",
         background: "#010a01",
+        flexWrap: "wrap", // 144г (18.10.2026): на 390 плашка цены сжималась в столбик 80×280 px между названием и «OpenAPI →»
+        rowGap: 8,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <Link href="/" style={{ color: "#446644", textDecoration: "none", fontSize: 13 }}>
@@ -59,7 +61,7 @@ export default function QFusionAIPage() {
             MVP
           </span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <ModulePricingChip moduleId="qfusionai" theme="dark" />
           <Link
             href="/api-backend/api/qfusionai/openapi.json"

@@ -1294,3 +1294,9 @@ footer {
   .aevion-razrabotka-polno { display: none; }
   .aevion-razrabotka-kratko { display: block; }
 }
+
+/* 144г (18.10.2026): заголовок героя с инлайновым размером 48–56 px на телефоне занимает 3–7 строк (shadownet 390×844:
+   h1 389..758). Класс ставится на такие h1; !important нужен, потому что размер задан инлайном. */
+@media (max-width: 768px) {
+  .aevion-h1-geroj { font-size: 30px !important; line-height: 1.15 !important; }
+}

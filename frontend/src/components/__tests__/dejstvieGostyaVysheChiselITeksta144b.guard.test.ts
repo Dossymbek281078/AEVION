@@ -30,8 +30,8 @@ describe("144б: действие гостя выше чисел и преиму
   });
   test("🔴 qcontract: ссылка создания раньше фишек-преимуществ, верхнее поле героя py-10 на телефоне", () => {
     const s = файл("src/app/qcontract/page.tsx");
-    const герой = s.indexOf('className="max-w-3xl mx-auto px-6 py-10 md:py-24 text-center"');
-    expect(герой, "нет героя с py-10 md:py-24").toBeGreaterThan(0);
+    const герой = s.indexOf('className="max-w-3xl mx-auto px-6 py-8 md:py-10 text-center"'); // 144г: было py-10 md:py-24, на 1463×724 h1 стоял на 582
+    expect(герой, "нет героя с py-8 md:py-10").toBeGreaterThan(0);
     const кусок = s.slice(герой, s.indexOf("{/* Dashboard */}", герой));
     const ссылка = кусок.indexOf('href="/qcontract/create"');
     const фишки = кусок.indexOf('t("qcontract.home.hero.feat.password")');

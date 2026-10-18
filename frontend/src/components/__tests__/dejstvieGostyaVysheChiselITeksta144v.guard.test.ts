@@ -46,9 +46,21 @@ describe("144в: действие гостя выше чисел, бейджей
     expect(абзац).toBeGreaterThan(форма);
     expect(статус).toBeGreaterThan(форма);
   });
-  test("🔴 qcontract: эмодзи героя только с md, заголовок и абзац на телефоне меньше", () => {
+  test("🔴 144г: psyapp-deps — абзац героя под онбордингом; shadownet — h1 с классом aevion-h1-geroj и правилом ≤768; qfusionai — шапка переносится", () => {
+    const psy = файл("src/app/psyapp-deps/page.tsx");
+    expect(psy.indexOf("<p style={styles.heroSub}>")).toBeGreaterThan(psy.indexOf("<Onboarding onStarted={handleStarted} />"));
+    const sh = файл("src/app/shadownet/page.tsx");
+    expect(sh).toContain('className="aevion-h1-geroj"');
+    const css = файл("src/app/globals.css");
+    expect(css.slice(css.lastIndexOf("@media (max-width: 768px)"))).toContain(".aevion-h1-geroj { font-size: 30px !important;");
+    const qf = файл("src/app/qfusionai/page.tsx");
+    expect(qf).toContain('flexWrap: "wrap", // 144г');
+    expect(qf).toContain('<div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>\n          <ModulePricingChip moduleId="qfusionai"');
+  });
+  test("🔴 qcontract: эмодзи героя только с md, заголовок и абзац на телефоне меньше, поле героя py-8 md:py-10", () => {
     const s = файл("src/app/qcontract/page.tsx");
-    expect(s).toContain('<div className="hidden md:block text-6xl mb-6">💣</div>');
+    expect(s).toContain('className="max-w-3xl mx-auto px-6 py-8 md:py-10 text-center"');
+    expect(s).toContain('<div className="hidden md:block text-5xl mb-4">💣</div>');
     expect(s).toContain('<h1 className="text-3xl md:text-4xl font-black mb-4">{t("qcontract.home.hero.title")}</h1>');
     expect(s).toContain('className="text-slate-400 text-base md:text-lg mb-6 md:mb-8 leading-relaxed"');
   });

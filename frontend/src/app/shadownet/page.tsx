@@ -101,7 +101,10 @@ export default function ShadowNetPage() {
         >
           conceptual · educational · in-browser
         </p>
+        {/* 144г (18.10.2026): 56 px моноширинным на 390 — заголовок 389..758 (370 px), первое действие за кадром;
+            класс aevion-h1-geroj (globals.css) на ≤768 даёт 30 px. */}
         <h1
+          className="aevion-h1-geroj"
           style={{
             fontSize: "56px",
             fontWeight: 700,

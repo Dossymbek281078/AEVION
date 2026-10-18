@@ -6,6 +6,7 @@ import { denPoMestnomu, vcheraPoMestnomu } from "./denPoMestnomu";
 import { otmetitPervyyHod, pervyyHodSdelan } from "./pervyyHod";
 import { verhTostaNaTelefone } from "./tostPodDoskoy";
 import { OtzyvPosleRezultata } from "./OtzyvPosleRezultata";
+import { OshibkaForma } from "./OshibkaForma";
 import { podpiskaPora } from "./podpiskaPosleOtzyva";
 import { soobschenieONorme } from "./normaTrenera";
 import { track } from "@/lib/track";
@@ -1858,6 +1859,9 @@ export default function CyberChessPage(){
   // 140б: на низком десктопе с боковой панелью (≥1280 и <860) ряд «буквы · палитра · масштаб» уходит в панель:
   // буквы и так в клетках, а 26 px ряда отдаются доске (1463×724: 538 → 564, 74 → 78 % vh; lichess 76–79).
   const рядМасштабаВПанели=панельРядом&&vhPx<860&&!зашёлЗаЗадачей;
+  // 143: что приложить к отчёту «Нашли ошибку?» — читается в момент отправки, а не при отрисовке
+  const PERENOS_RYADA="wrap" as const; // 143: ряд под доской всегда переносится — форма ложится строкой ниже
+  const dannyeOshibki=()=>({fen:(()=>{try{return game.fen()}catch{return ""}})(),puzzleId:pzCurrent?.id??null,kontekst:(setup?"setup":tab==="puzzles"?"puzzle":tab==="analysis"?"analysis":"game") as "setup"|"puzzle"|"analysis"|"game"});
   const подДоской139=зашёлЗаЗадачей?36:(рядМасштабаВПанели?0:26)+строкаИгрокаPx;     // буквы 26 + строка «Вы» (пришедшему за задачей — только буквы)
   const desktopVReserve=(boardTopPx>0?boardTopPx:110)+подДоской139+8;
   const vReserve=vwPx>=769?desktopVReserve:300;
@@ -9870,9 +9874,11 @@ export default function CyberChessPage(){
           {/* Телефон: палитра тем и масштаб уходят на вторую строку, а буквы a–h занимают всю ширину
               доски — иначе на 390 сетка букв сжималась до ~70px и «ABCDEFGH» слипалось слева (тестер 20.09.2026). */}
           {/* 140б: на низком десктопе с боковой панелью ряд не нужен — буквы уже в клетках (coordFile), палитра и масштаб в панели. */}
-          {!рядМасштабаВПанели&&<div style={{display:"flex",alignItems:"center",paddingLeft:обвязкаДоскиPx+3,width:bw,gap:4,flexWrap:vwPx<769?"wrap":"nowrap"}}>
+          {!рядМасштабаВПанели&&<div style={{display:"flex",alignItems:"center",paddingLeft:обвязкаДоскиPx+3,width:bw,gap:4,flexWrap:PERENOS_RYADA}}>
             <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",flex:vwPx<769?"1 1 100%":1,marginTop:4}}>{cls.map(c=><div key={c} style={{textAlign:"center",fontSize:11,color:CC.textMute,fontWeight:800,fontFamily:"ui-monospace, SFMono-Regular, monospace",letterSpacing:0.5,textTransform:"uppercase" as const}}>{FILES[c]}</div>)}</div>
             <PalitraIMasshtab boardTheme={boardTheme} onTheme={sBoardTheme} boardScale={boardScale} onScale={sBoardScale} cc={CC}/>
+            {/* 143: «Нашли ошибку?» — в ряду под доской, не поверх клеток; форма раскрывается строкой ниже */}
+            <OshibkaForma dannye={dannyeOshibki} t={cc.t} cc={CC} width="100%"/>
           </div>}
 
           {/* 139б: во время партии карточку онбординга под доской не рисуем — она отодвигала строку «Вы» с часами
@@ -10378,7 +10384,7 @@ export default function CyberChessPage(){
           {mobileSidebarOpen&&<div className="cc-right-panel-backdrop" onClick={()=>sMobileSidebarOpen(false)}/>}
           <div className={`cc-right-panel${mobileSidebarOpen?" open":""}`} style={{flex:vwPx>=769&&!панельРядом?"1 1 100%":"0 0 auto",width:vwPx>=769&&!панельРядом?"100%":rightPanelMax,minWidth:0,maxWidth:vwPx>=769&&!панельРядом?"100%":rightPanelMax,display:"flex",flexDirection:"column",gap:0,overflowY:"auto",maxHeight:"100%"}}>
           {!isMobileLayout&&полоскаСтарта("100%")}
-          {рядМасштабаВПанели&&<div data-cc-masshtab-v-paneli="1" style={{display:"flex",justifyContent:"flex-end",padding:"6px 8px 2px",flexShrink:0}}><PalitraIMasshtab boardTheme={boardTheme} onTheme={sBoardTheme} boardScale={boardScale} onScale={sBoardScale} cc={CC}/></div>}
+          {рядМасштабаВПанели&&<div data-cc-masshtab-v-paneli="1" style={{display:"flex",flexWrap:"wrap",gap:6,alignItems:"center",justifyContent:"flex-end",padding:"6px 8px 2px",flexShrink:0}}><OshibkaForma dannye={dannyeOshibki} t={cc.t} cc={CC} width="100%"/><PalitraIMasshtab boardTheme={boardTheme} onTheme={sBoardTheme} boardScale={boardScale} onScale={sBoardScale} cc={CC}/></div>}
           {/* ── Right panel sub-tabs (play mode only) ── */}
           {on&&!setup&&tab==="play"&&<div style={{
             display:"flex",gap:0,borderBottom:`1px solid ${CC.border}`,

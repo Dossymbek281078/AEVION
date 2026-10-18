@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { razobratOtchetObOshibke, otpravitOtchetObOshibke } from "../lib/oshibkaOtchet";
 import { klassUstroystva, type KlassUstroystva } from "../lib/klassUstroystva";
 /** Час суток по Алматы «00»…«23» — для разрезов по времени дня (та же зона, что denPoMestnomu). */
 const часАлматы = (d: Date): string =>
@@ -3122,6 +3123,11 @@ eventsRouter.post("/", (req, res) => {
         : undefined,
   };
 
+  // 143: отчёт об ошибке («Нашли ошибку?») идёт тем же событием, но: пустой/слишком длинный текст — 400,
+  // полный текст и авто-поля — письмом на data@ и строкой в журнал заявок (журнал событий — хвост с пределом).
+  const отчёт = razobratOtchetObOshibke(body as Record<string, unknown>, req);
+  if (отчёт && "status" in отчёт) return res.status(отчёт.status).json({ error: отчёт.error });
+
   try {
     ensureDir();
     appendFileSync(EVENTS_FILE, JSON.stringify(event) + "\n", "utf8");
@@ -3131,6 +3137,10 @@ eventsRouter.post("/", (req, res) => {
     return res.status(500).json({ error: "storage_error" });
   }
 
+  if (отчёт && "otchet" in отчёт) {
+    // письмо и журнал заявок — после ответа клиенту; отказ почты в ответ не превращается, он пишется в журнал
+    void otpravitOtchetObOshibke(отчёт.otchet).catch((e) => console.error("[oshibka] отправка упала:", e instanceof Error ? e.message : e));
+  }
   res.status(204).end();
 });
 

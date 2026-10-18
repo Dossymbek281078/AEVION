@@ -13,11 +13,11 @@ const ROUTE = readFileSync(join(__dirname, "..", "[id]", "route.ts"), "utf8");
 const КЛИЕНТ = readFileSync(join(__dirname, "..", "klientSkript.ts"), "utf8");
 
 describe("разбор после решения на лёгкой странице (142)", () => {
-  it("🔴 загрузка задачи берёт razbor рядом с puzzle и не падает без него", () => {
+  it("🔴 загрузка задачи берёт разбор рядом с задачей и не падает без него", () => {
     expect(ROUTE).toContain("razbor?: { ru?: string; en?: string; kk?: string }");
     expect(ROUTE).toContain('razbor: telo?.razbor && typeof telo.razbor === "object" ? telo.razbor : undefined');
   });
-  it("🔴 POST отдаёт razbor только при решении и на языке запроса (запасной — en)", () => {
+  it("🔴 ответ на ход отдаёт разбор только при решении и на языке запроса (запасной — английский)", () => {
     expect(ROUTE).toContain("const razbor = r.reshena && syraya.razbor ? (syraya.razbor[yazyk] || syraya.razbor.en || undefined) : undefined;");
     expect(ROUTE).toContain('const yazyk = yazykZaprosa(req.headers.get("cookie"), new URL(req.url).searchParams.get("lang"), req.headers.get("accept-language"));');
     expect(ROUTE).toContain("san: r.reshena ? resheniyeSan(pz.fen, pz.sol) : undefined, razbor");

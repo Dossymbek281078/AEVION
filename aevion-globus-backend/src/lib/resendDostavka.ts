@@ -43,12 +43,17 @@ export async function proveritIPovtorit(a: {
 }
 
 /** Через cherezMs (60 с) проверить доставку и при отказе повторить через Brevo. Без id/ключа — тишина с записью. */
-export function zaplanirovatProverkuDostavki(a: { id?: string; pismo: PismoDlyaPovtora; cherezMs?: number }): boolean {
+export type ItogDostavki = { lastEvent: string | null; повтор: boolean; brevoOk?: boolean };
+
+/** Через cherezMs проверить доставку; при отказе повторить через Brevo; `naItog` получает исход (143: чтобы недоставленное писалось в журнал, а не только в консоль). */
+export function zaplanirovatProverkuDostavki(a: { id?: string; pismo: PismoDlyaPovtora; cherezMs?: number; naItog?: (итог: ItogDostavki) => void }): boolean {
   const key = process.env.RESEND_API_KEY?.trim();
   if (!a.id || !key) { console.warn(`[почта] проверка доставки не запланирована для ${a.pismo.to}: ${!a.id ? "нет id письма" : "нет ключа Resend"}`); return false; }
   const id = a.id;
   const t = setTimeout(() => {
-    proveritIPovtorit({ id, pismo: a.pismo, key }).catch((e) => console.error("[почта] проверка доставки не выполнена:", e instanceof Error ? e.message : e));
+    proveritIPovtorit({ id, pismo: a.pismo, key })
+      .then((итог) => { try { a.naItog?.(итог); } catch (e) { console.error("[почта] naItog упал:", e instanceof Error ? e.message : e); } })
+      .catch((e) => console.error("[почта] проверка доставки не выполнена:", e instanceof Error ? e.message : e));
   }, a.cherezMs ?? 60_000);
   (t as { unref?: () => void }).unref?.();
   return true;

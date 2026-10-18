@@ -10,7 +10,7 @@ import { join } from "node:path";
  */
 const src = readFileSync(join(__dirname, "..", "page.tsx"), "utf8");
 
-describe("подсказка Ctrl+K не накрывает первый экран и экран задачи (139в)", () => {
+describe("подсказка палитры не накрывает первый экран и экран задачи (139в)", () => {
   it("🔴 условие показа: не телефон, не путь задачи, только после доигранной партии; эффект зависит от over", () => {
     const i = src.indexOf('showToast("⌕ Жми Ctrl+K');
     expect(i).toBeGreaterThan(0);

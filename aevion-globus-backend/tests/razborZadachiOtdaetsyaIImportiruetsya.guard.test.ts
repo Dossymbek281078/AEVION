@@ -72,6 +72,16 @@ describe("разбор задачи: выдача и импорт (142)", () => 
     expect("razbor" in r.body).toBe(false);
   });
 
+  it("🔴 импорт по служебному X-Admin-Token (ADMIN_TOKEN) — тот же путь, что у /recent; неверный токен — 403", async () => {
+    process.env.ADMIN_TOKEN = "sluzhebnyy-token-test";
+    const app = await приложение();
+    const ok = await request(app).post("/api/cyberchess-puzzles/razbory/import").set("X-Admin-Token", "sluzhebnyy-token-test").send({ items: [{ id: "li_tok", ru: "1", en: "1", kk: "1" }] });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    const bad = await request(app).post("/api/cyberchess-puzzles/razbory/import").set("X-Admin-Token", "chuzhoy").send({ items: [{ id: "li_tok", ru: "1", en: "1", kk: "1" }] });
+    expect(bad.status).toBe(403);
+    delete process.env.ADMIN_TOKEN;
+  });
+
   it("импорт: без админа 403; пустой список и мусорный id — 400; больше 2000 — 400", async () => {
     const app = await приложение();
     expect((await request(app).post("/api/cyberchess-puzzles/razbory/import").send({ items: [{ id: "a", ru: "1", en: "1", kk: "1" }] })).status).toBe(403);

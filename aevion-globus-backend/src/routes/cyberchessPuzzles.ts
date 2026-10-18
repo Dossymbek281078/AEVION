@@ -381,7 +381,11 @@ router.get("/meta", async (_req: Request, res: Response): Promise<void> => {
  * Отвечает числом записанных и общим числом разборов в таблице — чтобы импорт был виден числом, а не словом.
  */
 router.post("/razbory/import", async (req: Request, res: Response): Promise<void> => {
-  if (!isAdminRequest(req)) { res.status(403).json({ ok: false, reason: "admin_required" }); return; }
+  // админ — JWT из allowlist (isAdminRequest) ИЛИ служебный X-Admin-Token (тот же, что у /api/pricing/events/recent):
+  // разовый импорт идёт скриптом без пользовательского входа
+  const adminToken = process.env.ADMIN_TOKEN?.trim();
+  const got = typeof req.headers["x-admin-token"] === "string" ? (req.headers["x-admin-token"] as string).trim() : "";
+  if (!isAdminRequest(req) && !(adminToken && got && got === adminToken)) { res.status(403).json({ ok: false, reason: "admin_required" }); return; }
   const raw = (req.body as { items?: unknown } | undefined)?.items;
   if (!Array.isArray(raw) || raw.length === 0 || raw.length > 2000) { res.status(400).json({ ok: false, reason: "items_1_2000" }); return; }
   const items: Array<{ id: string; ru: string; en: string; kk: string; model?: string }> = [];

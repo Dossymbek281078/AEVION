@@ -275,7 +275,7 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
   },
 
-  hero: { maxWidth: 1100, margin: "0 auto", padding: "48px 20px 32px" },
+  hero: { maxWidth: 1100, margin: "0 auto", padding: "24px 20px 20px" }, // 149 (18.10.2026): на 1463×724 h1 450..573, поле онбординга за кадром
   heroEyebrow: {
     color: "#9bd4a8",
     fontSize: 12,
@@ -286,7 +286,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   heroTitle: {
     color: "#f5ebd7",
-    fontSize: "clamp(32px, 6vw, 56px)",
+    fontSize: "clamp(30px, 4.5vw, 44px)", // 149: было clamp(32px, 6vw, 56px)
     fontWeight: 800,
     lineHeight: 1.1,
     margin: "0 0 16px 0",

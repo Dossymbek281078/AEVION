@@ -77,7 +77,7 @@ export default function QFusionAIPage() {
       <section style={{
         maxWidth: 900,
         margin: "0 auto",
-        padding: "60px 24px 40px",
+        padding: "28px 24px 24px", // 149 (18.10.2026): было 60/40 — на 1463×724 h1 400..524, кнопки стратегии за кадром
         textAlign: "center",
       }}>
         <div style={{
@@ -96,7 +96,7 @@ export default function QFusionAIPage() {
         </div>
 
         <h1 style={{
-          fontSize: "clamp(32px, 6vw, 56px)",
+          fontSize: "clamp(30px, 4.5vw, 44px)", // 149: было clamp(32px, 6vw, 56px)
           fontWeight: 900,
           lineHeight: 1.1,
           margin: "0 0 16px",

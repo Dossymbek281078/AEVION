@@ -30,4 +30,12 @@ describe("147: shadownet и z-tide — действие гостя первым"
     const p = файл("src/app/z-tide/page.tsx");
     expect(p.indexOf("<TideCharts />")).toBeLessThan(p.indexOf("{/* Stats strip */}"));
   });
+  test("🔴 149: psyapp-deps и qfusionai — герой компактнее на десктопе (1463×724: h1 на 450/400, действие за кадром 724)", () => {
+    const psy = файл("src/app/psyapp-deps/page.tsx");
+    expect(psy).toContain('hero: { maxWidth: 1100, margin: "0 auto", padding: "24px 20px 20px" }');
+    expect(psy).toContain('fontSize: "clamp(30px, 4.5vw, 44px)"');
+    const qf = файл("src/app/qfusionai/page.tsx");
+    expect(qf).toContain('padding: "28px 24px 24px", // 149');
+    expect(qf).toContain('fontSize: "clamp(30px, 4.5vw, 44px)", // 149');
+  });
 });

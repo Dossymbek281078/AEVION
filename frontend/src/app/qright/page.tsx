@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { launchHasPassed, PLATFORM_LAUNCH_HUMAN } from "../launchDate";
 import { useI18nOptional } from "@/lib/i18n";
 import { QR_BUSY } from "./busyUi";
@@ -134,6 +134,9 @@ export default function QRightPage() {
   const TOKEN_KEY = "aevion_auth_token_v1";
 
   const [step, setStep] = useState<Step>("form");
+  // 158 (18.10.2026): после отправки кадр оставался на низе карточки сертификата (кнопки PDF/Verify и тост),
+  // а заголовок и хэш были выше кадра на 858–1618 px на всех 5 парах окон (прибор 156 на проде). Прокручиваем к шапке.
+  const doneRef = useRef<HTMLDivElement | null>(null);
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState("music");
   const [description, setDescription] = useState("");
@@ -498,6 +501,8 @@ export default function QRightPage() {
       setResult(data as PipelineResult);
       setStep("done");
       showToast("Your work is now protected!", "success");
+      // 158: карточка монтируется на следующем кадре — прокручиваем к её шапке, а не оставляем человека у кнопок внизу
+      requestAnimationFrame(() => doneRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }));
     } catch (e) {
       timers.forEach(clearTimeout);
       // «pipeline failed» и «Error 500» — наш жаргон, человеку он говорит
@@ -1148,7 +1153,7 @@ export default function QRightPage() {
 
         {/* ── Step: DONE ── */}
         {step === "done" && result && (
-          <div>
+          <div ref={doneRef} data-qright-done style={{ scrollMarginTop: 84 }}>
             <div style={{ textAlign: "center", padding: "32px 20px", marginBottom: 24, borderRadius: 16, background: "linear-gradient(135deg, rgba(16,185,129,0.08), rgba(13,148,136,0.06))", border: "1px solid rgba(16,185,129,0.2)" }}>
               <div style={{ fontSize: 48, marginBottom: 8 }}>🎉</div>
               <div style={{ fontWeight: 900, fontSize: 22, color: "#059669", marginBottom: 6 }}>Protected. Provable. Permanent.</div>

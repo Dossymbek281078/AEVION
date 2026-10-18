@@ -94,6 +94,16 @@ export default function StartupExchangePage() {
   const [interestFor, setInterestFor] = useState<Listing | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(false);
+  // 159 (18.10.2026): клик по «Опишите проект» в первую секунду после загрузки терялся — обработчика ещё нет
+  // (гидратация), прибор 156 на проде: 2 окна из 5. Встроенный скрипт ниже (в HTML сервера) ставит такой клик
+  // в очередь, а после монтирования мы её исполняем: человек нажал — мастер открылся, когда бы он ни нажал.
+  useEffect(() => {
+    const w = window as unknown as { __seWizardQueued?: number };
+    if (w.__seWizardQueued) {
+      w.__seWizardQueued = 0;
+      setShowWizard(true);
+    }
+  }, []);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const fetchListings = useCallback(async (tier: TierFilter, off: number, s: "recent" | "score", sector: string, q: string) => {
@@ -175,6 +185,13 @@ export default function StartupExchangePage() {
       {/* Замер посещения И запоминание канала: без него метка `?c=` на этой
           странице не доживала до кассы (разбор — в src/app/multichat-engine/page.tsx). */}
       <PageTracking page="startup-exchange" />
+      {/* 159: очередь клика до гидратации — см. useEffect у showWizard */}
+      <script
+        dangerouslySetInnerHTML={{
+          __html:
+            "document.addEventListener(\"click\",function(e){var t=e.target&&e.target.closest&&e.target.closest(\"[data-se-wizard]\");if(t){window.__seWizardQueued=1;}},true);",
+        }}
+      />
       <Wave1Nav />
       <ProductPageShell>
 
@@ -205,6 +222,7 @@ export default function StartupExchangePage() {
           {!showWizard && (
             <button
               type="button"
+              data-se-wizard
               onClick={() => setShowWizard(true)}
               style={{
                 margin: "4px 0 14px",

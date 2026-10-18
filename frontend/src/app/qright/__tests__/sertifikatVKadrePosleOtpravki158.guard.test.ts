@@ -20,8 +20,11 @@ describe("158: после отправки сертификат показыва
   test("🔴 прокрутка к шапке вызывается сразу после setStep(\"done\") в обработчике отправки, на следующем кадре", () => {
     const done = src.indexOf('setStep("done");');
     expect(done).toBeGreaterThan(0);
-    const хвост = src.slice(done, done + 600);
-    expect(хвост).toMatch(/requestAnimationFrame\(\(\) => doneRef\.current\?\.scrollIntoView\(\{ block: "start"/);
+    const хвост = src.slice(done, done + 1400);
+    expect(хвост).toContain('const кШапкеСертификата = () => doneRef.current?.scrollIntoView({ block: "start" });');
+    expect(хвост).toContain("requestAnimationFrame(кШапкеСертификата);");
+    // второй заход после сдвига вёрстки: замер на проде 19.10 00:0x — одной прокрутки не хватало на 4 окнах из 5
+    expect(хвост).toContain("setTimeout(кШапкеСертификата, 400);");
     // прокрутка не должна стоять ДО смены шага — тогда блока ещё нет в DOM и ref пуст
     const scroll = src.indexOf("doneRef.current?.scrollIntoView");
     expect(scroll).toBeGreaterThan(done);

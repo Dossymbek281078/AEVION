@@ -501,8 +501,12 @@ export default function QRightPage() {
       setResult(data as PipelineResult);
       setStep("done");
       showToast("Your work is now protected!", "success");
-      // 158: карточка монтируется на следующем кадре — прокручиваем к её шапке, а не оставляем человека у кнопок внизу
-      requestAnimationFrame(() => doneRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }));
+      // 158: карточка монтируется на следующем кадре — прокручиваем к её шапке, а не оставляем человека у кнопок внизу.
+      // Повтор через 400 мс: замер на проде 19.10 00:0x — после первой прокрутки вёрстка ещё сдвигалась (блок шагов
+      // отрисовки сворачивался, панели карточки раскрывались), и строка хэша оставалась на 54–159 px выше кадра.
+      const кШапкеСертификата = () => doneRef.current?.scrollIntoView({ block: "start" });
+      requestAnimationFrame(кШапкеСертификата);
+      setTimeout(кШапкеСертификата, 400);
     } catch (e) {
       timers.forEach(clearTimeout);
       // «pipeline failed» и «Error 500» — наш жаргон, человеку он говорит

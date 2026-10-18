@@ -2,7 +2,7 @@
 
 import { channelNow } from "@/lib/channelNow";
 import { ждатьКарточкуПриложения } from "@/lib/scrollToAppCard";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { RazrabotkaPreduprezhdenie } from "@/components/RazrabotkaPreduprezhdenie";
@@ -264,6 +264,18 @@ export default function PricingPage() {
   const [quoting, setQuoting] = useState(false);
   const [checkingOut, setCheckingOut] = useState<string | null>(null);
   const [checkoutNotice, setCheckoutNotice] = useState<string | null>(null);
+  /*
+   * 🔴 160 (18.10.2026). Продажи на проде a5751236, 1463×724: смета в EUR, «Оплатить смету · €368» → касса считает
+   * в USD, первое нажатие по правилу 31.08 не уводит, а предупреждение «На экране EUR, а касса спишет USD…»
+   * отрисовано наверху страницы — на 6 556 px выше кнопки, вне кадра. Для человека: нажал — ничего не произошло.
+   * Нажатое в смете предупреждается В СМЕТЕ, у кнопки; верхний блок остаётся для остальных кнопок страницы.
+   */
+  const [noticeFrom, setNoticeFrom] = useState<"calc" | "other">("other");
+  const calcNoticeRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = calcNoticeRef.current;
+    if (checkoutNotice && noticeFrom === "calc" && el && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "nearest" });
+  }, [checkoutNotice, noticeFrom]);
   // Один раз предупредили о валюте — второй клик считаем осознанным.
   const [согласенНаВалюту, setСогласенНаВалюту] = useState(false);
 
@@ -313,10 +325,13 @@ export default function PricingPage() {
     seats?: number;
     promoCode?: string;
     trial?: boolean;
+    /** 160 (18.10.2026): нажато в смете — предупреждение кассы показываем рядом с её кнопкой, а не наверху страницы. */
+    from?: "calc";
   }) {
     const ключ = opts.app ? ключПриложения(opts.app) : opts.tierId;
     setCheckingOut(ключ);
     setCheckoutNotice(null);
+    setNoticeFrom(opts.from ?? "other");
     // Запоминаем тариф ДО ухода в кассу: касса вернёт отказавшегося на наш
     // экран без тарифа в адресе, и кнопка «вернуться к тарифу» иначе не
     // появляется вовсе (замер с контролем — см. lib/checkoutIntent.ts).
@@ -1289,7 +1304,7 @@ export default function PricingPage() {
       </section>
 
       {/* Checkout notice */}
-      {checkoutNotice && (
+      {checkoutNotice && noticeFrom !== "calc" && (
         <div
           style={{
             marginBottom: 20,
@@ -2385,13 +2400,23 @@ export default function PricingPage() {
                     {tp("calc.invoiceOnly")}
                   </Link>
                 )}
+                {checkoutNotice && noticeFrom === "calc" && (
+                  <div
+                    ref={calcNoticeRef}
+                    data-calc-notice
+                    role="status"
+                    style={{ marginTop: 16, padding: "12px 16px", background: "rgba(251,191,36,0.12)", border: "1px solid rgba(251,191,36,0.45)", borderRadius: 10, color: "#fbbf24", fontSize: 15, lineHeight: 1.5 }}
+                  >
+                    {checkoutNotice}
+                  </div>
+                )}
                 {calcTier !== "free" && calcTier !== "enterprise" && calcSeats <= 1 && !calcPromo && (
                   <button
                     disabled={checkingOut === calcTier || !продаётся(calcTier)}
                     onClick={() =>
                       // Голая ступень: места и промокод сюда НЕ передаются, пока сумма
                       // не доводится до кассы. Ветка выше показывает строку со счётом.
-                      startCheckout({ tierId: calcTier, seats: 1 })
+                      startCheckout({ tierId: calcTier, seats: 1, from: "calc" })
                     }
                     style={{
                       width: "100%",

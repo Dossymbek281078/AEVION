@@ -40,9 +40,9 @@ describe("доска во всю доступную высоту (136)", () => {
     const колонка = src.indexOf('data-cc-board-col="1"');
     const доска = src.indexOf('data-cc-board="1"');
     expect(src.slice(колонка, доска)).not.toContain("полоскаСтарта(bw)");
-    expect(src).toContain("{isMobileLayout&&полоскаСтарта(bw)}");
+    expect(src).toContain("{isMobileLayout&&!(on&&!over)&&полоскаСтарта(bw)}");
     expect(src).toContain('{!isMobileLayout&&полоскаСтарта("100%")}');
-    expect(src.indexOf("{isMobileLayout&&полоскаСтарта(bw)}")).toBeGreaterThan(доска);
+    expect(src.indexOf("{isMobileLayout&&!(on&&!over)&&полоскаСтарта(bw)}")).toBeGreaterThan(доска);
   });
   it("🔴 первый экран (настройка): превью по высоте окна, лобби колонкой справа с 1280, масштаб −/+ под превью, карточка после доски", () => {
     expect(src).toContain("const лоббиРядом=vwPx>=1280;");

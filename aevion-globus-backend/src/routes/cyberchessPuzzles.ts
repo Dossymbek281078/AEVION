@@ -11,6 +11,8 @@
 // result (the frontend falls back to its bundled copy), never a crash.
 
 import { Router, type Request, type Response } from "express";
+import { razborZadachi, zapisatRazbory, skolkoRazborov } from "../lib/puzzleRazbor";
+import { isAdminRequest } from "../lib/adminAuth";
 import * as fs from "node:fs";
 import { getPool } from "../lib/dbPool";
 import { ispravitPodpisMata } from "../lib/chessPuzzleLabel";
@@ -373,6 +375,32 @@ router.get("/meta", async (_req: Request, res: Response): Promise<void> => {
  *                  500 000 из 502 584), поэтому «нет в выдаче» и «нет в банке» —
  *                  разные утверждения, и читатель обязан видеть, какое из них.
  */
+/**
+ * POST /razbory/import (админ, X-Admin-Token) — разовая загрузка разборов из scripts/razbory-zadach.
+ * Тело: { items: [{ id, ru, en, kk, model? }] }, не больше 2000 за вызов; upsert по puzzleId.
+ * Отвечает числом записанных и общим числом разборов в таблице — чтобы импорт был виден числом, а не словом.
+ */
+router.post("/razbory/import", async (req: Request, res: Response): Promise<void> => {
+  if (!isAdminRequest(req)) { res.status(403).json({ ok: false, reason: "admin_required" }); return; }
+  const raw = (req.body as { items?: unknown } | undefined)?.items;
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > 2000) { res.status(400).json({ ok: false, reason: "items_1_2000" }); return; }
+  const items: Array<{ id: string; ru: string; en: string; kk: string; model?: string }> = [];
+  for (const x of raw as Array<Record<string, unknown>>) {
+    const id = String(x?.id ?? "");
+    const ru = String(x?.ru ?? ""), en = String(x?.en ?? ""), kk = String(x?.kk ?? "");
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(id) || !ru || !en || !kk || ru.length > 400 || en.length > 400 || kk.length > 400) { res.status(400).json({ ok: false, reason: "bad_item", id }); return; }
+    items.push({ id, ru, en, kk, model: typeof x.model === "string" ? x.model.slice(0, 60) : undefined });
+  }
+  try {
+    const written = await zapisatRazbory(items);
+    const total = await skolkoRazborov();
+    res.json({ ok: true, written, total });
+  } catch (e) {
+    console.warn("[cyberchess-puzzles] razbor import failed:", e instanceof Error ? e.message : e);
+    res.status(503).json({ ok: false, reason: "razbor_import_failed" });
+  }
+});
+
 router.get("/:id", async (req: Request, res: Response): Promise<void> => {
   // Форма проверяется ДО любого поиска. Идентификаторы Lichess это пять знаков
   // букв и цифр ("382iH"), сгенерированные — "gen_<что-то>". Всё остальное
@@ -417,7 +445,11 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
       });
       return;
     }
-    res.json({ ok: true, puzzle: POOL[i] });
+    // 142: разбор (ru/en/kk) из таблицы PuzzleRazbor; его отсутствие или отказ БД задачу не ломают —
+    // поле просто не отдаётся, и страницы это умеют.
+    let razbor: Awaited<ReturnType<typeof razborZadachi>> = null;
+    try { razbor = await razborZadachi(id); } catch (e) { console.warn("[cyberchess-puzzles] razbor lookup failed:", e instanceof Error ? e.message : e); }
+    res.json(razbor ? { ok: true, puzzle: POOL[i], razbor } : { ok: true, puzzle: POOL[i] });
   } catch (e) {
     console.warn("[cyberchess-puzzles] lookup failed:", e instanceof Error ? e.message : e);
     res.status(503).json({ ok: false, reason: "puzzle_lookup_failed" });

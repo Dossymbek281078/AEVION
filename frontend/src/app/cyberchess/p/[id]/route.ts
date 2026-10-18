@@ -22,7 +22,7 @@ import { КЛИЕНТ } from "../klientSkript";
 
 export const dynamic = "force-dynamic";
 
-type Syraya = { fen: string; sol: string[]; name?: string; r?: number; theme?: string };
+type Syraya = { fen: string; sol: string[]; name?: string; r?: number; theme?: string; razbor?: { ru?: string; en?: string; kk?: string } };
 const КЭШ = new Map<string, { t: number; pz: Syraya | null }>();
 
 async function zagruzit(id: string): Promise<Syraya | null> {
@@ -33,9 +33,11 @@ async function zagruzit(id: string): Promise<Syraya | null> {
   const r = await serverFetch(id === "daily" ? "/api/cyberchess-daily/puzzle" : `/api/cyberchess-puzzles/${encodeURIComponent(id)}`, { timeoutMs: 4000, retries: 1 });
   if (r && r.ok) {
     try {
-      const raw = ((await r.json()) as { puzzle?: Partial<Syraya> & { rating?: number } })?.puzzle;
+      const telo = (await r.json()) as { puzzle?: Partial<Syraya> & { rating?: number }; razbor?: Syraya["razbor"] };
+      const raw = telo?.puzzle;
       const p = raw && id === "daily" ? { ...raw, r: raw.r ?? raw.rating } : raw;
-      if (p?.fen && Array.isArray(p.sol) && p.sol.length > 0) pz = { fen: p.fen, sol: p.sol, name: p.name, r: p.r, theme: p.theme };
+      // 142: разбор (ru/en/kk) приходит рядом с задачей; его нет — поля нет, страница живёт без него
+      if (p?.fen && Array.isArray(p.sol) && p.sol.length > 0) pz = { fen: p.fen, sol: p.sol, name: p.name, r: p.r, theme: p.theme, razbor: telo?.razbor && typeof telo.razbor === "object" ? telo.razbor : undefined };
     } catch { /* тело не JSON — задачи нет */ }
   }
   КЭШ.set(id, { t: Date.now(), pz });
@@ -87,7 +89,7 @@ main{min-height:100dvh;display:grid;grid-template-columns:1fr;justify-items:cent
 @media(min-width:1024px){:root{--side:min(100dvh - 120px,100vw - 360px)}main{grid-template-columns:auto 290px;grid-template-rows:repeat(7,min-content) 1fr;justify-content:center;align-items:start;column-gap:20px;padding-top:16px}
 .b.wd{grid-column:1;grid-row:1/span 8}.hdr,.z,.s,.hb,.zm,.r,.f{grid-column:2;width:290px}.hdr{grid-row:1}.z{grid-row:2;font-size:18px}.s{grid-row:3}.hb{grid-row:4}.zm{grid-row:5}.r{grid-row:6}.f{grid-row:7}}
 @media(min-width:1280px){:root{--side:min(100dvh - 120px,100vw - 440px)}main{grid-template-columns:auto 360px;column-gap:28px}.hdr,.z,.s,.hb,.zm,.r,.f{width:360px}}
-.z{font-size:15px;font-weight:800}.z .dl{color:#fbbf24}.b .m::before{content:"";position:absolute;inset:6%;border-radius:50%;box-shadow:0 0 0 3px rgba(5,150,105,.75) inset}
+.s .rz{font-size:14px;font-weight:500;line-height:1.45;color:#cbd5e1;margin-top:8px}.z{font-size:15px;font-weight:800}.z .dl{color:#fbbf24}.b .m::before{content:"";position:absolute;inset:6%;border-radius:50%;box-shadow:0 0 0 3px rgba(5,150,105,.75) inset}
 .b{aspect-ratio:1/1;display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);border-radius:8px;overflow:hidden;box-shadow:0 4px 18px rgba(0,0,0,.4);touch-action:none;user-select:none}
 .b i.c{position:absolute;font-style:normal;font-weight:800;opacity:.8;pointer-events:none;font-size:calc(var(--zm)*var(--side)/8*.22);line-height:1}.b i.f{right:4%;bottom:3%}.b i.r{left:5%;top:4%}.b .l i.c{color:#b58863}.b .d i.c{color:#f0d9b5}
 .ghost{position:fixed;left:0;top:0;pointer-events:none;z-index:9;transform:translate(-50%,-50%);font-size:calc(var(--zm)*var(--side)/8*.9);line-height:1;filter:drop-shadow(0 6px 8px rgba(0,0,0,.5))}.ghost.w{color:#fff;text-shadow:0 0 2px #000}.ghost.b{color:#111}
@@ -164,6 +166,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   if (b.akt === "hint") return Response.json({ from: s.reshena || s.i >= s.sol.length ? null : s.sol[s.i].slice(0, 2) });
   const r = shag(s, from, to);
   if (r.vid !== "ok") return Response.json({ vid: "wrong" });
+  // 142: разбор на языке страницы — только после решения (до него он подсказка, а не разбор)
+  const yazyk = yazykZaprosa(req.headers.get("cookie"), new URL(req.url).searchParams.get("lang"), req.headers.get("accept-language"));
+  const razbor = r.reshena && syraya.razbor ? (syraya.razbor[yazyk] || syraya.razbor.en || undefined) : undefined;
   // после решения — вся линия в SAN (как «Success» у lichess с разбором): человек видит, что именно сработало
-  return Response.json({ vid: "ok", fen: r.sostoyanie.fen, i: r.sostoyanie.i, reshena: r.reshena, otvet: r.otvet, movable: r.reshena ? [] : hodyashchie(r.sostoyanie.fen, s.storona), san: r.reshena ? resheniyeSan(pz.fen, pz.sol) : undefined });
+  return Response.json({ vid: "ok", fen: r.sostoyanie.fen, i: r.sostoyanie.i, reshena: r.reshena, otvet: r.otvet, movable: r.reshena ? [] : hodyashchie(r.sostoyanie.fen, s.storona), san: r.reshena ? resheniyeSan(pz.fen, pz.sol) : undefined, razbor });
 }

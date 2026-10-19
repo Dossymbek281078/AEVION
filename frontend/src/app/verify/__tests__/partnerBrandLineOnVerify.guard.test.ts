@@ -54,5 +54,8 @@ describe("форма /qright даёт бюро вписать своё назв�
     expect(Q).toContain("partnerName: partnerName.trim().slice(0, 80) || undefined,");
     expect(Q).toContain('localStorage.setItem("aevion_qright_partner_v1"');
     expect(Q).toContain('localStorage.getItem("aevion_qright_partner_v1")');
+    // Продажи 21:4x: блок свёрнут, заголовок говорил только про автора; имя живого лида — не пример.
+    expect(Q).toContain("bureau / organisation shown on the verification page");
+    expect(Q, "в подсказке поля имя живого лида").not.toContain("e.g. Консалтинг WPK");
   });
 });

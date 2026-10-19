@@ -1122,7 +1122,7 @@ export default function QRightPage() {
 
               <details style={{ borderRadius: 12, border: "1px solid rgba(15,23,42,0.08)", padding: "12px 16px" }}>
                 <summary style={{ fontSize: 13, fontWeight: 700, color: "#475569", cursor: "pointer" }}>
-                  Author details (optional — auto-filled if logged in)
+                  Author details (optional — auto-filled if logged in) · bureau / organisation shown on the verification page
                 </summary>
                 <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr", marginTop: 12 }}>
                   <div>
@@ -1146,7 +1146,7 @@ export default function QRightPage() {
                   <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>Bureau / organisation (shown on the verification page)</div>
                   <input aria-label="Bureau or organisation" data-testid="partner-name" value={partnerName} maxLength={80}
                     onChange={(e) => { setPartnerName(e.target.value); try { localStorage.setItem("aevion_qright_partner_v1", e.target.value); } catch {} }}
-                    placeholder="e.g. Консалтинг WPK — leave empty if you register as the author" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
+                    placeholder="например: Патентное бюро «Пример» — leave empty if you register as the author" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
                   <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>Shown as «Запись сделана через … · проверку обеспечивает AEVION». Not part of the signature.</div>
                 </div>
               </details>

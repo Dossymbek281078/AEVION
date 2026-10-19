@@ -507,14 +507,16 @@ function upgradeResponse(res: Response, moduleId: string, plan: ResolvedPlan, au
   const message = authenticated
     ? `На этом аккаунте покупки модуля «${moduleId}» нет. ` +
       `Если вы оплачивали другим адресом — войдите под ним: ${loginUrl}. ` +
-      `Если ещё не оформляли — модуль входит в любую платную подписку: ${PUBLIC_BASE}${ссылкаНаТариф(moduleId)}`
+      `Если ещё не оформляли — модуль входит в план «AEVION Планета» (любой срок): ${PUBLIC_BASE}${ссылкаНаТариф(moduleId)}`
     : `Если вы уже оплатили — войдите под почтой, которой платили, и доступ откроется: ${loginUrl}. ` +
-      `Если ещё нет — модуль «${moduleId}» входит в любую платную подписку: ${PUBLIC_BASE}${ссылкаНаТариф(moduleId)}`;
+      `Если ещё нет — модуль «${moduleId}» входит в план «AEVION Планета» (любой срок): ${PUBLIC_BASE}${ссылкаНаТариф(moduleId)}`;
   res.status(402).json({
     error: "upgrade_required",
     module: moduleId,
     plan: plan.tier,
     requiredTiers: requiredTiers.length ? requiredTiers : ["full"],
+    // 19.10.2026: канонический «full» = любой платный срок; наружу — имя плана, который открывает.
+    requiredPlan: "AEVION Планета (любой срок)",
     upgradeUrl: `${PUBLIC_BASE}${ссылкаНаТариф(moduleId)}`,
     // authState и loginUrl — чтобы фронт показал кнопку входа в случае
     // «не вошёл», а не только «к тарифам». Старые клиенты поля игнорируют.

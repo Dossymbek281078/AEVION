@@ -15,6 +15,7 @@
  */
 
 import { apiUrl } from "./apiBase";
+import { planetFromPerMonth, planetPricePerMonth } from "./termPricing";
 import { getAuthHeaders } from "@/lib/auth";
 import { getClientApiBase } from "@/lib/apiBase";
 
@@ -233,7 +234,9 @@ export function требуемоеСловами(tiers: CanonicalTier[]): string
   // Только free в списке — платить не за что; прежний контракт (пустая строка)
   // сохранён: его закрепил существующий тест, и он поймал мою ошибку.
   if (!платные.length) return "";
-  if (платные.includes("full")) return "любой платный тариф, от Lite";
+  // 19.10.2026, один план (слово основателя): открывает план «AEVION Планета» на любом сроке.
+  // «от Lite» — прежняя лестница тарифов, её больше нет на витрине; цена — из лесенки плана.
+  if (платные.includes("full")) return `план «AEVION Планета», любой срок — от $${planetFromPerMonth()}/мес при оплате за год, $${planetPricePerMonth("lite")}/мес без срока`;
   return платные.map(tierLabel).join(" / ");
 }
 

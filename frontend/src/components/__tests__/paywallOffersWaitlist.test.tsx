@@ -1,3 +1,4 @@
+import { planetFromPerMonth } from "@/lib/termPricing";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { PaywallScreen } from "../PaywallScreen";
@@ -58,15 +59,15 @@ describe("стена называет самый дешёвый вход", () =>
     message: "Если вы уже оплатили — войдите…",
   } as never;
 
-  it("называет Lite как вход и не выдаёт «FULL» за требование", () => {
+  it("называет план «AEVION Планета» как вход и не выдаёт «FULL» за требование", () => {
     const { container } = render(<PaywallScreen payload={прод} backHref="/modules" />);
     const текст = (container.textContent || "").replace(/\s+/g, " ");
     process.stderr.write(`[сторож] экран печатает: ${текст.slice(0, 220)}${String.fromCharCode(10)}`);
 
-    expect(
-      текст,
-      "экран не называет Lite — гость не узнает, что хватает самого дешёвого срока",
-    ).toMatch(/Lite/i);
+    // 19.10.2026, один план: экран называет план «AEVION Планета» и цену из его лесенки, а не прежний «Lite».
+    expect(текст, "экран не называет план, который открывает модуль").toContain("план «AEVION Планета»");
+    expect(текст, "цена плана не из лесенки").toContain(`$${planetFromPerMonth()}/мес`);
+    expect(/Lite/.test(текст), "прежняя лестница тарифов вернулась на стену").toBe(false);
 
     // «FULL» как ТРЕБОВАНИЕ — запрещено: столько платить не нужно.
     expect(

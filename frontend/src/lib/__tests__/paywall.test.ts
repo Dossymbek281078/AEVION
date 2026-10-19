@@ -1,3 +1,4 @@
+import { planetFromPerMonth, planetPricePerMonth } from "@/lib/termPricing";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   PaywallError,
@@ -180,8 +181,14 @@ describe("formatTiers", () => {
    * Поэтому при наличии «full» выводится фраза, а не список ярлыков.
    */
   it("требование с «full» названо фразой, а не ярлыком тарифа", () => {
-    expect(formatTiers(["medium", "full", "enterprise"])).toBe("любой платный тариф, от Lite");
-    expect(formatTiers(["free", "lite", "full"])).toBe("любой платный тариф, от Lite");
+    // 19.10.2026: один план — текст называет его и цену из лесенки плана, а не прежний «Lite».
+    for (const t of [["medium", "full", "enterprise"], ["free", "lite", "full"]] as const) {
+      const s = formatTiers([...t] as never);
+      expect(s).toContain("план «AEVION Планета»");
+      expect(s).toContain(`$${planetFromPerMonth()}/мес`);
+      expect(s).toContain(`$${planetPricePerMonth("lite")}/мес`);
+      expect(s, "старая лестница вернулась в текст стены").not.toMatch(/\bLite\b/);
+    }
   });
 
   it("без «full» ярлыки остаются, и free по-прежнему отбрасывается", () => {

@@ -56,7 +56,7 @@ export function PaywallModal() {
   const anonymous = info.authState === "anonymous";
   const message =
     info.message ||
-    `Этот раздел доступен на тарифах: ${tiers}. Оформи подписку, чтобы продолжить.`;
+    `Этот раздел открывает ${tiers}. Оформите план, чтобы продолжить.`;
 
   return (
     <div
@@ -153,7 +153,7 @@ export function PaywallModal() {
             color: "#e9d5ff",
           }}
         >
-          Тариф: {tiers}
+          Открывает: {tiers}
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>

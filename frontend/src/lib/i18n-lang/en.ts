@@ -5103,6 +5103,8 @@ const en: Record<string, string> = {
   "pricing.home.tier.monthlyBilling": "Billed monthly at {perMonth} — a {months}-{unit} commitment",
   "pricing.home.tier.prepay": "Or pay the whole term up front: {total} (−{percent}%)",
   "pricing.home.tier.prepayCta": "Pay the whole term up front — {total}",
+  "pricing.home.tier.accessToAccount": "Access opens on the account you are signed in with.",
+  "pricing.home.tier.payWithLoginEmail": "Use the same email in the checkout that you sign in with — access opens on it.",
   "pricing.home.apps.title": "Standalone apps",
   "pricing.home.apps.subtitle": "{count} apps are also sold without a plan — on the same term ladder. All other modules come only with a plan.",
   "pricing.home.apps.termAria": "Term for standalone apps",

@@ -26,6 +26,7 @@ import { модулиДляКассы } from "../lib/payment/customData";
 const ужеСообщено = new Set<string>();
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { rateLimit } from "../lib/rateLimit";
+import { verifyBearerOptional } from "../lib/authJwt";
 import { primaryCheckoutProvider, lemonSqueezyCanCharge, lemonSqueezyCanDeliver } from "../lib/payment/primaryProvider";
 
 const capture = makeServiceCapture("checkout");
@@ -138,10 +139,13 @@ function gumroadPermalinkConfigured(reference: string): boolean {
 function собратьCustomData(
   liteModule: string | undefined,
   channel: string,
+  accountEmail?: string | null,
 ): Record<string, string> | undefined {
   const out: Record<string, string> = {};
   if (liteModule) out.module = liteModule;
   if (channel) out.channel = channel;
+  // 19.10.2026: почта аккаунта едет в кассу — вебхук выдаёт доступ ей, не набранному адресу.
+  if (accountEmail) out.accountEmail = accountEmail;
   return Object.keys(out).length ? out : undefined;
 }
 
@@ -315,6 +319,20 @@ checkoutRouter.get("/status", statusLimiter, (req, res) => {
 checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
   try {
     const body = (req.body ?? {}) as CheckoutBody;
+    /*
+     * 🔴 19.10.2026 (замер Продаж 23:1x): касса не знала аккаунт покупателя — в LS
+     * уходил email null, подписка привязывалась к адресу, НАБРАННОМУ в кассе, а
+     * бесплатная норма снимается по почте из токена. Заплатил одним адресом, входит
+     * другим — остаётся норма 3, молча. Теперь почта вошедшего (Bearer) предзаполняет
+     * кассу и едет в custom_data.accountEmail; вебхук выдаёт доступ ей.
+     * Без входа — как прежде: адрес из тела или тот, что наберут в кассе.
+     */
+    const аккаунт = verifyBearerOptional(req);
+    const почтаАккаунта =
+      typeof аккаунт?.email === "string" && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(аккаунт.email.trim())
+        ? аккаунт.email.trim().toLowerCase()
+        : null;
+    const почтаДляВыдачи = почтаАккаунта ?? body.email;
     // Канал режем по длине: значение приходит из адресной строки, а оттуда
     // приезжает что угодно. Пустую строку не передаём вовсе — пустой канал
     // хуже отсутствующего: в сводке он стал бы отдельным безымянным ключом.
@@ -558,7 +576,7 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
       выбранныеМодули.length > 0 ? { modules: выбранныеМодули.join(",") } : {};
 
     if (totalCents <= 0) {
-      if (!body.email) {
+      if (!почтаДляВыдачи) {
         return res.status(400).json({
           error: "email_required",
           message: "A free or fully-discounted plan needs an email to be issued to.",
@@ -566,7 +584,7 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
       }
       try {
         await provisionSubscription({
-          email: body.email, tierId: tier.id, termMonths, seats,
+          email: почтаДляВыдачи, tierId: tier.id, termMonths, seats,
           // ТОТ ЖЕ список, что и на платном пути: отфильтрованный,
           // без повторов и ограниченный. Одинаковый вход обязан давать
           // одинаковую запись — иначе бесплатный тариф хранит сырое тело
@@ -656,7 +674,7 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
         const kztCents = Math.round(totalCents * CURRENCY_RATES.KZT.rate);
         const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
         const intent = await payboxPaymentProvider.createIntent({
-          reference, amountCents: kztCents, currency: "KZT", description, email: body.email ?? null,
+          reference, amountCents: kztCents, currency: "KZT", description, email: почтаАккаунта ?? body.email ?? null,
           customData: { ...(собратьCustomData(liteModule, channel) ?? {}), ...местаДляКассы, ...модулиДляЗаписи },
           // Модуль для адреса возврата: страница после оплаты обязана
           // назвать то, за что заплатили. Только при ОДНОМ купленном
@@ -683,7 +701,7 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
       try {
         const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
         const intent = await paypalPaymentProvider.createIntent({
-          reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
+          reference, amountCents: totalCents, currency: "USD", description, email: почтаАккаунта ?? body.email ?? null,
           customData: { ...(собратьCustomData(liteModule, channel) ?? {}), ...местаДляКассы, ...модулиДляЗаписи },
           // Модуль для адреса возврата: страница после оплаты обязана
           // назвать то, за что заплатили. Только при ОДНОМ купленном
@@ -759,7 +777,7 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
           // Запасным путём касса открывается по варианту тарифа, а цену
           // назначаем мы: иначе покупатель заплатил бы цену планеты.
           reference: запасной ? "tier_lite" : план ? план.reference : reference,
-          amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
+          amountCents: totalCents, currency: "USD", description, email: почтаАккаунта ?? body.email ?? null,
           // 🔴 19.10.2026: НАША сумма уходит в кассу ВСЕГДА (custom_price), а не только
           // запасным путём. Замер того дня: варианты планеты в LS несли прежнюю
           // лесенку ($400 за месяц), витрина — новую ($250): касса списала бы
@@ -767,8 +785,8 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
           customPriceCents: totalCents,
           // План: срок и режим едут в custom_data — вебхук по ним выдаёт ступень.
           customData: план
-            ? { ...(собратьCustomData(liteModule, channel) ?? {}), ...план.customData }
-            : собратьCustomData(liteModule, channel),
+            ? { ...(собратьCustomData(liteModule, channel, почтаАккаунта) ?? {}), ...план.customData }
+            : собратьCustomData(liteModule, channel, почтаАккаунта),
           // Язык страницы оплаты. Берём его от САМОГО ПОКУПАТЕЛЯ, а не
           // подставляем свой: сперва то, что прислала витрина, иначе язык его
           // браузера. Без этого касса открывалась по-болгарски (замер 09.09).
@@ -807,7 +825,7 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
     if (gumroadPermalinkConfigured(reference)) {
       предупредитьЕслиСуммаНеДоедет("gumroad");
       const intent = await gumroadPaymentProvider.createIntent({
-        reference, amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
+        reference, amountCents: totalCents, currency: "USD", description, email: почтаАккаунта ?? body.email ?? null,
         // Выбранного модуля в этой ветке нет — она для одноразовых продуктов,
         // а модуль выбирают только у тарифа Lite. Канал передаём: без него
         // покупка попадёт в сводке выручки в ключ "direct".

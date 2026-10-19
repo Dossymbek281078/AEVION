@@ -116,6 +116,8 @@ interface LsSubscriptionPayload {
       reference?: string; email?: string; module?: string; channel?: string; bureauIntentId?: string;
       /** 19.10.2026, вариант «Б»: план на срок куплен вариантом tier_lite/tier_<t> с подменой цены. */
       term?: string; billing?: string;
+      /** 19.10.2026: почта вошедшего, которую наша касса положила по Bearer, — доступ выдаётся ей. */
+      accountEmail?: string;
     };
     /** Покупка из тестового режима кассы — не выручка. Добавлено 20.09.2026. */
     test_mode?: boolean;
@@ -271,7 +273,14 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
 
   const event = (payload.meta?.event_name ?? "").toLowerCase();
   const attrs = payload.data?.attributes ?? {};
-  const email = (attrs.user_email ?? payload.meta?.custom_data?.email ?? "").trim().toLowerCase();
+  // 19.10.2026: почта аккаунта из custom_data (её кладёт наша касса по Bearer покупателя)
+  // сильнее адреса, набранного в кассе: доступ открывается тому, кто вошёл и нажал
+  // «оплатить». Без неё — как прежде: user_email кассы, затем custom_data.email.
+  const почтаАккаунта = String(payload.meta?.custom_data?.accountEmail ?? "").trim().toLowerCase();
+  const email = (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(почтаАккаунта)
+    ? почтаАккаунта
+    : String(attrs.user_email ?? payload.meta?.custom_data?.email ?? "")
+  ).trim().toLowerCase();
 
   if (event === "order_created" || event === "order_refunded") {
     // Возврат ЗАБИРАЕТ то, что выдала покупка. До 13.08.2026 слова «refund» в

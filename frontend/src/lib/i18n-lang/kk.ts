@@ -5103,6 +5103,8 @@ const kk: Record<string, string> = {
   "pricing.home.tier.monthlyBilling": "Ай сайын {perMonth} алынады — {months} {unit} міндеттеме",
   "pricing.home.tier.prepay": "Немесе бүкіл мерзімді бір төлеммен алдын ала: {total} (−{percent} %)",
   "pricing.home.tier.prepayCta": "Бүкіл мерзімді алдын ала төлеу — {total}",
+  "pricing.home.tier.accessToAccount": "Қолжетімділік сіз кірген аккаунтта ашылады.",
+  "pricing.home.tier.payWithLoginEmail": "Кассада кіретін мекенжайыңызды көрсетіңіз — қолжетімділік соған ашылады.",
   "pricing.home.apps.title": "Жеке қосымшалар",
   "pricing.home.apps.subtitle": "{count} қосымша тарифсіз де сатылады — сол мерзім баспалдағы бойынша. Қалған модульдер тек тарифтерге кіреді.",
   "pricing.home.apps.termAria": "Жеке қосымшалардың мерзімі",

@@ -5103,6 +5103,8 @@ const ru: Record<string, string> = {
   "pricing.home.tier.monthlyBilling": "Списание ежемесячно по {perMonth} — обязательство на {months} {unit}",
   "pricing.home.tier.prepay": "Или весь срок вперёд одним платежом: {total} (−{percent} %)",
   "pricing.home.tier.prepayCta": "Оплатить весь срок вперёд — {total}",
+  "pricing.home.tier.accessToAccount": "Доступ откроется на аккаунте, которым вы вошли.",
+  "pricing.home.tier.payWithLoginEmail": "В кассе укажите тот же адрес, которым будете входить — доступ открывается на него.",
   "pricing.home.apps.title": "Отдельные приложения",
   "pricing.home.apps.subtitle": "{count} приложений продаются и без тарифа — по той же лестнице сроков. Остальные модули входят только в тарифы.",
   "pricing.home.apps.termAria": "Срок для отдельных приложений",

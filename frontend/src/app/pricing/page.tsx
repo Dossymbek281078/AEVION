@@ -9,6 +9,7 @@ import { RazrabotkaPreduprezhdenie } from "@/components/RazrabotkaPreduprezhdeni
 import { predlagaemOtdelno } from "@/lib/neProdayotsyaOtdelno";
 import { vybratVhod, nuzhnaProkrutkaKKartochke } from "@/lib/vhodNaStranitseTsen";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthHeaders, isAuthenticated } from "@/lib/auth";
 import { fetchAiSavings, счётчикГоденДляПоказа } from "@/lib/aiSavings";
 import { запомнитьНамерение } from "@/lib/checkoutIntent";
 import { channelFrom, keepChannel, withChannel } from "@/lib/products";
@@ -274,6 +275,9 @@ export default function PricingPage() {
   // Калькулятор сметы. Срок задаёт сам тариф, а все модули уже входят в любой
   // платный срок — выбирать надстройки больше не из чего (15.09.2026).
   const [calcTier, setCalcTier] = useState<TierId>("medium");
+  // Вошёл ли человек — читаем после монтирования (localStorage; на сервере его нет).
+  const [вошёл, setВошёл] = useState(false);
+  useEffect(() => { setВошёл(isAuthenticated()); }, []);
   const [calcSeats, setCalcSeats] = useState(1);
   const [calcPromo, setCalcPromo] = useState("");
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -372,7 +376,9 @@ export default function PricingPage() {
       // (локальные карты КЗ + Kaspi), иначе USD → LemonSqueezy → Gumroad → stub.
       const r = await fetch(apiUrl("/api/pricing/checkout/session"), {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        // 19.10.2026: вход уходит в кассу — почта аккаунта предзаполняет кассу и
+        // получает доступ (custom_data.accountEmail), а не адрес, набранный в кассе.
+        headers: { "content-type": "application/json", ...getAuthHeaders() },
         // Канал уходит в ТЕЛЕ запроса, а не дописыванием к адресу кассы:
         // подписанный адрес от LemonSqueezy любое дополнение отвергает (403).
         // Бэкенд кладёт его в checkout_data.custom, откуда вебхук и читает.
@@ -1389,6 +1395,11 @@ export default function PricingPage() {
       */}
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 20px" }}>
         <RazrabotkaPreduprezhdenie отступСверху={0} />
+        {/* 19.10.2026: доступ открывается на аккаунт входа, а не на адрес из кассы —
+            говорим это ДО кнопок, одной строкой на все карточки. */}
+        <p data-testid="pay-with-login-note" style={{ fontSize: 14, lineHeight: 1.5, color: "#475569", margin: "10px 0 0" }}>
+          {вошёл ? t("pricing.home.tier.accessToAccount") : t("pricing.home.tier.payWithLoginEmail")}
+        </p>
       </div>
 
       {/* Tier cards */}

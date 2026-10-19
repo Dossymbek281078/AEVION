@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   // заголовок живёт в выдаче и превью месяцами и расходится с кассой молча.
   title: "Pricing — Free and Pro in the AEVION subscription · AEVION Constitution",
   description:
-    "Free (5 сохранений, 10 AI-запросов в день) и Pro — безлимит, AI без лимита, clean PDF, embed — в подписке AEVION: все модули на срок от 1 до 12 месяцев, оплата за срок вперёд.",
+    "Free (5 сохранений, 10 AI-запросов в день) и Pro — безлимит, AI без лимита, clean PDF, embed — в подписке AEVION: все модули на срок от 1 до 12 месяцев, списание ежемесячно по цене срока.",
   alternates: { canonical: `${SITE}/constitution/pricing` },
   openGraph: {
     title: "Constitution Pricing — Free / Pro",

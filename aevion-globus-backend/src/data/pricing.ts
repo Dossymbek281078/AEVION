@@ -97,8 +97,10 @@ export interface PricingTier {
   priceMonthly: number | null;
   /** Срок доступа в месяцах (lite 1 … max 12). null — у free и enterprise срока нет. */
   termMonths: number | null;
-  /** Платёж за весь срок вперёд = priceMonthly × termMonths. */
+  /** Сумма платежей за срок = priceMonthly × termMonths; с 19.10.2026 списывается помесячно. */
   priceTermTotal: number | null;
+  /** Один платёж за весь срок вперёд со скидкой (19.10.2026); null — где срока нет. */
+  pricePrepayTotal: number | null;
   /** Что входит — короткие буллеты. */
   features: string[];
   /** Жёсткие лимиты для квот / биллинга. */
@@ -230,6 +232,82 @@ export function planetTotal(term: TermTier): number { return PLANET_TERM_PRICE[t
 /** «от $…/мес» — месяц на самом длинном сроке. */
 export function planetFromPerMonth(): number { return PLANET_TERM_PRICE.max; }
 export function planetSavingPercent(term: TermTier): number { return Math.round((1 - PLANET_TERM_PRICE[term] / PLANET_TERM_PRICE.lite) * 1000) / 10; }
+
+/*
+ * 🔴 19.10.2026 22:4x–22:5x, слово основателя: срочный план СПИСЫВАЕТСЯ
+ * ПОМЕСЯЧНО при обязательстве на срок («$1800 сразу неподъёмно — соглашается
+ * на годовую, платит ежемесячно»). totalUsd срока — сумма помесячных платежей.
+ * Оплата всего срока вперёд — скидка к этой сумме: 3 мес −5 %, 6 −7,5 %,
+ * 9 −10 %, 12 −12,5 % → 641.25 / 1110 / 1417.50 / 1575. Без срока (lite)
+ * платить вперёд не за что — скидка 0.
+ */
+export const PLANET_PREPAY_DISCOUNT_PERCENT: Record<TermTier, number> = { lite: 0, medium: 5, pro: 7.5, full: 10, max: 12.5 };
+/** До цента: 675 × 0.95 в двоичной дроби — 641.2499…, покупателю показываем 641.25. */
+export function toCents(usd: number): number { return Math.round(usd * 100) / 100; }
+/** Один платёж за весь срок вперёд, со скидкой; у срока без обязательства — цена месяца. */
+export function planetPrepayTotal(term: TermTier): number {
+  return toCents(planetTotal(term) * (1 - PLANET_PREPAY_DISCOUNT_PERCENT[term] / 100));
+}
+/** Сколько помесячных списаний несёт обязательство: 1 / 3 / 6 / 9 / 12. */
+export function planetPaymentsCount(term: TermTier): number { return TERM_MONTHS[term]; }
+
+/*
+ * Досрочная отмена срочного плана — ИТОГ основателя 19.10 22:5x.
+ * Прожитые дни оплачиваются по самой длинной ПРОЙДЕННОЙ ступени лесенки:
+ * < 90 дн — $250/мес, 90–179 — $225, 180–269 — $200, 270–364 — $175;
+ * месяц = 30 дней, год = 365. Дослужил срок — цена плана, пересчёта нет.
+ * «Оплачено − наше» > 0 — возврат; < 0 — у помесячного доплата счётом
+ * (касса сама не спишет), у оплаты вперёд доплаты нет.
+ * Контрольные числа основателя: год вперёд 1575, 200 дн → наше 1333.33,
+ * возврат 241.67; год помесячно, 120 дн, оплачено 600 → доплата 300.
+ */
+export const DAYS_PER_MONTH = 30;
+export const DAYS_PER_YEAR = 365;
+/** С какого прожитого дня ступень считается пройденной. */
+export const PLANET_LADDER_FROM_DAY: Record<TermTier, number> = { lite: 0, medium: 90, pro: 180, full: 270, max: DAYS_PER_YEAR };
+export type PlanetBilling = "monthly" | "prepaid";
+export interface PlanetEarlyCancellation {
+  /** Ступень, по цене месяца которой посчитаны прожитые дни. */
+  ladderTier: TermTier;
+  rateUsdPerMonth: number;
+  /** Сколько стоят прожитые дни. */
+  ourUsd: number;
+  refundUsd: number;
+  surchargeUsd: number;
+  /** Срок дослужен (или срока не было) — пересчёта нет. */
+  finished: boolean;
+}
+/** Длина срока в днях: 30 / 90 / 180 / 270 / 365. */
+export function planetTermDays(term: TermTier): number {
+  return term === "max" ? DAYS_PER_YEAR : TERM_MONTHS[term] * DAYS_PER_MONTH;
+}
+/** Самая длинная ступень, чей порог дней пройден. */
+export function planetLadderTierForDays(daysUsed: number): TermTier {
+  let tier: TermTier = "lite";
+  for (const t of TERM_TIERS) if (daysUsed >= PLANET_LADDER_FROM_DAY[t]) tier = t;
+  return tier;
+}
+export function planetEarlyCancellation(input: { term: TermTier; billing: PlanetBilling; daysUsed: number; paidUsd: number }): PlanetEarlyCancellation {
+  const { term, billing } = input;
+  const daysUsed = Math.max(0, Math.floor(input.daysUsed));
+  const paidUsd = toCents(Math.max(0, input.paidUsd));
+  // Без срока обязательства нет, дослуженный срок пересчёту не подлежит.
+  if (term === "lite" || daysUsed >= planetTermDays(term)) {
+    return { ladderTier: term, rateUsdPerMonth: PLANET_TERM_PRICE[term], ourUsd: paidUsd, refundUsd: 0, surchargeUsd: 0, finished: true };
+  }
+  const ladderTier = planetLadderTierForDays(daysUsed);
+  const rateUsdPerMonth = PLANET_TERM_PRICE[ladderTier];
+  const ourUsd = toCents((daysUsed * rateUsdPerMonth) / DAYS_PER_MONTH);
+  const diff = toCents(paidUsd - ourUsd);
+  return {
+    ladderTier,
+    rateUsdPerMonth,
+    ourUsd,
+    refundUsd: diff > 0 ? diff : 0,
+    surchargeUsd: diff < 0 && billing === "monthly" ? toCents(-diff) : 0,
+    finished: false,
+  };
+}
 
 export function isTermTier(id: string): id is TermTier {
   return (TERM_TIERS as readonly string[]).includes(id);
@@ -380,12 +458,16 @@ function planetTier(id: TermTier, extra: Partial<PricingTier> = {}): PricingTier
     priceMonthly: perMonth,
     termMonths: months,
     priceTermTotal: total,
+    pricePrepayTotal: planetPrepayTotal(id),
     features: [
       "Все продукты AEVION в одной подписке",
       "DevHub, Multichat, IP Bureau, CyberChess, QVenture и остальные модули",
       "QCoreAI: 50 000 000 токенов / месяц",
-      months === 1 ? `$${total} за месяц` : `$${total} за ${monthsLabelRu(months)} — $${perMonth} в месяц`,
-      savingPct > 0 ? `Экономия ${savingPct}% против помесячной оплаты` : "Без обязательств дольше месяца",
+      // 19.10.2026: срочный план списывается помесячно; вперёд — один платёж со скидкой.
+      months === 1
+        ? `$${total} за месяц, без обязательств`
+        : `$${perMonth} в месяц, списание ежемесячно — ${months} ${months === 3 ? "платежа" : "платежей"}, $${total} за ${monthsLabelRu(months)}; вперёд одним платежом — $${planetPrepayTotal(id)}`,
+      savingPct > 0 ? `Экономия ${savingPct}% против месяца без срока` : "Без обязательств дольше месяца",
       // 🔴 07.10.2026 «Приоритетная поддержка (8h SLA)» СНЯТА со всех пяти
       // ступеней (строка одна — она собирается для каждой). Причина: ни в
       // бэкенде, ни в процессе нет приоритета обращений и срока ответа —
@@ -408,6 +490,7 @@ export const TIERS: PricingTier[] = [
     priceMonthly: 0,
     termMonths: null,
     priceTermTotal: 0,
+    pricePrepayTotal: 0,
     features: [
       "1 активный модуль на выбор",
       "QRight: до 10 объектов / месяц",
@@ -439,6 +522,7 @@ export const TIERS: PricingTier[] = [
     priceMonthly: null,
     termMonths: null,
     priceTermTotal: null,
+    pricePrepayTotal: null,
     /*
      * 🔴 01.10.2026: СНЯТО ЗАЯВЛЕНИЕ О СЕРТИФИКАЦИИ, которой у нас нет.
      *

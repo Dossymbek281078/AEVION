@@ -21,6 +21,7 @@ import {
   TERM_TIERS, TERM_MONTHS, TERM_FACTOR, STANDALONE_APPS, PLANET_BASE_MONTHLY, termPricePerMonth, termTotal,
   appSellableTerms, appTermTotal,
   PLANET_TERM_PRICE, planetTotal, planetFromPerMonth, CHESS_YEARLY_USD,
+  PLANET_PREPAY_DISCOUNT_PERCENT, PLANET_LADDER_FROM_DAY, DAYS_PER_MONTH, DAYS_PER_YEAR, planetPrepayTotal, planetPaymentsCount,
   type TierId,
 } from "../data/pricing";
 import { projects } from "../data/projects";
@@ -188,7 +189,31 @@ pricingRouter.get("/", (_req, res) => {
     plan: {
       id: "planet",
       name: "AEVION Планета",
-      terms: TERM_TIERS.map((t) => ({ tierId: t, months: TERM_MONTHS[t], perMonthUsd: PLANET_TERM_PRICE[t], totalUsd: planetTotal(t) })),
+      /*
+       * 19.10.2026 22:4x, слово основателя: срочный план списывается ПОМЕСЯЧНО
+       * (billing, paymentsCount); totalUsd — сумма платежей за срок. Вперёд —
+       * один платёж prepayUsd со скидкой prepayDiscountPercent.
+       */
+      billing: "monthly",
+      terms: TERM_TIERS.map((t) => ({
+        tierId: t,
+        months: TERM_MONTHS[t],
+        perMonthUsd: PLANET_TERM_PRICE[t],
+        totalUsd: planetTotal(t),
+        paymentsCount: planetPaymentsCount(t),
+        prepayUsd: planetPrepayTotal(t),
+        prepayDiscountPercent: PLANET_PREPAY_DISCOUNT_PERCENT[t],
+      })),
+      /* Досрочная отмена (итог основателя 19.10 22:5x): прожитые дни — по самой
+       * длинной пройденной ступени; дослужил — цена плана; разница > 0 возврат,
+       * < 0 — доплата счётом у помесячного, 0 у оплаты вперёд. */
+      earlyCancellation: {
+        daysPerMonth: DAYS_PER_MONTH,
+        daysPerYear: DAYS_PER_YEAR,
+        ladder: TERM_TIERS.map((t) => ({ tierId: t, fromDay: PLANET_LADDER_FROM_DAY[t], usdPerMonth: PLANET_TERM_PRICE[t] })),
+        monthlySurcharge: true,
+        prepaidSurcharge: false,
+      },
     },
     chess: { id: "cyberchess", priceUsd: CHESS_YEARLY_USD, period: "year" },
     /*
@@ -1727,10 +1752,10 @@ pricingRouter.get("/healthz", (_req, res) => {
 const PRICING_FAQ = [
   { id: "faq-01", q: "What is included in the Starter plan?", a: "Core platform access with up to 3 users, AI quota 1k calls/month, QSign basic.", category: "plans" },
   { id: "faq-02", q: "Can I upgrade mid-month?", a: "Yes. Upgrading applies pro-rated billing instantly.", category: "billing" },
-  { id: "faq-03", q: "Do longer terms cost less?", a: `Yes. Every plan is a term paid upfront — 1, 3, 6, 9 or 12 months. The whole platform costs $${PLANET_BASE_MONTHLY}/month on 1 month and $${planetFromPerMonth()}/month on 12.`, category: "billing" },
+  { id: "faq-03", q: "Do longer terms cost less?", a: `Yes. A plan is a commitment of 1, 3, 6, 9 or 12 months, billed monthly at the term's price: $${PLANET_BASE_MONTHLY}/month with no term, $${planetFromPerMonth()}/month on a 12-month commitment. Paying the whole term up front takes a further 5–12.5% off (12 months: $${planetPrepayTotal("max")}).`, category: "billing" },
   { id: "faq-04", q: "Is there a free trial?", a: "14-day free trial on Growth and above. No credit card required.", category: "plans" },
   { id: "faq-05", q: "What payment methods do you accept?", a: "Visa, Mastercard, Kaspi, QR code (QazQR), wire transfer.", category: "billing" },
-  { id: "faq-06", q: "Can I cancel any time?", a: "Yes. Cancelling stops the renewal; access stays open until the paid term ends.", category: "billing" },
+  { id: "faq-06", q: "Can I cancel any time?", a: "Yes. With no term, cancelling stops the next charge. On a term plan the months you used are re-priced at the longest term step you completed (<90 days $250/mo, 90–179 $225, 180–269 $200, 270–364 $175): a prepaid balance is refunded, a monthly plan gets an invoice for the difference.", category: "billing" },
   { id: "faq-07", q: "What does Enterprise include?", a: "Unlimited seats, SLA 99.9%, dedicated Railway cluster, custom domain, SSO, on-prem option.", category: "enterprise" },
   { id: "faq-08", q: "Is there a minimum commitment for Enterprise?", a: "12-month contract minimum, custom pricing via quote request.", category: "enterprise" },
   { id: "faq-09", q: "How does per-seat pricing work?", a: "Each named user counts as a seat. Guest/viewer roles are free.", category: "plans" },

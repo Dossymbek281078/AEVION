@@ -1,7 +1,7 @@
 import { describe, test, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { TERM_TIERS, TERM_MONTHS, TERM_FACTOR, PLANET_BASE_MONTHLY, PLANET_TERM_PRICE, STANDALONE_APPS, planetPricePerMonth, planetTotal, planetFromPerMonth } from "../termPricing";
+import { TERM_TIERS, TERM_MONTHS, TERM_FACTOR, PLANET_BASE_MONTHLY, PLANET_TERM_PRICE, STANDALONE_APPS, planetPricePerMonth, planetTotal, planetFromPerMonth, PLANET_PREPAY_DISCOUNT_PERCENT, PLANET_LADDER_FROM_DAY, planetPrepayTotal, planetEarlyCancellation, DAYS_PER_YEAR } from "../termPricing";
 import { readdirSync, statSync } from "node:fs";
 
 /**
@@ -41,6 +41,24 @@ describe("лестница сроков сайта совпадает с бэк�
     expect(TERM_TIERS.map((t) => planetTotal(t))).toEqual([250, 675, 1200, 1575, 1800]);
     expect(planetFromPerMonth()).toBe(150);
     expect(PLANET_TERM_PRICE.lite).toBe(PLANET_BASE_MONTHLY);
+  });
+  // 🔴 19.10.2026 22:4x–22:5x, слово основателя: помесячно при обязательстве, вперёд со скидкой,
+  // отмена по пройденной ступени. Формула живёт в двух проектах — сверяем ТЕКСТ функции.
+  test("🔴 помесячно при обязательстве: скидка вперёд, лесенка отмены и сама функция совпадают с бэкендом", () => {
+    expect(record("PLANET_PREPAY_DISCOUNT_PERCENT")).toEqual(PLANET_PREPAY_DISCOUNT_PERCENT);
+    expect(TERM_TIERS.map((t) => planetPrepayTotal(t))).toEqual([250, 641.25, 1110, 1417.5, 1575]);
+    expect(record("PLANET_LADDER_FROM_DAY")).toEqual({ lite: 0, medium: 90, pro: 180, full: 270 }); // max: DAYS_PER_YEAR — не литерал
+    expect(PLANET_LADDER_FROM_DAY).toEqual({ lite: 0, medium: 90, pro: 180, full: 270, max: 365 });
+    expect(Number(/export const DAYS_PER_YEAR = (\d+);/.exec(backend)?.[1])).toBe(DAYS_PER_YEAR);
+    const тело = (src: string, имя: string) => { const i = src.indexOf(`export function ${имя}(`); const j = src.indexOf("\n}\n", i); return i < 0 || j < 0 ? "" : src.slice(i, j); };
+    const фронт = readFileSync(join(__dirname, "..", "termPricing.ts"), "utf-8");
+    for (const имя of ["planetEarlyCancellation", "planetLadderTierForDays", "planetTermDays", "planetPrepayTotal"]) {
+      expect(тело(фронт, имя).length, `${имя}: функция найдена на фронте`).toBeGreaterThan(40);
+      expect(тело(фронт, имя), `${имя}: текст функции на фронте ≠ бэкенду`).toBe(тело(backend, имя));
+    }
+    // контрольные числа основателя — на копии фронта
+    expect(planetEarlyCancellation({ term: "max", billing: "prepaid", daysUsed: 200, paidUsd: 1575 })).toMatchObject({ ourUsd: 1333.33, refundUsd: 241.67, surchargeUsd: 0 });
+    expect(planetEarlyCancellation({ term: "max", billing: "monthly", daysUsed: 120, paidUsd: 600 })).toMatchObject({ ourUsd: 900, refundUsd: 0, surchargeUsd: 300 });
   });
   test("🔴 ни одна страница не считает планету старой формулой termPricePerMonth(PLANET_BASE_MONTHLY…)", () => {
     // 250 × 0.875 = 218.75: на бэке это throw, на сайте — тихая неверная цена. Поэтому запрет на уровне исходников.

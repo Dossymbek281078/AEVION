@@ -197,7 +197,7 @@ export default async function EnShopPage({
             PLANET_BASE_MONTHLY,
           )} for one month with no term, or ${CURRENCY.format(
             planetPricePerMonth("max"),
-          )} a month when paying for 12 months up front. Expensive models, voice and video — 4,500 credits a month inside the plan.`}
+          )} a month on a 12-month commitment, billed monthly; paying the whole term up front takes a further 12.5% off. Expensive models, voice and video — 4,500 credits a month inside the plan.`}
           items={SUBSCRIPTIONS}
           channel={channel}
         />

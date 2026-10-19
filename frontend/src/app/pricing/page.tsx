@@ -39,6 +39,7 @@ import {
   planetPricePerMonth,
   planetTotal,
   planetFromPerMonth,
+  PLANET_PREPAY_DISCOUNT_PERCENT,
   appSellableTerms,
   appTermTotal,
   appTermFor,
@@ -74,8 +75,10 @@ interface PricingTier {
   priceMonthly: number | null;
   /** Срок в месяцах; null у free и enterprise. */
   termMonths: number | null;
-  /** Платёж за весь срок вперёд. */
+  /** Сумма платежей за срок; с 19.10.2026 списывается помесячно. */
   priceTermTotal: number | null;
+  /** Один платёж за весь срок вперёд со скидкой; null — где срока нет. */
+  pricePrepayTotal?: number | null;
   features: string[];
   limits: TierLimits;
   ctaLabel: string;
@@ -1466,6 +1469,19 @@ export default function PricingPage() {
                 {!безТовара(tier.id) && tier.termMonths !== null && tier.priceTermTotal !== null && tier.priceTermTotal > 0 && (
                   <div style={{ fontSize: 15.5, fontWeight: 700, color: isHighlight ? "#cbd5e1" : "#334155", marginTop: 4 }}>
                     {заСрок(tier.priceTermTotal, tier.termMonths)}
+                  </div>
+                )}
+                {/* 19.10.2026, слово основателя: срочный план списывается помесячно;
+                    вперёд — один платёж со скидкой. Без срока (1 мес) строк нет. */}
+                {!безТовара(tier.id) && isTermTier(tier.id) && tier.termMonths !== null && tier.termMonths > 1 && tier.priceMonthly !== null && (
+                  <div data-testid={`billing-${tier.id}`} style={{ fontSize: 13.5, lineHeight: 1.45, color: isHighlight ? "#94a3b8" : "#64748b", marginTop: 4 }}>
+                    {t("pricing.home.tier.monthlyBilling", { perMonth: displayPrice(tier.priceMonthly), months: String(tier.termMonths), unit: t(termUnitKey(tier.termMonths)) })}
+                    {tier.pricePrepayTotal != null && tier.priceTermTotal !== null && tier.pricePrepayTotal < tier.priceTermTotal && (
+                      <>
+                        <br />
+                        {t("pricing.home.tier.prepay", { total: displayPrice(tier.pricePrepayTotal), percent: String(PLANET_PREPAY_DISCOUNT_PERCENT[tier.id]) })}
+                      </>
+                    )}
                   </div>
                 )}
                 {!безТовара(tier.id) && экономия > 0 && (

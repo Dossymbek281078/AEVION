@@ -365,7 +365,7 @@ export default async function GoPage({
           <p style={styles.headLink}>
             Нужен инструмент сразу?{" "}
             <a href={keep("/pricing#tiers")} style={styles.link}>
-              План «AEVION Планета» — от ${ЦЕНА_ЗА_ГОД}/мес при оплате за год, ${ЦЕНА_ВХОДА}/мес без срока →
+              План «AEVION Планета» — от ${ЦЕНА_ЗА_ГОД}/мес при обязательстве на год, ${ЦЕНА_ВХОДА}/мес без срока →
             </a>
           </p>
         </header>
@@ -513,7 +513,7 @@ export default async function GoPage({
               href={withChannel(allAccess.href, channel, "go")}
               kicker={allAccess.format}
               title="Доступ ко всему сразу"
-              note="Все модули AEVION на срок от 1 до 12 месяцев, оплата за срок вперёд."
+              note="Все модули AEVION на срок от 1 до 12 месяцев, списание ежемесячно по цене срока."
               price={priceOf(allAccess)}
             />
           )}

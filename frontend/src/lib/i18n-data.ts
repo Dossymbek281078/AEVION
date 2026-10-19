@@ -179,9 +179,10 @@ export const LANG_KEY_COUNT: Record<Lang, number> = {
   // в калькуляторе), на плашке «входит в подписку» и после оплаты. Число взято
   // из падения самого сторожа, а не посчитано на глаз.
   // 19.10: +5 в ru/en/kk — pricing.home.apps.perYear/subtitleYearOnly/priceMayRise, faq.*.aOnePlan (один план, шахматы $50/год)
-  ru: 7424,
-  en: 7424,
-  kk: 7424,
+  // 19.10 (цены помесячно): +4 в каждом словаре — tier.monthlyBilling, tier.prepay, tier.prepayCta, calc.payMonthly.
+  ru: 7428,
+  en: 7428,
+  kk: 7428,
   de: 134,
   fr: 134,
   es: 134,

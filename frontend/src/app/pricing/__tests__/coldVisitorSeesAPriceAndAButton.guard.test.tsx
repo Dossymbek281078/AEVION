@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, cleanup, act } from "@testing-library/react";
 import { I18nProvider } from "@/lib/i18n";
-import { STANDALONE_APPS, standaloneApp, termPricePerMonth } from "@/lib/termPricing";
+import { STANDALONE_APPS, standaloneApp, termPricePerMonth , planetFromPerMonth } from "@/lib/termPricing";
 
 /**
  * ХОЛОДНЫЙ ПОСЕТИТЕЛЬ ВИДИТ ЦЕНУ И КНОПКУ — в первом экране, без метки в адресе.
@@ -86,27 +86,36 @@ describe("холодный посетитель /pricing", () => {
 
     expect(вКарточке, "в карточке входа нет названия").toContain(вход!.name);
 
-    // Цену берём из ТОГО ЖЕ источника, что и карточка: иначе сторож начнёт
-    // охранять собственное число, а не то, что видит человек.
-    const цена = termPricePerMonth(вход!.baseMonthly, "lite");
+    // 🔴 19.10.2026 (один план, кадр прода 390×844 20:10): Multichat отдельно не
+    // продаётся, и герой обязан показать цену ПЛАНА («от $150/мес») и путь к
+    // тарифам, а не «$40/мес · Купить Multichat» — кнопку в кассу, отвечающую 400.
+    // Цену берём из ТОГО ЖЕ источника, что и карточка (своя лесенка плана).
+    const старая = termPricePerMonth(вход!.baseMonthly, "lite");
+    const цена = planetFromPerMonth();
     expect(
       вКарточке.includes(String(цена)),
-      `в карточке входа нет цены ${цена} — холодный посетитель снова без цены`,
+      `в карточке входа нет цены плана ${цена} — холодный посетитель снова без цены`,
     ).toBe(true);
+    expect(
+      вКарточке.includes(`$${старая}`),
+      `в карточке входа снова отдельная цена Multichat ${старая} — товар снят с продажи`,
+    ).toBe(false);
 
     const кнопкаВКарточке = [...(карточка?.querySelectorAll("button") ?? [])]
       .map((b) => (b.textContent || "").trim())
       .find((подпись) => подпись.includes(вход!.name));
-    expect(кнопкаВКарточке, "в карточке входа нет кнопки покупки").toBeTruthy();
+    expect(кнопкаВКарточке, "в карточке входа есть кнопка покупки снятого товара").toBeFalsy();
+    const ссылкаКТарифам = [...(карточка?.querySelectorAll("a") ?? [])].find((a) => (a.getAttribute("href") || "") === "#tiers");
+    expect(ссылкаКТарифам, "в карточке входа нет пути к тарифам (#tiers)").toBeTruthy();
 
-    // И порядок: кнопка покупки в карточке входа идёт в документе РАНЬШЕ
-    // кнопок блока приложений — иначе «показали» превратится в «показали внизу».
-    const всеКнопки = [...document.querySelectorAll("button")];
-    const перваяСИменем = всеКнопки.findIndex((b) => (b.textContent || "").includes(вход!.name));
-    const вКарточкеИндекс = всеКнопки.findIndex((b) => карточка!.contains(b) && (b.textContent || "").includes(вход!.name));
+    // И порядок: путь к тарифам из карточки входа идёт в документе РАНЬШЕ
+    // любой кнопки покупки — иначе «показали» превратится в «показали внизу».
+    const кнопкиПокупки = [...document.querySelectorAll("button")].filter((b) => /купить|buy/i.test(b.textContent || ""));
+    expect(кнопкиПокупки.some((b) => (b.textContent || "").includes(вход!.name)), "где-то на странице осталась кнопка «Купить Multichat»").toBe(false);
+    const позицияСсылки = ссылкаКТарифам!.compareDocumentPosition(кнопкиПокупки[0] ?? ссылкаКТарифам!);
     expect(
-      вКарточкеИндекс >= 0 && вКарточкеИндекс === перваяСИменем,
-      "кнопка входа не первая: человек доберётся до неё только прокруткой",
+      кнопкиПокупки.length === 0 || Boolean(позицияСсылки & Node.DOCUMENT_POSITION_FOLLOWING),
+      "путь к тарифам не первый: человек доберётся до него только прокруткой",
     ).toBe(true);
   }, 120000);
 

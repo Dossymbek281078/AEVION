@@ -933,8 +933,14 @@ export default function PricingPage() {
         const ВХОД_ПО_УМОЛЧАНИЮ = "multichat";
         const модульВхода = heroModule || ВХОД_ПО_УМОЛЧАНИЮ;
         const m = data.modules.find((x) => x.id === модульВхода);
-        const app = standaloneApp(модульВхода);
-        const имя = app?.name ?? m?.name;
+        // 🔴 19.10.2026, кадр прода 390×844 после выкатки e7956a30f: холодный вход
+        // рисовал «Мультичат — $40/мес · Купить Multichat» — цену и кнопку товара,
+        // снятого с отдельной продажи (касса на него отвечает 400). Разметка этого
+        // не показала: ?app= идёт через vybratVhod с проверкой predlagaemOtdelno,
+        // а вход ПО УМОЛЧАНИЮ шёл мимо неё. Снятое — в ветку «входит в план».
+        const найденное = standaloneApp(модульВхода);
+        const app = найденное && predlagaemOtdelno(найденное.slug) ? найденное : null;
+        const имя = найденное?.name ?? m?.name;
         if (!имя) return null;
         const рамка: React.CSSProperties = {
           margin: "24px auto 0",

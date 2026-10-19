@@ -180,9 +180,10 @@ export const LANG_KEY_COUNT: Record<Lang, number> = {
   // из падения самого сторожа, а не посчитано на глаз.
   // 19.10: +5 в ru/en/kk — pricing.home.apps.perYear/subtitleYearOnly/priceMayRise, faq.*.aOnePlan (один план, шахматы $50/год)
   // 19.10 (цены помесячно): +4 в каждом словаре — tier.monthlyBilling, tier.prepay, tier.prepayCta, calc.payMonthly.
-  ru: 7428,
-  en: 7428,
-  kk: 7428,
+  // 19.10 (форма бюро): +1 — pricing.contact.industry.patentBureaus.
+  ru: 7429,
+  en: 7429,
+  kk: 7429,
   de: 134,
   fr: 134,
   es: 134,

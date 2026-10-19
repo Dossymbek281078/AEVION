@@ -455,6 +455,7 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         // Деньги дошли и купленное выдано — только ТЕПЕРЬ это «оплатили» в
         // воронке. Почту не пишем: в хранилище воронки личных данных нет.
         записатьПодтверждённуюОплату({
+          testMode: payload.meta?.test_mode === true,
           source: "lemonsqueezy",
           tier: appSlug,
           app: appSlug,
@@ -549,6 +550,7 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         if (String(customModule) === "devhub") await upgradeDevHubByEmail(email, "pro");
         console.log(`[ls/webhook] ${event} → один модуль: ${String(customModule)} for ${email}`);
         записатьПодтверждённуюОплату({
+          testMode: payload.meta?.test_mode === true,
           source: "lemonsqueezy",
           tier: String(customModule),
           app: String(customModule),
@@ -627,6 +629,7 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
       // То же, что у ветки приложений: ступень «оплатили» двигает подтверждение
       // кассы, а не загрузка страницы «спасибо».
       записатьПодтверждённуюОплату({
+          testMode: payload.meta?.test_mode === true,
           source: "lemonsqueezy",
           tier: tierId,
           reference: ref ?? null,

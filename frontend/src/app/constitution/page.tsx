@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n";
+import { getAuthHeaders } from "@/lib/auth";
 import { ConstitutionEmbed } from "@/components/ConstitutionEmbed";
 import { countryByCode } from "@/lib/constitution";
 import { useFunnel } from "@/lib/useFunnel";
@@ -372,7 +373,9 @@ export default function ConstitutionPage() {
   useEffect(() => {
     void (async () => {
       try {
-        const r = await fetch("/api-backend/api/constitution/me/plan");
+        // 🔴 19.10.2026 (railway run constitution-e2e): ручка с Bearer отвечала pro после покупки плана,
+        // а страница звала её без входа — подписчик в браузере выглядел free (тот же класс, что DevHub).
+        const r = await fetch("/api-backend/api/constitution/me/plan", { headers: getAuthHeaders() });
         if (!r.ok) return;
         const j = (await r.json()) as {
           plan: "free" | "pro";
@@ -691,7 +694,7 @@ export default function ConstitutionPage() {
       const cleanTitle = title.trim() || "untitled-constitution";
       const r = await fetch("/api-backend/api/constitution/pdf", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({
           title: cleanTitle,
           sliders,
@@ -2017,7 +2020,7 @@ function AiAdvisorModal({
     try {
       const r = await fetch("/api-backend/api/constitution/ai-suggest-stream", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({ description: description.trim() }),
       });
       if (!r.ok) {

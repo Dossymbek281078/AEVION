@@ -7,7 +7,7 @@ const часАлматы = (d: Date): string =>
 import { denPoMestnomu, vcheraPoMestnomu } from "../lib/denPoMestnomu";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { queryNumber } from "../lib/queryNumber";
-import { existsSync, mkdirSync, appendFileSync, readFileSync } from "fs";
+import { existsSync, mkdirSync, appendFileSync, readFileSync, writeFileSync, renameSync } from "fs";
 import { join, dirname } from "path";
 import { clientIp } from "../lib/rateLimit";
 import { queryDate } from "../lib/queryDate";
@@ -4991,4 +4991,89 @@ eventsRouter.get("/by-variant", (req, res) => {
   }
 
   res.json({ keys, windowHours: sinceHours, variants: result });
+});
+
+/**
+ * ПОМЕТКА ПРОВЕРОЧНЫХ ОПЛАТ КАК НАШИХ (слово оркестратора 19.10.2026).
+ *
+ * Зачем. 19.10.2026 воронка за день показала «оплаты: всего 7, наши 0, живые 7»,
+ * и все семь были моими тестовыми вебхуками кассы (адреса @example.test,
+ * 16:29–17:16Z): признак «свой» вычислялся только из домена aevion.app, а
+ * тестовый режим кассы (meta.test_mode) в признак не попадал. Семь «живых
+ * оплат» в отчёте дня — ложь, по которой основатель судит о продажах.
+ *
+ * Почему пометка, а не удаление: запись проверочных оплат остаётся для аудита,
+ * ошибку пометки можно откатить тем же путём, ошибку удаления — нет.
+ *
+ * Тело: { type, from, to, dryRun, reason }. Затрагиваются ТОЛЬКО события
+ * указанного типа в окне [from, to] по ts, у которых ещё нет свой:true.
+ * dryRun (по умолчанию true) печатает, что было бы помечено, и ничего не пишет.
+ * Файл переписывается целиком через временный файл и rename — чтобы обрыв
+ * посреди записи не оставил половину журнала.
+ */
+eventsRouter.post("/mark-ours", (req, res) => {
+  const required = process.env.ADMIN_TOKEN?.trim();
+  if (required) {
+    const got = (req.headers["x-admin-token"] as string | undefined)?.trim();
+    if (got !== required) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+  }
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const type = typeof body.type === "string" ? body.type.trim() : "";
+  const from = typeof body.from === "string" ? Date.parse(body.from) : NaN;
+  const to = typeof body.to === "string" ? Date.parse(body.to) : NaN;
+  const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 200) : "";
+  const dryRun = body.dryRun !== false;
+  if (!type || !Number.isFinite(from) || !Number.isFinite(to) || from > to) {
+    return res.status(400).json({ error: "bad_request", need: "type, from<=to (ISO), reason; dryRun=false чтобы записать" });
+  }
+  if (!dryRun && !reason) {
+    return res.status(400).json({ error: "bad_request", need: "reason обязателен при записи" });
+  }
+  if (!existsSync(EVENTS_FILE)) {
+    return res.json({ dryRun, type, from: new Date(from).toISOString(), to: new Date(to).toISOString(), affected: [], count: 0, total: 0 });
+  }
+  let content = "";
+  try {
+    content = readFileSync(EVENTS_FILE, "utf8");
+  } catch (e) {
+    console.error("[events/mark-ours] read failed", e);
+    captureEventsError(e, { route: "events/POST/mark-ours" });
+    return res.status(500).json({ error: "read_error" });
+  }
+  const lines = content.split("\n");
+  const affected: Array<{ ts: string; type: string; source?: string; tier?: string; reference?: unknown }> = [];
+  let total = 0;
+  const out = lines.map((line) => {
+    if (!line.trim()) return line;
+    let ev: AnalyticsEvent;
+    try {
+      ev = JSON.parse(line) as AnalyticsEvent;
+    } catch {
+      return line;
+    }
+    total += 1;
+    if (ev.type !== type) return line;
+    const t = Date.parse(ev.ts);
+    if (!Number.isFinite(t) || t < from || t > to) return line;
+    if (ev.meta?.свой === true) return line;
+    affected.push({ ts: ev.ts, type: ev.type, source: ev.source, tier: ev.tier, reference: ev.meta?.reference ?? null });
+    if (dryRun) return line;
+    return JSON.stringify({ ...ev, meta: { ...(ev.meta ?? {}), свой: true, свойПричина: reason, свойПомечено: new Date().toISOString() } });
+  });
+  if (!dryRun && affected.length > 0) {
+    try {
+      ensureDir();
+      const tmp = EVENTS_FILE + ".mark-ours.tmp";
+      writeFileSync(tmp, out.join("\n"), "utf8");
+      renameSync(tmp, EVENTS_FILE);
+    } catch (e) {
+      console.error("[events/mark-ours] write failed", e);
+      captureEventsError(e, { route: "events/POST/mark-ours" });
+      return res.status(500).json({ error: "write_error" });
+    }
+    console.warn(`[events/mark-ours] помечено свой:true: ${affected.length} × ${type} в окне ${new Date(from).toISOString()}–${new Date(to).toISOString()} (${reason})`);
+  }
+  res.json({ dryRun, type, from: new Date(from).toISOString(), to: new Date(to).toISOString(), reason: reason || null, count: affected.length, total, affected });
 });

@@ -45,6 +45,8 @@ type VerifyData = {
     verifiedName?: string | null;
     verifiedAt?: string | null;
     verifiedBy?: string | null;
+    /** Бюро-партнёр, через которое сделана запись (справочное поле вне подписи). */
+    partner?: string | null;
   };
   integrity: {
     contentHashValid: boolean;
@@ -387,6 +389,14 @@ export default function VerifyPage() {
                   AEVION Digital IP Bureau — Protection Certificate
                 </div>
                 <div style={{ fontSize: 22, fontWeight: 900 }}>{cert.title}</div>
+                {/* 19.10.2026, обещано бюро письмами: запись через партнёра — его имя на странице
+                    проверки. Строка только при заполненном поле; без партнёра страница как прежде. */}
+                {cert.partner ? (
+                  <div data-testid="cert-partner" style={{ marginTop: 8, fontSize: 13, fontWeight: 700, color: "#99f6e4", lineHeight: 1.5 }}>
+                    Запись сделана через {cert.partner} · проверку обеспечивает AEVION
+                    <span style={{ display: "block", fontWeight: 500, color: "#94a3b8", fontSize: 12 }}>Record made via {cert.partner} · verification by AEVION</span>
+                  </div>
+                ) : null}
               </div>
               <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "flex-end", gap: 4 }}>
                 <div style={{

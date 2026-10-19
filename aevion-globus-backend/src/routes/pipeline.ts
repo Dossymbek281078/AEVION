@@ -241,6 +241,12 @@ async function ensureTables(): Promise<void> {
   // Pending immediately after /protect; upgraded to bitcoin-confirmed via
   // POST /pipeline/ots/:certId/upgrade once the OT calendar network has
   // folded the hash into a Bitcoin block (typically 1-6h).
+  // 19.10.2026, заявка Продаж «бренд бюро на /verify»: справочное имя партнёра (бюро),
+  // через которого сделана запись. НЕ входит в contentHash и подписи — правка имени
+  // не ломает проверку (урок 19.10 про поля QRight в contentHash).
+  await pool.query(
+    `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "partnerName" TEXT;`,
+  );
   await pool.query(
     `ALTER TABLE "IPCertificate" ADD COLUMN IF NOT EXISTS "otsProof" BYTEA;`,
   );
@@ -536,7 +542,14 @@ async function protectOne(input: ProtectInput, user: ResolvedUser) {
     authorPublicKey,
     authorSignature,
     fileHash,
+    partnerName,
   } = input;
+  // Имя партнёра (бюро): строка ≤ 80 знаков, иначе отказ; пусто → null.
+  if (partnerName !== undefined && partnerName !== null && typeof partnerName !== "string") {
+    throw new ProtectInputError("partnerName must be a string");
+  }
+  const safePartnerName: string | null =
+    typeof partnerName === "string" && partnerName.trim() ? partnerName.trim().slice(0, 80) : null;
 
   if (!title || !description) {
     throw new ProtectInputError("title and description are required");
@@ -740,8 +753,8 @@ async function protectOne(input: ProtectInput, user: ResolvedUser) {
     );
 
     await client.query(
-      `INSERT INTO "IPCertificate" ("id","objectId","shieldId","title","kind","description","authorName","authorEmail","country","city","contentHash","fileHash","signatureHmac","signatureEd25519","publicKeyEd25519","shardCount","shardThreshold","algorithm","legalBasis","status","protectedAt","signedAt","qsignKeyVersion","authorPublicKey","authorSignature","authorKeyAlgo","platformAttestationKid","platformAttestationSig")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,'active',$20,$21,$22,$23,$24,$25,$26,$27)`,
+      `INSERT INTO "IPCertificate" ("id","objectId","shieldId","title","kind","description","authorName","authorEmail","country","city","contentHash","fileHash","signatureHmac","signatureEd25519","publicKeyEd25519","shardCount","shardThreshold","algorithm","legalBasis","status","protectedAt","signedAt","qsignKeyVersion","authorPublicKey","authorSignature","authorKeyAlgo","platformAttestationKid","platformAttestationSig","partnerName")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,'active',$20,$21,$22,$23,$24,$25,$26,$27,$28)`,
       [
         certId,
         objectId,
@@ -772,6 +785,7 @@ async function protectOne(input: ProtectInput, user: ResolvedUser) {
         // недоступен, и выпуск сертификата от этого не останавливается.
         platformAttestation?.kid ?? null,
         platformAttestation?.signature ?? null,
+        safePartnerName,
       ],
     );
 
@@ -1648,6 +1662,8 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
         verifiedName: cert.authorVerifiedName || null,
         verifiedAt: cert.authorVerifiedAt || null,
         verifiedBy: cert.authorVerificationProvider || null,
+        // Бюро-партнёр, через которое сделана запись (справочное поле вне подписи).
+        partner: typeof cert.partnerName === "string" && cert.partnerName.trim() ? cert.partnerName : null,
       },
       integrity: {
         contentHashValid: hashValid,

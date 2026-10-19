@@ -6,6 +6,7 @@ import { учестьДействие, отказПоНорме } from "../lib/f
 import { verifyBearerOptional, type JwtPayload } from "../lib/authJwt";
 import { resolveApiKey } from "../lib/apiKeyAuth";
 import { ensureQSignV2Tables } from "../lib/qsignV2/ensureTables";
+import { ПРОБЫ_ПОДПИСЕЙ_SQL, этоПробаПодписи } from "../lib/qsignV2/probes";
 import { canonicalJson, sha256Hex, CANONICALIZATION_SPEC } from "../lib/qsignV2/canonicalize";
 import { resolveGeo, extractClientIp as _extractClientIpImpl } from "../lib/qsignV2/geo";
 import {
@@ -644,19 +645,22 @@ qsignV2Router.get("/stats", async (req, res) => {
          SUM(CASE WHEN "revokedAt" IS NOT NULL THEN 1 ELSE 0 END)::int AS revoked,
          COUNT(DISTINCT "issuerUserId")::int AS unique_issuers,
          COUNT(DISTINCT "geoCountry") FILTER (WHERE "geoCountry" IS NOT NULL)::int AS unique_countries
-       FROM "QSignSignature"`,
+       FROM "QSignSignature"
+       WHERE NOT ${ПРОБЫ_ПОДПИСЕЙ_SQL}`,
     )) as any;
 
     const last24Q = (await pool.query(
       `SELECT COUNT(*)::int AS n
        FROM "QSignSignature"
-       WHERE "createdAt" >= NOW() - INTERVAL '24 hours'`,
+       WHERE "createdAt" >= NOW() - INTERVAL '24 hours'
+         AND NOT ${ПРОБЫ_ПОДПИСЕЙ_SQL}`,
     )) as any;
 
     const countriesQ = (await pool.query(
       `SELECT "geoCountry" AS country, COUNT(*)::int AS n
        FROM "QSignSignature"
        WHERE "geoCountry" IS NOT NULL
+         AND NOT ${ПРОБЫ_ПОДПИСЕЙ_SQL}
        GROUP BY "geoCountry"
        ORDER BY n DESC
        LIMIT 10`,
@@ -751,14 +755,23 @@ qsignV2Router.get("/recent", async (req, res) => {
          "ed25519Kid",
          "createdAt",
          "revokedAt",
-         "geoCountry"
+         "geoCountry",
+         "issuerEmail",
+         "payloadCanonical"
        FROM "QSignSignature"
+       WHERE NOT ${ПРОБЫ_ПОДПИСЕЙ_SQL}
        ORDER BY "createdAt" DESC
        LIMIT $1`,
       [limit],
     )) as any;
 
-    const items = (r.rows || []).map((row: any) => ({
+    // Вторая линия того же правила (19.10): если строка-проба всё же пришла,
+    // наружу она не уходит; сколько скрыто — в ответе, чтобы ноль был виден.
+    const всеСтроки: any[] = r.rows || [];
+    const безПроб = всеСтроки.filter((row) => !этоПробаПодписи(row));
+    const probesHidden = всеСтроки.length - безПроб.length;
+    // issuerEmail и payloadCanonical нужны только фильтру — наружу их нет (ниже перечислены поля явно).
+    const items = безПроб.map((row: any) => ({
       id: row.id,
       algoVersion: row.algoVersion,
       hmacKid: row.hmacKid,
@@ -777,6 +790,7 @@ qsignV2Router.get("/recent", async (req, res) => {
       limitRequested: запрошен ? Math.floor(rawLimit) : null,
       limitApplied: limit,
       limitMax: МАКСИМУМ,
+      probesHidden,
     });
   } catch (e: any) {
     errResp(req, res, 500, { error: "recent_failed" }, e);

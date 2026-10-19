@@ -30,6 +30,17 @@ function mintAevQSign(action: "qsign_sign" | "qsign_verify"): number {
 }
 
 const TOKEN_KEY = "aevion_auth_token_v1";
+/*
+ * 🔴 19.10.2026: витрина «Проверить реальную подпись» ведёт на ЗАКРЕПЛЁННУЮ
+ * демо-подпись AEVION, а не на recent.items[0]. Замер на проде 19.10: первая
+ * запись ленты была ОТОЗВАННОЙ пробой, а после одного прогона пути гостя — моей
+ * пробой с payload {"probe":…}; каждый прогон менял то, что видит гость.
+ * Демо подписана учёткой demo-qsign@aevion.app (payload — настоящий текст о
+ * назначении подписи, без слов probe/test), не отозвана; из ленты и счётчиков
+ * она исключена правилом бэка (lib/qsignV2/probes), прямая ссылка живая.
+ * Пустая константа = витрины нет: обещать пробу и привести в 404 хуже.
+ */
+const QSIGN_DEMO_SIGNATURE_ID = "8c8cbfc9-59d1-4998-be25-863776ac1558";
 
 /* ───────── RFC 8785-compatible canonicalization (mirrors backend lib/qsignV2/canonicalize.ts) ─────────
  * Same algorithm the server uses: keys sorted lex, no whitespace, undefined rejected.
@@ -763,7 +774,7 @@ export default function QSignPage() {
          * запроса не делает) и даёт одну кнопку. Ничего не обещаем сверх того,
          * что человек увидит: подпись чужая и настоящая, проверка публичная.
          */}
-        {recent && recent.items.length > 0 ? (
+        {QSIGN_DEMO_SIGNATURE_ID ? (
           <div
             style={{
               border: "1px solid #bbf7d0",
@@ -783,12 +794,12 @@ export default function QSignPage() {
                 Try it now — no account needed
               </div>
               <div style={{ fontSize: 13, color: "#047857", lineHeight: 1.5 }}>
-                Open a real signature from the feed below and check it yourself. Verification is
+                Open AEVION's demo signature and check it yourself. Verification is
                 public and stateless: change one character of the payload and it turns INVALID.
               </div>
             </div>
             <a
-              href={`/qsign/verify/${recent.items[0].id}`}
+              href={`/qsign/verify/${QSIGN_DEMO_SIGNATURE_ID}`}
               style={{
                 padding: "10px 18px",
                 background: "#059669",

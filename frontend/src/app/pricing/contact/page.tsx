@@ -62,8 +62,17 @@ const INITIAL: LeadForm = {
   message: "",
 };
 
-const INDUSTRIES = ["Банки и финтех", "Стартапы", "Госсектор", "Создатели контента", "Юр. фирмы", "Другое"];
-const INDUSTRY_KEYS = ["banks", "startups", "government", "creators", "lawFirms", "other"];
+/*
+ * 19.10.2026 (замер Продаж 23:25, прод 38cdc1a28988): переход с /verify нёс
+ * topic=bureau, а форма его не читала — текст и отрасль были те же, что без
+ * параметра. Отрасли «патентные бюро» в списке не было вовсе, хотя это
+ * единственный путь «увидел доказательство → написал нам» у первой продажи.
+ */
+const ОТРАСЛЬ_БЮРО = "Патентные бюро и поверенные";
+const INDUSTRIES = ["Банки и финтех", "Стартапы", "Госсектор", "Создатели контента", "Юр. фирмы", ОТРАСЛЬ_БЮРО, "Другое"];
+const INDUSTRY_KEYS = ["banks", "startups", "government", "creators", "lawFirms", "patentBureaus", "other"];
+/** Тема обращения, у которой свой заголовок, подсказка и отрасль. */
+const ТЕМА_БЮРО = "bureau";
 
 function ContactInner() {
   const tp = usePricingT();
@@ -96,9 +105,10 @@ function ContactInner() {
     setForm((f) => ({
       ...f,
       tier: tier && ТАРИФ_ИЗ_ССЫЛКИ.includes(tier) ? tier : f.tier,
-      industry: industry ?? f.industry,
+      // Тема «бюро» предвыбирает отрасль; явный ?industry= сильнее темы.
+      industry: industry ?? (темаИзАдреса === ТЕМА_БЮРО ? ОТРАСЛЬ_БЮРО : f.industry),
     }));
-  }, [sp]);
+  }, [sp, темаИзАдреса]);
 
   function update<K extends keyof LeadForm>(key: K, value: LeadForm[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -238,7 +248,7 @@ function ContactInner() {
             marginBottom: 16,
           }}
         >
-          {tp("contact.badge")}
+          {tp(темаИзАдреса === ТЕМА_БЮРО ? "contact.bureau.badge" : "contact.badge")}
         </div>
         <h1
           style={{
@@ -250,10 +260,10 @@ function ContactInner() {
             color: "#0f172a",
           }}
         >
-          {tp("contact.title")}
+          {tp(темаИзАдреса === ТЕМА_БЮРО ? "contact.bureau.title" : "contact.title")}
         </h1>
         <p style={{ fontSize: 14, color: "#475569", maxWidth: 520, margin: "0 auto" }}>
-          {tp("contact.subtitle")}
+          {tp(темаИзАдреса === ТЕМА_БЮРО ? "contact.bureau.subtitle" : "contact.subtitle")}
         </p>
       </section>
 
@@ -349,7 +359,7 @@ function ContactInner() {
           <textarea
             value={form.message}
             onChange={(e) => update("message", e.target.value)}
-            placeholder={tp("contact.placeholder.message")}
+            placeholder={tp(темаИзАдреса === ТЕМА_БЮРО ? "contact.bureau.placeholder.message" : "contact.placeholder.message")}
             rows={5}
             style={{
               ...inputStyle,

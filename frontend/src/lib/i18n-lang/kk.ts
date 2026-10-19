@@ -4906,6 +4906,7 @@ const kk: Record<string, string> = {
   "pricing.contact.industry.creators": "Контент жасаушылар",
   "pricing.contact.industry.government": "Мемлекеттік сектор",
   "pricing.contact.industry.lawFirms": "Заң фирмалары",
+  "pricing.contact.industry.patentBureaus": "Патенттік бюролар мен сенім білдірілген өкілдер",
   "pricing.contact.industry.other": "Басқа",
   "pricing.contact.industry.startups": "Стартаптар",
   "pricing.forIndustry.backToPricing": "← Барлық тарифтер",

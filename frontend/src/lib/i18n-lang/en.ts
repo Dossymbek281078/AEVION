@@ -4906,6 +4906,7 @@ const en: Record<string, string> = {
   "pricing.contact.industry.creators": "Content creators",
   "pricing.contact.industry.government": "Government",
   "pricing.contact.industry.lawFirms": "Law firms",
+  "pricing.contact.industry.patentBureaus": "Patent bureaus & attorneys",
   "pricing.contact.industry.other": "Other",
   "pricing.contact.industry.startups": "Startups",
   "pricing.forIndustry.backToPricing": "← All plans",

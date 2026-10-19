@@ -4906,6 +4906,7 @@ const ru: Record<string, string> = {
   "pricing.contact.industry.creators": "Создатели контента",
   "pricing.contact.industry.government": "Госсектор",
   "pricing.contact.industry.lawFirms": "Юр. фирмы",
+  "pricing.contact.industry.patentBureaus": "Патентные бюро и поверенные",
   "pricing.contact.industry.other": "Другое",
   "pricing.contact.industry.startups": "Стартапы",
   "pricing.forIndustry.backToPricing": "← Все тарифы",

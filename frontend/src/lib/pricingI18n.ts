@@ -494,6 +494,10 @@ const baseDict: Record<Lang, Record<string, string>> = {
 
     /* Contact form */
     "contact.badge": "ENTERPRISE / SALES",
+    "contact.bureau.badge": "ДЛЯ ПАТЕНТНЫХ БЮРО",
+    "contact.bureau.title": "Бюро авторства для патентных бюро и поверенных",
+    "contact.bureau.subtitle": "Расскажите о бюро — ответим в течение 24 часов. Пилотная норма 50 записей в месяц, реестр с меткой времени и сертификатом, вход с рабочего адреса бюро.",
+    "contact.bureau.placeholder.message": "Например: 20 заявок в месяц, нужны сертификаты с QR для клиентов и выгрузка реестра",
     "contact.title": "Связаться с продажами",
     "contact.subtitle": "Расскажите о задаче — Customer Success свяжется в течение 24 часов с предложением, demo и customer-stories под вашу индустрию.",
     "contact.field.name": "Ваше имя *",
@@ -956,6 +960,10 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "error.whatNow": "We are on it. Refresh in a minute — or contact us if it is urgent.",
 
     "contact.badge": "ENTERPRISE / SALES",
+    "contact.bureau.badge": "FOR PATENT BUREAUS",
+    "contact.bureau.title": "Authorship bureau for patent attorneys and IP firms",
+    "contact.bureau.subtitle": "Tell us about your firm — we reply within 24 hours. A pilot quota of 50 records a month, a timestamped registry with certificates, sign-in with your firm's work address.",
+    "contact.bureau.placeholder.message": "E.g.: 20 filings a month, QR certificates for clients, registry export",
     "contact.title": "Contact sales",
     "contact.subtitle": "Tell us about your task — Customer Success will reach out within 24 hours with a proposal, demo and customer stories for your vertical.",
     "contact.field.name": "Your name *",

@@ -6535,7 +6535,7 @@ export default function CyberChessPage(){
     // Roll initial die for diceblade
     if(V==="diceblade"){const d=rollDice();sDiceFace(d.face);sDicePieceType(d.pieceType);sDiceLabel(d.label)}
     const variantLabel=V==="standard"?"":` · ${VARIANTS.find(v=>v.id===V)?.name||""}`;
-    showToast(`Игра за ${cl==="w"?"белых":"чёрных"}${variantLabel}`,"info");
+    showToast(`${cc.t(cl==="w"?"game.playingWhite":"game.playingBlack")}${variantLabel}`,"info");
     // Tutorial overlay for non-standard variants — once per variant. After dismissed, the
     // smaller toast tip kicks in for the next 3 plays as a refresher.
     if(V!=="standard"&&!seenVariantTutorials.has(V)){
@@ -10373,7 +10373,11 @@ export default function CyberChessPage(){
              */
             ...(vwPx<769?{position:"fixed" as const,left:8,right:8,
               bottom:`calc(env(safe-area-inset-bottom) + ${ВЫСОТА_НИЖНЕЙ_ПАНЕЛИ+ЗАЗОР_ПРИЛИПШИХ}px)`,
-              zIndex:100,background:CC.bg,paddingTop:4,paddingBottom:4,
+              /* z выше плашки почты (101) и нижней панели: кнопки партии —
+                 главный элемент, их нельзя перекрывать. 19.10: на EN/узких окнах
+                 плашка и панель забирали клики «Сдаться/Ничья/Подсказка»
+                 (elementFromPoint отдавал SPAN плашки / cc-bottom-nav). */
+              zIndex:102,background:CC.bg,paddingTop:4,paddingBottom:4,
               boxShadow:"0 -4px 14px rgba(0,0,0,0.18)"}:{}),
             ...podDoskoyRow}}>
             <Btn size="md" variant="danger" className="cc-game-btn" onClick={()=>{if(armed!=="resign"){sArmed("resign");return;}sArmed(null);if(p2pMode&&p2p.status==="connected"){p2p.send({t:"resign"})}else{const nr=новыйРейтинг(rat,lv.elo,false);sRat(nr);svR(nr);const ns={...sts,l:sts.l+1};sSts(ns);svS(ns);}sPms([]);sOn(false);sOver("You resigned");snd("x")}}>{armed==="resign"?cc.t("btn.resignConfirm"):cc.t("btn.resign")}</Btn>

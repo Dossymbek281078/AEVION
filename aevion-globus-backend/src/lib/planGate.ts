@@ -82,6 +82,14 @@ const ALLOWLIST = (process.env.PAYWALL_ALLOWLIST || "")
 
 /** Наши собственные домены: покупка с такого адреса — внутренняя по определению. */
 const НАШИ_ДОМЕНЫ = ["aevion.app", "aevion.dev"];
+/**
+ * 🔴 19.10.2026: семь тестовых вебхуков с адресами @example.test легли в воронку
+ * «живыми оплатами» (всего 7, наши 0). Зарезервированные домены примеров
+ * (RFC 2606/6761) и наши пробные префиксы — покупки проверочные по определению:
+ * ни один человек не платит с такого адреса.
+ */
+const ДОМЕНЫ_ПРИМЕРОВ = ["example.test", "example.com", "example.org", "example.net", "test", "invalid", "localhost"];
+const ПРОБНЫЕ_ПРЕФИКСЫ = ["smoke-", "probe-", "qa-"];
 
 /**
  * Наш ли это адрес — то есть покупка внутренняя, а не продажа человеку.
@@ -106,7 +114,9 @@ export function нашВнутреннийАдрес(email: string | null | unde
   const e = String(email ?? "").trim().toLowerCase();
   if (!e) return false;
   if (ALLOWLIST.includes(e)) return true;
-  return НАШИ_ДОМЕНЫ.some((d) => e.endsWith(`@${d}`));
+  if (НАШИ_ДОМЕНЫ.some((d) => e.endsWith(`@${d}`))) return true;
+  if (ДОМЕНЫ_ПРИМЕРОВ.some((d) => e.endsWith(`@${d}`) || e.endsWith(`.${d}`))) return true;
+  return ПРОБНЫЕ_ПРЕФИКСЫ.some((p) => e.startsWith(p));
 }
 
 /* ───── Tier model ──────────────────────────────────────────────── */

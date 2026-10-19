@@ -55,11 +55,15 @@ describe("правило «наша проба» для подписей", () =>
       { issuerEmail: "x@y.z", payloadCanonical: '{"idem":"test"}' },
       { issuerEmail: "x@y.z", payloadCanonical: '{"probe":1}' },
       { issuerEmail: "smoke-1784775240406@aevion.app", payloadCanonical: "{}" },
+      // прод-база 19.10: 22 записи домена .test с payload {"hello":"AEVION"} — слова-признаки их не ловили
+      { issuerEmail: "qsign-ci@aevion.test", payloadCanonical: '{"alpha":2,"hello":"AEVION","ts":1785133288,"zeta":1}' },
     ];
     const живые = [
       { issuerEmail: "ivan@example.com", payloadCanonical: '{"contract":"Договор №12"}' },
       { issuerEmail: "anna@example.com", payloadCanonical: '{"latest":"contest results","protest":"no"}' },
       { issuerEmail: "demo@example.com", payloadCanonical: '{"a":1}' },
+      { issuerEmail: "ivan@testing-lab.com", payloadCanonical: '{"a":1}' }, // .com, не .test
+      { issuerEmail: "ivan@contest.kz", payloadCanonical: '{"a":1}' },
     ];
     expect(пробы.filter((р) => !этоПробаПодписи(р)), "пропущенные пробы").toEqual([]);
     expect(живые.filter((р) => этоПробаПодписи(р)), "живые, сочтённые пробами").toEqual([]);
@@ -67,6 +71,7 @@ describe("правило «наша проба» для подписей", () =>
   it("SQL-правило и JS-правило говорят об одних и тех же словах", () => {
     expect(ПРОБЫ_ПОДПИСЕЙ_SQL).toContain("(probe|smoke|demo)[-+._]");
     expect(ПРОБЫ_ПОДПИСЕЙ_SQL).toContain("(probe|smoke|test|idem)");
+    expect(ПРОБЫ_ПОДПИСЕЙ_SQL).toContain(String.raw`@[^@]*.test$`);
   });
 });
 

@@ -62,7 +62,7 @@ describe("список щитов прячет служебные записи",
 
 // 19.10.2026: витрина /quantum-shield показывала ДЕМО с именем лида и три пробы с русскими
 // названиями (замер Продаж 18:4x) — префиксный фильтр их не ловит. Скрытие по id, в БД не правим.
-import { СКРЫТЫ_ИЗ_СПИСКОВ, скрытоИзСписков, скрытыеИдентификаторы } from "../src/lib/publicRegistryProbes";
+import { СКРЫТЫ_ИЗ_СПИСКОВ, скрытоИзСписков, скрытыеИдентификаторы, скрытоИПоПрямойСсылке } from "../src/lib/publicRegistryProbes";
 
 describe("витрина щитов прячет записи по id (19.10.2026)", () => {
   const ОЖИДАЕМЫЕ = ["qs-1eb0e72e92724c88", "qs-6e9b0097991fd1d3", "qs-4352e7533b02bd55", "qs-84ea9703c933ae6f"];
@@ -75,9 +75,14 @@ describe("витрина щитов прячет записи по id (19.10.202
     expect(SRC).toContain("params.push(скрытыеИдентификаторы());");
     expect(SRC).toContain("mineOnly && auth?.sub ? [auth.sub] : [скрытыеИдентификаторы()]");
   });
-  it("прямой адрес /:id скрытой записи — 404", () => {
+  it("прямой /:id: три пробы — 404, демо для лида (qs-1eb0e72e92724c88) — живая (на неё ведёт письмо)", () => {
+    for (const id of ["qs-6e9b0097991fd1d3", "qs-4352e7533b02bd55", "qs-84ea9703c933ae6f"]) expect(скрытоИПоПрямойСсылке(id), id).toBe(true);
+    expect(скрытоИПоПрямойСсылке("qs-1eb0e72e92724c88"), "демо из письма Восток-Патенту закрыта по прямой ссылке — View Shield в письме умрёт").toBe(false);
+    expect(скрытоИзСписков("qs-1eb0e72e92724c88"), "а из списков демо обязана быть скрыта").toBe(true);
+    expect(скрытоИПоПрямойСсылке("qs-88eb73dbfaafd980")).toBe(false);
     const i = SRC.indexOf("quantumShieldRouter.get(\"/:id\"");
     expect(i).toBeGreaterThan(0);
-    expect(SRC.slice(i, i + 700)).toContain("if (скрытоИзСписков(req.params.id))");
+    expect(SRC.slice(i, i + 900)).toContain("if (скрытоИПоПрямойСсылке(req.params.id))");
+    expect(SRC.slice(i, i + 900), "прямой адрес снова закрыт списочным правилом").not.toContain("if (скрытоИзСписков(req.params.id))");
   });
 });

@@ -88,6 +88,20 @@ export const СКРЫТЫ_ИЗ_СПИСКОВ = new Set<string>([
 export function скрытыеИдентификаторы(): string[] {
   return [...СКРЫТЫ_ИЗ_СПИСКОВ];
 }
+/**
+ * 19.10.2026 (Продажи 19:4x): пробы Продаж — 404 и по ПРЯМОЙ ссылке; демо qs-1eb0e72e92724c88
+ * сюда НЕ входит: на неё ссылается /api/pipeline/verify/cert-503ab5d6bfc504a7 (письмо лиду,
+ * блок «View Shield») — прямой /:id остаётся живым, прячем только из списков (правило 157).
+ */
+export const СКРЫТЫ_И_ПО_ПРЯМОЙ_ССЫЛКЕ = new Set<string>([
+  "qs-6e9b0097991fd1d3",
+  "qs-4352e7533b02bd55",
+  "qs-84ea9703c933ae6f",
+]);
+export function скрытоИПоПрямойСсылке(id: unknown): boolean {
+  return СКРЫТЫ_И_ПО_ПРЯМОЙ_ССЫЛКЕ.has(String(id ?? ""));
+}
+
 export function скрытоИзСписков(id: unknown): boolean {
   return СКРЫТЫ_ИЗ_СПИСКОВ.has(String(id ?? ""));
 }

@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from "express";
-import { скрытоИзСписков, скрытыеИдентификаторы } from "../lib/publicRegistryProbes";
+import { скрытоИПоПрямойСсылке, скрытыеИдентификаторы } from "../lib/publicRegistryProbes";
 import { denPoMestnomu } from "../lib/denPoMestnomu";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
@@ -1264,8 +1264,9 @@ quantumShieldRouter.get("/:id", async (req, res) => {
   if (RESERVED_IDS.has(req.params.id)) {
     return res.status(404).json({ error: "Not found" });
   }
-  // 19.10.2026: скрытая по id запись (демо с именем лида, пробы) — 404 и по прямому адресу.
-  if (скрытоИзСписков(req.params.id)) {
+  // 19.10.2026: пробы Продаж — 404 и по прямому адресу; демо qs-1eb0e72e92724c88 прячется ТОЛЬКО из
+  // списков: на неё ссылается сертификат из письма лиду (/verify/cert-503ab5d6bfc504a7 → View Shield).
+  if (скрытоИПоПрямойСсылке(req.params.id)) {
     return res.status(404).json({ error: "Shield record not found", hidden: true });
   }
   try {

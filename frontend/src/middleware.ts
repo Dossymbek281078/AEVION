@@ -95,6 +95,33 @@ export function английскийРедирект(pathname: string | null | u
   return "/" + части.slice(1).join("/");
 }
 
+/**
+ * /ru/<приложение> и /kk/<приложение> без своей страницы.
+ *
+ * ЗАМЕР 19.10.2026 22:46 (оркестратор, curl по проду 38cdc1a28): /ru/qsign и
+ * /kk/qsign отвечали 404, /en/qsign — 308. Своих страниц под /ru и /kk всего две
+ * (ru/verify/[id], kk/cyberchess), так что 404 стоял на /ru|/kk для всех
+ * приложений разом. Лечение то же, что у английского: адрес без префикса и
+ * кука языка — страница одна, отличается словарь.
+ */
+const СВОИ_СТРАНИЦЫ_ЯЗЫКА: Record<string, (путь: string) => boolean> = {
+  ru: (п) => п.startsWith("/ru/verify/"),
+  kk: (п) => п === "/kk/cyberchess" || п.startsWith("/kk/cyberchess/"),
+};
+
+export function языковойРедирект(
+  pathname: string | null | undefined,
+): { цель: string; язык: "ru" | "kk" } | null {
+  const части = String(pathname ?? "").split("/").filter(Boolean);
+  if (части.length === 0) return null;
+  const язык = части[0].toLowerCase();
+  if (язык !== "ru" && язык !== "kk") return null;
+  const безХвоста = ("/" + части.join("/")).toLowerCase();
+  if (СВОИ_СТРАНИЦЫ_ЯЗЫКА[язык](безХвоста)) return null;
+  if (части.length === 1) return { цель: "/", язык };
+  return { цель: "/" + части.slice(1).join("/"), язык };
+}
+
 function битыйАдрес(): NextResponse {
   // Тело намеренно короткое и без разметки: это ответ роботу, а не человеку.
   // Имён внутренних систем здесь быть не должно (feedback_error_text_leaks_infrastructure).
@@ -123,6 +150,15 @@ export function middleware(req: NextRequest) {
     // Постоянная переадресация кэшируется, поэтому язык ставим здесь же:
     // иначе человек приедет на русскую страницу без признака английского.
     ответ.cookies.set("aevion_lang_v1", "en", { path: "/", maxAge: 60 * 60 * 24 * 365 });
+    return ответ;
+  }
+
+  const языковой = языковойРедирект(pathname);
+  if (языковой) {
+    const адрес = new URL(языковой.цель, req.url);
+    адрес.search = req.nextUrl.search;
+    const ответ = NextResponse.redirect(адрес, 308);
+    ответ.cookies.set("aevion_lang_v1", языковой.язык, { path: "/", maxAge: 60 * 60 * 24 * 365 });
     return ответ;
   }
 

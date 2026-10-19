@@ -3,8 +3,7 @@ import { языки } from "@/lib/hreflang";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { BuyLink } from "@/components/BuyLink";
 import { PageTracking } from "@/components/PageTracking";
-import { productById, channelFrom, withChannel, keepChannel, type Product } from "@/lib/products";
-import { fromPricePerMonth } from "@/lib/termPricing";
+import { productById, channelFrom, withChannel, keepChannel, fromPerMonthOf, type Product } from "@/lib/products";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 
 // /en/go — англоязычная посадочная под ссылку в профиле.
@@ -60,7 +59,7 @@ const CURRENCY = new Intl.NumberFormat("en-US", {
 function price(p: Product): string {
   // Term access (pricing policy of 15.09.2026): the honest floor is the month on
   // the longest term, hence "from". The figure comes from the term ladder.
-  if (p.billing === "term") return `from ${CURRENCY.format(fromPricePerMonth(p.priceUsd))} / mo`;
+  if (p.billing === "term") return `from ${CURRENCY.format(fromPerMonthOf(p))} / mo`;
   return CURRENCY.format(p.priceUsd) + (p.billing === "monthly" ? " / mo" : "");
 }
 

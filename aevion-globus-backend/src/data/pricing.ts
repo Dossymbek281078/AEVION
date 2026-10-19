@@ -207,13 +207,29 @@ export type TermTier = (typeof TERM_TIERS)[number];
 
 export const TERM_MONTHS: Record<TermTier, number> = { lite: 1, medium: 3, pro: 6, full: 9, max: 12 };
 
-/** Доля базовой цены месяца на ступени: у планеты это 400 / 350 / 300 / 250 / 200. */
+/** Доля базовой цены месяца на ступени — для отдельных приложений; у планеты это 250 / 225 / 200 / 175 / 150 (своя лесенка PLANET_TERM_PRICE ниже, не доля). */
 export const TERM_FACTOR: Record<TermTier, number> = { lite: 1, medium: 0.875, pro: 0.75, full: 0.625, max: 0.5 };
 
 export const TERM_NAME: Record<TermTier, string> = { lite: "Lite", medium: "Medium", pro: "Pro", full: "Full", max: "Max" };
 
 /** Цена месяца всей планеты на самом коротком сроке (Lite). */
-export const PLANET_BASE_MONTHLY = 400;
+/**
+ * 🔴 19.10.2026 — слово основателя: ОДИН план «AEVION Планета», доступ ко всем
+ * приложениям, цена месяца зависит от срока: 1 мес $250, 3 мес по $225, 6 по $200,
+ * 9 по $175, 12 по $150. У плана СВОЯ лесенка (не TERM_FACTOR): 250×0.875 — не
+ * целые доллары, и termPricePerMonth на этом бросает (инвариант «целый доллар»).
+ * Числа — решение человека, записаны литералами; TERM_FACTOR остаётся для
+ * отдельных приложений. Шахматы — отдельной карточкой $50/год.
+ */
+export const PLANET_TERM_PRICE: Record<TermTier, number> = { lite: 250, medium: 225, pro: 200, full: 175, max: 150 };
+/** Цена одного месяца без срока (ступень lite); литерал держит сторож зеркала. */
+export const PLANET_BASE_MONTHLY = 250;
+export const CHESS_YEARLY_USD = 50;
+export function planetPricePerMonth(term: TermTier): number { return PLANET_TERM_PRICE[term]; }
+export function planetTotal(term: TermTier): number { return PLANET_TERM_PRICE[term] * TERM_MONTHS[term]; }
+/** «от $…/мес» — месяц на самом длинном сроке. */
+export function planetFromPerMonth(): number { return PLANET_TERM_PRICE.max; }
+export function planetSavingPercent(term: TermTier): number { return Math.round((1 - PLANET_TERM_PRICE[term] / PLANET_TERM_PRICE.lite) * 1000) / 10; }
 
 export function isTermTier(id: string): id is TermTier {
   return (TERM_TIERS as readonly string[]).includes(id);
@@ -331,9 +347,9 @@ const PLANET_LIMITS: TierLimits = {
 
 function planetTier(id: TermTier, extra: Partial<PricingTier> = {}): PricingTier {
   const months = TERM_MONTHS[id];
-  const perMonth = termPricePerMonth(PLANET_BASE_MONTHLY, id);
-  const total = perMonth * months;
-  const savingPct = Math.round((1 - TERM_FACTOR[id]) * 1000) / 10;
+  const perMonth = planetPricePerMonth(id);
+  const total = planetTotal(id);
+  const savingPct = planetSavingPercent(id);
   return {
     id,
     name: TERM_NAME[id],

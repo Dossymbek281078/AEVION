@@ -26,6 +26,8 @@ import {
   fromPricePerMonth,
   standaloneApp,
   termTotal,
+  planetTotal,
+  planetFromPerMonth,
 } from "./termPricing";
 
 /*
@@ -134,12 +136,22 @@ const appFormat = (id: string) =>
  * продаются — Constitution входит в подписку AEVION. Их permalink на Gumroad
  * покупателю не показываем нигде.
  */
+/**
+ * 🔴 19.10.2026: «от $…/мес» для срочного товара. У планеты (aevion-planet) своя
+ * лесенка PLANET_TERM_PRICE — fromPricePerMonth(priceUsd) дал бы 250×0.5 = $125
+ * вместо $150. Четыре страницы считали так через product.priceUsd, мимо прямого
+ * упоминания PLANET_BASE_MONTHLY — сторож по исходникам их не видел.
+ */
+export function fromPerMonthOf(p: Pick<Product, "id" | "priceUsd">): number {
+  return p.id === "aevion-planet" ? planetFromPerMonth() : fromPricePerMonth(p.priceUsd);
+}
+
 export const SUBSCRIPTIONS: Product[] = [
   {
     id: "aevion-planet",
     title: "Подписка AEVION",
-    format: `вся планета · от ${usd(fromPricePerMonth(PLANET_BASE_MONTHLY))}/мес · от ${usd(
-      termTotal(PLANET_BASE_MONTHLY, "lite"),
+    format: `вся планета · от ${usd(planetFromPerMonth())}/мес · от ${usd(
+      planetTotal("lite"),
     )} за месяц`,
     desc:
       "Доступ ко всем модулям AEVION на выбранный срок: 1, 3, 6, 9 или 12 месяцев. " +

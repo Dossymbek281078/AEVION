@@ -216,7 +216,7 @@ describe("Конституция отдельно не продаётся — т
   test("цена на витрине СЧИТАЕТСЯ из лестницы сроков, а не вписана числом", () => {
     const price = fieldAfterTier("pro", "price");
     expect(
-      price.includes("fromPricePerMonth("),
+      /fromPricePerMonth\(|planetFromPerMonth\(\)/.test(price), // 19.10: у планеты своя функция
       `цена платной карточки вписана как «${price}». Возьми её из @/lib/termPricing ` +
         "(fromPricePerMonth) — иначе витрина переживёт смену лестницы со старым числом, " +
         "как это уже было 13.08 и 15.09.2026.",

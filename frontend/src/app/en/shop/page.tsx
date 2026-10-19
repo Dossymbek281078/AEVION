@@ -12,7 +12,11 @@ import {
   type Product,
 } from "@/lib/products";
 import { PageTracking } from "@/components/PageTracking";
-import { PLANET_BASE_MONTHLY, termPricePerMonth, STANDALONE_APPS,
+import {
+  PLANET_BASE_MONTHLY,
+  termPricePerMonth,
+  STANDALONE_APPS,
+  planetPricePerMonth,
 } from "@/lib/termPricing";
 
 /** Сколько приложений продаётся отдельно — из того же списка, что и карточки.
@@ -190,7 +194,7 @@ export default async function EnShopPage({
           )} for one month; the whole planet — ${CURRENCY.format(
             PLANET_BASE_MONTHLY,
           )} for one month, or ${CURRENCY.format(
-            termPricePerMonth(PLANET_BASE_MONTHLY, "max"),
+            planetPricePerMonth("max"),
           )} a month when paying for 12 months up front.`}
           items={SUBSCRIPTIONS}
           channel={channel}

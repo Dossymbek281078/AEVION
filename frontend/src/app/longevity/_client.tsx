@@ -3,8 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { apiUrl } from "@/lib/apiBase";
 import { HealthDisclaimer } from "@/components/HealthDisclaimer";
-import { keepChannel, productById, withChannel } from "@/lib/products";
-import { fromPricePerMonth } from "@/lib/termPricing";
+import { keepChannel, productById, withChannel, fromPerMonthOf } from "@/lib/products";
 import { BuyLink } from "@/components/BuyLink";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
@@ -594,7 +593,7 @@ export default function LongevityClient({
               </p>
             </div>
             <div style={styles.buyRight}>
-              <div style={styles.buyPrice}>от ${fromPricePerMonth(ALL_ACCESS.priceUsd)}<span style={styles.upsellPer}>/мес</span></div>
+              <div style={styles.buyPrice}>от ${fromPerMonthOf(ALL_ACCESS)}<span style={styles.upsellPer}>/мес</span></div>
               <div style={styles.upsellBtn}>Выбрать срок&nbsp;→</div>
             </div>
           </a>

@@ -32,12 +32,14 @@ import {
 const term = (id: string) => TIERS.find((t) => t.id === id)!;
 
 describe("лестница сроков AEVION", () => {
-  test("планета: $400 / $350 / $300 / $250 / $200 в месяц на 1 / 3 / 6 / 9 / 12 месяцев", () => {
-    expect(TERM_TIERS.map((t) => term(t).priceMonthly)).toEqual([400, 350, 300, 250, 200]);
+  // 🔴 19.10.2026 — новое слово основателя: один план «Планета», $250 за месяц,
+  // по $225/$200/$175/$150 в месяц на 3/6/9/12 месяцев (литералами, как и прежде).
+  test("планета: $250 / $225 / $200 / $175 / $150 в месяц на 1 / 3 / 6 / 9 / 12 месяцев", () => {
+    expect(TERM_TIERS.map((t) => term(t).priceMonthly)).toEqual([250, 225, 200, 175, 150]);
     expect(TERM_TIERS.map((t) => term(t).termMonths)).toEqual([1, 3, 6, 9, 12]);
-    expect(TERM_TIERS.map((t) => term(t).priceTermTotal)).toEqual([400, 1050, 1800, 2250, 2400]);
+    expect(TERM_TIERS.map((t) => term(t).priceTermTotal)).toEqual([250, 675, 1200, 1575, 1800]);
     expect(TERM_TIERS.map((t) => term(t).name)).toEqual(["Lite", "Medium", "Pro", "Full", "Max"]);
-    expect(PLANET_BASE_MONTHLY).toBe(400);
+    expect(PLANET_BASE_MONTHLY).toBe(250);
   });
 
   // 20.09.2026: приложений стало девять. Четыре добавлены по прямому слову
@@ -86,7 +88,7 @@ describe("лестница сроков AEVION", () => {
     // рядом — нет. Тест при этом оставался зелёным: утверждение и его объяснение
     // живут в разных местах, и расходятся молча.
     expect(STANDALONE_APPS.reduce((s, a) => s + a.baseMonthly, 0)).toBe(480);
-    expect(PLANET_BASE_MONTHLY).toBe(400);
+    expect(PLANET_BASE_MONTHLY).toBe(250); // 19.10: $480 приложений против $250 у планеты
   });
 
   test("фиксированный промокод — один раз за покупку, а не за каждый месяц срока", () => {
@@ -94,7 +96,7 @@ describe("лестница сроков AEVION", () => {
     expect(buildQuote({ tierId: "full", promoCode: "TEAM100" }).promo?.applied).toBe(100);
     expect(buildQuote({ tierId: "max", promoCode: "FRIEND10" }).promo?.applied).toBe(10);
     // КОНТРОЛЬ: процентный промокод по-прежнему считается от всей суммы срока
-    expect(buildQuote({ tierId: "max", promoCode: "AEVION20" }).promo?.applied).toBe(480);
+    expect(buildQuote({ tierId: "max", promoCode: "AEVION20" }).promo?.applied).toBe(360); // 19.10: 20% от $1800 за 12 мес
   });
 
   test("на каждой ступени целые доллары; нецелая база — ошибка данных, а не округление", () => {

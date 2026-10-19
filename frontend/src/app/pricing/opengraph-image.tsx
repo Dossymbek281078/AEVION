@@ -1,10 +1,10 @@
 import { ImageResponse } from "next/og";
 import { MODULE_NODES } from "@/data/pitchFacts";
-import { PLANET_BASE_MONTHLY, fromPricePerMonth } from "@/lib/termPricing";
+import { PLANET_BASE_MONTHLY, fromPricePerMonth, planetFromPerMonth } from "@/lib/termPricing";
 
 // «От» — самая низкая цена месяца, которую можно назвать честно: срок Max.
 // Берётся из lib/termPricing.ts; до 15.09.2026 здесь стояла цена прежнего Lite.
-const ОТ_В_МЕСЯЦ = `$${fromPricePerMonth(PLANET_BASE_MONTHLY)}`;
+const ОТ_В_МЕСЯЦ = `$${planetFromPerMonth()}`;
 
 export const runtime = "edge";
 // Count-free wording kept from main — one less number that can go stale. The

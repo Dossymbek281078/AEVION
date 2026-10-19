@@ -14,6 +14,8 @@ import {
   termPricePerMonth,
   termTotal,
   type TermTier,
+  planetPricePerMonth,
+  planetTotal,
 } from "@/lib/termPricing";
 
 type TierCard = { name: string; price: string; total: string | null; tagline: string; gradient: string };
@@ -44,8 +46,8 @@ const TIER_DATA: Record<string, TierCard> = {
       term,
       {
         name: TERM_NAME[term],
-        price: `$${termPricePerMonth(PLANET_BASE_MONTHLY, term)}`,
-        total: `$${termTotal(PLANET_BASE_MONTHLY, term)}`,
+        price: `$${planetPricePerMonth(term)}`,
+        total: `$${planetTotal(term)}`,
         tagline: `Вся планета AEVION · ${TERM_MONTHS[term]} мес.`,
         gradient: GRADIENT[term],
       },

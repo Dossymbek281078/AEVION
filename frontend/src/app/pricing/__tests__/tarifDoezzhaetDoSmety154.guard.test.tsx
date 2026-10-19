@@ -3,7 +3,7 @@ import { render, cleanup, act, waitFor } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { I18nProvider } from "@/lib/i18n";
-import { TERM_MONTHS, PLANET_BASE_MONTHLY, termTotal, type TermTier } from "@/lib/termPricing";
+import { TERM_MONTHS, PLANET_BASE_MONTHLY, termTotal, type TermTier , planetTotal } from "@/lib/termPricing";
 import { тарифИзАдреса } from "../tarifIzAdresa";
 
 /*
@@ -37,7 +37,7 @@ function ответыСервера(запросыСметы: Запрос[]) {
       запросыСметы.push({ url: адрес, body });
       const tier = String(body.tierId) as TermTier;
       const months = TERM_MONTHS[tier] ?? null;
-      const total = months ? termTotal(PLANET_BASE_MONTHLY, tier) : 0;
+      const total = months ? planetTotal(tier) : 0;
       const смета = {
         tierId: tier, termMonths: months, currency: "USD",
         lines: [{ kind: "tier", label: tier, unitPrice: total, qty: 1, total }],
@@ -76,12 +76,12 @@ afterEach(() => {
 
 describe("154: тариф со страницы тарифа доезжает до сметы", () => {
   it.each([
-    ["lite", 400, 1],
-    ["medium", 1050, 3],
-    ["pro", 1800, 6],
-    ["max", 2400, 12],
+    ["lite", 250, 1],
+    ["medium", 675, 3],
+    ["pro", 1200, 6],
+    ["max", 1800, 12],
   ] as const)("🔴 /pricing?tier=%s → смета этого тарифа: $%i за %i мес.", async (tier, total, months) => {
-    expect(termTotal(PLANET_BASE_MONTHLY, tier), "контроль: цена из termPricing").toBe(total);
+    expect(planetTotal(tier), "контроль: цена из termPricing").toBe(total);
     const запросы = await открыть(`/pricing?tier=${tier}#calculator`);
     const последний = запросы[запросы.length - 1];
     expect(последний.body.tierId).toBe(tier);

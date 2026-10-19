@@ -19,6 +19,7 @@ import {
   resolvePromoCode,
   type CurrencyCode,
   TERM_TIERS, TERM_MONTHS, TERM_FACTOR, STANDALONE_APPS, PLANET_BASE_MONTHLY, termPricePerMonth, termTotal,
+  PLANET_TERM_PRICE, planetTotal, planetFromPerMonth, CHESS_YEARLY_USD,
   type TierId,
 } from "../data/pricing";
 import { projects } from "../data/projects";
@@ -178,6 +179,17 @@ pricingRouter.get("/", (_req, res) => {
     currency: "USD",
     // Лестница сроков вместо годовой скидки (15.09.2026): тариф — это срок.
     termLadder: TERM_TIERS.map((t) => ({ tierId: t, months: TERM_MONTHS[t], factor: TERM_FACTOR[t] })),
+    /*
+     * 🔴 19.10.2026: один план «AEVION Планета» ЯВНЫМИ полями (perMonthUsd, totalUsd
+     * по сроку) и шахматы отдельной карточкой $50/год. Приёмка оркестратора
+     * читает именно их: подстрока «250» в большом JSON ничего не доказывает.
+     */
+    plan: {
+      id: "planet",
+      name: "AEVION Планета",
+      terms: TERM_TIERS.map((t) => ({ tierId: t, months: TERM_MONTHS[t], perMonthUsd: PLANET_TERM_PRICE[t], totalUsd: planetTotal(t) })),
+    },
+    chess: { id: "cyberchess", priceUsd: CHESS_YEARLY_USD, period: "year" },
     /*
      * «Продаётся отдельно» берётся из единого источника data/moduleAccess.ts —
      * из того же места, откуда шлюз берёт «закрыто стеной». До 01.10.2026 это
@@ -1712,7 +1724,7 @@ pricingRouter.get("/healthz", (_req, res) => {
 const PRICING_FAQ = [
   { id: "faq-01", q: "What is included in the Starter plan?", a: "Core platform access with up to 3 users, AI quota 1k calls/month, QSign basic.", category: "plans" },
   { id: "faq-02", q: "Can I upgrade mid-month?", a: "Yes. Upgrading applies pro-rated billing instantly.", category: "billing" },
-  { id: "faq-03", q: "Do longer terms cost less?", a: `Yes. Every plan is a term paid upfront — 1, 3, 6, 9 or 12 months. The whole platform costs $${PLANET_BASE_MONTHLY}/month on 1 month and $${termPricePerMonth(PLANET_BASE_MONTHLY, "max")}/month on 12.`, category: "billing" },
+  { id: "faq-03", q: "Do longer terms cost less?", a: `Yes. Every plan is a term paid upfront — 1, 3, 6, 9 or 12 months. The whole platform costs $${PLANET_BASE_MONTHLY}/month on 1 month and $${planetFromPerMonth()}/month on 12.`, category: "billing" },
   { id: "faq-04", q: "Is there a free trial?", a: "14-day free trial on Growth and above. No credit card required.", category: "plans" },
   { id: "faq-05", q: "What payment methods do you accept?", a: "Visa, Mastercard, Kaspi, QR code (QazQR), wire transfer.", category: "billing" },
   { id: "faq-06", q: "Can I cancel any time?", a: "Yes. Cancelling stops the renewal; access stays open until the paid term ends.", category: "billing" },

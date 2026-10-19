@@ -11,7 +11,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import ModulePricingChip from "../ModulePricingChip";
-import { PLANET_BASE_MONTHLY, STANDALONE_APPS, TERM_TIERS, fromPricePerMonth, termPricePerMonth } from "@/lib/termPricing";
+import { STANDALONE_APPS, TERM_TIERS, fromPricePerMonth, termPricePerMonth, planetFromPerMonth } from "@/lib/termPricing";
 import { predlagaemOtdelno } from "@/lib/neProdayotsyaOtdelno";
 
 vi.mock("@/lib/apiBase", () => ({ apiUrl: (p: string) => p }));
@@ -68,7 +68,7 @@ describe("ModulePricingChip — цены лестницы сроков", () => {
       // длинного срока: незнание не имеет права обещать скидку.
       expect(text).toContain(`$${termPricePerMonth(app.baseMonthly, "lite")}`);
       expect(text).toContain(app.name);
-      expect(text).toContain(`от $${fromPricePerMonth(PLANET_BASE_MONTHLY)}/мес`);
+      expect(text).toContain(`от $${planetFromPerMonth()}/мес`); // 19.10: своя лесенка плана
       const buy = screen.getByText("Купить").closest("a")!;
       expect(buy.getAttribute("href")).toBe(`/pricing?app=${app.slug}#apps`);
     },
@@ -105,7 +105,7 @@ describe("ModulePricingChip — цены лестницы сроков", () => {
     const { container } = render(<ModulePricingChip moduleId="qlearn" />);
     const text = container.textContent ?? "";
     expect(text).toContain("Входит в подписку AEVION");
-    expect(text).toContain(`$${fromPricePerMonth(PLANET_BASE_MONTHLY)}`);
+    expect(text).toContain(`$${planetFromPerMonth()}`);
     expect(text).not.toContain("отдельно");
     expect(screen.getByText("Купить").closest("a")!.getAttribute("href")).toBe("/pricing#tiers");
   });

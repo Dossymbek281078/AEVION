@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import * as pricing from "../src/data/pricing";
 import {
   MODULES_PRICING, getTier, standaloneApp, TERM_TIERS, TERM_MONTHS, PLANET_BASE_MONTHLY, termPricePerMonth,
+  planetPricePerMonth,
 } from "../src/data/pricing";
 
 /**
@@ -116,7 +117,7 @@ describe("цена имеет один источник", () => {
     for (const id of TERM_TIERS) {
       const t = getTier(id)!;
       expect(t.termMonths, `${id}: срок в карточке не равен лестнице`).toBe(TERM_MONTHS[id]);
-      expect(t.priceMonthly, `${id}: цена месяца не из лестницы`).toBe(termPricePerMonth(PLANET_BASE_MONTHLY, id));
+      expect(t.priceMonthly, `${id}: цена месяца не из лестницы`).toBe(planetPricePerMonth(id)); // 19.10: своя лесенка плана
       expect(
         t.priceTermTotal,
         `${id}: $${t.priceTermTotal} за срок — это не $${t.priceMonthly} × ${t.termMonths}`,

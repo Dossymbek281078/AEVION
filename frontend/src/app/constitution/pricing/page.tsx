@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useFunnel } from "@/lib/useFunnel";
 import { useI18n } from "@/lib/i18n";
 import { PageTracking } from "@/components/PageTracking";
-import { PLANET_BASE_MONTHLY, fromPricePerMonth } from "@/lib/termPricing";
+import { PLANET_BASE_MONTHLY, fromPricePerMonth, planetFromPerMonth } from "@/lib/termPricing";
 
 // ⚠️ 15.09.2026 — новая ценовая политика (слово основателя). Constitution Pro и
 // Team отдельными подписками сняты (Gumroad pyiaz / wjvquw). Pro-возможности
@@ -69,7 +69,7 @@ export default function ConstitutionPricingPage() {
     {
       id: "pro",
       name: "Pro · AEVION",
-      price: `от $${fromPricePerMonth(PLANET_BASE_MONTHLY)}`,
+      price: `от $${planetFromPerMonth()}`,
       period: t("constitution.pricing.tier.period.monthly"),
       tagline: t("constitution.pricing.tier.pro.tagline"),
       features: [
@@ -180,7 +180,7 @@ export default function ConstitutionPricingPage() {
             Constitution Pricing
           </h1>
           <p className="text-[#9aa3c0] mt-3 max-w-2xl mx-auto">
-            {t("constitution.pricing.header.subtitle", { price: `$${fromPricePerMonth(PLANET_BASE_MONTHLY)}` })}
+            {t("constitution.pricing.header.subtitle", { price: `$${planetFromPerMonth()}` })}
           </p>
         </header>
 

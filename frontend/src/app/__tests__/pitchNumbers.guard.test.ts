@@ -318,21 +318,20 @@ function registryLiteralTierPrices(src: string): Record<string, number | null> {
 /** tierId → цена месяца. Семь тарифов: free, пять сроков, enterprise. */
 function registryTierPrices(): Record<string, number | null> {
   const src = backendSource();
-  const base = registryNumber(src, "PLANET_BASE_MONTHLY");
-  const factor = registryRecord(src, "TERM_FACTOR");
+  // 19.10.2026: у планеты своя лесенка PLANET_TERM_PRICE (литералы основателя), не base × TERM_FACTOR
+  const ladder = registryRecord(src, "PLANET_TERM_PRICE");
   const out: Record<string, number | null> = { ...registryLiteralTierPrices(src) };
-  for (const id of registryTermIds(src)) out[id] = (base as number) * factor[id];
+  for (const id of registryTermIds(src)) out[id] = ladder[id];
   return out;
 }
 
 /** tierId срока → платёж за весь срок вперёд (priceTermTotal реестра). */
 function registryTermTotals(): Record<string, number> {
   const src = backendSource();
-  const base = registryNumber(src, "PLANET_BASE_MONTHLY") as number;
-  const factor = registryRecord(src, "TERM_FACTOR");
+  const ladder = registryRecord(src, "PLANET_TERM_PRICE");
   const months = registryRecord(src, "TERM_MONTHS");
   const out: Record<string, number> = {};
-  for (const id of registryTermIds(src)) out[id] = base * factor[id] * months[id];
+  for (const id of registryTermIds(src)) out[id] = ladder[id] * months[id];
   return out;
 }
 
@@ -382,8 +381,11 @@ describe("prices — derived surfaces stay in sync with the backend tier registr
 
     // И что платёж за срок в реестре — ПРОИЗВЕДЕНИЕ, а не своя формула: иначе
     // наш «цена месяца × месяцы» был бы вторым способом счёта, а не тем же.
-    expect(src).toContain("const total = perMonth * months");
+    // 19.10.2026: платёж за срок — planetTotal(id) = PLANET_TERM_PRICE[id] × TERM_MONTHS[id], одна формула в данных
+    expect(src).toContain("const total = planetTotal(id);");
     expect(src).toContain("priceTermTotal: total");
+    expect(src).toContain("return PLANET_TERM_PRICE[term] * TERM_MONTHS[term];");
+    expect(Object.keys(registryRecord(src, "PLANET_TERM_PRICE"))).toHaveLength(5);
   }, IMPORT_TIMEOUT_MS);
 
   it("реестр отдаёт СЕМЬ тарифов — free, пять сроков, enterprise", () => {
@@ -559,7 +561,9 @@ describe("prices — derived surfaces stay in sync with the backend tier registr
 
       const code = stripComments(raw);
       expect(
-        code.includes("PLANET_BASE_MONTHLY") && code.includes("termPricePerMonth("),
+        // 19.10.2026: у планеты своя лесенка — planetPricePerMonth/planetTotal тоже «из лестницы»
+        (code.includes("PLANET_BASE_MONTHLY") || code.includes("planetPricePerMonth(")) &&
+          (code.includes("termPricePerMonth(") || code.includes("planetPricePerMonth(")),
         `${rel} обязана брать цену из @/lib/termPricing (PLANET_BASE_MONTHLY + ` +
           "termPricePerMonth), а не печатать число: карточку никто не открывает заново " +
           "при смене цен, и здесь уже дважды переживала смену цен старая цифра.",
@@ -615,7 +619,7 @@ describe("product prices — marketing copy stays pinned to the charging code", 
     // figure from the term ladder.
     expect(src).toContain("productById(PLANET_ID)");
     expect(src).toContain('const PLANET_ID = "aevion-planet"');
-    expect(src).toContain("fromPricePerMonth(");
+    expect(src).toContain("fromPerMonthOf("); // 19.10: у планеты своя лесенка, цена через products.fromPerMonthOf
     expect(src).not.toContain("xpxzam");
   }, IMPORT_TIMEOUT_MS);
 

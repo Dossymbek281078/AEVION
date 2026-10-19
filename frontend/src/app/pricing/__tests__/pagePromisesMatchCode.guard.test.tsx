@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { STANDALONE_APPS, PLANET_BASE_MONTHLY, termTotal } from "@/lib/termPricing";
+import { STANDALONE_APPS, PLANET_BASE_MONTHLY, termTotal, planetTotal } from "@/lib/termPricing";
 import ru from "@/lib/i18n-lang/ru";
 import en from "@/lib/i18n-lang/en";
 
@@ -28,7 +28,7 @@ describe("довод «по отдельности дороже» остаётс
     // termTotal берёт ИМЯ ступени, а не число месяцев: первая версия теста
     // передала 1 и получила NaN — прибор поймал сам себя до доклада.
     expect(STANDALONE_APPS.reduce((s, a) => s + termTotal(a.baseMonthly, "lite"), 0)).toBe(480);
-    expect(termTotal(PLANET_BASE_MONTHLY, "lite")).toBe(400);
+    expect(planetTotal("lite")).toBe(250); // 19.10: один план «Планета», $250 за месяц
   });
 
   test("🔴 текст называет, сколько приложений в сумме — иначе её нечем сверить", () => {

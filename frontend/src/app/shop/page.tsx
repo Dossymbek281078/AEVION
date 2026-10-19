@@ -16,7 +16,11 @@ import {
   keepChannel,
   keepChannelOrProbe,
 } from "@/lib/products";
-import { PLANET_BASE_MONTHLY, termPricePerMonth, STANDALONE_APPS,
+import {
+  PLANET_BASE_MONTHLY,
+  termPricePerMonth,
+  STANDALONE_APPS,
+  planetPricePerMonth,
 } from "@/lib/termPricing";
 
 /** Сколько приложений продаётся отдельно — из того же списка, что и карточки.
@@ -238,7 +242,7 @@ export default async function ShopPage({
           )} за месяц; вся планета — ${CURRENCY.format(
             PLANET_BASE_MONTHLY,
           )} за месяц или ${CURRENCY.format(
-            termPricePerMonth(PLANET_BASE_MONTHLY, "max"),
+            planetPricePerMonth("max"),
           )} в месяц при оплате за 12 месяцев вперёд.`}
           items={SUBSCRIPTIONS}
           channel={channel}

@@ -34,7 +34,12 @@ import {
   termPricePerMonth,
   termSavingPercent,
   termTotal,
-  type TermTier, СРОК_ПО_УМОЛЧАНИЮ } from "@/lib/termPricing";
+  type TermTier,
+  СРОК_ПО_УМОЛЧАНИЮ,
+  planetPricePerMonth,
+  planetTotal,
+  planetFromPerMonth,
+} from "@/lib/termPricing";
 import { тарифИзАдреса } from "./tarifIzAdresa";
 import { useI18n } from "@/lib/i18n";
 import { useABVariant, getAllVariants } from "@/lib/abVariant";
@@ -954,7 +959,7 @@ export default function PricingPage() {
                 <div style={{ fontSize: 20, fontWeight: 900, color: "#0f172a", margin: "4px 0 2px" }}>
                   {t("pricing.home.heroModule.includedLine", {
                     name: имя,
-                    price: displayPrice(fromPricePerMonth(PLANET_BASE_MONTHLY)),
+                    price: displayPrice(planetFromPerMonth()),
                   })}
                 </div>
               </div>
@@ -1615,7 +1620,7 @@ export default function PricingPage() {
         // которого на витрине нет.
         const суммаПриложений = STANDALONE_APPS.filter((a) => predlagaemOtdelno(a.slug))
           .reduce((s, a) => s + termTotal(a.baseMonthly, appTerm), 0);
-        const планета = termTotal(PLANET_BASE_MONTHLY, appTerm);
+        const планета = planetTotal(appTerm);
         return (
           <section id="apps" style={{ marginBottom: 56 }}>
             <h2
@@ -2599,7 +2604,7 @@ export default function PricingPage() {
                   [
                     t("pricing.home.compare.row.comparablePrice"),
                     // В долларах, как и цены конкурентов в строке: «от» — месяц на сроке Max.
-                    t("pricing.home.compare.priceAevion", { price: `$${fromPricePerMonth(PLANET_BASE_MONTHLY)}` }),
+                    t("pricing.home.compare.priceAevion", { price: `$${planetFromPerMonth()}` }),
                     t("pricing.home.compare.priceDocusign"),
                     t("pricing.home.compare.priceStripe"),
                     t("pricing.home.compare.priceOpenai"),
@@ -2694,7 +2699,7 @@ export default function PricingPage() {
               // Суммы — месяц на самом коротком сроке (Lite), из lib/termPricing.ts.
               a: t("pricing.home.faq.bothSuites.a", {
                 apps: displayPrice(STANDALONE_APPS.reduce((s, a) => s + termPricePerMonth(a.baseMonthly, "lite"), 0)),
-                planet: displayPrice(termPricePerMonth(PLANET_BASE_MONTHLY, "lite")),
+                planet: displayPrice(planetPricePerMonth("lite")),
                 count: String(STANDALONE_APPS.length),
               }),
             },

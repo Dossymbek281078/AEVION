@@ -61,7 +61,7 @@ describe("апселл уводит к выбору срока вместе с �
     document.body.innerHTML = "";
     const { container } = render(<UpgradeButton variant="banner" />);
     const text = container.textContent ?? "";
-    expect(text).toContain("от $200/мес");
+    expect(text).toContain("от $150/мес"); // 19.10: план «Планета», 12 мес по $150
     expect(text).not.toMatch(/\$59|All-Access/);
   });
 });

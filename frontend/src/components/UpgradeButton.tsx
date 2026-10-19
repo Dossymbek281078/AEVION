@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PRICING_TERMS, keepChannel, productById } from "@/lib/products";
-import { fromPricePerMonth } from "@/lib/termPricing";
+import { PRICING_TERMS, keepChannel, productById, fromPerMonthOf } from "@/lib/products";
 import { channelNow } from "@/lib/channelNow";
 import { track } from "@/lib/track";
 
@@ -87,7 +86,7 @@ export function UpgradeButton({
                 списывала. «от» — это месяц на самом длинном сроке (12 месяцев). */}
             {planet ? (
               <div className="text-sm font-semibold text-white">
-                {planet.title} — от ${fromPricePerMonth(planet.priceUsd)}/мес
+                {planet.title} — от ${fromPerMonthOf(planet)}/мес
               </div>
             ) : null}
             <div className="text-xs text-gray-400 mt-0.5">Все модули включены · срок от 1 до 12 месяцев · оплата за срок вперёд</div>

@@ -1,5 +1,5 @@
 import { PRICING_TERMS, productById, withChannel } from "./products";
-import { PLANET_BASE_MONTHLY, fromPricePerMonth } from "./termPricing";
+import { PLANET_BASE_MONTHLY, fromPricePerMonth, planetFromPerMonth } from "./termPricing";
 
 export type ПокупкаНаГлавной = {
   вид: string;
@@ -82,7 +82,7 @@ export function покупкиНаГлавной(канал: string | null, сы
   из.push({
     вид: "subscription · all modules",
     название: "Every AEVION module",
-    цена: "from $" + fromPricePerMonth(PLANET_BASE_MONTHLY) + "/mo",
+    цена: "from $" + planetFromPerMonth() + "/mo",
     // Адрес берём КОНСТАНТОЙ каталога, а не строкой: якорь `#tiers` живёт
     // в products.ts, и переименуй его там — главная молча вела бы на верх
     // страницы цен, то есть мимо лестницы сроков, ради которой ссылка и есть.

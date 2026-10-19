@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, cleanup, act } from "@testing-library/react";
 import { I18nProvider } from "@/lib/i18n";
-import { PLANET_BASE_MONTHLY, STANDALONE_APPS, termPricePerMonth, termTotal } from "@/lib/termPricing";
+import { PLANET_BASE_MONTHLY, STANDALONE_APPS, termPricePerMonth, termTotal , planetTotal } from "@/lib/termPricing";
 import { predlagaemOtdelno } from "@/lib/neProdayotsyaOtdelno";
 import { localizeTier } from "@/lib/pricingLocalize";
 
@@ -389,7 +389,7 @@ describe("отдельные приложения: цена, покупка и �
      */
     const сумма = STANDALONE_APPS.filter((a) => predlagaemOtdelno(a.slug))
       .reduce((s, a) => s + termTotal(a.baseMonthly, "lite"), 0);
-    const планета = termTotal(PLANET_BASE_MONTHLY, "lite");
+    const планета = planetTotal("lite"); // 19.10: своя лесенка плана
     const строка = document.querySelector('[data-testid="apps-vs-planet"]');
     expect(Boolean(строка), `сумма приложений ${сумма}, планета ${планета}`).toBe(сумма > планета);
     if (строка) {

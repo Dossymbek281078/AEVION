@@ -18,6 +18,9 @@ import {
   termPricePerMonth,
   termTotal,
   STANDALONE_APPS,
+  planetPricePerMonth,
+  planetTotal,
+  planetFromPerMonth,
 } from "@/lib/termPricing";
 
 /** Сколько приложений продаётся отдельно — из того же списка, что и карточки.
@@ -311,7 +314,7 @@ const CAT_COLOR: Record<string, string> = {
 const TERM_APPS = APPS.filter((a) => a.term && a.price > 0);
 /** Девять приложений по отдельности за 1 месяц — против всей планеты за тот же месяц. */
 const RACK_RATE = TERM_APPS.reduce((s, a) => s + a.price, 0);
-const PLANET_FROM = fromPricePerMonth(PLANET_BASE_MONTHLY);
+const PLANET_FROM = planetFromPerMonth();
 /**
  * Приложения, которые были бесплатными и до политики 15.09.2026 (у карточек не
  * было цены). Всё остальное без товара в каталоге — прежние платные модули:
@@ -438,10 +441,10 @@ export default function AppsPage() {
                         {TERM_MONTHS[t]} mo
                       </td>
                       <td style={{ padding: "5px 4px", textAlign: "right" }}>
-                        ${termPricePerMonth(PLANET_BASE_MONTHLY, t)}/mo
+                        ${planetPricePerMonth(t)}/mo
                       </td>
                       <td style={{ padding: "5px 4px", textAlign: "right", opacity: 0.8 }}>
-                        ${termTotal(PLANET_BASE_MONTHLY, t)}
+                        ${planetTotal(t)}
                       </td>
                     </tr>
                   ))}

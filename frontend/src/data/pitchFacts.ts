@@ -91,10 +91,11 @@ export const REVENUE_SPLIT = "51/49";
  * subscription flagship is modelled at the 12-month term — $200/mo, $2,400 for
  * the term. The subscriber assumptions did NOT move: still 1,000 beachhead and
  * 10,000 regional. Only the price input changed, so the arithmetic is
- * 1,000 × $2,400 = $2.4M and 10,000 × $2,400 = $24M (was 1,000 × $490 = $490K
+ * 1,000 × $1,800 = $1.8M and 10,000 × $1,800 = $18M since 2026-10-19 (one Planet plan;
+ * 2026-09-16: 1,000 × $2,400 = $2.4M and 10,000 × $2,400 = $24M; was 1,000 × $490 = $490K
  * and 10,000 × $490 = $4.9M under the retired monthly plan).
  *
- * Totals therefore move ≈$0.85M → ≈$2.76M beachhead and ≈$9.65M → ≈$28.75M
+ * Totals therefore move ≈$0.85M → ≈$2.76M → ≈$2.16M beachhead and ≈$9.65M → ≈$28.75M → ≈$22.75M
  * regional; the QBuild ($235K / $2.35M) and QCoreAI ($120K / $2.4M) rows are
  * untouched, because neither is priced off the planet ladder.
  *
@@ -106,8 +107,8 @@ export const REVENUE_SPLIT = "51/49";
  * flagship ARR from the backend term ladder and re-adds the three rows, instead
  * of comparing one hardcoded number to another.
  */
-export const BOTTOM_UP_BEACHHEAD_ARR = "≈$2.76M";
-export const BOTTOM_UP_REGIONAL_ARR = "≈$28.75M";
+export const BOTTOM_UP_BEACHHEAD_ARR = "≈$2.16M"; // 19.10.2026: ARPU $1,800/yr (один план «Планета»)
+export const BOTTOM_UP_REGIONAL_ARR = "≈$22.75M"; // 19.10.2026
 export const IS_PRE_REVENUE = true;
 
 // ── Term ladder (a paid tier IS a term of access to the whole planet) ───────
@@ -116,8 +117,8 @@ export const IS_PRE_REVENUE = true;
  *
  * Тариф называет СРОК доступа ко ВСЕЙ планете, оплата за срок вперёд: Lite
  * 1 месяц, Medium 3, Pro 6, Full 9, Max 12. Цена месяца дешевеет с длиной
- * срока: $400 / $350 / $300 / $250 / $200. Платёж за срок = цена месяца ×
- * месяцы, то есть $400 / $1050 / $1800 / $2250 / $2400.
+ * срока (с 19.10.2026): $250 / $225 / $200 / $175 / $150. Платёж за срок = цена
+ * месяца × месяцы, то есть $250 / $675 / $1200 / $1575 / $1800.
  *
  * Источник чисел — реестр бэкенда (data/pricing.ts: TERM_MONTHS, TERM_FACTOR,
  * PLANET_BASE_MONTHLY), копия для страниц — lib/termPricing.ts. Строки ниже
@@ -141,7 +142,7 @@ export const IS_PRE_REVENUE = true;
  * платёж за срок берётся из реестра, а не считается скидкой к году.
  */
 /** Месяц на самом коротком сроке (Lite, 1 месяц) — вход в лестницу. */
-export const ENTRY_TERM_MONTHLY = "$400";
+export const ENTRY_TERM_MONTHLY = "$250"; // 19.10.2026: один план «Планета», $250 за месяц
 /**
  * Верхняя ступень лестницы — Max, 12 месяцев, $200/мес.
  *
@@ -150,9 +151,9 @@ export const ENTRY_TERM_MONTHLY = "$400";
  * то есть верхняя ступень лестницы и есть верхняя ступень с живой кассой.
  * Держать оговорку дальше значило бы занижать то, что уже можно купить.
  */
-export const LIVE_TOP_TIER_MONTHLY = "$200";
+export const LIVE_TOP_TIER_MONTHLY = "$150"; // 19.10.2026: 12 месяцев по $150
 /** Платёж за весь 12-месячный срок вперёд — он же ARPU места за год. */
-export const LIVE_TOP_TIER_TERM_TOTAL = "$2,400";
+export const LIVE_TOP_TIER_TERM_TOTAL = "$1,800"; // 19.10.2026: 12 × $150
 /** Честная оговорка рядом с ценой: срок фиксирует цену месяца на весь свой период. */
 export const TERM_LADDER_INTRO_NOTE =
   "Introductory pricing — the term you pay for locks your monthly rate for its whole length; " +

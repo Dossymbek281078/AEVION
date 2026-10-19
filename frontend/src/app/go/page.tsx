@@ -15,10 +15,11 @@ import {
   type Product,
   keepChannel,
   keepChannelOrProbe,
+  fromPerMonthOf,
 } from "@/lib/products";
 import { BuyLink } from "@/components/BuyLink";
 import { PageTracking } from "@/components/PageTracking";
-import { fromPricePerMonth, STANDALONE_APPS, termPricePerMonth } from "@/lib/termPricing";
+import { STANDALONE_APPS, termPricePerMonth } from "@/lib/termPricing";
 
 /**
  * Вход для холодного гостя — тот же, что первым стоит на /pricing.
@@ -200,7 +201,7 @@ function priceOf(p: Product | undefined): string | undefined {
   if (!p) return undefined;
   // Срочный доступ (политика 15.09.2026): честная нижняя цена месяца — на самом
   // длинном сроке, отсюда «от». Число — из лестницы сроков, не из вёрстки.
-  if (p.billing === "term") return `от ${CURRENCY.format(fromPricePerMonth(p.priceUsd))} / мес`;
+  if (p.billing === "term") return `от ${CURRENCY.format(fromPerMonthOf(p))} / мес`;
   return CURRENCY.format(p.priceUsd) + (p.billing === "monthly" ? " / мес" : "");
 }
 

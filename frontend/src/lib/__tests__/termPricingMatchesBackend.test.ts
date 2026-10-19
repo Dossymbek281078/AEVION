@@ -1,7 +1,8 @@
 import { describe, test, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { TERM_TIERS, TERM_MONTHS, TERM_FACTOR, PLANET_BASE_MONTHLY, STANDALONE_APPS, termPricePerMonth } from "../termPricing";
+import { TERM_TIERS, TERM_MONTHS, TERM_FACTOR, PLANET_BASE_MONTHLY, PLANET_TERM_PRICE, STANDALONE_APPS, planetPricePerMonth, planetTotal, planetFromPerMonth } from "../termPricing";
+import { readdirSync, statSync } from "node:fs";
 
 /**
  * Лестница сроков живёт в двух TS-проектах без общего импорта: бэкенд
@@ -34,7 +35,22 @@ describe("лестница сроков сайта совпадает с бэк�
 
   test("цена всей планеты", () => {
     expect(Number(/export const PLANET_BASE_MONTHLY = (\d+);/.exec(backend)?.[1])).toBe(PLANET_BASE_MONTHLY);
-    expect(TERM_TIERS.map((t) => termPricePerMonth(PLANET_BASE_MONTHLY, t))).toEqual([400, 350, 300, 250, 200]);
+    // 🔴 19.10.2026: у плана своя лесенка (слово основателя), литералы — решение человека
+    expect(record("PLANET_TERM_PRICE")).toEqual(PLANET_TERM_PRICE);
+    expect(TERM_TIERS.map((t) => planetPricePerMonth(t))).toEqual([250, 225, 200, 175, 150]);
+    expect(TERM_TIERS.map((t) => planetTotal(t))).toEqual([250, 675, 1200, 1575, 1800]);
+    expect(planetFromPerMonth()).toBe(150);
+    expect(PLANET_TERM_PRICE.lite).toBe(PLANET_BASE_MONTHLY);
+  });
+  test("🔴 ни одна страница не считает планету старой формулой termPricePerMonth(PLANET_BASE_MONTHLY…)", () => {
+    // 250 × 0.875 = 218.75: на бэке это throw, на сайте — тихая неверная цена. Поэтому запрет на уровне исходников.
+    const src = join(root, "frontend", "src");
+    const файлы = [];
+    const walk = (d) => { for (const n of readdirSync(d)) { const p = join(d, n); if (statSync(p).isDirectory()) { if (n !== "node_modules") walk(p); } else if (/\.(ts|tsx)$/.test(n) && !/\.test\.|__tests__/.test(p)) файлы.push(p); } };
+    walk(src);
+    const нарушители = файлы.filter((p) => /(termPricePerMonth|termTotal|fromPricePerMonth)\(PLANET_BASE_MONTHLY/.test(readFileSync(p, "utf8")));
+    expect(файлы.length, "контроль прибора: файлы прочитаны").toBeGreaterThan(100);
+    expect(нарушители.map((p) => p.slice(src.length)), `нарушителей ${нарушители.length} из ${файлы.length}`).toEqual([]);
   });
 
   test("пять отдельных приложений и их базы", () => {

@@ -1,5 +1,5 @@
 import { ImageResponse } from "next/og";
-import { PLANET_BASE_MONTHLY, TERM_NAME, TERM_TIERS, termPricePerMonth } from "@/lib/termPricing";
+import { PLANET_BASE_MONTHLY, TERM_NAME, TERM_TIERS, termPricePerMonth, planetPricePerMonth } from "@/lib/termPricing";
 
 export const runtime = "edge";
 export const alt = "AEVION — Full tier × modules matrix";
@@ -106,7 +106,7 @@ export default async function Image() {
               <Tier
                 key={term}
                 name={TERM_NAME[term].toUpperCase()}
-                price={`$${termPricePerMonth(PLANET_BASE_MONTHLY, term)}`}
+                price={`$${planetPricePerMonth(term)}`}
                 highlight={term === "max"}
               />
             ))}

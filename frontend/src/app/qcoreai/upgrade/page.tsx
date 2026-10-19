@@ -6,7 +6,7 @@ import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { PageTracking } from "@/components/PageTracking";
 import { PRICING_APP, PRICING_TERMS } from "@/lib/products";
-import { PLANET_BASE_MONTHLY, fromPricePerMonth, standaloneApp } from "@/lib/termPricing";
+import { PLANET_BASE_MONTHLY, fromPricePerMonth, standaloneApp, planetFromPerMonth } from "@/lib/termPricing";
 
 // ⚠️ 15.09.2026 — новая ценовая политика (слово основателя). Карточки «Pro $19/mo»
 // и «Enterprise $99/mo» с переключателем «помесячно / за год» сняты: помесячной и
@@ -16,7 +16,7 @@ import { PLANET_BASE_MONTHLY, fromPricePerMonth, standaloneApp } from "@/lib/ter
 //   · Enterprise — по запросу.
 // Числа — только из @/lib/termPricing.
 
-const PLANET_FROM = fromPricePerMonth(PLANET_BASE_MONTHLY);
+const PLANET_FROM = planetFromPerMonth();
 const MULTICHAT = standaloneApp("multichat");
 
 const PRO_BENEFITS = [

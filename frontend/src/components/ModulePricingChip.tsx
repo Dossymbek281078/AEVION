@@ -15,6 +15,7 @@ import {
   fromPricePerMonth,
   termPricePerMonth,
   standaloneApp,
+  planetFromPerMonth,
 } from "@/lib/termPricing";
 
 // Плашка цены и кнопка покупки на страницах модулей (~40 страниц).
@@ -151,7 +152,7 @@ export default function ModulePricingChip({ moduleId, theme = "light", hideBuy =
    */
   const appВозможный = standaloneApp(moduleId);
   const app = appВозможный && predlagaemOtdelno(appВозможный.slug) ? appВозможный : undefined;
-  const planetFrom = `$${fromPricePerMonth(PLANET_BASE_MONTHLY)}`;
+  const planetFrom = `$${planetFromPerMonth()}`;
   // Самый дешёвый срок из тех, что реально продаются; список не пришёл —
   // берём месяц (см. разбор выше), а не самый длинный срок.
   const дешевейшийПродаваемый = (): number | null => {

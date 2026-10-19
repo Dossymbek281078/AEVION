@@ -36,7 +36,23 @@ export const TERM_NAME: Record<TermTier, string> = { lite: "Lite", medium: "Medi
 export const СРОК_ПО_УМОЛЧАНИЮ: TermTier = "lite";
 
 /** Цена месяца всей планеты на самом коротком сроке (Lite). */
-export const PLANET_BASE_MONTHLY = 400;
+/**
+ * 🔴 19.10.2026 — слово основателя: ОДИН план «AEVION Планета», доступ ко всем
+ * приложениям, цена месяца зависит от срока: 1 мес $250, 3 мес по $225, 6 по $200,
+ * 9 по $175, 12 по $150. У плана СВОЯ лесенка (не TERM_FACTOR): 250×0.875 — не
+ * целые доллары, и termPricePerMonth на этом бросает (инвариант «целый доллар»).
+ * Числа — решение человека, записаны литералами; TERM_FACTOR остаётся для
+ * отдельных приложений. Шахматы — отдельной карточкой $50/год.
+ */
+export const PLANET_TERM_PRICE: Record<TermTier, number> = { lite: 250, medium: 225, pro: 200, full: 175, max: 150 };
+/** Цена одного месяца без срока (ступень lite); зеркало бэкенда, сторож termPricingMatchesBackend. */
+export const PLANET_BASE_MONTHLY = 250;
+export const CHESS_YEARLY_USD = 50;
+export function planetPricePerMonth(term: TermTier): number { return PLANET_TERM_PRICE[term]; }
+export function planetTotal(term: TermTier): number { return PLANET_TERM_PRICE[term] * TERM_MONTHS[term]; }
+/** «от $…/мес» — месяц на самом длинном сроке. */
+export function planetFromPerMonth(): number { return PLANET_TERM_PRICE.max; }
+export function planetSavingPercent(term: TermTier): number { return Math.round((1 - PLANET_TERM_PRICE[term] / PLANET_TERM_PRICE.lite) * 1000) / 10; }
 
 export function isTermTier(id: string): id is TermTier {
   return (TERM_TIERS as readonly string[]).includes(id);

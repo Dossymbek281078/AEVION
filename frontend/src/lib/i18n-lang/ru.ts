@@ -5101,6 +5101,7 @@ const ru: Record<string, string> = {
   "pricing.home.tier.termNote": "Тариф — это срок обязательства на всю планету AEVION: все модули в любом платном тарифе. Списание ежемесячно по цене срока; весь срок можно оплатить вперёд со скидкой до 12,5 %.",
   "pricing.home.tier.monthlyBilling": "Списание ежемесячно по {perMonth} — обязательство на {months} {unit}",
   "pricing.home.tier.prepay": "Или весь срок вперёд одним платежом: {total} (−{percent} %)",
+  "pricing.home.tier.prepayCta": "Оплатить весь срок вперёд — {total}",
   "pricing.home.apps.title": "Отдельные приложения",
   "pricing.home.apps.subtitle": "{count} приложений продаются и без тарифа — по той же лестнице сроков. Остальные модули входят только в тарифы.",
   "pricing.home.apps.termAria": "Срок для отдельных приложений",

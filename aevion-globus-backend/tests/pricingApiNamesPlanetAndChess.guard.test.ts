@@ -40,6 +40,10 @@ describe("/api/pricing: план «Планета» и шахматы явным
       { tierId: "pro", fromDay: 180, usdPerMonth: 200 }, { tierId: "full", fromDay: 270, usdPerMonth: 175 }, { tierId: "max", fromDay: 365, usdPerMonth: 150 },
     ]);
     expect(c.monthlySurcharge).toBe(true);
+    // Вариант «Б»: признак продаваемости режимов — булев у каждого срока; без срока «вперёд» не продаётся никогда.
+    const sellable = (r.body.plan.terms as Array<{ tierId: string; sellable?: { monthly: unknown; prepaid: unknown } }>).map((t) => t.sellable);
+    for (const s of sellable) { expect(typeof s?.monthly).toBe("boolean"); expect(typeof s?.prepaid).toBe("boolean"); }
+    expect(sellable[0]?.prepaid, "lite: вперёд не продаётся").toBe(false);
     expect(c.prepaidSurcharge).toBe(false);
     // FAQ больше не обещает «paid upfront» как единственный путь
     const faq = await request(app()).get("/api/pricing/faq");

@@ -5,12 +5,12 @@ import { gumroadPaymentProvider } from "../lib/payment/gumroadProvider";
 import { lemonSqueezyPaymentProvider } from "../lib/payment/lemonSqueezyProvider";
 import { payboxPaymentProvider, isPayboxConfigured, isPayboxWebhookSecretSet } from "../lib/payment/payboxProvider";
 import { paypalPaymentProvider, isPaypalConfigured } from "../lib/payment/paypalProvider";
-import { resolveLemonSqueezyVariant, lemonSqueezySellable, fallbackVariantForReference, appSlugForReference, type LemonSqueezyReference } from "../data/lemonSqueezyVariants";
+import { resolveLemonSqueezyVariant, lemonSqueezySellable, fallbackVariantForReference, appSlugForReference, planetCheckoutVariant, type LemonSqueezyReference } from "../data/lemonSqueezyVariants";
 import { продаётсяОтдельно } from "../data/moduleAccess";
 import {
   TIERS, getTier, getModulePrice, resolvePromoCode, CURRENCY_RATES, MAX_PROMO_DISCOUNT_RATIO, buildQuote,
   type TierId, type CurrencyCode, type TermTier,
-  isTermTier, standaloneApp, termTotal, monthsLabel, appTermTotal, appSellableTerms, TERM_MONTHS } from "../data/pricing";
+  isTermTier, standaloneApp, termTotal, monthsLabel, appTermTotal, appSellableTerms, TERM_MONTHS, type PlanetBilling } from "../data/pricing";
 import { findAppSubscriptionByIntent } from "../lib/appEntitlements";
 import { provisionSubscription, countSubscriptions, findSubscriptionByPaymentId, termMonthsOf } from "./provisioning";
 import { модулиДляКассы } from "../lib/payment/customData";
@@ -147,6 +147,12 @@ function собратьCustomData(
 
 interface CheckoutBody {
   tierId: TierId;
+  /**
+   * 🔴 19.10.2026: режим списания плана на срок — "monthly" (помесячно при
+   * обязательстве, слово основателя) или "prepaid" (весь срок вперёд со скидкой).
+   * Без поля — прежний путь: сумма за срок из сметы (калькулятор, старые вызовы).
+   */
+  billing?: PlanetBilling;
   /** Устарело 15.09.2026: тариф сам и есть срок (lite 1 мес … max 12). Поле не читается. */
   period?: string;
   /** Отдельное приложение (STANDALONE_APPS: slug или id модуля); tierId тогда — ступень срока. */
@@ -328,6 +334,15 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
     }
     const tier = getTier(body.tierId)!;
     const termMonths = tier.termMonths;
+    // Неизвестный режим — отказ, а не молчаливый прежний путь с другой суммой.
+    if (body.billing !== undefined && body.billing !== "monthly" && body.billing !== "prepaid") {
+      return res.status(400).json({
+        error: "invalid_billing",
+        message: наЯзыке(языкПокупателя(req),
+          "Unknown billing mode. Choose monthly billing or paying the whole term up front.",
+          "Неизвестный режим оплаты. Выберите помесячное списание или оплату всего срока вперёд."),
+      });
+    }
     // Отдельное приложение — та же лестница сроков, своя база цены (STANDALONE_APPS).
     // Всё остальное продаётся только в составе планеты: чужое имя — отказ, а не
     // тихая покупка тарифа вместо приложения.
@@ -407,7 +422,14 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
       promoCode: body.promoCode,
       commitmentMonths: body.commitmentMonths,
     });
-    const totalUsd = ценаПриложения ?? quote.total;
+    /*
+     * 🔴 19.10.2026, вариант «Б»: план на срок с полем billing идёт своим путём —
+     * списывается цена месяца (помесячно) или скидочная сумма (вперёд), вариант
+     * кассы и custom_data даёт planetCheckoutVariant. Без поля — прежняя смета.
+     */
+    const план = !app && isTermTier(tier.id) && body.billing ? planetCheckoutVariant(tier.id, body.billing) : null;
+    const планПомесячно = план?.customData.billing === "monthly";
+    const totalUsd = ценаПриложения ?? план?.chargeUsd ?? quote.total;
 
     // ЧТО СПИШУТ, ЕСЛИ КАССА НЕ ЗНАЕТ НАШЕЙ СУММЫ.
     //
@@ -584,7 +606,27 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
      * Теперь попадает. Неизвестный язык даёт английский: сайт отдаёт английский
      * по всем адресам.
      */
-    const description = `AEVION ${app ? `${app.name} ` : ""}${tier.name} — ${monthsLabel(termMonths ?? 1, языкПокупателя(req))}`;
+    // У плана имя называет срок и режим: «AEVION Планета — 3 месяца, помесячно».
+    // Имя ВАРИАНТА кассы («Planet — Lite (1 mo)») касса показывает в скобках сама.
+    const description = план
+      ? наЯзыке(языкПокупателя(req),
+          `AEVION Planet — ${monthsLabel(termMonths ?? 1, "en")}${планПомесячно ? ", billed monthly" : ", paid up front"}`,
+          `AEVION Планета — ${monthsLabel(termMonths ?? 1, "ru")}${планПомесячно ? ", помесячно" : ", вперёд"}`)
+      : `AEVION ${app ? `${app.name} ` : ""}${tier.name} — ${monthsLabel(termMonths ?? 1, языкПокупателя(req))}`;
+
+    // Помесячное списание умеет только подписка кассы LS: разовые кассы (PayBox,
+    // PayPal, Gumroad) взяли бы цену месяца за весь срок обязательства.
+    if (планПомесячно && !lemonSqueezyCanDeliver()) {
+      return res.status(503).json({
+        error: "monthly_billing_unavailable",
+        tier: tier.id,
+        termMonths,
+        message: наЯзыке(языкПокупателя(req),
+          "Monthly billing is not available right now. Nothing was charged — pay the whole term up front or write to us.",
+          "Помесячное списание сейчас недоступно. Деньги не списаны — оплатите весь срок вперёд или напишите нам."),
+        contactUrl: `${FRONTEND_URL}/pricing/contact?tier=${tier.id}`,
+      });
+    }
 
     // 0) PayBox — локальный KZT-канал (карты КЗ + Kaspi). Срабатывает только
     //    когда плательщик явно выбрал KZT и провайдер настроен. Сумму USD
@@ -609,7 +651,7 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
     // Отдельное приложение идёт ТОЛЬКО через Lemon Squeezy и Gumroad: их вебхуки
     // пишут AppSubscription. Вебхуки PayBox и PayPal приложений не выдают вовсе —
     // оплата прошла бы без доступа (15.09.2026).
-    if (body.currency === "KZT" && isPayboxConfigured() && !app) {
+    if (body.currency === "KZT" && isPayboxConfigured() && !app && !планПомесячно) {
       try {
         const kztCents = Math.round(totalCents * CURRENCY_RATES.KZT.rate);
         const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
@@ -637,7 +679,7 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
 
     // 0b) PayPal — глобальный карт/PayPal-канал. Срабатывает только когда
     //     плательщик явно выбрал method="paypal" и провайдер настроен.
-    if (body.method === "paypal" && isPaypalConfigured() && !app) {
+    if (body.method === "paypal" && isPaypalConfigured() && !app && !планПомесячно) {
       try {
         const liteModule = tier.id === "lite" ? (body.modules ?? [])[0] : undefined;
         const intent = await paypalPaymentProvider.createIntent({
@@ -693,8 +735,8 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
     // товары с публикации (ступень full уходила за цену одного модуля).
     // Предикат ОДИН на кассу и витрину — иначе кнопка и касса разойдутся
     // (lemonSqueezyVariants.ts, fallbackVariantForReference).
-    const собственныйВариант = resolveLemonSqueezyVariant(reference);
-    const запасной = fallbackVariantForReference(reference);
+    const собственныйВариант = план ? план.variantId : resolveLemonSqueezyVariant(reference);
+    const запасной = план ? null : fallbackVariantForReference(reference);
     const lsReady =
       Boolean(process.env.LEMON_SQUEEZY_API_KEY?.trim()) &&
       Boolean(process.env.LEMON_SQUEEZY_STORE_ID?.trim()) &&
@@ -716,14 +758,17 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
         const intent = await lemonSqueezyPaymentProvider.createIntent({
           // Запасным путём касса открывается по варианту тарифа, а цену
           // назначаем мы: иначе покупатель заплатил бы цену планеты.
-          reference: запасной ? "tier_lite" : reference,
+          reference: запасной ? "tier_lite" : план ? план.reference : reference,
           amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
           // 🔴 19.10.2026: НАША сумма уходит в кассу ВСЕГДА (custom_price), а не только
           // запасным путём. Замер того дня: варианты планеты в LS несли прежнюю
           // лесенку ($400 за месяц), витрина — новую ($250): касса списала бы
           // цену товара, а не названную. Теперь списывается ровно totalCents.
           customPriceCents: totalCents,
-          customData: собратьCustomData(liteModule, channel),
+          // План: срок и режим едут в custom_data — вебхук по ним выдаёт ступень.
+          customData: план
+            ? { ...(собратьCustomData(liteModule, channel) ?? {}), ...план.customData }
+            : собратьCustomData(liteModule, channel),
           // Язык страницы оплаты. Берём его от САМОГО ПОКУПАТЕЛЯ, а не
           // подставляем свой: сперва то, что прислала витрина, иначе язык его
           // браузера. Без этого касса открывалась по-болгарски (замер 09.09).
@@ -746,6 +791,19 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
     }
 
     // 2) Gumroad — fallback (one-time продукты / пока LS не настроен).
+    // Помесячный план в разовую кассу не отдаём — см. отказ 503 выше; сюда он
+    // доходит только если LS упал на создании ссылки.
+    if (планПомесячно) {
+      return res.status(503).json({
+        error: "monthly_billing_unavailable",
+        tier: tier.id,
+        termMonths,
+        message: наЯзыке(языкПокупателя(req),
+          "Monthly billing is not available right now. Nothing was charged — pay the whole term up front or write to us.",
+          "Помесячное списание сейчас недоступно. Деньги не списаны — оплатите весь срок вперёд или напишите нам."),
+        contactUrl: `${FRONTEND_URL}/pricing/contact?tier=${tier.id}`,
+      });
+    }
     if (gumroadPermalinkConfigured(reference)) {
       предупредитьЕслиСуммаНеДоедет("gumroad");
       const intent = await gumroadPaymentProvider.createIntent({

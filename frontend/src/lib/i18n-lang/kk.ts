@@ -5101,6 +5101,7 @@ const kk: Record<string, string> = {
   "pricing.home.tier.termNote": "Тариф — бүкіл AEVION планетасына мерзімді міндеттеме: кез келген ақылы тарифте барлық модуль бар. Төлем ай сайын мерзім бағасымен алынады; бүкіл мерзімді алдын ала төлесеңіз — 12,5 %-ға дейін жеңілдік.",
   "pricing.home.tier.monthlyBilling": "Ай сайын {perMonth} алынады — {months} {unit} міндеттеме",
   "pricing.home.tier.prepay": "Немесе бүкіл мерзімді бір төлеммен алдын ала: {total} (−{percent} %)",
+  "pricing.home.tier.prepayCta": "Бүкіл мерзімді алдын ала төлеу — {total}",
   "pricing.home.apps.title": "Жеке қосымшалар",
   "pricing.home.apps.subtitle": "{count} қосымша тарифсіз де сатылады — сол мерзім баспалдағы бойынша. Қалған модульдер тек тарифтерге кіреді.",
   "pricing.home.apps.termAria": "Жеке қосымшалардың мерзімі",

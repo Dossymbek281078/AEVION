@@ -5101,6 +5101,7 @@ const en: Record<string, string> = {
   "pricing.home.tier.termNote": "A plan is a commitment to the whole AEVION planet for a term: every module in every paid plan. Billed monthly at the term's price; pay the whole term up front and take up to 12.5% off.",
   "pricing.home.tier.monthlyBilling": "Billed monthly at {perMonth} — a {months}-{unit} commitment",
   "pricing.home.tier.prepay": "Or pay the whole term up front: {total} (−{percent}%)",
+  "pricing.home.tier.prepayCta": "Pay the whole term up front — {total}",
   "pricing.home.apps.title": "Standalone apps",
   "pricing.home.apps.subtitle": "{count} apps are also sold without a plan — on the same term ladder. All other modules come only with a plan.",
   "pricing.home.apps.termAria": "Term for standalone apps",

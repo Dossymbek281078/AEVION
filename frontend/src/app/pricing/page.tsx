@@ -2,7 +2,7 @@
 
 import { channelNow } from "@/lib/channelNow";
 import { ждатьКарточкуПриложения } from "@/lib/scrollToAppCard";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { RazrabotkaPreduprezhdenie } from "@/components/RazrabotkaPreduprezhdenie";
@@ -336,10 +336,12 @@ export default function PricingPage() {
     seats?: number;
     promoCode?: string;
     trial?: boolean;
+    /** 19.10.2026: помесячно при обязательстве или весь срок вперёд (вариант «Б»). */
+    billing?: "monthly" | "prepaid";
     /** 160 (18.10.2026): нажато в смете — предупреждение кассы показываем рядом с её кнопкой, а не наверху страницы. */
     from?: "calc";
   }) {
-    const ключ = opts.app ? ключПриложения(opts.app) : opts.tierId;
+    const ключ = opts.app ? ключПриложения(opts.app) : opts.billing === "prepaid" ? `${opts.tierId}:prepaid` : opts.tierId;
     setCheckingOut(ключ);
     setCheckoutNotice(null);
     setNoticeFrom(opts.from ?? "other");
@@ -469,6 +471,21 @@ export default function PricingPage() {
   /** Можно ли купить товар с этой ссылкой прямо сейчас. Незнание = НЕ запрещаем. */
   const продаётсяСсылка = (ссылка: string) =>
     sellableRefs === null ? true : sellableRefs.includes(ссылка);
+  /*
+   * 19.10.2026, вариант «Б»: помесячно план покупается вариантом tier_lite, вперёд —
+   * вариантом своего срока. Что из этого продаётся, говорит /api/pricing
+   * plan.terms[].sellable; пока поля нет (старый бэкенд) — прежнее правило по ссылке.
+   * Кнопка «вперёд» без признака НЕ рисуется: её нажатие вело бы в 503.
+   */
+  const планПродаётся = useMemo(() => {
+    const terms = (data as unknown as { plan?: { terms?: Array<{ tierId: string; sellable?: { monthly: boolean; prepaid: boolean } }> } } | null)?.plan?.terms;
+    if (!Array.isArray(terms)) return null;
+    const out: Record<string, { monthly: boolean; prepaid: boolean }> = {};
+    for (const t of terms) if (t && t.sellable) out[t.tierId] = t.sellable;
+    return Object.keys(out).length ? out : null;
+  }, [data]);
+  const продаётсяПомесячно = (tierId: string) => (планПродаётся?.[tierId] ? планПродаётся[tierId].monthly : продаётся(tierId));
+  const продаётсяВперёд = (tierId: string) => Boolean(планПродаётся?.[tierId]?.prepaid);
   /**
    * Можно ли ОБЕЩАТЬ цену этого срока. Правило обратное кнопке намеренно.
    *
@@ -1538,7 +1555,7 @@ export default function PricingPage() {
                   </p>
                 )}
                 <button
-                  disabled={checkingOut === tier.id || !продаётся(tier.id)}
+                  disabled={checkingOut === tier.id || !продаётсяПомесячно(tier.id)}
                   style={{
                     width: "100%",
                     padding: "10px 16px",
@@ -1557,10 +1574,36 @@ export default function PricingPage() {
                     opacity: checkingOut === tier.id ? 0.7 : 1,
                   }}
                   // Любой срок открывает всю планету: выбирать продукт больше не нужно.
-                  onClick={() => startCheckout({ tierId: tier.id, seats: 1 })}
+                  // 19.10.2026: план списывается помесячно при обязательстве на срок.
+                  onClick={() => startCheckout({ tierId: tier.id, seats: 1, billing: "monthly" })}
                 >
                   {checkingOut === tier.id ? t("pricing.home.tier.openingCheckout") : tier.ctaLabel}
                 </button>
+                {/* Весь срок вперёд со скидкой — вторая кнопка, только когда вариант срока
+                    в кассе есть (plan.terms[].sellable.prepaid) и цена вперёд ниже суммы платежей. */}
+                {isTermTier(tier.id) && tier.termMonths !== null && tier.termMonths > 1 && tier.pricePrepayTotal != null && tier.priceTermTotal !== null && tier.pricePrepayTotal < tier.priceTermTotal && продаётсяВперёд(tier.id) && (
+                  <button
+                    data-testid={`prepay-${tier.id}`}
+                    disabled={checkingOut === `${tier.id}:prepaid`}
+                    style={{
+                      width: "100%",
+                      padding: "8px 16px",
+                      fontSize: 14.5,
+                      fontWeight: 700,
+                      borderRadius: 10,
+                      border: isHighlight ? "1px solid rgba(148,163,184,0.5)" : "1px solid #cbd5e1",
+                      cursor: checkingOut === `${tier.id}:prepaid` ? "wait" : "pointer",
+                      background: "transparent",
+                      color: isHighlight ? "#e2e8f0" : "#0f172a",
+                      marginBottom: 8,
+                    }}
+                    onClick={() => startCheckout({ tierId: tier.id, seats: 1, billing: "prepaid" })}
+                  >
+                    {checkingOut === `${tier.id}:prepaid`
+                      ? t("pricing.home.tier.openingCheckout")
+                      : t("pricing.home.tier.prepayCta", { total: displayPrice(tier.pricePrepayTotal) })}
+                  </button>
+                )}
                 </>
               )}
               {/* Калькулятор — только у тарифа, у которого ЕСТЬ товар: у тарифа без

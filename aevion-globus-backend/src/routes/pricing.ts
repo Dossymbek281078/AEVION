@@ -25,6 +25,7 @@ import {
   type TierId,
 } from "../data/pricing";
 import { projects } from "../data/projects";
+import { planetBillingSellable } from "../data/lemonSqueezyVariants";
 import { TESTIMONIALS, TRUST_NUMBERS, TRUST_BADGES } from "../data/trust";
 import { ROADMAP, PHASE_META } from "../data/roadmap";
 import { CASE_STUDIES, getCaseStudy } from "../data/cases";
@@ -203,6 +204,8 @@ pricingRouter.get("/", (_req, res) => {
         paymentsCount: planetPaymentsCount(t),
         prepayUsd: planetPrepayTotal(t),
         prepayDiscountPercent: PLANET_PREPAY_DISCOUNT_PERCENT[t],
+        // Вариант «Б»: что можно купить сейчас (переменные вариантов кассы заданы).
+        sellable: planetBillingSellable(t),
       })),
       /* Досрочная отмена (итог основателя 19.10 22:5x): прожитые дни — по самой
        * длинной пройденной ступени; дослужил — цена плана; разница > 0 возврат,

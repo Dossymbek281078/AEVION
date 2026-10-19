@@ -10,6 +10,7 @@ import {
   deriveVerdict,
   verdictCopy,
 } from "./integrityVerdict";
+import { channelFrom, keepChannel } from "@/lib/products";
 
 type VerifyData = {
   /**
@@ -120,6 +121,15 @@ export default function VerifyPage() {
   const [error, setError] = useState<string | null>(null);
   const [upgrading, setUpgrading] = useState(false);
   const [upgradeMsg, setUpgradeMsg] = useState<string | null>(null);
+  // Метка канала из адреса (?c=mail-pb01): нужна, чтобы переходы со страницы
+  // проверки не теряли канал и не становились «прямыми заходами» в воронке.
+  // Читаем после монтирования (клиентский компонент) — иначе SSR/ветка без
+  // window. keepChannel сохраняет и под-метку поста (byPost) третьим аргументом.
+  const [rawC, setRawC] = useState<string | null>(null);
+  useEffect(() => {
+    try { setRawC(new URLSearchParams(window.location.search).get("c")); } catch { /* нет window — канал null */ }
+  }, []);
+  const channel = channelFrom(rawC ?? undefined);
   const aevMinted = 0; // mintAevBureauVerify removed — function was never defined
 
   useEffect(() => {
@@ -262,6 +272,80 @@ export default function VerifyPage() {
               <a href="/aev/tokenomics" style={{ color: "#0e7490", textDecoration: "underline", fontWeight: 700 }}>see ledger →</a>
             </div>
           )}
+        </div>
+
+        {/*
+          Полоса действий СРАЗУ под вердиктом (просьба окна Продаж 19.10): человека,
+          которого убедил сертификат, раньше встречала пустота — единственная кнопка
+          страницы («Protect Your Own Work») лежала в 6 экранах вниз. Здесь три хода,
+          видимых на первом экране: сделать свою запись, узнать цену, партнёрство для
+          бюро. Все адреса — через keepChannel: метка канала из письма (?c=mail-pb01)
+          сохраняется на переходе, иначе заход уедет в «прямые» в воронке.
+        */}
+        <div
+          role="region"
+          aria-label="What you can do next"
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 10,
+            justifyContent: "center",
+            marginBottom: 24,
+          }}
+        >
+          <a
+            href={keepChannel("/qright", channel, rawC)}
+            style={{
+              flex: "1 1 220px",
+              minWidth: 0,
+              textAlign: "center",
+              padding: "13px 18px",
+              borderRadius: 11,
+              background: "#059669",
+              color: "#fff",
+              fontWeight: 800,
+              fontSize: 14,
+              textDecoration: "none",
+            }}
+          >
+            🛡️ Protect your own work in a minute
+          </a>
+          <a
+            href={keepChannel("/pricing?app=aevion-ip-bureau", channel, rawC)}
+            style={{
+              flex: "1 1 160px",
+              minWidth: 0,
+              textAlign: "center",
+              padding: "13px 18px",
+              borderRadius: 11,
+              background: "#fff",
+              color: "#0f766e",
+              border: "1.5px solid #0d9488",
+              fontWeight: 800,
+              fontSize: 14,
+              textDecoration: "none",
+            }}
+          >
+            💳 See the price
+          </a>
+          <a
+            href={keepChannel("/pricing/contact?app=ip_bureau&tier=lite", channel, rawC)}
+            style={{
+              flex: "1 1 220px",
+              minWidth: 0,
+              textAlign: "center",
+              padding: "13px 18px",
+              borderRadius: 11,
+              background: "#fff",
+              color: "#475569",
+              border: "1.5px solid #cbd5e1",
+              fontWeight: 700,
+              fontSize: 13.5,
+              textDecoration: "none",
+            }}
+          >
+            🤝 For bureaus & patent attorneys — partnership
+          </a>
         </div>
 
         {/* How to read this page */}

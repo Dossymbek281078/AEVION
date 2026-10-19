@@ -318,13 +318,19 @@ export default async function QSignVerifyPage({ params }: Props) {
           background: bannerBg,
           color: "#fff",
           padding: "26px 26px 22px",
-          display: "grid",
-          gridTemplateColumns: "minmax(0,1fr) auto",
+          /*
+           * 🔴 19.10.2026: было grid «minmax(0,1fr) auto» — на 390×844 QR (180px)
+           * оставлял заголовку 98px, и «ДЕЙСТВИТЕЛЬНАЯ ПОДПИСЬ» рвалось посреди
+           * слов (ДЕЙС/ТВИТЕ/ЛЬНА/Я). Теперь flex с переносом: текст не уже 240px,
+           * QR уходит под него, когда вдвоём не помещаются.
+           */
+          display: "flex",
+          flexWrap: "wrap",
           gap: 20,
           alignItems: "center",
         }}
       >
-        <div>
+        <div style={{ flex: "1 1 240px", minWidth: 0 }}>
           <div
             style={{
               fontSize: 11,
@@ -339,10 +345,11 @@ export default async function QSignVerifyPage({ params }: Props) {
           </div>
           <h1
             style={{
-              fontSize: 30,
+              fontSize: "clamp(22px, 7vw, 30px)",
               fontWeight: 900,
               margin: "0 0 8px",
               letterSpacing: "-0.02em",
+              overflowWrap: "normal",
             }}
           >
             {bannerTitle}

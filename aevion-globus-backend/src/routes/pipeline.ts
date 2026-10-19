@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { учестьДействие, отказПоНорме } from "../lib/freeActionQuota";
 import { denPoMestnomu } from "../lib/denPoMestnomu";
 import { этоНашаПроба, нечитаемыйЗаголовок, скрытоИзСписков } from "../lib/publicRegistryProbes";
 import crypto from "crypto";
@@ -967,6 +968,14 @@ pipelineRouter.post("/protect", async (req, res) => {
     // ни запроса к базе, ни разбора пользователя.
 
     const user = await resolveUser(req);
+    // 🔴 Волна 2 (19.10.2026): регистрация — платное действие qright_register: бесплатная
+    // норма в месяц, дальше 402 free_quota_exceeded с адресом тарифов; платящий проходит всегда;
+    // проверка чужих записей (/verify, /objects) остаётся бесплатной. Спит, пока действие
+    // не названо в PAID_ACTIONS. Витрина /qright шлёт сюда, а не в POST /api/qright/objects.
+    const норма = await учестьДействие(req, "qright_register");
+    if (норма.заблокировано) {
+      return отказПоНорме(res, "qright", норма);
+    }
     const result = await protectOne(req.body || {}, user);
     res.status(201).json({ success: true, ...result });
   } catch (err: unknown) {
@@ -1036,6 +1045,11 @@ pipelineRouter.post("/protect-batch", async (req, res) => {
     // mid-request, and avoiding N extra DB hits matters at batch=25.
     const user = await resolveUser(req);
 
+    // Волна 2: пакет регистраций считается как ОДНО действие нормы (защита от обхода по одному).
+    const нормаПакета = await учестьДействие(req, "qright_register");
+    if (нормаПакета.заблокировано) {
+      return отказПоНорме(res, "qright", нормаПакета);
+    }
     const results: Array<
       | { ok: true; index: number; certificate: Awaited<ReturnType<typeof protectOne>>["certificate"] }
       | { ok: false; index: number; error: string; code?: string; input: { title: unknown; kind: unknown } }

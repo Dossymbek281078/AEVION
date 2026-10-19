@@ -262,6 +262,15 @@ export default function VerifyPage() {
           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 8 }}>
             Verified at {new Date(data.verifiedAt).toLocaleString()} · Check #{data.stats.verifiedCount}
           </div>
+          {/* Кадр прода 390×844/1463×724 (19.10 20:5x): строка партнёра в карточке лежала на y=1304/974 —
+              ниже первого экрана. Бюро обещано «ваш бренд на странице проверки», значит имя — в вердикте,
+              который человек видит первым. Та же строка остаётся и в карточке. */}
+          {cert.partner ? (
+            <div data-testid="cert-partner-banner" style={{ marginTop: 10, fontSize: 14, fontWeight: 800, color: "#0f766e", lineHeight: 1.5 }}>
+              Запись сделана через {cert.partner} · проверку обеспечивает AEVION
+              <span style={{ display: "block", fontWeight: 500, color: "#475569", fontSize: 12 }}>Record made via {cert.partner} · verification by AEVION</span>
+            </div>
+          ) : null}
           {aevMinted > 0 && (
             <div style={{
               display: "inline-flex", alignItems: "center", gap: 8, marginTop: 12,

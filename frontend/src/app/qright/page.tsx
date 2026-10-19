@@ -13,6 +13,7 @@ import { InfoTip } from "@/components/InfoTip";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import AskAi from "@/components/AskAi";
 import { apiUrl } from "@/lib/apiBase";
+import { planetFromPerMonth, planetPricePerMonth } from "@/lib/termPricing";
 import { track } from "@/lib/track";
 import { canonicalContentHash } from "@/lib/canonicalContentHash";
 import { WaitlistCapture } from "@/components/WaitlistCapture";
@@ -145,6 +146,8 @@ export default function QRightPage() {
   const [country, setCountry] = useState("");
   const [city, setCity] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  /** Волна 2: бесплатная норма регистраций исчерпана — показываем предложение с ценой плана, а не ошибку. */
+  const [quotaOffer, setQuotaOffer] = useState<{ used: number; freePerMonth: number } | null>(null);
 
   // File-hash: SHA-256 of uploaded file bytes (optional, sent alongside the
   // canonical text-field contentHash so prior-art search can match actual files).
@@ -492,6 +495,14 @@ export default function QRightPage() {
       });
 
       const data = await res.json().catch(() => null);
+      if (res.status === 402 && data?.error === "free_quota_exceeded") {
+        // Не авария: норма исчерпана, человеку — предложение, а не «Protection failed».
+        timers.forEach(clearTimeout);
+        setQuotaOffer({ used: Number(data.used) || 0, freePerMonth: Number(data.freePerMonth) || 0 });
+        setStep("form");
+        track({ type: "feature_use", source: "qright", meta: { feature: "quota_offer", app: "qright" } });
+        return;
+      }
       if (!res.ok) throw new Error(data?.error || `Error ${res.status}`);
 
       await new Promise((r) => setTimeout(r, 2800));
@@ -1128,6 +1139,13 @@ export default function QRightPage() {
 
               {err && (
                 <div role="alert" style={{ color: "#dc2626", fontSize: 13, padding: "10px 14px", borderRadius: 10, background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.15)" }}>{err}</div>
+              )}
+              {quotaOffer && (
+                <div data-testid="quota-offer" role="status" style={{ fontSize: 13.5, lineHeight: 1.5, padding: "12px 14px", borderRadius: 10, background: "rgba(13,148,136,0.07)", border: "1px solid rgba(13,148,136,0.25)", color: "#0f172a" }}>
+                  <b>Free registrations this month are used up ({quotaOffer.used} of {quotaOffer.freePerMonth}).</b>{" "}
+                  The AEVION Planet plan removes the limit and opens every app — from ${planetFromPerMonth()}/mo on the 12-month term, ${planetPricePerMonth("lite")}/mo with no term.{" "}
+                  <a href="/pricing#tiers" style={{ color: "#0d9488", fontWeight: 800 }}>See plans →</a>
+                </div>
               )}
 
               <button type="submit" aria-label="Protect my work — register, sign, and shield in one click" style={{ padding: "16px 24px", borderRadius: 14, border: "none", background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", fontWeight: 900, fontSize: 16, cursor: "pointer", boxShadow: "0 4px 20px rgba(13,148,136,0.35)" }}>

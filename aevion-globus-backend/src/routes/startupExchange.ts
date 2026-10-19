@@ -13,6 +13,7 @@
  */
 
 import { Router, Request, Response, NextFunction } from "express";
+import { учестьДействие, отказПоНорме } from "../lib/freeActionQuota";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import crypto from "node:crypto";
 import { rateLimit } from "../lib/rateLimit";
@@ -781,6 +782,12 @@ startupExchangeRouter.post("/ideas", publishGate, postLimiter, async (req: Reque
   const { listing, issues } = normalizeListing(req.body);
   if (!listing) return fail(res, "validation_failed", 400, { issues });
 
+  // 🔴 Волна 2 (19.10.2026): публикация карточки — платное действие startup_publish
+  // (просмотр, RSS и интерес инвестора — бесплатно). Спит, пока не названо в PAID_ACTIONS.
+  const норма = await учестьДействие(req, "startup_publish");
+  if (норма.заблокировано) {
+    return отказПоНорме(res, "startup-exchange", норма);
+  }
   let assessment: Assessment;
   try {
     assessment = assessListing(listing);

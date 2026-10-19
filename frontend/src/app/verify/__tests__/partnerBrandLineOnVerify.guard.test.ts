@@ -26,7 +26,16 @@ describe("бренд бюро на /verify (19.10.2026)", () => {
     expect(block).toMatch(/\) : null\}/);
     expect(block).not.toContain("undefined");
   });
-  it("строка стоит в шапке карточки сразу под названием записи — видна без прокрутки", () => {
+  it("строка партнёра стоит и в вердикте первого экрана (кадр 19.10: карточка была на y=1304/974)", () => {
+    expect(SRC).toContain('data-testid="cert-partner-banner"');
+    const banner = SRC.indexOf('data-testid="cert-partner-banner"');
+    const verified = SRC.indexOf("Verified at {new Date(data.verifiedAt)");
+    expect(verified).toBeGreaterThan(0);
+    expect(banner - verified, "строка партнёра ушла из вердикта").toBeGreaterThan(0);
+    expect(banner - verified).toBeLessThan(900);
+    expect(SRC.slice(banner - 80, banner), "вердикт рисует строку без условия partner").toContain("{cert.partner ? (");
+  });
+  it("строка стоит в шапке карточки сразу под названием записи", () => {
     const title = SRC.indexOf("{cert.title}</div>");
     const partner = SRC.indexOf('data-testid="cert-partner"');
     expect(title).toBeGreaterThan(0);

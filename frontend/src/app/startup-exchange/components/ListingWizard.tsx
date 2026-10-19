@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { planetFromPerMonth, planetPricePerMonth } from "@/lib/termPricing";
 import { useI18nOptional } from "@/lib/i18n";
 import { SX_BUSY } from "./busyUi";
 import {
@@ -98,6 +99,8 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
   const [busy, setBusy] = useState(false);
   const [issues, setIssues] = useState<ValidationIssue[]>([]);
   const [error, setError] = useState<string | null>(null);
+  /** Волна 2: бесплатная норма публикаций исчерпана — предложение с ценой плана. */
+  const [quotaOffer, setQuotaOffer] = useState(false);
 
   const spec = tiers.find((t) => t.id === tier);
   const allowedIntents = spec?.intents ?? ["raise"];
@@ -171,7 +174,9 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
       setPhase("published");
       onPublished(r.listing);
     } catch (e) {
-      if (e instanceof ApiError) {
+      if (e instanceof ApiError && e.code === "free_quota_exceeded") {
+        setQuotaOffer(true);
+      } else if (e instanceof ApiError) {
         setIssues(e.issues);
         if (e.issues.length === 0) setError(e.message);
       } else {
@@ -531,6 +536,12 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
             </div>
           )}
           {error && <p style={{ color: "#dc2626", fontSize: 12.5, margin: "8px 0" }}>{error}</p>}
+          {quotaOffer && (
+            <p data-testid="quota-offer" role="status" style={{ fontSize: 13, lineHeight: 1.5, margin: "8px 0", padding: "10px 12px", borderRadius: 10, background: "rgba(13,148,136,0.07)", border: "1px solid rgba(13,148,136,0.25)" }}>
+              <b>Бесплатные публикации на этот месяц исчерпаны.</b> План «AEVION Планета» снимает ограничение и открывает все приложения — от ${planetFromPerMonth()}/мес при оплате за 12 месяцев, ${planetPricePerMonth("lite")}/мес без срока.{" "}
+              <a href="/pricing#tiers" style={{ color: "#0d9488", fontWeight: 800 }}>Смотреть тарифы →</a>
+            </p>
+          )}
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 6 }}>
             <button type="button" onClick={() => runAssessment("terms")} disabled={busy} style={secondaryBtn(busy)}>

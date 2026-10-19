@@ -36,7 +36,6 @@ const ОТЛОЖЕНО: Record<string, string> = {
   bureau_certificate: "выдача идёт через оплату провайдером, счётчик там лишний — разбирается отдельно",
   devhub_build: "у DevHub свой тариф (DevHubTier), норму вплетаем в него, а не поверх",
   qskyway_route: "ждёт подключения 28.09",
-  startup_publish: "ждёт подключения 28.09",
   qventure_publish: "ждёт подключения 28.09",
 };
 

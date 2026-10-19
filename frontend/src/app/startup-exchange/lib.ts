@@ -155,9 +155,12 @@ export interface ValidationIssue {
 
 export class ApiError extends Error {
   issues: ValidationIssue[];
-  constructor(message: string, issues: ValidationIssue[] = []) {
+  /** Код ошибки сервера (free_quota_exceeded и др.) — чтобы экран показал предложение, а не текст. */
+  code?: string;
+  constructor(message: string, issues: ValidationIssue[] = [], code?: string) {
     super(message);
     this.issues = issues;
+    this.code = code;
   }
 }
 
@@ -167,6 +170,8 @@ export class ApiError extends Error {
  * сломалось ли что-то у него или у нас.
  */
 const ERROR_TEXT: Record<string, string> = {
+  // Волна 2 (19.10.2026): норма бесплатных публикаций в месяц исчерпана — это предложение, не поломка.
+  free_quota_exceeded: "Бесплатные публикации на этот месяц исчерпаны. План «AEVION Планета» снимает ограничение — /pricing#tiers",
   rate_limited: "Слишком много запросов подряд. Подождите минуту и повторите.",
   daily_publish_limit: "С этого адреса сегодня уже опубликовано максимум заявок. Следующая — завтра.",
   validation_failed: "Проверьте отмеченные поля.",
@@ -206,7 +211,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   }
   const body = payload as { success?: boolean; data?: T; error?: string; issues?: ValidationIssue[] };
   if (!resp.ok || body?.success === false) {
-    throw new ApiError(humanError(body?.error, resp.status), body?.issues ?? []);
+    throw new ApiError(humanError(body?.error, resp.status), body?.issues ?? [], body?.error);
   }
   return body.data as T;
 }

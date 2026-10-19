@@ -32,6 +32,57 @@ export const SUPPORTED_LOCALES: { code: CcLocale; label: string; flag: string }[
 const DICTIONARY: Record<CcLocale, Record<string, string>> = {
   ru: {
     ...PZ_SLOVA.ru,
+    // ── Видимый текст игрового экрана (волна EN, 19.10.2026). Русские значения —
+    //    ДОСЛОВНО как было в page.tsx хардкодом; английские — рядом в en.
+    //    Атрибуты title/aria и темы доски — отдельная волна (Б).
+    "game.check": "Шах!",
+    "game.thinkingSF": "Stockfish думает…",
+    "game.thinkingAI": "ИИ думает…",
+    "game.yourMove": "Ваш ход",
+    "game.aiMove": "Ход ИИ",
+    "game.you": "Вы",
+    "game.thinkingBadge": "думаю",
+    "rp.moves": "Ходы",
+    "rp.info": "Инфо",
+    "rp.explorer": "Дебют",
+    "rp.coach": "Коуч",
+    "tile.stream": "Стрим",
+    "tile.streamLive": "Live●",
+    "tile.more": "Ещё",
+    "tile.video": "Видео",
+    "tile.videoOn": "Видео✓",
+    "btn.resign": "🏳 Сдаться",
+    "btn.resignConfirm": "Точно сдаться? ✓",
+    "btn.draw": "½ Ничья",
+    "btn.drawConfirm": "Предложить ничью? ✓",
+    "btn.undo": "↩ Отменить ход",
+    "btn.hint": "💡 Подсказка",
+    "btn.voice": "🎤 Голос",
+    "btn.voiceListening": "🔴 Слушаю (нажми для паузы)",
+    "btn.textMove": "⌨️ Ход текстом",
+    "login.signIn": "Войти",
+    "analysis.variant": "🔍 Анализ варианта",
+    "analysis.variantHint": "Двигай за обе стороны не ломая партию",
+    "mq.brilliant": "блеск",
+    "mq.great": "отлично",
+    "mq.good": "хорошо",
+    "mq.inacc": "неточность",
+    "mq.mistake": "ошибка",
+    "mq.blunder": "зевок",
+    "plashka.title": "Задача дня — на почту",
+    "plashka.button": "Получать",
+    "plashka.promise": "Письмо на запуск. Отписка — одним нажатием.",
+    "a11y.boardPrefix": "Шахматная доска.",
+    "a11y.white": "белые",
+    "a11y.black": "чёрные",
+    "a11y.yourMove": "ваш ход",
+    "a11y.oppMove": "ход соперника",
+    "a11y.noMovePuzzle": ", ход ещё не сделан",
+    "a11y.notStarted": ", партия ещё не начата",
+    "a11y.lastMovePrefix": ", последний ход ",
+    "a11y.check": ", шах",
+    "a11y.howtoTouch": "Ходы делаются касанием: коснитесь фигуры, затем клетки, куда пойти.",
+    "a11y.howtoKeyboard": "Ходы вводятся с клавиатуры в нотации, например e4 или Кf3.",
     // 30.09.2026: две подписи ушли из кода в словарь — сторож attrI18n считал их
     // русским текстом на переводимой странице, и он прав: на английском экране
     // они оставались русскими. Дата запуска здесь НЕ пишется — её подставляет
@@ -353,6 +404,55 @@ const DICTIONARY: Record<CcLocale, Record<string, string>> = {
   },
   en: {
     ...PZ_SLOVA.en,
+    // ── Visible game-screen text (EN wave, 2026-10-19). RU originals kept verbatim.
+    "game.check": "Check!",
+    "game.thinkingSF": "Stockfish is thinking…",
+    "game.thinkingAI": "AI is thinking…",
+    "game.yourMove": "Your move",
+    "game.aiMove": "AI to move",
+    "game.you": "You",
+    "game.thinkingBadge": "thinking",
+    "rp.moves": "Moves",
+    "rp.info": "Info",
+    "rp.explorer": "Openings",
+    "rp.coach": "Coach",
+    "tile.stream": "Stream",
+    "tile.streamLive": "Live●",
+    "tile.more": "More",
+    "tile.video": "Video",
+    "tile.videoOn": "Video✓",
+    "btn.resign": "🏳 Resign",
+    "btn.resignConfirm": "Resign for sure? ✓",
+    "btn.draw": "½ Draw",
+    "btn.drawConfirm": "Offer a draw? ✓",
+    "btn.undo": "↩ Undo move",
+    "btn.hint": "💡 Hint",
+    "btn.voice": "🎤 Voice",
+    "btn.voiceListening": "🔴 Listening (tap to pause)",
+    "btn.textMove": "⌨️ Move by text",
+    "login.signIn": "Sign in",
+    "analysis.variant": "🔍 Line analysis",
+    "analysis.variantHint": "Move for both sides without breaking the game",
+    "mq.brilliant": "brilliant",
+    "mq.great": "great",
+    "mq.good": "good",
+    "mq.inacc": "inaccuracy",
+    "mq.mistake": "mistake",
+    "mq.blunder": "blunder",
+    "plashka.title": "Daily puzzle by email",
+    "plashka.button": "Subscribe",
+    "plashka.promise": "One launch email. Unsubscribe in one tap.",
+    "a11y.boardPrefix": "Chess board.",
+    "a11y.white": "White",
+    "a11y.black": "Black",
+    "a11y.yourMove": "your move",
+    "a11y.oppMove": "opponent to move",
+    "a11y.noMovePuzzle": ", no move made yet",
+    "a11y.notStarted": ", game not started",
+    "a11y.lastMovePrefix": ", last move ",
+    "a11y.check": ", check",
+    "a11y.howtoTouch": "Moves are made by touch: tap a piece, then the square to move to.",
+    "a11y.howtoKeyboard": "Moves are entered on the keyboard in notation, e.g. e4 or Nf3.",
     "wl.launch.title": "CyberChess full launch",
     "buy.card.title": "Card payment · CyberChess subscription",
     "tc.bullet": "Bullet", "tc.blitz": "Blitz", "tc.rapid": "Rapid", "tc.custom": "Custom",
@@ -967,6 +1067,14 @@ export function loadLocale(): CcLocale {
     // 1. Свой явный выбор — старше всех: человек выбрал язык именно для шахмат.
     const stored = localStorage.getItem(LOCALE_KEY);
     if (stored === "ru" || stored === "en" || stored === "kk") return stored;
+    // 1б. Префикс адреса /en/ или /kk/ — явное намерение ссылки (письма тренерам
+    //     ведут на /en/cyberchess). Старше куки/браузера, но НИЖЕ своего выбора,
+    //     иначе переключатель на этих маршрутах не смог бы увести с языка адреса.
+    try {
+      const path = window.location?.pathname || "";
+      if (/^\/en(\/|$)/.test(path)) return "en";
+      if (/^\/kk(\/|$)/.test(path)) return "kk";
+    } catch {}
     // 2. Выбор языка платформы. КУКА старше localStorage: выбор из другой
     //    сессии/через SSR приходит именно кукой (setLang пишет и то, и другое,
     //    но localStorage — только в той вкладке, где переключали). Без чтения

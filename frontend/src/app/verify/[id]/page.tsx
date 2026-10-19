@@ -11,6 +11,8 @@ import {
   verdictCopy,
 } from "./integrityVerdict";
 import { channelFrom, keepChannel } from "@/lib/products";
+import { useI18nOptional } from "@/lib/i18n";
+import { tv } from "./verifyI18n";
 
 type VerifyData = {
   /**
@@ -116,6 +118,8 @@ const KIND_LABELS: Record<string, string> = {
 
 export default function VerifyPage() {
   const params = useParams();
+  // Язык экрана — из переключателя сайта (ru/kk/en…); словарь — ./verifyI18n.ts
+  const lang = useI18nOptional()?.lang;
   const certId = params?.id as string;
 
   const [loading, setLoading] = useState(true);
@@ -193,7 +197,7 @@ export default function VerifyPage() {
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f8fafc" }}>
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: "#0f172a" }}>Verifying certificate...</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "#0f172a" }}>{tv(lang, "Verifying certificate...")}</div>
           <div style={{ fontSize: 13, color: "#64748b", marginTop: 8 }}>{certId}</div>
         </div>
       </div>
@@ -205,13 +209,13 @@ export default function VerifyPage() {
       <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f8fafc" }}>
         <div style={{ textAlign: "center", maxWidth: 480, padding: "0 20px" }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>❌</div>
-          <div style={{ fontSize: 22, fontWeight: 900, color: "#dc2626", marginBottom: 8 }}>Verification Failed</div>
-          <div style={{ fontSize: 14, color: "#475569", marginBottom: 20 }}>{error || "Certificate not found"}</div>
+          <div style={{ fontSize: 22, fontWeight: 900, color: "#dc2626", marginBottom: 8 }}>{tv(lang, "Verification Failed")}</div>
+          <div style={{ fontSize: 14, color: "#475569", marginBottom: 20 }}>{error || tv(lang, "Certificate not found")}</div>
           <div style={{ padding: "12px 16px", borderRadius: 10, background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.15)", fontSize: 12, color: "#64748b", fontFamily: "monospace" }}>
             ID: {certId}
           </div>
           <a href="/" style={{ display: "inline-block", marginTop: 20, padding: "10px 20px", borderRadius: 10, background: "#0f172a", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 14 }}>
-            Go to AEVION
+            {tv(lang, "Go to AEVION")}
           </a>
         </div>
       </div>
@@ -238,7 +242,7 @@ export default function VerifyPage() {
             <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg, #0d9488, #06b6d4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 900, color: "#fff" }}>A</div>
             <span style={{ fontSize: 16, fontWeight: 900, color: "#fff", letterSpacing: "-0.02em" }}>AEVION</span>
           </a>
-          <div style={{ fontSize: 12, color: "#64748b" }}>Digital IP Bureau — Public Verification</div>
+          <div style={{ fontSize: 12, color: "#64748b" }}>{tv(lang, "Digital IP Bureau — Public Verification")}</div>
         </div>
       </div>
 
@@ -256,19 +260,19 @@ export default function VerifyPage() {
         }}>
           <div style={{ fontSize: 48, marginBottom: 8 }}>{banner.icon}</div>
           <div style={{ fontSize: 24, fontWeight: 900, color: allChecksPass ? "#059669" : "#d97706", marginBottom: 6 }}>
-            {banner.title}
+            {tv(lang, banner.title)}
           </div>
-          <div style={{ fontSize: 14, color: "#475569" }}>{banner.body}</div>
+          <div style={{ fontSize: 14, color: "#475569" }}>{tv(lang, banner.body)}</div>
           <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 8 }}>
-            Verified at {new Date(data.verifiedAt).toLocaleString()} · Check #{data.stats.verifiedCount}
+            {tv(lang, "Verified at")} {new Date(data.verifiedAt).toLocaleString()} · {tv(lang, "Check #")}{data.stats.verifiedCount}
           </div>
           {/* Кадр прода 390×844/1463×724 (19.10 20:5x): строка партнёра в карточке лежала на y=1304/974 —
               ниже первого экрана. Бюро обещано «ваш бренд на странице проверки», значит имя — в вердикте,
               который человек видит первым. Та же строка остаётся и в карточке. */}
           {cert.partner ? (
             <div data-testid="cert-partner-banner" style={{ marginTop: 10, fontSize: 14, fontWeight: 800, color: "#0f766e", lineHeight: 1.5 }}>
-              Запись сделана через {cert.partner} · проверку обеспечивает AEVION
-              <span style={{ display: "block", fontWeight: 500, color: "#475569", fontSize: 12 }}>Record made via {cert.partner} · verification by AEVION</span>
+              {tv(lang, "Record made via")} {cert.partner} · {tv(lang, "verification by AEVION")}
+              {lang !== "en" && <span style={{ display: "block", fontWeight: 500, color: "#475569", fontSize: 12 }}>Record made via {cert.partner} · verification by AEVION</span>}
             </div>
           ) : null}
           {aevMinted > 0 && (
@@ -319,10 +323,10 @@ export default function VerifyPage() {
               textDecoration: "none",
             }}
           >
-            🛡️ Protect your own work in a minute
+            {tv(lang, "🛡️ Protect your own work in a minute")}
           </a>
           <a
-            href={keepChannel("/pricing/contact?app=ip_bureau", channel, rawC)}
+            href={keepChannel("/pricing/contact?topic=bureau&app=ip_bureau", channel, rawC)}
             style={{
               flex: "1 1 160px",
               minWidth: 0,
@@ -337,10 +341,10 @@ export default function VerifyPage() {
               textDecoration: "none",
             }}
           >
-            💳 Ask about pricing
+            {tv(lang, "💳 Ask about pricing")}
           </a>
           <a
-            href={keepChannel("/pricing/contact?app=ip_bureau&tier=lite", channel, rawC)}
+            href={keepChannel("/pricing/contact?topic=bureau&app=ip_bureau&tier=lite", channel, rawC)}
             style={{
               flex: "1 1 220px",
               minWidth: 0,
@@ -355,7 +359,7 @@ export default function VerifyPage() {
               textDecoration: "none",
             }}
           >
-            🤝 For bureaus & patent attorneys — partnership
+            {tv(lang, "🤝 For bureaus & patent attorneys — partnership")}
           </a>
         </div>
 
@@ -367,23 +371,23 @@ export default function VerifyPage() {
         >
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
             <span style={{ fontSize: 18 }} aria-hidden>👇</span>
-            <div style={{ fontSize: 13, fontWeight: 900, color: "#0f766e" }}>How to read this page</div>
+            <div style={{ fontSize: 13, fontWeight: 900, color: "#0f766e" }}>{tv(lang, "How to read this page")}</div>
           </div>
           <ol style={{ margin: 0, paddingLeft: 22, display: "grid", gap: 6, fontSize: 12, color: "#0f172a", lineHeight: 1.6 }}>
             <li>
-              <b>Status banner</b> above is the one-line verdict — green only if every applicable layer matched.
+              <b>{tv(lang, "Status banner")}</b> {tv(lang, "above is the one-line verdict — green only if every applicable layer matched.")}
             </li>
             <li>
-              <b>Integrity Checks</b> break that verdict apart: content hash, HMAC (with key version), Shamir shielding, and the author&apos;s own co-signature. Each tile is one independent test.
+              <b>{tv(lang, "Integrity Checks")}</b> {tv(lang, "break that verdict apart: content hash, HMAC (with key version), Shamir shielding, and the author's own co-signature. Each tile is one independent test.")}
             </li>
             <li>
-              <b>Shard Distribution</b> shows where the Ed25519 private key was split. AEVION holds at most 1 of 3, so we cannot forge or recover this key alone.
+              <b>{tv(lang, "Shard Distribution")}</b> {tv(lang, "shows where the Ed25519 private key was split. AEVION holds at most 1 of 3, so we cannot forge or recover this key alone.")}
             </li>
             <li>
-              <b>Bitcoin Anchor</b> records <i>when</i> the certificate existed — settled by Bitcoin&apos;s proof-of-work, not by us.
+              <b>{tv(lang, "Bitcoin Anchor")}</b> {tv(lang, "records")} <i>{tv(lang, "when")}</i> {tv(lang, "the certificate existed — settled by Bitcoin's proof-of-work, not by us.")}
             </li>
             <li>
-              <b>Independent of AEVION</b> at the bottom downloads a self-contained bundle — verify offline today, in 10 years, on any machine.
+              <b>{tv(lang, "Independent of AEVION")}</b> {tv(lang, "at the bottom downloads a self-contained bundle — verify offline today, in 10 years, on any machine.")}
             </li>
           </ol>
         </div>
@@ -395,15 +399,15 @@ export default function VerifyPage() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
               <div>
                 <div style={{ fontSize: 10, fontWeight: 700, color: "#0d9488", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>
-                  AEVION Digital IP Bureau — Protection Certificate
+                  {tv(lang, "AEVION Digital IP Bureau — Protection Certificate")}
                 </div>
                 <div style={{ fontSize: 22, fontWeight: 900 }}>{cert.title}</div>
                 {/* 19.10.2026, обещано бюро письмами: запись через партнёра — его имя на странице
                     проверки. Строка только при заполненном поле; без партнёра страница как прежде. */}
                 {cert.partner ? (
                   <div data-testid="cert-partner" style={{ marginTop: 8, fontSize: 13, fontWeight: 700, color: "#99f6e4", lineHeight: 1.5 }}>
-                    Запись сделана через {cert.partner} · проверку обеспечивает AEVION
-                    <span style={{ display: "block", fontWeight: 500, color: "#94a3b8", fontSize: 12 }}>Record made via {cert.partner} · verification by AEVION</span>
+                    {tv(lang, "Record made via")} {cert.partner} · {tv(lang, "verification by AEVION")}
+                    {lang !== "en" && <span style={{ display: "block", fontWeight: 500, color: "#94a3b8", fontSize: 12 }}>Record made via {cert.partner} · verification by AEVION</span>}
                   </div>
                 ) : null}
               </div>
@@ -416,7 +420,7 @@ export default function VerifyPage() {
                   fontSize: 12,
                   fontWeight: 800,
                 }}>
-                  {cert.status === "active" ? "✓ PROTECTED" : "⚠ " + cert.status.toUpperCase()}
+                  {cert.status === "active" ? tv(lang, "✓ PROTECTED") : "⚠ " + cert.status.toUpperCase()}
                 </div>
                 {cert.verificationLevel === "verified" && (
                   <div style={{
@@ -439,10 +443,10 @@ export default function VerifyPage() {
           <div style={{ padding: "20px 24px", background: "#fff" }}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
               {[
-                { label: "Author", value: cert.author },
-                { label: "Type", value: KIND_LABELS[cert.kind] || cert.kind },
-                { label: "Protected At", value: new Date(cert.protectedAt).toLocaleString() },
-                { label: "Location", value: cert.location || "Not specified" },
+                { label: tv(lang, "Author"), value: cert.author },
+                { label: tv(lang, "Type"), value: KIND_LABELS[cert.kind] || cert.kind },
+                { label: tv(lang, "Protected At"), value: new Date(cert.protectedAt).toLocaleString() },
+                { label: tv(lang, "Location"), value: cert.location || tv(lang, "Not specified") },
               ].map((f) => (
                 <div key={f.label}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", marginBottom: 2 }}>{f.label}</div>
@@ -453,7 +457,7 @@ export default function VerifyPage() {
 
             {cert.description && (
               <div style={{ marginBottom: 16, padding: "12px 14px", borderRadius: 10, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)" }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", marginBottom: 4 }}>Description</div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", marginBottom: 4 }}>{tv(lang, "Description")}</div>
                 <div style={{ fontSize: 13, color: "#334155", lineHeight: 1.6 }}>{cert.description}</div>
               </div>
             )}
@@ -463,7 +467,7 @@ export default function VerifyPage() {
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                   <span style={{ fontSize: 18 }} aria-hidden>⭐</span>
                   <div style={{ fontSize: 12, fontWeight: 900, color: "#312e81" }}>
-                    Author identity verified by AEVION Bureau
+                    {tv(lang, "Author identity verified by AEVION Bureau")}
                   </div>
                   <InfoTip
                     label="Verified Author tier"
@@ -484,7 +488,7 @@ export default function VerifyPage() {
 
             {/* Cryptographic details */}
             <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a", marginBottom: 10, display: "flex", alignItems: "center" }}>
-              Cryptographic Proof
+              {tv(lang, "Cryptographic Proof")}
               <InfoTip
                 label="Cryptographic Proof"
                 text="Derived proofs — the SHA-256 content hash, the HMAC and Ed25519 signatures, and AEVION's platform attestation of this certificate's key — plus the algorithm and certificate ID for context. Tampering with a field that the hash covers breaks at least one of them. Note the limit honestly: certificates issued under the earlier v1 rule hashed only title, description and work type, so country and city are recorded on the certificate but not covered by that hash — the row above says which rule applies."
@@ -493,13 +497,13 @@ export default function VerifyPage() {
             <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
               {[
                 {
-                  label: "Content Hash (SHA-256)",
+                  label: tv(lang, "Content Hash (SHA-256)"),
                   value: cert.contentHash,
                   valid: integrity.contentHashValid,
                   tip: { name: "SHA-256", text: "Cryptographic fingerprint of your work. Changing one byte in the source produces a completely different hash, so this value can prove the original content has not been altered." },
                 },
                 {
-                  label: "HMAC-SHA256 Signature",
+                  label: tv(lang, "HMAC-SHA256 Signature"),
                   value: cert.signatureHmac,
                   tip: { name: "HMAC-SHA256", text: "Tamper-detection signature computed with AEVION's secret key. Anyone with the same key can re-derive it from the certificate fields and check that it has not been changed." },
                 },
@@ -513,7 +517,7 @@ export default function VerifyPage() {
                   // и офлайн-проверка их действительно сверяет. Подпись должна
                   // называть то, что показано, и вести туда, где проверка
                   // возможна.
-                  label: "Ed25519 Signature (first 64 chars)",
+                  label: tv(lang, "Ed25519 Signature (first 64 chars)"),
                   value: cert.signatureEd25519 || "N/A",
                   // Текст зависит от того, ЕСТЬ ЛИ что проверять: у старой
                   // схемы подписанный текст утрачен вместе с временной меткой,
@@ -521,7 +525,7 @@ export default function VerifyPage() {
                   tip: { name: "Ed25519", text: ed25519FieldNote(integrity.signatureHmacReason) },
                 },
                 {
-                  label: "Platform attestation",
+                  label: tv(lang, "Platform attestation"),
                   // Единственный слой, чей открытый ключ берётся НЕ из пакета:
                   // по kid его получают на /api/qsign/v2/keys. Без него подпись
                   // выше самосогласована — проверяется ключом, приехавшим рядом
@@ -539,9 +543,9 @@ export default function VerifyPage() {
                       : "This certificate has no platform attestation: it was issued before the layer existed, or the platform key was unavailable at issue time. The signatures above still verify, but only against a key that travels with the certificate.",
                   },
                 },
-                { label: "Algorithm", value: cert.algorithm },
-                { label: "Certificate ID", value: cert.id },
-                ...(cert.fileHash ? [{ label: "File Hash (SHA-256)", value: cert.fileHash, tip: { name: "File Hash", text: "SHA-256 of the original file bytes, computed in the author's browser before submission. Paste this hash into the bureau prior-art search to find this exact file." } }] : []),
+                { label: tv(lang, "Algorithm"), value: cert.algorithm },
+                { label: tv(lang, "Certificate ID"), value: cert.id },
+                ...(cert.fileHash ? [{ label: tv(lang, "File Hash (SHA-256)"), value: cert.fileHash, tip: { name: "File Hash", text: "SHA-256 of the original file bytes, computed in the author's browser before submission. Paste this hash into the bureau prior-art search to find this exact file." } }] : []),
               ].map((item) => (
                 <div key={item.label} style={{
                   padding: "10px 12px",
@@ -561,7 +565,7 @@ export default function VerifyPage() {
                       )}
                       {"valid" in item && (
                         <span style={{ color: item.valid ? "#059669" : "#dc2626", fontSize: 10 }}>
-                          {item.valid ? " ✓ valid" : " ✗ mismatch"}
+                          {item.valid ? tv(lang, " ✓ valid") : tv(lang, " ✗ mismatch")}
                         </span>
                       )}
                     </div>
@@ -571,7 +575,7 @@ export default function VerifyPage() {
                     onClick={() => copy(item.value)}
                     style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", color: "#475569", flexShrink: 0 }}
                   >
-                    Copy
+                    {tv(lang, "Copy")}
                   </button>
                 </div>
               ))}
@@ -579,10 +583,10 @@ export default function VerifyPage() {
 
             {/* Integrity checks */}
             <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a", marginBottom: 10, display: "flex", alignItems: "center" }}>
-              Integrity Checks
+              {tv(lang, "Integrity Checks")}
               <InfoTip
                 label="Integrity Checks"
-                text="Each tile is one independent test. Green passed. Red failed — something does not match and the certificate cannot be relied on. Grey means the layer did not exist yet when this certificate was issued, so there is nothing to check: that is the certificate's age, not a failure."
+                text={tv(lang, "Each tile is one independent test. Green passed. Red failed — something does not match and the certificate cannot be relied on. Grey means the layer did not exist yet when this certificate was issued, so there is nothing to check: that is the certificate's age, not a failure.")}
               />
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
@@ -610,10 +614,10 @@ export default function VerifyPage() {
                 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" }}>
                     <span style={{ fontSize: 14 }} aria-label={palette.aria}>{palette.mark}</span>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: "#0f172a" }}>{check.label}</span>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: "#0f172a" }}>{tv(lang, check.label)}</span>
                     {check.tip && <InfoTip label={check.tip.name} text={check.tip.text} size={12} />}
                   </div>
-                  <div style={{ fontSize: 11, color: "#64748b" }}>{check.detail}</div>
+                  <div style={{ fontSize: 11, color: "#64748b" }}>{tv(lang, check.detail)}</div>
                 </div>
                 );
               })}
@@ -624,7 +628,7 @@ export default function VerifyPage() {
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ fontSize: 18 }} aria-hidden>🛡️</span>
                   <div>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: "#0f766e" }}>Linked Quantum Shield record</div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: "#0f766e" }}>{tv(lang, "Linked Quantum Shield record")}</div>
                     <div style={{ fontSize: 11, fontFamily: "monospace", color: "#475569", marginTop: 2 }}>{integrity.shieldId}</div>
                   </div>
                 </div>
@@ -632,7 +636,7 @@ export default function VerifyPage() {
                   href={`/quantum-shield/${integrity.shieldId}`}
                   style={{ padding: "8px 14px", borderRadius: 8, background: "#0d9488", color: "#fff", textDecoration: "none", fontSize: 12, fontWeight: 800 }}
                 >
-                  View Shield →
+                  {tv(lang, "View Shield →")}
                 </a>
               </div>
             )}
@@ -646,7 +650,7 @@ export default function VerifyPage() {
               <div>
                 <div style={{ fontSize: 15, fontWeight: 900, color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ fontSize: 20 }} aria-hidden>🧩</span>
-                  Shard Distribution (Shamir SSS 2-of-3)
+                  {tv(lang, "Shard Distribution (Shamir SSS 2-of-3)")}
                   <InfoTip
                     label="Shamir 2-of-3"
                     text="The signing key is split into 3 pieces stored in different places. Combining any 2 of the 3 reconstructs the key; possessing only 1 reveals nothing. AEVION holds at most 1 — so no rogue platform action can forge your certificate."
@@ -654,8 +658,8 @@ export default function VerifyPage() {
                 </div>
                 <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
                   {data.shardDistribution.realDistributed
-                    ? "Any 2 of 3 shards reconstruct the Ed25519 private key; no single holder can forge the certificate."
-                    : "Legacy record: all three shards are stored in our DB. Re-protect to upgrade to true distribution."}
+                    ? tv(lang, "Any 2 of 3 shards reconstruct the Ed25519 private key; no single holder can forge the certificate.")
+                    : tv(lang, "Legacy record: all three shards are stored in our DB. Re-protect to upgrade to true distribution.")}
                 </div>
               </div>
               <div style={{
@@ -666,7 +670,7 @@ export default function VerifyPage() {
                 background: data.shardDistribution.realDistributed ? "rgba(16,185,129,0.15)" : "rgba(245,158,11,0.15)",
                 color: data.shardDistribution.realDistributed ? "#059669" : "#d97706",
               }}>
-                {data.shardDistribution.realDistributed ? "✓ TRULY DISTRIBUTED" : "⚠ LEGACY (LOCAL)"}
+                {data.shardDistribution.realDistributed ? tv(lang, "✓ TRULY DISTRIBUTED") : tv(lang, "⚠ LEGACY (LOCAL)")}
               </div>
             </div>
             <div style={{ padding: "20px 24px", background: "#fff" }}>
@@ -682,7 +686,7 @@ export default function VerifyPage() {
                       {loc.index === 1 ? "👤" : loc.index === 2 ? "🏢" : "🌐"}
                     </div>
                     <div style={{ fontSize: 12, fontWeight: 800, color: "#0f172a", marginBottom: 4 }}>
-                      Shard {loc.index}: {loc.place}
+                      {tv(lang, "Shard")} {loc.index}: {loc.place}
                     </div>
                     <div style={{ fontSize: 11, color: "#475569", marginBottom: 6 }}>{loc.held}</div>
                     <div style={{
@@ -694,7 +698,7 @@ export default function VerifyPage() {
                       background: !loc.serverHasCopy ? "#059669" : "#64748b",
                       color: "#fff",
                     }}>
-                      {!loc.serverHasCopy ? "OFFLINE (user holds)" : "ON-SERVER"}
+                      {!loc.serverHasCopy ? tv(lang, "OFFLINE (user holds)") : tv(lang, "ON-SERVER")}
                     </div>
                     {loc.cid && (
                       <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(15,23,42,0.06)" }}>
@@ -712,7 +716,7 @@ export default function VerifyPage() {
               {data.shardDistribution.witness && (
                 <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 8, background: "rgba(15,23,42,0.03)", border: "1px solid rgba(15,23,42,0.06)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <div style={{ fontSize: 11, color: "#475569" }}>
-                    Public witness shard — fetchable by anyone, integrity verified via content-addressed CID
+                    {tv(lang, "Public witness shard — fetchable by anyone, integrity verified via content-addressed CID")}
                   </div>
                   <a
                     href={apiUrl(data.shardDistribution.witness.witnessUrl)}
@@ -720,7 +724,7 @@ export default function VerifyPage() {
                     rel="noopener noreferrer"
                     style={{ padding: "6px 12px", borderRadius: 6, background: "#0f172a", color: "#fff", textDecoration: "none", fontSize: 11, fontWeight: 700 }}
                   >
-                    Fetch Witness Shard →
+                    {tv(lang, "Fetch Witness Shard →")}
                   </a>
                 </div>
               )}
@@ -735,14 +739,14 @@ export default function VerifyPage() {
               <div>
                 <div style={{ fontSize: 15, fontWeight: 900, color: "#0f172a", display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ fontSize: 20 }} aria-hidden>₿</span>
-                  Bitcoin Blockchain Anchor
+                  {tv(lang, "Bitcoin Blockchain Anchor")}
                   <InfoTip
                     label="OpenTimestamps"
                     text="At protection time we submit the content hash to OpenTimestamps. Within hours it is included in a Bitcoin block — proof that this exact certificate existed by that timestamp, verifiable against any Bitcoin node without trusting AEVION."
                   />
                 </div>
                 <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
-                  {data.bitcoinAnchor.network} — third-party verifiable timestamp
+                  {data.bitcoinAnchor.network} — {tv(lang, "third-party verifiable timestamp")}
                 </div>
               </div>
               <div style={{
@@ -766,15 +770,15 @@ export default function VerifyPage() {
                 {data.bitcoinAnchor.status === "bitcoin-confirmed"
                   ? `✓ CONFIRMED @ BLOCK #${data.bitcoinAnchor.bitcoinBlockHeight}`
                   : data.bitcoinAnchor.status === "pending"
-                    ? "⏱ PENDING CONFIRMATION"
-                    : "✗ FAILED"}
+                    ? tv(lang, "⏱ PENDING CONFIRMATION")
+                    : tv(lang, "✗ FAILED")}
               </div>
             </div>
             <div style={{ padding: "20px 24px", background: "#fff" }}>
               {data.bitcoinAnchor.status === "bitcoin-confirmed" && (
                 <div style={{ padding: "14px 16px", borderRadius: 10, background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.2)", marginBottom: 14 }}>
                   <div style={{ fontSize: 13, color: "#065f46", lineHeight: 1.6 }}>
-                    The content hash of this certificate is <b>permanently recorded in the Bitcoin blockchain</b> at block <b>#{data.bitcoinAnchor.bitcoinBlockHeight}</b>. This proof is independent of AEVION — anyone can verify it with the standard OpenTimestamps client.
+                    {tv(lang, "The content hash of this certificate is")} <b>{tv(lang, "permanently recorded in the Bitcoin blockchain")}</b> {tv(lang, "at block")} <b>#{data.bitcoinAnchor.bitcoinBlockHeight}</b>. This proof is independent of AEVION — anyone can verify it with the standard OpenTimestamps client.
                   </div>
                 </div>
               )}
@@ -795,13 +799,13 @@ export default function VerifyPage() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
                 {data.bitcoinAnchor.stampedAt && (
                   <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", marginBottom: 2 }}>Submitted to OT</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", marginBottom: 2 }}>{tv(lang, "Submitted to OT")}</div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>{new Date(data.bitcoinAnchor.stampedAt).toLocaleString()}</div>
                   </div>
                 )}
                 {data.bitcoinAnchor.upgradedAt && (
                   <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", marginBottom: 2 }}>Bitcoin-confirmed</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", marginBottom: 2 }}>{tv(lang, "Bitcoin-confirmed")}</div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#059669" }}>{new Date(data.bitcoinAnchor.upgradedAt).toLocaleString()}</div>
                   </div>
                 )}
@@ -812,7 +816,7 @@ export default function VerifyPage() {
                     href={apiUrl(data.bitcoinAnchor.proofUrl)}
                     style={{ padding: "8px 14px", borderRadius: 8, background: "#0f172a", color: "#fff", textDecoration: "none", fontSize: 12, fontWeight: 700 }}
                   >
-                    ⬇ Download .ots proof
+                    {tv(lang, "⬇ Download .ots proof")}
                   </a>
                 )}
                 {data.bitcoinAnchor.status === "pending" && data.bitcoinAnchor.upgradeUrl && (
@@ -821,7 +825,7 @@ export default function VerifyPage() {
                     disabled={upgrading}
                     style={{ padding: "8px 14px", borderRadius: 8, background: upgrading ? "#cbd5e1" : "#f7931a", color: "#fff", border: "none", fontSize: 12, fontWeight: 700, cursor: upgrading ? "not-allowed" : "pointer" }}
                   >
-                    {upgrading ? "Checking..." : "₿ Try upgrade now"}
+                    {upgrading ? tv(lang, "Checking...") : tv(lang, "₿ Try upgrade now")}
                   </button>
                 )}
                 <a
@@ -830,7 +834,7 @@ export default function VerifyPage() {
                   rel="noopener noreferrer"
                   style={{ padding: "8px 14px", borderRadius: 8, background: "#fff", color: "#475569", border: "1px solid rgba(15,23,42,0.12)", textDecoration: "none", fontSize: 12, fontWeight: 700 }}
                 >
-                  What is OpenTimestamps?
+                  {tv(lang, "What is OpenTimestamps?")}
                 </a>
               </div>
               {upgradeMsg && (
@@ -845,12 +849,12 @@ export default function VerifyPage() {
         {/* Legal basis */}
         <div style={{ borderRadius: 16, border: "1px solid rgba(15,23,42,0.1)", overflow: "hidden", marginBottom: 24 }}>
           <div style={{ padding: "16px 24px", background: "rgba(15,23,42,0.02)", borderBottom: "1px solid rgba(15,23,42,0.06)" }}>
-            <div style={{ fontSize: 15, fontWeight: 900, color: "#0f172a" }}>Legal Basis</div>
+            <div style={{ fontSize: 15, fontWeight: 900, color: "#0f172a" }}>{tv(lang, "Legal Basis")}</div>
             <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{legal.framework} — {legal.type}</div>
           </div>
           <div style={{ padding: "20px 24px", background: "#fff" }}>
             {/* International frameworks */}
-            <div style={{ fontSize: 12, fontWeight: 800, color: "#0f172a", marginBottom: 10 }}>International Copyright Frameworks</div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#0f172a", marginBottom: 10 }}>{tv(lang, "International Copyright Frameworks")}</div>
             <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
               {legal.international.map((l, i) => (
                 <div key={i} style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid rgba(15,23,42,0.06)", background: "#f8fafc" }}>
@@ -863,7 +867,7 @@ export default function VerifyPage() {
             {/* Digital signature laws */}
             {legal.digitalSignature && legal.digitalSignature.length > 0 && (
               <>
-                <div style={{ fontSize: 12, fontWeight: 800, color: "#0f172a", marginBottom: 10 }}>Digital Signature Legislation</div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: "#0f172a", marginBottom: 10 }}>{tv(lang, "Digital Signature Legislation")}</div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
                   {legal.digitalSignature.map((l, i) => (
                     <div key={i} style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.08)", background: "#f8fafc" }}>
@@ -877,7 +881,7 @@ export default function VerifyPage() {
 
             {/* Disclaimer */}
             <div style={{ padding: "12px 14px", borderRadius: 10, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)", fontSize: 11, color: "#92400e", lineHeight: 1.6 }}>
-              <b>Legal Disclaimer:</b> {legal.disclaimer}
+              <b>{tv(lang, "Legal Disclaimer:")}</b> {legal.disclaimer}
             </div>
           </div>
         </div>
@@ -887,7 +891,7 @@ export default function VerifyPage() {
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
             <span style={{ fontSize: 18 }} aria-hidden>🛡️</span>
             <div style={{ fontSize: 13, fontWeight: 900, color: "#3730a3" }}>
-              Independent of AEVION
+              {tv(lang, "Independent of AEVION")}
             </div>
             <InfoTip
               label="Verification bundle"
@@ -916,13 +920,13 @@ export default function VerifyPage() {
               href={apiUrl(`/api/pipeline/certificate/${cert.id}/bundle.json`)}
               style={{ padding: "10px 16px", borderRadius: 10, background: "#4f46e5", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 13 }}
             >
-              ⬇ Download bundle.json
+              {tv(lang, "⬇ Download bundle.json")}
             </a>
             <a
               href="/verify-offline"
               style={{ padding: "10px 16px", borderRadius: 10, border: "1px solid #4f46e5", color: "#4f46e5", background: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 13 }}
             >
-              Open offline verifier →
+              {tv(lang, "Open offline verifier →")}
             </a>
           </div>
         </div>

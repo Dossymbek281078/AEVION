@@ -17,7 +17,8 @@ describe("бренд бюро на /verify (19.10.2026)", () => {
   it("строка партнёра рисуется только при заполненном поле и несёт обе подписи", () => {
     expect(SRC).toContain("{cert.partner ? (");
     expect(SRC).toContain('data-testid="cert-partner"');
-    expect(SRC).toContain("Запись сделана через {cert.partner} · проверку обеспечивает AEVION");
+    // 19.10 вечер: строка идёт через словарь tv(lang, …) — ru «Запись сделана через … · проверку обеспечивает AEVION».
+    expect(SRC).toContain('{tv(lang, "Record made via")} {cert.partner} · {tv(lang, "verification by AEVION")}');
     expect(SRC).toContain("Record made via {cert.partner} · verification by AEVION");
   });
   it("без партнёра — ничего: ветка null, не пустой div и не «undefined»", () => {
@@ -29,7 +30,7 @@ describe("бренд бюро на /verify (19.10.2026)", () => {
   it("строка партнёра стоит и в вердикте первого экрана (кадр 19.10: карточка была на y=1304/974)", () => {
     expect(SRC).toContain('data-testid="cert-partner-banner"');
     const banner = SRC.indexOf('data-testid="cert-partner-banner"');
-    const verified = SRC.indexOf("Verified at {new Date(data.verifiedAt)");
+    const verified = SRC.indexOf('{tv(lang, "Verified at")} {new Date(data.verifiedAt)');
     expect(verified).toBeGreaterThan(0);
     expect(banner - verified, "строка партнёра ушла из вердикта").toBeGreaterThan(0);
     expect(banner - verified).toBeLessThan(900);

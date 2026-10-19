@@ -326,7 +326,7 @@ export default function VerifyPage() {
               textDecoration: "none",
             }}
           >
-            💳 See the price
+            💳 Plans &amp; pricing
           </a>
           <a
             href={keepChannel("/pricing/contact?app=ip_bureau&tier=lite", channel, rawC)}

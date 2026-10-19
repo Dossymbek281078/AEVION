@@ -13,6 +13,7 @@ import { useDevhubT, type DevhubKey } from "./i18n";
 import { COMPARISON_ROWS, capabilityIsKnownOff, comparisonTotalUsd } from "./capabilityRows";
 import { howtoTranscript } from "./howtoTranscript";
 import { getDevhubGuestId } from "@/lib/devhubGuest";
+import { getAuthToken } from "@/lib/auth";
 import { TERM_MONTHS, СРОК_ПО_УМОЛЧАНИЮ, planetPricePerMonth, planetTotal } from "@/lib/termPricing";
 import { useI18n } from "@/lib/i18n";
 import { catalog } from "@/lib/aevionCatalog";
@@ -423,7 +424,10 @@ export default function DevHubPage() {
   }, []);
 
   useEffect(() => {
-    fetch(apiUrl("/api/devhub/studio/credits"), { cache: "no-store" })
+    // 🔴 19.10.2026 (railway run devhub-e2e): запрос шёл БЕЗ Authorization — подписчик плана в браузере
+    // выглядел гостем: tier free, баннер «Оформить план», гостевые нормы, хотя ручка с Bearer отвечала pro.
+    const токен = getAuthToken();
+    fetch(apiUrl("/api/devhub/studio/credits"), { cache: "no-store", headers: токен ? { Authorization: "Bearer " + токен } : {} })
       .then((r) => r.json())
       .then((d) => { if (d.tier) setUserTier(d.tier); if (d.usage) setUsage(d.usage); })
       .catch(() => {});

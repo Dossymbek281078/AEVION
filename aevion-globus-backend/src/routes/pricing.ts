@@ -467,9 +467,12 @@ pricingRouter.post("/lead", (req, res) => {
     return res.status(500).json({ error: "storage_error" });
   }
 
-  // Порядок как у /apply: письмо запускается и НЕ ждётся — ответ человеку не
+  // Порядок как у /apply: письма запускаются и НЕ ждутся — ответ человеку не
   // задерживается почтой, а отказ отправки не роняет принятую заявку.
+  // Оба письма идут ПОСЛЕ успешной записи (appendFileSync выше): внутреннее
+  // уведомление нам и подтверждение заявителю с настоящим lead.id.
   void уведомитьОЗаявке(lead);
+  void подтвердитьЗаявителю(lead);
 
   res.status(201).json({ ok: true, id: lead.id });
 });
@@ -1015,6 +1018,51 @@ async function уведомитьОЗаявке(lead: PricingLead): Promise<void
   void отправитьПисьмо("pricing/lead -> внутреннее уведомление", {
     to: NOTIFY_EMAIL,
     subject: `[lead${lead.tier ? ` ${lead.tier}` : ""}] ${lead.name} · ${lead.company ?? "—"}`,
+    html,
+    text,
+  });
+}
+
+/**
+ * Автоподтверждение ЗАЯВИТЕЛЮ (окно Продаж, 19.10.2026). Форма слала письмо
+ * только нам, а страница обещает ответ в 24 часа — человек не получал ничего.
+ *
+ * Требования (иначе письмо вредит):
+ *  • уходит ТОЛЬКО после успешной записи заявки, с НАСТОЯЩИМ lead.id (его же
+ *    видит человек в ответе ручки) — выдуманный номер сломал бы доверие;
+ *  • отказ отправки НЕ глотается: `отправитьПисьмо` пишет в журнал получателя,
+ *    тему и причину — молчание выглядело бы успехом;
+ *  • ответ ручки письма не ждёт (вызывается void, как уведомитьОЗаявке).
+ *
+ * Язык: форма /pricing/contact не передаёт язык страницы, поэтому шлём РУ и EN
+ * одним письмом — это честнее, чем угадать. Текст согласован Продажами, без
+ * цены и доли.
+ */
+async function подтвердитьЗаявителю(lead: PricingLead): Promise<void> {
+  const имя = lead.name || "there";
+  const id = lead.id;
+  const proof = "https://aevion.app/verify/cert-463708f3b7f6e156";
+  const subject = `Заявка ${id} принята — ответим в 24 часа · Request ${id} received — we reply within 24h`;
+  const ruText =
+    `Здравствуйте, ${имя}!\n\n` +
+    `Заявка принята, её номер ${id}. Отвечу лично в течение 24 часов — по сути вашей задачи, не шаблоном.\n\n` +
+    `Пока ждёте, вот то же, что увидят ваши клиенты, без регистрации: ${proof}\n\n` +
+    `Если срочно — ответьте на это письмо словом «срочно» и удобным временем.\n\n` +
+    `Досымбек Жакия, основатель AEVION`;
+  const enText =
+    `Hello, ${имя}!\n\n` +
+    `Your request is in, number ${id}. I will answer personally within 24 hours — to your actual question, not with a template.\n\n` +
+    `While you wait, here is what your own clients would see, no account needed: ${proof}\n\n` +
+    `If it is urgent, reply "urgent" with a time that suits you.\n\n` +
+    `Dosymbek Zhakiya, founder of AEVION`;
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const toHtml = (t: string) =>
+    t.split("\n\n").map((p) => `<p>${esc(p).replace(/\n/g, "<br>").replace(esc(proof), `<a href="${proof}">${proof}</a>`)}</p>`).join("");
+  const html = `${toHtml(ruText)}<hr>${toHtml(enText)}`;
+  const text = `${ruText}\n\n— — —\n\n${enText}`;
+  await отправитьПисьмо("pricing/lead -> подтверждение заявителю", {
+    to: lead.email,
+    subject,
     html,
     text,
   });

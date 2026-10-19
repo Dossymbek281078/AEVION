@@ -9,7 +9,7 @@ import { rateLimit } from "../lib/rateLimit";
 import { deliverWebhook } from "../lib/webhookDelivery";
 import { applyOgEtag, applyEtag } from "../lib/ogEtag";
 import { csvNeutralizeFormula } from "../lib/csv";
-import { этоНашаПроба } from "../lib/publicRegistryProbes";
+import { этоНашаПроба, скрытоИзСписков } from "../lib/publicRegistryProbes";
 
 const QRIGHT_WEBHOOK_DELIVERY_CFG = {
   webhookTable: "QRightWebhook",
@@ -392,7 +392,9 @@ function пробаРеестра(row: { id?: unknown; title?: unknown; ownerNam
   return этоНашаПроба({ id: row.id, title: row.title, author: row.ownerName });
 }
 function безПроб<T extends { id?: unknown; title?: unknown; ownerName?: unknown }>(rows: T[]): T[] {
-  return rows.filter((r) => !пробаРеестра(r));
+  // скрытоИзСписков — только здесь, в списках: прямая ссылка /objects/:id на
+  // такую запись остаётся живой (19.10, см. lib/publicRegistryProbes).
+  return rows.filter((r) => !пробаРеестра(r) && !скрытоИзСписков(r.id));
 }
 
 qrightRouter.get("/objects", objectsRateLimit, async (req, res) => {

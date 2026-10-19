@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { denPoMestnomu } from "../lib/denPoMestnomu";
-import { этоНашаПроба, нечитаемыйЗаголовок } from "../lib/publicRegistryProbes";
+import { этоНашаПроба, нечитаемыйЗаголовок, скрытоИзСписков } from "../lib/publicRegistryProbes";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { verifyBearerOptional, getJwtSecret } from "../lib/authJwt";
@@ -826,6 +826,11 @@ async function protectOne(input: ProtectInput, user: ResolvedUser) {
   })();
 
   /* ── Response ── */
+  // 🔴 19.10.2026: для НАШЕЙ пробы (ownerName/title вида smoke-/probe-) публичная
+  // проверка /verify отвечает 404 по правилу 157 — так задумано. Но ответ этой ручки
+  // обещал verifyUrl и «Protected…», и смоук окна Продажи принял мёртвую ссылку за
+  // живую (POST success, GET 404). Ответ обязан говорить правду: ссылки нет, это проба.
+  const этоПроба = этоНашаПроба({ id: certId, title, author: authorName });
   const certificate = {
     id: certId,
     objectId,
@@ -853,7 +858,8 @@ async function protectOne(input: ProtectInput, user: ResolvedUser) {
     },
     protectedAt,
     status: "active",
-    verifyUrl: `https://aevion.app/verify/${certId}`,
+    verifyUrl: этоПроба ? null : `https://aevion.app/verify/${certId}`,
+    probe: этоПроба,
   };
 
   // Re-derive for response (shadowing inner scope).
@@ -862,7 +868,9 @@ async function protectOne(input: ProtectInput, user: ResolvedUser) {
   const responseWitnessCid = computeWitnessCid(responseWitnessShard);
 
   return {
-    message: cosign
+    message: этоПроба
+      ? "Protected as OUR PROBE (smoke-/probe- naming): record written, but public /verify and registries hide it by rule 157 — verifyUrl is null."
+      : cosign
       ? "Protected. 4 cryptographic layers active (incl. your browser-held author key) + Bitcoin anchor + international legal basis."
       : "Protected. 3 cryptographic layers active + Bitcoin anchor + international legal basis.",
     qright: {
@@ -1830,7 +1838,7 @@ pipelineRouter.get("/certificates", async (_req, res) => {
         bitcoinAnchor: anchorSummary(r),
         verifyUrl: `https://aevion.app/verify/${r.id}`,
       }))
-      .filter((c: { id: unknown; title: unknown; author: unknown }) => !этоНашаПроба(c));
+      .filter((c: { id: unknown; title: unknown; author: unknown }) => !этоНашаПроба(c) && !скрытоИзСписков(c.id));
 
     // Нечитаемые заголовки — ОТДЕЛЬНЫЙ вопрос от «наша проба», и фильтруются
     // отдельно. Посетителю вместо названия достался бы ряд ромбиков; при этом
@@ -1944,7 +1952,12 @@ pipelineRouter.get("/certificates.csv", async (req, res) => {
       "verifyUrl",
     ];
     const lines = [header.join(",")];
-    for (const r of rows as Record<string, unknown>[]) {
+    // Та же витрина, что GET /certificates, только в CSV: наши пробы и
+    // скрытые по id записи здесь тоже не показываем (19.10) — иначе спрятано наполовину.
+    const видимыеСтроки = (rows as Record<string, unknown>[]).filter(
+      (r) => !этоНашаПроба({ id: r.id, title: r.title, author: r.authorName }) && !скрытоИзСписков(r.id),
+    );
+    for (const r of видимыеСтроки) {
       lines.push(
         [
           esc(r.id),

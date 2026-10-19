@@ -155,8 +155,13 @@ export default function ModulePricingChip({ moduleId, theme = "light", hideBuy =
   const planetFrom = `$${planetFromPerMonth()}`;
   // Самый дешёвый срок из тех, что реально продаются; список не пришёл —
   // берём месяц (см. разбор выше), а не самый длинный срок.
+  // 19.10.2026: годовое приложение (шахматы $50/год) — одна цена, подпись «/год».
+  const годовое = Boolean(app && app.yearOnlyUsd != null);
   const дешевейшийПродаваемый = (): number | null => {
     if (!app) return null;
+    if (app.yearOnlyUsd != null) {
+      return !продаваемые || продаваемые.includes(`app_${app.slug}_max`) ? app.yearOnlyUsd : null;
+    }
     if (!продаваемые) return termPricePerMonth(app.baseMonthly, "lite");
     const доступные = TERM_TIERS.filter((t) => продаваемые.includes(`app_${app.slug}_${t}`));
     if (!доступные.length) return null;
@@ -172,6 +177,8 @@ export default function ModulePricingChip({ moduleId, theme = "light", hideBuy =
       : { bg: "#f8fafc", border: "rgba(15,23,42,0.08)", text: "#0f172a", muted: "#64748b", accent: "#0d9488" };
 
   const perMonth = tr("moduleChip.perMonth", "/мес");
+  const perYear = tr("moduleChip.perYear", "/год");
+  const appUnit = годовое ? perYear : perMonth;
 
   function onBuy() {
     // Намерение, а не начало оплаты: оплата начнётся на /pricing, и там своё
@@ -212,8 +219,8 @@ export default function ModulePricingChip({ moduleId, theme = "light", hideBuy =
         {app && appFrom ? (
           <>
             <span>
-              {tr("moduleChip.from", "от")} <strong style={{ fontWeight: 800 }}>{appFrom}</strong>
-              {perMonth}
+              {годовое ? null : <>{tr("moduleChip.from", "от")} </>}<strong style={{ fontWeight: 800 }}>{appFrom}</strong>
+              {appUnit}
             </span>
             <span style={{ color: palette.muted }}>·</span>
             {/* Имя приложения — внутри словарной строки, но без машинного
@@ -263,7 +270,9 @@ export default function ModulePricingChip({ moduleId, theme = "light", hideBuy =
           onClick={onBuy}
           title={
             app && appFrom
-              ? tr("moduleChip.buyTitle", "Выбрать срок и оплатить — от {price}/мес при оплате за 12 месяцев", { price: appFrom })
+              ? годовое
+                ? tr("moduleChip.buyTitleYear", "Купить на год — {price}/год", { price: appFrom })
+                : tr("moduleChip.buyTitle", "Выбрать срок и оплатить — от {price}/мес при оплате за 12 месяцев", { price: appFrom })
               : tr("moduleChip.requestAccessTitle", "Отдельно пока не продаётся — напишите нам, подберём доступ")
           }
           style={{

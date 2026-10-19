@@ -51,9 +51,10 @@ export function товарПриложения(app: StandaloneApp) {
       priceCurrency: "USD",
       // Честная «вилка»: самый длинный срок даёт самый дешёвый месяц,
       // самый короткий — самый дорогой. Одна цена здесь соврала бы.
-      lowPrice: fromPricePerMonth(app.baseMonthly).toFixed(2),
-      highPrice: app.baseMonthly.toFixed(2),
-      offerCount: 5,
+      // 19.10.2026: годовое приложение (шахматы) — одна цена $50/год, одно предложение.
+      lowPrice: (app.yearOnlyUsd ?? fromPricePerMonth(app.baseMonthly)).toFixed(2),
+      highPrice: (app.yearOnlyUsd ?? app.baseMonthly).toFixed(2),
+      offerCount: app.yearOnlyUsd != null ? 1 : 5,
       availability: "https://schema.org/InStock",
       url: `${САЙТ}/pricing?app=${encodeURIComponent(app.slug)}#apps`,
     },

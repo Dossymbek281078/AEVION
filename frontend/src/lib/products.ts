@@ -28,7 +28,9 @@ import {
   termTotal,
   planetTotal,
   planetFromPerMonth,
+  appTermTotal,
 } from "./termPricing";
+import { predlagaemOtdelno } from "./neProdayotsyaOtdelno";
 
 /*
  * ⚠️ 15.09.2026 — НОВАЯ ЦЕНОВАЯ ПОЛИТИКА (слово основателя).
@@ -78,7 +80,8 @@ export interface Product {
    *           месячной и годовой оплаты больше нет. Оставлено в типе для
    *           старых подписок, которые ещё доживают свой период.
    */
-  billing: "monthly" | "once" | "term";
+  /** `year` — 19.10.2026: продаётся только на 12 месяцев за priceUsd (шахматы $50/год). */
+  billing: "monthly" | "once" | "term" | "year";
   kind: ProductKind;
   processor: Processor;
   href: string;
@@ -126,7 +129,15 @@ const appBase = (id: string) => soldApp(id).baseMonthly;
 /** Слаг, который касса ждёт в поле `app`. */
 const appHref = (id: string) => PRICING_APP(soldApp(id).slug);
 const appFormat = (id: string) =>
-  `приложение · от ${usd(fromPricePerMonth(soldApp(id).baseMonthly))}/мес`;
+  soldApp(id).yearOnlyUsd != null
+    ? `приложение · ${usd(soldApp(id).yearOnlyUsd!)}/год`
+    : `приложение · от ${usd(fromPricePerMonth(soldApp(id).baseMonthly))}/мес`;
+/** Годовая цена приложения (19.10.2026: шахматы $50/год); у приложения без неё — ошибка данных. */
+const appYear = (id: string): number => {
+  const v = appTermTotal(soldApp(id), "max");
+  if (soldApp(id).yearOnlyUsd == null || v === null) throw new Error(`products.ts: «${id}» не годовое приложение`);
+  return v;
+};
 
 /**
  * Подписка — одна: срок доступа ко ВСЕЙ планете (решение основателя 15.09.2026).
@@ -267,7 +278,10 @@ export const GUIDES: Product[] = [
  * `/pricing?app=<slug>#apps`: там выбирается срок, и заказ уходит в кассу полем
  * `app`. Прежние ссылки LS на месячные варианты покупателю не показываются.
  */
-export const MODULES: Product[] = [
+// 19.10.2026: витрине отдаются ТОЛЬКО те приложения, которые предлагаются отдельно
+// (lib/neProdayotsyaOtdelno.ts) — с этого дня это одни шахматы. Остальные строки
+// остаются в каталоге: по ним опознаются уже оплаченные подписки и страницы модулей.
+const ВСЕ_МОДУЛИ: Product[] = [
   // 🔴 06.10.2026: подпись говорит, ЗА ЧТО деньги, а не только что это за модуль.
   // Повод — замер по заданию оркестратора «что получает заплативший» в четырёх
   // продаваемых модулях: у трёх из четырёх на сервере не менялось НИЧЕГО, а у
@@ -358,8 +372,8 @@ export const MODULES: Product[] = [
     // Вернуть можно, но вместе со сторожем, который сверяет её с ручкой.
     // Слово «пазлы» из описания убрано: в модуле их зовут задачами.
     desc: "Шахматная платформа: задачи, ИИ-тренер и соперники, играющие по-человечески на своём уровне.",
-    priceUsd: appBase("cyberchess"),
-    billing: "term",
+    priceUsd: appYear("cyberchess"),
+    billing: "year",
     kind: "module",
     processor: "aevion",
     href: appHref("cyberchess"),
@@ -422,15 +436,27 @@ export const MODULES: Product[] = [
 // Сторож на сборке каталога: отдельно продаётся ровно то, что названо в
 // STANDALONE_APPS. Шестое приложение в MODULES без строки в лестнице (или
 // потерянное пятое) — это кнопка «купить» к товару, которого касса не знает.
+// 19.10.2026: сверяем ВЕСЬ каталог (ВСЕ_МОДУЛИ) с прайсом — витрина MODULES уже отфильтрована.
 {
-  const inCatalog = new Set(MODULES.map((m) => soldApp(m.id).slug));
+  const inCatalog = new Set(ВСЕ_МОДУЛИ.map((m) => soldApp(m.id).slug));
   const missing = STANDALONE_APPS.filter((a) => !inCatalog.has(a.slug)).map((a) => a.slug);
-  if (missing.length || inCatalog.size !== MODULES.length) {
-    throw new Error(`products.ts: MODULES расходится с STANDALONE_APPS (нет: ${missing.join(", ") || "—"})`);
+  if (missing.length || inCatalog.size !== ВСЕ_МОДУЛИ.length) {
+    throw new Error(`products.ts: каталог расходится с STANDALONE_APPS (нет: ${missing.join(", ") || "—"})`);
   }
 }
 
+export const MODULES: Product[] = ВСЕ_МОДУЛИ.filter((p) => {
+  const app = standaloneApp(p.appId ?? p.id);
+  return app ? predlagaemOtdelno(app.slug) : true;
+});
+
+/** Приложения каталога, снятые с отдельной витрины (для сторожей: они не продаются, но и не потеряны). */
+export const MODULES_NOT_OFFERED: Product[] = ВСЕ_МОДУЛИ.filter((p) => !MODULES.includes(p));
+
+
 export const ALL_PRODUCTS: Product[] = [...SUBSCRIPTIONS, ...GUIDES, ...MODULES];
+/** ВЕСЬ каталог, включая снятые с витрины модули: по нему кабинет называет уже купленное (appSlugTitle). */
+export const CATALOG_PRODUCTS: Product[] = [...SUBSCRIPTIONS, ...GUIDES, ...ВСЕ_МОДУЛИ];
 
 /**
  * Оговорки модулей, которые ОТДЕЛЬНО НЕ ПРОДАЮТСЯ, но живут на сайте и входят в
@@ -457,7 +483,8 @@ export function productNotice(id: string): string | undefined {
   return Object.prototype.hasOwnProperty.call(MODULE_NOTICES, id) ? MODULE_NOTICES[id] : undefined;
 }
 
-const BY_ID = new Map(ALL_PRODUCTS.map((p) => [p.id, p]));
+// 19.10.2026: по id ищем во ВСЁМ каталоге — страница DevHub и кабинет знают товар и после снятия с витрины.
+const BY_ID = new Map(CATALOG_PRODUCTS.map((p) => [p.id, p]));
 
 /**
  * Позиция каталога по id. Нужна страницам, у которых своя подача и свои данные

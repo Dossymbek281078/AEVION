@@ -1,7 +1,7 @@
 import { describe, test, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { MODULES } from "@/lib/products";
+import { CATALOG_PRODUCTS } from "@/lib/products";
 // Тот же экспорт, что читает страница и соседний храповик: значение, а не исходник.
 import { EN_TEXTS } from "@/app/en/shop/page";
 
@@ -66,7 +66,7 @@ const СЛОВА: Record<string, { ru: string; en: string }> = {
   tts: { ru: "знаков", en: "characters" },
 };
 
-const подпись = MODULES.find((m) => m.id === "devhub")?.desc ?? "";
+const подпись = CATALOG_PRODUCTS.find((m) => m.id === "devhub")?.desc ?? ""; // 19.10: DevHub снят с витрины, карточка в каталоге
 
 describe("карточка DevHub говорит, за что деньги", () => {
   test("ЗНАМЕНАТЕЛЬ: сколько норм сверено с таблицей бэкенда", () => {

@@ -1,8 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { productById } from "@/lib/products";
-import { fromPricePerMonth } from "@/lib/termPricing";
+import { productById, fromPerMonthOf } from "@/lib/products";
 
 /**
  * Цена DevHub стоит в ПЕРВОМ экране обеих посадочных.
@@ -54,7 +53,7 @@ describe("цена DevHub стоит в первом экране", () => {
   it("на английской посадочной цена и путь в кассу объявлены в первом экране", () => {
     const экран = первыйЭкран(EN);
     expect(экран, "в первом экране нет блока цены").toContain("heroPrice");
-    expect(экран, "цена за длинный срок не считается из источника").toContain("fromPricePerMonth(devhub.priceUsd)");
+    expect(экран, "цена за длинный срок не считается из источника").toContain("fromPerMonthOf(devhub)"); // 19.10: план, своя лесенка
     expect(экран, "помесячной цены нет").toContain("${devhub.priceUsd}/mo");
     expect(экран, "нет пути в кассу").toContain("devhub.href");
   });
@@ -62,7 +61,7 @@ describe("цена DevHub стоит в первом экране", () => {
   it("на основной посадочной цена и путь в кассу объявлены в первом экране", () => {
     const экран = первыйЭкран(RU);
     expect(экран, "в первом экране нет строки цены").toContain('t("hero.price")');
-    expect(экран, "цена за длинный срок не считается из источника").toContain("fromPricePerMonth(devhubProduct.priceUsd)");
+    expect(экран, "цена за длинный срок не считается из источника").toContain("fromPerMonthOf(devhubProduct)"); // 19.10: план, своя лесенка
     expect(экран, "помесячной цены нет").toContain("devhubProduct.priceUsd");
     expect(экран, "нет пути в кассу").toContain("devhubProduct.href");
     expect(экран, "нет подписи ссылки").toContain('t("hero.priceCta")');
@@ -93,10 +92,11 @@ describe("цена DevHub стоит в первом экране", () => {
   it("числа НЕ вписаны руками: источник один с кассой", () => {
     // Требование оркестратора и наше правило: цена на странице и цена в кассе
     // обязаны быть одним числом. Вписанное руками расходится молча.
-    const devhub = productById("devhub");
-    expect(devhub, "продукт devhub не найден в каталоге").toBeTruthy();
+    // 19.10.2026: деньги на странице DevHub — план «Планета» (DevHub отдельно не продаётся).
+    const devhub = productById("aevion-planet");
+    expect(devhub, "продукт aevion-planet не найден в каталоге").toBeTruthy();
     const помесячно = devhub!.priceUsd;
-    const заГод = fromPricePerMonth(помесячно);
+    const заГод = fromPerMonthOf(devhub!);
     expect(помесячно, "помесячная цена перестала быть числом").toBeGreaterThan(0);
     expect(заГод, "цена за длинный срок не дешевле помесячной").toBeLessThan(помесячно);
 

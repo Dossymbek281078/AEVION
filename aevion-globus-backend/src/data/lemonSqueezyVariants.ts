@@ -18,7 +18,7 @@
  */
 
 import {
-  TERM_TIERS, TERM_NAME, TERM_MONTHS, TIERS, STANDALONE_APPS, termTotal,
+  TERM_TIERS, TERM_NAME, TERM_MONTHS, TIERS, STANDALONE_APPS, termTotal, appTermTotal, appSellableTerms,
   type TierId, type TermTier,
 } from "./pricing";
 import { tierIdForReference } from "../lib/payment/billingPeriod";
@@ -450,6 +450,18 @@ export function appSlugForModuleId(moduleId: string): string | null {
  * Возвращаем ИМЕНА переменных, не значения: имя не секрет, значение —
  * идентификатор товара в чужой панели, ему в ответе не место.
  */
+/**
+ * Продаётся ли ссылка на ЭТОМ сроке по замыслу прайса (19.10.2026): у годового
+ * приложения — только `max`. Ступени планеты и legacy-ссылки — всегда да.
+ */
+export function продаётсяНаЭтомСроке(ref: string): boolean {
+  const a = /^app_([a-z_]+?)_(lite|medium|pro|full|max)$/.exec(ref);
+  if (!a) return true;
+  const app = STANDALONE_APPS.find((x) => x.slug === a[1]);
+  if (!app) return true;
+  return appSellableTerms(app).includes(a[2] as TermTier);
+}
+
 export function lemonSqueezySellable(): {
   configured: string[];
   missing: string[];
@@ -457,6 +469,10 @@ export function lemonSqueezySellable(): {
   const configured: string[] = [];
   const missing: string[] = [];
   for (const [ref, env] of Object.entries(TIER_VARIANT_ENV)) {
+    // 19.10.2026: срок, на котором приложение НЕ продаётся (шахматы — только 12 мес),
+    // в «настроено» не попадает, даже если переменная варианта задана: витрина и
+    // JSON-LD по этому списку зажигают кнопки, а касса на таком сроке отвечает 400.
+    if (!продаётсяНаЭтомСроке(ref)) continue;
     // Своего товара нет — но продать всё равно можем, если есть запасной путь
     // (см. fallbackVariantForReference). Витрина зажигает кнопку ИМЕННО по
     // этому списку, поэтому молчать здесь значит оставить серую кнопку при
@@ -487,7 +503,8 @@ export function priceForReference(ref: string | null): number | null {
   const a = /^app_([a-z_]+?)_(lite|medium|pro|full|max)$/.exec(ref);
   if (!a) return null;
   const app = STANDALONE_APPS.find((x) => x.slug === a[1]);
-  return app ? termTotal(app.baseMonthly, a[2] as TermTier) : null;
+  // 19.10.2026: годовое приложение — его сумма только на max, иначе null.
+  return app ? appTermTotal(app, a[2] as TermTier) : null;
 }
 
 /**

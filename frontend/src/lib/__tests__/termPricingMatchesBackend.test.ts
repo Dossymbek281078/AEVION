@@ -24,7 +24,7 @@ describe("лестница сроков сайта совпадает с бэк�
   test("КОНТРОЛЬ прибора: в источнике нашлись все три таблицы и девять приложений", () => {
     expect(Object.keys(record("TERM_MONTHS"))).toHaveLength(5);
     expect(Object.keys(record("TERM_FACTOR"))).toHaveLength(5);
-    expect([...backend.matchAll(/\{ slug: "[^"]+", moduleId: "[^"]+", name: "[^"]+", baseMonthly: \d+ \}/g)]).toHaveLength(9);
+    expect([...backend.matchAll(/\{ slug: "[^"]+", moduleId: "[^"]+", name: "[^"]+", baseMonthly: \d+(?:, yearOnlyUsd: \w+)? \}/g)]).toHaveLength(9);
   });
 
   test("сроки и доли цены", () => {
@@ -54,8 +54,11 @@ describe("лестница сроков сайта совпадает с бэк�
   });
 
   test("пять отдельных приложений и их базы", () => {
-    const fromBackend = [...backend.matchAll(/\{ slug: "([^"]+)", moduleId: "([^"]+)", name: "([^"]+)", baseMonthly: (\d+) \}/g)].map(
-      (m) => ({ slug: m[1], moduleId: m[2], name: m[3], baseMonthly: Number(m[4]) }),
+    // 19.10.2026: годовое приложение несёт yearOnlyUsd (у шахмат — CHESS_YEARLY_USD из того же файла).
+    const chessYearly = Number(/export const CHESS_YEARLY_USD = (\d+);/.exec(backend)?.[1]);
+    expect(chessYearly).toBe(50);
+    const fromBackend = [...backend.matchAll(/\{ slug: "([^"]+)", moduleId: "([^"]+)", name: "([^"]+)", baseMonthly: (\d+)(?:, yearOnlyUsd: (\w+))? \}/g)].map(
+      (m) => ({ slug: m[1], moduleId: m[2], name: m[3], baseMonthly: Number(m[4]), ...(m[5] ? { yearOnlyUsd: m[5] === "CHESS_YEARLY_USD" ? chessYearly : Number(m[5]) } : {}) }),
     );
     expect(fromBackend).toEqual(STANDALONE_APPS);
   });

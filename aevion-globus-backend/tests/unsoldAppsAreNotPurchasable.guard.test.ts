@@ -22,9 +22,10 @@ import { ДОСТУП_МОДУЛЕЙ, продаётсяОтдельно } from 
 import { STANDALONE_APPS } from "../src/data/pricing";
 
 /** Снятые 01.10 — по слагам кассы, как их присылает витрина в поле `app`. */
-const СНЯТЫЕ_СЛАГИ = ["qright", "qsign", "qskyway", "startup_exchange"];
+// 19.10.2026, слово основателя: один план «Планета», отдельно продаются только шахматы ($50/год).
+const СНЯТЫЕ_СЛАГИ = ["qright", "qsign", "qskyway", "startup_exchange", "devhub", "multichat", "ip_bureau", "qventure"];
 /** Оставшиеся со своими товарами — контроль в обратную сторону. */
-const ПРОДАЮТСЯ_СЛАГИ = ["devhub", "multichat", "cyberchess", "ip_bureau", "qventure"];
+const ПРОДАЮТСЯ_СЛАГИ = ["cyberchess"];
 
 /*
  * 🔴 Монтируем ОБА роутера, и путь кассы — ровно тот, что в проде
@@ -60,7 +61,7 @@ describe("снятое с продажи не купить ни кнопкой, 
     expect(r.status).toBe(200);
     const слаги: string[] = (r.body.standaloneApps ?? []).map((a: { slug: string }) => a.slug);
 
-    expect(слаги.length, "ручка не отдала ни одного приложения — проверять нечего").toBe(5);
+    expect(слаги.length, "ручка не отдала ни одного приложения — проверять нечего").toBe(ПРОДАЮТСЯ_СЛАГИ.length);
     for (const s of СНЯТЫЕ_СЛАГИ) {
       expect(слаги, `${s} снят с продажи, а витрина его показывает — кнопка «Купить» жива`).not.toContain(s);
     }
@@ -119,6 +120,6 @@ describe("снятое с продажи не купить ни кнопкой, 
       const app = STANDALONE_APPS.find((a) => a.slug === s);
       expect(продаётсяОтдельно(app!.moduleId), `${s}: источник всё ещё считает его продаваемым`).toBe(false);
     }
-    expect(ДОСТУП_МОДУЛЕЙ.filter((м) => м.продаётся).length, "продаваемых не 5").toBe(5);
+    expect(ДОСТУП_МОДУЛЕЙ.filter((м) => м.продаётся).length, "продаваемых не 1 (шахматы)").toBe(1);
   });
 });

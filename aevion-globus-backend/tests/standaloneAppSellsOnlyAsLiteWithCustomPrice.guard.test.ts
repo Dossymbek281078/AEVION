@@ -92,18 +92,20 @@ describe("снятые с отдельной продажи — касса че�
     }
   }
 
-  test("КОНТРОЛЬ: ещё продаваемый модуль (Multichat, свой вариант) — 200, касса создаётся", async () => {
+  test("КОНТРОЛЬ: ещё продаваемый модуль (CyberChess, год, свой вариант) — 200, касса создаётся", async () => {
+    // 19.10.2026: отдельно продаются только шахматы и только на 12 месяцев ($50).
     // Вторая половина пары: без неё «все 400» прошло бы и на коде, который
     // сломал кассу ЦЕЛИКОМ. Multichat продаётся отдельно (продаётсяОтдельно=true)
     // и имеет свой вариант — путь обязан работать.
-    process.env.LEMON_SQUEEZY_VARIANT_MULTICHAT_LITE = "222222";
+    process.env.LEMON_SQUEEZY_VARIANT_CYBERCHESS_MAX = "222222";
     const приложение = await собратьПриложение();
     const ответ = await request(приложение)
       .post("/api/pricing/checkout/session")
-      .send({ tierId: "lite", app: "multichat", seats: 1, currency: "USD" });
+      .send({ tierId: "max", app: "cyberchess", seats: 1, currency: "USD" });
 
-    expect(ответ.status, "проданный Multichat обязан отвечать 200").toBe(200);
+    expect(ответ.status, "продаваемые шахматы обязаны отвечать 200").toBe(200);
     expect(созданные).toHaveLength(1);
-    expect(созданные[0].reference).toBe("app_multichat_lite");
+    expect(созданные[0].reference).toBe("app_cyberchess_max");
+    expect(созданные[0].customPriceCents, "в кассу не ушла НАША сумма ($50)").toBe(5000);
   });
 });

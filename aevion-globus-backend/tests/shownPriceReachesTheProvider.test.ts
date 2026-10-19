@@ -33,7 +33,8 @@ vi.mock("../src/lib/sentry/platform", () => ({
 // Только Gumroad: у него адрес строится локально, сети не нужно.
 // LS намеренно НЕ настраиваем — иначе createIntent пошёл бы в сеть.
 process.env.GUMROAD_PERMALINK_TIER_LITE = "lite-slug";
-process.env.GUMROAD_PERMALINK_APP_CYBERCHESS_PRO = "chess-pro-slug";
+// 19.10.2026: шахматы продаются только на 12 месяцев ($50/год).
+process.env.GUMROAD_PERMALINK_APP_CYBERCHESS_MAX = "chess-max-slug";
 delete process.env.LEMON_SQUEEZY_API_KEY;
 delete process.env.GUMROAD_DEFAULT_PERMALINK;
 
@@ -75,7 +76,7 @@ describe("показанная цена доезжает до кассы", () =>
   });
 
   test("КОНТРОЛЬ: отдельное приложение по цене своей ступени тревоги не даёт", async () => {
-    const r = await сессия({ tierId: "pro", app: "cyberchess" });
+    const r = await сессия({ tierId: "max", app: "cyberchess" });
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     expect(r.body.provider).toBe("gumroad");
     expect(тревоги).toEqual([]);

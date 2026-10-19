@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, cleanup, act } from "@testing-library/react";
 import { I18nProvider } from "@/lib/i18n";
-import { PLANET_BASE_MONTHLY, STANDALONE_APPS, termPricePerMonth, termTotal , planetTotal } from "@/lib/termPricing";
+import { PLANET_BASE_MONTHLY, STANDALONE_APPS, termPricePerMonth, termTotal , planetTotal, appTermTotal, appTermFor } from "@/lib/termPricing";
 import { predlagaemOtdelno } from "@/lib/neProdayotsyaOtdelno";
 import { localizeTier } from "@/lib/pricingLocalize";
 
@@ -286,7 +286,7 @@ describe("непокупаемый тариф объясняет себя", () =
       `нашлась не та кнопка карточки: «${покупка?.textContent}»`,
     ).toBe(true);
     expect(покупка?.disabled, "незнание погасило покупку срока").toBe(false);
-    const купитьПриложение = карточка("devhub").querySelector("button");
+    const купитьПриложение = карточка("cyberchess").querySelector("button"); // 19.10: единственное предлагаемое отдельно
     expect(купитьПриложение, "кнопки покупки приложения нет — проверка ниже пустая").not.toBeNull();
     expect(купитьПриложение!.disabled, "незнание погасило покупку приложения").toBe(false);
   });
@@ -331,20 +331,20 @@ describe("отдельные приложения: цена, покупка и �
     ответыСервера(ВСЕ_ССЫЛКИ, []);
     await отрисовать();
     // Контроль: по умолчанию срок Lite, и цена карточки — база приложения.
-    expect(карточка("devhub").textContent ?? "").toContain(`$${termPricePerMonth(200, "lite")}`);
+    // 19.10.2026: шахматы продаются только на год за $50 — переключателя сроков нет, в кассу уходит max.
+    expect((карточка("cyberchess").textContent ?? "").replace(/\s/g, "")).toMatch(/\$50\/(год|year)/);
 
-    await срокПриложений("Pro");
-    const текст = карточка("devhub").textContent ?? "";
-    expect(текст, "цена месяца не пересчиталась на выбранный срок").toContain(`$${termPricePerMonth(200, "pro")}`);
+    const текст = карточка("cyberchess").textContent ?? "";
+    expect(текст, "карточка годового приложения называет цену месяца").not.toContain(`$${termPricePerMonth(24, "lite")}/`);
     // Платёж за срок печатается рядом (toLocaleString ставит неразрывный пробел в тысячах).
-    expect(текст.replace(/\s/g, "")).toContain(`$${termTotal(200, "pro")}`);
+    expect(текст.replace(/\s/g, "")).toContain("$50");
 
     await act(async () => {
-      карточка("devhub").querySelector("button")!.click();
+      карточка("cyberchess").querySelector("button")!.click();
       await new Promise((r) => setTimeout(r, 50));
     });
     expect(вКассу.length, "нажатие не дошло до кассы — проверка ниже пустая").toBe(1);
-    expect(вКассу[0]).toMatchObject({ tierId: "pro", app: "devhub" });
+    expect(вКассу[0]).toMatchObject({ tierId: "max", app: "cyberchess" });
     expect(вКассу[0].period, "в кассу снова уходит период месяц/год").toBeUndefined();
   });
 
@@ -355,19 +355,22 @@ describe("отдельные приложения: цена, покупка и �
     expect(к.querySelector("button"), "у приложения без товара осталась кнопка покупки — она ведёт в 503").toBeNull();
     const ссылки = Array.from(к.querySelectorAll("a")).map((a) => a.getAttribute("href") ?? "");
     expect(ссылки, "у приложения без товара нет пути «связаться» с его сроком").toContain(
-      "/pricing/contact?tier=lite&app=cyberchess",
+      "/pricing/contact?tier=max&app=cyberchess", // 19.10: у шахмат один срок — год
     );
   });
 
   it("продаваемость смотрится по ссылке ВЫБРАННОГО срока, а не любого", async () => {
     // Lite настроен, Max объявлен, но переменная пропала — авария кассы на одном сроке.
-    ответыСервера(["tier_full", "app_cyberchess_lite"], ["app_cyberchess_max"]);
+    // 19.10.2026: у шахмат один срок (max): продаётся → кнопка жива; вариант в аварии → погашена и «онлайн».
+    ответыСервера(["tier_full", "app_cyberchess_max"], []);
     await отрисовать();
     const наLite = карточка("cyberchess").querySelector("button");
     expect(наLite, "кнопки покупки на Lite нет — проверка ниже пустая").not.toBeNull();
     expect(наLite!.disabled, "продаваемый срок погашен").toBe(false);
 
-    await срокПриложений("Max");
+    cleanup();
+    ответыСервера(["tier_full"], ["app_cyberchess_max"]);
+    await отрисовать();
     const наMax = карточка("cyberchess").querySelector("button");
     expect(наMax, "на аварийном сроке пропала кнопка — цена спрятана как у отсутствующего товара").not.toBeNull();
     expect(наMax!.disabled, "на сроке с аварией кассы кнопка покупки осталась живой").toBe(true);
@@ -388,7 +391,7 @@ describe("отдельные приложения: цена, покупка и �
      * когда оно верно.
      */
     const сумма = STANDALONE_APPS.filter((a) => predlagaemOtdelno(a.slug))
-      .reduce((s, a) => s + termTotal(a.baseMonthly, "lite"), 0);
+      .reduce((s, a) => s + (appTermTotal(a, appTermFor(a, "lite")) ?? 0), 0); // 19.10: у годового — год
     const планета = planetTotal("lite"); // 19.10: своя лесенка плана
     const строка = document.querySelector('[data-testid="apps-vs-planet"]');
     expect(Boolean(строка), `сумма приложений ${сумма}, планета ${планета}`).toBe(сумма > планета);

@@ -6,6 +6,7 @@ import {
   TERM_TIERS, STANDALONE_APPS, termTotal, termPricePerMonth, PLANET_BASE_MONTHLY,
 } from "../src/data/pricing";
 import { priceForReference } from "../src/data/lemonSqueezyVariants";
+import { appSellableTerms, appTermTotal } from "../src/data/pricing";
 
 /**
  * Лестница цен обязана быть выбираемой: у покупателя не должно быть варианта,
@@ -147,10 +148,15 @@ describe("лестница цен непротиворечива", () => {
         expect(прайс, `${a.slug}: цена надстройки в прайсе не равна базе лестницы`).toBe(a.baseMonthly);
       }
       for (const t of TERM_TIERS) {
+        // 19.10.2026: годовое приложение (шахматы $50) — цена только на max, иначе null.
+        const ожидаемо = appSellableTerms(a).includes(t)
+          ? (a.yearOnlyUsd ?? termPricePerMonth(a.baseMonthly, t) * (getTier(t)!.termMonths as number))
+          : null;
         expect(
           priceForReference(`app_${a.slug}_${t}`),
           `${a.slug}/${t}: касса возьмёт не платёж за срок по базе приложения`,
-        ).toBe(termPricePerMonth(a.baseMonthly, t) * (getTier(t)!.termMonths as number));
+        ).toBe(ожидаемо);
+        expect(appTermTotal(a, t)).toBe(ожидаемо);
       }
     }
     // Контроль: у планеты своя база, и она не равна базе приложения — иначе

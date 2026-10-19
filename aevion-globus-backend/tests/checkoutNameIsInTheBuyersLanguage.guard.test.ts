@@ -71,7 +71,7 @@ beforeEach(() => {
   // (lemonSqueezySellable). Имена — LEMON_SQUEEZY_VARIANT_<ПРИЛОЖЕНИЕ>_<СТУПЕНЬ>
   // и LEMON_SQUEEZY_VARIANT_<СТУПЕНЬ> для планеты.
   for (const ступень of ["LITE", "MEDIUM", "PRO", "FULL", "MAX"]) {
-    process.env["LEMON_SQUEEZY_VARIANT_DEVHUB_" + ступень] = "1";
+    process.env["LEMON_SQUEEZY_VARIANT_CYBERCHESS_" + ступень] = "1";
     process.env["LEMON_SQUEEZY_VARIANT_" + ступень] = "1";
   }
   delete process.env.PAYBOX_MERCHANT_ID;
@@ -80,15 +80,16 @@ beforeEach(() => {
 
 describe("имя товара в кассе — на языке покупателя", () => {
   test("прибор исправен: имя вообще доходит до кассы", async () => {
-    const { ответ, имя } = await купить("en-US", { tierId: "lite", app: "devhub" });
+    // 19.10.2026: отдельно продаются только шахматы, и только на 12 месяцев.
+    const { ответ, имя } = await купить("en-US", { tierId: "max", app: "cyberchess" });
     expect(ответ.status, "сессия не создалась — мерить нечего").toBe(200);
     expect(имя.length, "в кассу не ушло имя товара").toBeGreaterThan(5);
-    expect(имя, "имя не называет приложение").toContain("DevHub");
+    expect(имя, "имя не называет приложение").toContain("CyberChess");
   });
 
   test("англоязычный покупатель НЕ видит кириллицы — ни в одном из пяти сроков", async () => {
     for (const tierId of ["lite", "medium", "pro", "full", "max"]) {
-      const { имя } = await купить("en-US", { tierId, app: "devhub" });
+      const { имя } = await купить("en-US", { tierId });
       expect(КИРИЛЛИЦА.test(имя), `срок ${tierId}: кириллица в имени товара → «${имя}»`).toBe(false);
       expect(имя, `срок ${tierId}: срок не назван по-английски`).toMatch(/\d+ months?$/);
     }
@@ -97,20 +98,20 @@ describe("имя товара в кассе — на языке покупате
   test("русскоязычный покупатель видит русское — экономия не ломает своих", async () => {
     // КОНТРОЛЬ в обратную сторону. Без него починка могла бы просто выкинуть
     // русский язык совсем, и это был бы не ремонт, а другая поломка.
-    const { имя } = await купить("ru-RU,ru;q=0.9", { tierId: "lite", app: "devhub" });
+    const { имя } = await купить("ru-RU,ru;q=0.9", { tierId: "max", app: "cyberchess" });
     expect(КИРИЛЛИЦА.test(имя), `русскому покупателю ушло «${имя}»`).toBe(true);
-    expect(имя).toContain("1 месяц");
+    expect(имя).toContain("12 месяцев");
   });
 
   test("язык неизвестен — английский, а не русский наугад", async () => {
-    const { имя } = await купить(null, { tierId: "lite", app: "devhub" });
+    const { имя } = await купить(null, { tierId: "max", app: "cyberchess" });
     expect(КИРИЛЛИЦА.test(имя), `без Accept-Language ушло «${имя}»`).toBe(false);
   });
 
   test("язык передаётся кассе отдельным полем — это НЕ замена имени", async () => {
     // Чтобы починка имени не выглядела достаточной: locale отвечает за надписи
     // самой кассы, имя товара — за то, что покупатель читает первым.
-    await купить("en-US", { tierId: "lite", app: "devhub" });
+    await купить("en-US", { tierId: "max", app: "cyberchess" });
     expect(вызовы[0]?.locale, "язык покупателя до кассы не доходит").toBeTruthy();
   });
 

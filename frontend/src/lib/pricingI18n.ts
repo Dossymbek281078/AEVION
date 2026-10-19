@@ -3,11 +3,13 @@
 import { useI18n } from "./i18n";
 import { MODULE_NODES } from "@/data/pitchFacts";
 import { STANDALONE_APPS } from "./termPricing";
+import { predlagaemOtdelno } from "./neProdayotsyaOtdelno";
 
 /** Сколько приложений продаётся отдельно. Числом словом («пять») страница
  *  расходилась с витриной: приложений девять, и сумма $480 в другом месте
  *  считалась по всем девяти. Берём из того же списка, что и карточки. */
-const ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ = STANDALONE_APPS.length;
+// 19.10.2026: считаем предлагаемые отдельно (шахматы), а не весь прайс.
+const ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ = STANDALONE_APPS.filter((a) => predlagaemOtdelno(a.slug)).length;
 import { migrationsDict } from "./pricingI18n/sections/migrations";
 
 /**

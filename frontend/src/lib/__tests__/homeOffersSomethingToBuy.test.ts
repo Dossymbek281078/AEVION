@@ -1,3 +1,4 @@
+import { planetFromPerMonth } from "@/lib/termPricing";
 import { describe, it, expect } from "vitest";
 import { покупкиНаГлавной } from "@/lib/homeBuyLinks";
 import { PRICING_TERMS, productById } from "@/lib/products";
@@ -30,7 +31,7 @@ describe("главная предлагает купить по ценам ка�
   });
 
   it("цена подписки считается формулой, а не зашита", () => {
-    const ожид = "from $" + fromPricePerMonth(PLANET_BASE_MONTHLY) + "/mo";
+    const ожид = "from $" + planetFromPerMonth() + "/mo"; // 19.10: своя лесенка плана, не TERM_FACTOR
     expect(покупкиНаГлавной(null).some((п) => п.цена === ожид)).toBe(true);
   });
 

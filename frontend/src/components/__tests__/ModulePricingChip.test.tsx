@@ -54,7 +54,9 @@ describe("ModulePricingChip — цены лестницы сроков", () => {
    */
   it("🔴 знаменатель перебора: из каталога убрано ровно одно приложение", () => {
     const предлагаемые = STANDALONE_APPS.filter((a) => predlagaemOtdelno(a.slug));
-    expect(STANDALONE_APPS.length - предлагаемые.length, "из предложения убрано не одно приложение").toBe(1);
+    // 19.10.2026: один план — отдельно предлагаются только шахматы.
+    expect(STANDALONE_APPS.length - предлагаемые.length, "из предложения убрано не восемь приложений").toBe(STANDALONE_APPS.length - 1);
+    expect(предлагаемые.map((a) => a.slug)).toEqual(["cyberchess"]);
     expect(предлагаемые.some((a) => a.slug === "ip_bureau")).toBe(false);
   });
 
@@ -66,7 +68,8 @@ describe("ModulePricingChip — цены лестницы сроков", () => {
       const text = container.textContent ?? "";
       // Список не пришёл (guest) — называем цену МЕСЯЦА, а не самого
       // длинного срока: незнание не имеет права обещать скидку.
-      expect(text).toContain(`$${termPricePerMonth(app.baseMonthly, "lite")}`);
+      // 19.10.2026: годовое приложение показывает «$50/год», а не цену месяца.
+      expect(text).toContain(app.yearOnlyUsd != null ? `$${app.yearOnlyUsd}/год` : `$${termPricePerMonth(app.baseMonthly, "lite")}`);
       expect(text).toContain(app.name);
       expect(text).toContain(`от $${planetFromPerMonth()}/мес`); // 19.10: своя лесенка плана
       const buy = screen.getByText("Купить").closest("a")!;
@@ -74,29 +77,30 @@ describe("ModulePricingChip — цены лестницы сроков", () => {
     },
   );
 
-  it("продаётся ТОЛЬКО месяц — «от» называет цену месяца, а не длинного срока", async () => {
-    const app = STANDALONE_APPS.find((a) => a.slug === "qskyway")!;
-    гостьСоСписком([`app_${app.slug}_lite`]);
+  it("годовое приложение: касса продаёт только max — плашка называет $50/год, не цену месяца", async () => {
+    const app = STANDALONE_APPS.find((a) => a.slug === "cyberchess")!; // 19.10: единственное предлагаемое отдельно, годовое
+    гостьСоСписком([`app_${app.slug}_max`]);
     const { container } = render(<ModulePricingChip moduleId={app.moduleId} />);
     const месяц = termPricePerMonth(app.baseMonthly, "lite");
     const длинный = fromPricePerMonth(app.baseMonthly);
     // Ждать обязательно: список приходит запросом, и без ожидания проверка
     // видит только начальное значение — то есть проходит по случайности.
-    await waitFor(() => expect(container.textContent ?? "").toContain(`$${месяц}`));
+    await waitFor(() => expect(container.textContent ?? "").toContain(`$${app.yearOnlyUsd}/год`));
+    expect(container.textContent ?? "").not.toContain(`$${месяц}`);
     expect(длинный).toBeLessThan(месяц);
     // Главное утверждение: цены, которую заплатить НЕЛЬЗЯ, на странице нет.
     // Замер 28.09 на живом проде: /qskyway обещал «от $8» при настоящих $16.
     expect(container.textContent ?? "").not.toContain(`$${длинный}/мес`);
   });
 
-  it("продаются ВСЕ сроки — «от» снова называет самый длинный (контроль в обратную сторону)", async () => {
-    const app = STANDALONE_APPS.find((a) => a.slug === "qskyway")!;
+  it("КОНТРОЛЬ: даже если касса объявит все сроки, годовое приложение не превращается в лестницу", async () => {
+    const app = STANDALONE_APPS.find((a) => a.slug === "cyberchess")!; // 19.10: единственное предлагаемое отдельно, годовое
     гостьСоСписком(TERM_TIERS.map((t) => `app_${app.slug}_${t}`));
     const { container } = render(<ModulePricingChip moduleId={app.moduleId} />);
     // Без этого случая проверка выше проходила бы и на коде «всегда месяц»,
     // то есть не отличала бы починку от новой неправды в другую сторону.
     await waitFor(() =>
-      expect(container.textContent ?? "").toContain(`$${fromPricePerMonth(app.baseMonthly)}`),
+      expect(container.textContent ?? "").toContain(`$${app.yearOnlyUsd}/год`),
     );
   });
 
@@ -159,7 +163,7 @@ describe("ModulePricingChip — цены лестницы сроков", () => {
    * 400 invalid_app. Человек жал «Купить» и попадал в «напишите нам».
    */
   it("нечего купить (список продаваемых пуст) — кнопка зовёт обсудить, а не купить", async () => {
-    const app = STANDALONE_APPS.find((a) => a.slug === "qright") ?? STANDALONE_APPS[0];
+    const app = STANDALONE_APPS.find((a) => a.slug === "cyberchess")!; // 19.10
     гостьСоСписком([]);
     render(<ModulePricingChip moduleId={app.moduleId} />);
 
@@ -176,8 +180,8 @@ describe("ModulePricingChip — цены лестницы сроков", () => {
   });
 
   it("КОНТРОЛЬ: продаваемый срок есть — кнопка снова «Купить»", async () => {
-    const app = STANDALONE_APPS.find((a) => a.slug === "qright") ?? STANDALONE_APPS[0];
-    гостьСоСписком([`app_${app.slug}_lite`]);
+    const app = STANDALONE_APPS.find((a) => a.slug === "cyberchess")!; // 19.10
+    гостьСоСписком([`app_${app.slug}_max`]);
     render(<ModulePricingChip moduleId={app.moduleId} />);
 
     await waitFor(() => {

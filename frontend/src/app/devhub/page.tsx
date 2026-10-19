@@ -13,13 +13,13 @@ import { useDevhubT, type DevhubKey } from "./i18n";
 import { COMPARISON_ROWS, capabilityIsKnownOff, comparisonTotalUsd } from "./capabilityRows";
 import { howtoTranscript } from "./howtoTranscript";
 import { getDevhubGuestId } from "@/lib/devhubGuest";
-import { fromPricePerMonth, termPricePerMonth, termTotal, TERM_MONTHS, СРОК_ПО_УМОЛЧАНИЮ } from "@/lib/termPricing";
+import { TERM_MONTHS, СРОК_ПО_УМОЛЧАНИЮ, planetPricePerMonth, planetTotal } from "@/lib/termPricing";
 import { useI18n } from "@/lib/i18n";
 import { catalog } from "@/lib/aevionCatalog";
 import { fixDoubledScheme } from "@/lib/urls";
 import { track } from "@/lib/track";
 import { shagPervogoEkrana, podklyuchitSobytiyaPervogoEkrana } from "@/lib/sobytiyaPervogoEkrana";
-import { productById } from "@/lib/products";
+import { productById, fromPerMonthOf } from "@/lib/products";
 import { PageTracking } from "@/components/PageTracking";
 import { devhubServerError, useDevhubServerError } from "@/lib/devhubServerError";
 import { stackForIdea, даннымНуженСервер, доступенРежимПриложения, стекДляРежима,
@@ -116,7 +116,9 @@ function formatDate(iso: string) {
 
 // Price and checkout URL come from the product catalogue, which is verified
 // against the live payment dashboards — the page must not carry its own copy.
-const STUDIO_PRO = productById("devhub");
+// 🔴 19.10.2026, слово основателя: ОДИН план «AEVION Планета» — DevHub отдельно не продаётся,
+// деньги на этой странице ведут в план. Имя переменной сохранено ради сторожей (ворота «{STUDIO_PRO ? (»).
+const STUDIO_PRO = productById("aevion-planet");
 /* Цена и срок — ИЗ ДАННЫХ, а не из подписи. 07.10.2026: кнопка говорила
    «Оформить Pro — $200/мес», а по данным цен «pro» это 6 месяцев с множителем
    0.75, то есть $150/мес и $900 всего; $200/мес — это Lite (1 мес), и именно
@@ -137,10 +139,9 @@ const STUDIO_PRO = productById("devhub");
    «pro.unavailable» вместо кнопки. Ноль подставлять нельзя (нарисуется
    покупателю как «$0»), поэтому числа считаются ТАМ, где запись уже проверена:
    функция принимает товар, и внутри ветви типы сходятся сами. */
-const pricePerMonth = (товар: { priceUsd: number }) =>
-  termPricePerMonth(товар.priceUsd, СРОК_ПО_УМОЛЧАНИЮ);
-const termTotalFor = (товар: { priceUsd: number }) =>
-  termTotal(товар.priceUsd, СРОК_ПО_УМОЛЧАНИЮ);
+// Цена плана на сроке по умолчанию — своя лесенка плана (PLANET_TERM_PRICE), не TERM_FACTOR.
+const pricePerMonth = () => planetPricePerMonth(СРОК_ПО_УМОЛЧАНИЮ);
+const termTotalFor = () => planetTotal(СРОК_ПО_УМОЛЧАНИЮ);
 const TERM_MONTHS_SHOWN = TERM_MONTHS[СРОК_ПО_УМОЛЧАНИЮ];
 
 /**
@@ -201,7 +202,7 @@ function capabilityOffReason(
 export default function DevHubPage() {
   const t = useDevhubT();
   // Цена и ссылка на кассу — из одного источника с бэкендом, см. блок ниже.
-  const devhubProduct = productById("devhub");
+  const devhubProduct = productById("aevion-planet"); // 19.10: цена в герое — план, а не отдельный DevHub
   const { lang } = useI18n();
   /* Заголовок первого экрана по метке ролика (?c=). Метка живёт в window, поэтому на сервере и в
      первой отрисовке — общее обещание, после монтирования — обещание ролика (13.10.2026). */
@@ -789,7 +790,7 @@ export default function DevHubPage() {
           {devhubProduct ? (
             <div data-devhub-price="1" style={{ fontSize: 13.5, color: "#e2e8f0", marginTop: 10, lineHeight: 1.5 }}>
               {t("hero.price")
-                .replace("{a}", `$${fromPricePerMonth(devhubProduct.priceUsd)}`)
+                .replace("{a}", `$${fromPerMonthOf(devhubProduct)}`)
                 .replace("{b}", `$${devhubProduct.priceUsd}`)}{" "}
               <Link
                 href={devhubProduct.href}
@@ -1110,7 +1111,7 @@ export default function DevHubPage() {
                   whiteSpace: "nowrap",
                 }}
               >
-                {t("pro.upgrade")} — {`$${pricePerMonth(STUDIO_PRO)}`}{t("pro.perMonth")}
+                {t("pro.upgrade")} — {`$${pricePerMonth()}`}{t("pro.perMonth")}
               </a>
               ) : (
                 <span style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, fontWeight: 600 }}>
@@ -1125,7 +1126,7 @@ export default function DevHubPage() {
                   а не собирают его. Нашёл сборщик волны прогоном tsc. */}
               {STUDIO_PRO && (
                 <div style={{ fontSize: 11, color: "rgba(255,255,255,0.85)", width: "100%" }}>
-                  {t("pro.termNote").replace("{m}", String(TERM_MONTHS_SHOWN)).replace("{t}", `$${termTotalFor(STUDIO_PRO)}`)}
+                  {t("pro.termNote").replace("{m}", String(TERM_MONTHS_SHOWN)).replace("{t}", `$${termTotalFor()}`)}
                 </div>
               )}
               {/* Правда, которая нужна человеку ДО оплаты, а не после.

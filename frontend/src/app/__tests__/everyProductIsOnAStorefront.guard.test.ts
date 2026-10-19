@@ -31,7 +31,8 @@ function source(): string {
 
 /** Идентификаторы внутри одного экспортируемого списка. */
 function idsOf(src: string, name: string): string[] {
-  const i = src.indexOf("export const " + name);
+  // 19.10.2026: MODULES = ВСЕ_МОДУЛИ.filter(предлагается отдельно); строки каталога объявлены в ВСЕ_МОДУЛИ.
+  const i = src.indexOf(name === "MODULES" ? "const ВСЕ_МОДУЛИ" : "export const " + name);
   if (i < 0) return [];
   const j = src.indexOf("];", i);
   const body = src.slice(i, j < 0 ? src.length : j);

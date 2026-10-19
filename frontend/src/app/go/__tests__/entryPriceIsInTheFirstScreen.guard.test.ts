@@ -1,3 +1,4 @@
+import { planetPricePerMonth, planetFromPerMonth } from "@/lib/termPricing";
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -32,7 +33,7 @@ describe("посадочная /go: цена входа", () => {
 
   it("цена берётся из общего списка, а не вписана руками", () => {
     expect(
-      ИСХОДНИК.includes("termPricePerMonth(ВХОД.baseMonthly"),
+      ИСХОДНИК.includes("planetPricePerMonth(\"lite\")") && ИСХОДНИК.includes("planetFromPerMonth()"), // 19.10: план
       "цена посчитана не из STANDALONE_APPS — разойдётся с /pricing при первой правке",
     ).toBe(true);
     const вход = STANDALONE_APPS.find((a) => a.slug === "multichat")!;
@@ -78,7 +79,7 @@ describe("посадочная /go: цена входа", () => {
     // в никуда, и это заметили бы только по нулям в воронке.
     expect(STANDALONE_APPS.some((a) => a.slug === "multichat")).toBe(true);
     expect(
-      ИСХОДНИК.includes('keep(`/pricing?app=${ВХОД.slug}#apps`)'),
+      ИСХОДНИК.includes('keep("/pricing#tiers")'), // 19.10: вход — план «Планета»
       "ссылка без keep(): метка канала потеряется ровно на переходе к покупке",
     ).toBe(true);
   });
@@ -93,15 +94,15 @@ describe("обе границы цены — чтобы наши страниц�
    * $24» у шахмат, и решение то же: называем обе границы.
    */
   it("в строке названы и помесячная цена, и годовая", () => {
-    expect(ИСХОДНИК.includes("${ЦЕНА_ВХОДА}/мес помесячно"), "нет помесячной цены").toBe(true);
-    expect(ИСХОДНИК.includes("от ${ЦЕНА_ЗА_ГОД} при оплате за год"), "нет годовой границы").toBe(true);
+    expect(ИСХОДНИК.includes("${ЦЕНА_ВХОДА}/мес без срока"), "нет помесячной цены").toBe(true); // 19.10: план
+    expect(ИСХОДНИК.includes("от ${ЦЕНА_ЗА_ГОД}/мес при оплате за год"), "нет годовой границы").toBe(true);
   });
 
   it("обе цены считаются из общего списка и различаются", () => {
     const вход = STANDALONE_APPS.find((a) => a.slug === "multichat")!;
-    const помесячно = termPricePerMonth(вход.baseMonthly, "lite");
-    const заГод = termPricePerMonth(вход.baseMonthly, "max");
+    const помесячно = planetPricePerMonth("lite"); // 19.10: вход — план «Планета» со своей лесенкой
+    const заГод = planetFromPerMonth();
     expect(заГод, "границы совпали — вторая строка бессмысленна").toBeLessThan(помесячно);
-    expect(ИСХОДНИК.includes('termPricePerMonth(ВХОД.baseMonthly, "max")'), "годовая вписана руками").toBe(true);
+    expect(ИСХОДНИК.includes("const ЦЕНА_ЗА_ГОД = planetFromPerMonth();"), "годовая вписана руками").toBe(true);
   });
 });

@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { BuyLink } from "@/components/BuyLink";
 import { PageTracking } from "@/components/PageTracking";
-import { productById, channelFrom, channelFromRef, withChannel, keepChannel } from "@/lib/products";
-import { fromPricePerMonth } from "@/lib/termPricing";
+import { productById, fromPerMonthOf, channelFrom, channelFromRef, withChannel, keepChannel } from "@/lib/products";
 import { PaymentReachNotice } from "@/components/PaymentReachNotice";
 
 /* Предел бесплатных выкаток. Число ДУБЛИРУЕТ бэкенд (TIER_LIMITS.free.deploy), и
@@ -67,7 +66,8 @@ export default async function EnDevhubPage({
   // площадка. Без этой строки день запуска на PH считался бы прямыми заходами.
   const параметры = await searchParams;
   const channel = channelFrom(параметры.c) ?? channelFromRef(параметры.ref);
-  const devhub = productById("devhub");
+  // 19.10.2026: one AEVION Planet plan — DevHub is not sold on its own; money on this page leads to the plan.
+  const devhub = productById("aevion-planet");
 
   return (
     <main style={styles.page}>
@@ -99,9 +99,9 @@ export default async function EnDevhubPage({
           */}
           {devhub ? (
             <p data-devhub-price="1" style={styles.heroPrice}>
-              Full studio{" "}
-              <strong>from ${fromPricePerMonth(devhub.priceUsd)}/mo</strong>{" "}
-              on the 12-month term, ${devhub.priceUsd}/mo billed monthly.{" "}
+              The full studio comes with the AEVION Planet plan —{" "}
+              <strong>from ${fromPerMonthOf(devhub)}/mo</strong>{" "}
+              on the 12-month term, ${devhub.priceUsd}/mo with no term.{" "}
               <a href={withChannel(devhub.href, channel)} style={styles.heroPriceLink}>
                 See plans and buy →
               </a>
@@ -153,8 +153,8 @@ export default async function EnDevhubPage({
               channel={channel}
               style={styles.card}
             >
-              <div style={styles.cardKicker}>subscription · monthly</div>
-              <div style={styles.cardTitle}>DevHub Studio Pro</div>
+              <div style={styles.cardKicker}>plan · every AEVION app</div>
+              <div style={styles.cardTitle}>AEVION Planet plan</div>
               <p style={styles.cardNote}>
                 Browser IDE on the VS Code engine, AI code generation, one-click
                 deploys, and the cost ledger — you always see what a run cost.

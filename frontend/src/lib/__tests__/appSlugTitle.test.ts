@@ -16,7 +16,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { titleForAppSlug } from "../appSlugTitle";
-import { ALL_PRODUCTS } from "../products";
+import { CATALOG_PRODUCTS } from "../products";
 
 const VARIANTS = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -37,7 +37,7 @@ describe("кабинет называет купленное по-человеч
     const slugs = webhookSlugs();
     expect(slugs.length).toBeGreaterThan(5);
     expect(slugs).toContain("cyberchess");
-    expect(ALL_PRODUCTS.length).toBeGreaterThan(10);
+    expect(CATALOG_PRODUCTS.length, "19.10: весь каталог, включая снятые с витрины").toBeGreaterThan(10);
   });
 
   it("КАЖДАЯ ссылка вебхука разрешается в название товара", () => {

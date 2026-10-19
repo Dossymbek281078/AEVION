@@ -74,11 +74,11 @@ describe("ответ кассы называет валюту фактическ
     const { payboxPaymentProvider } = await import("../src/lib/payment/payboxProvider");
     const вызовы = vi.mocked(payboxPaymentProvider.createIntent);
     вызовы.mockClear();
-    process.env.LEMON_SQUEEZY_VARIANT_CYBERCHESS_PRO = "23456";
+    process.env.LEMON_SQUEEZY_VARIANT_CYBERCHESS_MAX = "23456";
     try {
       const r = await request(app)
         .post("/api/pricing/checkout/session")
-        .send({ tierId: "pro", app: "cyberchess", currency: "KZT" });
+        .send({ tierId: "max", app: "cyberchess", currency: "KZT" }); // 19.10: шахматы — только год
       expect(r.status, `касса ответила ${r.status}: ${JSON.stringify(r.body)}`).toBe(200);
       expect(вызовы, "покупка приложения ушла в PayBox").not.toHaveBeenCalled();
       expect(r.body.provider).toBe("lemonsqueezy");
@@ -90,7 +90,7 @@ describe("ответ кассы называет валюту фактическ
       await request(app).post("/api/pricing/checkout/session").send({ tierId: "medium", currency: "KZT" });
       expect(вызовы, "тариф в тенге перестал пробовать PayBox").toHaveBeenCalledTimes(1);
     } finally {
-      delete process.env.LEMON_SQUEEZY_VARIANT_CYBERCHESS_PRO;
+      delete process.env.LEMON_SQUEEZY_VARIANT_CYBERCHESS_MAX;
     }
   });
 });

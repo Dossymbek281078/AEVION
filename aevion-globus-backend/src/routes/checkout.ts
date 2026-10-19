@@ -10,7 +10,7 @@ import { продаётсяОтдельно } from "../data/moduleAccess";
 import {
   TIERS, getTier, getModulePrice, resolvePromoCode, CURRENCY_RATES, MAX_PROMO_DISCOUNT_RATIO, buildQuote,
   type TierId, type CurrencyCode, type TermTier,
-  isTermTier, standaloneApp, termTotal, monthsLabel } from "../data/pricing";
+  isTermTier, standaloneApp, termTotal, monthsLabel, appTermTotal, appSellableTerms, TERM_MONTHS } from "../data/pricing";
 import { findAppSubscriptionByIntent } from "../lib/appEntitlements";
 import { provisionSubscription, countSubscriptions, findSubscriptionByPaymentId, termMonthsOf } from "./provisioning";
 import { модулиДляКассы } from "../lib/payment/customData";
@@ -360,7 +360,24 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
           "Это приложение отдельно не продаётся — оно входит в подписку AEVION. Выберите срок подписки на странице цен."),
       });
     }
-    const ценаПриложения = app && isTermTier(tier.id) ? termTotal(app.baseMonthly, tier.id as TermTier) : null;
+    const ценаПриложения = app && isTermTier(tier.id) ? appTermTotal(app, tier.id as TermTier) : null;
+    /*
+     * 🔴 19.10.2026: годовое приложение (шахматы $50/год) на других сроках НЕ
+     * продаётся. Это не авария кассы (503), а постоянное положение: 400 с
+     * перечнем сроков, на которых покупка пройдёт, — витрина по этому ответу
+     * называет человеку рабочий срок, а не «попробуйте ещё раз».
+     */
+    if (app && isTermTier(tier.id) && ценаПриложения === null) {
+      const сроки = appSellableTerms(app).map((t) => TERM_MONTHS[t]);
+      return res.status(400).json({
+        error: "term_not_sold",
+        app: app.slug,
+        soldMonths: сроки,
+        message: наЯзыке(языкПокупателя(req),
+          `${app.name} is sold only for ${сроки.join(", ")} months. Pick that term on the pricing page.`,
+          `${app.name} продаётся только на ${сроки.join(", ")} месяцев. Выберите этот срок на странице цен.`),
+      });
+    }
     const seats = Math.max(1, Math.min(1000, body.seats ?? 1));
 
     if (tier.id === "free") {
@@ -695,13 +712,17 @@ checkoutRouter.post("/session", sessionLimiter, async (req, res) => {
           : tier.id === "lite"
             ? (body.modules ?? [])[0]
             : undefined;
-        предупредитьЕслиСуммаНеДоедет("lemonsqueezy");
+        // 19.10.2026: сумма ДОЕЗЖАЕТ — custom_price ниже; тревога осталась только у Gumroad.
         const intent = await lemonSqueezyPaymentProvider.createIntent({
           // Запасным путём касса открывается по варианту тарифа, а цену
           // назначаем мы: иначе покупатель заплатил бы цену планеты.
           reference: запасной ? "tier_lite" : reference,
           amountCents: totalCents, currency: "USD", description, email: body.email ?? null,
-          customPriceCents: запасной ? totalCents : undefined,
+          // 🔴 19.10.2026: НАША сумма уходит в кассу ВСЕГДА (custom_price), а не только
+          // запасным путём. Замер того дня: варианты планеты в LS несли прежнюю
+          // лесенку ($400 за месяц), витрина — новую ($250): касса списала бы
+          // цену товара, а не названную. Теперь списывается ровно totalCents.
+          customPriceCents: totalCents,
           customData: собратьCustomData(liteModule, channel),
           // Язык страницы оплаты. Берём его от САМОГО ПОКУПАТЕЛЯ, а не
           // подставляем свой: сперва то, что прислала витрина, иначе язык его

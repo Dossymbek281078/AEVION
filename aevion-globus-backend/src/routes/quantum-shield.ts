@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { скрытоИзСписков, скрытыеИдентификаторы } from "../lib/publicRegistryProbes";
 import { denPoMestnomu } from "../lib/denPoMestnomu";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
@@ -1013,7 +1014,10 @@ async function handleList(req: Request, res: Response): Promise<void> {
       where = `WHERE "ownerUserId" = $1`;
       params.push(auth.sub);
     } else {
-      where = `WHERE ${СЛУЖЕБНОЕ}`;
+      // 19.10.2026: плюс записи, скрытые по id (lib/publicRegistryProbes.ts) — демо с именем лида
+      // и пробы с русскими названиями, которые префиксный фильтр не ловит.
+      where = `WHERE ${СЛУЖЕБНОЕ} AND NOT ("id" = ANY($1::text[]))`;
+      params.push(скрытыеИдентификаторы());
     }
     params.push(limit, offset);
     const limitIdx = params.length - 1;
@@ -1025,7 +1029,7 @@ async function handleList(req: Request, res: Response): Promise<void> {
     );
     const totalQ = await pool.query(
       `SELECT COUNT(*)::int AS total FROM "QuantumShield" ${where}`,
-      mineOnly && auth?.sub ? [auth.sub] : [],
+      mineOnly && auth?.sub ? [auth.sub] : [скрытыеИдентификаторы()],
     );
     const isAdmin = auth?.role === "admin";
     const records = rows.map((r: Record<string, unknown>) => {
@@ -1259,6 +1263,10 @@ quantumShieldRouter.get("/:id/public", async (req, res) => {
 quantumShieldRouter.get("/:id", async (req, res) => {
   if (RESERVED_IDS.has(req.params.id)) {
     return res.status(404).json({ error: "Not found" });
+  }
+  // 19.10.2026: скрытая по id запись (демо с именем лида, пробы) — 404 и по прямому адресу.
+  if (скрытоИзСписков(req.params.id)) {
+    return res.status(404).json({ error: "Shield record not found", hidden: true });
   }
   try {
     await ensureShieldTable();

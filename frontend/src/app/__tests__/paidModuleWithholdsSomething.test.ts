@@ -168,7 +168,8 @@ function canWithhold(app: string, gated: Set<string>): boolean {
 describe("платный модуль умеет удерживать доступ", () => {
   it("контроль прибора: каталог и сторожа читаются", () => {
     const mods = pricedModules();
-    expect(mods.length, "в каталоге не найдено платных подписок — разбор сломан").toBeGreaterThanOrEqual(5);
+    // 19.10.2026: на витрине план «Планета» и шахматы — две платные позиции.
+    expect(mods.length, "в каталоге не найдено платных подписок — разбор сломан").toBeGreaterThanOrEqual(2);
     const gated = platformGated();
     expect(gated.size, "список закрываемых модулей пуст — разбор index.ts сломан").toBeGreaterThan(10);
     // и положительный контроль: модуль, который ТОЧНО закрыт, определяется закрытым

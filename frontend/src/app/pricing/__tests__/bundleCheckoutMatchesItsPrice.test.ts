@@ -82,19 +82,21 @@ describe("цена приложения и покупка — одна пара 
   const код = кодом(readFileSync(СТРАНИЦА, "utf8"));
 
   test("цена на карточке считается от выбранного срока и базы приложения", () => {
+    // 19.10.2026: срок приложения — appTermFor (у годового всегда max), сумма — платёжПриложения(a, срок).
+    expect(код).toContain("const срок = appTermFor(a, appTerm);");
     expect(код).toContain("termPricePerMonth(a.baseMonthly, appTerm)");
-    expect(код).toContain("termTotal(a.baseMonthly, appTerm)");
+    expect(код).toContain("заСрок(платёжПриложения(a, срок), TERM_MONTHS[срок])");
   });
 
   test("в кассу уходят тот же срок и то же приложение", () => {
     expect(
-      код.includes("startCheckout({ tierId: appTerm, app: a.slug"),
+      код.includes("startCheckout({ tierId: срок, app: a.slug"),
       "кнопка приложения шлёт в кассу не ту пару, от которой посчитана цена на карточке",
     ).toBe(true);
   });
 
   test("продаваемость проверяется по ссылке той же пары", () => {
     // Иначе кнопка была бы живой по одной ссылке, а покупка шла бы по другой.
-    expect(код).toContain("ссылкаПриложения(a.slug, appTerm)");
+    expect(код).toContain("ссылкаПриложения(a.slug, срок)");
   });
 });

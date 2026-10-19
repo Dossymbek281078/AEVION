@@ -21,7 +21,7 @@ const о = (q: { module?: string | null; app?: string | null }) =>
 describe("что показывать первым экраном на /pricing", () => {
   it("🔴 ?app= поднимает карточку приложения — то, ради чего правка", () => {
     expect(о({ app: "cyberchess" })).toBe("cyberchess");
-    expect(о({ app: "devhub" })).toBe("devhub");
+    expect(о({ app: "devhub" }), "19.10: DevHub отдельно не предлагается — наверх не поднимается").toBe("");
   });
 
   it("пробелы по краям метки не теряют человека", () => {
@@ -29,11 +29,11 @@ describe("что показывать первым экраном на /pricing"
     // ссылку переносили руками. Без обрезки такой заход молча падает в общий
     // холодный вход, то есть человек снова не видит того, за чем пришёл.
     expect(о({ app: " cyberchess " })).toBe("cyberchess");
-    expect(о({ module: " devhub " })).toBe("devhub");
+    expect(о({ module: " cyberchess " })).toBe("cyberchess");
   });
 
   it("?module= главнее ?app= — его ставит страница продукта", () => {
-    expect(о({ module: "devhub", app: "cyberchess" })).toBe("devhub");
+    expect(о({ module: "cyberchess", app: "ip_bureau" })).toBe("cyberchess");
   });
 
   it("🔴 не продаваемое отдельно наверх не поднимается", () => {
@@ -58,7 +58,7 @@ describe("что показывать первым экраном на /pricing"
   it("🔴 каждое продаваемое приложение поднимается — знаменатель по витрине", () => {
     // Иначе правка закроет один случай (шахматы) и промолчит на восьми других.
     const продаваемые = STANDALONE_APPS.filter((a) => predlagaemOtdelno(a.slug));
-    expect(продаваемые.length, "продаваемых приложений").toBeGreaterThan(5);
+    expect(продаваемые.length, "продаваемых приложений (19.10: шахматы)").toBeGreaterThanOrEqual(1);
     const немые = продаваемые.filter((a) => о({ app: a.slug }) !== a.slug);
     expect(немые.map((a) => a.slug), "эти приложения не поднимаются наверх").toEqual([]);
   });

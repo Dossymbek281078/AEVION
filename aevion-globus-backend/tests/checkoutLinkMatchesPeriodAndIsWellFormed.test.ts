@@ -81,11 +81,11 @@ describe("ссылка на оплату соответствует выбору
 
   test("отдельное приложение ведёт к товару своей ступени", async () => {
     process.env.GUMROAD_PERMALINK_APP_CYBERCHESS_PRO = "chess-pro-slug";
-    process.env.GUMROAD_PERMALINK_APP_CYBERCHESS_LITE = "chess-lite-slug";
+    process.env.GUMROAD_PERMALINK_APP_CYBERCHESS_MAX = "chess-max-slug"; // 19.10: шахматы — только год
     process.env.GUMROAD_PERMALINK_TIER_PRO = "planet-pro-slug";
-    const r = await сессия({ tierId: "pro", app: "cyberchess" });
+    const r = await сессия({ tierId: "max", app: "cyberchess" });
     expect(r.status, JSON.stringify(r.body)).toBe(200);
-    expect(String(r.body.url), "покупка приложения ушла к товару планеты или другой ступени").toContain("chess-pro-slug");
+    expect(String(r.body.url), "покупка приложения ушла к товару планеты или другой ступени").toContain("chess-max-slug");
   });
 
   test("переменная с ПОЛНОЙ ссылкой не даёт склеенный адрес", async () => {

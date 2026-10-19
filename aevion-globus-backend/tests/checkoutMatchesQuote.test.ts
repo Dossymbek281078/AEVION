@@ -46,7 +46,7 @@ vi.mock("../src/lib/payment/gumroadProvider", () => ({
 }));
 
 const { checkoutRouter } = await import("../src/routes/checkout");
-const { buildQuote, MODULES_PRICING, termTotal, standaloneApp } = await import("../src/data/pricing");
+const { buildQuote, MODULES_PRICING, termTotal, standaloneApp, appTermTotal } = await import("../src/data/pricing");
 const { STANDALONE_APPS } = await import("../src/data/pricing");
 const { продаётсяОтдельно } = await import("../src/data/moduleAccess");
 
@@ -127,19 +127,24 @@ describe("касса берёт ровно то, что показала вит�
 });
 
 describe("отдельное приложение: касса берёт цену его ступени", () => {
-  test("CyberChess на срок Pro — платёж за шесть месяцев по базе приложения", async () => {
+  test("CyberChess продаётся только на 12 месяцев — $50 за год (слово основателя 19.10.2026)", async () => {
     const chess = standaloneApp("cyberchess")!;
-    const cents = await checkoutCents({ tierId: "pro", app: "cyberchess" });
-    expect(cents, "касса взяла не цену приложения на этой ступени").toBe(termTotal(chess.baseMonthly, "pro") * 100);
-    expect(charged.reference).toBe("app_cyberchess_pro");
+    const cents = await checkoutCents({ tierId: "max", app: "cyberchess" });
+    expect(cents, "касса взяла не годовую цену шахмат").toBe(appTermTotal(chess, "max")! * 100);
+    expect(cents, "годовая цена шахмат — $50").toBe(5000);
+    expect(charged.reference).toBe("app_cyberchess_max");
   });
 
-  test("КОНТРОЛЬ: другая ступень того же приложения стоит иначе, а не как планета", async () => {
-    const pro = await checkoutCents({ tierId: "pro", app: "cyberchess" });
+  test("КОНТРОЛЬ: на другом сроке шахматы не продаются — отказ 400, не цена планеты", async () => {
     const max = await checkoutCents({ tierId: "max", app: "cyberchess" });
-    const планетаPro = Math.round(buildQuote({ tierId: "pro" }).total * 100);
-    expect(max).not.toBe(pro);
-    expect(pro, "приложение продано по цене всей планеты").not.toBe(планетаPro);
+    const планетаMax = Math.round(buildQuote({ tierId: "max" }).total * 100);
+    expect(max, "приложение продано по цене всей планеты").not.toBe(планетаMax);
+    charged.cents = -1;
+    const r = await request(app()).post("/api/pricing/checkout/session").send({ tierId: "pro", app: "cyberchess" });
+    expect(r.status, JSON.stringify(r.body)).toBe(400);
+    expect(r.body.error).toBe("term_not_sold");
+    expect(r.body.soldMonths).toEqual([12]);
+    expect(charged.cents, "касса была вызвана на непродаваемом сроке").toBe(-1);
   });
 
   test("приложение вне пяти и бесплатный срок — отказ 400, а не тихая покупка тарифа", async () => {
@@ -225,13 +230,14 @@ describe("касса: синонимы имени приложения", () => {
     const a = продаваемое!;
     const суммы: number[] = [];
     for (const имя of ИМЕНА) {
-      суммы.push(await checkoutCents({ tierId: "lite", [имя]: a.slug, seats: 1 }));
+      // 19.10.2026: единственное продаваемое отдельно — шахматы, у них один срок max.
+      суммы.push(await checkoutCents({ tierId: "max", [имя]: a.slug, seats: 1 }));
       // ТОВАР, а не только сумма: reference называет, что именно куплено.
       // Из-за дефекта здесь оказывалась планета вместо приложения.
       expect(
         charged.reference,
         `поле «${имя}» купило не то приложение: ${charged.reference}`,
-      ).toBe(`app_${a.slug}_lite`);
+      ).toBe(`app_${a.slug}_max`);
     }
     process.stderr.write(
       `[сторож] ${a.slug}: суммы по именам ${JSON.stringify(суммы)}${String.fromCharCode(10)}`,
@@ -239,7 +245,7 @@ describe("касса: синонимы имени приложения", () => {
     // termTotal считает в долларах, провайдер получает центы — ×100, как и
     // в соседней проверке этого же файла. Моё первое ожидание сравнивало
     // 2400¢ с 24$ и покраснело на ИСПРАВНОМ коде: ошибка была в приборе.
-    const ожидаемо = termTotal(a.baseMonthly, "lite") * 100;
+    const ожидаемо = appTermTotal(a, "max")! * 100;
     for (let i = 0; i < ИМЕНА.length; i++) {
       expect(
         суммы[i],

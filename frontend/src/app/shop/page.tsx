@@ -26,7 +26,10 @@ import {
 /** Сколько приложений продаётся отдельно — из того же списка, что и карточки.
  *  Числом словом («пять») страница расходилась с витриной: их девять, и сумма
  *  рядом считалась по всем девяти. */
-const ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ = STANDALONE_APPS.length;
+// 19.10.2026: считаем по витрине (MODULES), а не по прайсу — отдельно предлагаются только шахматы.
+const CURRENCY_USD = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ = MODULES.length;
+const ОТДЕЛЬНЫЕ_ИМЕНА = MODULES.map((p) => `${p.title} — ${CURRENCY_USD.format(p.priceUsd)}${p.billing === "year" ? " в год" : " за месяц"}`).join(", ");
 
 import { PageTracking } from "@/components/PageTracking";
 
@@ -50,7 +53,7 @@ export const metadata: Metadata = {
   // поэтому корневой файл не тронут.
   title: { absolute: "Магазин AEVION — подписка, гайды, приложения" },
   description:
-    "Все товары AEVION в одном месте: подписка на всю планету на срок от 1 до 12 месяцев, научные гайды о долголетии и книга разовой покупкой, 9 приложений отдельно. Wellness и образование, не медицина.",
+    "Все товары AEVION в одном месте: план «AEVION Планета» на срок от 1 до 12 месяцев, научные гайды о долголетии и книга разовой покупкой, шахматы CyberChess отдельно ($50 в год). Wellness и образование, не медицина.",
   // СВОЙ canonical, и для этой страницы он важнее, чем для большинства.
   // На неё ведут ссылки с меткой канала: ?c=tt, ?c=ig, ?c=dz и ещё семь.
   // Без canonical поисковик вправе счесть каждый вариант отдельной
@@ -64,7 +67,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Магазин AEVION — подписка, гайды, приложения",
     description:
-      "Подписка на всю планету на срок от 1 до 12 месяцев, научные гайды и книга разовой покупкой, 9 приложений отдельно. Wellness и образование, не медицина.",
+      "План «AEVION Планета» на срок от 1 до 12 месяцев, научные гайды и книга разовой покупкой, шахматы CyberChess отдельно ($50 в год). Wellness и образование, не медицина.",
     type: "website",
     siteName: "AEVION",
   },
@@ -91,7 +94,8 @@ function Card({ p, channel }: { p: Product; channel: string | null }) {
   // страницу цен — там выбирается срок и открывается касса, и там же уходит
   // checkout_start. Поэтому здесь обычная ссылка в той же вкладке, а не BuyLink:
   // иначе одна покупка считалась бы в воронке дважды.
-  const isTerm = p.billing === "term";
+  const isTerm = p.billing === "term" || p.billing === "year";
+  const isYear = p.billing === "year";
   const inner = (
     <>
       <div style={styles.cardTop}>
@@ -121,9 +125,9 @@ function Card({ p, channel }: { p: Product; channel: string | null }) {
       <div style={styles.cardFoot}>
         <span style={styles.price}>
           {CURRENCY.format(p.priceUsd)}
-          {isTerm ? <span style={styles.per}> за месяц</span> : null}
+          {isYear ? <span style={styles.per}> в год</span> : isTerm ? <span style={styles.per}> за месяц</span> : null}
         </span>
-        <span style={styles.buy}>{isTerm ? "Выбрать срок" : "Купить"}&nbsp;→</span>
+        <span style={styles.buy}>{isYear ? "Купить на год" : isTerm ? "Выбрать срок" : "Купить"}&nbsp;→</span>
       </div>
     </>
   );
@@ -230,20 +234,18 @@ export default async function ShopPage({
         <div style={styles.eyebrow}>AEVION · Магазин</div>
         <h1 style={styles.h1}>Всё, что можно купить в AEVION</h1>
         <p style={styles.lede}>
-          Подписка на всю планету на срок от 1 до 12 месяцев, гайды и книги разовой покупкой,
-          {ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ} приложений отдельно. Гайды и книги оплачиваются через Gumroad с мгновенной
-          выдачей; срок подписки и приложения выбирается на странице цен.
+          Один план «AEVION Планета» на срок от 1 до 12 месяцев, гайды и книги разовой покупкой,
+          отдельно — {ОТДЕЛЬНЫЕ_ИМЕНА}. Гайды и книги оплачиваются через Gumroad с мгновенной
+          выдачей; срок плана выбирается на странице цен.
         </p>
 
         <Section
           title="Подписка AEVION"
-          note={`${ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ} приложений по отдельности — ${CURRENCY.format(
-            MODULES_TOTAL_USD,
-          )} за месяц; вся планета — ${CURRENCY.format(
+          note={`Все приложения AEVION в одном плане: ${CURRENCY.format(
             PLANET_BASE_MONTHLY,
-          )} за месяц или ${CURRENCY.format(
+          )} за месяц без срока или ${CURRENCY.format(
             planetPricePerMonth("max"),
-          )} в месяц при оплате за 12 месяцев вперёд.`}
+          )} в месяц при оплате за 12 месяцев вперёд. Дорогие модели, голос и видео — 4500 кредитов в месяц в плане.`}
           items={SUBSCRIPTIONS}
           channel={channel}
         />
@@ -257,7 +259,7 @@ export default async function ShopPage({
 
         <Section
           title="Отдельные приложения"
-          note="9 приложений продаются и по отдельности — если нужен один инструмент, а не вся планета. Срок от 1 до 12 месяцев, оплата за срок вперёд; чем длиннее срок, тем дешевле месяц. Остальные модули входят только в подписку AEVION."
+          note={`Отдельно продаётся только ${ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ === 1 ? "одно приложение" : `${ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ} приложения`}: ${ОТДЕЛЬНЫЕ_ИМЕНА}. Цена может вырасти с добавлением новых игр. Остальные приложения входят только в план «AEVION Планета».`}
           items={MODULES}
           channel={channel}
         />

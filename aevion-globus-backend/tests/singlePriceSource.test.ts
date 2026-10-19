@@ -85,7 +85,7 @@ describe("цена имеет один источник", () => {
 
     expect(src).toContain("buildQuote(");
     // Цена отдельного приложения — тоже из общей лестницы, а не своей формулой.
-    expect(src).toContain("termTotal(");
+    expect(src).toContain("appTermTotal(");
     // Прежняя арифметика: накопление итога вручную.
     expect(src).not.toMatch(/totalUsd\s*\+=/);
   });

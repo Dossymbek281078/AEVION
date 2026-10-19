@@ -13,7 +13,8 @@ describe("путь к кассе CyberChess всегда на экране", () 
   it("цена и адрес берутся из каталога, а не зашиты", () => {
     const p = productById("cyberchess");
     expect(p).toBeTruthy();
-    expect(p!.format).toMatch(/^приложение · от \$\d+\/мес$/);
+    // 19.10.2026: шахматы продаются только на год — формат «приложение · $50/год».
+    expect(p!.format).toMatch(/^приложение · (от \$\d+\/мес|\$\d+\/год)$/);
     expect(p!.href).toBe(PRICING_APP("cyberchess"));
     expect(page).toContain('const ccBuyProduct=productById("cyberchess");');
     expect(page).toContain('const ccBuyLabel=(ccBuyProduct?.format||"").replace(/^приложение · /,"")||"купить";');

@@ -32,23 +32,25 @@ import { predlagaemOtdelno, НЕ_ПРОДАЁТСЯ_ОТДЕЛЬНО } from "@/l
  */
 const В_КАТАЛОГЕ = 9;
 const ПОКУПАЕМЫХ_БЫЛО = 5;
-const ПОКУПАЕМЫХ_СТАЛО = 4;
+// 19.10.2026, слово основателя: один план — отдельно остаются только шахматы.
+const ПОКУПАЕМЫХ_СТАЛО = 1;
 const ПОКУПАЕМЫЕ = ["cyberchess", "multichat", "qventure", "ip_bureau", "devhub"];
 
 describe("бюро убрано из предложения, остальное цело", () => {
-  it("🔴 бюро не предлагается, а четыре других — предлагаются", () => {
+  it("🔴 бюро не предлагается; с 19.10 из пяти остаются только шахматы", () => {
     expect(STANDALONE_APPS.length, "каталог приложений изменился — пересчитайте знаменатель").toBe(В_КАТАЛОГЕ);
     expect(predlagaemOtdelno("ip_bureau")).toBe(false);
     const покупаемыеСейчас = ПОКУПАЕМЫЕ.filter((s) => predlagaemOtdelno(s));
     expect(покупаемыеСейчас.length, `кнопок «Купить» останется ${покупаемыеСейчас.length}, ждали ${ПОКУПАЕМЫХ_СТАЛО}`).toBe(ПОКУПАЕМЫХ_СТАЛО);
     expect(ПОКУПАЕМЫЕ.length).toBe(ПОКУПАЕМЫХ_БЫЛО);
-    for (const слаг of ["cyberchess", "multichat", "qventure", "devhub"]) {
+    for (const слаг of ["cyberchess"]) {
       expect(predlagaemOtdelno(слаг), `${слаг} пропал из предложения — снесли лишнее`).toBe(true);
     }
     // И остальные четыре каталога (qright, qsign, startup_exchange, qskyway)
     // не тронуты: у них своей кассы и так нет, но из предложения их никто не убирал.
-    for (const слаг of ["qright", "qsign", "startup_exchange", "qskyway"]) {
-      expect(predlagaemOtdelno(слаг), `${слаг} задет без причины`).toBe(true);
+    for (const слаг of ["multichat", "qventure", "devhub", "qright", "qsign", "startup_exchange", "qskyway"]) {
+      expect(predlagaemOtdelno(слаг), `${слаг}: 19.10 снят с отдельной продажи, а предлагается`).toBe(false);
+      expect(НЕ_ПРОДАЁТСЯ_ОТДЕЛЬНО[слаг], `${слаг}: у запрета нет причины`).toContain("19.10.2026");
     }
   });
 

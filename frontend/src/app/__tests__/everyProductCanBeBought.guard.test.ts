@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ALL_PRODUCTS, MODULES, SUBSCRIPTIONS } from "@/lib/products";
 import { STANDALONE_APPS } from "@/lib/termPricing";
+import { predlagaemOtdelno } from "@/lib/neProdayotsyaOtdelno";
 
 /**
  * У каждого товара каталога должна быть цена И путь к оплате.
@@ -27,7 +28,8 @@ const PRICING = /^\/pricing(\?app=[a-z_]+)?#(tiers|apps)$/;
 describe("каждый товар каталога можно купить", () => {
   // Контроль охвата: пустой каталог ответил бы «нарушений нет».
   it("контроль прибора: каталог собран", () => {
-    expect(ALL_PRODUCTS.length, "каталог пуст или потерял товары").toBeGreaterThanOrEqual(10);
+    // 19.10.2026: на витрине один план, гайды и шахматы — 8 позиций.
+    expect(ALL_PRODUCTS.length, "каталог пуст или потерял товары").toBeGreaterThanOrEqual(8);
     expect(ALL_PRODUCTS.some((p) => p.id === "cyberchess"), "не нашёл известный товар").toBe(true);
   });
 
@@ -45,14 +47,14 @@ describe("каждый товар каталога можно купить", () 
 
   it("срочный доступ продаётся ТОЛЬКО через страницу цен, разовое — только ссылкой продавца", () => {
     const wrong = ALL_PRODUCTS.filter((p) =>
-      p.billing === "term" ? !PRICING.test(p.href) : !EXTERNAL.test(p.href),
+      p.billing === "term" || p.billing === "year" ? !PRICING.test(p.href) : !EXTERNAL.test(p.href),
     ).map((p) => `${p.id} (${p.billing}) -> ${p.href}`);
     expect(wrong, "способ оплаты не совпадает с тем, как списываются деньги").toEqual([]);
   });
 
   it("что продаётся отдельно — ровно список STANDALONE_APPS, остальное одна подписка", () => {
     expect(MODULES.map((m) => m.href).sort()).toEqual(
-      STANDALONE_APPS.map((a) => `/pricing?app=${a.slug}#apps`).sort(),
+      STANDALONE_APPS.filter((a) => predlagaemOtdelno(a.slug)).map((a) => `/pricing?app=${a.slug}#apps`).sort(),
     );
     expect(SUBSCRIPTIONS.map((s) => s.href)).toEqual(["/pricing#tiers"]);
   });

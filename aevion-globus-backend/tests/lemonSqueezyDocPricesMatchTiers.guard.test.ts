@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { TIERS, TERM_TIERS, TERM_MONTHS, TERM_NAME, STANDALONE_APPS, termTotal } from "../src/data/pricing";
+import { TIERS, TERM_TIERS, TERM_MONTHS, TERM_NAME, STANDALONE_APPS, termTotal, appTermTotal } from "../src/data/pricing";
 import { priceForReference, STOREFRONT_NAME_TO_REFERENCE } from "../src/data/lemonSqueezyVariants";
 
 /**
@@ -54,7 +54,8 @@ describe("инструкция по настройке кассы не расх�
   it("цена варианта приложения = платёж за срок по базе приложения", () => {
     for (const a of STANDALONE_APPS) {
       for (const t of TERM_TIERS) {
-        expect(priceForReference(`app_${a.slug}_${t}`), `app_${a.slug}_${t}`).toBe(termTotal(a.baseMonthly, t));
+        // 19.10.2026: у годового приложения на непродаваемом сроке потолка нет (null).
+        expect(priceForReference(`app_${a.slug}_${t}`), `app_${a.slug}_${t}`).toBe(appTermTotal(a, t));
       }
     }
   });

@@ -1,4 +1,4 @@
-import { ALL_PRODUCTS } from "./products";
+import { CATALOG_PRODUCTS } from "./products";
 import { STANDALONE_APPS } from "./termPricing";
 
 /**
@@ -52,6 +52,7 @@ const own = <T,>(o: Record<string, T>, k: string): T | undefined =>
 export function titleForAppSlug(slug: string): string {
   if (!slug) return slug;
   const appId = own(SLUG_ALIASES, slug) ?? slug;
-  const found = ALL_PRODUCTS.find((m) => m.appId === appId);
+  // 19.10.2026: ищем по ВСЕМУ каталогу — снятое с витрины уже могло быть куплено.
+  const found = CATALOG_PRODUCTS.find((m) => m.appId === appId);
   return found?.title ?? own(RETIRED_TITLES, appId) ?? slug;
 }

@@ -39,6 +39,9 @@ import {
   planetPricePerMonth,
   planetTotal,
   planetFromPerMonth,
+  appSellableTerms,
+  appTermTotal,
+  appTermFor,
 } from "@/lib/termPricing";
 import { тарифИзАдреса } from "./tarifIzAdresa";
 import { useI18n } from "@/lib/i18n";
@@ -484,7 +487,17 @@ export default function PricingPage() {
    * Список не пришёл — берём месяц (lite): он заведомо не ниже настоящей цены,
    * и человек не увидит числа, которого не существует.
    */
-  const ценаОтПродаваемых = (app: { slug: string; baseMonthly: number }): number | null => {
+  /** Платёж приложения за срок, на котором оно продаётся; иной срок здесь — ошибка кода, не данных. */
+  const платёжПриложения = (a: { baseMonthly: number; yearOnlyUsd?: number }, срок: TermTier): number => {
+    const v = appTermTotal(a, срок);
+    if (v === null) throw new Error(`срок ${срок} у приложения не продаётся — витрина выбрала его сама`);
+    return v;
+  };
+  const ценаОтПродаваемых = (app: { slug: string; baseMonthly: number; yearOnlyUsd?: number }): number | null => {
+    // 19.10.2026: годовое приложение (шахматы) — одна цена за год, лестницы нет.
+    if (app.yearOnlyUsd != null) {
+      return sellableRefs === null || sellableRefs.includes(ссылкаПриложения(app.slug, "max")) ? app.yearOnlyUsd : null;
+    }
     if (sellableRefs === null) return termPricePerMonth(app.baseMonthly, "lite");
     const доступные = TERM_TIERS.filter((t) => sellableRefs.includes(ссылкаПриложения(app.slug, t)));
     if (!доступные.length) return null;
@@ -969,26 +982,30 @@ export default function PricingPage() {
             </section>
           );
         }
-        const ссылка = ссылкаПриложения(app.slug, appTerm);
+        // 19.10.2026: у годового приложения срок один — max, что бы ни стояло на переключателе.
+        const срокГероя = appTermFor(app, appTerm);
+        const ссылка = ссылкаПриложения(app.slug, срокГероя);
         const ключ = ключПриложения(app.slug);
         const нетТовара = безТовараСсылка(ссылка);
         return (
           <section style={рамка} data-hero-entry={heroModule ? "module" : "cold"}>
             <div>
               <div style={значок}>
-                {t("pricing.home.heroModule.badge")} · {TERM_NAME[appTerm]}
+                {t("pricing.home.heroModule.badge")} · {TERM_NAME[срокГероя]}
               </div>
               <div style={{ fontSize: 22, fontWeight: 900, color: "#0f172a", margin: "4px 0 2px" }}>
                 {имя}
                 {!нетТовара && (
                   <span style={{ fontWeight: 700, color: "#334155", fontSize: 16 }}>
-                    {" "}— {displayPrice(termPricePerMonth(app.baseMonthly, appTerm))}/{t("pricing.home.heroModule.perMonth")}
+                    {" "}— {app.yearOnlyUsd != null
+                      ? `${displayPrice(платёжПриложения(app, "max"))}/${t("pricing.home.apps.perYear")}`
+                      : `${displayPrice(termPricePerMonth(app.baseMonthly, appTerm))}/${t("pricing.home.heroModule.perMonth")}`}
                   </span>
                 )}
               </div>
               {!нетТовара && (
                 <div style={{ fontSize: 15, color: "#334155", fontWeight: 700, marginBottom: 2 }}>
-                  {заСрок(termTotal(app.baseMonthly, appTerm), TERM_MONTHS[appTerm])}
+                  {заСрок(платёжПриложения(app, срокГероя), TERM_MONTHS[срокГероя])}
                 </div>
               )}
               <div style={{ fontSize: 15, color: "#64748b" }}>
@@ -1004,7 +1021,7 @@ export default function PricingPage() {
               </div>
             </div>
             {нетТовара ? (
-              <Link href={`/pricing/contact?tier=${appTerm}&app=${app.slug}`} style={{ ...кнопка, background: "#0f172a" }}>
+              <Link href={`/pricing/contact?tier=${срокГероя}&app=${app.slug}`} style={{ ...кнопка, background: "#0f172a" }}>
                 {t("pricing.home.tier.notSellableCta")}
               </Link>
             ) : (
@@ -1016,7 +1033,7 @@ export default function PricingPage() {
                      нам», но только ПОСЛЕ нажатия; здесь та же мысль сказана до. */
                   <p style={{ fontSize: 15, lineHeight: 1.4, color: "#64748b", marginBottom: 8 }}>
                     {t("pricing.home.tier.notSellable")}{" "}
-                    <Link href={`/pricing/contact?tier=${appTerm}&app=${app.slug}`} style={{ color: "#0d9488", fontWeight: 700 }}>
+                    <Link href={`/pricing/contact?tier=${срокГероя}&app=${app.slug}`} style={{ color: "#0d9488", fontWeight: 700 }}>
                       {t("pricing.home.tier.notSellableCta")}
                     </Link>
                   </p>
@@ -1024,7 +1041,7 @@ export default function PricingPage() {
                 <button
                   type="button"
                   disabled={checkingOut === ключ || !продаётсяСсылка(ссылка)}
-                  onClick={() => startCheckout({ tierId: appTerm, app: app.slug, seats: 1 })}
+                  onClick={() => startCheckout({ tierId: срокГероя, app: app.slug, seats: 1 })}
                   style={{
                     ...кнопка,
                     cursor: checkingOut === ключ ? "wait" : "pointer",
@@ -1614,12 +1631,15 @@ export default function PricingPage() {
         `app_<slug>_<срок>` из healthz, тем же правилом, что у тарифов.
       */}
       {(() => {
-        const месяцев = TERM_MONTHS[appTerm];
         // Сумма «если покупать по отдельности» считается по тому, что РЕАЛЬНО
         // предлагается: иначе выгода подписки считалась бы против товара,
         // которого на витрине нет.
-        const суммаПриложений = STANDALONE_APPS.filter((a) => predlagaemOtdelno(a.slug))
-          .reduce((s, a) => s + termTotal(a.baseMonthly, appTerm), 0);
+        // 19.10.2026: предлагаются только шахматы ($50/год) — у годового приложения срок один,
+        // переключатель сроков показываем лишь когда есть кому его применять.
+        const предлагаемые = STANDALONE_APPS.filter((a) => predlagaemOtdelno(a.slug));
+        const естьЛестница = предлагаемые.some((a) => appSellableTerms(a).length > 1);
+        const суммаПриложений = предлагаемые
+          .reduce((s, a) => s + платёжПриложения(a, appTermFor(a, appTerm)), 0);
         const планета = planetTotal(appTerm);
         return (
           <section id="apps" style={{ marginBottom: 56 }}>
@@ -1637,9 +1657,11 @@ export default function PricingPage() {
             <p style={{ color: "#64748b", margin: 0, marginBottom: 16 }}>
               {/* Счёт в подписи обязан равняться числу показанных карточек:
                   «пять приложений» над четырьмя — это наша же неправда. */}
-              {t("pricing.home.apps.subtitle", { count: String(STANDALONE_APPS.filter((a) => predlagaemOtdelno(a.slug)).length) })}
+              {естьЛестница
+                ? t("pricing.home.apps.subtitle", { count: String(предлагаемые.length) })
+                : t("pricing.home.apps.subtitleYearOnly", { apps: предлагаемые.map((a) => a.name).join(", ") })}
             </p>
-            <div
+            {естьЛестница && (<div
               role="group"
               aria-label={t("pricing.home.apps.termAria")}
               style={{
@@ -1677,7 +1699,7 @@ export default function PricingPage() {
                   {TERM_NAME[term]} · {срокТекст(TERM_MONTHS[term])}
                 </button>
               ))}
-            </div>
+            </div>)}
             <div
               style={{
                 display: "grid",
@@ -1694,11 +1716,13 @@ export default function PricingPage() {
                 экране заплатившего. Выкинув оттуда слаг, мы сломали бы доступ
                 тем, кто уже купил, — а задача была перестать ПРЕДЛАГАТЬ.
               */}
-              {STANDALONE_APPS.filter((a) => predlagaemOtdelno(a.slug)).map((a) => {
-                const ссылка = ссылкаПриложения(a.slug, appTerm);
+              {предлагаемые.map((a) => {
+                const срок = appTermFor(a, appTerm);
+                const годовое = a.yearOnlyUsd != null;
+                const ссылка = ссылкаПриложения(a.slug, срок);
                 const ключ = ключПриложения(a.slug);
                 const нетТовара = безТовараСсылка(ссылка);
-                const контакт = `/pricing/contact?tier=${appTerm}&app=${a.slug}`;
+                const контакт = `/pricing/contact?tier=${срок}&app=${a.slug}`;
                 return (
                   <div
                     key={a.slug}
@@ -1741,7 +1765,7 @@ export default function PricingPage() {
                       Ссылка на #app-term вдобавок работает без скрипта.
                     */}
                     <a
-                      href="#app-term"
+                      href={годовое ? undefined : "#app-term"}
                       data-app-term-badge={a.slug}
                       style={{
                         alignSelf: "flex-start",
@@ -1756,7 +1780,7 @@ export default function PricingPage() {
                         textDecoration: "none",
                       }}
                     >
-                      {TERM_NAME[appTerm]} · {срокТекст(месяцев)}
+                      {TERM_NAME[срок]} · {срокТекст(TERM_MONTHS[срок])}
                     </a>
                     {/* ЧТО ИМЕННО ПОКУПАЮТ. Замер 06.10.2026 на проде: карточка
                         говорила «CyberChess · $24/мес · Max: $12/мес · Купить» —
@@ -1782,12 +1806,19 @@ export default function PricingPage() {
                     ) : (
                       <div>
                         <span style={{ fontSize: 26, fontWeight: 900, letterSpacing: "-0.02em" }}>
-                          {displayPrice(termPricePerMonth(a.baseMonthly, appTerm))}
+                          {годовое ? displayPrice(платёжПриложения(a, "max")) : displayPrice(termPricePerMonth(a.baseMonthly, appTerm))}
                         </span>
-                        <span style={{ fontSize: 15.5, color: "#64748b", marginLeft: 4 }}>{tp("tier.perMonth")}</span>
+                        <span style={{ fontSize: 15.5, color: "#64748b", marginLeft: 4 }}>
+                          {годовое ? `/${t("pricing.home.apps.perYear")}` : tp("tier.perMonth")}
+                        </span>
                         <div style={{ fontSize: 15.5, fontWeight: 700, color: "#334155", marginTop: 2 }}>
-                          {заСрок(termTotal(a.baseMonthly, appTerm), месяцев)}
+                          {заСрок(платёжПриложения(a, срок), TERM_MONTHS[срок])}
                         </div>
+                        {годовое && (
+                          <div data-testid="app-price-may-rise" style={{ fontSize: 14, color: "#64748b", marginTop: 4 }}>
+                            {t("pricing.home.apps.priceMayRise")}
+                          </div>
+                        )}
                         {/* Вторая граница цены (29.09.2026).
                             Страница продукта обещает «от $12/мес» — это месяц на
                             самом длинном сроке. Человек приходит сюда, видит
@@ -1798,7 +1829,7 @@ export default function PricingPage() {
                             Из готовых кусков: цена, «/мес» и имя срока — новых
                             ключей перевода не заводим, иначе на девяти языках
                             пропуск молча откатится на английский. */}
-                        {appTerm !== "max" && можноОбещатьСрок(ссылкаПриложения(a.slug, "max")) && (
+                        {!годовое && appTerm !== "max" && можноОбещатьСрок(ссылкаПриложения(a.slug, "max")) && (
                           <div style={{ fontSize: 15, color: "#64748b", marginTop: 2 }}>
                             {TERM_NAME.max}: {displayPrice(termPricePerMonth(a.baseMonthly, "max"))}
                             {tp("tier.perMonth")}
@@ -1837,7 +1868,7 @@ export default function PricingPage() {
                         <button
                           type="button"
                           disabled={checkingOut === ключ || !продаётсяСсылка(ссылка)}
-                          onClick={() => startCheckout({ tierId: appTerm, app: a.slug, seats: 1 })}
+                          onClick={() => startCheckout({ tierId: срок, app: a.slug, seats: 1 })}
                           style={{
                             marginTop: "auto",
                             width: "100%",
@@ -2061,6 +2092,8 @@ export default function PricingPage() {
                         const дешевейший = ценаОтПродаваемых(app);
                         return дешевейший === null ? (
                           <span style={{ color: "#94a3b8" }}>—</span>
+                        ) : app.yearOnlyUsd != null ? (
+                          `${displayPrice(дешевейший)}/${t("pricing.home.apps.perYear")}`
                         ) : (
                           displayPrice(дешевейший)
                         );
@@ -2692,15 +2725,19 @@ export default function PricingPage() {
             },
             {
               q: t("pricing.home.faq.singleModule.q"),
-              a: t("pricing.home.faq.singleModule.a", { apps: STANDALONE_APPS.map((a) => a.name).join(", "), count: String(STANDALONE_APPS.length) }),
+              // 19.10.2026: один план; отдельно — только годовые приложения (шахматы $50/год).
+              a: t("pricing.home.faq.singleModule.aOnePlan", {
+                apps: STANDALONE_APPS.filter((a) => predlagaemOtdelno(a.slug))
+                  .map((a) => `${a.name} — ${displayPrice(платёжПриложения(a, appTermFor(a, "max")))}/${t("pricing.home.apps.perYear")}`)
+                  .join(", "),
+              }),
             },
             {
               q: t("pricing.home.faq.bothSuites.q"),
               // Суммы — месяц на самом коротком сроке (Lite), из lib/termPricing.ts.
-              a: t("pricing.home.faq.bothSuites.a", {
-                apps: displayPrice(STANDALONE_APPS.reduce((s, a) => s + termPricePerMonth(a.baseMonthly, "lite"), 0)),
+              a: t("pricing.home.faq.bothSuites.aOnePlan", {
                 planet: displayPrice(planetPricePerMonth("lite")),
-                count: String(STANDALONE_APPS.length),
+                planetFrom: displayPrice(planetFromPerMonth()),
               }),
             },
             {

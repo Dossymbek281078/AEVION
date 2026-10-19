@@ -63,7 +63,8 @@ describe("состояние: настроена ли выдача куплен�
     // только multichat-engine. Сперва я написал сюда qnews — он закрываем, но НЕ
     // продаётся, и утверждение про soldButOpen честно покраснело.
     const открытоБез = сводкаПейволла().soldButOpen;
-    process.env.PAYWALL_MODULES = "multichat-engine";
+    // 19.10.2026: единственный продаваемый отдельно и открытый модуль — шахматы (Multichat снят с продажи).
+    process.env.PAYWALL_MODULES = "cyberchess";
     const с = сводкаПейволла();
     expect(с.configured, "переменная задана, а сводка это не видит").toBe(true);
     expect(с.walledNow, "переменная называет закрываемый модуль, а закрыто ноль").toBeGreaterThanOrEqual(1);

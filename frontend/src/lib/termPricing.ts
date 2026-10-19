@@ -81,10 +81,16 @@ export interface StandaloneApp {
   name: string;
   /** Цена месяца на Lite (1 месяц). */
   baseMonthly: number;
+  /**
+   * 🔴 19.10.2026, слово основателя: продаётся ТОЛЬКО на 12 месяцев за эту сумму
+   * (шахматы $50/год). Зеркало бэкенда (data/pricing.ts): appSellableTerms даёт
+   * один срок max, appTermTotal на другом — null.
+   */
+  yearOnlyUsd?: number;
 }
 
 export const STANDALONE_APPS: StandaloneApp[] = [
-  { slug: "cyberchess", moduleId: "cyberchess", name: "CyberChess", baseMonthly: 24 },
+  { slug: "cyberchess", moduleId: "cyberchess", name: "CyberChess", baseMonthly: 24, yearOnlyUsd: CHESS_YEARLY_USD },
   { slug: "multichat", moduleId: "multichat-engine", name: "Multichat", baseMonthly: 40 },
   { slug: "qventure", moduleId: "qventure", name: "QVenture", baseMonthly: 80 },
   { slug: "ip_bureau", moduleId: "aevion-ip-bureau", name: "IP Bureau", baseMonthly: 32 },
@@ -96,6 +102,22 @@ export const STANDALONE_APPS: StandaloneApp[] = [
   { slug: "startup_exchange", moduleId: "startup-exchange", name: "Startup Exchange", baseMonthly: 40 },
   { slug: "qskyway", moduleId: "qskyway", name: "QSkyway", baseMonthly: 16 },
 ];
+
+/** Сроки, на которые приложение продаётся: у годового — один `max`. */
+export function appSellableTerms(app: Pick<StandaloneApp, "yearOnlyUsd">): TermTier[] {
+  return app.yearOnlyUsd != null ? ["max"] : [...TERM_TIERS];
+}
+
+/** Платёж за срок у приложения; null — на этом сроке не продаётся. */
+export function appTermTotal(app: Pick<StandaloneApp, "baseMonthly" | "yearOnlyUsd">, term: TermTier): number | null {
+  if (app.yearOnlyUsd != null) return term === "max" ? app.yearOnlyUsd : null;
+  return termTotal(app.baseMonthly, term);
+}
+
+/** Срок, который реально покупается у приложения при выбранном на витрине сроке. */
+export function appTermFor(app: Pick<StandaloneApp, "yearOnlyUsd">, chosen: TermTier): TermTier {
+  return app.yearOnlyUsd != null ? "max" : chosen;
+}
 
 /** По slug, id модуля или короткому id витрины ("bureau" → IP Bureau). */
 export function standaloneApp(id: string): StandaloneApp | null {

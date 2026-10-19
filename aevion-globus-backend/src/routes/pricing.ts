@@ -19,6 +19,7 @@ import {
   resolvePromoCode,
   type CurrencyCode,
   TERM_TIERS, TERM_MONTHS, TERM_FACTOR, STANDALONE_APPS, PLANET_BASE_MONTHLY, termPricePerMonth, termTotal,
+  appSellableTerms, appTermTotal,
   PLANET_TERM_PRICE, planetTotal, planetFromPerMonth, CHESS_YEARLY_USD,
   type TierId,
 } from "../data/pricing";
@@ -203,13 +204,15 @@ pricingRouter.get("/", (_req, res) => {
      * выдача этой ручки не меняется — проверено сторожем
      * moduleAccessIsOneSource (прайс и источник совпадают в обе стороны).
      */
+    // 19.10.2026: у годового приложения (шахматы $50/год) terms — один срок max
+    // с его суммой; pricePerMonth у него нет (целых долларов не выходит).
     standaloneApps: приложенияДляВитрины().map((a) => ({
       ...a,
-      terms: TERM_TIERS.map((t) => ({
+      terms: appSellableTerms(a).map((t) => ({
         tierId: t,
         months: TERM_MONTHS[t],
-        pricePerMonth: termPricePerMonth(a.baseMonthly, t),
-        total: termTotal(a.baseMonthly, t),
+        pricePerMonth: a.yearOnlyUsd != null ? null : termPricePerMonth(a.baseMonthly, t),
+        total: appTermTotal(a, t),
       })),
     })),
     tiers: TIERS,

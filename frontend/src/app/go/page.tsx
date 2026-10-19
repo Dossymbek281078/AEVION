@@ -19,7 +19,7 @@ import {
 } from "@/lib/products";
 import { BuyLink } from "@/components/BuyLink";
 import { PageTracking } from "@/components/PageTracking";
-import { STANDALONE_APPS, termPricePerMonth } from "@/lib/termPricing";
+import { planetPricePerMonth, planetFromPerMonth } from "@/lib/termPricing";
 
 /**
  * Вход для холодного гостя — тот же, что первым стоит на /pricing.
@@ -28,8 +28,8 @@ import { STANDALONE_APPS, termPricePerMonth } from "@/lib/termPricing";
  * продукт целиком (/api/multichat/presets отвечает 402 без оплаты).
  * Слаг сверен со списком: карточка на /pricing помечена `multichat`.
  */
-const ВХОД = STANDALONE_APPS.find((a) => a.slug === "multichat")!;
-const ЦЕНА_ВХОДА = termPricePerMonth(ВХОД.baseMonthly, "lite");
+// 19.10.2026, слово основателя: один план «AEVION Планета» — вход в инструменты это план, а не Multichat за $40.
+const ЦЕНА_ВХОДА = planetPricePerMonth("lite");
 /*
  * Вторая граница названа здесь НАМЕРЕННО. 30.09.2026: страница модуля
  * Мультичата пишет «от $20/мес» (это месяц при годовой оплате), а моя строка
@@ -43,7 +43,7 @@ const ЦЕНА_ВХОДА = termPricePerMonth(ВХОД.baseMonthly, "lite");
  * которого длинного срока нет, — эту строку нельзя будет просто скопировать:
  * сперва спросить кассу, как это делает страница цен.
  */
-const ЦЕНА_ЗА_ГОД = termPricePerMonth(ВХОД.baseMonthly, "max");
+const ЦЕНА_ЗА_ГОД = planetFromPerMonth();
 // Счётчик живых модулей — из pitchFacts, заперт на реестр сторожем.
 // До 10.08.2026 здесь стояло «29 живых модулей», пока реестр отдавал 36:
 // страница-хаб для ссылки в профиле занижала платформу на семь модулей
@@ -364,8 +364,8 @@ export default async function GoPage({
               второго места с ценой не заводим. */}
           <p style={styles.headLink}>
             Нужен инструмент сразу?{" "}
-            <a href={keep(`/pricing?app=${ВХОД.slug}#apps`)} style={styles.link}>
-              {ВХОД.name} — ${ЦЕНА_ВХОДА}/мес помесячно, от ${ЦЕНА_ЗА_ГОД} при оплате за год →
+            <a href={keep("/pricing#tiers")} style={styles.link}>
+              План «AEVION Планета» — от ${ЦЕНА_ЗА_ГОД}/мес при оплате за год, ${ЦЕНА_ВХОДА}/мес без срока →
             </a>
           </p>
         </header>

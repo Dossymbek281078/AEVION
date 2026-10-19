@@ -10,6 +10,7 @@ import {
   buildQuote,
 } from "../src/data/pricing";
 import { termMonthsForReference, tierIdForReference } from "../src/lib/payment/billingPeriod";
+import { appTermTotal } from "../src/data/pricing";
 import { ссылкаПодписки } from "../src/lib/payment/subscriptionReference";
 import {
   priceForReference,
@@ -166,7 +167,7 @@ describe("ссылка заказа → тариф и срок", () => {
       const t = ref.slice(ref.lastIndexOf("_") + 1) as (typeof TERM_TIERS)[number];
       const expected = ref.startsWith("tier_")
         ? term(t).priceTermTotal
-        : termTotal(STANDALONE_APPS.find((a) => a.slug === appSlugForReference(ref))!.baseMonthly, t);
+        : appTermTotal(STANDALONE_APPS.find((a) => a.slug === appSlugForReference(ref))!, t); // 19.10: годовое — null вне max
       expect(priceForReference(ref), ref).toBe(expected);
     }
     expect(priceForReference("app_devhub"), "прежняя ссылка — без потолка").toBeNull();

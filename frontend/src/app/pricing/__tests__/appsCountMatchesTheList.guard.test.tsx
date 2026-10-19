@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, cleanup, act } from "@testing-library/react";
 import { I18nProvider } from "@/lib/i18n";
+import { predlagaemOtdelno } from "@/lib/neProdayotsyaOtdelno";
 import { STANDALONE_APPS } from "@/lib/termPricing";
 
 /**
@@ -46,13 +47,17 @@ describe("число отдельных приложений", () => {
       );
     });
     const текст = document.body.textContent ?? "";
-    const сколько = STANDALONE_APPS.length;
+    // 19.10.2026: отдельно предлагаются только шахматы — подпись называет их по имени, числа нет.
+    const предлагаемые = STANDALONE_APPS.filter((a) => predlagaemOtdelno(a.slug));
+    const сколько = предлагаемые.length;
 
     // Контроль: страница отрисовалась (иначе всё ниже зелено по построению).
     expect(текст.length > 500, "страница не отрисовалась").toBe(true);
 
+    expect(сколько, "знаменатель: предлагаемых отдельно").toBe(1);
+    expect(текст.includes("Only CyberChess is sold separately") || текст.includes("Отдельно продаётся только CyberChess"), "подпись не называет единственное приложение").toBe(true);
     expect(
-      текст.includes(`${сколько} apps`) || текст.includes(`${сколько} приложений`),
+      !текст.includes(`${STANDALONE_APPS.length} apps`) && !текст.includes(`${STANDALONE_APPS.length} приложений`),
       `на странице нет числа ${сколько} рядом со словом «приложений» — снова разойдётся со списком`,
     ).toBe(true);
 
@@ -63,5 +68,6 @@ describe("число отдельных приложений", () => {
 
   it("КОНТРОЛЬ: список не пуст и не единица — иначе проверка выше бессмысленна", () => {
     expect(STANDALONE_APPS.length).toBeGreaterThan(1);
+    expect(STANDALONE_APPS.filter((a) => predlagaemOtdelno(a.slug)).length).toBe(1);
   });
 });

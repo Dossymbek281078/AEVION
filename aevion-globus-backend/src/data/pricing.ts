@@ -253,6 +253,20 @@ export function termTotal(base: number, term: TermTier): number {
   return termPricePerMonth(base, term) * TERM_MONTHS[term];
 }
 
+/**
+ * Сроки, на которые приложение ПРОДАЁТСЯ (19.10.2026): у годового — один `max`,
+ * у остальных — вся лестница. Единственный источник для кассы, healthz и витрины.
+ */
+export function appSellableTerms(app: Pick<StandaloneApp, "yearOnlyUsd">): TermTier[] {
+  return app.yearOnlyUsd != null ? ["max"] : [...TERM_TIERS];
+}
+
+/** Платёж за срок у приложения; null — на этом сроке оно не продаётся. */
+export function appTermTotal(app: Pick<StandaloneApp, "baseMonthly" | "yearOnlyUsd">, term: TermTier): number | null {
+  if (app.yearOnlyUsd != null) return term === "max" ? app.yearOnlyUsd : null;
+  return termTotal(app.baseMonthly, term);
+}
+
 /** «3 месяца», «6 месяцев» — для подписей. */
 /**
  * Подпись срока ПО-АНГЛИЙСКИ.
@@ -301,10 +315,19 @@ export interface StandaloneApp {
   moduleId: string;
   name: string;
   baseMonthly: number;
+  /**
+   * 🔴 19.10.2026, слово основателя: приложение продаётся ТОЛЬКО на 12 месяцев
+   * за эту сумму (шахматы — $50/год, «цена может вырасти с добавлением игр»).
+   * Лестница сроков к нему не применяется: appSellableTerms даёт один срок `max`,
+   * appTermTotal на любом другом — null (касса отвечает отказом, не ценой).
+   * baseMonthly при этом остаётся: по нему узнаются уже оплаченные подписки
+   * прежних ступеней (вебхук, priceForReference для legacy-ссылок).
+   */
+  yearOnlyUsd?: number;
 }
 
 export const STANDALONE_APPS: StandaloneApp[] = [
-  { slug: "cyberchess", moduleId: "cyberchess", name: "CyberChess", baseMonthly: 24 },
+  { slug: "cyberchess", moduleId: "cyberchess", name: "CyberChess", baseMonthly: 24, yearOnlyUsd: CHESS_YEARLY_USD },
   { slug: "multichat", moduleId: "multichat-engine", name: "Multichat", baseMonthly: 40 },
   { slug: "qventure", moduleId: "qventure", name: "QVenture", baseMonthly: 80 },
   { slug: "ip_bureau", moduleId: "aevion-ip-bureau", name: "IP Bureau", baseMonthly: 32 },

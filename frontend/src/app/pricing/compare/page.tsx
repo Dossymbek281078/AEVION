@@ -8,7 +8,13 @@ import { track } from "@/lib/track";
 import { usePricingT } from "@/lib/pricingI18n";
 import { useI18n } from "@/lib/i18n";
 import { localizeModuleOneLiner } from "@/lib/pricingLocalize";
-import { STANDALONE_APPS, fromPricePerMonth, standaloneApp } from "@/lib/termPricing";
+import { STANDALONE_APPS, fromPricePerMonth, standaloneApp, appTermTotal } from "@/lib/termPricing";
+import { predlagaemOtdelno } from "@/lib/neProdayotsyaOtdelno";
+
+/** 19.10.2026: отдельно предлагаются только годовые шахматы — легенда и ячейки берут их цену. */
+const ОТДЕЛЬНО = STANDALONE_APPS.filter((a) => predlagaemOtdelno(a.slug));
+const ценаОтдельно = (a: (typeof STANDALONE_APPS)[number]) =>
+  a.yearOnlyUsd != null ? { сумма: appTermTotal(a, "max") ?? a.yearOnlyUsd, ед: "/yr" } : { сумма: fromPricePerMonth(a.baseMonthly), ед: "/mo" };
 
 type TierId = "free" | "lite" | "medium" | "pro" | "full" | "max" | "enterprise";
 type ModuleKind = "core" | "product" | "service" | "experiment";
@@ -529,7 +535,7 @@ export default function PricingComparePage() {
           <LegendItem
             cell={
               <span style={{ fontWeight: 800, color: "#0ea5e9" }}>
-                ${fromPricePerMonth(Math.min(...STANDALONE_APPS.map((a) => a.baseMonthly)))}
+                ${Math.min(...ОТДЕЛЬНО.map((a) => ценаОтдельно(a).сумма))}{ОТДЕЛЬНО.every((a) => a.yearOnlyUsd != null) ? "/yr" : ""}
               </span>
             }
             label={tp("compareFull.legendAddon")}
@@ -602,13 +608,14 @@ function MatrixCell({
   if (included) {
     content = <CheckMark />;
     tone = "good";
-  } else if (standaloneApp(m.id)) {
+  } else if (standaloneApp(m.id) && predlagaemOtdelno(standaloneApp(m.id)!.slug)) {
+    const ц = ценаОтдельно(standaloneApp(m.id)!);
     // Отдельно продаются только пять приложений (15.09.2026); «от» — месяц на
     // самом длинном сроке, из lib/termPricing.ts.
     content = (
       <span style={{ fontSize: 12, fontWeight: 800, color: "#0ea5e9" }}>
-        ${fromPricePerMonth(standaloneApp(m.id)!.baseMonthly)}
-        <span style={{ fontSize: 9, fontWeight: 700, color: "#64748b", marginLeft: 2 }}>/mo</span>
+        ${ц.сумма}
+        <span style={{ fontSize: 9, fontWeight: 700, color: "#64748b", marginLeft: 2 }}>{ц.ед}</span>
       </span>
     );
   } else if (m.addonMonthly === 0) {

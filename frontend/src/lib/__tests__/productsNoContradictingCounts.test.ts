@@ -1,3 +1,4 @@
+import { planetFromPerMonth, planetTotal } from "@/lib/termPricing";
 import { describe, test, expect } from "vitest";
 import { SUBSCRIPTIONS, GUIDES, MODULES, type Product } from "../products";
 import { PLANET_BASE_MONTHLY, fromPricePerMonth, termTotal } from "../termPricing";
@@ -50,9 +51,9 @@ describe("a product card never states two different module counts", () => {
     const card = SUBSCRIPTIONS.find((p) => p.id === "aevion-planet")!;
     const dollars = [...card.format.matchAll(/\$(\d+)/g)].map((m) => Number(m[1])).sort((a, b) => a - b);
     expect(dollars).toEqual(
-      [fromPricePerMonth(PLANET_BASE_MONTHLY), termTotal(PLANET_BASE_MONTHLY, "lite")].sort((a, b) => a - b),
+      [planetFromPerMonth(), planetTotal("lite")].sort((a, b) => a - b), // 19.10: своя лесенка плана
     );
-    expect(card.priceUsd).toBe(termTotal(PLANET_BASE_MONTHLY, "lite"));
+    expect(card.priceUsd).toBe(planetTotal("lite"));
   });
 
   test("the guard catches the shape that shipped", () => {

@@ -43,7 +43,9 @@ describe("разметка каталога приложений", () => {
      * бесплатно, а Verified купить нельзя (kyc заглушка, платежи настроены
      * неверно).
      */
-    expect(sku).toEqual(["cyberchess", "devhub", "multichat", "qventure"]);
+    // 19.10.2026: один план — в разметке только шахматы.
+    expect(sku).toEqual(["cyberchess"]);
+    expect(sku).not.toContain("devhub");
     expect(sku, "бюро вернулось в разметку — витрина и выдача разошлись").not.toContain("ip_bureau");
     expect(sku).not.toContain("qskyway");
     expect(sku).not.toContain("qsign");
@@ -57,8 +59,10 @@ describe("разметка каталога приложений", () => {
     const каталог = new Map(STANDALONE_APPS.map((a) => [a.slug, a]));
     for (const э of схема.itemListElement) {
       const app = каталог.get(э.item.sku)!;
-      expect(э.item.offers.highPrice).toBe(app.baseMonthly.toFixed(2));
-      expect(э.item.offers.lowPrice).toBe(fromPricePerMonth(app.baseMonthly).toFixed(2));
+      // 19.10.2026: у годового приложения одна цена — $50/год, offerCount 1.
+      expect(э.item.offers.highPrice).toBe((app.yearOnlyUsd ?? app.baseMonthly).toFixed(2));
+      expect(э.item.offers.lowPrice).toBe((app.yearOnlyUsd ?? fromPricePerMonth(app.baseMonthly)).toFixed(2));
+      expect(э.item.offers.offerCount).toBe(app.yearOnlyUsd != null ? 1 : 5);
     }
   });
 

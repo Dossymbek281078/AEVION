@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
-import { TERM_TIERS, STANDALONE_APPS } from "../src/data/pricing";
+import { TERM_TIERS, STANDALONE_APPS, appSellableTerms } from "../src/data/pricing";
 import { продаётсяОтдельно } from "../src/data/moduleAccess";
 import request from "supertest";
 import express from "express";
@@ -188,8 +188,9 @@ describe("две ручки состояния согласны о том, кт�
     // тарифы плюс приложения, которые ЕЩЁ продаются отдельно, и считаем её тем же
     // предикатом, что и касса, а не снимком числа. Guard по-прежнему ловит
     // НЕнамеренную потерю среди продаваемого.
-    const продаваемыхОтдельно = STANDALONE_APPS.filter((a) => продаётсяОтдельно(a.moduleId)).length;
-    const всегоПозиций = TERM_TIERS.length * (1 + продаваемыхОтдельно);
+    // 19.10.2026: у годового приложения (шахматы) продаётся один срок, не пять.
+    const всегоПозиций = TERM_TIERS.length +
+      STANDALONE_APPS.filter((a) => продаётсяОтдельно(a.moduleId)).reduce((s, a) => s + appSellableTerms(a).length, 0);
     expect(s2.configured.length + s2.missing.length, "ручка знает не про все продаваемые позиции каталога").toBe(всегоПозиций);
     expect([...s2.configured, ...s2.missing]).not.toContain("tier_lite_monthly");
     delete process.env.LEMON_SQUEEZY_VARIANT_LITE;

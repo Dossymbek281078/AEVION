@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { keepChannel, withChannel } from "@/lib/products";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
-import { productById } from "@/lib/products";
+import { productById, MODULES } from "@/lib/products";
 import { EN_TEXTS } from "@/lib/enTexts";
 import { track } from "@/lib/track";
 import { PageTracking } from "@/components/PageTracking";
@@ -60,7 +60,7 @@ interface AppDef {
   productId?: string;
 }
 
-type App = AppDef & { price: number; checkoutUrl?: string; term: boolean };
+type App = AppDef & { price: number; checkoutUrl?: string; term: boolean; year: boolean };
 
 const APP_DEFS: AppDef[] = [
   /* ── Developer ──────────────────────────────────────────────────────── */
@@ -262,7 +262,10 @@ const APP_DEFS: AppDef[] = [
  * бесплатным и рисуется без кнопки покупки, а не с ценой $0 и битой ссылкой.
  */
 const APPS: App[] = APP_DEFS.map((a) => {
-  const product = a.productId ? productById(a.productId) : undefined;
+  // 19.10.2026: отдельная цена есть только у того, что предлагается отдельно (MODULES);
+  // снятое с витрины (DevHub, Multichat…) — «In the subscription», без старой цены.
+  const найденный = a.productId ? productById(a.productId) : undefined;
+  const product = найденный && (найденный.kind !== "module" || MODULES.includes(найденный)) ? найденный : undefined;
   return {
     ...a,
     /*
@@ -296,7 +299,8 @@ const APPS: App[] = APP_DEFS.map((a) => {
     tagline: (a.productId ? EN_TEXTS[a.productId]?.desc : undefined) ?? product?.desc ?? a.tagline,
     price: product?.priceUsd ?? 0,
     checkoutUrl: product?.href,
-    term: product?.billing === "term",
+    term: product?.billing === "term" || product?.billing === "year",
+    year: product?.billing === "year",
   };
 });
 
@@ -592,7 +596,12 @@ export default function AppsPage() {
                       }}
                     >
                       <div>
-                        {app.term ? (
+                        {app.year ? (
+                          <>
+                            <span style={{ fontSize: 24, fontWeight: 800, color: "#fff" }}>${app.price}</span>
+                            <span style={{ fontSize: 13, color: "#64748b" }}>/yr</span>
+                          </>
+                        ) : app.term ? (
                           <>
                             <span style={{ fontSize: 13, color: "#64748b" }}>from </span>
                             <span style={{ fontSize: 24, fontWeight: 800, color: "#fff" }}>

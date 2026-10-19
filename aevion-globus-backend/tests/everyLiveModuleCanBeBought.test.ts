@@ -99,7 +99,8 @@ function termShopModules(): string[] {
     // сверка «магазин = политика» краснела на исправном каталоге.
     const body = parts[i].split("\n  },")[0];
     if (!body.includes('kind: "module"')) continue;
-    if (!body.includes('billing: "term"') && !body.includes('billing: "monthly"')) continue;
+    // 19.10.2026: годовое приложение (шахматы) — billing "year".
+    if (!body.includes('billing: "term"') && !body.includes('billing: "monthly"') && !body.includes('billing: "year"')) continue;
     // Модуль засчитывается и по appId: в магазине сокращённое имя (bureau,
     // multichat), а в каталоге цен полное (aevion-ip-bureau, multichat-engine).
     const aidAt = body.indexOf('appId: "');

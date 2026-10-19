@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ALL_PRODUCTS } from "@/lib/products";
+import { CATALOG_PRODUCTS as ALL_PRODUCTS } from "@/lib/products"; // 19.10: сверяем весь каталог, включая снятые с витрины
 import { STANDALONE_APPS } from "@/lib/termPricing";
 
 /**
@@ -164,7 +164,8 @@ describe("идентификаторы витрины сходятся с кат
   it("у сравнимых товаров цены совпадают — и сравнимых не стало меньше", () => {
     const v = ceniVitriny();
     const k = ceniKataloga();
-    expect(Object.keys(v).length, "цены витрины не разобраны").toBeGreaterThan(10);
+    // 19.10.2026: витрина — план, гайды, шахматы: 8 товаров + 2 appId = 10 цен.
+    expect(Object.keys(v).length, "цены витрины не разобраны").toBeGreaterThanOrEqual(10);
     // 15.09.2026: у снятых с отдельной продажи модулей addonMonthly стал null,
     // поэтому порог «больше 20» описывал прежний прайс. Теперь контроль другой:
     // приложения лестницы, у которых цена в каталоге ЕСТЬ, обязаны совпадать с
@@ -185,7 +186,9 @@ describe("идентификаторы витрины сходятся с кат
       `сверено приложений: ${сцены.map((a) => a.moduleId).join(", ") || "ни одного"} — сверка ослабла`,
     ).toBeGreaterThanOrEqual(3);
 
-    const obshie = Object.keys(v).filter((id) => id in k);
+    // 19.10.2026: годовой товар (шахматы $50/год) с месячной надстройкой каталога не сравним.
+    const godovye = new Set(ALL_PRODUCTS.filter((p) => p.billing === "year").flatMap((p) => [p.id, p.appId ?? p.id]));
+    const obshie = Object.keys(v).filter((id) => id in k && !godovye.has(id));
     const rashozhdeniya = obshie.filter((id) => Math.abs(v[id] - k[id]) > 0.01)
       .map((id) => id + ": витрина $" + v[id] + ", каталог $" + k[id]);
     expect(rashozhdeniya, "цена на витрине не совпадает с каталогом").toEqual([]);

@@ -22,7 +22,10 @@ import {
 /** Сколько приложений продаётся отдельно — из того же списка, что и карточки.
  *  Числом словом («пять») страница расходилась с витриной: их девять, и сумма
  *  рядом считалась по всем девяти. */
-const ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ = STANDALONE_APPS.length;
+// 19.10.2026: counted from the storefront (MODULES), not the price list — only chess is offered separately.
+const CURRENCY_USD = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ = MODULES.length;
+const ОТДЕЛЬНЫЕ_ИМЕНА = MODULES.map((p) => `${p.title} — ${CURRENCY_USD.format(p.priceUsd)}${p.billing === "year" ? " a year" : " a month"}`).join(", ");
 
 
 // /en/shop — английская витрина. Назначение координатора 07.09.2026:
@@ -44,12 +47,12 @@ const ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ = STANDALONE_APPS.length;
 export const metadata: Metadata = {
   title: "AEVION Shop — subscription, guides, apps",
   description:
-    "Everything you can buy at AEVION in one place: a subscription to the whole planet for a term of 1 to 12 months, science-based longevity guides and a book as one-time purchases, 9 apps on their own. Wellness and education, not medicine.",
+    "Everything you can buy at AEVION in one place: one AEVION Planet plan for a term of 1 to 12 months, science-based longevity guides and a book as one-time purchases, CyberChess on its own ($50 a year). Wellness and education, not medicine.",
   alternates: { canonical: "/en/shop", languages: языки("/en/shop") },
   openGraph: {
     title: "AEVION Shop — subscription, guides, apps",
     description:
-      "A subscription for a term of 1 to 12 months, guides and a book as one-time purchases, 9 apps on their own. Wellness and education, not medicine.",
+      "One AEVION Planet plan for a term of 1 to 12 months, guides and a book as one-time purchases, CyberChess on its own ($50 a year). Wellness and education, not medicine.",
     type: "website",
     siteName: "AEVION",
   },
@@ -83,7 +86,8 @@ function Card({ p, channel }: { p: Product; channel: string | null }) {
   // Term access (subscription and the 9 apps, policy of 15.09.2026) leads to
   // the pricing page, where the term is chosen and checkout_start fires — so a
   // plain same-tab link here, not a BuyLink that would count the purchase twice.
-  const isTerm = p.billing === "term";
+  const isTerm = p.billing === "term" || p.billing === "year";
+  const isYear = p.billing === "year";
   const inner = (
     <>
       <div style={styles.cardTop}>
@@ -113,9 +117,9 @@ function Card({ p, channel }: { p: Product; channel: string | null }) {
       <div style={styles.cardFoot}>
         <span style={styles.price}>
           {CURRENCY.format(p.priceUsd)}
-          {isTerm ? <span style={styles.per}> for 1 month</span> : null}
+          {isYear ? <span style={styles.per}> a year</span> : isTerm ? <span style={styles.per}> for 1 month</span> : null}
         </span>
-        <span style={styles.buy}>{isTerm ? "Choose a term" : "Buy"}&nbsp;→</span>
+        <span style={styles.buy}>{isYear ? "Buy for a year" : isTerm ? "Choose a term" : "Buy"}&nbsp;→</span>
       </div>
     </>
   );
@@ -181,21 +185,19 @@ export default async function EnShopPage({
         <div style={styles.eyebrow}>AEVION · Shop</div>
         <h1 style={styles.h1}>Everything you can buy at AEVION</h1>
         <p style={styles.lede}>
-          A subscription to the whole planet for a term of 1 to 12 months,
-          guides and books as one-time purchases, {ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ} apps on their own.
-          Guides and books are paid via Gumroad with instant delivery; the
-          subscription term and the apps are chosen on the pricing page.
+          One AEVION Planet plan for a term of 1 to 12 months, guides and books as
+          one-time purchases, and on its own — {ОТДЕЛЬНЫЕ_ИМЕНА}. Guides and books
+          are paid via Gumroad with instant delivery; the plan term is chosen on the
+          pricing page.
         </p>
 
         <Section
           title="AEVION subscription"
-          note={`The ${ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ} apps bought separately — ${CURRENCY.format(
-            MODULES_TOTAL_USD,
-          )} for one month; the whole planet — ${CURRENCY.format(
+          note={`Every AEVION app in one plan: ${CURRENCY.format(
             PLANET_BASE_MONTHLY,
-          )} for one month, or ${CURRENCY.format(
+          )} for one month with no term, or ${CURRENCY.format(
             planetPricePerMonth("max"),
-          )} a month when paying for 12 months up front.`}
+          )} a month when paying for 12 months up front. Expensive models, voice and video — 4,500 credits a month inside the plan.`}
           items={SUBSCRIPTIONS}
           channel={channel}
         />
@@ -209,7 +211,7 @@ export default async function EnShopPage({
 
         <Section
           title="Apps on their own"
-          note="9 apps are also sold separately — when you need one tool rather than the whole planet. A term of 1 to 12 months, paid up front; the longer the term, the cheaper the month. Every other module comes only with the AEVION subscription."
+          note={`Only ${ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ === 1 ? "one app" : `${ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ} apps`} ${ОТДЕЛЬНЫХ_ПРИЛОЖЕНИЙ === 1 ? "is" : "are"} sold on its own: ${ОТДЕЛЬНЫЕ_ИМЕНА}. The price may rise as new games are added. Every other app comes only with the AEVION Planet plan.`}
           items={MODULES}
           channel={channel}
         />

@@ -1790,9 +1790,9 @@ export default function CyberChessPage(){
      поэтому локализуем на уровне показа: цена-число латиницей, меняем только
      русские «от» и «мес». Полная локализация каталога цен — отдельная волна. */
   const ccBuyLabelLoc = cc.locale==="en"
-    ? ccBuyLabel.replace(/^от\s+/,"from ").replace(/\/мес/g,"/mo").replace(/мес/g,"mo")
+    ? ccBuyLabel.replace(/^от\s+/,"from ").replace(/\/мес/g,"/mo").replace(/мес/g,"mo").replace(/\/год/g,"/yr") // 19.10: «$50/год»
     : cc.locale==="kk"
-    ? ccBuyLabel.replace(/^от\s+/,"").replace(/\/мес/g,"/ай").replace(/мес/g,"ай")
+    ? ccBuyLabel.replace(/^от\s+/,"").replace(/\/мес/g,"/ай").replace(/мес/g,"ай").replace(/\/год/g,"/жыл")
     : ccBuyLabel;
   const [ccBuyHref,sCcBuyHref]=useState<string>(ccBuyProduct?.href||"/pricing#apps");
   useEffect(()=>{try{sCcBuyHref(keepChannel(ccBuyProduct?.href||"/pricing#apps",channelNow()))}catch{}},[ccBuyProduct?.href]);

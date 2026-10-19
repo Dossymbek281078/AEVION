@@ -29,7 +29,8 @@ const СНЯТЫЕ = [
 // Переменные варианта: tier_lite включает запасной путь (из-за него снятые и
 // попадали в configured), multichat_lite — свой вариант контрольного модуля.
 const ENV_LITE = "LEMON_SQUEEZY_VARIANT_LITE";
-const ENV_MULTICHAT = "LEMON_SQUEEZY_VARIANT_MULTICHAT_LITE";
+// 19.10.2026: контрольный модуль — шахматы (единственное, что продаётся отдельно), их годовой вариант.
+const ENV_MULTICHAT = "LEMON_SQUEEZY_VARIANT_CYBERCHESS_MAX";
 const ВСЕ_ENV = [ENV_LITE, ENV_MULTICHAT];
 
 const { checkoutRouter } = await import("../src/routes/checkout");
@@ -85,10 +86,10 @@ describe("витрина не зажигает «Buy» у снятых с отд
       .toEqual([]);
   });
 
-  test("КОНТРОЛЬ: Multichat и тарифы по-прежнему продаются", async () => {
+  test("КОНТРОЛЬ: шахматы (год) и тарифы по-прежнему продаются", async () => {
     const { configured } = await sellable();
-    expect(configured, "Multichat пропал из продажи — правка задела контроль")
-      .toContain("app_multichat_lite");
+    expect(configured, "шахматы пропали из продажи — правка задела контроль")
+      .toContain("app_cyberchess_max");
     for (const t of ["tier_lite", "tier_medium", "tier_pro", "tier_full", "tier_max"]) {
       // Тарифы продаются только если заданы их варианты; здесь задан лишь lite,
       // поэтому строго проверяем, что фильтр не ВЫБРОСИЛ ни одного заведённого

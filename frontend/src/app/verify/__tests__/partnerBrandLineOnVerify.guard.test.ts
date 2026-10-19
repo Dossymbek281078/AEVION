@@ -43,3 +43,16 @@ describe("бренд бюро на /verify (19.10.2026)", () => {
     expect(partner - title, "строка партнёра ушла далеко от названия").toBeLessThan(600);
   });
 });
+
+// Продажи 21:0x: бюро в пилоте регистрирует САМО через /qright — без поля в форме бренд работал бы
+// только для записей, сделанных нами руками. Поле есть, уходит как partnerName, помнится в браузере.
+describe("форма /qright даёт бюро вписать своё название (partnerName)", () => {
+  const Q = readFileSync(join(__dirname, "..", "..", "qright", "page.tsx"), "utf8");
+  it("поле есть, ограничено 80 знаками и уходит в /protect как partnerName", () => {
+    expect(Q).toContain('data-testid="partner-name"');
+    expect(Q).toContain("maxLength={80}");
+    expect(Q).toContain("partnerName: partnerName.trim().slice(0, 80) || undefined,");
+    expect(Q).toContain('localStorage.setItem("aevion_qright_partner_v1"');
+    expect(Q).toContain('localStorage.getItem("aevion_qright_partner_v1")');
+  });
+});

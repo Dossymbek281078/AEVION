@@ -5113,6 +5113,7 @@ const en: Record<string, string> = {
   "pricing.home.apps.allAppsDearer": "All nine apps bought separately — {apps} for this term — cost more than the whole planet: {planet}. Four of them are enabled on request; their prices are included in this sum.",
   "pricing.home.calc.total": "TOTAL",
   "pricing.home.calc.totalTerm": "TOTAL for {months} {unit}",
+  "pricing.home.calc.payMonthly": "Subscribe — {perMonth} a month",
   "pricing.home.calc.discount": "Discounts",
   "pricing.home.calc.allIncluded": "Every paid plan already includes all modules — nothing to add.",
   "pricing.term.month.one": "month",

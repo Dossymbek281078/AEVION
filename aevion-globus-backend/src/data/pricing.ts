@@ -1121,6 +1121,16 @@ export interface Quote {
   fans: AppliedFan[];
   /** Сколько скидки срезал общий потолок (0 = не срезал). */
   discountCappedBy: number;
+  /**
+   * 19.10.2026: план на срок списывается ПОМЕСЯЧНО при обязательстве. total — сумма
+   * платежей за срок; monthlyCharge — один платёж (total / месяцы); prepayTotal —
+   * весь срок вперёд со скидкой prepayDiscountPercent (null у 1 месяца, free, enterprise).
+   * Все суммы — в валюте сметы, как и total.
+   */
+  billing: "monthly" | null;
+  monthlyCharge: number | null;
+  prepayTotal: number | null;
+  prepayDiscountPercent: number;
 }
 
 export function buildQuote(input: {
@@ -1153,6 +1163,10 @@ export function buildQuote(input: {
       promo: null,
       fans: [],
       discountCappedBy: 0,
+      billing: null,
+      monthlyCharge: null,
+      prepayTotal: null,
+      prepayDiscountPercent: 0,
     };
   }
 
@@ -1163,7 +1177,10 @@ export function buildQuote(input: {
   } else if (tierMonthly > 0) {
     lines.push({
       kind: "tier",
-      label: `Тариф ${tier.name} — ${monthsLabelRu(months)} вперёд`,
+      // 19.10.2026: срочный план списывается помесячно; сумма строки — за срок.
+      label: months > 1
+        ? `План «AEVION Планета» — ${monthsLabelRu(months)}, списание ежемесячно по $${tierMonthly}`
+        : `План «AEVION Планета» — 1 месяц, без обязательств`,
       unitPrice: tierMonthly,
       qty: months,
       total: tierMonthly * months,
@@ -1314,5 +1331,11 @@ export function buildQuote(input: {
       amountUsd: Math.round(f.amountUsd * rate * 100) / 100,
     })),
     discountCappedBy: Math.round(capped.cappedBy * rate * 100) / 100,
+    billing: isTermTier(tier.id) ? "monthly" : null,
+    monthlyCharge: isTermTier(tier.id) ? Math.round((totalUSD / months) * rate * 100) / 100 : null,
+    prepayTotal: isTermTier(tier.id) && months > 1
+      ? Math.round(totalUSD * (1 - PLANET_PREPAY_DISCOUNT_PERCENT[tier.id] / 100) * rate * 100) / 100
+      : null,
+    prepayDiscountPercent: isTermTier(tier.id) ? PLANET_PREPAY_DISCOUNT_PERCENT[tier.id] : 0,
   };
 }

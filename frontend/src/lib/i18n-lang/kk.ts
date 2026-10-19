@@ -5113,6 +5113,7 @@ const kk: Record<string, string> = {
   "pricing.home.apps.allAppsDearer": "Барлық қосымшаны жеке алу — осы мерзімге {apps} — бүкіл планетадан қымбат: {planet}.",
   "pricing.home.calc.total": "БАРЛЫҒЫ",
   "pricing.home.calc.totalTerm": "{months} {unit} үшін БАРЛЫҒЫ",
+  "pricing.home.calc.payMonthly": "Рәсімдеу — айына {perMonth}",
   "pricing.home.calc.discount": "Жеңілдіктер",
   "pricing.home.calc.allIncluded": "Кез келген ақылы тариф барлық модульді қамтиды — ештеңе қосымша алудың қажеті жоқ.",
   "pricing.term.month.one": "ай",

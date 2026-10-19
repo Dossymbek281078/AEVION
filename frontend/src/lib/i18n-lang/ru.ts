@@ -5113,6 +5113,7 @@ const ru: Record<string, string> = {
   "pricing.home.apps.allAppsDearer": "Все девять приложений по отдельности — {apps} за этот срок — дороже всей планеты: {planet}. Четыре из них подключаются по запросу, их цены входят в эту сумму.",
   "pricing.home.calc.total": "ИТОГО",
   "pricing.home.calc.totalTerm": "ИТОГО за {months} {unit}",
+  "pricing.home.calc.payMonthly": "Оформить — {perMonth} в месяц",
   "pricing.home.calc.discount": "Скидки",
   "pricing.home.calc.allIncluded": "Любой платный тариф уже включает все модули — докупать ничего не нужно.",
   "pricing.term.month.one": "месяц",

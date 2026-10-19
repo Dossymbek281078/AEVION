@@ -167,6 +167,11 @@ interface Quote {
   total: number;
   notes: string[];
   promo: AppliedPromo | null;
+  /** 19.10.2026: помесячное списание плана — платёж месяца и сумма вперёд со скидкой (в валюте сметы). */
+  billing?: "monthly" | null;
+  monthlyCharge?: number | null;
+  prepayTotal?: number | null;
+  prepayDiscountPercent?: number;
 }
 
 const CARD = "0 4px 20px rgba(15,23,42,0.06)";
@@ -2458,7 +2463,13 @@ export default function PricingPage() {
                     {quote.total.toLocaleString("ru-RU")}
                   </span>
                 </div>
-                {calcTier !== "free" && calcTier !== "enterprise" && !продаётся(calcTier) && (
+                {/* 19.10.2026: сумма за срок списывается помесячно — говорим это рядом с итогом. */}
+                {quote.termMonths !== null && quote.termMonths > 1 && typeof quote.monthlyCharge === "number" && (
+                  <p data-testid="calc-billing" style={{ fontSize: 14, lineHeight: 1.45, color: "#94a3b8", margin: "8px 0 0" }}>
+                    {t("pricing.home.tier.monthlyBilling", { perMonth: `${symbol}${quote.monthlyCharge.toLocaleString("ru-RU")}`, months: String(quote.termMonths), unit: t(termUnitKey(quote.termMonths)) })}
+                  </p>
+                )}
+                {calcTier !== "free" && calcTier !== "enterprise" && !продаётсяПомесячно(calcTier) && (
                   /* Калькулятор ведёт в ту же кассу, что и карточки: гасим кнопку
                      и говорим почему — серая кнопка без объяснения это тупик. */
                   <p style={{ fontSize: 15, lineHeight: 1.4, color: "#94a3b8", marginTop: 16, marginBottom: 0 }}>
@@ -2515,11 +2526,13 @@ export default function PricingPage() {
                 )}
                 {calcTier !== "free" && calcTier !== "enterprise" && calcSeats <= 1 && !calcPromo && (
                   <button
-                    disabled={checkingOut === calcTier || !продаётся(calcTier)}
+                    data-testid="calc-pay-monthly"
+                    disabled={checkingOut === calcTier || !продаётсяПомесячно(calcTier)}
                     onClick={() =>
                       // Голая ступень: места и промокод сюда НЕ передаются, пока сумма
                       // не доводится до кассы. Ветка выше показывает строку со счётом.
-                      startCheckout({ tierId: calcTier, seats: 1, from: "calc" })
+                      // 19.10.2026: та же касса, что у карточек — помесячно при обязательстве.
+                      startCheckout({ tierId: calcTier, seats: 1, billing: "monthly", from: "calc" })
                     }
                     style={{
                       width: "100%",
@@ -2537,7 +2550,20 @@ export default function PricingPage() {
                   >
                     {checkingOut === calcTier
                       ? tp("calc.opening")
-                      : `${tp("calc.payQuote")} · ${symbol}${quote.total.toLocaleString("ru-RU")}`}
+                      : typeof quote.monthlyCharge === "number"
+                        ? t("pricing.home.calc.payMonthly", { perMonth: `${symbol}${quote.monthlyCharge.toLocaleString("ru-RU")}` })
+                        : `${tp("calc.payQuote")} · ${symbol}${quote.total.toLocaleString("ru-RU")}`}
+                  </button>
+                )}
+                {/* Весь срок вперёд — та же вторая кнопка, что у карточки; только при варианте срока в кассе. */}
+                {calcTier !== "free" && calcTier !== "enterprise" && calcSeats <= 1 && !calcPromo && isTermTier(calcTier) && quote.termMonths !== null && quote.termMonths > 1 && typeof quote.prepayTotal === "number" && quote.prepayTotal < quote.total && продаётсяВперёд(calcTier) && (
+                  <button
+                    data-testid="calc-pay-prepaid"
+                    disabled={checkingOut === `${calcTier}:prepaid`}
+                    onClick={() => startCheckout({ tierId: calcTier, seats: 1, billing: "prepaid", from: "calc" })}
+                    style={{ width: "100%", marginTop: 10, padding: "11px 16px", fontSize: 15, fontWeight: 700, borderRadius: 10, border: "1px solid rgba(94,234,212,0.6)", cursor: checkingOut === `${calcTier}:prepaid` ? "wait" : "pointer", background: "transparent", color: "#5eead4" }}
+                  >
+                    {checkingOut === `${calcTier}:prepaid` ? tp("calc.opening") : t("pricing.home.tier.prepayCta", { total: `${symbol}${quote.prepayTotal.toLocaleString("ru-RU")}` })}
                   </button>
                 )}
                 {calcTier === "enterprise" && (

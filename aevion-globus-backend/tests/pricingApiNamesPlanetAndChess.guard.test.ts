@@ -51,6 +51,19 @@ describe("/api/pricing: план «Планета» и шахматы явным
     expect(texts.includes("paid upfront")).toBe(false);
     expect(texts.includes("billed monthly")).toBe(true);
   });
+  test("🔴 /quote говорит про помесячное списание: monthlyCharge, prepayTotal, строка без «вперёд»", async () => {
+    const m = await request(app()).post("/api/pricing/quote").send({ tierId: "medium" });
+    expect(m.status).toBe(200);
+    expect(m.body).toMatchObject({ total: 675, billing: "monthly", monthlyCharge: 225, prepayTotal: 641.25, prepayDiscountPercent: 5 });
+    expect(String(m.body.lines?.[0]?.label)).toContain("ежемесячно");
+    expect(String(m.body.lines?.[0]?.label)).not.toContain("вперёд");
+    const x = await request(app()).post("/api/pricing/quote").send({ tierId: "max" });
+    expect(x.body).toMatchObject({ total: 1800, monthlyCharge: 150, prepayTotal: 1575, prepayDiscountPercent: 12.5 });
+    const l = await request(app()).post("/api/pricing/quote").send({ tierId: "lite" });
+    expect(l.body).toMatchObject({ total: 250, monthlyCharge: 250, prepayTotal: null, prepayDiscountPercent: 0 });
+    const e = await request(app()).post("/api/pricing/quote").send({ tierId: "enterprise" });
+    expect(e.body).toMatchObject({ billing: null, monthlyCharge: null, prepayTotal: null });
+  });
   test("🔴 chess: $50 в год", async () => {
     const r = await request(app()).get("/api/pricing");
     expect(r.body.chess).toEqual({ id: "cyberchess", priceUsd: 50, period: "year" });

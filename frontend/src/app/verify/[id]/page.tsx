@@ -311,7 +311,7 @@ export default function VerifyPage() {
             🛡️ Protect your own work in a minute
           </a>
           <a
-            href={keepChannel("/pricing?app=aevion-ip-bureau", channel, rawC)}
+            href={keepChannel("/pricing/contact?app=ip_bureau", channel, rawC)}
             style={{
               flex: "1 1 160px",
               minWidth: 0,
@@ -326,7 +326,7 @@ export default function VerifyPage() {
               textDecoration: "none",
             }}
           >
-            💳 Plans &amp; pricing
+            💳 Ask about pricing
           </a>
           <a
             href={keepChannel("/pricing/contact?app=ip_bureau&tier=lite", channel, rawC)}

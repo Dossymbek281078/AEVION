@@ -115,3 +115,42 @@ describe("Биржа стартапов: публикация — платное
     expect(запросы.some((q) => /FreeActionUsage/.test(q))).toBe(false);
   });
 });
+
+describe("пилот бюро: FREE_QUOTA_PILOT_EMAILS даёт свою норму без выкатки", () => {
+  const токен = async (email: string) => {
+    const jwt = (await import("jsonwebtoken")).default;
+    return jwt.sign({ email, sub: email }, process.env.AUTH_JWT_SECRET as string, { algorithm: "HS256", expiresIn: "1h" });
+  };
+  test("пилотный аккаунт: 4-я регистрация в норме 50 — не 402 (счётчик опрошен, сертификат пишется)", async () => {
+    process.env.PAID_ACTIONS = "qright_register";
+    process.env.FREE_QRIGHT_REGISTER_PER_MONTH = "3";
+    process.env.FREE_QUOTA_PILOT_EMAILS = "pilot@bureau.kz, @wpk.kz";
+    использовано = 3; // уже три — следующая четвёртая
+    const r = await request(приложение()).post("/api/pipeline/protect")
+      .set("Authorization", "Bearer " + (await токен("pilot@bureau.kz")))
+      .send({ title: "Запись пилота", description: "четвёртая запись пилотного бюро в этом месяце", kind: "text" });
+    expect(r.status, JSON.stringify(r.body).slice(0, 200)).not.toBe(402);
+    expect(запросы.some((q) => /FreeActionUsage/.test(q)), "пилот должен считаться, а не проходить мимо счётчика").toBe(true);
+    const домен = await request(приложение()).post("/api/pipeline/protect")
+      .set("Authorization", "Bearer " + (await токен("Anna@WPK.kz")))
+      .send({ title: "Запись пилота по домену", description: "запись сотрудника пилотного бюро по домену", kind: "text" });
+    expect(домен.status, "домен из списка не узнан").not.toBe(402);
+    delete process.env.FREE_QUOTA_PILOT_EMAILS;
+  });
+  test("КОНТРОЛЬ: обычный аккаунт при тех же условиях — 402; пилот при 51-й — тоже 402", async () => {
+    process.env.PAID_ACTIONS = "qright_register";
+    process.env.FREE_QRIGHT_REGISTER_PER_MONTH = "3";
+    process.env.FREE_QUOTA_PILOT_EMAILS = "pilot@bureau.kz";
+    использовано = 3;
+    const обычный = await request(приложение()).post("/api/pipeline/protect")
+      .set("Authorization", "Bearer " + (await токен("guest@example.test")))
+      .send({ title: "Запись гостя", description: "четвёртая запись обычного пользователя", kind: "text" });
+    expect(обычный.status).toBe(402);
+    использовано = 50;
+    const пилот51 = await request(приложение()).post("/api/pipeline/protect")
+      .set("Authorization", "Bearer " + (await токен("pilot@bureau.kz")))
+      .send({ title: "51-я запись пилота", description: "пилотная норма тоже конечна", kind: "text" });
+    expect(пилот51.status, "пилотная норма 50 не держит").toBe(402);
+    delete process.env.FREE_QUOTA_PILOT_EMAILS;
+  });
+});

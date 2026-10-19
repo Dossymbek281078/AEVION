@@ -46,12 +46,30 @@ function платныеДействия(): Set<string> {
  * Имена действий — наши собственные идентификаторы, не секрет: без них ответ
  * «включено: да» не отвечает на вопрос «а ЧТО включено».
  */
-export function сводкаПлатныхДействий(): { configured: boolean; count: number; actions: string[] } {
+export function сводкаПлатныхДействий(): { configured: boolean; count: number; actions: string[]; pilotAccounts: number; pilotPerMonth: number } {
   const названные = [...платныеДействия()].sort();
-  return { configured: названные.length > 0, count: названные.length, actions: названные };
+  const пилотов = (process.env.FREE_QUOTA_PILOT_EMAILS || "").split(",").map((x) => x.trim()).filter(Boolean).length;
+  return { configured: названные.length > 0, count: названные.length, actions: названные, pilotAccounts: пилотов, pilotPerMonth: пилотнаяНорма() };
 }
 
 /** Сколько раз в месяц можно бесплатно. Своё число на действие, иначе 3. */
+/**
+ * 🔴 Пилот бюро (19.10.2026, письма Продаж: «месяц, до 50 записей, бесплатно»). Адреса
+ * пилотных аккаунтов — в FREE_QUOTA_PILOT_EMAILS (через запятую; запись «@домен.kz»
+ * — весь домен), их норма — FREE_QUOTA_PILOT_PER_MONTH (по умолчанию 50) на каждое
+ * действие. Заводится переменной, без выкатки. Платящий по-прежнему проходит всегда.
+ */
+export function пилотныйАккаунт(email: string | null | undefined): boolean {
+  const адрес = String(email ?? "").trim().toLowerCase();
+  if (!адрес) return false;
+  const список = (process.env.FREE_QUOTA_PILOT_EMAILS || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean);
+  return список.some((п) => (п.startsWith("@") ? адрес.endsWith(п) : адрес === п));
+}
+export function пилотнаяНорма(): number {
+  const n = Number(process.env.FREE_QUOTA_PILOT_PER_MONTH ?? "50");
+  return Number.isFinite(n) && n >= 0 ? n : 50;
+}
+
 export function бесплатноВМесяц(действие: string): number {
   const имя = "FREE_" + действие.toUpperCase() + "_PER_MONTH";
   const raw = process.env[имя];
@@ -154,7 +172,7 @@ export async function учестьДействие(req: Request, действи�
   const план = resolveUserPlan(req);
   if (план.tier && план.tier !== "free") return { заблокировано: false, причина: "платящий" };
 
-  const норма = бесплатноВМесяц(действие);
+  const норма = пилотныйАккаунт(план.email) ? пилотнаяНорма() : бесплатноВМесяц(действие);
   const кто = ктоЭто(req);
   try {
     const pool = getPool();

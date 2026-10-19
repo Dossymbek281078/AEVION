@@ -272,7 +272,6 @@ export default function VerifyPage() {
           {cert.partner ? (
             <div data-testid="cert-partner-banner" style={{ marginTop: 10, fontSize: 14, fontWeight: 800, color: "#0f766e", lineHeight: 1.5 }}>
               {tv(lang, "Record made via")} {cert.partner} · {tv(lang, "verification by AEVION")}
-              {lang !== "en" && <span style={{ display: "block", fontWeight: 500, color: "#475569", fontSize: 12 }}>Record made via {cert.partner} · verification by AEVION</span>}
             </div>
           ) : null}
           {aevMinted > 0 && (
@@ -407,7 +406,6 @@ export default function VerifyPage() {
                 {cert.partner ? (
                   <div data-testid="cert-partner" style={{ marginTop: 8, fontSize: 13, fontWeight: 700, color: "#99f6e4", lineHeight: 1.5 }}>
                     {tv(lang, "Record made via")} {cert.partner} · {tv(lang, "verification by AEVION")}
-                    {lang !== "en" && <span style={{ display: "block", fontWeight: 500, color: "#94a3b8", fontSize: 12 }}>Record made via {cert.partner} · verification by AEVION</span>}
                   </div>
                 ) : null}
               </div>

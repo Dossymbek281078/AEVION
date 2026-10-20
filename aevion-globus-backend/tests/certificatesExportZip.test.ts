@@ -40,6 +40,9 @@ vi.mock("../src/lib/dbPool", () => ({
     query: vi.fn(async (sql: string, params: unknown[] = []) => {
       const s = String(sql);
       db.sql.push(s);
+      // 20.10.2026: выгрузка проверяет живой аккаунт (verifyBearerLive) — здесь все
+      // пользователи живые; удалённые и отозванные — tests/exportRejectsDeletedAndRevoked.test.ts.
+      if (/SELECT "deletedAt" FROM "AEVIONUser"/.test(s)) return { rows: [{ deletedAt: null }] };
       if (s.includes('FROM "IPCertificate" c') && s.includes('JOIN "QRightObject" o')) {
         const ownerFilter = s.includes('o."ownerUserId" = $1');
         db.limit = params[2];

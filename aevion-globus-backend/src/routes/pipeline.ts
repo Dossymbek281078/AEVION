@@ -5,6 +5,7 @@ import { этоНашаПроба, нечитаемыйЗаголовок, ск�
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { verifyBearerOptional, getJwtSecret } from "../lib/authJwt";
+import { verifyBearerLive } from "../lib/authLive";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
 import {
@@ -3173,7 +3174,7 @@ export const EXPORT_ZIP_MAX_RECORDS = 500;
  */
 pipelineRouter.get("/certificates/export.zip", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth) {
       return res.status(401).json({
         error: "auth_required",

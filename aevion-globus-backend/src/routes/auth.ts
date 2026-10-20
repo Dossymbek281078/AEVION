@@ -4,7 +4,8 @@ import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { getJwtSecret } from "../lib/authJwt";
-import { rememberIssuedUser } from "../lib/tokenVersion";
+import { verifyBearerLive } from "../lib/authLive";
+import { rememberIssuedUser, bumpTokenVersion } from "../lib/tokenVersion";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
@@ -286,6 +287,20 @@ async function requireAuthStrict(req: any, res: any) {
   pool
     .query(`UPDATE "AuthSession" SET "lastActiveAt" = NOW() WHERE "id" = $1`, [sid])
     .catch(() => {});
+  return payload;
+}
+
+// 20.10.2026: личные данные (список сессий, журнал входов) — только живому
+// аккаунту. requireAuth здесь смотрит одну подпись: ни tokenVersion, ни
+// deletedAt, ни revokedAt. verifyBearerLive (lib/authLive.ts) — все три.
+async function requireAuthLive(req: any, res: any) {
+  const payload = requireAuth(req, res);
+  if (!payload) return null;
+  const live = await verifyBearerLive(req);
+  if (!live) {
+    res.status(401).json({ error: "invalid token" });
+    return null;
+  }
   return payload;
 }
 
@@ -605,7 +620,25 @@ authRouter.delete("/account", async (req, res) => {
       `UPDATE "AuthSession" SET "revokedAt" = NOW() WHERE "userId" = $1 AND "revokedAt" IS NULL`,
       [userId]
     );
-    recordAuthAudit(userId, "account.delete", req, null);
+    // 20.10.2026: до этой строки удалённый аккаунт оставлял ЖИВЫМИ все свои
+    // токены на 7 дней: verifyBearer* смотрит подпись и tokenVersion, а не
+    // deletedAt, и /certificates/export.zip отдавал записи после удаления
+    // (замер на проде cde01b698). Счётчик версий — как в /sign-out-everywhere:
+    // при включённой карте (enforcing) старые токены отвергаются везде.
+    // Отказ подъёма НЕ отменяет удаления (строка уже помечена), но молчать
+    // нельзя (§16): в журнал и в аудит.
+    let tokenVersionBumped = false;
+    try {
+      await bumpTokenVersion(userId);
+      tokenVersionBumped = true;
+    } catch (err) {
+      console.error(
+        "[auth] delete-account: tokenVersion НЕ поднят, старые токены живы до истечения:",
+        userId,
+        (err as Error)?.message ?? err,
+      );
+    }
+    recordAuthAudit(userId, "account.delete", req, { tokenVersionBumped });
     res.json({ deleted: true });
   } catch (err: any) {
     captureAuthError(err, { route: "delete-account" });
@@ -620,7 +653,7 @@ authRouter.delete("/account", async (req, res) => {
 // 🔹 GET /sessions — list mine, ordered newest first.
 authRouter.get("/sessions", async (req, res) => {
   try {
-    const payload: any = requireAuth(req, res);
+    const payload: any = await requireAuthLive(req, res);
     if (!payload) return;
     await ensureAuthTier2Tables();
 
@@ -1159,7 +1192,7 @@ authRouter.post("/email/verify/complete", emailVerifyRateLimit, async (req, res)
 // 🔹 GET /me/audit — list my own audit events.
 authRouter.get("/me/audit", async (req, res) => {
   try {
-    const payload: any = requireAuth(req, res);
+    const payload: any = await requireAuthLive(req, res);
     if (!payload) return;
     await ensureAuthTier2Tables();
 

@@ -46,6 +46,19 @@ describe("текст проверки с сервера", () => {
   });
 });
 
+describe("панель консилиума: разные семьи моделей", () => {
+  it("три агента — три разных поставщика, у каждого запасные", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const src = readFileSync(join(__dirname, "..", "CouncilConsole.tsx"), "utf8");
+    const панель = src.slice(src.indexOf("const PANEL = ["), src.indexOf("];", src.indexOf("const PANEL = [")));
+    const поставщики = [...панель.matchAll(/provider: "([a-z]+)"/g)].map((m) => m[1]);
+    expect(поставщики).toHaveLength(3);
+    expect(new Set(поставщики).size, "одна семья моделей трижды — «разногласия» становятся декорацией").toBe(3);
+    expect([...панель.matchAll(/fallback: \[/g)]).toHaveLength(3);
+  });
+});
+
 describe("имя агента", () => {
   it("роль из панели вместо внутреннего id; неизвестный id — как есть", () => {
     expect(имяАгента("analyst")).toBe("Аналитик");

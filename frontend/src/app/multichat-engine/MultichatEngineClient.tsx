@@ -591,7 +591,7 @@ export default function MultichatEnginePage() {
             AEVION Multichat Engine
           </h1>
           <p style={{ margin: "8px 0 0", color: T.neutralVeil82, fontSize: 14, lineHeight: 1.55 }}>
-            One backend, five LLM providers, two modes. Pick a single-model chat for quick answers,
+            One backend, several LLM providers, two modes. Pick a single-model chat for quick answers,
             or a multi-agent pipeline when you need a second (and third) pair of eyes on the answer.
           </p>
         </div>

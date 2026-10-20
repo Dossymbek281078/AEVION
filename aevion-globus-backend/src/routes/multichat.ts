@@ -613,6 +613,8 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
     id?: unknown;
     role?: unknown;
     provider?: unknown;
+    /** Запасные поставщики по порядку, если основной не ответил (20.10.2026). */
+    fallback?: unknown;
     model?: unknown;
     temperature?: unknown;
   };
@@ -627,11 +629,21 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
   // 60 секунд: длинный ответ модели укладывается с запасом, но зависание
   // становится отличимым от работы. Переопределяется на прогонах.
   const agentTimeoutMs = Number(process.env.MULTICHAT_AGENT_TIMEOUT_MS) || 60_000;
+  // Общий срок веера вместе с запасными поставщиками. С 20.10.2026 гостевой dispatch
+  // идёт через обработчик сайта (адрес гостя для нормы) — у функции Vercel потолок
+  // 60 с; цепочка «основной → запасной» не должна его пробивать. Ответы сейчас — 15–18 с.
+  const срокВеера = Date.now() + (Number(process.env.MULTICHAT_FANOUT_BUDGET_MS) || 50_000);
 
   const calls = (agents as AgentSpec[]).map(async (a, idx) => {
     const agentId = typeof a.id === "string" ? a.id : `agent_${idx}`;
     const role = typeof a.role === "string" ? a.role : "Agent";
     const provider = typeof a.provider === "string" ? a.provider : undefined;
+    // Цепочка как в DevHub: основной, затем запасные — разные семьи моделей, чтобы
+    // «разногласия» не были согласованной ошибкой одной семьи (слово Оркестратора 20.10).
+    const запасные = Array.isArray(a.fallback)
+      ? (a.fallback as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 3)
+      : [];
+    const цепочка: Array<string | undefined> = [provider, ...запасные.filter((x) => x !== provider)];
     const model = typeof a.model === "string" ? a.model : undefined;
     const temperature = typeof a.temperature === "number" ? a.temperature : 0.6;
 
@@ -643,29 +655,40 @@ multichatRouter.post("/conversations/:id/dispatch", dispatchLimiter, async (req,
     const threadId = agentThreadId(conversationId, agentId);
 
     try {
-      const r = await fetch(`${internalBase}/api/qcoreai/chat`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(authHeader ? { Authorization: authHeader } : {}),
-        },
-        body: JSON.stringify({
-          messages,
-          provider,
-          model,
-          temperature,
-          conversationId: threadId,
-        }),
-        signal: AbortSignal.timeout(agentTimeoutMs),
-      });
-      const data = (await r.json().catch(() => null)) as {
-        reply?: string;
-        mode?: string;
-        provider?: string;
-        model?: string;
-        usage?: unknown;
-        error?: string;
-      } | null;
+      type Ответ = { reply?: string; mode?: string; provider?: string; model?: string; usage?: unknown; error?: string } | null;
+      let r!: Response;
+      let data: Ответ = null;
+      for (let k = 0; k < цепочка.length; k++) {
+        const последний = k === цепочка.length - 1;
+        const осталось = Math.max(1_000, срокВеера - Date.now());
+        try {
+          r = await fetch(`${internalBase}/api/qcoreai/chat`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(authHeader ? { Authorization: authHeader } : {}),
+            },
+            body: JSON.stringify({
+              messages,
+              provider: цепочка[k],
+              // Модель называется только основному: у запасного поставщика её нет.
+              model: k === 0 ? model : undefined,
+              temperature,
+              conversationId: threadId,
+            }),
+            signal: AbortSignal.timeout(Math.min(agentTimeoutMs, осталось)),
+          });
+          data = (await r.json().catch(() => null)) as Ответ;
+        } catch (e) {
+          if (последний) throw e;
+          console.warn(`[multichat] агент ${agentId}: ${цепочка[k] ?? "по умолчанию"} не ответил (${(e as Error)?.name || e}), пробуем ${цепочка[k + 1]}`);
+          continue;
+        }
+        if (r.ok && data?.reply?.trim()) break;
+        if (!последний) {
+          console.warn(`[multichat] агент ${agentId}: ${цепочка[k] ?? "по умолчанию"} — ${data?.error || `upstream ${r.status}`}, пробуем ${цепочка[k + 1]}`);
+        }
+      }
       if (!r.ok) {
         const error = data?.error || `upstream ${r.status}`;
         await recordAgentFailure(userId, threadId, error);

@@ -55,7 +55,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const fallback: Metadata = {
     title: "Seller — AEVION QStore",
     description:
-      "Seller profile on the AEVION QStore digital marketplace. View listings, total sales, ratings and reviews.",
+      "Seller profile on the AEVION QStore digital marketplace. View listings, ratings and reviews.",
     alternates: { canonical },
     openGraph: {
       type: "profile",
@@ -82,7 +82,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     60
   );
   const desc = clip(
-    `${profile.products.length} digital products on AEVION QStore. ${profile.totalSales} total sales, ${profile.avgRating ? profile.avgRating.toFixed(1) : "—"}★ average rating.`,
+    `${profile.products.length} digital products on AEVION QStore. ${profile.avgRating ? profile.avgRating.toFixed(1) : "—"}★ average rating.`,
     158
   );
 

@@ -10,6 +10,14 @@ export type VoeSeedTrack = {
   audioUrl: string | null;
 };
 
+/**
+ * Ключ трека-примера: название + псевдоним. 20.10.2026 (замер прода): все 8 треков
+ * каталога — эти примеры (одна секунда 14.05, звука ни у одного, авторы выдуманы),
+ * а страница писала «только реальные люди и реальные голоса» и «8 треков всего».
+ * По решению Оркестратора для QBuild (тот же класс): пример помечается и в счёт не идёт.
+ */
+export const ключПримера = (title: string, artistAlias: string): string => `${title}\u0001${artistAlias}`;
+
 export const VOICE_OF_EARTH_SEED: VoeSeedTrack[] = [
   {
     title: "Утро над миром",
@@ -148,3 +156,10 @@ export const VOICE_OF_EARTH_SEED: VoeSeedTrack[] = [
     audioUrl: null,
   },
 ];
+
+export const КЛЮЧИ_ПРИМЕРОВ: ReadonlySet<string> = new Set(VOICE_OF_EARTH_SEED.map((t) => ключПримера(t.title, t.artistAlias)));
+
+/** Трек — пример из начального набора, а не поданный человеком. */
+export function трекПример(t: { title?: unknown; artist_alias?: unknown }): boolean {
+  return typeof t.title === "string" && typeof t.artist_alias === "string" && КЛЮЧИ_ПРИМЕРОВ.has(ключПримера(t.title, t.artist_alias));
+}

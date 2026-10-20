@@ -10,7 +10,13 @@ import {
   ensureVoiceOfEarthTables,
   isVoiceOfEarthDbReady,
 } from "../lib/ensureVoiceOfEarthTables";
-import { VOICE_OF_EARTH_SEED, VoeSeedTrack } from "../data/voiceOfEarthSeed";
+import { VOICE_OF_EARTH_SEED, VoeSeedTrack, КЛЮЧИ_ПРИМЕРОВ, трекПример } from "../data/voiceOfEarthSeed";
+
+/** Пометка example для витрины — «Пример · без записи». */
+const сПометкой = <T extends { title?: unknown; artist_alias?: unknown }>(t: T) => ({ ...t, example: трекПример(t) });
+/** SQL: трек не пример. Ключи — константы из data/voiceOfEarthSeed, параметром $N. */
+const НЕ_ПРИМЕР_SQL = (n: number) => `(title || chr(1) || artist_alias) <> ALL($${n}::text[])`;
+const КЛЮЧИ = [...КЛЮЧИ_ПРИМЕРОВ];
 import { pgIntId } from "../lib/queryNumber";
 
 const WARN =
@@ -160,7 +166,7 @@ voiceOfEarthRouter.get("/tracks", async (req: Request, res: Response) => {
         args,
       );
       return res.json({
-        items: rows,
+        items: rows.map(сПометкой),
         total: Number(cnt[0]?.c ?? "0"),
         backend: "postgres",
       });
@@ -178,7 +184,7 @@ voiceOfEarthRouter.get("/tracks", async (req: Request, res: Response) => {
   });
   const total = items.length;
   items = items.slice(offset, offset + limit);
-  res.json({ items, total, backend: "memory" });
+  res.json({ items: items.map(сПометкой), total, backend: "memory" });
 });
 
 // ─── GET /api/voice-of-earth/tracks/:id ──────────────────────────────────────
@@ -193,7 +199,7 @@ voiceOfEarthRouter.get("/tracks/:id", async (req: Request, res: Response) => {
         `SELECT * FROM voe_tracks WHERE id = $1`,
         [id],
       );
-      if (rows[0]) return res.json({ track: rows[0] });
+      if (rows[0]) return res.json({ track: сПометкой(rows[0]) });
       return res.status(404).json({ error: "not_found" });
     } catch (e) {
       console.error("[VoiceOfEarth] GET /tracks/:id DB error", e);
@@ -204,7 +210,7 @@ voiceOfEarthRouter.get("/tracks/:id", async (req: Request, res: Response) => {
   }
   const track = memTracks.find((t) => t.id === id);
   if (!track) return res.status(404).json({ error: "not_found" });
-  res.json({ track });
+  res.json({ track: сПометкой(track) });
 });
 
 // ─── POST /api/voice-of-earth/tracks ─────────────────────────────────────────
@@ -363,22 +369,31 @@ voiceOfEarthRouter.post(
 voiceOfEarthRouter.get("/stats", async (_req: Request, res: Response) => {
   if (isVoiceOfEarthDbReady()) {
     try {
-      const [tot, byLang, byMood, top] = await Promise.all([
+      // Счёт — только поданные людьми; примеры отдельным числом (20.10.2026).
+      const [tot, byLang, byMood, top, ex] = await Promise.all([
         pool.query(
-          `SELECT COUNT(*)::text AS c FROM voe_tracks WHERE status='published'`,
+          `SELECT COUNT(*)::text AS c FROM voe_tracks WHERE status='published' AND ${НЕ_ПРИМЕР_SQL(1)}`,
+          [КЛЮЧИ],
         ),
         pool.query(
           `SELECT language, COUNT(*)::text AS c FROM voe_tracks
-           WHERE status='published' GROUP BY language`,
+           WHERE status='published' AND ${НЕ_ПРИМЕР_SQL(1)} GROUP BY language`,
+          [КЛЮЧИ],
         ),
         pool.query(
           `SELECT mood, COUNT(*)::text AS c FROM voe_tracks
-           WHERE status='published' GROUP BY mood`,
+           WHERE status='published' AND ${НЕ_ПРИМЕР_SQL(1)} GROUP BY mood`,
+          [КЛЮЧИ],
         ),
         pool.query(
           `SELECT id, title, artist_alias, language, mood, votes
-           FROM voe_tracks WHERE status='published'
+           FROM voe_tracks WHERE status='published' AND ${НЕ_ПРИМЕР_SQL(1)}
            ORDER BY votes DESC, created_at DESC LIMIT 5`,
+          [КЛЮЧИ],
+        ),
+        pool.query(
+          `SELECT COUNT(*)::text AS c FROM voe_tracks WHERE status='published' AND NOT ${НЕ_ПРИМЕР_SQL(1)}`,
+          [КЛЮЧИ],
         ),
       ]);
       const byLanguage: Record<string, number> = {};
@@ -390,12 +405,14 @@ voiceOfEarthRouter.get("/stats", async (_req: Request, res: Response) => {
         byLanguage,
         byMood: byMoodObj,
         topTracks: top.rows,
+        examples: Number(ex.rows[0]?.c ?? "0"),
       });
     } catch (e) {
       console.error("[VoiceOfEarth] /stats DB error", e);
     }
   }
-  const tracks = memTracks.filter((t) => t.status === "published");
+  const tracks = memTracks.filter((t) => t.status === "published" && !трекПример(t));
+  const examples = memTracks.filter((t) => t.status === "published" && трекПример(t)).length;
   const byLanguage: Record<string, number> = {};
   const byMood: Record<string, number> = {};
   for (const t of tracks) {
@@ -416,7 +433,7 @@ voiceOfEarthRouter.get("/stats", async (_req: Request, res: Response) => {
       mood: t.mood,
       votes: t.votes,
     }));
-  res.json({ total: tracks.length, byLanguage, byMood, topTracks });
+  res.json({ total: tracks.length, byLanguage, byMood, topTracks, examples });
 });
 
 // ── MVP concept board surface ───────────────────────────────────────────────

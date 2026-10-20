@@ -4,6 +4,8 @@ import { CSSProperties } from "react";
 
 export type Stats = {
   total: number;
+  /** Сколько примеров в каталоге — в total не входят (20.10.2026). */
+  examples?: number;
   byLanguage: Record<string, number>;
   byMood: Record<string, number>;
 };
@@ -72,7 +74,9 @@ export default function StatsBar({ stats }: Props) {
     <div style={containerStyle}>
       <div style={totalStyle}>
         <span style={numStyle}>{stats.total}</span>
-        <span style={{ color: "#5b4a2e", fontSize: 14 }}>треков всего</span>
+        <span style={{ color: "#5b4a2e", fontSize: 14 }}>
+          треков от людей{stats.examples ? ` · ещё ${stats.examples} примеров` : ""}
+        </span>
       </div>
       <div style={{ width: 1, height: 28, background: "#f0d4a0" }} />
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>

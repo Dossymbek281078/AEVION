@@ -13,6 +13,8 @@ export type Track = {
   votes: number;
   created_at: string;
   content_hash?: string | null;
+  /** Пример из начального набора: выдуманный автор, записи нет (20.10.2026). */
+  example?: boolean;
 };
 
 const LANG_FLAG: Record<string, string> = {
@@ -203,6 +205,11 @@ export default function TrackCard({ track, onVote, votedLocal }: Props) {
     <article style={cardStyle}>
       <div style={headerStyle}>
         <div style={{ flex: 1, minWidth: 0 }}>
+          {track.example && (
+            <div data-voe-example style={{ display: "inline-block", marginBottom: 6, padding: "2px 8px", borderRadius: 999, background: "#fde7c2", color: "#7a4b10", fontSize: 11, fontWeight: 700 }}>
+              Пример · текст без записи, автор вымышлен
+            </div>
+          )}
           <h3 style={titleStyle}>{track.title}</h3>
           <div style={artistStyle}>{track.artist_alias}</div>
           {track.content_hash && (

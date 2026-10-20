@@ -1455,7 +1455,7 @@ describe("POST /api/devhub/projects/:id/agent/workflow", () => {
     expect(r.body.results[2].error).toMatch(/unknown step type/);
   });
 
-  test("шаг image идёт по той же цепочке, что ручка: OpenAI без кредитов → картинку даёт Gemini (17.09.2026)", async () => {
+  test("шаг image идёт по той же цепочке, что ручка: картинку даёт Gemini, OpenAI без кредитов не зовётся (17.09 / 20.10.2026)", async () => {
     // До этой даты шаг сценария звал ТОЛЬКО OpenAI: при кончившихся кредитах
     // сценарий терял картинку, хотя ручка /media/image рядом умела перейти дальше.
     process.env.OPENAI_API_KEY = "sk-fake";
@@ -1463,8 +1463,8 @@ describe("POST /api/devhub/projects/:id/agent/workflow", () => {
     try {
       const app = makeApp();
       const id = await createProject(app);
+      // 20.10.2026: OpenAI в цепочке последним — Gemini отвечает первым.
       fetchMock
-        .mockResolvedValueOnce(jsonResp(429, { error: { message: "You have no credits remaining.", code: "credit_balance_exhausted" } })) // openai
         .mockResolvedValueOnce(jsonResp(200, { candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: Buffer.from("gm").toString("base64") } }] } }] })); // gemini
 
       const r = await request(app)
@@ -1474,7 +1474,8 @@ describe("POST /api/devhub/projects/:id/agent/workflow", () => {
       expect(r.status).toBe(200);
       expect(r.body.results[0].ok).toBe(true);
       expect(String(r.body.results[0].output.url)).toContain(Buffer.from("gm").toString("base64"));
-      expect(String(fetchMock.mock.calls[1][0])).toContain("gemini-2.5-flash-image");
+      expect(String(fetchMock.mock.calls[0][0])).toContain("gemini-2.5-flash-image");
+      expect(fetchMock.mock.calls.map((c) => String(c[0])).some((u) => u.includes("api.openai.com"))).toBe(false);
     } finally {
       delete process.env.GEMINI_API_KEY;
     }
@@ -1757,7 +1758,8 @@ describe("Agent workflow image step → auto-upload to Cloudflare", () => {
     const id = await createProject(app);
 
     fetchMock
-      .mockResolvedValueOnce(jsonResp(200, { data: [{ url: "https://oai.example/temp.png" }] }))
+      .mockResolvedValueOnce(jsonResp(500, { errors: ["flux down"] })) // workers ai — первым с 20.10.2026
+      .mockResolvedValueOnce(jsonResp(200, { data: [{ url: "https://oai.example/temp.png" }] })) // openai
       .mockResolvedValueOnce(jsonResp(200, {
         result: { id: "cf-img-1", variants: ["https://imagedelivery.net/x/cf-img-1/public"], uploaded: "now" },
       }));

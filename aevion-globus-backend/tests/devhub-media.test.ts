@@ -363,10 +363,12 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
     process.env.OPENAI_API_KEY = "sk-fake";
     process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
     process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
+    // 20.10.2026: OpenAI в цепочке последним — при CF-ключах первым идёт Workers AI.
     fetchMock
+      .mockResolvedValueOnce(jsonResp(500, { errors: ["flux down"] })) // workers ai
       .mockResolvedValueOnce(jsonResp(200, {
         data: [{ b64_json: Buffer.from("fake-png-bytes").toString("base64") }],
-      }))
+      })) // openai
       .mockResolvedValueOnce(jsonResp(200, {
         result: { variants: ["https://imagedelivery.example/acc/img-1/public"] },
       }));
@@ -378,7 +380,7 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
     expect(r.status).toBe(200);
     expect(r.body.url).toBe("https://imagedelivery.example/acc/img-1/public");
     expect(r.body.storage).toBe("cloudflare");
-    const uploadCall = fetchMock.mock.calls[1];
+    const uploadCall = fetchMock.mock.calls[2];
     expect(String(uploadCall[0])).toContain("/images/v1");
     // File upload (raw bytes), not the URL-import form used for hosted results
     expect(String(uploadCall[1].body)).toContain('name="file"');
@@ -389,7 +391,8 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
     process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
     process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
     fetchMock
-      .mockResolvedValueOnce(jsonResp(200, { data: [{ url: "https://oai.example/tmp.png" }] }))
+      .mockResolvedValueOnce(jsonResp(500, { errors: ["flux down"] })) // workers ai (первым с 20.10.2026)
+      .mockResolvedValueOnce(jsonResp(200, { data: [{ url: "https://oai.example/tmp.png" }] })) // openai
       .mockResolvedValueOnce(jsonResp(500, { errors: ["nope"] }));
 
     const r = await request(makeApp())
@@ -401,12 +404,11 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
     expect(r.body.storage).toBe("upstream");
   });
 
-  test("OpenAI failure falls back to Cloudflare Workers AI (flux-1-schnell) when CF creds exist", async () => {
+  test("Cloudflare Workers AI (flux-1-schnell) serves FIRST when CF creds exist — paid OpenAI is not called (20.10.2026)", async () => {
     process.env.OPENAI_API_KEY = "sk-fake";
     process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
     process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
     fetchMock
-      .mockResolvedValueOnce(jsonResp(400, { error: { message: "Billing hard limit has been reached." } })) // openai
       .mockResolvedValueOnce(jsonResp(200, { result: { image: Buffer.from("flux-bytes").toString("base64") } })) // workers ai
       .mockResolvedValueOnce(jsonResp(200, { result: { variants: ["https://imagedelivery.example/acc/img-2/public"] } })); // cf images upload
 
@@ -416,11 +418,12 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
 
     expect(r.status).toBe(200);
     expect(r.body.provider).toBe("workers-ai");
-    expect(r.body.fallbackFrom).toEqual(["openai"]);
+    expect(r.body.fallbackFrom).toBeUndefined();
     expect(r.body.url).toBe("https://imagedelivery.example/acc/img-2/public");
     expect(r.body.storage).toBe("cloudflare");
-    expect(String(fetchMock.mock.calls[1][0])).toContain("/ai/run/@cf/black-forest-labs/flux-1-schnell");
-    const fluxBody = JSON.parse((fetchMock.mock.calls[1][1] as any).body);
+    expect(fetchMock.mock.calls.map((c) => String(c[0])).some((u) => u.includes("api.openai.com"))).toBe(false);
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/ai/run/@cf/black-forest-labs/flux-1-schnell");
+    const fluxBody = JSON.parse((fetchMock.mock.calls[0][1] as any).body);
     expect(fluxBody).toMatchObject({ prompt: "a cat", width: 1024, height: 1024 });
   });
 
@@ -430,8 +433,8 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
     process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
     process.env.GEMINI_API_KEY = "gm-fake";
     try {
+      // 20.10.2026: OpenAI последним — до него дело не доходит вовсе.
       fetchMock
-        .mockResolvedValueOnce(jsonResp(429, { error: { message: "You have no credits remaining.", code: "credit_balance_exhausted" } })) // openai
         .mockResolvedValueOnce(jsonResp(401, { success: false, errors: [{ code: 10000, message: "Authentication error" }] })) // workers ai
         .mockResolvedValueOnce(jsonResp(200, { candidates: [{ content: { parts: [{ text: "here" }, { inlineData: { mimeType: "image/png", data: Buffer.from("gemini-bytes").toString("base64") } }] } }] })) // gemini
         .mockResolvedValueOnce(jsonResp(401, { success: false })); // cf images upload — тот же мёртвый токен
@@ -442,11 +445,12 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
 
       expect(r.status).toBe(200);
       expect(r.body.provider).toBe("gemini");
-      expect(r.body.fallbackFrom).toEqual(["openai", "workers-ai"]);
-      expect(String(fetchMock.mock.calls[2][0])).toContain("gemini-2.5-flash-image:generateContent");
+      expect(r.body.fallbackFrom).toEqual(["workers-ai"]);
+      expect(fetchMock.mock.calls.map((c) => String(c[0])).some((u) => u.includes("api.openai.com"))).toBe(false);
+      expect(String(fetchMock.mock.calls[1][0])).toContain("gemini-2.5-flash-image:generateContent");
       // Ключ уходит заголовком, а не в адресе: адрес попадает в журналы.
-      expect(String(fetchMock.mock.calls[2][0])).not.toContain("gm-fake");
-      const gmBody = JSON.parse((fetchMock.mock.calls[2][1] as any).body);
+      expect(String(fetchMock.mock.calls[1][0])).not.toContain("gm-fake");
+      const gmBody = JSON.parse((fetchMock.mock.calls[1][1] as any).body);
       expect(gmBody.contents[0].parts[0].text).toContain("a cat");
       expect(gmBody.contents[0].parts[0].text).toContain("landscape");
       // Загрузка в Cloudflare не удалась — честный запасной вид, а не потеря картинки.
@@ -480,8 +484,8 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
     process.env.CLOUDFLARE_API_TOKEN = "cf-fake";
     process.env.CLOUDFLARE_ACCOUNT_ID = "acc-fake";
     fetchMock
-      .mockResolvedValueOnce(jsonResp(400, { error: { message: "billing" } }))
-      .mockResolvedValueOnce(jsonResp(500, { errors: ["flux down"] }));
+      .mockResolvedValueOnce(jsonResp(500, { errors: ["flux down"] })) // workers ai
+      .mockResolvedValueOnce(jsonResp(400, { error: { message: "billing" } })); // openai — последним
 
     const r = await request(makeApp())
       .post("/api/devhub/media/image")
@@ -493,7 +497,7 @@ describe("POST /api/devhub/media/image (DALL-E 3)", () => {
     // rather than a bad prompt.
     expect(r.body.providersBlocked).toBe(true);
     expect(r.body.error).toMatch(/not your prompt/);
-    expect(r.body.attempts.map((a: { provider: string }) => a.provider)).toEqual(["openai", "workers-ai"]);
+    expect(r.body.attempts.map((a: { provider: string }) => a.provider)).toEqual(["workers-ai", "openai"]);
   });
 });
 

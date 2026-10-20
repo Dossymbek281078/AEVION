@@ -93,7 +93,12 @@ export default function MvpConceptBoard({
     () => Object.fromEntries(fields.map((f) => [f.key, ""])),
   );
 
+  // Зависимость — СОДЕРЖИМОЕ списка, а не массив: страницы передают hideAuthors={["ci"]},
+  // то есть новый массив на каждом рендере, и refresh пересоздавался — эффект ниже заново
+  // звал обе ручки (замер прода 20.10, /startup-exchange: concept/messages и concept-stats ×5).
+  const скрытыеКлюч = (hideAuthors ?? []).join("\n");
   const refresh = useCallback(async () => {
+    const скрытые = скрытыеКлюч ? скрытыеКлюч.split("\n") : [];
     setLoading(true);
     try {
       const [listRes, statsRes] = await Promise.all([
@@ -106,10 +111,10 @@ export default function MvpConceptBoard({
         // Фильтр применяется ПОСЛЕ выдачи сервера, поэтому список может стать
         // короче запрошенного предела — это лучше, чем показать пробу робота.
         setItems(
-          hideAuthors && hideAuthors.length
+          скрытые.length
             ? сырые.filter((it) => {
                 const автор = it?.payload?.author;
-                return typeof автор !== "string" || !hideAuthors.includes(автор);
+                return typeof автор !== "string" || !скрытые.includes(автор);
               })
             : сырые,
         );
@@ -127,7 +132,7 @@ export default function MvpConceptBoard({
     } finally {
       setLoading(false);
     }
-  }, [moduleId, noun, hideAuthors]);
+  }, [moduleId, noun, скрытыеКлюч]);
 
   useEffect(() => {
     void refresh();

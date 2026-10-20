@@ -67,9 +67,12 @@ export function VenturesInterestProvider({ children }: { children: ReactNode }) 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ kind: "build", voterId: anonVoterId() }),
       });
-      const d = (await r.json()) as { interest?: number };
+      const d = (await r.json()) as { interest?: number; storage?: string };
       if (r.ok && typeof d.interest === "number") {
         setInterest((m) => ({ ...m, [id]: d.interest as number }));
+        // 20.10.2026: storage "memory" — база не приняла, голос живёт до перезапуска сервера.
+        // Не запоминаем его как окончательный: кнопка остаётся, человек может отдать голос снова.
+        if (d.storage === "memory") return;
         setVoted((v) => {
           const next = { ...v, [id]: true };
           try { localStorage.setItem("aevion_ventures_voted", JSON.stringify(next)); } catch { /* ignore */ }

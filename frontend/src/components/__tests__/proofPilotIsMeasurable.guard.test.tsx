@@ -40,7 +40,7 @@ beforeEach(() => {
 describe("нажатие на пилот видно воронке", () => {
   test("🔴 одно нажатие — два события, оба известных имени", () => {
     render(<ProofPilotBlock />);
-    const кнопка = screen.getByText(`Order the pilot — $${PILOT_USD}`);
+    const кнопка = screen.getByText(`Email the order — $${PILOT_USD}`);
     кнопка.click();
 
     expect(отправленные.length, "нажатие обязано отправить ровно два события").toBe(2);
@@ -52,7 +52,7 @@ describe("нажатие на пилот видно воронке", () => {
 
   test("🔴 шаг назван, иначе в разрезе byFeature его не отличить от других", () => {
     render(<ProofPilotBlock />);
-    screen.getByText(`Order the pilot — $${PILOT_USD}`).click();
+    screen.getByText(`Email the order — $${PILOT_USD}`).click();
 
     const шаг = отправленные.find((e) => e.type === "feature_use");
     expect((шаг?.meta as Record<string, unknown>)?.feature).toBe(PILOT_FEATURE);
@@ -87,7 +87,7 @@ describe("нажатие на пилот видно воронке", () => {
     render(<ProofPilotBlock />);
     // Заголовок и кнопка называют ОДНО число, и это число — из модуля.
     expect(screen.getByText(`Paid pilot — $${PILOT_USD}`)).toBeTruthy();
-    expect(screen.getByText(`Order the pilot — $${PILOT_USD}`)).toBeTruthy();
+    expect(screen.getByText(`Email the order — $${PILOT_USD}`)).toBeTruthy();
     // Контроль: другого числа на блоке нет — иначе цена разошлась бы с письмами.
     const текст = document.body.textContent ?? "";
     const цены = [...текст.matchAll(/\$(\d[\d,]*)/g)].map((m) => m[1].replace(/,/g, ""));

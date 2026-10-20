@@ -111,7 +111,7 @@ export function ProofPilotBlock() {
           textDecoration: "none",
         }}
       >
-        Order the pilot — ${PILOT_USD}
+        Email the order — ${PILOT_USD}
       </a>
       {/*
         Слабое место `mailto` названо прямо: у части людей почтовый клиент не

@@ -31,6 +31,8 @@ describe("152: голос «интересно» принимается без �
     console.log("тело 1:", JSON.stringify(r1.body));
     expect(r1.status).toBe(201);
     expect(r1.body).toMatchObject({ ok: true, ideaId: "01", alreadyVoted: false, interest: 1 });
+    // 20.10.2026: без базы голос в памяти процесса — ответ обязан это сказать (форма не запомнит его как окончательный).
+    expect(r1.body.storage).toBe("memory");
 
     const r2 = await request(app).post("/api/ventures/ideas/01/interest").send({ voterId, kind: "build" });
     console.log("тело 2:", JSON.stringify(r2.body));

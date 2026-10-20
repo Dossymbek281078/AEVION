@@ -264,6 +264,7 @@ venturesRouter.post("/ideas/:id/interest", interestLimiter, async (req: Request,
         ideaId: id,
         alreadyVoted: !created,
         interest: (count.rows[0] as { c: number }).c,
+        storage: "postgres",
       });
     } catch (err) {
       captureVenturesError(err, { route: "ventures/POST/interest" });
@@ -274,7 +275,9 @@ venturesRouter.post("/ideas/:id/interest", interestLimiter, async (req: Request,
   const already = set.has(hash);
   set.add(hash);
   memInterest.set(id, set);
-  res.status(already ? 200 : 201).json({ ok: true, ideaId: id, alreadyVoted: already, interest: set.size });
+  // 20.10.2026: признак хранения наружу — голос в памяти процесса пропадёт при перезапуске,
+  // форма обязана это знать (сторож formsReadStorageFlag), а не показывать «учтено навсегда».
+  res.status(already ? 200 : 201).json({ ok: true, ideaId: id, alreadyVoted: already, interest: set.size, storage: "memory" });
 });
 
 venturesRouter.post("/submit", submitLimiter, async (req: Request, res: Response) => {

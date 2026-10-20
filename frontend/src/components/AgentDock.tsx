@@ -15,6 +15,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { apiUrl } from "@/lib/apiBase";
+import { useI18nOptional } from "@/lib/i18n";
 import {
   buildRunRequest,
   canSend,
@@ -63,7 +64,64 @@ function ToolChips({ title, names, tone }: { title: string; names: string[]; ton
   );
 }
 
+
+/**
+ * Подписи помощника на языке посетителя. 20.10.2026 (замер /devhub, 3 локали):
+ * виджет стоит на КАЖДОЙ странице и смешивал языки при любом выборе — кнопка
+ * «AI Agent», «Send», подсказки и поле по-английски, aria-label по-русски.
+ */
+const DOCK = {
+  ru: {
+    open: "Открыть ИИ-помощника AEVION",
+    label: "ИИ-помощник",
+    panel: "ИИ-помощник AEVION",
+    title: "Помощник AEVION",
+    toolsShow: "Показать доступные инструменты",
+    tools: "Доступные инструменты",
+    collapse: "Свернуть помощника",
+    hintProject: "Попросите что угодно — я выберу нужный инструмент. Например: «добавь в проект страницу входа», «сделай 10-секундный лоу-фай трек» или «создай ссылку на оплату консультации $25».",
+    hint: "Попросите что угодно — я выберу нужный инструмент. Например: «сделай 10-секундный лоу-фай трек», «переведи это на казахский» или «создай ссылку на оплату консультации $25».",
+    working: "Работаю…",
+    placeholder: "Попросите помощника что-нибудь сделать…",
+    input: "Сообщение ИИ-помощнику",
+    send: "Отправить",
+  },
+  en: {
+    open: "Open the AEVION AI assistant",
+    label: "AI Agent",
+    panel: "AEVION AI assistant",
+    title: "AEVION Agent",
+    toolsShow: "Show available tools",
+    tools: "Available tools",
+    collapse: "Collapse the assistant",
+    hintProject: "Ask for anything and I'll use the right tool — e.g. “add a login page to this project”, “make a 10-second lofi music clip”, or “create a $25 payment link for a consult”.",
+    hint: "Ask for anything and I'll use the right tool — e.g. “make a 10-second lofi music clip”, “translate this to Kazakh”, or “create a $25 payment link for a consult”.",
+    working: "Working…",
+    placeholder: "Ask the agent to do something…",
+    input: "Message to the AI assistant",
+    send: "Send",
+  },
+  kk: {
+    open: "AEVION ЖИ-көмекшісін ашу",
+    label: "ЖИ-көмекші",
+    panel: "AEVION ЖИ-көмекшісі",
+    title: "AEVION көмекшісі",
+    toolsShow: "Қолжетімді құралдарды көрсету",
+    tools: "Қолжетімді құралдар",
+    collapse: "Көмекшіні жию",
+    hintProject: "Кез келген нәрсені сұраңыз — қажетті құралды өзім таңдаймын. Мысалы: «жобаға кіру бетін қос», «10 секундтық лоу-фай трек жаса» немесе «$25 кеңеске төлем сілтемесін жаса».",
+    hint: "Кез келген нәрсені сұраңыз — қажетті құралды өзім таңдаймын. Мысалы: «10 секундтық лоу-фай трек жаса», «мұны қазақшаға аудар» немесе «$25 кеңеске төлем сілтемесін жаса».",
+    working: "Орындалуда…",
+    placeholder: "Көмекшіден бірдеңе жасауды сұраңыз…",
+    input: "ЖИ-көмекшіге хабарлама",
+    send: "Жіберу",
+  },
+} as const;
+type DockLang = keyof typeof DOCK;
+
 export function AgentDock() {
+  const dockLang = useI18nOptional()?.lang;
+  const D = DOCK[(dockLang && dockLang in DOCK ? dockLang : "en") as DockLang];
   const pathname = usePathname();
   const projectId = extractDevHubProjectId(pathname || "");
   const [open, setOpen] = useState(false);
@@ -227,7 +285,7 @@ export function AgentDock() {
         onClick={() => setOpen(true)}
         ref={launcherRef}
         className="aev-agent-launcher"
-        aria-label="Открыть ИИ-помощника AEVION"
+        aria-label={D.open}
         style={{
           position: "fixed",
           // Отступаем на высоту баннера установки, если он показан: они стоят в
@@ -253,7 +311,7 @@ export function AgentDock() {
         }}
       >
         <span style={{ fontSize: 16 }}>✦</span>
-        <span className="aev-agent-label">AI Agent</span>
+        <span className="aev-agent-label">{D.label}</span>
       </button>
       </>
     );
@@ -263,7 +321,7 @@ export function AgentDock() {
   return (
     <div
       role="dialog"
-      aria-label="ИИ-помощник AEVION"
+      aria-label={D.panel}
       style={{
         position: "fixed",
         bottom: 16,
@@ -293,7 +351,7 @@ export function AgentDock() {
       >
         <span style={{ fontSize: 16 }}>✦</span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 900, color: "#fff" }}>AEVION Agent</div>
+          <div style={{ fontSize: 13, fontWeight: 900, color: "#fff" }}>{D.title}</div>
           <div style={{ fontSize: 10, color: "#8aa0c6" }}>
             {projectId ? "code · image · voice · music · pay · email · SMS · translate" : "image · voice · music · pay · email · SMS · translate"}
           </div>
@@ -301,8 +359,8 @@ export function AgentDock() {
         {health && (
           <button
             onClick={() => setShowTools((v) => !v)}
-            aria-label="Показать доступные инструменты"
-            title="Доступные инструменты"
+            aria-label={D.toolsShow}
+            title={D.tools}
             style={{
               padding: "4px 9px",
               borderRadius: 999,
@@ -320,7 +378,7 @@ export function AgentDock() {
         )}
         <button
           onClick={() => setOpen(false)}
-          aria-label="Свернуть помощника"
+          aria-label={D.collapse}
           style={{
             padding: "4px 8px",
             borderRadius: 6,
@@ -358,8 +416,8 @@ export function AgentDock() {
         {log.length === 0 && (
           <div style={{ color: "#7c90b5", fontSize: 12, lineHeight: 1.5 }}>
             {projectId
-              ? <>Ask for anything and I&apos;ll use the right tool — e.g. “add a login page to this project”, “make a 10-second lofi music clip”, or “create a $25 payment link for a consult”.</>
-              : <>Ask for anything and I&apos;ll use the right tool — e.g. “make a 10-second lofi music clip”, “translate this to Kazakh”, or “create a $25 payment link for a consult”.</>}
+              ? D.hintProject
+              : D.hint}
           </div>
         )}
         {log.map((m, i) => (
@@ -407,7 +465,7 @@ export function AgentDock() {
             )}
           </div>
         ))}
-        {busy && <div style={{ color: "#8aa0c6", fontSize: 12 }}>Working…</div>}
+        {busy && <div style={{ color: "#8aa0c6", fontSize: 12 }}>{D.working}</div>}
       </div>
 
       {/* input */}
@@ -418,8 +476,8 @@ export function AgentDock() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKeyDown}
             rows={2}
-            placeholder="Ask the agent to do something…"
-            aria-label="Сообщение ИИ-помощнику"
+            placeholder={D.placeholder}
+            aria-label={D.input}
             style={{
               flex: 1,
               resize: "none",
@@ -436,7 +494,7 @@ export function AgentDock() {
           <button
             onClick={() => void send()}
             disabled={busy || !canSend(input)}
-            aria-label="Send"
+            aria-label={D.send}
             style={{
               padding: "9px 14px",
               borderRadius: 8,
@@ -449,7 +507,7 @@ export function AgentDock() {
               whiteSpace: "nowrap",
             }}
           >
-            Send
+            {D.send}
           </button>
         </div>
       </div>

@@ -66,7 +66,9 @@ describe("Консилиум: прямое отрицание", () => {
     expect(screen.getByText("«стоит»")).toBeTruthy();
     // Обе стороны названы поимённо: «где-то есть противоречие» без имён
     // заставляет перечитывать все ответы заново.
-    expect(screen.getByText(/analyst утверждает, skeptic отрицает/)).toBeTruthy();
+    // 20.10.2026: роли, а не внутренние id — «analyst» в русском экране читался утечкой кода.
+    expect(screen.getByText(/Аналитик утверждает, Скептик отрицает/)).toBeTruthy();
+    expect(screen.queryByText(/analyst утверждает/)).toBeNull();
   });
 });
 

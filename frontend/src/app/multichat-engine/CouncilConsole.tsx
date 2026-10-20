@@ -20,7 +20,7 @@
 // модуле нет: контраст проверяется тестом, а литерал проверка не видит).
 // Страница переведена на светлый газетный эталон AEVION 2026-07-27.
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useI18nOptional } from "@/lib/i18n";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
@@ -72,6 +72,36 @@ const PANEL = [
   { id: "skeptic", role: "Скептик — ищет, где рассуждение ломается" },
   { id: "practic", role: "Практик — что делать завтра при ограниченных ресурсах" },
 ];
+
+/** Имя агента для человека: роль из PANEL, а не внутренний id. 20.10.2026 (путь гостя
+ *  на проде): в блоке разногласий печаталось «analyst: 2 · skeptic: 8» посреди русского
+ *  экрана — карточки ответов уже звали agentTitle, а разногласия — нет. */
+export function имяАгента(id: string): string {
+  return agentTitle(PANEL.find((a) => a.id === id)?.role, id);
+}
+
+/**
+ * Простая разметка ответа агента — React-узлами, без HTML из ответа модели.
+ * 20.10.2026: модели отвечают Markdown, а ответ выводился простым текстом —
+ * человек видел «**Доводы ЗА:**» и «### …» звёздочками и решётками.
+ * Поддержано то, что модели реально шлют: **жирный**, строки-заголовки #/##/###.
+ * Списки «1.»/«-» остаются как есть — pre-wrap их и так показывает читаемо.
+ */
+export function разметкаОтвета(text: string): ReactNode[] {
+  return text.split("\n").map((строка, i, все) => {
+    const заголовок = /^\s{0,3}#{1,4}\s+(.*)$/.exec(строка);
+    const тело = заголовок ? заголовок[1] : строка;
+    const части = тело.split(/(\*\*[^*\n]+\*\*)/g).map((ч, j) =>
+      /^\*\*[^*\n]+\*\*$/.test(ч) ? <strong key={j}>{ч.slice(2, -2)}</strong> : ч,
+    );
+    return (
+      <span key={i}>
+        {заголовок ? <strong>{части}</strong> : части}
+        {i < все.length - 1 ? "\n" : null}
+      </span>
+    );
+  });
+}
 
 // Пример для гостя. Ответы РЕАЛЬНЫЕ по форме: три роли расходятся так, как
 // расходятся живые модели — совпадают по словам, но противоречат по числам и
@@ -462,7 +492,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
                   <li key={i} style={{ borderBottom: `1px dotted ${T.lineSoft}`, padding: "5px 0", color: T.text }}>
                     <span style={{ color: T.bad, fontWeight: 600 }}>«{c.word}»</span>
                     <span style={{ color: T.textDim }}>
-                      {" "}— {c.affirms.join(", ")} утверждает, {c.denies.join(", ")} отрицает
+                      {" "}— {c.affirms.map(имяАгента).join(", ")} утверждает, {c.denies.map(имяАгента).join(", ")} отрицает
                     </span>
                   </li>
                 ))}
@@ -479,7 +509,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
                 {dissent.numericConflicts.slice(0, 5).map((c, i) => (
                   <li key={i} style={{ borderBottom: `1px dotted ${T.lineSoft}`, padding: "5px 0" }}>
                     <span style={{ color: T.text }}>
-                      {c.values.map((v) => `${v.agentId}: ${v.raw}`).join("  ·  ")}
+                      {c.values.map((v) => `${имяАгента(v.agentId)}: ${v.raw}`).join("  ·  ")}
                     </span>
                     <span style={{ marginLeft: 8, fontSize: 12, color: T.textFaded }}>«{c.context}»</span>
                   </li>
@@ -491,7 +521,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
           {dissent.outlier && (
             <p style={{ fontSize: 14, color: T.textDim, margin: "14px 0 0" }}>
               <span style={{ color: T.textFaded }}>Особняком: </span>
-              <span style={{ color: T.warn }}>{dissent.outlier.agentId}</span>
+              <span style={{ color: T.warn }}>{имяАгента(dissent.outlier.agentId)}</span>
               <span style={{ fontSize: 12, color: T.textFaded }}>
                 {" "}— его ответ дальше всех от остальных. Это не «неправ», это «прочитать первым».
               </span>
@@ -501,7 +531,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
           {dissent.hedges.length > 0 && (
             <p style={{ fontSize: 14, color: T.textDim, margin: "8px 0 0" }}>
               <span style={{ color: T.textFaded }}>Осторожность и отказы: </span>
-              {dissent.hedges.map((h) => `${h.agentId} (${h.kind === "failed" ? "не ответил" : h.note})`).join(", ")}
+              {dissent.hedges.map((h) => `${имяАгента(h.agentId)} (${h.kind === "failed" ? "не ответил" : h.note})`).join(", ")}
             </p>
           )}
 
@@ -590,7 +620,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
               </div>
               <p style={{ marginTop: 10, whiteSpace: "pre-wrap", fontSize: 14, lineHeight: 1.65, color: T.textDim }}>
                 {r.ok ? (
-                  r.reply
+                  разметкаОтвета(r.reply ?? "")
                 ) : (
                   // Причина по-русски, исходная строка сервера мелким рядом:
                   // прятать её нельзя, иначе отчёт человека об ошибке бесполезен.

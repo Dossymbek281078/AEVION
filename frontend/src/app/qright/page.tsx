@@ -1191,12 +1191,12 @@ export default function QRightPage() {
               <div style={{ padding: "20px 24px", background: "#fff" }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
                   <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 2 }}>AUTHOR</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 2 }}>{tq(lang, "AUTHOR")}</div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>{result.certificate.author}</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 2 }}>TYPE</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>{KIND_OPTIONS.find((k) => k.value === result.certificate.kind)?.label || result.certificate.kind}</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 2 }}>{tq(lang, "TYPE")}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>{tq(lang, KIND_OPTIONS.find((k) => k.value === result.certificate.kind)?.label || result.certificate.kind)}</div>
                   </div>
                   <div>
                     <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 2 }}>{tq(lang, "PROTECTED AT")}</div>
@@ -1204,17 +1204,17 @@ export default function QRightPage() {
                   </div>
                   <div>
                     <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 2 }}>{tq(lang, "LOCATION")}</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>{result.certificate.location || "Not specified"}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>{result.certificate.location || tq(lang, "Not specified")}</div>
                   </div>
                 </div>
 
                 <div style={{ display: "grid", gap: 8 }}>
                   {[
-                    { label: "Content Hash (SHA-256)", value: result.certificate.contentHash },
-                    { label: "HMAC Signature", value: result.certificate.signatureHmac },
-                    { label: "Ed25519 Signature", value: result.certificate.signatureEd25519 },
-                    { label: "Quantum Shield ID", value: result.certificate.shieldId },
-                    { label: "Certificate ID", value: result.certificate.id },
+                    { label: tq(lang, "Content Hash (SHA-256)"), value: result.certificate.contentHash },
+                    { label: tq(lang, "HMAC Signature"), value: result.certificate.signatureHmac },
+                    { label: tq(lang, "Ed25519 Signature"), value: result.certificate.signatureEd25519 },
+                    { label: tq(lang, "Quantum Shield ID"), value: result.certificate.shieldId },
+                    { label: tq(lang, "Certificate ID"), value: result.certificate.id },
                   ].map((item) => (
                     <div key={item.label} style={{ padding: "10px 12px", borderRadius: 10, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                       <div style={{ minWidth: 0 }}>
@@ -1227,14 +1227,14 @@ export default function QRightPage() {
                 </div>
 
                 <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 10, background: "rgba(13,148,136,0.05)", border: "1px solid rgba(13,148,136,0.15)", fontSize: 12, color: "#0f766e", display: "flex", alignItems: "center", flexWrap: "wrap", gap: 4 }}>
-                  <b>{result.cosign?.present ? "4-layer protection active:" : "3-layer protection active:"}</b>
-                  <span>SHA-256 hash + HMAC-SHA256 signature + Ed25519 with Shamir&apos;s Secret Sharing ({result.shield.shards} shards, threshold {result.shield.threshold}){result.cosign?.present ? " + author co-signature" : ""}</span>
+                  <b>{result.cosign?.present ? tq(lang, "4-layer protection active:") : tq(lang, "3-layer protection active:")}</b>
+                  <span>{tq(lang, "SHA-256 hash + HMAC-SHA256 signature + Ed25519 with Shamir's Secret Sharing")} ({result.shield.shards} {tq(lang, "shards, threshold")} {result.shield.threshold}){result.cosign?.present ? tq(lang, " + author co-signature") : ""}</span>
                   <InfoTip
                     label="Why these layers?"
                     text={
                       result.cosign?.present
-                        ? "Each layer detects a different attack. The author co-signature is the strongest: even if AEVION is breached and all platform keys leak, attackers still cannot forge new certificates in your name without your browser-held private key."
-                        : "Each layer detects a different attack: hash catches content tampering, HMAC catches certificate-field tampering, Shamir-Ed25519 makes forgery impossible without 2 of 3 distributed shards."
+                        ? tq(lang, "Each layer detects a different attack. The author co-signature is the strongest: even if AEVION is breached and all platform keys leak, attackers still cannot forge new certificates in your name without your browser-held private key.")
+                        : tq(lang, "Each layer detects a different attack: hash catches content tampering, HMAC catches certificate-field tampering, Shamir-Ed25519 makes forgery impossible without 2 of 3 distributed shards.")
                     }
                   />
                 </div>
@@ -1270,13 +1270,14 @@ export default function QRightPage() {
                 </div>
                 <div style={{ padding: "20px 24px" }}>
                   <div style={{ fontSize: 13, color: "#92400e", marginBottom: 14, lineHeight: 1.6 }}>
-                    {result.authorShard.warning}
+                    {/* текст приходит с бэка по-английски; словарь переводит по точной строке (сторож authorShardTextsHaveRussian) */}
+                    {tq(lang, result.authorShard.warning)}
                   </div>
                   <div style={{ display: "grid", gap: 6, marginBottom: 14 }}>
                     <div style={{ fontSize: 11, fontWeight: 800, color: "#78350f" }}>{tq(lang, "Any 2 of 3 reconstructs your proof:")}</div>
                     {result.authorShard.recoveryPaths.map((p, i) => (
                       <div key={i} style={{ fontSize: 12, color: "#78350f", paddingLeft: 16 }}>
-                        • {p}
+                        • {tq(lang, p)}
                       </div>
                     ))}
                   </div>

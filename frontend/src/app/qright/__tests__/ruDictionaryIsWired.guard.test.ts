@@ -13,6 +13,8 @@ import { QRIGHT_DICT, tq, qrightDictCoverage } from "../qrightI18n";
 const страница = readFileSync(join(process.cwd(), "src/app/qright/page.tsx"), "utf8");
 const RU = QRIGHT_DICT.ru ?? {};
 /** Типы работ приходят из данных KIND_OPTIONS — проводка одна на все семь. */
+/** Строки авторской доли, которые присылает бэк (warning + три пути восстановления). */
+const ИЗ_БЭКА = /^(Save this shard offline|Your Author Shard \+|AEVION vault \+ public Witness Shard)/;
 const ЧЕРЕЗ_ДАННЫЕ = new Set(["Music / Audio", "Code / Software", "Design / Visual", "Text / Article", "Video / Film", "Idea / Concept", "Other"]);
 
 describe("/qright: русский словарь проведён в разметку", () => {
@@ -23,6 +25,9 @@ describe("/qright: русский словарь проведён в разме�
   test("каждый ключ словаря обёрнут в tq(lang, …) в page.tsx", () => {
     const непроведённые = Object.keys(RU).filter((k) => {
       if (ЧЕРЕЗ_ДАННЫЕ.has(k)) return !страница.includes("tq(lang, opt.label)");
+      // 20.10: тексты авторской доли приходят с бэка (routes/pipeline.ts) — проводка одна на все четыре,
+      // соответствие строк бэка словарю держит authorShardTextsHaveRussian.guard
+      if (ИЗ_БЭКА.test(k)) return !страница.includes("tq(lang, result.authorShard.warning)") || !страница.includes("• {tq(lang, p)}");
       return !страница.includes(`tq(lang, "${k}")`) && !страница.includes(`tq(lang, '${k}')`);
     });
     expect(непроведённые, `не проведены ${непроведённые.length} из ${Object.keys(RU).length}`).toEqual([]);

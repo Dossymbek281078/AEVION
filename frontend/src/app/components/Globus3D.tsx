@@ -541,6 +541,16 @@ function readViewFromUrl(): SavedView | null {
 /** Контейнер глобуса уже этого — компактный режим панелей, даже на широком окне.
  *  Ноль ширины (контейнер ещё не размечен или скрыт) — не «узко». */
 export const УЗКИЙ_КОНТЕЙНЕР_PX = 640;
+/**
+ * Метка узла рисуется по центру над точкой (translate(-50%, calc(-100% - 10px))).
+ * Видна, только если весь её прямоугольник внутри холста: иначе в узком режиме
+ * (глобус увеличен) «QRIGHT/QSIGN/AIPB» висели над карточкой поверх текста страницы
+ * (замер прода 20.10.2026: 3 окна из 5).
+ */
+export function меткаВнутриХолста(sx: number, sy: number, lw: number, lh: number, cw: number, ch: number): boolean {
+  return sx - lw / 2 >= 0 && sy - lh - 12 >= 0 && sx + lw / 2 <= cw && sy <= ch;
+}
+
 export function узкийКонтейнер(ширина: number): boolean {
   return ширина > 0 && ширина < УЗКИЙ_КОНТЕЙНЕР_PX;
 }
@@ -2661,6 +2671,14 @@ export default function Globus3D({
           tmp.project(camera);
           const sx = (tmp.x * 0.5 + 0.5) * cw;
           const sy = (-tmp.y * 0.5 + 0.5) * ch;
+          // 20.10.2026: в узком режиме глобус увеличен, и метка за краем холста
+          // висела поверх текста страницы («QRIGHT/QSIGN/AIPB» над карточкой).
+          // Метка рисуется над точкой и по центру — проверяем её прямоугольник, а не точку
+          // (замер 768×1024: точка внутри, подпись «AIPB» на 16 px выше холста).
+          if (!меткаВнутриХолста(sx, sy, el.offsetWidth || 60, el.offsetHeight || 22, cw, ch)) {
+            if (el.style.display !== "none") el.style.display = "none";
+            continue;
+          }
           el.style.display = "block";
           el.style.left = `${sx}px`;
           el.style.top = `${sy}px`;
@@ -4013,6 +4031,12 @@ export default function Globus3D({
             bottom: 14,
             display: "flex",
             flexDirection: "column",
+            // 20.10.2026 (кадр прода 390×844 и 1463×724): 11 кнопок ≈ 500 px выше
+            // карточки 400/520 px — столбец вылезал за её верх на текст страницы.
+            // Не выше карточки: лишние кнопки уходят во вторую колонку влево.
+            maxHeight: globeHeight - 28,
+            flexWrap: "wrap-reverse",
+            alignContent: "flex-end",
             gap: 6,
             zIndex: 5,
           }}

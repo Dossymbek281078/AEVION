@@ -831,6 +831,39 @@ export async function sendWeeklyDigestEmail(
  * `replyTo` ставим на контакт заявителя, когда он похож на почту: ответить можно
  * прямо из ящика, не копируя адрес руками.
  */
+/**
+ * Новая идея в маркет /ventures — письмо команде.
+ *
+ * 🔴 Замер 20.10.2026: форма обещала «попадёт на маркет после проверки», а ни
+ * письма, ни ручки одобрения не было — идея ложилась в таблицу, которую никто не
+ * читает. Адрес тот же, что у заявок агентства (AGENCY_LEAD_EMAIL), отдельно —
+ * VENTURES_IDEA_EMAIL.
+ */
+export async function sendVenturesIdeaNotice(idea: {
+  id: string; name: string; pitch: string; model: string; ceiling: string; contact: string;
+}): Promise<boolean> {
+  const to = process.env.VENTURES_IDEA_EMAIL || process.env.AGENCY_LEAD_EMAIL || "yahiin1978@gmail.com";
+  const эк = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const строки = [
+    `Идея: ${idea.name}`,
+    idea.model ? `Модель: ${idea.model}` : "",
+    idea.ceiling ? `Потолок: ${idea.ceiling}` : "",
+    `Почта автора: ${idea.contact || "не оставил"}`,
+    "",
+    idea.pitch,
+    "",
+    `Одобрить: POST /api/ventures/submissions/${idea.id}/review {"status":"approved"} (админ)`,
+  ].filter((s, i, a) => s !== "" || (i > 0 && a[i - 1] !== ""));
+  return отправитьСЗапасом("идея-ventures", {
+    to: [{ email: to }],
+    subject: `Идея в маркет ventures: ${idea.name}`,
+    htmlContent: `<div style="font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;color:#0f172a">` + строки.map((s) => `<p style="margin:0 0 8px">${эк(s)}</p>`).join("") + `</div>`,
+    textContent: строки.join("\n"),
+    replyTo: idea.contact ? { email: idea.contact } : undefined,
+    tags: ["ventures-idea"],
+  });
+}
+
 export async function sendAgencyLeadNotice(lead: {
   contact: string;
   message: string;

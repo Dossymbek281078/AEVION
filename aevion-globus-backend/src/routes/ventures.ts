@@ -22,6 +22,8 @@ import { getPool } from "../lib/dbPool";
 import { rateLimit } from "../lib/rateLimit";
 import { mountConceptBoard } from "../lib/conceptBoardStore";
 import { makeServiceCapture } from "../lib/sentry/platform";
+import { sendVenturesIdeaNotice } from "../lib/constitutionBrevo";
+import { isAdminRequest } from "../lib/adminAuth";
 
 const captureVenturesError = makeServiceCapture("ventures");
 
@@ -103,6 +105,7 @@ async function ensureTables(): Promise<void> {
         created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
       CREATE INDEX IF NOT EXISTS idx_ventures_sub_status ON ventures_submissions (status, created_at DESC);
+      ALTER TABLE ventures_submissions ADD COLUMN IF NOT EXISTS contact TEXT NOT NULL DEFAULT '';
     `);
     tablesReady = true;
     dbAvailable = true;
@@ -286,8 +289,13 @@ venturesRouter.post("/submit", submitLimiter, async (req: Request, res: Response
   const pitch = str(body.pitch, 600);
   const model = str(body.model, 60);
   const ceiling = str(body.ceiling, 30);
+  // Почта автора — по желанию: чтобы сказать ему, что идея вышла (20.10.2026).
+  const contact = str(body.email, 120).toLowerCase();
   if (name.length < 3 || pitch.length < 10) {
     return res.status(400).json({ error: "name (>=3) and pitch (>=10) required" });
+  }
+  if (contact && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(contact)) {
+    return res.status(400).json({ error: "invalid_email", message: "Проверьте адрес почты — или оставьте поле пустым." });
   }
   const id = randomUUID();
   const createdAt = new Date().toISOString();
@@ -297,18 +305,61 @@ venturesRouter.post("/submit", submitLimiter, async (req: Request, res: Response
     try {
       const pool = getPool();
       await pool.query(
-        `INSERT INTO ventures_submissions (id, name, pitch, model, ceiling, status)
-         VALUES ($1, $2, $3, $4, $5, 'pending')`,
-        [id, name, pitch, model, ceiling],
+        `INSERT INTO ventures_submissions (id, name, pitch, model, ceiling, status, contact)
+         VALUES ($1, $2, $3, $4, $5, 'pending', $6)`,
+        [id, name, pitch, model, ceiling, contact],
       );
-      return res.status(201).json({ ok: true, id, status: "pending", note: "Идея принята — попадёт на маркет после проверки.", storage: "db" });
+      const notified = await известитьКоманду({ id, name, pitch, model, ceiling, contact });
+      return res.status(201).json({ ok: true, id, status: "pending", note: "Идея принята — попадёт на маркет после проверки.", storage: "db", notified });
     } catch (err) {
       captureVenturesError(err, { route: "ventures/POST/submit" });
       // fall through to memory
     }
   }
   memSubmissions.push({ id, name, pitch, model, ceiling, status: "pending", createdAt });
-  res.status(201).json({ ok: true, id, status: "pending", note: "Идея принята — попадёт на маркет после проверки.", storage: "memory" });
+  const notified = await известитьКоманду({ id, name, pitch, model, ceiling, contact });
+  res.status(201).json({ ok: true, id, status: "pending", note: "Идея принята — попадёт на маркет после проверки.", storage: "memory", notified });
+});
+
+/** Письмо команде о новой идее; отказ не молчит — в журнал и в ответ (notified:false). */
+async function известитьКоманду(idea: { id: string; name: string; pitch: string; model: string; ceiling: string; contact: string }): Promise<boolean> {
+  try {
+    const ok = await sendVenturesIdeaNotice(idea);
+    if (!ok) console.error(`[ventures] письмо команде об идее ${idea.id} не ушло`);
+    return ok;
+  } catch (err) {
+    console.error(`[ventures] письмо команде об идее ${idea.id} упало`, err);
+    captureVenturesError(err, { route: "ventures/POST/submit:notify" });
+    return false;
+  }
+}
+
+/**
+ * POST /submissions/:id/review — админ одобряет или отклоняет идею (20.10.2026:
+ * до этого одобрить было нечем, и «после проверки» не наступало никогда).
+ */
+venturesRouter.post("/submissions/:id/review", async (req: Request, res: Response) => {
+  if (!isAdminRequest(req)) return res.status(403).json({ error: "admin_required" });
+  const status = String((req.body || {}).status || "");
+  if (status !== "approved" && status !== "rejected") {
+    return res.status(400).json({ error: "status_must_be_approved_or_rejected" });
+  }
+  const id = String(req.params.id || "");
+  await ensureTables();
+  if (dbAvailable) {
+    try {
+      const r = await getPool().query(`UPDATE ventures_submissions SET status = $1 WHERE id = $2 RETURNING id, status`, [status, id]);
+      if (!r.rowCount) return res.status(404).json({ error: "submission_not_found" });
+      return res.json({ ok: true, id, status });
+    } catch (err) {
+      captureVenturesError(err, { route: "ventures/POST/review" });
+      return res.status(500).json({ error: "review_failed" });
+    }
+  }
+  const s = memSubmissions.find((x) => x.id === id);
+  if (!s) return res.status(404).json({ error: "submission_not_found" });
+  s.status = status;
+  return res.json({ ok: true, id, status });
 });
 
 venturesRouter.get("/submissions", async (_req, res) => {

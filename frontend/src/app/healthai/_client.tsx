@@ -58,7 +58,7 @@ const STR: Record<string, Record<Lang, string>> = {
   card_check_title: { en: "Symptom check", ru: "Симптом-чек" },
   card_check_subtitle: {
     en: "Describe what bothers you — get advice. Severe symptoms → see a doctor immediately.",
-    ru: "Опишите что беспокоит — получите advice. Серьёзные симптомы → немедленно к врачу.",
+    ru: "Опишите, что беспокоит, — получите совет. Серьёзные симптомы → немедленно к врачу.",
   },
   card_log_title: { en: "Daily wellness log", ru: "Дневник самочувствия" },
   card_log_subtitle_n: { en: "Logged: {n} {d}", ru: "Записано: {n} {d}" },
@@ -110,7 +110,7 @@ const STR: Record<string, Record<Lang, string>> = {
   },
   family_no_auth: {
     en: "Sign in via /auth to attach profiles to your AEVION account.",
-    ru: "Войдите через /auth, чтобы привязать профили к AEVION-аккаунту.",
+    ru: "Войдите в AEVION, чтобы привязать профили к своему аккаунту.",
   },
   family_no_profiles: {
     en: "No additional profiles yet.",
@@ -302,7 +302,7 @@ const STR: Record<string, Record<Lang, string>> = {
   plan_title: { en: "Personalized weekly plan", ru: "Персональный план на неделю" },
   plan_subtitle: {
     en: "Auto-generated from your profile, recent logs and screener results. Rule-based — safe defaults.",
-    ru: "Сгенерирован из профиля, логов и результатов screener-ов. Rule-based — безопасные defaults.",
+    ru: "Составлен по профилю, дневнику и результатам скринингов. По правилам, без ИИ — только безопасные общие рекомендации.",
   },
   plan_section_goals: { en: "Goals", ru: "Цели" },
   plan_section_routine: { en: "Daily routine", ru: "Дневной режим" },
@@ -347,7 +347,7 @@ const STR: Record<string, Record<Lang, string>> = {
   ph_conditions: { en: "e.g. diabetes, hypertension", ru: "напр. диабет, гипертония" },
   ph_allergies: { en: "e.g. pollen, nuts", ru: "напр. пыльца, орехи" },
   ph_medications: { en: "regular medications", ru: "что принимаете регулярно" },
-  ph_symptoms: { en: "e.g. headache, fatigue, nausea", ru: "напр. headache, fatigue, тошнота" },
+  ph_symptoms: { en: "e.g. headache, fatigue, nausea", ru: "напр. головная боль, усталость, тошнота" },
   ph_check_notes: {
     en: "what makes it better / worse",
     ru: "что облегчает / ухудшает",
@@ -385,7 +385,7 @@ const STR: Record<string, Record<Lang, string>> = {
     en: "✓ No active risk flags. Keep up the wellness routine.",
     ru: "✓ Активных рисков нет. Поддерживайте режим — отличная работа.",
   },
-  section_score: { en: "Wellness score", ru: "Wellness-оценка" },
+  section_score: { en: "Wellness score", ru: "Оценка самочувствия" },
   score_band_excellent: { en: "Excellent", ru: "Отлично" },
   score_band_good: { en: "Good", ru: "Хорошо" },
   score_band_fair: { en: "Fair", ru: "Средне" },

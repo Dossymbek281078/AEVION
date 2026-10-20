@@ -97,7 +97,7 @@ export default function IdeaMarket() {
 }
 
 function SubmitForm() {
-  const [f, setF] = useState({ name: "", pitch: "", model: "", ceiling: "" });
+  const [f, setF] = useState({ name: "", pitch: "", model: "", ceiling: "", email: "" });
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -114,7 +114,7 @@ function SubmitForm() {
       });
       const d = await r.json();
       if (!r.ok) {
-        setMsg({ kind: "err", text: d?.error || `HTTP ${r.status}` });
+        setMsg({ kind: "err", text: d?.message || d?.error || `HTTP ${r.status}` });
         return;
       }
       // Ручка честно называет, КУДА легла идея: запасной путь помечен
@@ -134,7 +134,7 @@ function SubmitForm() {
         return;
       }
       setMsg({ kind: "ok", text: d?.note || "Идея принята — попадёт на маркет после проверки." });
-      setF({ name: "", pitch: "", model: "", ceiling: "" });
+      setF({ name: "", pitch: "", model: "", ceiling: "", email: "" });
     } catch (err) {
       setMsg({ kind: "err", text: err instanceof Error ? err.message : "Ошибка сети" });
     } finally {
@@ -158,6 +158,7 @@ function SubmitForm() {
           <input style={input} aria-label="Модель бизнеса" placeholder="Модель (SaaS, DTC…)" maxLength={60} value={f.model} onChange={(e) => setF({ ...f, model: e.target.value })} />
           <input style={input} aria-label="Потолок рынка" placeholder="Потолок ($10M, $1B…)" maxLength={30} value={f.ceiling} onChange={(e) => setF({ ...f, ceiling: e.target.value })} />
         </div>
+        <input style={input} type="email" aria-label="Почта автора (по желанию)" placeholder="Почта — по желанию, чтобы сообщить вам о решении" maxLength={120} value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button type="submit" disabled={busy} style={{ padding: "10px 18px", borderRadius: 9, border: "none", background: "var(--amber)", color: "var(--ink)", fontWeight: 700, fontSize: 14, cursor: busy ? "default" : "pointer" }}>
             {busy ? "Отправка…" : "Отправить идею"}
@@ -166,7 +167,7 @@ function SubmitForm() {
         </div>
       </div>
       <p style={{ fontSize: 12, color: "var(--soft)", marginTop: 12, marginBottom: 0 }}>
-        Идеи проходят модерацию перед публикацией. Контакты не собираем — только суть.
+        Идеи проходят модерацию перед публикацией: каждую читает человек из команды. Почта — по желанию: только чтобы сообщить вам о решении.
       </p>
     </form>
   );

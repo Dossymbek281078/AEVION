@@ -1706,8 +1706,12 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
       },
       shardDistribution: {
         policy: distributionPolicy,
-        // Real distribution means the AEVION DB cannot recover the key on
-        // its own — an external source (author or witness) is required.
+        // 20.10.2026: имя поля врёт — при distributed_v2 доли 2 (QuantumShield.shards) и 3
+        // (PublicShardWitness) обе лежат в нашей базе, порог 2: сервер восстанавливает ключ
+        // один, вне сервера только авторская доля. Значение оставлено ради контракта API
+        // (означает «политика distributed_v2», не «сервер не может собрать ключ»);
+        // честные поля (serverCanReconstructAlone, shardsOutsideServer) предложены в
+        // паспорте ПРИЛОЖЕНИЯ/qright.md и ждут слова оркестратора — контракт API.
         realDistributed: distributionPolicy === "distributed_v2",
         locations:
           distributionPolicy === "distributed_v2"

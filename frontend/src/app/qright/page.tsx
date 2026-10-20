@@ -134,7 +134,7 @@ export default function QRightPage() {
   const qrLang = useI18nOptional()?.lang ?? "en";
   const QR = QR_BUSY[qrLang] ?? QR_BUSY.en;
   const { showToast } = useToast();
-  const { lang } = useI18n();
+  const { lang, t } = useI18n();
   const TOKEN_KEY = "aevion_auth_token_v1";
 
   const [step, setStep] = useState<Step>("form");
@@ -1481,7 +1481,7 @@ export default function QRightPage() {
                           textTransform: "capitalize",
                         }}
                       >
-                        {s === "mine" ? "Mine" : "All"}
+                        {s === "mine" ? t("qright.registry.mine") : t("qright.registry.all")}
                       </button>
                     ))}
                   </div>

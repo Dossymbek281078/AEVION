@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { ценаVerifiedДляВитрины } from "./verifiedPrice";
 import { verifiedCta, verifiedContactLabel } from "./verifiedCta";
 import { useI18nOptional } from "@/lib/i18n";
+import { MyCertificates } from "./MyCertificates";
 import { BU_BUSY } from "./busyUi";
 import Link from "next/link";
 import { track } from "@/lib/track";
@@ -198,7 +199,9 @@ export function DataBuyerNotice() {
 }
 
 function BureauPageInner() {
-  const buLang = useI18nOptional()?.lang ?? "en";
+  const buI18n = useI18nOptional();
+  const buLang = buI18n?.lang ?? "en";
+  const buT = buI18n?.t ?? ((k: string) => k);
   const BU = BU_BUSY[buLang] ?? BU_BUSY.en;
   // 128 (13.10.2026): главный CTA бюро — на языке страницы, не литералом (на ru-RU стоял «Protect Your Work» при русском h1).
   const ctaProtect = ({ ru: "🛡️ Защитить работу", kk: "🛡️ Жұмысты қорғау" } as Record<string, string>)[buLang] ?? "🛡️ Protect Your Work";
@@ -609,6 +612,11 @@ function BureauPageInner() {
           <ModulePricingChip moduleId="bureau" theme="light" />
         </div>
 
+
+        {/* ── Мои сертификаты (только вошедшему; 20.10.2026) ── */}
+        {authed && dashboard && !dashboardFailed && (
+          <MyCertificates certificates={dashboard.certificates} t={buT} lang={buLang} />
+        )}
 
         {/* ── My Identity (authed users only) ── */}
         {authed && (dashboardFailed || myIdentity || inFlightUpgrade || (dashboard && dashboard.certificates.length > 0)) && (

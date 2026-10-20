@@ -42,7 +42,7 @@ export function exportFileName(disposition: string | null, now: Date = new Date(
   return m ? m[1] : `aevion-records-${now.toISOString().slice(0, 10)}.zip`;
 }
 
-export function ExportAllButton({ labels }: { labels: ExportAllLabels }) {
+export function ExportAllButton({ labels, lang }: { labels: ExportAllLabels; lang?: string }) {
   const [вошёл, setВошёл] = useState(false);
   const [state, setState] = useState<State>({ kind: "idle" });
   useEffect(() => {
@@ -54,7 +54,7 @@ export function ExportAllButton({ labels }: { labels: ExportAllLabels }) {
     setState({ kind: "busy" });
     let res: Response;
     try {
-      res = await fetch(apiUrl("/api/pipeline/certificates/export.zip"), { headers: getAuthHeaders() });
+      res = await fetch(apiUrl(`/api/pipeline/certificates/export.zip?lang=${encodeURIComponent(lang === "ru" || lang === "kk" ? lang : "en")}`), { headers: getAuthHeaders() });
     } catch (e) {
       console.error("[qright] export.zip: network error", e);
       setState({ kind: "error", text: labels.network });

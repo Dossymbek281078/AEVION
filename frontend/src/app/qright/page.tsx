@@ -1422,6 +1422,7 @@ export default function QRightPage() {
           </button>
           {/* Все записи аккаунта одним архивом — видна только вошедшему (сама проверяет вход). */}
           <ExportAllButton
+            lang={lang}
             labels={{
               button: tq(lang, "Download all my records"),
               busy: tq(lang, "Preparing archive…"),

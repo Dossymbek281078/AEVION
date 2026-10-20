@@ -22,6 +22,12 @@ import jwt from "jsonwebtoken";
 const { режим } = vi.hoisted(() => ({
   режим: { падать: false, бдГотова: false, запросы: [] as string[] },
 }));
+// 20.10.2026: живость аккаунта (deletedAt/revokedAt) проверена в exportRejectsDeletedAndRevoked.test.ts;
+// здесь мок базы её не знает — помощник сводим к прежней проверке подписи.
+vi.mock("../src/lib/authLive", async () => {
+  const jwtLib = await import("../src/lib/authJwt");
+  return { verifyBearerLive: async (req: Parameters<typeof jwtLib.verifyBearerOptional>[0]) => jwtLib.verifyBearerOptional(req) };
+});
 vi.mock("../src/lib/dbPool", () => ({
   getPool: () => ({
     query: async (sql: string) => {

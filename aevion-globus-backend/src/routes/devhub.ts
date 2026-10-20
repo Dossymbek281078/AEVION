@@ -3,6 +3,7 @@ import { pgIntId } from "../lib/queryNumber";
 import { usageToTokens } from "../lib/usageTokens";
 import crypto from "node:crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { verifyBearerLive } from "../lib/authLive";
 import { resolvePlanFromPayload, isModuleEntitled } from "../lib/planGate";
 import { СЛАГ_СТАРТ, tarifStartZaveden, НОРМЫ_СТАРТ } from "../lib/devhubStart";
 import { podpiskaNaSlag } from "../lib/appEntitlements";
@@ -3200,7 +3201,7 @@ async function loadOwnedProjectOrReply(
 }
 
 devhubRouter.get("/projects", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   const userId = requesterId(req, auth?.sub);
   try {
     const projects = await dbListProjects(userId);
@@ -3243,7 +3244,7 @@ devhubRouter.get("/projects", async (req, res) => {
 
 // GET /api/devhub/projects/:id
 devhubRouter.get("/projects/:id", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   const userId = requesterId(req, auth?.sub);
   try {
     const project = await dbGetProject(req.params.id);
@@ -3665,7 +3666,7 @@ devhubRouter.delete("/projects/:id", async (req, res) => {
 
 // GET /api/devhub/projects/:id/files
 devhubRouter.get("/projects/:id/files", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   const userId = requesterId(req, auth?.sub);
   const read = await readProject(req.params.id);
   if (!read.project && read.failed) return replyStorageUnavailable(res);
@@ -3688,7 +3689,7 @@ devhubRouter.get("/projects/:id/files", async (req, res) => {
 
 // GET /api/devhub/projects/:id/files/:filepath — get file by path
 devhubRouter.get("/projects/:id/files/:filepath", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   const userId = requesterId(req, auth?.sub);
   const filePath = req.params.filepath || "";
   const read = await readProject(req.params.id);
@@ -3716,7 +3717,7 @@ devhubRouter.get("/projects/:id/files/:filepath", async (req, res) => {
 
 // GET /api/devhub/projects/:id/file — get file content by path in query string
 devhubRouter.get("/projects/:id/file", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   const userId = requesterId(req, auth?.sub);
   const filePath = String(req.query.path || "");
   if (!filePath) return res.status(400).json({ error: "path query param required" });
@@ -4317,7 +4318,7 @@ devhubRouter.post("/projects/:id/database/provision", async (req, res) => {
 // GET /api/devhub/projects/:id/database — what this project's database is
 // actually using. Measured, so quota talk is never a guess.
 devhubRouter.get("/projects/:id/database", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   const userId = requesterId(req, auth?.sub);
   const read = await readProject(req.params.id);
   if (!read.project && read.failed) return replyStorageUnavailable(res);
@@ -4412,7 +4413,7 @@ devhubRouter.post("/projects/:id/generate/undo", async (req, res) => {
 // the checkpoint-history UI (labels + timestamps + touched paths only, no
 // file content — that's only needed at restore time).
 devhubRouter.get("/projects/:id/checkpoints", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   const userId = requesterId(req, auth?.sub);
   const read = await readProject(req.params.id);
   if (!read.project && read.failed) return replyStorageUnavailable(res);
@@ -4668,7 +4669,7 @@ Built, but ${url} did not answer 2xx in time`;
 
 // GET /api/devhub/projects/:id/deployments/:deployId/log — SSE build log stream
 devhubRouter.get("/projects/:id/deployments/:deployId/log", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
@@ -4738,7 +4739,7 @@ devhubRouter.get("/projects/:id/deployments/:deployId/log", async (req, res) => 
 
 // GET /api/devhub/projects/:id/collaborators
 devhubRouter.get("/projects/:id/collaborators", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   const userId = requesterId(req, auth?.sub);
   const read = await readProject(req.params.id);
   if (!read.project && read.failed) return replyStorageUnavailable(res);
@@ -5310,7 +5311,7 @@ devhubRouter.post("/projects/:id/github/pull-request/:number/merge", async (req,
 
 // GET /api/devhub/projects/:id/github/status — check if repo exists on GitHub
 devhubRouter.get("/projects/:id/github/status", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
@@ -5363,7 +5364,7 @@ devhubRouter.get("/projects/:id/github/status", async (req, res) => {
 
 // GET /api/devhub/projects/:id/github/branches — list branches of linked repo
 devhubRouter.get("/projects/:id/github/branches", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
@@ -5465,7 +5466,7 @@ devhubRouter.post("/projects/:id/apply-template", async (req, res) => {
 
 // GET /api/devhub/projects/:id/env
 devhubRouter.get("/projects/:id/env", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
@@ -5567,7 +5568,7 @@ devhubRouter.post("/projects/:id/domain", async (req, res) => {
 
 // GET /api/devhub/projects/:id/deployments
 devhubRouter.get("/projects/:id/deployments", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
@@ -5680,7 +5681,7 @@ function isServiceSnippet(s: DevHubSnippet): boolean {
 
 // GET /api/devhub/snippets — public list, optional ?tag=X&user=Y&limit=N
 devhubRouter.get("/snippets", async (req, res) => {
-  const viewerId = requesterId(req, verifyBearerOptional(req)?.sub);
+  const viewerId = requesterId(req, (await verifyBearerLive(req))?.sub);
   const tag = req.query.tag ? String(req.query.tag).trim() : undefined;
   const userId = req.query.user ? String(req.query.user).trim() : undefined;
   const limit = req.query.limit ? Math.min(Math.max(parseInt(String(req.query.limit), 10) || 50, 1), 200) : 50;
@@ -5753,7 +5754,7 @@ devhubRouter.post("/snippets", dhCreateLimit(), async (req, res) => {
 
 // GET /api/devhub/snippets/:id — fetch single snippet
 devhubRouter.get("/snippets/:id", async (req, res) => {
-  const viewerId = requesterId(req, verifyBearerOptional(req)?.sub);
+  const viewerId = requesterId(req, (await verifyBearerLive(req))?.sub);
   try {
     const snippet = await dbGetSnippet(req.params.id);
     if (!snippet) return res.status(404).json({ error: "snippet not found" });
@@ -5827,7 +5828,7 @@ devhubRouter.post("/snippets/:id/star", async (req, res) => {
 
 // GET /api/devhub/projects/:id/env/validate — check required env vars
 devhubRouter.get("/projects/:id/env/validate", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   const userId = requesterId(req, auth?.sub);
   const project = await loadOwnedProjectOrReply(req.params.id, userId, res);
   if (!project) return;
@@ -6869,7 +6870,7 @@ const PREVIEW_PROXY_OVERLAY = `
 `;
 
 devhubRouter.get("/projects/:id/preview-proxy", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   const userId = requesterId(req, auth?.sub);
   const read = await readProject(req.params.id);
   if (!read.project && read.failed) return replyStorageUnavailable(res);
@@ -8042,7 +8043,7 @@ function detectB64Mime(path: string): string | null {
 
 // GET /api/devhub/projects/:id/file-binary?path=... — decode base64 file and serve as binary
 devhubRouter.get("/projects/:id/file-binary", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   const userId = requesterId(req, auth?.sub);
   const filePath = String(req.query.path || "");
   if (!filePath) return res.status(400).json({ error: "path query param required" });
@@ -8263,7 +8264,7 @@ function generateSDK(projectName: string, baseUrl: string, routes: DetectedRoute
 
 // GET /api/devhub/projects/:id/sdk — return TypeScript SDK
 devhubRouter.get("/projects/:id/sdk", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   const userId = requesterId(req, auth?.sub);
   const read = await readProject(req.params.id);
   if (!read.project && read.failed) return replyStorageUnavailable(res);
@@ -8395,7 +8396,7 @@ export function buildZipStored(entries: Array<{ path: string; content: Buffer }>
 
 // GET /api/devhub/projects/:id/export — download project as ZIP
 devhubRouter.get("/projects/:id/export", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   const userId = requesterId(req, auth?.sub);
   const read = await readProject(req.params.id);
   if (!read.project && read.failed) return replyStorageUnavailable(res);
@@ -9811,7 +9812,7 @@ devhubRouter.post("/projects/:id/domain/setup", async (req, res) => {
 });
 
 devhubRouter.get("/projects/:id/domain/status", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   const userId = requesterId(req, auth?.sub);
 
   const read = await readProject(req.params.id);
@@ -10444,7 +10445,7 @@ devhubRouter.post("/studio/adopt-guest", dhAdoptLimit(), async (req, res) => {
 
 
 devhubRouter.get("/studio/spend", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   const userId = requesterId(req, auth?.sub);
   const agg = await aggregateSmartRunsForUser(userId);
   if (!agg) {
@@ -10470,7 +10471,7 @@ devhubRouter.get("/studio/spend", async (req, res) => {
 
 
 devhubRouter.get("/studio/credits", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   const userId = requesterId(req, auth?.sub);
   try {
     const { anyUnknown, ...result } = await getAllMonthUsage(userId);

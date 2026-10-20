@@ -2,6 +2,7 @@ import { Router } from "express";
 import { denPoMestnomu } from "../lib/denPoMestnomu";
 import crypto from "crypto";
 import { verifyBearerOptional } from "../lib/authJwt";
+import { verifyBearerLive } from "../lib/authLive";
 import { ensureUsersTable } from "../lib/ensureUsersTable";
 import { getPool } from "../lib/dbPool";
 import { учестьДействие, отказПоНорме } from "../lib/freeActionQuota";
@@ -408,7 +409,7 @@ qrightRouter.get("/objects", objectsRateLimit, async (req, res) => {
       String(mineRaw || "").toLowerCase() === "yes";
 
     if (mine) {
-      const auth = verifyBearerOptional(req);
+      const auth = await verifyBearerLive(req);
       if (!auth) {
         return res.status(401).json({ error: "Bearer token required for mine=1" });
       }
@@ -528,7 +529,7 @@ qrightRouter.get("/objects/:id/stats", async (req, res) => {
   try {
     await ensureQRightTable();
 
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth) {
       return res.status(401).json({ error: "Bearer token required" });
     }
@@ -1808,7 +1809,7 @@ qrightRouter.post("/revoke/:id", async (req, res) => {
 qrightRouter.get("/webhooks", async (req, res) => {
   try {
     await ensureQRightTable();
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth) return res.status(401).json({ error: "Bearer token required" });
 
     const result = await pool.query(
@@ -1973,7 +1974,7 @@ qrightRouter.patch("/webhooks/:id", async (req, res) => {
 qrightRouter.get("/webhooks/:id/deliveries", async (req, res) => {
   try {
     await ensureQRightTable();
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth) return res.status(401).json({ error: "Bearer token required" });
 
     const id = String(req.params.id);

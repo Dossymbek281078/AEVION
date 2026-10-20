@@ -5,6 +5,7 @@ import { makeServiceCapture } from "../lib/sentry/platform";
 const captureQCoreAIError = makeServiceCapture("qcoreai");
 
 import { verifyBearerOptional } from "../lib/authJwt";
+import { verifyBearerLive } from "../lib/authLive";
 import {
   enforceFreeTokenQuota,
   monthlyQuotaHeadroom,
@@ -765,7 +766,7 @@ qcoreaiRouter.get("/health", async (_req, res) => {
    ═══════════════════════════════════════════════════════════════════════ */
 
 qcoreaiRouter.get("/me/webhook", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try {
     const cfg = await getUserWebhook(auth.sub);
@@ -860,7 +861,7 @@ qcoreaiRouter.post("/me/webhook/test", async (req, res) => {
 
 /** GET /api/qcoreai/me/webhook/log — last 50 webhook delivery attempts for the caller. */
 qcoreaiRouter.get("/me/webhook/log", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try {
     const limit = Math.min(100, Math.max(parseInt(String(req.query.limit || "50"), 10) || 50, 1));
@@ -874,7 +875,7 @@ qcoreaiRouter.get("/me/webhook/log", async (req, res) => {
 
 /** GET /api/qcoreai/me/webhook/stats — delivery statistics for the last 30 days. */
 qcoreaiRouter.get("/me/webhook/stats", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try {
     if (!isDbReady()) {
@@ -969,7 +970,7 @@ qcoreaiRouter.post("/notebook/collections", async (req, res) => {
 });
 
 qcoreaiRouter.get("/notebook/collections", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try { res.json({ items: await listCollections(auth.sub) }); }
   catch (err: any) { captureQCoreAIError(err, { route: "notebook-collections" }); res.status(500).json({ error: "list collections failed" }); }
@@ -1002,7 +1003,7 @@ qcoreaiRouter.patch("/notebook/:snippetId/collection", async (req, res) => {
    ═══════════════════════════════════════════════════════════════════════ */
 
 qcoreaiRouter.get("/insights", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   try {
     if (!isDbReady() || !auth?.sub) {
       return res.json({ topAgentCosts: [], strategyRatings: [], avgCostByHour: [] });
@@ -1086,7 +1087,7 @@ qcoreaiRouter.get("/pipelines/public", async (req, res) => {
 });
 
 qcoreaiRouter.get("/pipelines", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try { res.json({ items: await listPipelines(auth.sub) }); }
   catch (err: any) { captureQCoreAIError(err, { route: "list-pipelines" }); res.status(500).json({ error: "list pipelines failed" }); }
@@ -1096,7 +1097,7 @@ qcoreaiRouter.get("/pipelines/:id", async (req, res) => {
   try {
     const p = await getPipeline(String(req.params.id));
     if (!p) return res.status(404).json({ error: "not found" });
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!p.isPublic && p.ownerUserId !== auth?.sub) return res.status(403).json({ error: "forbidden" });
     res.json({ pipeline: p });
   } catch (err: any) { captureQCoreAIError(err, { route: "get-pipeline" }); res.status(500).json({ error: "get pipeline failed" }); }
@@ -1145,7 +1146,7 @@ qcoreaiRouter.post("/pipelines/:id/use", async (req, res) => {
 const VALID_ROLES = ["analyst", "writer", "writerB", "critic"];
 
 qcoreaiRouter.get("/me/personas", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try {
     await ensureQCoreTables(pool);
@@ -1203,7 +1204,7 @@ qcoreaiRouter.delete("/me/personas/:roleId", async (req, res) => {
    ═══════════════════════════════════════════════════════════════════════ */
 
 qcoreaiRouter.get("/me/analytics-goal", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try {
     await ensureQCoreTables(pool);
@@ -1247,7 +1248,7 @@ qcoreaiRouter.put("/me/analytics-goal", async (req, res) => {
    ═══════════════════════════════════════════════════════════════════════ */
 
 qcoreaiRouter.get("/me/spend-limit", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try {
     const limit = await getSpendLimit(auth.sub);
@@ -1288,7 +1289,7 @@ qcoreaiRouter.delete("/me/spend-limit", async (req, res) => {
 });
 
 qcoreaiRouter.get("/me/spend-summary", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try {
     const [limit, spent] = await Promise.all([
@@ -1324,7 +1325,7 @@ qcoreaiRouter.get("/me/spend-summary", async (req, res) => {
  * enforcement on (see docs/PRICING_STRATEGY_2026-07.md).
  */
 qcoreaiRouter.get("/me/token-quota", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try {
     const plan = resolveUserPlan(req);
@@ -1395,7 +1396,7 @@ qcoreaiRouter.get("/quota-policy", (_req, res) => {
 
 qcoreaiRouter.get("/sessions", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     const rows = await listSessions(auth?.sub ?? null, 50);
     res.json({ items: rows, total: rows.length, scope: auth ? "mine" : "anonymous" });
   } catch (err: any) {
@@ -1410,7 +1411,7 @@ qcoreaiRouter.get("/sessions", async (req, res) => {
 // архивных сессий был недостижим.
 qcoreaiRouter.get("/sessions/archived", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     const rows = await listSessions(auth?.sub ?? null, 100, true);
     const archived = rows.filter((s) => s.archivedAt);
     res.json({ items: archived, total: archived.length });
@@ -1422,7 +1423,7 @@ qcoreaiRouter.get("/sessions/archived", async (req, res) => {
 
 qcoreaiRouter.get("/sessions/:id", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     const session = await getSession(req.params.id, auth?.sub ?? null);
     if (!session) return res.status(404).json({ error: "session not found" });
     const runs = await listRuns(session.id, 200);
@@ -1522,7 +1523,7 @@ qcoreaiRouter.get("/runs/:id", async (req, res) => {
   try {
     const run = await getRun(req.params.id);
     if (!run) return res.status(404).json({ error: "run not found" });
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     const session = await getSession(run.sessionId, auth?.sub ?? null);
     if (!session) return res.status(403).json({ error: "forbidden" });
     const messages = await listMessages(run.id);
@@ -1642,7 +1643,7 @@ qcoreaiRouter.post("/shared/:token/comments", sharedLimiter, async (req, res) =>
 
 qcoreaiRouter.get("/analytics", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     const summary = await getAnalytics(auth?.sub ?? null);
     res.json(summary);
   } catch (err: any) {
@@ -1808,7 +1809,7 @@ qcoreaiRouter.post("/runs/:id/refine", refineLimiter, async (req, res) => {
  */
 qcoreaiRouter.get("/search", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     const q = String(req.query.q ?? "").trim().slice(0, 200);
     const limit = Math.max(1, Math.min(100, Math.max(parseInt(String(req.query.limit ?? "30"), 10) || 30, 1)));
     if (!q) return res.json({ items: [], query: "" });
@@ -1827,7 +1828,7 @@ qcoreaiRouter.get("/search", async (req, res) => {
  */
 qcoreaiRouter.get("/tags", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     const limit = Math.max(1, Math.min(100, Math.max(parseInt(String(req.query.limit ?? "20"), 10) || 20, 1)));
     const items = await getTopUserTags(auth?.sub ?? null, limit);
     res.json({ items });
@@ -1907,7 +1908,7 @@ qcoreaiRouter.get("/presets/:id", async (req, res) => {
     const p = await getSharedPreset(String(req.params.id));
     if (!p) return res.status(404).json({ error: "preset not found" });
     if (!p.isPublic) {
-      const auth = verifyBearerOptional(req);
+      const auth = await verifyBearerLive(req);
       if (!auth?.sub || auth.sub !== p.ownerUserId) {
         return res.status(404).json({ error: "preset not found" });
       }
@@ -1949,7 +1950,7 @@ qcoreaiRouter.delete("/presets/:id", async (req, res) => {
  */
 qcoreaiRouter.get("/analytics/timeseries", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     const days = Math.max(1, Math.min(365, parseInt(String(req.query.days ?? "30"), 10) || 30));
     const items = await getCostTimeseries(auth?.sub ?? null, days);
     res.json({ items, days });
@@ -2026,7 +2027,7 @@ const storageDegraded = { items: [], degraded: true, reason: "storage_unavailabl
 
 qcoreaiRouter.get("/analytics/agent-performance", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     // Два РАЗНЫХ случая, и раньше они давали один ответ: у анонима данных
     // честно нет, а недоступное хранилище — наша поломка.
     if (!isDbReady()) return res.json(storageDegraded);
@@ -2062,7 +2063,7 @@ qcoreaiRouter.get("/analytics/agent-performance", async (req, res) => {
  */
 qcoreaiRouter.get("/analytics/provider-latency", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!isDbReady()) return res.json(storageDegraded);
     if (!auth?.sub) {
       return res.json({ items: [] });
@@ -2097,7 +2098,7 @@ qcoreaiRouter.get("/analytics/provider-latency", async (req, res) => {
  */
 qcoreaiRouter.get("/analytics/by-tag", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     const limit = Math.min(50, Math.max(parseInt(String(req.query.limit || "20"), 10) || 20, 1));
 
     if (!isDbReady()) {
@@ -2135,7 +2136,7 @@ qcoreaiRouter.get("/analytics/by-tag", async (req, res) => {
  */
 qcoreaiRouter.get("/analytics/sessions", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     const days = Math.min(90, parseInt(String(req.query.days || "7"), 10) || 7);
     const limit = Math.min(50, Math.max(parseInt(String(req.query.limit || "10"), 10) || 10, 1));
     const items = await getSessionCostSummary(auth?.sub ?? null, days, limit);
@@ -2152,7 +2153,7 @@ qcoreaiRouter.get("/analytics/sessions", async (req, res) => {
  */
 qcoreaiRouter.get("/analytics/export", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     const days = Math.min(90, parseInt(String(req.query.days || "30"), 10) || 30);
     const data = await getCostTimeseries(auth?.sub ?? null, days);
     const csv = [
@@ -2176,7 +2177,7 @@ qcoreaiRouter.get("/analytics/export", async (req, res) => {
 
 qcoreaiRouter.get("/analytics/agent-length", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     if (!isDbReady()) return res.json(storageDegraded);
     const r = await pool.query(
@@ -2211,7 +2212,7 @@ qcoreaiRouter.get("/analytics/agent-length", async (req, res) => {
 
 qcoreaiRouter.get("/analytics/provider-compare", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     if (!isDbReady()) return res.json(storageDegraded);
     const r = await pool.query(
@@ -2256,7 +2257,7 @@ qcoreaiRouter.get("/analytics/provider-compare", async (req, res) => {
  */
 qcoreaiRouter.get("/sessions/:id/export", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     const session = await getSession(String(req.params.id), auth?.sub ?? null);
     if (!session) return res.status(404).json({ error: "session not found or forbidden" });
     const runs = await listRuns(session.id, 200);
@@ -2298,7 +2299,7 @@ qcoreaiRouter.get("/runs/:id/export", async (req, res) => {
   try {
     const run = await getRun(req.params.id);
     if (!run) return res.status(404).json({ error: "run not found" });
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     const session = await getSession(run.sessionId, auth?.sub ?? null);
     if (!session) return res.status(403).json({ error: "forbidden" });
     const messages = await listMessages(run.id);
@@ -2348,7 +2349,7 @@ qcoreaiRouter.get("/runs/:id/thread", async (req, res) => {
   try {
     const run = await getRun(req.params.id);
     if (!run) return res.status(404).json({ error: "run not found" });
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     const session = await getSession(run.sessionId, auth?.sub ?? null);
     if (!session) return res.status(403).json({ error: "forbidden" });
     const threadId = run.threadId ?? run.id;
@@ -3140,7 +3141,7 @@ qcoreaiRouter.post("/eval/suites", async (req, res) => {
 
 qcoreaiRouter.get("/eval/suites", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const limit = Math.max(1, Math.min(200, Math.max(parseInt(String(req.query.limit ?? "50"), 10) || 50, 1)));
     const items = await listEvalSuites(auth.sub, limit);
@@ -3179,7 +3180,7 @@ qcoreaiRouter.patch("/eval/suites/:id/visibility", async (req, res) => {
 
 qcoreaiRouter.get("/eval/suites/:id", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const s = await getEvalSuite(String(req.params.id));
     if (!s || s.ownerUserId !== auth.sub) return res.status(404).json({ error: "suite not found" });
@@ -3259,7 +3260,7 @@ qcoreaiRouter.post("/eval/suites/:id/run", evalRunLimiter, async (req, res) => {
 
 qcoreaiRouter.get("/eval/runs/:id", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const r = await getEvalRun(String(req.params.id));
     if (!r || r.ownerUserId !== auth.sub) return res.status(404).json({ error: "run not found" });
@@ -3272,7 +3273,7 @@ qcoreaiRouter.get("/eval/runs/:id", async (req, res) => {
 
 qcoreaiRouter.get("/eval/suites/:id/runs", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const suite = await getEvalSuite(String(req.params.id));
     if (!suite || suite.ownerUserId !== auth.sub) return res.status(404).json({ error: "suite not found" });
@@ -3314,7 +3315,7 @@ qcoreaiRouter.post("/prompts", async (req, res) => {
 
 qcoreaiRouter.get("/prompts", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const limit = Math.max(1, Math.min(500, Math.max(parseInt(String(req.query.limit ?? "100"), 10) || 100, 1)));
     const items = await listPrompts(auth.sub, limit);
@@ -3347,7 +3348,7 @@ qcoreaiRouter.get("/prompts/public", async (req, res) => {
 // один случай.
 qcoreaiRouter.get("/prompts/audit", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const limit = parseInt(String(req.query.limit || "100"), 10) || 100;
     const items = await listPromptAudit(auth.sub, limit);
@@ -3360,7 +3361,7 @@ qcoreaiRouter.get("/prompts/audit", async (req, res) => {
 
 qcoreaiRouter.get("/prompts/:id", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     const p = await getPrompt(String(req.params.id));
     if (!p) return res.status(404).json({ error: "prompt not found" });
     if (!p.isPublic && (!auth?.sub || auth.sub !== p.ownerUserId)) {
@@ -3375,7 +3376,7 @@ qcoreaiRouter.get("/prompts/:id", async (req, res) => {
 
 qcoreaiRouter.get("/prompts/:id/versions", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     const p = await getPrompt(String(req.params.id));
     if (!p) return res.status(404).json({ error: "prompt not found" });
     if (!p.isPublic && (!auth?.sub || auth.sub !== p.ownerUserId)) {
@@ -3396,7 +3397,7 @@ qcoreaiRouter.get("/prompts/:id/versions", async (req, res) => {
 
 qcoreaiRouter.get("/prompts/:id/diff", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     const targetId = String(req.params.id);
     const fromId = typeof req.query.fromId === "string" ? req.query.fromId : null;
     const target = await getPrompt(targetId);
@@ -3559,7 +3560,7 @@ qcoreaiRouter.get("/templates/public", async (req, res) => {
 
 qcoreaiRouter.get("/templates", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const items = await listTemplates(auth.sub);
     res.json({ items });
@@ -3573,7 +3574,7 @@ qcoreaiRouter.get("/templates/:id", async (req, res) => {
   try {
     const t = await getTemplate(req.params.id);
     if (!t) return res.status(404).json({ error: "template not found" });
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!t.isPublic && t.ownerUserId !== auth?.sub) {
       return res.status(403).json({ error: "forbidden" });
     }
@@ -3832,7 +3833,7 @@ qcoreaiRouter.post("/batch", batchLimiter, async (req, res) => {
 
 qcoreaiRouter.get("/batches", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const items = await listBatches(auth.sub);
     res.json({ items });
@@ -3844,7 +3845,7 @@ qcoreaiRouter.get("/batches", async (req, res) => {
 
 qcoreaiRouter.get("/batch/:id", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const batch = await getBatch(req.params.id);
     if (!batch) return res.status(404).json({ error: "batch not found" });
@@ -3917,7 +3918,7 @@ qcoreaiRouter.post("/schedules", async (req, res) => {
 
 qcoreaiRouter.get("/schedules", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const items = await listScheduledBatches(auth.sub);
     res.json({ items });
@@ -3929,7 +3930,7 @@ qcoreaiRouter.get("/schedules", async (req, res) => {
 
 qcoreaiRouter.get("/schedules/:id", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const s = await getScheduledBatch(req.params.id);
     if (!s || s.ownerUserId !== auth.sub) return res.status(404).json({ error: "not found" });
@@ -4133,7 +4134,7 @@ qcoreaiRouter.delete("/runs/:id/bookmark", async (req, res) => {
 });
 
 qcoreaiRouter.get("/bookmarks", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try {
     const limit = Math.min(100, Math.max(parseInt(String(req.query.limit || "50"), 10) || 50, 1));
@@ -4165,7 +4166,7 @@ qcoreaiRouter.post("/runs/:id/rate", async (req, res) => {
 
 qcoreaiRouter.get("/runs/:id/rating", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     const [mine, summary] = await Promise.all([
       getRating(String(req.params.id), auth?.sub ?? null),
       getRatingsSummary(String(req.params.id)),
@@ -4179,7 +4180,7 @@ qcoreaiRouter.get("/runs/:id/rating", async (req, res) => {
 
 qcoreaiRouter.get("/ratings/top", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     const limit = Math.min(50, Math.max(parseInt(String(req.query.limit || "20"), 10) || 20, 1));
     const items = await listTopRatedRuns(auth?.sub ?? null, limit);
     res.json({ items });
@@ -4246,7 +4247,7 @@ qcoreaiRouter.post("/workspaces", async (req, res) => {
 
 qcoreaiRouter.get("/workspaces", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const items = await listWorkspaces(auth.sub);
     res.json({ items });
@@ -4258,7 +4259,7 @@ qcoreaiRouter.get("/workspaces", async (req, res) => {
 
 qcoreaiRouter.get("/workspaces/:id", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const workspace = await getWorkspace(String(req.params.id));
     if (!workspace) return res.status(404).json({ error: "not found" });
@@ -4303,7 +4304,7 @@ qcoreaiRouter.delete("/workspaces/:id", async (req, res) => {
 // Members
 qcoreaiRouter.get("/workspaces/:id/members", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const items = await listWorkspaceMembers(String(req.params.id));
     res.json({ items });
@@ -4344,7 +4345,7 @@ qcoreaiRouter.delete("/workspaces/:id/members/:userId", async (req, res) => {
 // Sessions
 qcoreaiRouter.get("/workspaces/:id/sessions", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const items = await listWorkspaceSessions(String(req.params.id));
     res.json({ items });
@@ -4411,7 +4412,7 @@ qcoreaiRouter.post("/notebook", async (req, res) => {
 
 qcoreaiRouter.get("/notebook/tags", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const items = await listSnippetTagCloud(auth.sub);
     res.json({ items });
@@ -4423,7 +4424,7 @@ qcoreaiRouter.get("/notebook/tags", async (req, res) => {
 
 qcoreaiRouter.get("/notebook", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const q = typeof req.query.q === "string" ? req.query.q : undefined;
     const tag = typeof req.query.tag === "string" ? req.query.tag : undefined;
@@ -4439,7 +4440,7 @@ qcoreaiRouter.get("/notebook", async (req, res) => {
 
 qcoreaiRouter.get("/notebook/:id", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const snippet = await getSnippet(String(req.params.id));
     if (!snippet || snippet.ownerUserId !== auth.sub) return res.status(404).json({ error: "not found" });
@@ -4488,7 +4489,7 @@ qcoreaiRouter.delete("/notebook/:id", async (req, res) => {
 
 qcoreaiRouter.get("/sessions/:id/stats", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const session = await getSession(String(req.params.id), auth.sub);
     if (!session) return res.status(404).json({ error: "session not found" });
@@ -4523,7 +4524,7 @@ qcoreaiRouter.get("/sessions/:id/stats", async (req, res) => {
 
 qcoreaiRouter.get("/runs/:id/annotations", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const rows = await listAnnotations(String(req.params.id), auth.sub);
     res.json({ annotations: rows });
@@ -4584,7 +4585,7 @@ qcoreaiRouter.delete("/annotations/:id", async (req, res) => {
 
 qcoreaiRouter.get("/me/annotations", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const limit = Math.min(100, Math.max(Number(req.query.limit) || 50, 1));
     const rows = await listAllAnnotations(auth.sub, limit);
@@ -4632,7 +4633,7 @@ qcoreaiRouter.patch("/workspaces/:id/sessions/:sessionId/pin", async (req, res) 
 
 qcoreaiRouter.get("/search", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
     if (!q) return res.json({ results: [] });
@@ -4884,7 +4885,7 @@ qcoreaiRouter.post("/sessions/:id/presence/ping", async (req, res) => {
 
 qcoreaiRouter.get("/sessions/:id/presence", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const sessionId = String(req.params.id);
     cleanPresence(sessionId);
@@ -5041,7 +5042,7 @@ const FREE_PLAN_LIMITS = { runs: 100, costUsd: 5 };
 
 qcoreaiRouter.get("/me/usage", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
 
     // Get current month analytics
@@ -5092,7 +5093,7 @@ qcoreaiRouter.get("/me/usage", async (req, res) => {
 
 qcoreaiRouter.get("/me/plan", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     res.json({
       plan: "free",
@@ -5176,7 +5177,7 @@ qcoreaiRouter.post("/sessions/bulk-archive", async (req, res) => {
 
 qcoreaiRouter.get("/runs/:id/siblings", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const run = await getRun(String(req.params.id));
     if (!run) return res.status(404).json({ error: "run not found" });
@@ -5219,7 +5220,7 @@ qcoreaiRouter.post("/orgs", async (req, res) => {
 
 qcoreaiRouter.get("/orgs", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const items = await listOrgs(auth.sub);
     res.json({ items, total: items.length });
@@ -5231,7 +5232,7 @@ qcoreaiRouter.get("/orgs", async (req, res) => {
 
 qcoreaiRouter.get("/orgs/:id", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const org = await getOrg(String(req.params.id));
     if (!org) return res.status(404).json({ error: "org not found" });
@@ -5293,7 +5294,7 @@ qcoreaiRouter.delete("/orgs/:id/members/:userId", async (req, res) => {
 
 qcoreaiRouter.get("/orgs/:id/members", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const org = await getOrg(String(req.params.id));
     if (!org) return res.status(404).json({ error: "org not found" });
@@ -5403,7 +5404,7 @@ qcoreaiRouter.post("/me/optimize-costs", async (req, res) => {
 
 qcoreaiRouter.get("/me/cost-trend", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const days = Math.min(90, Math.max(7, Number(req.query.days) || 30));
 
@@ -5501,7 +5502,7 @@ qcoreaiRouter.post("/me/api-keys", apiKeyLimiter, async (req, res) => {
 
 qcoreaiRouter.get("/me/api-keys", apiKeyLimiter, async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const items = await listApiKeys(auth.sub);
     res.json({ items });
@@ -5591,7 +5592,7 @@ qcoreaiRouter.get("/runs/:id/embed", async (req, res) => {
 /** POST /runs/:id/export-pdf-data — returns structured data for client-side PDF generation. */
 qcoreaiRouter.post("/runs/:id/export-pdf-data", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const run = await getRun(String(req.params.id));
     if (!run) return res.status(404).json({ error: "run not found" });
@@ -5668,7 +5669,7 @@ qcoreaiRouter.post("/sessions/:id/ai-summary", assistLimiter, async (req, res) =
 /** GET /sessions/:id/ai-summary — return cached summary or null. */
 qcoreaiRouter.get("/sessions/:id/ai-summary", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const session = await getSession(String(req.params.id), auth.sub);
     if (!session) return res.status(404).json({ error: "session not found" });
@@ -5687,7 +5688,7 @@ qcoreaiRouter.get("/sessions/:id/ai-summary", async (req, res) => {
 /** GET /sessions/:id/timeline — ordered run events for sparkline. */
 qcoreaiRouter.get("/sessions/:id/timeline", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const session = await getSession(String(req.params.id), auth.sub);
     if (!session) return res.status(404).json({ error: "session not found" });
@@ -5723,7 +5724,7 @@ const RATE_LIMIT_BUCKETS: Record<string, { limit: number; windowMs: number }> = 
 /** GET /me/rate-limits — current rate limit status for the calling user. */
 qcoreaiRouter.get("/me/rate-limits", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
 
     const rows = await listRateLimits(auth.sub);
@@ -5805,7 +5806,7 @@ qcoreaiRouter.get("/prompt-chains/public", async (req, res) => {
 });
 
 qcoreaiRouter.get("/prompt-chains", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try {
     const items = await listPromptChains(auth.sub);
@@ -5814,7 +5815,7 @@ qcoreaiRouter.get("/prompt-chains", async (req, res) => {
 });
 
 qcoreaiRouter.get("/prompt-chains/:id", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   try {
     const chain = await getPromptChain(String(req.params.id));
     if (!chain) return res.status(404).json({ error: "not found" });
@@ -5970,7 +5971,7 @@ qcoreaiRouter.post("/notebook/auto-tag", assistLimiter, async (req, res) => {
 // новый: помощник generationLimit живёт в чужой незамёрженной ветке, и своя
 // копия с тем же именем дала бы при мерже два объявления.
 qcoreaiRouter.get("/notebook/collections/:id/summary", chatLimiter, async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try {
     // Load snippets in this collection (up to 10)
@@ -6003,7 +6004,7 @@ qcoreaiRouter.get("/notebook/collections/:id/summary", chatLimiter, async (req, 
 });
 
 qcoreaiRouter.post("/notebook/collections/:id/export", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try {
     const [allSnippets, collections] = await Promise.all([
@@ -6042,7 +6043,7 @@ qcoreaiRouter.post("/notebook/collections/:id/export", async (req, res) => {
    ═══════════════════════════════════════════════════════════════════════ */
 
 qcoreaiRouter.get("/me/stats", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try {
     const stats = await getUserStats(auth.sub);
@@ -6077,7 +6078,7 @@ qcoreaiRouter.post("/sessions/:id/invites", async (req, res) => {
 
 qcoreaiRouter.get("/sessions/:id/invites", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const session = await getSession(req.params.id, null);
     if (!session) return res.status(404).json({ error: "session not found" });
@@ -6113,7 +6114,7 @@ qcoreaiRouter.get("/invites/:token", async (req, res) => {
 
 qcoreaiRouter.get("/me/audit-log", async (req, res) => {
   try {
-    const auth = verifyBearerOptional(req);
+    const auth = await verifyBearerLive(req);
     if (!auth?.sub) return res.status(401).json({ error: "auth required" });
     const limit = Math.min(200, Math.max(1, parseInt(String(req.query.limit || "50"), 10) || 50));
     const entries = await listAuditLog(auth.sub, limit);
@@ -6196,7 +6197,7 @@ qcoreaiRouter.post("/me/memories", async (req, res) => {
 });
 
 qcoreaiRouter.get("/me/memories", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   const category = typeof req.query.category === "string" ? req.query.category : undefined;
   const pinnedQ = req.query.pinned;
@@ -6577,7 +6578,7 @@ qcoreaiRouter.post("/ab-tests", async (req, res) => {
 });
 
 qcoreaiRouter.get("/ab-tests", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try {
     const items = await listAbTests(auth.sub);
@@ -6586,7 +6587,7 @@ qcoreaiRouter.get("/ab-tests", async (req, res) => {
 });
 
 qcoreaiRouter.get("/ab-tests/:id", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try {
     const test = await getAbTest(req.params.id, auth.sub);
@@ -6648,7 +6649,7 @@ qcoreaiRouter.post("/ab-tests/:id/run", async (req, res) => {
    ═══════════════════════════════════════════════════════════════════════ */
 
 qcoreaiRouter.get("/me/settings", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   if (!auth?.sub) return res.status(401).json({ error: "auth required" });
   try {
     const settings = await getAllUserSettings(auth.sub);
@@ -6685,7 +6686,7 @@ qcoreaiRouter.delete("/me/settings/:key", async (req, res) => {
    ═══════════════════════════════════════════════════════════════════════ */
 
 qcoreaiRouter.get("/analytics/cohorts", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   try {
     if (!isDbReady()) {
       return res.json({ cohorts: [] });
@@ -6722,7 +6723,7 @@ qcoreaiRouter.get("/analytics/cohorts", async (req, res) => {
 });
 
 qcoreaiRouter.get("/analytics/top-hours", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   try {
     if (!isDbReady()) {
       return res.json({ hours: [] });
@@ -6756,7 +6757,7 @@ qcoreaiRouter.get("/analytics/top-hours", async (req, res) => {
 });
 
 qcoreaiRouter.get("/analytics/run-quality", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   try {
     if (!isDbReady()) {
       return res.json({ brief: 0, standard: 0, detailed: 0, avgLengthByStrategy: [] });
@@ -6873,7 +6874,7 @@ qcoreaiRouter.get("/runs/:id/branches", async (req, res) => {
 const exportRateLimitMap = new Map<string, number>();
 
 qcoreaiRouter.post("/export/session-bundle", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   const userId = auth?.sub ?? null;
   if (!userId) return res.status(401).json({ error: "auth required" });
 
@@ -6932,7 +6933,7 @@ qcoreaiRouter.post("/export/session-bundle", async (req, res) => {
 });
 
 qcoreaiRouter.post("/export/full-account", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   const userId = auth?.sub ?? null;
   if (!userId) return res.status(401).json({ error: "auth required" });
 
@@ -7010,7 +7011,7 @@ qcoreaiRouter.post("/me/routing-rules", async (req, res) => {
 });
 
 qcoreaiRouter.get("/me/routing-rules", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   const userId = auth?.sub ?? null;
   if (!userId) return res.status(401).json({ error: "auth required" });
 
@@ -7174,7 +7175,7 @@ qcoreaiRouter.get("/collab/:token", async (req, res) => {
 
 // GET /api/qcoreai/sessions/:id/collab/stats — owner stats
 qcoreaiRouter.get("/sessions/:id/collab/stats", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   if (!auth) return res.status(401).json({ error: "auth required" });
   const sessionId = req.params.id;
   try {
@@ -7227,7 +7228,7 @@ qcoreaiRouter.delete("/sessions/:id/collab", async (req, res) => {
 
 // GET /api/qcoreai/me/collabs — list all active collab links for current user
 qcoreaiRouter.get("/me/collabs", async (req, res) => {
-  const auth = verifyBearerOptional(req);
+  const auth = await verifyBearerLive(req);
   if (!auth) return res.status(401).json({ error: "auth required" });
   try {
     pruneExpiredCollabs();

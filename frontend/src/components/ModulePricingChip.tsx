@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { фонСветлыйПод } from "@/lib/fonPodElementom";
 import Link from "next/link";
 import { apiUrl } from "@/lib/apiBase";
 import { track } from "@/lib/track";
@@ -70,6 +71,14 @@ export default function ModulePricingChip({ moduleId, theme = "light", hideBuy =
   // Метка канала — после отрисовки: на сервере адреса нет, и ссылка, собранная
   // при отрисовке, разошлась бы с разметкой.
   const [channel, setChannel] = useState<string | null>(null);
+  // 20.10.2026: theme="dark" стоит на 30 страницах, многие из них уже светлые — на
+  // /multichat-engine «Входит в подписку AEVION» был #e2e8f0 на #f8fafc (1.18:1, kontrast.mjs).
+  // Тему решает реальный фон под плашкой (родитель), а не обещание в месте вызова.
+  const корень = useRef<HTMLSpanElement>(null);
+  const [фонСветлый, setФонСветлый] = useState(false);
+  useEffect(() => {
+    setФонСветлый(фонСветлыйПод(корень.current?.parentElement ?? null));
+  }, []);
   useEffect(() => {
     setChannel(channelNow());
   }, []);
@@ -172,7 +181,7 @@ export default function ModulePricingChip({ moduleId, theme = "light", hideBuy =
   const href = keepChannel(app ? PRICING_APP(app.slug) : PRICING_TERMS, channel);
 
   const palette =
-    theme === "dark"
+    theme === "dark" && !фонСветлый
       ? { bg: "rgba(255,255,255,0.04)", border: "rgba(255,255,255,0.12)", text: "#e2e8f0", muted: "#94a3b8", accent: "#34d399" }
       : { bg: "#f8fafc", border: "rgba(15,23,42,0.08)", text: "#0f172a", muted: "#64748b", accent: "#0d9488" };
 
@@ -196,6 +205,7 @@ export default function ModulePricingChip({ moduleId, theme = "light", hideBuy =
     // Замер 27.08.2026 при экране 375: /lifebox чип 231px -> 203px, документ
     // 572 -> 375 (вместе с починкой баннера в UpgradeButton.tsx).
     <span
+      ref={корень}
       style={{
         display: "inline-flex",
         flexWrap: "wrap",

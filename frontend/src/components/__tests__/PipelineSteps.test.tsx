@@ -11,7 +11,8 @@ vi.mock("next/link", () => ({
 describe("PipelineSteps", () => {
   it("renders all 6 step labels", () => {
     render(<PipelineSteps current="auth" />);
-    for (const label of ["Auth", "QRight", "QSign", "Shield", "Bureau", "Planet"]) {
+    // 20.10.2026: ярлыки из словаря navI18n.ts; вне провайдера язык — ru (как было до словаря).
+    for (const label of ["Авторизация", "QRight", "QSign", "Щит", "Бюро", "Планета"]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
   });

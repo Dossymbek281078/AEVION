@@ -162,6 +162,10 @@ const RU: Record<string, string> = {
   "Could not download the archive — check your connection and try again":
     "Не удалось скачать архив — проверьте связь и попробуйте ещё раз",
   "Could not prepare the archive": "Не удалось подготовить архив",
+  // подсказки полей (20.10, замер Продаж при ru-RU: 7 из 8 placeholder английские)
+  "your@email.com": "вы@почта.kz",
+  "Visible on the public revocation banner.": "Будет видно на публичном баннере отзыва.",
+  "e.g. How does content hashing prove ownership?": "например: Как хеш содержимого доказывает авторство?",
 };
 
 /**
@@ -180,6 +184,9 @@ const KK: Record<string, string> = {
   "Could not download the archive — check your connection and try again":
     "Мұрағатты жүктеу мүмкін болмады — байланысты тексеріп, қайта көріңіз",
   "Could not prepare the archive": "Мұрағатты дайындау мүмкін болмады",
+  "your@email.com": "сіз@пошта.kz",
+  "Visible on the public revocation banner.": "Жария кері шақыру баннерінде көрсетіледі.",
+  "e.g. How does content hashing prove ownership?": "мысалы: Мазмұн хеші авторлықты қалай дәлелдейді?",
 };
 
 export const QRIGHT_DICT: Partial<Record<Lang, Record<string, string>>> = { ru: RU, kk: KK };

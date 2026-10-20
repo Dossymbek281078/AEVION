@@ -1098,7 +1098,7 @@ export default function QRightPage() {
                   </div>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>{tq(lang, "Email")}</div>
-                    <input aria-label={tq(lang, "Email")} value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} placeholder="your@email.com" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
+                    <input aria-label={tq(lang, "Email")} value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} placeholder={tq(lang, "your@email.com")} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
                   </div>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>{tq(lang, "Country")}</div>
@@ -1759,7 +1759,7 @@ export default function QRightPage() {
               value={revokeText}
               onChange={(e) => setRevokeText(e.target.value.slice(0, 500))}
               rows={3}
-              placeholder="Visible on the public revocation banner."
+              placeholder={tq(lang, "Visible on the public revocation banner.")}
               style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", fontSize: 13, color: "#0f172a", background: "#fff", marginBottom: 16, resize: "vertical", fontFamily: "inherit" }}
             />
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
@@ -1888,7 +1888,7 @@ export default function QRightPage() {
         <AskAi
           module="qright"
           title="Ask about QRight"
-          placeholder="e.g. How does content hashing prove ownership?"
+          placeholder={tq(lang, "e.g. How does content hashing prove ownership?")}
         />
       </section>
     </main>

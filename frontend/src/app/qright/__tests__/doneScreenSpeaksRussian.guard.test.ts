@@ -13,7 +13,8 @@ import { tq } from "../qrightI18n";
 const PAGE = readFileSync(join(__dirname, "..", "page.tsx"), "utf8");
 const DICT = readFileSync(join(__dirname, "..", "qrightI18n.ts"), "utf8");
 const START = PAGE.indexOf('{step === "done" && result && (');
-const BLOCK = PAGE.slice(START, START + 16000);
+const END = PAGE.indexOf("{/* ── Registry toggle ── */}", START);
+const BLOCK = PAGE.slice(START, END > START ? END : START + 24000); // блок done ≈ 20,7 тыс. знаков (20.10)
 
 const LATIN_OK = new Set(["aevion", "hmac", "sha", "ed25519", "shamir", "qright", "json", "pdf", "id", "quantum", "shield", "svg", "png", "url"]);
 function englishWords(s: string): string[] {
@@ -49,6 +50,14 @@ describe("экран «готово» QRight говорит по-русски п
     const missing = keys.filter((k) => tq("ru", k) === k);
     expect(missing).toEqual([]);
     expect(DICT).toContain('"AUTHOR": "АВТОР"');
+  });
+
+  test("кнопка «Upgrade to Verified» на экране «готово» — через словарь (ru и kk)", () => {
+    // 20.10 12:4x, замер Продукта на проде: «Verified»×2 оставались английскими при ru
+    expect(BLOCK).toContain('{tq(lang, "⭐ Upgrade to Verified")}');
+    expect(BLOCK).not.toMatch(/>\s*⭐ Upgrade to Verified \(/);
+    expect(tq("ru", "⭐ Upgrade to Verified")).not.toBe("⭐ Upgrade to Verified");
+    expect(tq("kk", "⭐ Upgrade to Verified")).not.toBe("⭐ Upgrade to Verified");
   });
 
   test("вид работы в сертификате — через словарь", () => {

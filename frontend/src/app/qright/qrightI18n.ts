@@ -160,6 +160,7 @@ const RU: Record<string, string> = {
   "A single .json with every proof — verifiable offline if AEVION ever disappears": "Один .json со всеми доказательствами — проверяется офлайн, даже если AEVION исчезнет",
   "🛡️ Download Verification Bundle": "🛡️ Скачать Пакет проверки",
   "✓ Verify Certificate": "✓ Проверить сертификат",
+  "⭐ Upgrade to Verified": "⭐ Повысить до «Проверено»",
   "⏳ Verified upgrade — not available yet": "⏳ Повышение до «Проверено» — пока недоступно",
   "Upgrade to Verified — adds real-name attestation by AEVION Bureau": "Повышение до «Проверено» — заверение настоящего имени Бюро AEVION",
   "Get an embeddable trust badge for your site": "Получить встраиваемый значок доверия для сайта",
@@ -200,6 +201,8 @@ const RU: Record<string, string> = {
  * источник, как и до 20.10). Ключи — те же английские строки, что у RU.
  */
 const KK: Record<string, string> = {
+  // кнопка на экране «готово» (20.10, окно «Приложения»): «Verified» оставалось английским при ru/kk
+  "⭐ Upgrade to Verified": "⭐ «Расталған» деңгейіне көтеру",
   "Download all my records": "Барлық жазбаларымды жүктеу",
   "Preparing archive…": "Мұрағат дайындалуда…",
   "One .zip with every certificate bundle — verifiable without AEVION.":

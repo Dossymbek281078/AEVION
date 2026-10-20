@@ -31,6 +31,15 @@ describe("DevHub: живой адрес после выкатки", () => {
     expect(SRC.slice(i, j)).toContain('setActiveTab("deployments")');
   });
 
+  it("после выкатки Pages страница опрашивает проект до live, а не перечитывает один раз", () => {
+    const i = SRC.indexOf("setPagesResult({ liveUrl: d.liveUrl");
+    const j = SRC.indexOf("Публикация на Cloudflare Pages не удалась", i);
+    const ветка = SRC.slice(i, j);
+    expect(ветка).toContain("const pollPages = async");
+    expect(ветка).toMatch(/st === "live" \|\| st === "error" \|\| pagesTries >= 36/);
+    expect(ветка).toContain("setTimeout(pollPages, 5000)");
+  });
+
   it("тост с адресом живёт дольше 4 с", () => {
     const d = SRC.slice(SRC.indexOf("const drainToasts"), SRC.indexOf("const drainToasts") + 3000);
     expect(d).toMatch(/https\?:.*\n.*setTimeout\(drainToasts, сАдресом \? 20000/);

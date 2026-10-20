@@ -2919,12 +2919,27 @@ if (/Месячная норма исчерпана|Месячный лимит[
               : `${GL.siteLive}: ${d.liveUrl ?? d.pagesUrl}`,
         d.domain && !d.domainReady && !d.domainDns ? "warning" : "success",
       );
-      setTimeout(async () => {
-        const pr = await fetch(apiUrl(`/api/devhub/projects/${project.id}`), { cache: "no-store" });
-        const pd = await pr.json();
-        setProject(pd.project);
-        fetchDeployments();
-      }, 5000);
+      // Сервер ставит проекту «live» ПОСЛЕ проверки, что страница отвечает
+      // (markDeploymentLive, ~35 с). Один перечит на 5-й секунде его не
+      // заставал: замер 20.10 — метка «черновик» и через 200 с после выкатки.
+      // Опрос тем же образцом, что у Railway: до live/error или 3 минут.
+      deployPollGenRef.current += 1;
+      const pagesGen = deployPollGenRef.current;
+      let pagesTries = 0;
+      const pollPages = async () => {
+        if (deployPollGenRef.current !== pagesGen) return;
+        pagesTries += 1;
+        try {
+          const pr = await fetch(apiUrl(`/api/devhub/projects/${project.id}`), { cache: "no-store" });
+          const pd = await pr.json();
+          setProject(pd.project);
+          fetchDeployments();
+          const st = pd.project?.status ?? "";
+          if (st === "live" || st === "error" || pagesTries >= 36) return;
+        } catch { /* сеть мигнула — следующий тик спросит снова */ }
+        setTimeout(pollPages, 5000);
+      };
+      setTimeout(pollPages, 5000);
     } catch (e: any) {
       showToast(e?.message || "Публикация на Cloudflare Pages не удалась", "error");
     } finally {

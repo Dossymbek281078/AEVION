@@ -31,6 +31,18 @@ describe("/qright: русский словарь проведён в разме�
     const плохие = Object.entries(RU).filter(([k, v]) => !/[А-Яа-яЁё]/.test(v) || v === k);
     expect(плохие.map(([k]) => k), `без кириллицы или копия ключа: ${плохие.length}`).toEqual([]);
   });
+  test("🔴 20.10: ни один КЛЮЧ словаря не содержит кириллицы — ключ = английский источник для en", () => {
+    // Продажи замерили на проде: при en подсказка поля бюро была русско-английской
+    // («например: Патентное бюро «Пример» — leave empty…»), потому что tq при en
+    // отдаёт ключ как есть. Ключей было 2 таких из 119.
+    const ключи = Object.entries(QRIGHT_DICT).flatMap(([язык, d]) => Object.keys(d ?? {}).map((k) => `${язык} :: ${k}`));
+    expect(ключи.length, "ключей в словаре").toBeGreaterThan(80);
+    const скириллицей = ключи.filter((k) => /[А-Яа-яЁё]/.test(k.split(" :: ")[1]));
+    expect(скириллицей, `ключей ${ключи.length}, с кириллицей ${скириллицей.length}`).toEqual([]);
+    expect(/[А-Яа-яЁё]/.test("например"), "КОНТРОЛЬ признака").toBe(true);
+    expect(tq("en", "e.g. Example Patent Bureau — leave empty if you register as the author")).not.toMatch(/[А-Яа-яЁё]/);
+    expect(tq("ru", "e.g. Example Patent Bureau — leave empty if you register as the author")).toBe("например: Патентное бюро «Пример» — оставьте пустым, если регистрируете как автор");
+  });
   test("tq: ru переводит, en и незнакомый язык отдают источник, незнакомый ключ — как есть", () => {
     expect(tq("ru", "Protect Your Work")).toBe("Защитите свою работу");
     expect(tq("en", "Protect Your Work")).toBe("Protect Your Work");

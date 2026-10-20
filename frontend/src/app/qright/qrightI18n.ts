@@ -84,8 +84,8 @@ const RU: Record<string, string> = {
   "e.g. Astana": "например: Астана",
   "Bureau / organisation (shown on the verification page)": "Бюро / организация (показывается на странице проверки)",
   "Bureau or organisation": "Бюро или организация",
-  "например: Патентное бюро «Пример» — leave empty if you register as the author": "например: Патентное бюро «Пример» — оставьте пустым, если регистрируете как автор",
-  "Shown as «Запись сделана через … · проверку обеспечивает AEVION». Not part of the signature.":
+  "e.g. Example Patent Bureau — leave empty if you register as the author": "например: Патентное бюро «Пример» — оставьте пустым, если регистрируете как автор",
+  "Shown as «Record made via … · verification by AEVION». Not part of the signature.":
     "Показывается как «Запись сделана через … · проверку обеспечивает AEVION». В подпись не входит.",
   "See plans →": "Смотреть тарифы →",
   "Protect my work — register, sign, and shield in one click": "Защитить работу — зарегистрировать, подписать и укрыть одним нажатием",

@@ -1112,8 +1112,8 @@ export default function QRightPage() {
                   <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>{tq(lang, "Bureau / organisation (shown on the verification page)")}</div>
                   <input aria-label={tq(lang, "Bureau or organisation")} data-testid="partner-name" value={partnerName} maxLength={80}
                     onChange={(e) => { setPartnerName(e.target.value); try { localStorage.setItem("aevion_qright_partner_v1", e.target.value); } catch {} }}
-                    placeholder={tq(lang, "например: Патентное бюро «Пример» — leave empty if you register as the author")} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
-                  <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>{tq(lang, "Shown as «Запись сделана через … · проверку обеспечивает AEVION». Not part of the signature.")}</div>
+                    placeholder={tq(lang, "e.g. Example Patent Bureau — leave empty if you register as the author")} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
+                  <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>{tq(lang, "Shown as «Record made via … · verification by AEVION». Not part of the signature.")}</div>
                 </div>
               </details>
 

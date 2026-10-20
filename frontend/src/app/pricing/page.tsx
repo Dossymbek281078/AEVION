@@ -2,13 +2,14 @@
 
 import { channelNow } from "@/lib/channelNow";
 import { ждатьКарточкуПриложения } from "@/lib/scrollToAppCard";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import Link from "next/link";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { RazrabotkaPreduprezhdenie } from "@/components/RazrabotkaPreduprezhdenie";
 import { predlagaemOtdelno } from "@/lib/neProdayotsyaOtdelno";
 import { vybratVhod, nuzhnaProkrutkaKKartochke } from "@/lib/vhodNaStranitseTsen";
 import { apiUrl } from "@/lib/apiBase";
+import { getAuthHeaders, isAuthenticated } from "@/lib/auth";
 import { fetchAiSavings, счётчикГоденДляПоказа } from "@/lib/aiSavings";
 import { запомнитьНамерение } from "@/lib/checkoutIntent";
 import { channelFrom, keepChannel, withChannel } from "@/lib/products";
@@ -39,6 +40,7 @@ import {
   planetPricePerMonth,
   planetTotal,
   planetFromPerMonth,
+  PLANET_PREPAY_DISCOUNT_PERCENT,
   appSellableTerms,
   appTermTotal,
   appTermFor,
@@ -74,8 +76,10 @@ interface PricingTier {
   priceMonthly: number | null;
   /** Срок в месяцах; null у free и enterprise. */
   termMonths: number | null;
-  /** Платёж за весь срок вперёд. */
+  /** Сумма платежей за срок; с 19.10.2026 списывается помесячно. */
   priceTermTotal: number | null;
+  /** Один платёж за весь срок вперёд со скидкой; null — где срока нет. */
+  pricePrepayTotal?: number | null;
   features: string[];
   limits: TierLimits;
   ctaLabel: string;
@@ -164,6 +168,11 @@ interface Quote {
   total: number;
   notes: string[];
   promo: AppliedPromo | null;
+  /** 19.10.2026: помесячное списание плана — платёж месяца и сумма вперёд со скидкой (в валюте сметы). */
+  billing?: "monthly" | null;
+  monthlyCharge?: number | null;
+  prepayTotal?: number | null;
+  prepayDiscountPercent?: number;
 }
 
 const CARD = "0 4px 20px rgba(15,23,42,0.06)";
@@ -266,6 +275,9 @@ export default function PricingPage() {
   // Калькулятор сметы. Срок задаёт сам тариф, а все модули уже входят в любой
   // платный срок — выбирать надстройки больше не из чего (15.09.2026).
   const [calcTier, setCalcTier] = useState<TierId>("medium");
+  // Вошёл ли человек — читаем после монтирования (localStorage; на сервере его нет).
+  const [вошёл, setВошёл] = useState(false);
+  useEffect(() => { setВошёл(isAuthenticated()); }, []);
   const [calcSeats, setCalcSeats] = useState(1);
   const [calcPromo, setCalcPromo] = useState("");
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -333,10 +345,12 @@ export default function PricingPage() {
     seats?: number;
     promoCode?: string;
     trial?: boolean;
+    /** 19.10.2026: помесячно при обязательстве или весь срок вперёд (вариант «Б»). */
+    billing?: "monthly" | "prepaid";
     /** 160 (18.10.2026): нажато в смете — предупреждение кассы показываем рядом с её кнопкой, а не наверху страницы. */
     from?: "calc";
   }) {
-    const ключ = opts.app ? ключПриложения(opts.app) : opts.tierId;
+    const ключ = opts.app ? ключПриложения(opts.app) : opts.billing === "prepaid" ? `${opts.tierId}:prepaid` : opts.tierId;
     setCheckingOut(ключ);
     setCheckoutNotice(null);
     setNoticeFrom(opts.from ?? "other");
@@ -362,7 +376,9 @@ export default function PricingPage() {
       // (локальные карты КЗ + Kaspi), иначе USD → LemonSqueezy → Gumroad → stub.
       const r = await fetch(apiUrl("/api/pricing/checkout/session"), {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        // 19.10.2026: вход уходит в кассу — почта аккаунта предзаполняет кассу и
+        // получает доступ (custom_data.accountEmail), а не адрес, набранный в кассе.
+        headers: { "content-type": "application/json", ...getAuthHeaders() },
         // Канал уходит в ТЕЛЕ запроса, а не дописыванием к адресу кассы:
         // подписанный адрес от LemonSqueezy любое дополнение отвергает (403).
         // Бэкенд кладёт его в checkout_data.custom, откуда вебхук и читает.
@@ -466,6 +482,21 @@ export default function PricingPage() {
   /** Можно ли купить товар с этой ссылкой прямо сейчас. Незнание = НЕ запрещаем. */
   const продаётсяСсылка = (ссылка: string) =>
     sellableRefs === null ? true : sellableRefs.includes(ссылка);
+  /*
+   * 19.10.2026, вариант «Б»: помесячно план покупается вариантом tier_lite, вперёд —
+   * вариантом своего срока. Что из этого продаётся, говорит /api/pricing
+   * plan.terms[].sellable; пока поля нет (старый бэкенд) — прежнее правило по ссылке.
+   * Кнопка «вперёд» без признака НЕ рисуется: её нажатие вело бы в 503.
+   */
+  const планПродаётся = useMemo(() => {
+    const terms = (data as unknown as { plan?: { terms?: Array<{ tierId: string; sellable?: { monthly: boolean; prepaid: boolean } }> } } | null)?.plan?.terms;
+    if (!Array.isArray(terms)) return null;
+    const out: Record<string, { monthly: boolean; prepaid: boolean }> = {};
+    for (const t of terms) if (t && t.sellable) out[t.tierId] = t.sellable;
+    return Object.keys(out).length ? out : null;
+  }, [data]);
+  const продаётсяПомесячно = (tierId: string) => (планПродаётся?.[tierId] ? планПродаётся[tierId].monthly : продаётся(tierId));
+  const продаётсяВперёд = (tierId: string) => Boolean(планПродаётся?.[tierId]?.prepaid);
   /**
    * Можно ли ОБЕЩАТЬ цену этого срока. Правило обратное кнопке намеренно.
    *
@@ -1364,6 +1395,11 @@ export default function PricingPage() {
       */}
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 20px" }}>
         <RazrabotkaPreduprezhdenie отступСверху={0} />
+        {/* 19.10.2026: доступ открывается на аккаунт входа, а не на адрес из кассы —
+            говорим это ДО кнопок, одной строкой на все карточки. */}
+        <p data-testid="pay-with-login-note" style={{ fontSize: 14, lineHeight: 1.5, color: "#475569", margin: "10px 0 0" }}>
+          {вошёл ? t("pricing.home.tier.accessToAccount") : t("pricing.home.tier.payWithLoginEmail")}
+        </p>
       </div>
 
       {/* Tier cards */}
@@ -1468,6 +1504,19 @@ export default function PricingPage() {
                     {заСрок(tier.priceTermTotal, tier.termMonths)}
                   </div>
                 )}
+                {/* 19.10.2026, слово основателя: срочный план списывается помесячно;
+                    вперёд — один платёж со скидкой. Без срока (1 мес) строк нет. */}
+                {!безТовара(tier.id) && isTermTier(tier.id) && tier.termMonths !== null && tier.termMonths > 1 && tier.priceMonthly !== null && (
+                  <div data-testid={`billing-${tier.id}`} style={{ fontSize: 13.5, lineHeight: 1.45, color: isHighlight ? "#94a3b8" : "#64748b", marginTop: 4 }}>
+                    {t("pricing.home.tier.monthlyBilling", { perMonth: displayPrice(tier.priceMonthly), months: String(tier.termMonths), unit: t(termUnitKey(tier.termMonths)) })}
+                    {tier.pricePrepayTotal != null && tier.priceTermTotal !== null && tier.pricePrepayTotal < tier.priceTermTotal && (
+                      <>
+                        <br />
+                        {t("pricing.home.tier.prepay", { total: displayPrice(tier.pricePrepayTotal), percent: String(PLANET_PREPAY_DISCOUNT_PERCENT[tier.id]) })}
+                      </>
+                    )}
+                  </div>
+                )}
                 {!безТовара(tier.id) && экономия > 0 && (
                   <span
                     style={{
@@ -1522,7 +1571,7 @@ export default function PricingPage() {
                   </p>
                 )}
                 <button
-                  disabled={checkingOut === tier.id || !продаётся(tier.id)}
+                  disabled={checkingOut === tier.id || !продаётсяПомесячно(tier.id)}
                   style={{
                     width: "100%",
                     padding: "10px 16px",
@@ -1541,10 +1590,36 @@ export default function PricingPage() {
                     opacity: checkingOut === tier.id ? 0.7 : 1,
                   }}
                   // Любой срок открывает всю планету: выбирать продукт больше не нужно.
-                  onClick={() => startCheckout({ tierId: tier.id, seats: 1 })}
+                  // 19.10.2026: план списывается помесячно при обязательстве на срок.
+                  onClick={() => startCheckout({ tierId: tier.id, seats: 1, billing: "monthly" })}
                 >
                   {checkingOut === tier.id ? t("pricing.home.tier.openingCheckout") : tier.ctaLabel}
                 </button>
+                {/* Весь срок вперёд со скидкой — вторая кнопка, только когда вариант срока
+                    в кассе есть (plan.terms[].sellable.prepaid) и цена вперёд ниже суммы платежей. */}
+                {isTermTier(tier.id) && tier.termMonths !== null && tier.termMonths > 1 && tier.pricePrepayTotal != null && tier.priceTermTotal !== null && tier.pricePrepayTotal < tier.priceTermTotal && продаётсяВперёд(tier.id) && (
+                  <button
+                    data-testid={`prepay-${tier.id}`}
+                    disabled={checkingOut === `${tier.id}:prepaid`}
+                    style={{
+                      width: "100%",
+                      padding: "8px 16px",
+                      fontSize: 14.5,
+                      fontWeight: 700,
+                      borderRadius: 10,
+                      border: isHighlight ? "1px solid rgba(148,163,184,0.5)" : "1px solid #cbd5e1",
+                      cursor: checkingOut === `${tier.id}:prepaid` ? "wait" : "pointer",
+                      background: "transparent",
+                      color: isHighlight ? "#e2e8f0" : "#0f172a",
+                      marginBottom: 8,
+                    }}
+                    onClick={() => startCheckout({ tierId: tier.id, seats: 1, billing: "prepaid" })}
+                  >
+                    {checkingOut === `${tier.id}:prepaid`
+                      ? t("pricing.home.tier.openingCheckout")
+                      : t("pricing.home.tier.prepayCta", { total: displayPrice(tier.pricePrepayTotal) })}
+                  </button>
+                )}
                 </>
               )}
               {/* Калькулятор — только у тарифа, у которого ЕСТЬ товар: у тарифа без
@@ -2399,7 +2474,13 @@ export default function PricingPage() {
                     {quote.total.toLocaleString("ru-RU")}
                   </span>
                 </div>
-                {calcTier !== "free" && calcTier !== "enterprise" && !продаётся(calcTier) && (
+                {/* 19.10.2026: сумма за срок списывается помесячно — говорим это рядом с итогом. */}
+                {quote.termMonths !== null && quote.termMonths > 1 && typeof quote.monthlyCharge === "number" && (
+                  <p data-testid="calc-billing" style={{ fontSize: 14, lineHeight: 1.45, color: "#94a3b8", margin: "8px 0 0" }}>
+                    {t("pricing.home.tier.monthlyBilling", { perMonth: `${symbol}${quote.monthlyCharge.toLocaleString("ru-RU")}`, months: String(quote.termMonths), unit: t(termUnitKey(quote.termMonths)) })}
+                  </p>
+                )}
+                {calcTier !== "free" && calcTier !== "enterprise" && !продаётсяПомесячно(calcTier) && (
                   /* Калькулятор ведёт в ту же кассу, что и карточки: гасим кнопку
                      и говорим почему — серая кнопка без объяснения это тупик. */
                   <p style={{ fontSize: 15, lineHeight: 1.4, color: "#94a3b8", marginTop: 16, marginBottom: 0 }}>
@@ -2456,11 +2537,13 @@ export default function PricingPage() {
                 )}
                 {calcTier !== "free" && calcTier !== "enterprise" && calcSeats <= 1 && !calcPromo && (
                   <button
-                    disabled={checkingOut === calcTier || !продаётся(calcTier)}
+                    data-testid="calc-pay-monthly"
+                    disabled={checkingOut === calcTier || !продаётсяПомесячно(calcTier)}
                     onClick={() =>
                       // Голая ступень: места и промокод сюда НЕ передаются, пока сумма
                       // не доводится до кассы. Ветка выше показывает строку со счётом.
-                      startCheckout({ tierId: calcTier, seats: 1, from: "calc" })
+                      // 19.10.2026: та же касса, что у карточек — помесячно при обязательстве.
+                      startCheckout({ tierId: calcTier, seats: 1, billing: "monthly", from: "calc" })
                     }
                     style={{
                       width: "100%",
@@ -2478,7 +2561,20 @@ export default function PricingPage() {
                   >
                     {checkingOut === calcTier
                       ? tp("calc.opening")
-                      : `${tp("calc.payQuote")} · ${symbol}${quote.total.toLocaleString("ru-RU")}`}
+                      : typeof quote.monthlyCharge === "number"
+                        ? t("pricing.home.calc.payMonthly", { perMonth: `${symbol}${quote.monthlyCharge.toLocaleString("ru-RU")}` })
+                        : `${tp("calc.payQuote")} · ${symbol}${quote.total.toLocaleString("ru-RU")}`}
+                  </button>
+                )}
+                {/* Весь срок вперёд — та же вторая кнопка, что у карточки; только при варианте срока в кассе. */}
+                {calcTier !== "free" && calcTier !== "enterprise" && calcSeats <= 1 && !calcPromo && isTermTier(calcTier) && quote.termMonths !== null && quote.termMonths > 1 && typeof quote.prepayTotal === "number" && quote.prepayTotal < quote.total && продаётсяВперёд(calcTier) && (
+                  <button
+                    data-testid="calc-pay-prepaid"
+                    disabled={checkingOut === `${calcTier}:prepaid`}
+                    onClick={() => startCheckout({ tierId: calcTier, seats: 1, billing: "prepaid", from: "calc" })}
+                    style={{ width: "100%", marginTop: 10, padding: "11px 16px", fontSize: 15, fontWeight: 700, borderRadius: 10, border: "1px solid rgba(94,234,212,0.6)", cursor: checkingOut === `${calcTier}:prepaid` ? "wait" : "pointer", background: "transparent", color: "#5eead4" }}
+                  >
+                    {checkingOut === `${calcTier}:prepaid` ? tp("calc.opening") : t("pricing.home.tier.prepayCta", { total: `${symbol}${quote.prepayTotal.toLocaleString("ru-RU")}` })}
                   </button>
                 )}
                 {calcTier === "enterprise" && (

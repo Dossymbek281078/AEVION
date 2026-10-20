@@ -236,7 +236,7 @@ export function требуемоеСловами(tiers: CanonicalTier[]): string
   if (!платные.length) return "";
   // 19.10.2026, один план (слово основателя): открывает план «AEVION Планета» на любом сроке.
   // «от Lite» — прежняя лестница тарифов, её больше нет на витрине; цена — из лесенки плана.
-  if (платные.includes("full")) return `план «AEVION Планета», любой срок — от $${planetFromPerMonth()}/мес при оплате за год, $${planetPricePerMonth("lite")}/мес без срока`;
+  if (платные.includes("full")) return `план «AEVION Планета», любой срок — от $${planetFromPerMonth()}/мес при обязательстве на год (списание ежемесячно), $${planetPricePerMonth("lite")}/мес без срока`;
   return платные.map(tierLabel).join(" / ");
 }
 

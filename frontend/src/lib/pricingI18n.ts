@@ -174,10 +174,10 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "refund.section.downgrade.b2": "Переход на более длинный срок даёт более низкую цену месяца со следующего платежа.",
     "refund.section.downgrade.b3": "Спорные случаи — через форму связи, разберёмся вручную.",
 
-    "refund.section.term.title": "Оплата за срок",
-    "refund.section.term.body": "Срок тарифа оплачивается целиком вперёд. В первые 14 дней — полный возврат. Позже отмена останавливает продление, а доступ сохраняется до последнего дня оплаченного срока.",
-    "refund.section.term.b1": "Продление — на тот же срок и по цене месяца той же ступени.",
-    "refund.section.term.b2": "Остановить продление можно в любой момент — через форму связи.",
+    "refund.section.term.title": "Срочный план и досрочная отмена",
+    "refund.section.term.body": "Срочный план списывается ежемесячно по цене выбранного срока; весь срок можно оплатить вперёд со скидкой. В первые 14 дней — полный возврат. При досрочной отмене прожитые дни пересчитываются по самой длинной пройденной ступени: до 90 дней — $250 в месяц, 90–179 — $225, 180–269 — $200, 270–364 — $175 (месяц — 30 дней, год — 365). Дослужили срок — остаётся цена плана.",
+    "refund.section.term.b1": "Оплата вперёд: разница между оплаченным и пересчитанным возвращается; доплаты нет.",
+    "refund.section.term.b2": "Помесячная оплата: если пересчёт выше оплаченного, разница выставляется счётом. Отмена — через форму связи.",
     "refund.section.term.b3": "Промокоды учитываются: возврат в первые 14 дней — от фактически оплаченной суммы.",
 
     "refund.section.usage.title": "Использование (usage-based)",
@@ -494,6 +494,10 @@ const baseDict: Record<Lang, Record<string, string>> = {
 
     /* Contact form */
     "contact.badge": "ENTERPRISE / SALES",
+    "contact.bureau.badge": "ДЛЯ ПАТЕНТНЫХ БЮРО",
+    "contact.bureau.title": "Бюро авторства для патентных бюро и поверенных",
+    "contact.bureau.subtitle": "Расскажите о бюро — ответим в течение 24 часов. Пилотная норма 50 записей в месяц, реестр с меткой времени и сертификатом, вход с рабочего адреса бюро.",
+    "contact.bureau.placeholder.message": "Например: 20 заявок в месяц, нужны сертификаты с QR для клиентов и выгрузка реестра",
     "contact.title": "Связаться с продажами",
     "contact.subtitle": "Расскажите о задаче — Customer Success свяжется в течение 24 часов с предложением, demo и customer-stories под вашу индустрию.",
     "contact.field.name": "Ваше имя *",
@@ -652,10 +656,10 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "refund.section.downgrade.b2": "Moving to a longer term lowers the monthly price from the next payment.",
     "refund.section.downgrade.b3": "Edge cases — use the contact form and we'll sort them out manually.",
 
-    "refund.section.term.title": "Paying for a term",
-    "refund.section.term.body": "A plan's term is paid in full up front. Within the first 14 days you get a full refund. After that, cancelling stops the renewal and access stays until the last day of the paid term.",
-    "refund.section.term.b1": "Renewal is for the same term at the same monthly price.",
-    "refund.section.term.b2": "You can stop the renewal at any time via the contact form.",
+    "refund.section.term.title": "Term plans and early cancellation",
+    "refund.section.term.body": "A term plan is billed monthly at the term's price; you can also pay the whole term up front at a discount. Within the first 14 days you get a full refund. If you cancel early, the days you used are re-priced at the longest term step you completed: under 90 days $250 a month, 90–179 $225, 180–269 $200, 270–364 $175 (a month is 30 days, a year 365). Complete the term and the plan price stands.",
+    "refund.section.term.b1": "Prepaid: the difference between what you paid and the re-priced amount is refunded; there is no surcharge.",
+    "refund.section.term.b2": "Monthly: if the re-priced amount is higher than what you paid, we invoice the difference. Cancel via the contact form.",
     "refund.section.term.b3": "Promo codes count: a refund in the first 14 days is based on the amount actually paid.",
 
     "refund.section.usage.title": "Usage-based fees",
@@ -956,6 +960,10 @@ const baseDict: Record<Lang, Record<string, string>> = {
     "error.whatNow": "We are on it. Refresh in a minute — or contact us if it is urgent.",
 
     "contact.badge": "ENTERPRISE / SALES",
+    "contact.bureau.badge": "FOR PATENT BUREAUS",
+    "contact.bureau.title": "Authorship bureau for patent attorneys and IP firms",
+    "contact.bureau.subtitle": "Tell us about your firm — we reply within 24 hours. A pilot quota of 50 records a month, a timestamped registry with certificates, sign-in with your firm's work address.",
+    "contact.bureau.placeholder.message": "E.g.: 20 filings a month, QR certificates for clients, registry export",
     "contact.title": "Contact sales",
     "contact.subtitle": "Tell us about your task — Customer Success will reach out within 24 hours with a proposal, demo and customer stories for your vertical.",
     "contact.field.name": "Your name *",

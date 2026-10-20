@@ -1,0 +1,166 @@
+/**
+ * Словарь страницы /qright — ru поверх английского источника (образец: verify/[id]/verifyI18n.ts).
+ *
+ * 🔴 Заявка Продаж 19.10.2026 23:25: адрес aevion.app/qright стоит в подписи пяти
+ * писем русскоязычным патентным бюро (уходят 20.10 09:00), а страница была целиком
+ * английской при выбранном RU (замер: 0 кириллических знаков при 2058 латинских).
+ * Ключ — английская строка из разметки: нет перевода → остаётся английский, а не
+ * пустота. Хеши, идентификаторы и имена алгоритмов (SHA-256, Ed25519, HMAC, Shamir,
+ * CID, JSON, PDF, QR, Bitcoin) не переводятся — это значения, не подписи.
+ * kk пока нет: читатель с kk видит английский (как и до этого дня).
+ */
+import type { Lang } from "@/lib/i18n-data";
+
+const RU: Record<string, string> = {
+  // герой
+  "Protect Your Work": "Защитите свою работу",
+  "One click. Four cryptographic layers. Forever-verifiable.": "Один клик. Четыре криптографических слоя. Проверяемо всегда.",
+  "🛡️ Protect my work — free ↓": "🛡️ Защитить работу — бесплатно ↓",
+  "Register your work and walk away with a self-contained proof bundle — Ed25519-signed immediately and Bitcoin-anchored once the timestamp confirms, verifiable even if AEVION disappears tomorrow.":
+    "Зарегистрируйте работу и получите самодостаточный пакет доказательств — подписанный Ed25519 сразу и закреплённый в Bitcoin после подтверждения метки времени; проверяется, даже если AEVION завтра исчезнет.",
+  "Open public transparency report": "Открыть публичный отчёт о прозрачности",
+  "Live registry": "Живой реестр",
+  "revoked": "отозвано",
+  "Public report →": "Публичный отчёт →",
+  // ключ автора
+  "Your browser doesn't support Ed25519 in WebCrypto, so the author co-signature layer is disabled. The other three layers (SHA-256, HMAC, and Shamir-Ed25519) still apply — but for forge-resistance against an AEVION breach, open this page in an up-to-date Chromium or Firefox.":
+    "Ваш браузер не поддерживает Ed25519 в WebCrypto, поэтому слой со-подписи автора отключён. Три остальных слоя (SHA-256, HMAC и Shamir-Ed25519) работают — но для защиты от подделки при взломе AEVION откройте эту страницу в свежем Chromium или Firefox.",
+  "Your author identity": "Ваша авторская личность",
+  "Back up your key now.": "Сохраните резервную копию ключа сейчас.",
+  "If you lose this browser AND the backup, you cannot issue new claims under this identity. Existing certificates remain verifiable forever.":
+    "Потеряете этот браузер И резервную копию — новые заявки под этой личностью выпустить не получится. Уже выданные сертификаты проверяемы всегда.",
+  "⬇ Download key backup (.json)": "⬇ Скачать копию ключа (.json)",
+  "Restore from file": "Восстановить из файла",
+  // быстрый старт
+  "Quick start guide": "Краткая инструкция",
+  "First time? Start here.": "Впервые здесь? Начните отсюда.",
+  "Fill": "Заполните",
+  "title": "название",
+  "description": "описание",
+  ", pick the type, press": ", выберите тип и нажмите",
+  "🛡️ Protect My Work": "🛡️ Защитить работу",
+  "You walk away with: a public verify URL, a downloadable PDF, an Author Shard you store offline, and a Verification Bundle that works even if AEVION goes dark. Save the bundle and the shard — that's the part we cannot do for you.":
+    "Вы получите: публичную ссылку проверки, PDF для скачивания, Долю автора, которую храните офлайн, и Пакет проверки, который работает, даже если AEVION исчезнет. Сохраните пакет и долю — это единственное, что мы не можем сделать за вас.",
+  "Dismiss quick start guide": "Скрыть краткую инструкцию",
+  // файл
+  "📎 Attach a file": "📎 Прикрепить файл",
+  "(optional)": "(необязательно)",
+  "Drop any file to compute its SHA-256 fingerprint — stored alongside your certificate as proof the exact file existed at this timestamp.":
+    "Перетащите любой файл — посчитаем его отпечаток SHA-256 и сохраним рядом с сертификатом как доказательство, что именно этот файл существовал на эту метку времени.",
+  "Browse…": "Выбрать…",
+  "⏳ Computing SHA-256…": "⏳ Считаем SHA-256…",
+  "✕ Clear": "✕ Убрать",
+  "Checking bureau registry for prior art…": "Проверяем реестр бюро на совпадения…",
+  "No prior art found": "Совпадений не найдено",
+  "This file is unique in the AEVION registry — safe to register.": "Этот файл уникален в реестре AEVION — можно регистрировать.",
+  "Prior art detected": "Найдено совпадение",
+  "Identical content already registered as": "Идентичное содержимое уже зарегистрировано как",
+  "by": "— автор",
+  "View existing certificate →": "Открыть существующий сертификат →",
+  // форма
+  "What are you protecting? *": "Что вы защищаете? *",
+  'e.g. "My AI Music Track", "Logo Design v3", "Trading Algorithm"': "например: «Мой ИИ-трек», «Логотип v3», «Торговый алгоритм»",
+  "Title of the work you are protecting": "Название защищаемой работы",
+  "Type of work": "Тип работы",
+  "Music / Audio": "Музыка / аудио",
+  "Code / Software": "Код / ПО",
+  "Design / Visual": "Дизайн / визуал",
+  "Text / Article": "Текст / статья",
+  "Video / Film": "Видео / фильм",
+  "Idea / Concept": "Идея / концепция",
+  "Other": "Другое",
+  "Describe your work *": "Опишите работу *",
+  "What is it? What makes it identifiable as yours? Anything you write here becomes part of the signed certificate.":
+    "Что это? По чему её можно узнать как вашу? Всё написанное здесь становится частью подписанного сертификата.",
+  "Description of the work": "Описание работы",
+  "Author details (optional — auto-filled if logged in) · bureau / organisation shown on the verification page":
+    "Данные автора (необязательно — заполняются при входе) · бюро / организация показывается на странице проверки",
+  "Name": "Имя",
+  "Your name": "Ваше имя",
+  "Email": "Почта",
+  "Country": "Страна",
+  "e.g. Kazakhstan": "например: Казахстан",
+  "City": "Город",
+  "e.g. Astana": "например: Астана",
+  "Bureau / organisation (shown on the verification page)": "Бюро / организация (показывается на странице проверки)",
+  "Bureau or organisation": "Бюро или организация",
+  "например: Патентное бюро «Пример» — leave empty if you register as the author": "например: Патентное бюро «Пример» — оставьте пустым, если регистрируете как автор",
+  "Shown as «Запись сделана через … · проверку обеспечивает AEVION». Not part of the signature.":
+    "Показывается как «Запись сделана через … · проверку обеспечивает AEVION». В подпись не входит.",
+  "See plans →": "Смотреть тарифы →",
+  "Protect my work — register, sign, and shield in one click": "Защитить работу — зарегистрировать, подписать и укрыть одним нажатием",
+  "Protect My Work": "Защитить работу",
+  "Protecting your work...": "Защищаем работу...",
+  "Please fill in the title and description": "Заполните название и описание",
+  "Could not hash file": "Не удалось посчитать хеш файла",
+  // сертификат
+  "Your work is now protected!": "Ваша работа защищена!",
+  "Protected. Provable. Permanent.": "Защищено. Доказуемо. Навсегда.",
+  "AEVION Protection Certificate": "Сертификат защиты AEVION",
+  "✓ PROTECTED": "✓ ЗАЩИЩЕНО",
+  "PROTECTED AT": "ЗАЩИЩЕНО",
+  "LOCATION": "МЕСТО",
+  "Copy": "Копировать",
+  "Co-signed by your author key": "Со-подписано вашим авторским ключом",
+  "Author key fingerprint:": "Отпечаток авторского ключа:",
+  "Your Author Shard — Save It Now": "Ваша Доля автора — сохраните сейчас",
+  "Shard 1 of 3 · AEVION does NOT keep a copy · Without it you depend on AEVION": "Доля 1 из 3 · AEVION копию НЕ хранит · без неё вы зависите от AEVION",
+  "Any 2 of 3 reconstructs your proof:": "Любые 2 из 3 восстанавливают доказательство:",
+  "Author shard downloaded — store it safely!": "Доля автора скачана — храните надёжно!",
+  "⬇ Download Author Shard (.json)": "⬇ Скачать Долю автора (.json)",
+  "Copy JSON": "Копировать JSON",
+  "Public Witness Shard (shard 3 of 3)": "Публичная Доля свидетеля (доля 3 из 3)",
+  "Content-addressed: anyone can fetch this shard and verify the bytes match the CID. Pair it with your Author Shard to recover without AEVION.":
+    "Адресуется содержимым: любой может получить эту долю и сверить байты с CID. Вместе с вашей Долей автора она восстанавливает доказательство без AEVION.",
+  // что дальше
+  "What to do next": "Что делать дальше",
+  "Download the Verification Bundle": "Скачайте Пакет проверки",
+  "— a single": "— один файл",
+  "file containing every cryptographic proof. Drop it into": "со всеми криптографическими доказательствами. Положите его в",
+  "on any machine, any year, no AEVION required.": "на любой машине, в любом году, без AEVION.",
+  "This is the proof that survives us.": "Это доказательство переживёт нас.",
+  "Save your Author Shard": "Сохраните Долю автора",
+  "(orange panel above) — store it offline alongside the bundle. AEVION holds at most 1 of 3 shards; without yours, no rogue platform action can forge a recovery.":
+    "(оранжевая панель выше) — храните офлайн рядом с пакетом. У AEVION не больше 1 доли из 3; без вашей никакое действие платформы не подделает восстановление.",
+  "Share the verify link": "Поделитесь ссылкой проверки",
+  "— the public page shows every integrity check, the Bitcoin anchor status, and the legal basis.": "— публичная страница показывает все проверки целостности, статус якоря в Bitcoin и правовую основу.",
+  "Print the PDF": "Распечатайте PDF",
+  "for paper records — printable, with a QR code back to the live verify page.": "для бумажного архива — с QR-кодом на живую страницу проверки.",
+  "Pin the Witness Shard": "Закрепите Долю свидетеля",
+  "— its CID is content-addressed, so anyone can independently fetch and verify it. Combined with your Author Shard, that's 2 of 3 — recovery without AEVION.":
+    "— её CID адресуется содержимым, так что любой может независимо получить и проверить её. Вместе с вашей Долей автора это 2 из 3 — восстановление без AEVION.",
+  "📄 Download PDF Certificate": "📄 Скачать сертификат PDF",
+  "A single .json with every proof — verifiable offline if AEVION ever disappears": "Один .json со всеми доказательствами — проверяется офлайн, даже если AEVION исчезнет",
+  "🛡️ Download Verification Bundle": "🛡️ Скачать Пакет проверки",
+  "✓ Verify Certificate": "✓ Проверить сертификат",
+  "⏳ Verified upgrade — not available yet": "⏳ Повышение до «Проверено» — пока недоступно",
+  "Upgrade to Verified — adds real-name attestation by AEVION Bureau": "Повышение до «Проверено» — заверение настоящего имени Бюро AEVION",
+  "Get an embeddable trust badge for your site": "Получить встраиваемый значок доверия для сайта",
+  "🔖 Embed Badge": "🔖 Встроить значок",
+  "🛡️ Protect Another Work": "🛡️ Защитить ещё одну работу",
+  "Shield Dashboard →": "Панель защиты →",
+  "Export JSON": "Экспорт JSON",
+  // реестр
+  "Sign in to see your works": "Войдите, чтобы увидеть свои работы",
+  "Search by title (≥ 2 chars)…": "Поиск по названию (от 2 знаков)…",
+  "Filter loaded results by title…": "Отфильтровать загруженное по названию…",
+  "Loading registry...": "Загружаем реестр...",
+  "Top sources (30d)": "Источники (30 дней)",
+  "Public page →": "Публичная страница →",
+  "Get embed code →": "Код для встраивания →",
+  "Policies →": "Правила →",
+  "Revoke": "Отозвать",
+};
+
+export const QRIGHT_DICT: Partial<Record<Lang, Record<string, string>>> = { ru: RU };
+
+/** Перевод строки /qright; нет перевода — английский источник как есть. */
+export function tq(lang: Lang | string | undefined, en: string): string {
+  const d = lang ? QRIGHT_DICT[lang as Lang] : undefined;
+  return (d && d[en]) || en;
+}
+
+/** Сколько ключей в словаре — знаменатель для сторожа и отчёта. */
+export function qrightDictCoverage(): { ru: number } {
+  return { ru: Object.keys(RU).length };
+}

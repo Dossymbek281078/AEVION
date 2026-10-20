@@ -538,7 +538,7 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
           {error && <p style={{ color: "#dc2626", fontSize: 12.5, margin: "8px 0" }}>{error}</p>}
           {quotaOffer && (
             <p data-testid="quota-offer" role="status" style={{ fontSize: 13, lineHeight: 1.5, margin: "8px 0", padding: "10px 12px", borderRadius: 10, background: "rgba(13,148,136,0.07)", border: "1px solid rgba(13,148,136,0.25)" }}>
-              <b>Бесплатные публикации на этот месяц исчерпаны.</b> План «AEVION Планета» снимает ограничение и открывает все приложения — от ${planetFromPerMonth()}/мес при оплате за 12 месяцев, ${planetPricePerMonth("lite")}/мес без срока.{" "}
+              <b>Бесплатные публикации на этот месяц исчерпаны.</b> План «AEVION Планета» снимает ограничение и открывает все приложения — от ${planetFromPerMonth()}/мес при обязательстве на 12 месяцев, ${planetPricePerMonth("lite")}/мес без срока.{" "}
               <a href="/pricing#tiers" style={{ color: "#0d9488", fontWeight: 800 }}>Смотреть тарифы →</a>
             </p>
           )}

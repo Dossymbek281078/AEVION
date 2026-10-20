@@ -56,9 +56,10 @@ import {
   PILOT_490_REFERENCE,
   isAppReference,
   appSlugForReference,
+  expectedPlanetChargeUsd,
   type LemonSqueezyReference,
 } from "../data/lemonSqueezyVariants";
-import { MEDIUM_BUNDLE, TIERS } from "../data/pricing";
+import { MEDIUM_BUNDLE, TIERS, TERM_MONTHS, isTermTier } from "../data/pricing";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { getPool } from "../lib/dbPool";
 import { hasSeenWebhook, markWebhookSeen, releaseWebhookKey } from "../lib/webhookDedup";
@@ -111,7 +112,13 @@ export const lemonSqueezyWebhookRouter = Router();
 interface LsSubscriptionPayload {
   meta?: {
     event_name?: string;
-    custom_data?: { reference?: string; email?: string; module?: string; channel?: string; bureauIntentId?: string };
+    custom_data?: {
+      reference?: string; email?: string; module?: string; channel?: string; bureauIntentId?: string;
+      /** 19.10.2026, вариант «Б»: план на срок куплен вариантом tier_lite/tier_<t> с подменой цены. */
+      term?: string; billing?: string;
+      /** 19.10.2026: почта вошедшего, которую наша касса положила по Bearer, — доступ выдаётся ей. */
+      accountEmail?: string;
+    };
     /** Покупка из тестового режима кассы — не выручка. Добавлено 20.09.2026. */
     test_mode?: boolean;
   };
@@ -266,7 +273,14 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
 
   const event = (payload.meta?.event_name ?? "").toLowerCase();
   const attrs = payload.data?.attributes ?? {};
-  const email = (attrs.user_email ?? payload.meta?.custom_data?.email ?? "").trim().toLowerCase();
+  // 19.10.2026: почта аккаунта из custom_data (её кладёт наша касса по Bearer покупателя)
+  // сильнее адреса, набранного в кассе: доступ открывается тому, кто вошёл и нажал
+  // «оплатить». Без неё — как прежде: user_email кассы, затем custom_data.email.
+  const почтаАккаунта = String(payload.meta?.custom_data?.accountEmail ?? "").trim().toLowerCase();
+  const email = (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(почтаАккаунта)
+    ? почтаАккаунта
+    : String(attrs.user_email ?? payload.meta?.custom_data?.email ?? "")
+  ).trim().toLowerCase();
 
   if (event === "order_created" || event === "order_refunded") {
     // Возврат ЗАБИРАЕТ то, что выдала покупка. До 13.08.2026 слова «refund» в
@@ -516,7 +530,34 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
         releaseWebhookKey("lemonsqueezy", dedupKey);
         return res.status(500).json({ ok: false, error: "unmapped_variant", variantId: String(attrs.variant_id ?? "") });
       }
-      const tierId = tierForLemonSqueezyReference(ref);
+      /*
+       * 🔴 19.10.2026, вариант «Б»: план на срок приходит вариантом tier_lite
+       * (помесячно) или tier_<t> (вперёд) с custom_data {term, billing}. Ступень —
+       * из term, но ТОЛЬКО когда списанная сумма равна ожидаемой для пары: иначе
+       * custom_data с чужим term открыл бы год за цену месяца. Сумма меньше
+       * ожидаемой или пара неизвестна — отказ без выдачи (409/400), ключ
+       * дедупликации отпускаем, чтобы повтор не пропал.
+       */
+      const планCd = payload.meta?.custom_data;
+      const планЕсть = планCd?.term !== undefined || планCd?.billing !== undefined;
+      let планTerm: string | null = null;
+      if (планЕсть) {
+        const ожидаемо = expectedPlanetChargeUsd(планCd?.term, планCd?.billing);
+        if (ожидаемо === null || typeof планCd?.term !== "string" || !isTermTier(планCd.term)) {
+          releaseWebhookKey("lemonsqueezy", dedupKey);
+          capture(new Error(`ls_plan_custom_data_invalid:${payload.data?.id ?? "?"}`), { route: "ls/webhook" });
+          console.error(`[ls/webhook] ${event}: custom_data плана непонятен (term=${String(планCd?.term)}, billing=${String(планCd?.billing)}) — доступ НЕ выдан`);
+          return res.status(400).json({ ok: false, error: "plan_custom_data_invalid" });
+        }
+        if (paidUsd !== undefined && paidUsd + 0.005 < ожидаемо) {
+          releaseWebhookKey("lemonsqueezy", dedupKey);
+          capture(new Error(`ls_plan_amount_mismatch:${payload.data?.id ?? "?"}`), { route: "ls/webhook" });
+          console.error(`[ls/webhook] ${event}: план ${планCd.term}/${String(планCd.billing)} ждёт $${ожидаемо}, списано $${paidUsd} — доступ НЕ выдан`);
+          return res.status(409).json({ ok: false, error: "plan_amount_mismatch", expectedUsd: ожидаемо, paidUsd });
+        }
+        планTerm = планCd.term;
+      }
+      const tierId = планTerm && isTermTier(планTerm) ? планTerm : tierForLemonSqueezyReference(ref);
       const customModule = payload.meta?.custom_data?.module;
 
       // 🔴 ПОКУПКА ОДНОГО МОДУЛЯ ЧЕРЕЗ ВАРИАНТ ТАРИФА — НЕ ТАРИФ.
@@ -597,7 +638,7 @@ lemonSqueezyWebhookRouter.post("/webhook", async (req, res) => {
       if (testMode) {
         console.warn("[lemonsqueezy] ТЕСТОВАЯ покупка (meta.test_mode): ref=%s — доступ выдан, в выручку не считать", ref ?? "?");
       }
-      const termMonths = termMonthsForReference(ref ?? "");
+      const termMonths = планTerm && isTermTier(планTerm) ? TERM_MONTHS[планTerm] : termMonthsForReference(ref ?? "");
       const result = await provisionSubscription({
         email,
         tierId,

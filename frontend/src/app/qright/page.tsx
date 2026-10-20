@@ -21,6 +21,7 @@ import { ЦЕНА_ПРОВЕРКИ_ЦЕНТЫ, ценаСПериодом } from
 import { Sparkline } from "@/components/Sparkline";
 import { PageTracking } from "@/components/PageTracking";
 import { useI18n } from "@/lib/i18n";
+import { tq } from "./qrightI18n";
 import {
   OWNER_REVOKE_REASON_CODES,
   revokeReasonLabel,
@@ -402,7 +403,7 @@ export default function QRightPage() {
         setPriorArtResult("clear");
       }
     } catch {
-      showToast("Could not hash file", "error");
+      showToast(tq(lang, "Could not hash file"), "error");
     } finally {
       setFileHashing(false);
     }
@@ -420,8 +421,8 @@ export default function QRightPage() {
 
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
-    if (sp.get("title")) setTitle(sp.get("title")!);
-    if (sp.get("description")) setDescription(sp.get("description")!);
+    if (sp.get(tq(lang, "title"))) setTitle(sp.get(tq(lang, "title"))!);
+    if (sp.get(tq(lang, "description"))) setDescription(sp.get(tq(lang, "description"))!);
     if (sp.get("country")) setCountry(sp.get("country")!);
     if (sp.get("city")) setCity(sp.get("city")!);
   }, []);
@@ -444,7 +445,7 @@ export default function QRightPage() {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !description.trim()) {
-      setErr("Please fill in the title and description");
+      setErr(tq(lang, "Please fill in the title and description"));
       return;
     }
 
@@ -518,7 +519,7 @@ export default function QRightPage() {
 
       setResult(data as PipelineResult);
       setStep("done");
-      showToast("Your work is now protected!", "success");
+      showToast(tq(lang, "Your work is now protected!"), "success");
       // 158: карточка монтируется на следующем кадре — прокручиваем к её шапке, а не оставляем человека у кнопок внизу.
       // Повтор через 400 мс: замер на проде 19.10 00:0x — после первой прокрутки вёрстка ещё сдвигалась (блок шагов
       // отрисовки сворачивался, панели карточки раскрывались), и строка хэша оставалась на 54–159 px выше кадра.
@@ -562,7 +563,7 @@ export default function QRightPage() {
         const data = await res.json();
         setItems(data.items || []);
       } else if (scope === "mine" && res.status === 401) {
-        showToast("Sign in to see your works", "error");
+        showToast(tq(lang, "Sign in to see your works"), "error");
       }
     } catch {}
     setLoadingItems(false);
@@ -784,8 +785,8 @@ export default function QRightPage() {
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
               <div style={{ width: 48, height: 48, borderRadius: 14, background: "linear-gradient(135deg, #0d9488, #06b6d4)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>🛡️</div>
               <div>
-                <h1 style={{ fontSize: 24, fontWeight: 900, margin: 0, letterSpacing: "-0.02em" }}>Protect Your Work</h1>
-                <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>One click. Four cryptographic layers. Forever-verifiable.</p>
+                <h1 style={{ fontSize: 24, fontWeight: 900, margin: 0, letterSpacing: "-0.02em" }}>{tq(lang, "Protect Your Work")}</h1>
+                <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>{tq(lang, "One click. Four cryptographic layers. Forever-verifiable.")}</p>
               </div>
             </div>
             {/* Замер 12.10.2026 (окно Приложения-31.12): бесплатная форма стоит в
@@ -797,12 +798,8 @@ export default function QRightPage() {
               href="#protect-form"
               data-testid="qright-jump-to-form"
               style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 4, marginBottom: 14, padding: "12px 20px", borderRadius: 12, background: "#14b8a6", color: "#0f172a", fontWeight: 800, fontSize: 15, textDecoration: "none" }}
-            >
-              🛡️ Protect my work — free ↓
-            </a>
-            <p style={{ margin: 0, fontSize: 14, opacity: 0.75, lineHeight: 1.6, maxWidth: 600 }}>
-              Register your work and walk away with a self-contained proof bundle — Ed25519-signed immediately and Bitcoin-anchored once the timestamp confirms, verifiable even if AEVION disappears tomorrow.
-            </p>
+            >{tq(lang, "🛡️ Protect my work — free ↓")}</a>
+            <p style={{ margin: 0, fontSize: 14, opacity: 0.75, lineHeight: 1.6, maxWidth: 600 }}>{tq(lang, "Register your work and walk away with a self-contained proof bundle — Ed25519-signed immediately and Bitcoin-anchored once the timestamp confirms, verifiable even if AEVION disappears tomorrow.")}</p>
           </div>
         </div>
 
@@ -828,7 +825,7 @@ export default function QRightPage() {
         {transparency && transparency.registered > 0 && (
           <Link
             href="/qright/transparency"
-            aria-label="Open public transparency report"
+            aria-label={tq(lang, "Open public transparency report")}
             style={{
               display: "flex",
               flexWrap: "wrap",
@@ -845,23 +842,18 @@ export default function QRightPage() {
           >
             <span style={{ fontSize: 18 }} aria-hidden>📊</span>
             <span style={{ display: "flex", flexDirection: "column" }}>
-              <span style={{ fontSize: 11, fontWeight: 800, color: "#0d9488", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                Live registry
-              </span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: "#0d9488", textTransform: "uppercase", letterSpacing: "0.06em" }}>{tq(lang, "Live registry")}</span>
               <span style={{ fontSize: 13, color: "#0f172a", fontWeight: 600 }}>
                 <strong style={{ color: "#0d9488" }}>{transparency.registered.toLocaleString()}</strong> registered ·{" "}
                 <strong>{transparency.active.toLocaleString()}</strong> active
                 {transparency.revoked > 0 && (
                   <>
                     {" · "}
-                    <strong style={{ color: "#dc2626" }}>{transparency.revoked.toLocaleString()}</strong> revoked
-                  </>
+                    <strong style={{ color: "#dc2626" }}>{transparency.revoked.toLocaleString()}</strong>{tq(lang, "revoked")}</>
                 )}
               </span>
             </span>
-            <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 800, color: "#0d9488" }}>
-              Public report →
-            </span>
+            <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 800, color: "#0d9488" }}>{tq(lang, "Public report →")}</span>
           </Link>
         )}
 
@@ -888,9 +880,7 @@ export default function QRightPage() {
 
             {/* Author identity panel — your client-side keypair */}
             {cosignSupported === false && (
-              <div role="alert" style={{ borderRadius: 12, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.05)", padding: "12px 16px", marginBottom: 14, fontSize: 12, color: "#991b1b" }}>
-                Your browser doesn&apos;t support Ed25519 in WebCrypto, so the author co-signature layer is disabled. The other three layers (SHA-256, HMAC, and Shamir-Ed25519) still apply — but for forge-resistance against an AEVION breach, open this page in an up-to-date Chromium or Firefox.
-              </div>
+              <div role="alert" style={{ borderRadius: 12, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.05)", padding: "12px 16px", marginBottom: 14, fontSize: 12, color: "#991b1b" }}>{tq(lang, "Your browser doesn't support Ed25519 in WebCrypto, so the author co-signature layer is disabled. The other three layers (SHA-256, HMAC, and Shamir-Ed25519) still apply — but for forge-resistance against an AEVION breach, open this page in an up-to-date Chromium or Firefox.")}</div>
             )}
             {keyError && (
               <div role="alert" style={{ borderRadius: 12, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.05)", padding: "12px 16px", marginBottom: 14, fontSize: 12, color: "#991b1b" }}>
@@ -901,9 +891,7 @@ export default function QRightPage() {
               <div style={{ borderRadius: 14, border: needsBackup ? "2px solid #f59e0b" : "1px solid rgba(13,148,136,0.2)", background: needsBackup ? "#fffbeb" : "rgba(13,148,136,0.04)", padding: "14px 16px", marginBottom: 18 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: needsBackup ? 8 : 0 }}>
                   <span style={{ fontSize: 18 }} aria-hidden>🔑</span>
-                  <div style={{ fontSize: 12, fontWeight: 900, color: needsBackup ? "#92400e" : "#0f766e" }}>
-                    Your author identity
-                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 900, color: needsBackup ? "#92400e" : "#0f766e" }}>{tq(lang, "Your author identity")}</div>
                   <InfoTip
                     label="Author co-signing"
                     text="Your browser holds an Ed25519 keypair only known to you. Every certificate you create is also signed with this key, so even if AEVION is breached, attackers cannot forge new certificates in your name without your private key."
@@ -915,21 +903,16 @@ export default function QRightPage() {
                 {needsBackup && (
                   <>
                     <div style={{ fontSize: 12, color: "#78350f", lineHeight: 1.55, marginBottom: 8 }}>
-                      <b>Back up your key now.</b> If you lose this browser AND the backup, you cannot issue new claims under this identity. Existing certificates remain verifiable forever.
-                    </div>
+                      <b>{tq(lang, "Back up your key now.")}</b>{tq(lang, "If you lose this browser AND the backup, you cannot issue new claims under this identity. Existing certificates remain verifiable forever.")}</div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <button
                         type="button"
                         onClick={downloadKeyBackup}
                         style={{ padding: "10px 14px", borderRadius: 10, border: "none", background: "#78350f", color: "#fff", fontWeight: 800, fontSize: 13, cursor: "pointer" }}
-                      >
-                        ⬇ Download key backup (.json)
-                      </button>
+                      >{tq(lang, "⬇ Download key backup (.json)")}</button>
                       <label
                         style={{ padding: "10px 14px", borderRadius: 10, border: "1px solid #92400e", background: "#fff", color: "#92400e", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
-                      >
-                        Restore from file
-                        <input
+                      >{tq(lang, "Restore from file")}<input
                           type="file"
                           accept="application/json"
                           onChange={(e) => {
@@ -948,23 +931,21 @@ export default function QRightPage() {
             {showTour && (
               <div
                 role="region"
-                aria-label="Quick start guide"
+                aria-label={tq(lang, "Quick start guide")}
                 style={{ position: "relative", borderRadius: 14, border: "1px dashed rgba(13,148,136,0.4)", background: "rgba(13,148,136,0.05)", padding: "14px 18px 14px 16px", marginBottom: 18 }}
               >
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
                   <span style={{ fontSize: 20 }} aria-hidden>👇</span>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 12, fontWeight: 900, color: "#0f766e", marginBottom: 4 }}>First time? Start here.</div>
-                    <div style={{ fontSize: 12, color: "#0f172a", lineHeight: 1.55 }}>
-                      Fill <b>title</b> and <b>description</b>, pick the type, press
-                      <span style={{ display: "inline-block", margin: "0 4px", padding: "1px 8px", borderRadius: 6, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", fontWeight: 800, fontSize: 11 }}>🛡️ Protect My Work</span>.
-                      You walk away with: a public verify URL, a downloadable PDF, an Author Shard you store offline, and a Verification Bundle that works even if AEVION goes dark. Save the bundle and the shard — that&apos;s the part we cannot do for you.
+                    <div style={{ fontSize: 12, fontWeight: 900, color: "#0f766e", marginBottom: 4 }}>{tq(lang, "First time? Start here.")}</div>
+                    <div style={{ fontSize: 12, color: "#0f172a", lineHeight: 1.55 }}>{tq(lang, "Fill")}<b>{tq(lang, "title")}</b> and <b>{tq(lang, "description")}</b>{tq(lang, ", pick the type, press")}<span style={{ display: "inline-block", margin: "0 4px", padding: "1px 8px", borderRadius: 6, background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", fontWeight: 800, fontSize: 11 }}>{tq(lang, "🛡️ Protect My Work")}</span>.
+                      {tq(lang, "You walk away with: a public verify URL, a downloadable PDF, an Author Shard you store offline, and a Verification Bundle that works even if AEVION goes dark. Save the bundle and the shard — that's the part we cannot do for you.")}
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={dismissTour}
-                    aria-label="Dismiss quick start guide"
+                    aria-label={tq(lang, "Dismiss quick start guide")}
                     style={{ border: "none", background: "transparent", color: "#64748b", fontSize: 18, fontWeight: 700, cursor: "pointer", padding: 0, lineHeight: 1 }}
                   >
                     ×
@@ -994,16 +975,11 @@ export default function QRightPage() {
             >
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" as const }}>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a", marginBottom: 2 }}>
-                    📎 Attach a file <span style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>(optional)</span>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: "#0f172a", marginBottom: 2 }}>{tq(lang, "📎 Attach a file")}<span style={{ fontSize: 11, fontWeight: 600, color: "#64748b" }}>{tq(lang, "(optional)")}</span>
                   </div>
-                  <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.5 }}>
-                    Drop any file to compute its SHA-256 fingerprint — stored alongside your certificate as proof the exact file existed at this timestamp.
-                  </div>
+                  <div style={{ fontSize: 11, color: "#64748b", lineHeight: 1.5 }}>{tq(lang, "Drop any file to compute its SHA-256 fingerprint — stored alongside your certificate as proof the exact file existed at this timestamp.")}</div>
                 </div>
-                <label style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontSize: 12, fontWeight: 700, color: "#334155", cursor: "pointer", whiteSpace: "nowrap" as const }}>
-                  Browse…
-                  <input
+                <label style={{ padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", fontSize: 12, fontWeight: 700, color: "#334155", cursor: "pointer", whiteSpace: "nowrap" as const }}>{tq(lang, "Browse…")}<input
                     type="file"
                     className="aevion-file-input"
                     onChange={(e) => { const f = e.target.files?.[0]; if (f) hashFile(f); }}
@@ -1012,7 +988,7 @@ export default function QRightPage() {
               </div>
 
               {fileHashing && (
-                <div style={{ marginTop: 10, fontSize: 12, color: "#0d9488" }}>⏳ Computing SHA-256…</div>
+                <div style={{ marginTop: 10, fontSize: 12, color: "#0d9488" }}>{tq(lang, "⏳ Computing SHA-256…")}</div>
               )}
               {fileHash && !fileHashing && (
                 <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
@@ -1029,23 +1005,20 @@ export default function QRightPage() {
                       type="button"
                       onClick={() => { setFileHash(null); setFileName(null); setPriorArtResult(null); }}
                       style={{ padding: "5px 10px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", color: "#64748b", fontSize: 11, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}
-                    >
-                      ✕ Clear
-                    </button>
+                    >{tq(lang, "✕ Clear")}</button>
                   </div>
 
                   {/* Prior-art result */}
                   {priorArtResult === "checking" && (
                     <div style={{ fontSize: 11, color: "#64748b", display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>⏳</span> Checking bureau registry for prior art…
-                    </div>
+                      <span style={{ animation: "spin 1s linear infinite", display: "inline-block" }}>⏳</span>{tq(lang, "Checking bureau registry for prior art…")}</div>
                   )}
                   {priorArtResult === "clear" && (
                     <div style={{ padding: "8px 12px", borderRadius: 8, background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.25)", display: "flex", alignItems: "center", gap: 8 }}>
                       <span style={{ fontSize: 16 }}>✅</span>
                       <div>
-                        <div style={{ fontSize: 12, fontWeight: 800, color: "#065f46" }}>No prior art found</div>
-                        <div style={{ fontSize: 11, color: "#6b7280" }}>This file is unique in the AEVION registry — safe to register.</div>
+                        <div style={{ fontSize: 12, fontWeight: 800, color: "#065f46" }}>{tq(lang, "No prior art found")}</div>
+                        <div style={{ fontSize: 11, color: "#6b7280" }}>{tq(lang, "This file is unique in the AEVION registry — safe to register.")}</div>
                       </div>
                     </div>
                   )}
@@ -1053,13 +1026,10 @@ export default function QRightPage() {
                     <div style={{ padding: "8px 12px", borderRadius: 8, background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.25)", display: "flex", alignItems: "flex-start", gap: 8 }}>
                       <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12, fontWeight: 800, color: "#991b1b" }}>Prior art detected</div>
-                        <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>
-                          Identical content already registered as <b>&ldquo;{priorArtResult.title}&rdquo;</b> by {priorArtResult.author}.
+                        <div style={{ fontSize: 12, fontWeight: 800, color: "#991b1b" }}>{tq(lang, "Prior art detected")}</div>
+                        <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>{tq(lang, "Identical content already registered as")}<b>&ldquo;{priorArtResult.title}&rdquo;</b> {tq(lang, "by")} {priorArtResult.author}.
                         </div>
-                        <Link href={`/verify/${priorArtResult.id}`} target="_blank" style={{ fontSize: 11, color: "#dc2626", fontWeight: 700, textDecoration: "underline", marginTop: 4, display: "inline-block" }}>
-                          View existing certificate →
-                        </Link>
+                        <Link href={`/verify/${priorArtResult.id}`} target="_blank" style={{ fontSize: 11, color: "#dc2626", fontWeight: 700, textDecoration: "underline", marginTop: 4, display: "inline-block" }}>{tq(lang, "View existing certificate →")}</Link>
                       </div>
                     </div>
                   )}
@@ -1069,14 +1039,12 @@ export default function QRightPage() {
 
             <form id="protect-form" onSubmit={submit} style={{ display: "grid", gap: 16, scrollMarginTop: 80 }}>
               <div>
-                <label style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", marginBottom: 6, display: "block" }}>
-                  What are you protecting? *
-                </label>
+                <label style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", marginBottom: 6, display: "block" }}>{tq(lang, "What are you protecting? *")}</label>
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder='e.g. "My AI Music Track", "Logo Design v3", "Trading Algorithm"'
-                  aria-label="Title of the work you are protecting"
+                  placeholder={tq(lang, 'e.g. "My AI Music Track", "Logo Design v3", "Trading Algorithm"')}
+                  aria-label={tq(lang, "Title of the work you are protecting")}
                   aria-required="true"
                   required
                   style={{ width: "100%", padding: "14px 16px", borderRadius: 12, border: "1px solid rgba(15,23,42,0.15)", fontSize: 15, outline: "none", boxSizing: "border-box" }}
@@ -1084,7 +1052,7 @@ export default function QRightPage() {
               </div>
 
               <div>
-                <label style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", marginBottom: 8, display: "block" }}>Type of work</label>
+                <label style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", marginBottom: 8, display: "block" }}>{tq(lang, "Type of work")}</label>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {KIND_OPTIONS.map((opt) => (
                     <button
@@ -1100,20 +1068,20 @@ export default function QRightPage() {
                         cursor: "pointer", display: "flex", alignItems: "center", gap: 4, transition: "all 0.15s",
                       }}
                     >
-                      <span>{opt.icon}</span> {opt.label}
+                      <span>{opt.icon}</span> {tq(lang, opt.label)}
                     </button>
                   ))}
                 </div>
               </div>
 
               <div>
-                <label style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", marginBottom: 6, display: "block" }}>Describe your work *</label>
+                <label style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", marginBottom: 6, display: "block" }}>{tq(lang, "Describe your work *")}</label>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="What is it? What makes it identifiable as yours? Anything you write here becomes part of the signed certificate."
+                  placeholder={tq(lang, "What is it? What makes it identifiable as yours? Anything you write here becomes part of the signed certificate.")}
                   rows={4}
-                  aria-label="Description of the work"
+                  aria-label={tq(lang, "Description of the work")}
                   aria-required="true"
                   required
                   style={{ width: "100%", padding: "14px 16px", borderRadius: 12, border: "1px solid rgba(15,23,42,0.15)", fontSize: 14, outline: "none", resize: "vertical", boxSizing: "border-box" }}
@@ -1121,33 +1089,31 @@ export default function QRightPage() {
               </div>
 
               <details style={{ borderRadius: 12, border: "1px solid rgba(15,23,42,0.08)", padding: "12px 16px" }}>
-                <summary style={{ fontSize: 13, fontWeight: 700, color: "#475569", cursor: "pointer" }}>
-                  Author details (optional — auto-filled if logged in) · bureau / organisation shown on the verification page
-                </summary>
+                <summary style={{ fontSize: 13, fontWeight: 700, color: "#475569", cursor: "pointer" }}>{tq(lang, "Author details (optional — auto-filled if logged in) · bureau / organisation shown on the verification page")}</summary>
                 <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr", marginTop: 12 }}>
                   <div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>Name</div>
-                    <input aria-label="Name" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} placeholder="Your name" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>{tq(lang, "Name")}</div>
+                    <input aria-label={tq(lang, "Name")} value={ownerName} onChange={(e) => setOwnerName(e.target.value)} placeholder={tq(lang, "Your name")} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>Email</div>
-                    <input aria-label="Email" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} placeholder="your@email.com" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>{tq(lang, "Email")}</div>
+                    <input aria-label={tq(lang, "Email")} value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} placeholder="your@email.com" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>Country</div>
-                    <input aria-label="Country" value={country} onChange={(e) => setCountry(e.target.value)} placeholder="e.g. Kazakhstan" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>{tq(lang, "Country")}</div>
+                    <input aria-label={tq(lang, "Country")} value={country} onChange={(e) => setCountry(e.target.value)} placeholder={tq(lang, "e.g. Kazakhstan")} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>City</div>
-                    <input aria-label="City" value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g. Astana" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>{tq(lang, "City")}</div>
+                    <input aria-label={tq(lang, "City")} value={city} onChange={(e) => setCity(e.target.value)} placeholder={tq(lang, "e.g. Astana")} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
                   </div>
                 </div>
                 <div style={{ marginTop: 10 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>Bureau / organisation (shown on the verification page)</div>
-                  <input aria-label="Bureau or organisation" data-testid="partner-name" value={partnerName} maxLength={80}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>{tq(lang, "Bureau / organisation (shown on the verification page)")}</div>
+                  <input aria-label={tq(lang, "Bureau or organisation")} data-testid="partner-name" value={partnerName} maxLength={80}
                     onChange={(e) => { setPartnerName(e.target.value); try { localStorage.setItem("aevion_qright_partner_v1", e.target.value); } catch {} }}
-                    placeholder="например: Патентное бюро «Пример» — leave empty if you register as the author" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
-                  <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>Shown as «Запись сделана через … · проверку обеспечивает AEVION». Not part of the signature.</div>
+                    placeholder={tq(lang, "например: Патентное бюро «Пример» — leave empty if you register as the author")} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
+                  <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>{tq(lang, "Shown as «Запись сделана через … · проверку обеспечивает AEVION». Not part of the signature.")}</div>
                 </div>
               </details>
 
@@ -1158,13 +1124,12 @@ export default function QRightPage() {
                 <div data-testid="quota-offer" role="status" style={{ fontSize: 13.5, lineHeight: 1.5, padding: "12px 14px", borderRadius: 10, background: "rgba(13,148,136,0.07)", border: "1px solid rgba(13,148,136,0.25)", color: "#0f172a" }}>
                   <b>Free registrations this month are used up ({quotaOffer.used} of {quotaOffer.freePerMonth}).</b>{" "}
                   The AEVION Planet plan removes the limit and opens every app — from ${planetFromPerMonth()}/mo on the 12-month term, ${planetPricePerMonth("lite")}/mo with no term.{" "}
-                  <a href="/pricing#tiers" style={{ color: "#0d9488", fontWeight: 800 }}>See plans →</a>
+                  <a href="/pricing#tiers" style={{ color: "#0d9488", fontWeight: 800 }}>{tq(lang, "See plans →")}</a>
                 </div>
               )}
 
-              <button type="submit" aria-label="Protect my work — register, sign, and shield in one click" style={{ padding: "16px 24px", borderRadius: 14, border: "none", background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", fontWeight: 900, fontSize: 16, cursor: "pointer", boxShadow: "0 4px 20px rgba(13,148,136,0.35)" }}>
-                <span aria-hidden>🛡️</span> Protect My Work
-              </button>
+              <button type="submit" aria-label={tq(lang, "Protect my work — register, sign, and shield in one click")} style={{ padding: "16px 24px", borderRadius: 14, border: "none", background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", fontWeight: 900, fontSize: 16, cursor: "pointer", boxShadow: "0 4px 20px rgba(13,148,136,0.35)" }}>
+                <span aria-hidden>🛡️</span>{tq(lang, "Protect My Work")}</button>
             </form>
           </>
         )}
@@ -1173,7 +1138,7 @@ export default function QRightPage() {
         {step === "processing" && (
           <div role="status" aria-live="polite" style={{ textAlign: "center", padding: "60px 20px" }}>
             <div style={{ fontSize: 48, marginBottom: 20 }}>⚡</div>
-            <div style={{ fontWeight: 900, fontSize: 20, color: "#0f172a", marginBottom: 24 }}>Protecting your work...</div>
+            <div style={{ fontWeight: 900, fontSize: 20, color: "#0f172a", marginBottom: 24 }}>{tq(lang, "Protecting your work...")}</div>
             <div style={{ maxWidth: 360, margin: "0 auto", display: "grid", gap: 12 }}>
               {PROCESSING_STEPS.map((s, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", borderRadius: 12, background: processingStep > i ? "rgba(16,185,129,0.08)" : processingStep === i ? "rgba(13,148,136,0.06)" : "rgba(15,23,42,0.02)", border: `1px solid ${processingStep > i ? "rgba(16,185,129,0.25)" : processingStep === i ? "rgba(13,148,136,0.2)" : "rgba(15,23,42,0.06)"}`, transition: "all 0.4s" }}>
@@ -1192,7 +1157,7 @@ export default function QRightPage() {
           <div ref={doneRef} data-qright-done style={{ scrollMarginTop: 84 }}>
             <div style={{ textAlign: "center", padding: "32px 20px", marginBottom: 24, borderRadius: 16, background: "linear-gradient(135deg, rgba(16,185,129,0.08), rgba(13,148,136,0.06))", border: "1px solid rgba(16,185,129,0.2)" }}>
               <div style={{ fontSize: 48, marginBottom: 8 }}>🎉</div>
-              <div style={{ fontWeight: 900, fontSize: 22, color: "#059669", marginBottom: 6 }}>Protected. Provable. Permanent.</div>
+              <div style={{ fontWeight: 900, fontSize: 22, color: "#059669", marginBottom: 6 }}>{tq(lang, "Protected. Provable. Permanent.")}</div>
               <div style={{ fontSize: 14, color: "#475569" }}>
                 {result.cosign?.present
                   ? "Four cryptographic layers active — including a co-signature only you can produce."
@@ -1204,10 +1169,10 @@ export default function QRightPage() {
               <div style={{ background: "#0f172a", padding: "20px 24px", color: "#fff" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
                   <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#0d9488", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>AEVION Protection Certificate</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#0d9488", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>{tq(lang, "AEVION Protection Certificate")}</div>
                     <div style={{ fontSize: 20, fontWeight: 900 }}>{result.certificate.title}</div>
                   </div>
-                  <div style={{ padding: "6px 14px", borderRadius: 8, background: "rgba(16,185,129,0.15)", color: "#10b981", fontSize: 12, fontWeight: 800 }}>✓ PROTECTED</div>
+                  <div style={{ padding: "6px 14px", borderRadius: 8, background: "rgba(16,185,129,0.15)", color: "#10b981", fontSize: 12, fontWeight: 800 }}>{tq(lang, "✓ PROTECTED")}</div>
                 </div>
               </div>
 
@@ -1222,11 +1187,11 @@ export default function QRightPage() {
                     <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>{KIND_OPTIONS.find((k) => k.value === result.certificate.kind)?.label || result.certificate.kind}</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 2 }}>PROTECTED AT</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 2 }}>{tq(lang, "PROTECTED AT")}</div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>{new Date(result.certificate.protectedAt).toLocaleString()}</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 2 }}>LOCATION</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 2 }}>{tq(lang, "LOCATION")}</div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>{result.certificate.location || "Not specified"}</div>
                   </div>
                 </div>
@@ -1244,7 +1209,7 @@ export default function QRightPage() {
                         <div style={{ fontSize: 9, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", marginBottom: 2 }}>{item.label}</div>
                         <div style={{ fontSize: 11, fontFamily: "monospace", color: "#334155", wordBreak: "break-all" }}>{item.value}</div>
                       </div>
-                      <button onClick={() => copy(item.value, item.label)} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", color: "#475569", flexShrink: 0 }}>Copy</button>
+                      <button onClick={() => copy(item.value, item.label)} style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", color: "#475569", flexShrink: 0 }}>{tq(lang, "Copy")}</button>
                     </div>
                   ))}
                 </div>
@@ -1266,15 +1231,13 @@ export default function QRightPage() {
                   <div style={{ marginTop: 10, padding: "10px 14px", borderRadius: 10, background: "rgba(16,185,129,0.05)", border: "1px solid rgba(16,185,129,0.2)", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                     <span style={{ fontSize: 18 }} aria-hidden>✍️</span>
                     <div style={{ flex: 1, minWidth: 200 }}>
-                      <div style={{ fontSize: 12, fontWeight: 800, color: "#065f46" }}>
-                        Co-signed by your author key
-                        <InfoTip
+                      <div style={{ fontSize: 12, fontWeight: 800, color: "#065f46" }}>{tq(lang, "Co-signed by your author key")}<InfoTip
                           label="Author co-signature"
                           text="This certificate carries a second Ed25519 signature made with your private key (held only in your browser, never sent to AEVION). Even if AEVION's keys leak, this layer alone proves you authored the work."
                         />
                       </div>
                       <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>
-                        Author key fingerprint:&nbsp;
+                        {tq(lang, "Author key fingerprint:")}&nbsp;
                         <span style={{ fontFamily: "monospace", color: "#0f172a", fontWeight: 700 }}>
                           ed25519:{result.cosign.authorKeyFingerprint}
                         </span>
@@ -1290,19 +1253,15 @@ export default function QRightPage() {
               <div style={{ borderRadius: 16, border: "2px solid #f59e0b", overflow: "hidden", marginBottom: 20, background: "#fffbeb" }}>
                 <div style={{ padding: "16px 24px", background: "linear-gradient(135deg, #fbbf24, #f59e0b)", color: "#451a03" }}>
                   <div style={{ fontSize: 14, fontWeight: 900, display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 22 }}>🔑</span>
-                    Your Author Shard — Save It Now
-                  </div>
-                  <div style={{ fontSize: 12, marginTop: 4 }}>
-                    Shard 1 of 3 · AEVION does NOT keep a copy · Without it you depend on AEVION
-                  </div>
+                    <span style={{ fontSize: 22 }}>🔑</span>{tq(lang, "Your Author Shard — Save It Now")}</div>
+                  <div style={{ fontSize: 12, marginTop: 4 }}>{tq(lang, "Shard 1 of 3 · AEVION does NOT keep a copy · Without it you depend on AEVION")}</div>
                 </div>
                 <div style={{ padding: "20px 24px" }}>
                   <div style={{ fontSize: 13, color: "#92400e", marginBottom: 14, lineHeight: 1.6 }}>
                     {result.authorShard.warning}
                   </div>
                   <div style={{ display: "grid", gap: 6, marginBottom: 14 }}>
-                    <div style={{ fontSize: 11, fontWeight: 800, color: "#78350f" }}>Any 2 of 3 reconstructs your proof:</div>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: "#78350f" }}>{tq(lang, "Any 2 of 3 reconstructs your proof:")}</div>
                     {result.authorShard.recoveryPaths.map((p, i) => (
                       <div key={i} style={{ fontSize: 12, color: "#78350f", paddingLeft: 16 }}>
                         • {p}
@@ -1323,28 +1282,22 @@ export default function QRightPage() {
                         a.download = `aevion-author-shard-${result.authorShard.shieldId}.json`;
                         a.click();
                         URL.revokeObjectURL(url);
-                        showToast("Author shard downloaded — store it safely!", "success");
+                        showToast(tq(lang, "Author shard downloaded — store it safely!"), "success");
                       }}
                       style={{ padding: "12px 18px", borderRadius: 10, border: "none", background: "#78350f", color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}
-                    >
-                      ⬇ Download Author Shard (.json)
-                    </button>
+                    >{tq(lang, "⬇ Download Author Shard (.json)")}</button>
                     <button
                       onClick={() => copy(JSON.stringify(result.authorShard, null, 2), "Author shard JSON")}
                       style={{ padding: "12px 18px", borderRadius: 10, border: "1px solid #92400e", background: "#fff", color: "#92400e", fontWeight: 700, fontSize: 14, cursor: "pointer" }}
-                    >
-                      Copy JSON
-                    </button>
+                    >{tq(lang, "Copy JSON")}</button>
                   </div>
                   {result.witness && (
                     <div style={{ marginTop: 14, padding: "10px 14px", borderRadius: 8, background: "rgba(15,23,42,0.04)", border: "1px solid rgba(15,23,42,0.08)" }}>
-                      <div style={{ fontSize: 10, fontWeight: 800, color: "#475569", textTransform: "uppercase", marginBottom: 4 }}>Public Witness Shard (shard 3 of 3)</div>
+                      <div style={{ fontSize: 10, fontWeight: 800, color: "#475569", textTransform: "uppercase", marginBottom: 4 }}>{tq(lang, "Public Witness Shard (shard 3 of 3)")}</div>
                       <div style={{ fontSize: 11, fontFamily: "monospace", color: "#334155", wordBreak: "break-all" as const }}>
                         CID: {result.witness.cid}
                       </div>
-                      <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
-                        Content-addressed: anyone can fetch this shard and verify the bytes match the CID. Pair it with your Author Shard to recover without AEVION.
-                      </div>
+                      <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>{tq(lang, "Content-addressed: anyone can fetch this shard and verify the bytes match the CID. Pair it with your Author Shard to recover without AEVION.")}</div>
                     </div>
                   )}
                 </div>
@@ -1354,42 +1307,36 @@ export default function QRightPage() {
             {/* What to do next */}
             <div
               role="region"
-              aria-label="What to do next"
+              aria-label={tq(lang, "What to do next")}
               style={{ borderRadius: 14, border: "1px solid rgba(13,148,136,0.2)", background: "linear-gradient(135deg, rgba(13,148,136,0.04), rgba(6,182,212,0.04))", padding: "16px 18px", marginBottom: 20 }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                 <span style={{ fontSize: 18 }} aria-hidden>📋</span>
-                <div style={{ fontSize: 13, fontWeight: 900, color: "#0f766e" }}>What to do next</div>
+                <div style={{ fontSize: 13, fontWeight: 900, color: "#0f766e" }}>{tq(lang, "What to do next")}</div>
               </div>
               <ol style={{ margin: 0, paddingLeft: 22, display: "grid", gap: 8, fontSize: 12, color: "#0f172a", lineHeight: 1.6 }}>
                 <li>
-                  <b>Download the Verification Bundle</b> — a single <code style={{ fontSize: 11, padding: "1px 5px", background: "#e2e8f0", borderRadius: 4 }}>.json</code> file containing every cryptographic proof. Drop it into <a href="/verify-offline" style={{ color: "#0d9488", fontWeight: 700, textDecoration: "underline" }}>/verify-offline</a> on any machine, any year, no AEVION required. <em>This is the proof that survives us.</em>
+                  <b>{tq(lang, "Download the Verification Bundle")}</b>{tq(lang, "— a single")}<code style={{ fontSize: 11, padding: "1px 5px", background: "#e2e8f0", borderRadius: 4 }}>.json</code>{tq(lang, "file containing every cryptographic proof. Drop it into")}<a href="/verify-offline" style={{ color: "#0d9488", fontWeight: 700, textDecoration: "underline" }}>/verify-offline</a>{tq(lang, "on any machine, any year, no AEVION required.")}<em>{tq(lang, "This is the proof that survives us.")}</em>
                 </li>
                 {result.authorShard && (
                   <li>
-                    <b>Save your Author Shard</b> (orange panel above) — store it offline alongside the bundle. AEVION holds at most 1 of 3 shards; without yours, no rogue platform action can forge a recovery.
-                  </li>
+                    <b>{tq(lang, "Save your Author Shard")}</b>{tq(lang, "(orange panel above) — store it offline alongside the bundle. AEVION holds at most 1 of 3 shards; without yours, no rogue platform action can forge a recovery.")}</li>
                 )}
                 <li>
-                  <b>Share the verify link</b> — the public page shows every integrity check, the Bitcoin anchor status, and the legal basis.
-                  <div style={{ marginTop: 6, padding: "8px 10px", borderRadius: 8, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)", fontSize: 11, fontFamily: "monospace", color: "#334155", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                  <b>{tq(lang, "Share the verify link")}</b>{tq(lang, "— the public page shows every integrity check, the Bitcoin anchor status, and the legal basis.")}<div style={{ marginTop: 6, padding: "8px 10px", borderRadius: 8, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)", fontSize: 11, fontFamily: "monospace", color: "#334155", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                     <span style={{ wordBreak: "break-all" as const }}>{typeof window !== "undefined" ? `${window.location.origin}/verify/${result.certificate.id}` : `/verify/${result.certificate.id}`}</span>
                     <button
                       type="button"
                       onClick={() => copy(typeof window !== "undefined" ? `${window.location.origin}/verify/${result.certificate.id}` : `/verify/${result.certificate.id}`, "Verify URL")}
                       style={{ padding: "4px 10px", borderRadius: 6, border: "1px solid rgba(15,23,42,0.12)", background: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer", color: "#475569", flexShrink: 0 }}
-                    >
-                      Copy
-                    </button>
+                    >{tq(lang, "Copy")}</button>
                   </div>
                 </li>
                 <li>
-                  <b>Print the PDF</b> for paper records — printable, with a QR code back to the live verify page.
-                </li>
+                  <b>{tq(lang, "Print the PDF")}</b>{tq(lang, "for paper records — printable, with a QR code back to the live verify page.")}</li>
                 {result.witness && (
                   <li>
-                    <b>Pin the Witness Shard</b> — its CID is content-addressed, so anyone can independently fetch and verify it. Combined with your Author Shard, that&apos;s 2 of 3 — recovery without AEVION.
-                  </li>
+                    <b>{tq(lang, "Pin the Witness Shard")}</b>{tq(lang, "— its CID is content-addressed, so anyone can independently fetch and verify it. Combined with your Author Shard, that's 2 of 3 — recovery without AEVION.")}</li>
                 )}
               </ol>
             </div>
@@ -1401,24 +1348,18 @@ export default function QRightPage() {
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{ padding: "12px 20px", borderRadius: 12, border: "none", background: "#0f172a", color: "#fff", fontWeight: 800, fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
-              >
-                📄 Download PDF Certificate
-              </a>
+              >{tq(lang, "📄 Download PDF Certificate")}</a>
               <a
                 href={apiUrl(`/api/pipeline/certificate/${result.certificate.id}/bundle.json`)}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{ padding: "12px 20px", borderRadius: 12, border: "none", background: "linear-gradient(135deg, #6366f1, #4f46e5)", color: "#fff", fontWeight: 800, fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
-                title="A single .json with every proof — verifiable offline if AEVION ever disappears"
-              >
-                🛡️ Download Verification Bundle
-              </a>
+                title={tq(lang, "A single .json with every proof — verifiable offline if AEVION ever disappears")}
+              >{tq(lang, "🛡️ Download Verification Bundle")}</a>
               <Link
                 href={`/verify/${result.certificate.id}`}
                 style={{ padding: "12px 20px", borderRadius: 12, border: "1px solid #0d9488", color: "#0d9488", fontWeight: 800, fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center" }}
-              >
-                ✓ Verify Certificate
-              </Link>
+              >{tq(lang, "✓ Verify Certificate")}</Link>
               {/* Кнопку показываем, только пока не выяснилось, что платная
                   проверка недоступна. Ответ «недоступна» заменяет её честной
                   строкой, а не прячет молча: человек только что защитил работу
@@ -1427,14 +1368,12 @@ export default function QRightPage() {
                 <span
                   style={{ padding: "12px 20px", borderRadius: 12, border: "1px dashed rgba(15,23,42,0.2)", color: "#64748b", background: "#f8fafc", fontWeight: 700, fontSize: 13.5, display: "inline-flex", alignItems: "center", gap: 6 }}
                   title="Проверено на проде: ручка апгрейда отвечает 503 — поставщики личности и оплаты ещё не подключены"
-                >
-                  ⏳ Verified upgrade — not available yet
-                </span>
+                >{tq(lang, "⏳ Verified upgrade — not available yet")}</span>
               ) : (
                 <Link
                   href={`/bureau/upgrade/${result.certificate.id}`}
                   style={{ padding: "12px 20px", borderRadius: 12, border: "1px solid #4f46e5", color: "#4f46e5", background: "#fff", fontWeight: 800, fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
-                  title="Upgrade to Verified — adds real-name attestation by AEVION Bureau"
+                  title={tq(lang, "Upgrade to Verified — adds real-name attestation by AEVION Bureau")}
                 >
                   ⭐ Upgrade to Verified ({ценаСПериодом(ценаПроверкиЦенты)})
                 </Link>
@@ -1442,28 +1381,20 @@ export default function QRightPage() {
               <Link
                 href={`/qright/badge/${result.qright.id}`}
                 style={{ padding: "12px 20px", borderRadius: 12, border: "1px solid rgba(15,23,42,0.15)", background: "#fff", color: "#0f172a", fontWeight: 800, fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
-                title="Get an embeddable trust badge for your site"
-              >
-                🔖 Embed Badge
-              </Link>
+                title={tq(lang, "Get an embeddable trust badge for your site")}
+              >{tq(lang, "🔖 Embed Badge")}</Link>
               <button
                 onClick={reset}
                 style={{ padding: "12px 20px", borderRadius: 12, border: "none", background: "linear-gradient(135deg, #0d9488, #06b6d4)", color: "#fff", fontWeight: 800, fontSize: 14, cursor: "pointer" }}
-              >
-                🛡️ Protect Another Work
-              </button>
+              >{tq(lang, "🛡️ Protect Another Work")}</button>
               <Link
                 href="/quantum-shield"
                 style={{ padding: "12px 20px", borderRadius: 12, border: "1px solid rgba(15,23,42,0.15)", color: "#0f172a", fontWeight: 700, fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center" }}
-              >
-                Shield Dashboard →
-              </Link>
+              >{tq(lang, "Shield Dashboard →")}</Link>
               <button
                 onClick={() => copy(JSON.stringify(result.certificate, null, 2), "Certificate JSON")}
                 style={{ padding: "12px 20px", borderRadius: 12, border: "1px solid rgba(15,23,42,0.15)", background: "transparent", color: "#475569", fontWeight: 700, fontSize: 14, cursor: "pointer" }}
-              >
-                Export JSON
-              </button>
+              >{tq(lang, "Export JSON")}</button>
             </div>
           </div>
         )}
@@ -1482,7 +1413,7 @@ export default function QRightPage() {
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 12 }}>
                 <input
                   type="search"
-                  placeholder="Search by title (≥ 2 chars)…"
+                  placeholder={tq(lang, "Search by title (≥ 2 chars)…")}
                   value={registryQuery}
                   onChange={(e) => {
                     setRegistryQuery(e.target.value);
@@ -1532,7 +1463,7 @@ export default function QRightPage() {
               {!loadingItems && items.length > 1 && (
                 <input
                   type="search"
-                  placeholder="Filter loaded results by title…"
+                  placeholder={tq(lang, "Filter loaded results by title…")}
                   value={localSearch}
                   onChange={(e) => setLocalSearch(e.target.value)}
                   style={{
@@ -1549,7 +1480,7 @@ export default function QRightPage() {
                 />
               )}
               {loadingItems ? (
-                <div style={{ padding: 24, textAlign: "center", color: "#94a3b8" }}>Loading registry...</div>
+                <div style={{ padding: 24, textAlign: "center", color: "#94a3b8" }}>{tq(lang, "Loading registry...")}</div>
               ) : items.length === 0 ? (
                 <div style={{ padding: 24, textAlign: "center", color: "#94a3b8" }}>
                   {registryQuery.trim().length >= 2
@@ -1605,9 +1536,7 @@ export default function QRightPage() {
                           </div>
                           {stats[x.id].topSources.length > 0 && (
                             <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                              <span style={{ fontSize: 10, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                                Top sources (30d)
-                              </span>
+                              <span style={{ fontSize: 10, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em" }}>{tq(lang, "Top sources (30d)")}</span>
                               {stats[x.id].topSources.slice(0, 5).map((s) => (
                                 <span
                                   key={s.host}
@@ -1645,29 +1574,21 @@ export default function QRightPage() {
                         <Link
                           href={`/qright/object/${x.id}`}
                           style={{ fontSize: 11, fontWeight: 800, color: "#0f172a", textDecoration: "none", padding: "4px 10px", border: "1px solid rgba(15,23,42,0.15)", borderRadius: 6 }}
-                        >
-                          Public page →
-                        </Link>
+                        >{tq(lang, "Public page →")}</Link>
                         <Link
                           href={`/qright/badge/${x.id}`}
                           style={{ fontSize: 11, fontWeight: 800, color: "#0d9488", textDecoration: "none", padding: "4px 10px", border: "1px solid rgba(13,148,136,0.3)", borderRadius: 6 }}
-                        >
-                          Get embed code →
-                        </Link>
+                        >{tq(lang, "Get embed code →")}</Link>
                         <Link
                           href={`/qright/object/${x.id}/policies`}
                           style={{ fontSize: 11, fontWeight: 800, color: "#7c3aed", textDecoration: "none", padding: "4px 10px", border: "1px solid rgba(124,58,237,0.3)", borderRadius: 6 }}
-                        >
-                          Policies →
-                        </Link>
+                        >{tq(lang, "Policies →")}</Link>
                         {showRevokeBtn && (
                           <button
                             onClick={() => startRevoke(x)}
                             style={{ fontSize: 11, fontWeight: 800, color: "#dc2626", background: "transparent", padding: "4px 10px", border: "1px solid rgba(220,38,38,0.4)", borderRadius: 6, cursor: "pointer" }}
                             title="Mark as revoked — embeds and badges flip red"
-                          >
-                            Revoke
-                          </button>
+                          >{tq(lang, "Revoke")}</button>
                         )}
                       </div>
                     </div>

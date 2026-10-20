@@ -24,6 +24,46 @@ describe("/api/pricing: план «Планета» и шахматы явным
     expect(terms.map((t) => t.totalUsd)).toEqual([250, 675, 1200, 1575, 1800]);
     for (const t of terms) expect(t.totalUsd, `${t.tierId}: итог ≠ месяц × месяцы`).toBe(t.perMonthUsd * t.months);
   });
+  test("🔴 19.10 помесячно при обязательстве: billing monthly, число платежей, цена вперёд со скидкой, лесенка отмены", async () => {
+    const r = await request(app()).get("/api/pricing");
+    expect(r.body.plan?.billing).toBe("monthly");
+    const terms = r.body.plan.terms as Array<{ months: number; paymentsCount: number; prepayUsd: number; prepayDiscountPercent: number; totalUsd: number }>;
+    expect(terms.map((t) => t.paymentsCount)).toEqual([1, 3, 6, 9, 12]);
+    expect(terms.map((t) => t.prepayDiscountPercent)).toEqual([0, 5, 7.5, 10, 12.5]);
+    expect(terms.map((t) => t.prepayUsd)).toEqual([250, 641.25, 1110, 1417.5, 1575]);
+    for (const t of terms) expect(t.prepayUsd, `${t.months} мес: вперёд не дороже суммы платежей`).toBeLessThanOrEqual(t.totalUsd);
+    const c = r.body.plan.earlyCancellation;
+    expect(c.daysPerMonth).toBe(30);
+    expect(c.daysPerYear).toBe(365);
+    expect(c.ladder).toEqual([
+      { tierId: "lite", fromDay: 0, usdPerMonth: 250 }, { tierId: "medium", fromDay: 90, usdPerMonth: 225 },
+      { tierId: "pro", fromDay: 180, usdPerMonth: 200 }, { tierId: "full", fromDay: 270, usdPerMonth: 175 }, { tierId: "max", fromDay: 365, usdPerMonth: 150 },
+    ]);
+    expect(c.monthlySurcharge).toBe(true);
+    // Вариант «Б»: признак продаваемости режимов — булев у каждого срока; без срока «вперёд» не продаётся никогда.
+    const sellable = (r.body.plan.terms as Array<{ tierId: string; sellable?: { monthly: unknown; prepaid: unknown } }>).map((t) => t.sellable);
+    for (const s of sellable) { expect(typeof s?.monthly).toBe("boolean"); expect(typeof s?.prepaid).toBe("boolean"); }
+    expect(sellable[0]?.prepaid, "lite: вперёд не продаётся").toBe(false);
+    expect(c.prepaidSurcharge).toBe(false);
+    // FAQ больше не обещает «paid upfront» как единственный путь
+    const faq = await request(app()).get("/api/pricing/faq");
+    const texts = JSON.stringify(faq.body);
+    expect(texts.includes("paid upfront")).toBe(false);
+    expect(texts.includes("billed monthly")).toBe(true);
+  });
+  test("🔴 /quote говорит про помесячное списание: monthlyCharge, prepayTotal, строка без «вперёд»", async () => {
+    const m = await request(app()).post("/api/pricing/quote").send({ tierId: "medium" });
+    expect(m.status).toBe(200);
+    expect(m.body).toMatchObject({ total: 675, billing: "monthly", monthlyCharge: 225, prepayTotal: 641.25, prepayDiscountPercent: 5 });
+    expect(String(m.body.lines?.[0]?.label)).toContain("ежемесячно");
+    expect(String(m.body.lines?.[0]?.label)).not.toContain("вперёд");
+    const x = await request(app()).post("/api/pricing/quote").send({ tierId: "max" });
+    expect(x.body).toMatchObject({ total: 1800, monthlyCharge: 150, prepayTotal: 1575, prepayDiscountPercent: 12.5 });
+    const l = await request(app()).post("/api/pricing/quote").send({ tierId: "lite" });
+    expect(l.body).toMatchObject({ total: 250, monthlyCharge: 250, prepayTotal: null, prepayDiscountPercent: 0 });
+    const e = await request(app()).post("/api/pricing/quote").send({ tierId: "enterprise" });
+    expect(e.body).toMatchObject({ billing: null, monthlyCharge: null, prepayTotal: null });
+  });
   test("🔴 chess: $50 в год", async () => {
     const r = await request(app()).get("/api/pricing");
     expect(r.body.chess).toEqual({ id: "cyberchess", priceUsd: 50, period: "year" });

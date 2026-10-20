@@ -9,7 +9,7 @@ import { track } from "@/lib/track";
 import { useI18n } from "@/lib/i18n";
 import { localizeModuleOneLiner } from "@/lib/pricingLocalize";
 import { termUnitKey } from "@/lib/pricingI18n";
-import { isTermTier, termSavingPercent } from "@/lib/termPricing";
+import { isTermTier, termSavingPercent, PLANET_PREPAY_DISCOUNT_PERCENT } from "@/lib/termPricing";
 
 type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 // Тариф — это срок доступа ко всей планете (15.09.2026): lite 1 мес … max 12.
@@ -26,6 +26,8 @@ interface PricingTier {
   termMonths: number | null;
   /** Платёж за весь срок вперёд. */
   priceTermTotal: number | null;
+  /** Один платёж за весь срок вперёд со скидкой (19.10.2026); null — где срока нет. */
+  pricePrepayTotal?: number | null;
   features: string[];
   limits: {
     modules: number | null;
@@ -362,6 +364,18 @@ export default function TierDetailPage() {
                     months: String(tier.termMonths),
                     unit: t(termUnitKey(tier.termMonths)),
                   })}
+            </div>
+          )}
+          {/* 19.10.2026: срочный план списывается помесячно; вперёд — один платёж со скидкой. */}
+          {isTermTier(tier.id) && tier.termMonths !== null && tier.termMonths > 1 && tier.priceMonthly !== null && (
+            <div data-testid={`billing-${tier.id}`} style={{ fontSize: 14, lineHeight: 1.45, color: "#64748b", marginTop: 4 }}>
+              {t("pricing.home.tier.monthlyBilling", { perMonth: displayPrice(tier.priceMonthly), months: String(tier.termMonths), unit: t(termUnitKey(tier.termMonths)) })}
+              {tier.pricePrepayTotal != null && tier.priceTermTotal !== null && tier.pricePrepayTotal < tier.priceTermTotal && (
+                <>
+                  <br />
+                  {t("pricing.home.tier.prepay", { total: displayPrice(tier.pricePrepayTotal), percent: String(PLANET_PREPAY_DISCOUNT_PERCENT[tier.id]) })}
+                </>
+              )}
             </div>
           )}
           {экономия > 0 && (

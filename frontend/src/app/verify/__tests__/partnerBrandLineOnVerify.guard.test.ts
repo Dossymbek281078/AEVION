@@ -19,7 +19,10 @@ describe("бренд бюро на /verify (19.10.2026)", () => {
     expect(SRC).toContain('data-testid="cert-partner"');
     // 19.10 вечер: строка идёт через словарь tv(lang, …) — ru «Запись сделана через … · проверку обеспечивает AEVION».
     expect(SRC).toContain('{tv(lang, "Record made via")} {cert.partner} · {tv(lang, "verification by AEVION")}');
-    expect(SRC).toContain("Record made via {cert.partner} · verification by AEVION");
+    // 20.10.2026 00:3x, замер Продаж на проде (390×844, ru-RU): английский дубль под русской
+    // строкой был ВИДИМ (span 308×36 на 538px) — бюро читало обещание дважды на двух языках.
+    // Дубль снят: одна строка на языке страницы (tv), английский — только при lang=en.
+    expect(SRC, "английский дубль строки бренда вернулся").not.toContain("Record made via {cert.partner} · verification by AEVION</span>");
   });
   it("без партнёра — ничего: ветка null, не пустой div и не «undefined»", () => {
     const i = SRC.indexOf("{cert.partner ? (");

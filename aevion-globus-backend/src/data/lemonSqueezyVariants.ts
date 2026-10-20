@@ -19,7 +19,8 @@
 
 import {
   TERM_TIERS, TERM_NAME, TERM_MONTHS, TIERS, STANDALONE_APPS, termTotal, appTermTotal, appSellableTerms,
-  type TierId, type TermTier,
+  PLANET_TERM_PRICE, planetPrepayTotal, isTermTier,
+  type TierId, type TermTier, type PlanetBilling,
 } from "./pricing";
 import { tierIdForReference } from "../lib/payment/billingPeriod";
 
@@ -273,6 +274,57 @@ export function fallbackVariantForReference(reference: string): string | null {
   if (!m) return null;
   if (!STANDALONE_APPS.some((a) => a.slug === m[1])) return null;
   return resolveLemonSqueezyVariant("tier_lite");
+}
+
+/*
+ * 🔴 19.10.2026, вариант «Б» (решение оркестратора 23:1x): план «AEVION Планета»
+ * продаётся БЕЗ новых товаров в кабинете кассы — API кассы товары не создаёт
+ * (405), а рука основателя в критическом пути стоит день.
+ *
+ *   помесячно при обязательстве → вариант tier_lite: интервал «каждый месяц»
+ *     (замер кассы 19.10 23:07: «$250.00 billed every month»), цена подменяется
+ *     custom_price на цену месяца срока (225/200/175/150), срок и режим едут в
+ *     custom_data {term, billing} — вебхук выдаёт ступень срока;
+ *   вперёд → вариант своего срока tier_<t> (интервал 3/6/9/12 мес), цена
+ *     подменяется на скидочную сумму (641.25/1110/1417.50/1575).
+ *
+ * Обязательство касса не держит — пересчёт при досрочной отмене наш
+ * (planetEarlyCancellation). Сумма, которую ждёт вебхук, — expectedPlanetChargeUsd:
+ * покупка с custom_data.term и другой суммой доступа НЕ получает.
+ */
+export interface PlanetCheckoutVariant {
+  reference: LemonSqueezyReference;
+  variantId: string | null;
+  /** Сколько касса спишет сейчас и при каждом продлении. */
+  chargeUsd: number;
+  customData: { term: TermTier; billing: PlanetBilling };
+}
+export function planetCheckoutVariant(term: TermTier, billing: PlanetBilling): PlanetCheckoutVariant {
+  // Без срока «вперёд» не отличается от помесячного: скидки нет, интервал — месяц.
+  const режим: PlanetBilling = term === "lite" ? "monthly" : billing;
+  const reference: LemonSqueezyReference = режим === "monthly" ? "tier_lite" : `tier_${term}`;
+  return {
+    reference,
+    variantId: resolveLemonSqueezyVariant(reference),
+    chargeUsd: режим === "monthly" ? PLANET_TERM_PRICE[term] : planetPrepayTotal(term),
+    customData: { term, billing: режим },
+  };
+}
+/** Что из двух режимов можно купить сейчас: задана переменная нужного варианта. */
+export function planetBillingSellable(term: TermTier): { monthly: boolean; prepaid: boolean } {
+  return {
+    monthly: Boolean(resolveLemonSqueezyVariant("tier_lite")),
+    prepaid: term !== "lite" && Boolean(resolveLemonSqueezyVariant(`tier_${term}`)),
+  };
+}
+/** Сумма, которую вебхук ждёт при custom_data {term, billing}; null — такой пары нет. */
+export function expectedPlanetChargeUsd(term: unknown, billing: unknown): number | null {
+  if (typeof term !== "string" || !isTermTier(term)) return null;
+  if (billing !== "monthly" && billing !== "prepaid") return null;
+  const v = planetCheckoutVariant(term, billing);
+  // Пара «lite + prepaid» в кассу не уходит (planetCheckoutVariant сводит её к monthly).
+  if (v.customData.billing !== billing) return null;
+  return v.chargeUsd;
 }
 
 /** True when at least one tier variant id is configured (LS checkout is live). */

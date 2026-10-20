@@ -28,6 +28,7 @@
  * defensively — this is a backstop, not a substitute for checking the docs.
  */
 
+import { createHash } from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 import { appSlugForModuleId } from "../data/lemonSqueezyVariants";
 import { verifyBearerOptional } from "./authJwt";
@@ -89,7 +90,40 @@ const НАШИ_ДОМЕНЫ = ["aevion.app", "aevion.dev"];
  * ни один человек не платит с такого адреса.
  */
 const ДОМЕНЫ_ПРИМЕРОВ = ["example.test", "example.com", "example.org", "example.net", "test", "invalid", "localhost"];
-const ПРОБНЫЕ_ПРЕФИКСЫ = ["smoke-", "probe-", "qa-"];
+const ПРОБНЫЕ_ПРЕФИКСЫ = ["smoke-", "probe-", "qa-", "e2e"];
+/**
+ * 🔴 20.10.2026: все 10 «живых» лидов оказались нашими — ящик основателя, пять его
+ * +алиасов gmail и четыре e2e…@primer.ru («пример» по-русски — домен наших прогонов).
+ */
+const НАШИ_ДОМЕНЫ_ПРОГОНОВ = ["primer.ru"];
+/**
+ * Ящики основателя — sha256 НОРМАЛИЗОВАННОГО адреса (см. нормализоватьАдрес), а не
+ * сам адрес: открытым текстом в публичном коде ему не место. Добавить ещё ящик:
+ * FOUNDER_EMAIL_SHA256 (через запятую) на Railway или строка сюда.
+ */
+const ХЕШИ_ЯЩИКОВ_ОСНОВАТЕЛЯ = new Set([
+  "930b75ddd796e073b0c9d2904dc7838edab858edd39db86de046236a1365d7cf",
+  ...(process.env.FOUNDER_EMAIL_SHA256 || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean),
+]);
+
+/**
+ * Один ящик — один адрес: «+хвост» срезается у всех, точки — только у gmail
+ * (gmail их не различает, другие почты различают).
+ */
+export function нормализоватьАдрес(email: string | null | undefined): string {
+  const e = String(email ?? "").trim().toLowerCase();
+  const at = e.lastIndexOf("@");
+  if (at < 1) return e;
+  let имя = e.slice(0, at).split("+")[0];
+  let домен = e.slice(at + 1);
+  if (домен === "googlemail.com") домен = "gmail.com";
+  if (домен === "gmail.com") имя = имя.split(".").join("");
+  return `${имя}@${домен}`;
+}
+
+function ящикОснователя(email: string): boolean {
+  return ХЕШИ_ЯЩИКОВ_ОСНОВАТЕЛЯ.has(createHash("sha256").update(нормализоватьАдрес(email)).digest("hex"));
+}
 
 /**
  * Наш ли это адрес — то есть покупка внутренняя, а не продажа человеку.
@@ -116,6 +150,8 @@ export function нашВнутреннийАдрес(email: string | null | unde
   if (ALLOWLIST.includes(e)) return true;
   if (НАШИ_ДОМЕНЫ.some((d) => e.endsWith(`@${d}`))) return true;
   if (ДОМЕНЫ_ПРИМЕРОВ.some((d) => e.endsWith(`@${d}`) || e.endsWith(`.${d}`))) return true;
+  if (НАШИ_ДОМЕНЫ_ПРОГОНОВ.some((d) => e.endsWith(`@${d}`))) return true;
+  if (ящикОснователя(e)) return true;
   return ПРОБНЫЕ_ПРЕФИКСЫ.some((p) => e.startsWith(p));
 }
 

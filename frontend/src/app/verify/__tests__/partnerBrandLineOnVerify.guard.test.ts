@@ -63,3 +63,30 @@ describe("форма /qright даёт бюро вписать своё назв�
     expect(Q, "в подсказке поля имя живого лида").not.toContain("e.g. Консалтинг WPK");
   });
 });
+
+/*
+ * 🔴 20.10.2026 (просьба Продаж): блоки статуса биткоин-якоря «pending» и «failed» и
+ * фраза «This proof is independent of AEVION…» стояли голым английским без tv() —
+ * при ru/kk посетитель читал их по-английски.
+ */
+describe("статус биткоин-якоря на языке страницы", () => {
+  it("три английских источника встречаются в page.tsx только внутри tv(lang, …) и переведены в ru и kk", async () => {
+    const { VERIFY_DICT, tv } = await import("../[id]/verifyI18n");
+    const источники = [
+      "Hash submitted to the OpenTimestamps calendar network. It will be included in a Bitcoin block within 1-6 hours, after which this certificate becomes independently verifiable against any Bitcoin node.",
+      "Bitcoin anchoring failed at the time of protection (calendar network unreachable). The other cryptographic layers remain valid.",
+      "This proof is independent of AEVION — anyone can verify it with the standard OpenTimestamps client.",
+    ];
+    for (const s of источники) {
+      const всего = SRC.split(s).length - 1;
+      const вОбёртке = SRC.split(`tv(lang, "${s}")`).length - 1;
+      expect(всего, `в page.tsx: ${s.slice(0, 40)}`).toBeGreaterThan(0);
+      expect(вОбёртке, `голый английский вне tv(): ${s.slice(0, 40)}`).toBe(всего);
+      for (const язык of ["ru", "kk"] as const) {
+        expect(VERIFY_DICT[язык]?.[s], `${язык}: ${s.slice(0, 40)}`).toMatch(/[А-Яа-яЁёӘәІіҢңҒғҮүҰұҚқӨөҺһ]/);
+        expect(tv(язык, s)).not.toBe(s);
+      }
+      expect(tv("en", s)).toBe(s);
+    }
+  });
+});

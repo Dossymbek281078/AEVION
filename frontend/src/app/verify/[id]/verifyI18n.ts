@@ -96,6 +96,12 @@ const RU: Record<string, string> = {
   "third-party verifiable timestamp": "метка времени, проверяемая третьей стороной",
   "⏱ PENDING CONFIRMATION": "⏱ ЖДЁТ ПОДТВЕРЖДЕНИЯ",
   "✗ FAILED": "✗ НЕ УДАЛОСЬ",
+  "Hash submitted to the OpenTimestamps calendar network. It will be included in a Bitcoin block within 1-6 hours, after which this certificate becomes independently verifiable against any Bitcoin node.":
+    "Хеш отправлен в сеть календарей OpenTimestamps. Он попадёт в блок биткоина в течение 1–6 часов, после чего этот сертификат можно будет независимо проверить по любому узлу биткоина.",
+  "Bitcoin anchoring failed at the time of protection (calendar network unreachable). The other cryptographic layers remain valid.":
+    "Якорение в биткоине при защите не удалось (сеть календарей была недоступна). Остальные криптографические слои действуют.",
+  "This proof is independent of AEVION — anyone can verify it with the standard OpenTimestamps client.":
+    "Это доказательство не зависит от AEVION — любой может проверить его стандартным клиентом OpenTimestamps.",
   "The content hash of this certificate is": "Хеш содержимого этого сертификата",
   "permanently recorded in the Bitcoin blockchain": "навсегда записан в блокчейн Bitcoin",
   "at block": "в блоке",
@@ -199,6 +205,12 @@ const KK: Record<string, string> = {
   "third-party verifiable timestamp": "үшінші тарап тексере алатын уақыт белгісі",
   "⏱ PENDING CONFIRMATION": "⏱ РАСТАУ КҮТІЛУДЕ",
   "✗ FAILED": "✗ СӘТСІЗ",
+  "Hash submitted to the OpenTimestamps calendar network. It will be included in a Bitcoin block within 1-6 hours, after which this certificate becomes independently verifiable against any Bitcoin node.":
+    "Хеш OpenTimestamps күнтізбелер желісіне жіберілді. Ол 1–6 сағат ішінде Bitcoin блогына енеді, содан кейін бұл сертификатты кез келген Bitcoin түйіні арқылы тәуелсіз тексеруге болады.",
+  "Bitcoin anchoring failed at the time of protection (calendar network unreachable). The other cryptographic layers remain valid.":
+    "Қорғау кезінде Bitcoin-ге зәкірлеу сәтсіз аяқталды (күнтізбелер желісі қолжетімсіз болды). Қалған криптографиялық қабаттар жарамды.",
+  "This proof is independent of AEVION — anyone can verify it with the standard OpenTimestamps client.":
+    "Бұл дәлел AEVION-ға тәуелді емес — кез келген адам оны стандартты OpenTimestamps клиентімен тексере алады.",
   "The content hash of this certificate is": "Бұл сертификаттың мазмұн хеші",
   "permanently recorded in the Bitcoin blockchain": "Bitcoin блокчейніне мәңгі жазылған",
   "at block": "блокта",

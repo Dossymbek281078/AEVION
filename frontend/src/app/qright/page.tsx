@@ -1161,9 +1161,19 @@ export default function QRightPage() {
               <div style={{ fontWeight: 900, fontSize: 22, color: "#059669", marginBottom: 6 }}>{tq(lang, "Protected. Provable. Permanent.")}</div>
               <div style={{ fontSize: 14, color: "#475569" }}>
                 {result.cosign?.present
-                  ? "Four cryptographic layers active — including a co-signature only you can produce."
-                  : "Three cryptographic layers active — content hash, HMAC, and Shamir-split Ed25519."}
+                  ? tq(lang, "Four cryptographic layers active — including a co-signature only you can produce.")
+                  : tq(lang, "Three cryptographic layers active — content hash, HMAC, and Shamir-split Ed25519.")}
               </div>
+              {/* 20.10.2026 (окно «Приложения», по слову оркестратора): после регистрации на экране не было
+                  ссылки на публичную страницу записи — человек не знал, чем делиться; ссылка была только в
+                  списке реестра ниже. Адрес — тот же, что в реестре (/qright/object/<id>). */}
+              <a
+                href={`/qright/object/${encodeURIComponent(result.qright.id)}`}
+                data-qright-public-link
+                style={{ display: "inline-block", marginTop: 14, padding: "10px 18px", borderRadius: 10, background: "#059669", color: "#fff", fontWeight: 800, fontSize: 14, textDecoration: "none" }}
+              >
+                {tq(lang, "Open the public page of this record →")}
+              </a>
             </div>
 
             <div style={{ borderRadius: 16, border: "1px solid rgba(15,23,42,0.1)", overflow: "hidden", marginBottom: 20 }}>

@@ -96,6 +96,12 @@ const RU: Record<string, string> = {
   // сертификат
   "Your work is now protected!": "Ваша работа защищена!",
   "Protected. Provable. Permanent.": "Защищено. Доказуемо. Навсегда.",
+  // экран «готово» (20.10, окно «Приложения»): две фразы под заголовком и ссылка на публичную страницу
+  "Four cryptographic layers active — including a co-signature only you can produce.":
+    "Активны четыре криптографических слоя — включая со-подпись, которую можете создать только вы.",
+  "Three cryptographic layers active — content hash, HMAC, and Shamir-split Ed25519.":
+    "Активны три криптографических слоя — хеш содержимого, HMAC и Ed25519 с разделением по Шамиру.",
+  "Open the public page of this record →": "Открыть публичную страницу записи →",
   "AEVION Protection Certificate": "Сертификат защиты AEVION",
   "✓ PROTECTED": "✓ ЗАЩИЩЕНО",
   "PROTECTED AT": "ЗАЩИЩЕНО",

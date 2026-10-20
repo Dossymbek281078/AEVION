@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { useBuildAuth } from "@/lib/build/auth";
+import { useBuildAuth, принятьПлатформеннуюСессию } from "@/lib/build/auth";
 import { buildApi, buildLogin, buildRegister, BuildApiError } from "@/lib/build/api";
 import { ToastProvider } from "./Toast";
 import { HeaderSearch } from "./HeaderSearch";
@@ -104,6 +104,11 @@ export function BuildShell({ children, theme = "dark" }: { children: React.React
   const hydrated = useBuildAuth((s) => s.hydrated);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const skin = SHELL_SKIN[theme];
+
+  // Вход AEVION пускает и в QBuild — без второй формы (20.10.2026).
+  useEffect(() => {
+    if (hydrated) void принятьПлатформеннуюСессию(() => buildApi.me());
+  }, [hydrated]);
 
   // Auto-close the drawer on route change so taps on a link feel instant.
   useEffect(() => {

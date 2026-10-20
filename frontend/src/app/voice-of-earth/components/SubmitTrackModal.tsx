@@ -197,7 +197,8 @@ export default function SubmitTrackModal({ open, onClose, onSubmit }: Props) {
     });
     setSubmitting(false);
     if (result.ok) {
-      setOk("Трек принят и опубликован. Спасибо!");
+      // 20.10.2026: трек ждёт проверки — говорим это, а не «опубликован».
+      setOk(result.message || "Трек принят — появится в каталоге после проверки командой.");
       reset();
       setTimeout(() => {
         setOk(null);

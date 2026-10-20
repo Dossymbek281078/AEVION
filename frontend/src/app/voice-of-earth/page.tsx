@@ -147,7 +147,7 @@ const JSONLD = {
 };
 
 type ApiTracks = { items: Track[]; total: number; backend?: string };
-type ApiTrack = { track: Track };
+type ApiTrack = { track: Track; note?: string };
 
 function getOrCreateVoter(): string {
   if (typeof window === "undefined") return "anon";
@@ -299,7 +299,7 @@ export default function VoiceOfEarthPage() {
           // refresh list + stats
           void loadTracks();
           void loadStats();
-          return { ok: true, message: `Опубликовано (id ${result.track.id})` };
+          return { ok: true, message: result.note ?? "Трек принят — появится в каталоге после проверки командой." };
         }
         const errData = (await r.json().catch(() => ({}))) as { error?: string };
         return { ok: false, message: errData.error ?? "submit_failed" };
@@ -360,9 +360,11 @@ export default function VoiceOfEarthPage() {
           Voice of Earth — <span style={heroAccent}>песни на разных языках</span>
         </h1>
         <p style={heroText}>
-          Каталог позитивных треков со всего света. Каждый автор поёт на
-          своём языке, каждый слушатель голосует за то, что трогает. Без
-          алгоритмов — только реальные люди и реальные голоса.
+          Каталог позитивных треков со всего света: каждый автор поёт на
+          своём языке, каждый слушатель голосует за то, что трогает.
+          {stats && stats.total === 0
+            ? " Пока здесь только примеры текстов без записи — подайте первый настоящий трек."
+            : " Примеры помечены отдельно, остальное подали люди."}
         </p>
         <button type="button" style={submitBtn} onClick={() => setShowModal(true)}>
           ✨ Подать свой трек

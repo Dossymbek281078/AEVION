@@ -10,7 +10,29 @@ import {
   ensureVoiceOfEarthTables,
   isVoiceOfEarthDbReady,
 } from "../lib/ensureVoiceOfEarthTables";
-import { VOICE_OF_EARTH_SEED, VoeSeedTrack } from "../data/voiceOfEarthSeed";
+import { VOICE_OF_EARTH_SEED, VoeSeedTrack, КЛЮЧИ_ПРИМЕРОВ, трекПример } from "../data/voiceOfEarthSeed";
+import { sendVoiceOfEarthTrackNotice } from "../lib/constitutionBrevo";
+import { isAdminRequest } from "../lib/adminAuth";
+
+const НА_ПРОВЕРКЕ = "Трек принят — появится в каталоге после проверки командой.";
+
+/** Письмо команде о треке на проверке; отказ не молчит — журнал и notified:false. */
+async function известитьОТреке(t: { id: number | string; title: string; artistAlias: string; language: string; mood: string; lyrics: string; audioUrl: string | null }): Promise<boolean> {
+  try {
+    const ok = await sendVoiceOfEarthTrackNotice(t);
+    if (!ok) console.error(`[VoiceOfEarth] письмо команде о треке ${t.id} не ушло`);
+    return ok;
+  } catch (e) {
+    console.error(`[VoiceOfEarth] письмо команде о треке ${t.id} упало`, e);
+    return false;
+  }
+}
+
+/** Пометка example для витрины — «Пример · без записи». */
+const сПометкой = <T extends { title?: unknown; artist_alias?: unknown }>(t: T) => ({ ...t, example: трекПример(t) });
+/** SQL: трек не пример. Ключи — константы из data/voiceOfEarthSeed, параметром $N. */
+const НЕ_ПРИМЕР_SQL = (n: number) => `(title || chr(1) || artist_alias) <> ALL($${n}::text[])`;
+const КЛЮЧИ = [...КЛЮЧИ_ПРИМЕРОВ];
 import { pgIntId } from "../lib/queryNumber";
 
 const WARN =
@@ -160,7 +182,7 @@ voiceOfEarthRouter.get("/tracks", async (req: Request, res: Response) => {
         args,
       );
       return res.json({
-        items: rows,
+        items: rows.map(сПометкой),
         total: Number(cnt[0]?.c ?? "0"),
         backend: "postgres",
       });
@@ -178,7 +200,7 @@ voiceOfEarthRouter.get("/tracks", async (req: Request, res: Response) => {
   });
   const total = items.length;
   items = items.slice(offset, offset + limit);
-  res.json({ items, total, backend: "memory" });
+  res.json({ items: items.map(сПометкой), total, backend: "memory" });
 });
 
 // ─── GET /api/voice-of-earth/tracks/:id ──────────────────────────────────────
@@ -193,7 +215,7 @@ voiceOfEarthRouter.get("/tracks/:id", async (req: Request, res: Response) => {
         `SELECT * FROM voe_tracks WHERE id = $1`,
         [id],
       );
-      if (rows[0]) return res.json({ track: rows[0] });
+      if (rows[0] && (rows[0].status === "published" || isAdminRequest(req))) return res.json({ track: сПометкой(rows[0]) });
       return res.status(404).json({ error: "not_found" });
     } catch (e) {
       console.error("[VoiceOfEarth] GET /tracks/:id DB error", e);
@@ -203,8 +225,8 @@ voiceOfEarthRouter.get("/tracks/:id", async (req: Request, res: Response) => {
     }
   }
   const track = memTracks.find((t) => t.id === id);
-  if (!track) return res.status(404).json({ error: "not_found" });
-  res.json({ track });
+  if (!track || (track.status !== "published" && !isAdminRequest(req))) return res.status(404).json({ error: "not_found" });
+  res.json({ track: сПометкой(track) });
 });
 
 // ─── POST /api/voice-of-earth/tracks ─────────────────────────────────────────
@@ -264,11 +286,13 @@ voiceOfEarthRouter.post(
       try {
         const { rows } = await pool.query(
           `INSERT INTO voe_tracks (title, artist_alias, language, lyrics, mood, audio_url, status, content_hash)
-           VALUES ($1, $2, $3, $4, $5, $6, 'published', $7)
+           VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)
            RETURNING *`,
           [titleStored, artistAlias, language, lyrics, mood, audioUrl, contentHash],
         );
-        return res.status(201).json({ track: rows[0], contentHash, storage: "db" });
+        // 20.10.2026: трек ждёт проверки (pending) — витрина и счёт видят только published.
+        const notified = await известитьОТреке({ id: rows[0].id, title: titleStored, artistAlias, language, mood, lyrics, audioUrl });
+        return res.status(201).json({ track: rows[0], contentHash, storage: "db", status: "pending", note: НА_ПРОВЕРКЕ, notified });
       } catch (e) {
         console.error("[VoiceOfEarth] POST /tracks DB error", e);
       }
@@ -283,16 +307,43 @@ voiceOfEarthRouter.post(
       mood,
       audio_url: audioUrl,
       votes: 0,
-      status: "published",
+      status: "pending",
       created_at: new Date().toISOString(),
       content_hash: contentHash,
     };
     memTracks.push(track);
     // keep last 100 in memory
     if (memTracks.length > 100) memTracks.splice(0, memTracks.length - 100);
-    res.status(201).json({ track, contentHash, storage: "memory" });
+    const notified = await известитьОТреке({ id: track.id, title: titleStored, artistAlias, language, mood, lyrics, audioUrl });
+    res.status(201).json({ track, contentHash, storage: "memory", status: "pending", note: НА_ПРОВЕРКЕ, notified });
   },
 );
+
+// ─── POST /api/voice-of-earth/tracks/:id/review — админ публикует или скрывает ──
+// 20.10.2026: до этого трек публиковался сам; теперь решает человек из команды.
+voiceOfEarthRouter.post("/tracks/:id/review", async (req: Request, res: Response) => {
+  if (!isAdminRequest(req)) return res.status(403).json({ error: "admin_required" });
+  const id = pgIntId(req.params.id);
+  if (id === null) return res.status(400).json({ error: "invalid id" });
+  const status = String((req.body || {}).status || "");
+  if (status !== "published" && status !== "flagged") {
+    return res.status(400).json({ error: "status_must_be_published_or_flagged" });
+  }
+  if (isVoiceOfEarthDbReady()) {
+    try {
+      const { rows } = await pool.query(`UPDATE voe_tracks SET status = $1 WHERE id = $2 RETURNING id, status`, [status, id]);
+      if (!rows[0]) return res.status(404).json({ error: "not_found" });
+      return res.json({ ok: true, id, status });
+    } catch (e) {
+      console.error("[VoiceOfEarth] POST /tracks/:id/review DB error", e);
+      return res.status(503).json({ error: "storage_unavailable" });
+    }
+  }
+  const t = memTracks.find((x) => x.id === id);
+  if (!t) return res.status(404).json({ error: "not_found" });
+  t.status = status;
+  return res.json({ ok: true, id, status });
+});
 
 // ─── POST /api/voice-of-earth/tracks/:id/vote ────────────────────────────────
 voiceOfEarthRouter.post(
@@ -314,7 +365,7 @@ voiceOfEarthRouter.post(
       try {
         // Check track exists
         const { rowCount: trackRows } = await pool.query(
-          `SELECT 1 FROM voe_tracks WHERE id = $1`,
+          `SELECT 1 FROM voe_tracks WHERE id = $1 AND status = 'published'`,
           [id],
         );
         if (!trackRows) return res.status(404).json({ error: "not_found" });
@@ -348,7 +399,7 @@ voiceOfEarthRouter.post(
     }
 
     const track = memTracks.find((t) => t.id === id);
-    if (!track) return res.status(404).json({ error: "not_found" });
+    if (!track || track.status !== "published") return res.status(404).json({ error: "not_found" });
     const key = `${id}:${voterAlias}`;
     if (memVotes.has(key)) {
       return res.status(409).json({ error: "already_voted", votes: track.votes });
@@ -363,22 +414,31 @@ voiceOfEarthRouter.post(
 voiceOfEarthRouter.get("/stats", async (_req: Request, res: Response) => {
   if (isVoiceOfEarthDbReady()) {
     try {
-      const [tot, byLang, byMood, top] = await Promise.all([
+      // Счёт — только поданные людьми; примеры отдельным числом (20.10.2026).
+      const [tot, byLang, byMood, top, ex] = await Promise.all([
         pool.query(
-          `SELECT COUNT(*)::text AS c FROM voe_tracks WHERE status='published'`,
+          `SELECT COUNT(*)::text AS c FROM voe_tracks WHERE status='published' AND ${НЕ_ПРИМЕР_SQL(1)}`,
+          [КЛЮЧИ],
         ),
         pool.query(
           `SELECT language, COUNT(*)::text AS c FROM voe_tracks
-           WHERE status='published' GROUP BY language`,
+           WHERE status='published' AND ${НЕ_ПРИМЕР_SQL(1)} GROUP BY language`,
+          [КЛЮЧИ],
         ),
         pool.query(
           `SELECT mood, COUNT(*)::text AS c FROM voe_tracks
-           WHERE status='published' GROUP BY mood`,
+           WHERE status='published' AND ${НЕ_ПРИМЕР_SQL(1)} GROUP BY mood`,
+          [КЛЮЧИ],
         ),
         pool.query(
           `SELECT id, title, artist_alias, language, mood, votes
-           FROM voe_tracks WHERE status='published'
+           FROM voe_tracks WHERE status='published' AND ${НЕ_ПРИМЕР_SQL(1)}
            ORDER BY votes DESC, created_at DESC LIMIT 5`,
+          [КЛЮЧИ],
+        ),
+        pool.query(
+          `SELECT COUNT(*)::text AS c FROM voe_tracks WHERE status='published' AND NOT ${НЕ_ПРИМЕР_SQL(1)}`,
+          [КЛЮЧИ],
         ),
       ]);
       const byLanguage: Record<string, number> = {};
@@ -390,12 +450,14 @@ voiceOfEarthRouter.get("/stats", async (_req: Request, res: Response) => {
         byLanguage,
         byMood: byMoodObj,
         topTracks: top.rows,
+        examples: Number(ex.rows[0]?.c ?? "0"),
       });
     } catch (e) {
       console.error("[VoiceOfEarth] /stats DB error", e);
     }
   }
-  const tracks = memTracks.filter((t) => t.status === "published");
+  const tracks = memTracks.filter((t) => t.status === "published" && !трекПример(t));
+  const examples = memTracks.filter((t) => t.status === "published" && трекПример(t)).length;
   const byLanguage: Record<string, number> = {};
   const byMood: Record<string, number> = {};
   for (const t of tracks) {
@@ -416,7 +478,7 @@ voiceOfEarthRouter.get("/stats", async (_req: Request, res: Response) => {
       mood: t.mood,
       votes: t.votes,
     }));
-  res.json({ total: tracks.length, byLanguage, byMood, topTracks });
+  res.json({ total: tracks.length, byLanguage, byMood, topTracks, examples });
 });
 
 // ── MVP concept board surface ───────────────────────────────────────────────

@@ -162,6 +162,7 @@ const RU: Record<string, string> = {
   "✓ Verify Certificate": "✓ Проверить сертификат",
   "⭐ Upgrade to Verified": "⭐ Повысить до «Проверено»",
   "⏳ Verified upgrade — not available yet": "⏳ Повышение до «Проверено» — пока недоступно",
+  "The Verified upgrade opens once identity and payment providers are connected": "Повышение до «Проверено» откроется, когда подключат проверку личности и оплату",
   "Upgrade to Verified — adds real-name attestation by AEVION Bureau": "Повышение до «Проверено» — заверение настоящего имени Бюро AEVION",
   "Get an embeddable trust badge for your site": "Получить встраиваемый значок доверия для сайта",
   "🔖 Embed Badge": "🔖 Встроить значок",

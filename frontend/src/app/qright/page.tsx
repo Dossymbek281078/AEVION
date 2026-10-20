@@ -1380,7 +1380,7 @@ export default function QRightPage() {
               {платнаяПроверкаДоступна === false ? (
                 <span
                   style={{ padding: "12px 20px", borderRadius: 12, border: "1px dashed rgba(15,23,42,0.2)", color: "#64748b", background: "#f8fafc", fontWeight: 700, fontSize: 13.5, display: "inline-flex", alignItems: "center", gap: 6 }}
-                  title="Проверено на проде: ручка апгрейда отвечает 503 — поставщики личности и оплаты ещё не подключены"
+                  title={tq(lang, "The Verified upgrade opens once identity and payment providers are connected")}
                 >{tq(lang, "⏳ Verified upgrade — not available yet")}</span>
               ) : (
                 <Link

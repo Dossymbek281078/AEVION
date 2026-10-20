@@ -248,7 +248,50 @@ async function translateBatch(target: string, texts: string[]): Promise<string[]
       }
     }
   }
-  return claudeBatch(texts, LANG_NAME[target] || target);
+  return claudeBatchChunked(texts, target);
+}
+
+/**
+ * Claude — пачками по 12 и с одним повтором «эха».
+ *
+ * 🔴 ПОВОД (замер на проде 20.10.2026, /multichat-engine при kk). Страница шлёт
+ * одну пачку в 56 строк; из 42 строк латиницей модель вернула БЕЗ ПЕРЕВОДА больше
+ * половины («Live cost + tokens», «Saveable presets», «Debate»…), хотя те же
+ * строки пачкой в 5 переводятся все. Клиент (AutoTranslate) запоминает ответ как
+ * готовый, и у посетителя английский остаётся навсегда — 22 английские строки
+ * на казахской странице через 25 с ожидания.
+ *
+ * Поэтому: пачки не больше CLAUDE_CHUNK, параллельно; затем строки латиницей,
+ * вернувшиеся без изменений при НЕлатинской цели, спрашиваются ещё раз отдельно.
+ * Бренды (AEVION, Claude…) вернутся эхом и во второй раз — это верный ответ.
+ * Отказ повтора не роняет перевод, но пишется в журнал (не молчаливый отказ).
+ */
+export const CLAUDE_CHUNK = 12;
+const NON_LATIN_TARGETS = new Set(["ru", "kk", "zh", "ja", "ar"]);
+
+export function эхоЛатиницей(texts: string[], out: string[], target: string): number[] {
+  if (!NON_LATIN_TARGETS.has(target)) return [];
+  return texts
+    .map((t, i) => (out[i] === t && /[A-Za-z]{2,}/.test(t) ? i : -1))
+    .filter((i) => i >= 0);
+}
+
+async function claudeBatchChunked(texts: string[], target: string): Promise<string[]> {
+  const langName = LANG_NAME[target] || target;
+  const chunks: string[][] = [];
+  for (let i = 0; i < texts.length; i += CLAUDE_CHUNK) chunks.push(texts.slice(i, i + CLAUDE_CHUNK));
+  const out = (await Promise.all(chunks.map((c) => claudeBatch(c, langName)))).flat();
+  const echo = эхоЛатиницей(texts, out, target);
+  for (let i = 0; i < echo.length; i += CLAUDE_CHUNK) {
+    const idx = echo.slice(i, i + CLAUDE_CHUNK);
+    try {
+      const again = await claudeBatch(idx.map((k) => texts[k]), langName);
+      idx.forEach((k, j) => { out[k] = again[j]; });
+    } catch (e) {
+      console.warn(`[i18n] повтор ${idx.length} непереведённых строк для "${target}" не удался: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+  return out;
 }
 
 /**

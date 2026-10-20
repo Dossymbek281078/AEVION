@@ -49,6 +49,7 @@ import {
 import { applyOgEtag, applyEtag } from "../lib/ogEtag";
 import { makeServiceCapture } from "../lib/sentry/platform";
 import { csvNeutralizeFormula } from "../lib/csv";
+import { buildZip, type ZipEntry } from "../lib/zipWriter";
 import { PublicError, safeErrorText } from "../lib/safeError";
 const capturePipelineError = makeServiceCapture("pipeline");
 
@@ -2886,6 +2887,207 @@ pipelineRouter.post("/ots/:certId/verify", async (req, res) => {
 });
 
 /**
+ * Пакет проверки одного сертификата — общий для /certificate/:certId/bundle.json
+ * и для выгрузки всех записей аккаунта (/certificates/export.zip). Одна функция,
+ * чтобы пакет в архиве был байт-в-байт тем же, что отдаёт ручка одного пакета:
+ * сериализация тоже здесь — serializeCertificateBundle.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function buildCertificateBundle(cert: any, exportedAt: string = new Date().toISOString()) {
+  // Reconstruct the exact payload AEVION's Ed25519 signed at /protect
+  // time. Must stay byte-for-byte aligned with the JSON.stringify({...})
+  // call there — see /protect for the source of truth. We extract the
+  // raw 32-byte public key by stripping the 12-byte Ed25519 SPKI prefix
+  // (RFC 8410, fixed format).
+  const spkiHex = String(cert.publicKeyEd25519 || "");
+  const spkiBuf = Buffer.from(spkiHex, "hex");
+  const aevionPublicKeyRawHex =
+    spkiBuf.length === 44 ? spkiBuf.subarray(12).toString("hex") : "";
+
+  const signedAtIso =
+    cert.signedAt instanceof Date
+      ? cert.signedAt.toISOString()
+      : cert.signedAt
+        ? String(cert.signedAt)
+        : null;
+
+  const aevionSignedPayload = signedAtIso
+    ? JSON.stringify({
+        objectId: cert.objectId,
+        title: cert.title,
+        contentHash: cert.contentHash,
+        signatureHmac: cert.signatureHmac,
+        publicKeyRawHex: aevionPublicKeyRawHex,
+        signedAt: signedAtIso,
+      })
+    : null;
+
+  // Public Shamir witness — anyone can re-pin it to IPFS to make the
+  // witness survive AEVION going down.
+  let witness: {
+    shieldId: string;
+    shardIndex: number;
+    sssShare: string;
+    hmac: string;
+    hmacKeyVersion: number;
+    witnessCid: string;
+  } | null = null;
+  if (cert.shieldId) {
+    const w = await pool.query(
+      `SELECT "shardIndex","sssShare","hmac","hmacKeyVersion","witnessCid"
+       FROM "PublicShardWitness" WHERE "shieldId" = $1`,
+      [cert.shieldId],
+    );
+    const wr = w.rows?.[0];
+    if (wr) {
+      witness = {
+        shieldId: cert.shieldId,
+        shardIndex: wr.shardIndex,
+        sssShare: wr.sssShare,
+        hmac: wr.hmac,
+        hmacKeyVersion: wr.hmacKeyVersion,
+        witnessCid: wr.witnessCid,
+      };
+    }
+  }
+
+  const otsProof = cert.otsProof as Buffer | null;
+  const bundle = {
+    version: 1 as const,
+    bundleType: "aevion-verification-bundle" as const,
+    exportedAt,
+    certificate: {
+      id: cert.id,
+      objectId: cert.objectId,
+      shieldId: cert.shieldId,
+      title: cert.title,
+      kind: cert.kind,
+      description: cert.description,
+      author: cert.authorName || "Anonymous",
+      // email intentionally omitted — this bundle is public (anyone can
+      // re-pin it to IPFS), so including authorEmail would let anyone scrape
+      // every author's email by enumerating cert IDs. Matches the /verify
+      // response, which omits it for the same reason. Not needed for
+      // offline verification (hashes + signatures + witness carry that).
+      location:
+        [cert.city, cert.country].filter(Boolean).join(", ") || null,
+      contentHash: cert.contentHash,
+      algorithm: cert.algorithm,
+      protectedAt: cert.protectedAt,
+      status: cert.status,
+    },
+    proofs: {
+      contentHash: {
+        algo: "SHA-256",
+        value: cert.contentHash,
+        // Inputs are listed so the verifier can recompute the hash
+        // from these exact fields — same canonicalization as the
+        // AEVION server (see canonicalContentHash).
+        canonicalInputs: {
+          title: cert.title,
+          description: cert.description,
+          kind: cert.kind,
+          country: cert.country || null,
+          city: cert.city || null,
+        },
+      },
+      aevionEd25519: aevionSignedPayload
+        ? {
+            algo: "Ed25519",
+            publicKeySpkiHex: spkiHex,
+            publicKeyRawHex: aevionPublicKeyRawHex,
+            signedPayload: aevionSignedPayload,
+            signature: cert.signatureEd25519,
+          }
+        : null,
+      /*
+       * Заверение эфемерного ключа ПОСТОЯННЫМ ключом платформы.
+       *
+       * Без него подпись выше самосогласована: и подпись, и ключ к ней
+       * приезжают в этом же файле, так что посторонний соберёт такой пакет
+       * своей парой ключей. Здесь же лежит kid — по нему открытый ключ
+       * берётся НЕЗАВИСИМО, с /api/qsign/v2/keys, и цепочка замыкается.
+       *
+       * null — законное значение: сертификаты до этой правки и выпуски, где
+       * постоянный ключ был недоступен. Проверяющий обязан читать null как
+       * «заверения нет», а не как «всё в порядке».
+       */
+      platformAttestation:
+        cert.platformAttestationKid && cert.platformAttestationSig
+          ? {
+              algo: "Ed25519",
+              kid: cert.platformAttestationKid,
+              signedValue: "proofs.aevionEd25519.publicKeyRawHex",
+              signature: cert.platformAttestationSig,
+              note:
+                "AEVION's long-lived key signs the per-certificate key. Fetch the " +
+                "public half independently from /api/qsign/v2/keys — that is what " +
+                "makes this layer independent of the bundle.",
+            }
+          : null,
+      qsignHmac: signedAtIso
+        ? {
+            algo: "HMAC-SHA256",
+            keyVersion:
+              typeof cert.qsignKeyVersion === "number"
+                ? cert.qsignKeyVersion
+                : 1,
+            signedAt: signedAtIso,
+            signature: cert.signatureHmac,
+            note: "HMAC verification requires AEVION's server-side secret. Included for identity continuity; offline verifiers should rely on Ed25519.",
+          }
+        : null,
+      authorCosign:
+        cert.authorPublicKey && cert.authorSignature
+          ? {
+              algo: cert.authorKeyAlgo || "ed25519",
+              publicKeyBase64: cert.authorPublicKey,
+              signature: cert.authorSignature,
+              signedMessage: "contentHash (utf8)",
+              note: "Verify by signing the contentHash hex string (utf8 bytes) with this public key.",
+            }
+          : null,
+      // Раньше при отсутствии штампа сюда клался `null`, и он значил сразу
+      // две вещи: «не якорили» и «мы это поле не положили». Пакет —
+      // единственное, что остаётся у человека без нас; в нём различие
+      // должно быть написано словами. Состояние считается тем же общим
+      // помощником, что и на остальных поверхностях.
+      openTimestamps: {
+        ...anchorSummary(cert as unknown as Record<string, unknown>),
+        stampedAt: cert.otsStampedAt ?? null,
+        upgradedAt: cert.otsUpgradedAt ?? null,
+        proofBase64: otsProof ? otsProof.toString("base64") : null,
+        note: cert.otsStatus
+          ? "Verify with any OpenTimestamps client against the Bitcoin blockchain. The proof targets the contentHash exactly."
+          : "This certificate predates Bitcoin anchoring: no OpenTimestamps proof exists and none will appear. The other proof layers below are unaffected.",
+      },
+    },
+    shamirWitness: witness,
+    verification: {
+      howTo: [
+        "1. Recompute SHA-256 of stableStringify({city, country, description, kind, title}) where each value is NFC-normalized; missing kind defaults to 'other'. Compare with proofs.contentHash.value.",
+        "2. Verify proofs.aevionEd25519.signature using publicKeyRawHex over the UTF-8 bytes of proofs.aevionEd25519.signedPayload (a JSON string). Note what this does and does not show: it proves the payload was not altered after signing, NOT who signed it — that key travels inside this file and is generated per certificate. Step 3 is what ties it to AEVION.",
+        "3. If proofs.platformAttestation is present, verify its signature using AEVION's long-lived public key over the UTF-8 bytes of proofs.aevionEd25519.publicKeyRawHex. Fetch that key INDEPENDENTLY of this file — https://api.aevion.app/api/qsign/v2/keys, matching the kid — because a key that travels with the thing it signs proves nothing. This is the only step that distinguishes a certificate issued by AEVION from a bundle assembled by anyone else. If the field is absent, the certificate predates this layer.",
+        "4. If proofs.authorCosign is present, verify its signature using publicKeyBase64 over the UTF-8 bytes of proofs.contentHash.value (the hex string itself).",
+        "5. If proofs.openTimestamps.proofBase64 is present, decode and run any OT client (https://opentimestamps.org) against it; the protected file is the raw bytes of proofs.contentHash.value as a hex string. A bitcoinBlockHeight >= 1 means the timestamp is locked to a real Bitcoin block.",
+        "6. Do not rely on the status field for the anchor: we write it. What proves the timestamp is the .ots proof itself — it must commit to this contentHash and carry a Bitcoin attestation, which any OpenTimestamps client will tell you. When it does, the certificate's existence at that block is anchored independently of AEVION, IPFS, or any other party.",
+      ],
+      independence: [
+        "AEVION's Ed25519 signature can be verified with any Ed25519 library — we are not in the trust path.",
+        "The OpenTimestamps proof can be verified against Bitcoin block explorers — Bitcoin is the trust anchor.",
+        "If author co-signing is present, the user's own key — held only by them — provides a second independent layer.",
+        "This bundle is sufficient for proof of existence and authorship even if AEVION ceases to exist.",
+      ],
+    },
+  };
+  return bundle;
+}
+
+function serializeCertificateBundle(bundle: unknown): string {
+  return JSON.stringify(bundle, null, 2);
+}
+
+/**
  * GET /api/pipeline/certificate/:certId/bundle.json
  *
  * Self-contained verification bundle: a single JSON document that lets a
@@ -2928,203 +3130,126 @@ pipelineRouter.get("/certificate/:certId/bundle.json", async (req, res) => {
     }
     const cert = rows[0];
 
-    // Reconstruct the exact payload AEVION's Ed25519 signed at /protect
-    // time. Must stay byte-for-byte aligned with the JSON.stringify({...})
-    // call there — see /protect for the source of truth. We extract the
-    // raw 32-byte public key by stripping the 12-byte Ed25519 SPKI prefix
-    // (RFC 8410, fixed format).
-    const spkiHex = String(cert.publicKeyEd25519 || "");
-    const spkiBuf = Buffer.from(spkiHex, "hex");
-    const aevionPublicKeyRawHex =
-      spkiBuf.length === 44 ? spkiBuf.subarray(12).toString("hex") : "";
-
-    const signedAtIso =
-      cert.signedAt instanceof Date
-        ? cert.signedAt.toISOString()
-        : cert.signedAt
-          ? String(cert.signedAt)
-          : null;
-
-    const aevionSignedPayload = signedAtIso
-      ? JSON.stringify({
-          objectId: cert.objectId,
-          title: cert.title,
-          contentHash: cert.contentHash,
-          signatureHmac: cert.signatureHmac,
-          publicKeyRawHex: aevionPublicKeyRawHex,
-          signedAt: signedAtIso,
-        })
-      : null;
-
-    // Public Shamir witness — anyone can re-pin it to IPFS to make the
-    // witness survive AEVION going down.
-    let witness: {
-      shieldId: string;
-      shardIndex: number;
-      sssShare: string;
-      hmac: string;
-      hmacKeyVersion: number;
-      witnessCid: string;
-    } | null = null;
-    if (cert.shieldId) {
-      const w = await pool.query(
-        `SELECT "shardIndex","sssShare","hmac","hmacKeyVersion","witnessCid"
-         FROM "PublicShardWitness" WHERE "shieldId" = $1`,
-        [cert.shieldId],
-      );
-      const wr = w.rows?.[0];
-      if (wr) {
-        witness = {
-          shieldId: cert.shieldId,
-          shardIndex: wr.shardIndex,
-          sssShare: wr.sssShare,
-          hmac: wr.hmac,
-          hmacKeyVersion: wr.hmacKeyVersion,
-          witnessCid: wr.witnessCid,
-        };
-      }
-    }
-
-    const otsProof = cert.otsProof as Buffer | null;
-    const bundle = {
-      version: 1 as const,
-      bundleType: "aevion-verification-bundle" as const,
-      exportedAt: new Date().toISOString(),
-      certificate: {
-        id: cert.id,
-        objectId: cert.objectId,
-        shieldId: cert.shieldId,
-        title: cert.title,
-        kind: cert.kind,
-        description: cert.description,
-        author: cert.authorName || "Anonymous",
-        // email intentionally omitted — this bundle is public (anyone can
-        // re-pin it to IPFS), so including authorEmail would let anyone scrape
-        // every author's email by enumerating cert IDs. Matches the /verify
-        // response, which omits it for the same reason. Not needed for
-        // offline verification (hashes + signatures + witness carry that).
-        location:
-          [cert.city, cert.country].filter(Boolean).join(", ") || null,
-        contentHash: cert.contentHash,
-        algorithm: cert.algorithm,
-        protectedAt: cert.protectedAt,
-        status: cert.status,
-      },
-      proofs: {
-        contentHash: {
-          algo: "SHA-256",
-          value: cert.contentHash,
-          // Inputs are listed so the verifier can recompute the hash
-          // from these exact fields — same canonicalization as the
-          // AEVION server (see canonicalContentHash).
-          canonicalInputs: {
-            title: cert.title,
-            description: cert.description,
-            kind: cert.kind,
-            country: cert.country || null,
-            city: cert.city || null,
-          },
-        },
-        aevionEd25519: aevionSignedPayload
-          ? {
-              algo: "Ed25519",
-              publicKeySpkiHex: spkiHex,
-              publicKeyRawHex: aevionPublicKeyRawHex,
-              signedPayload: aevionSignedPayload,
-              signature: cert.signatureEd25519,
-            }
-          : null,
-        /*
-         * Заверение эфемерного ключа ПОСТОЯННЫМ ключом платформы.
-         *
-         * Без него подпись выше самосогласована: и подпись, и ключ к ней
-         * приезжают в этом же файле, так что посторонний соберёт такой пакет
-         * своей парой ключей. Здесь же лежит kid — по нему открытый ключ
-         * берётся НЕЗАВИСИМО, с /api/qsign/v2/keys, и цепочка замыкается.
-         *
-         * null — законное значение: сертификаты до этой правки и выпуски, где
-         * постоянный ключ был недоступен. Проверяющий обязан читать null как
-         * «заверения нет», а не как «всё в порядке».
-         */
-        platformAttestation:
-          cert.platformAttestationKid && cert.platformAttestationSig
-            ? {
-                algo: "Ed25519",
-                kid: cert.platformAttestationKid,
-                signedValue: "proofs.aevionEd25519.publicKeyRawHex",
-                signature: cert.platformAttestationSig,
-                note:
-                  "AEVION's long-lived key signs the per-certificate key. Fetch the " +
-                  "public half independently from /api/qsign/v2/keys — that is what " +
-                  "makes this layer independent of the bundle.",
-              }
-            : null,
-        qsignHmac: signedAtIso
-          ? {
-              algo: "HMAC-SHA256",
-              keyVersion:
-                typeof cert.qsignKeyVersion === "number"
-                  ? cert.qsignKeyVersion
-                  : 1,
-              signedAt: signedAtIso,
-              signature: cert.signatureHmac,
-              note: "HMAC verification requires AEVION's server-side secret. Included for identity continuity; offline verifiers should rely on Ed25519.",
-            }
-          : null,
-        authorCosign:
-          cert.authorPublicKey && cert.authorSignature
-            ? {
-                algo: cert.authorKeyAlgo || "ed25519",
-                publicKeyBase64: cert.authorPublicKey,
-                signature: cert.authorSignature,
-                signedMessage: "contentHash (utf8)",
-                note: "Verify by signing the contentHash hex string (utf8 bytes) with this public key.",
-              }
-            : null,
-        // Раньше при отсутствии штампа сюда клался `null`, и он значил сразу
-        // две вещи: «не якорили» и «мы это поле не положили». Пакет —
-        // единственное, что остаётся у человека без нас; в нём различие
-        // должно быть написано словами. Состояние считается тем же общим
-        // помощником, что и на остальных поверхностях.
-        openTimestamps: {
-          ...anchorSummary(cert as unknown as Record<string, unknown>),
-          stampedAt: cert.otsStampedAt ?? null,
-          upgradedAt: cert.otsUpgradedAt ?? null,
-          proofBase64: otsProof ? otsProof.toString("base64") : null,
-          note: cert.otsStatus
-            ? "Verify with any OpenTimestamps client against the Bitcoin blockchain. The proof targets the contentHash exactly."
-            : "This certificate predates Bitcoin anchoring: no OpenTimestamps proof exists and none will appear. The other proof layers below are unaffected.",
-        },
-      },
-      shamirWitness: witness,
-      verification: {
-        howTo: [
-          "1. Recompute SHA-256 of stableStringify({city, country, description, kind, title}) where each value is NFC-normalized; missing kind defaults to 'other'. Compare with proofs.contentHash.value.",
-          "2. Verify proofs.aevionEd25519.signature using publicKeyRawHex over the UTF-8 bytes of proofs.aevionEd25519.signedPayload (a JSON string). Note what this does and does not show: it proves the payload was not altered after signing, NOT who signed it — that key travels inside this file and is generated per certificate. Step 3 is what ties it to AEVION.",
-          "3. If proofs.platformAttestation is present, verify its signature using AEVION's long-lived public key over the UTF-8 bytes of proofs.aevionEd25519.publicKeyRawHex. Fetch that key INDEPENDENTLY of this file — https://api.aevion.app/api/qsign/v2/keys, matching the kid — because a key that travels with the thing it signs proves nothing. This is the only step that distinguishes a certificate issued by AEVION from a bundle assembled by anyone else. If the field is absent, the certificate predates this layer.",
-          "4. If proofs.authorCosign is present, verify its signature using publicKeyBase64 over the UTF-8 bytes of proofs.contentHash.value (the hex string itself).",
-          "5. If proofs.openTimestamps.proofBase64 is present, decode and run any OT client (https://opentimestamps.org) against it; the protected file is the raw bytes of proofs.contentHash.value as a hex string. A bitcoinBlockHeight >= 1 means the timestamp is locked to a real Bitcoin block.",
-          "6. Do not rely on the status field for the anchor: we write it. What proves the timestamp is the .ots proof itself — it must commit to this contentHash and carry a Bitcoin attestation, which any OpenTimestamps client will tell you. When it does, the certificate's existence at that block is anchored independently of AEVION, IPFS, or any other party.",
-        ],
-        independence: [
-          "AEVION's Ed25519 signature can be verified with any Ed25519 library — we are not in the trust path.",
-          "The OpenTimestamps proof can be verified against Bitcoin block explorers — Bitcoin is the trust anchor.",
-          "If author co-signing is present, the user's own key — held only by them — provides a second independent layer.",
-          "This bundle is sufficient for proof of existence and authorship even if AEVION ceases to exist.",
-        ],
-      },
-    };
+    const bundle = await buildCertificateBundle(cert);
 
     res.setHeader("Content-Type", "application/json; charset=utf-8");
     res.setHeader(
       "Content-Disposition",
       `attachment; filename="aevion-bundle-${certId}.json"`,
     );
-    res.send(JSON.stringify(bundle, null, 2));
+    res.send(serializeCertificateBundle(bundle));
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "bundle export failed"; // только для журнала
     const msgPublic = safeErrorText(err, "bundle export failed", "pipeline");
     console.error("[Pipeline] bundle error:", msg);
+    if (!res.headersSent) {
+      res.status(500).json({ error: msgPublic });
+    }
+  }
+});
+
+/** Сколько записей отдаётся одним архивом. Больше — 413, а не обрезанный архив. */
+export const EXPORT_ZIP_MAX_RECORDS = 500;
+
+/**
+ * GET /api/pipeline/certificates/export.zip — все записи аккаунта одним архивом.
+ *
+ * Повод (Продажи, 20.10.2026): бюро на пилоте спрашивает «а если уйдём?».
+ * Ответ — выгрузка, которая проверяется без нас: в архиве на каждую запись
+ * `<certId>/bundle.json`, байт-в-байт тот же, что /certificate/:certId/bundle.json
+ * (одна функция buildCertificateBundle + serializeCertificateBundle), и
+ * `index.json` в корне со списком.
+ *
+ * Правила:
+ *  - только с Bearer: без токена или с битым — 401;
+ *  - записи выбираются ТОЛЬКО по владельцу из токена, тем же правилом, что
+ *    /api/qright/objects?mine=1 (ownerUserId = sub, либо старая запись без
+ *    ownerUserId с ownerEmail = почта токена). Никаких id из адреса или тела
+ *    ручка не принимает: переданные ?ids=… молча игнорируются, чужая запись
+ *    попасть в архив не может;
+ *  - записей нет — 404 {error:"no_records"}, а не пустой архив;
+ *  - записей больше EXPORT_ZIP_MAX_RECORDS — 413 {error:"too_many_records"};
+ *  - архив собирается в памяти (500 × несколько КБ — единицы МБ).
+ */
+pipelineRouter.get("/certificates/export.zip", async (req, res) => {
+  try {
+    const auth = verifyBearerOptional(req);
+    if (!auth) {
+      return res.status(401).json({
+        error: "auth_required",
+        message: "Sign in to download your records.",
+      });
+    }
+    const rl = bundleRateLimiter.check(clientIp(req));
+    if (!rl.allowed) {
+      res.setHeader("Retry-After", String(Math.ceil((rl.retryAfterMs ?? 60_000) / 1000)));
+      return res.status(429).json({ error: "rate limit exceeded — try again shortly" });
+    }
+    await ensureTables();
+    const { rows } = await pool.query(
+      `SELECT c.*, o."createdAt" AS "objectCreatedAt"
+         FROM "IPCertificate" c
+         JOIN "QRightObject" o ON o."id" = c."objectId"
+        WHERE (o."ownerUserId" = $1)
+           OR (o."ownerUserId" IS NULL AND o."ownerEmail" = $2)
+        ORDER BY c."protectedAt" ASC
+        LIMIT $3`,
+      [auth.sub, auth.email, EXPORT_ZIP_MAX_RECORDS + 1],
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({
+        error: "no_records",
+        message: "This account has no protected records yet.",
+      });
+    }
+    if (rows.length > EXPORT_ZIP_MAX_RECORDS) {
+      return res.status(413).json({
+        error: "too_many_records",
+        limit: EXPORT_ZIP_MAX_RECORDS,
+        message: `This account has more than ${EXPORT_ZIP_MAX_RECORDS} records — more than one archive can hold. Download individual bundles from each certificate page, or contact support for a full export.`,
+      });
+    }
+
+    const now = new Date();
+    const exportedAt = now.toISOString();
+    const entries: ZipEntry[] = [];
+    const records: Array<{ certId: string; title: string; createdAt: unknown; verifyUrl: string }> = [];
+    for (const cert of rows) {
+      const bundle = await buildCertificateBundle(cert, exportedAt);
+      entries.push({ name: `${cert.id}/bundle.json`, data: serializeCertificateBundle(bundle) });
+      const created = cert.objectCreatedAt ?? cert.protectedAt ?? null;
+      records.push({
+        certId: String(cert.id),
+        title: String(cert.title ?? ""),
+        createdAt: created instanceof Date ? created.toISOString() : created,
+        verifyUrl: `https://aevion.app/verify/${cert.id}`,
+      });
+    }
+    const index = {
+      exportedAt,
+      account: auth.email,
+      count: records.length,
+      records,
+      howToVerify:
+        "Each folder holds bundle.json — the same file as /api/pipeline/certificate/<certId>/bundle.json. " +
+        "It verifies without AEVION: recompute the content hash, check the Ed25519 signature, and run the " +
+        "OpenTimestamps proof against Bitcoin. Step-by-step instructions are inside each bundle " +
+        "(verification.howTo); you can also drop a bundle on https://aevion.app/verify.",
+    };
+    entries.unshift({ name: "index.json", data: JSON.stringify(index, null, 2) });
+
+    const zip = buildZip(entries, now);
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="aevion-records-${exportedAt.slice(0, 10)}.zip"`,
+    );
+    res.setHeader("Content-Length", String(zip.length));
+    return res.end(zip);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "export failed"; // только для журнала
+    const msgPublic = safeErrorText(err, "export failed", "pipeline");
+    console.error("[Pipeline] export.zip error:", msg);
     if (!res.headersSent) {
       res.status(500).json({ error: msgPublic });
     }

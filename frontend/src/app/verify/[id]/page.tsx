@@ -776,21 +776,21 @@ export default function VerifyPage() {
               {data.bitcoinAnchor.status === "bitcoin-confirmed" && (
                 <div style={{ padding: "14px 16px", borderRadius: 10, background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.2)", marginBottom: 14 }}>
                   <div style={{ fontSize: 13, color: "#065f46", lineHeight: 1.6 }}>
-                    {tv(lang, "The content hash of this certificate is")} <b>{tv(lang, "permanently recorded in the Bitcoin blockchain")}</b> {tv(lang, "at block")} <b>#{data.bitcoinAnchor.bitcoinBlockHeight}</b>. This proof is independent of AEVION — anyone can verify it with the standard OpenTimestamps client.
+                    {tv(lang, "The content hash of this certificate is")} <b>{tv(lang, "permanently recorded in the Bitcoin blockchain")}</b> {tv(lang, "at block")} <b>#{data.bitcoinAnchor.bitcoinBlockHeight}</b>. {tv(lang, "This proof is independent of AEVION — anyone can verify it with the standard OpenTimestamps client.")}
                   </div>
                 </div>
               )}
               {data.bitcoinAnchor.status === "pending" && (
                 <div style={{ padding: "14px 16px", borderRadius: 10, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", marginBottom: 14 }}>
                   <div style={{ fontSize: 13, color: "#92400e", lineHeight: 1.6 }}>
-                    Hash submitted to the OpenTimestamps calendar network. It will be included in a Bitcoin block within 1-6 hours, after which this certificate becomes independently verifiable against any Bitcoin node.
+                    {tv(lang, "Hash submitted to the OpenTimestamps calendar network. It will be included in a Bitcoin block within 1-6 hours, after which this certificate becomes independently verifiable against any Bitcoin node.")}
                   </div>
                 </div>
               )}
               {data.bitcoinAnchor.status === "failed" && (
                 <div style={{ padding: "14px 16px", borderRadius: 10, background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)", marginBottom: 14 }}>
                   <div style={{ fontSize: 13, color: "#991b1b", lineHeight: 1.6 }}>
-                    Bitcoin anchoring failed at the time of protection (calendar network unreachable). The other cryptographic layers remain valid.
+                    {tv(lang, "Bitcoin anchoring failed at the time of protection (calendar network unreachable). The other cryptographic layers remain valid.")}
                   </div>
                 </div>
               )}

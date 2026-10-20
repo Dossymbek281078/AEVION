@@ -31,12 +31,45 @@ describe("/qright: русский словарь проведён в разме�
     const плохие = Object.entries(RU).filter(([k, v]) => !/[А-Яа-яЁё]/.test(v) || v === k);
     expect(плохие.map(([k]) => k), `без кириллицы или копия ключа: ${плохие.length}`).toEqual([]);
   });
+  test("🔴 20.10: ни один КЛЮЧ словаря не содержит кириллицы — ключ = английский источник для en", () => {
+    // Продажи замерили на проде: при en подсказка поля бюро была русско-английской
+    // («например: Патентное бюро «Пример» — leave empty…»), потому что tq при en
+    // отдаёт ключ как есть. Ключей было 2 таких из 119.
+    const ключи = Object.entries(QRIGHT_DICT).flatMap(([язык, d]) => Object.keys(d ?? {}).map((k) => `${язык} :: ${k}`));
+    expect(ключи.length, "ключей в словаре").toBeGreaterThan(80);
+    const скириллицей = ключи.filter((k) => /[А-Яа-яЁё]/.test(k.split(" :: ")[1]));
+    expect(скириллицей, `ключей ${ключи.length}, с кириллицей ${скириллицей.length}`).toEqual([]);
+    expect(/[А-Яа-яЁё]/.test("например"), "КОНТРОЛЬ признака").toBe(true);
+    expect(tq("en", "e.g. Example Patent Bureau — leave empty if you register as the author")).not.toMatch(/[А-Яа-яЁё]/);
+    expect(tq("ru", "e.g. Example Patent Bureau — leave empty if you register as the author")).toBe("например: Патентное бюро «Пример» — оставьте пустым, если регистрируете как автор");
+  });
   test("tq: ru переводит, en и незнакомый язык отдают источник, незнакомый ключ — как есть", () => {
     expect(tq("ru", "Protect Your Work")).toBe("Защитите свою работу");
     expect(tq("en", "Protect Your Work")).toBe("Protect Your Work");
     expect(tq("kk", "Protect Your Work")).toBe("Protect Your Work");
     expect(tq(undefined, "Protect Your Work")).toBe("Protect Your Work");
     expect(tq("ru", "no such key")).toBe("no such key");
+  });
+  test("🔴 20.10: ни одного placeholder= латинским литералом вне tq(…), кроме адресов http", () => {
+    // Продажи замерили на проде при ru-RU: 7 из 8 подсказок полей английские.
+    // Литерал: placeholder="…", placeholder={"…"}, placeholder={'…'}, placeholder={`…`}.
+    const все = [...страница.matchAll(/placeholder=(\{?\s*["'`][^"'`]*["'`]\s*\}?|\{tq\(lang,)/g)].map((m) => m[1]);
+    const обёрнуты = все.filter((p) => p.startsWith("{tq(lang,"));
+    const литералы = все.filter((p) => !p.startsWith("{tq(lang,")).map((p) => p.replace(/^\{?\s*["'`]|["'`]\s*\}?$/g, ""));
+    const плохие = литералы.filter((t) => /[A-Za-z]/.test(t) && !/^https?:\/\//.test(t));
+    const всегоВФайле = (страница.match(/placeholder=/g) ?? []).length;
+    console.log(`[qright placeholder] всего ${всегоВФайле}, разобрано ${все.length}, через tq ${обёрнуты.length}, адресов ${литералы.length - плохие.length}, латиницей вне tq ${плохие.length}`);
+    // КОНТРОЛЬ прибора: разобраны ВСЕ placeholder= (иначе новый вид записи ускользнёт),
+    // и известный литерал-адрес найден как литерал.
+    expect(все.length, "placeholder= другого вида — прибор его не разбирает").toBe(всегоВФайле);
+    expect(литералы).toContain("https://your-site.example/qright/revoked");
+    expect(обёрнуты.length).toBeGreaterThan(5);
+    expect(плохие, `латиницей вне tq: ${плохие.length}`).toEqual([]);
+    // каждая обёрнутая подсказка переведена на ru
+    const ключи = [...страница.matchAll(/placeholder=\{tq\(lang,\s*(["'])((?:(?!\1).)*)\1\)\}/g)].map((m) => m[2]);
+    expect(ключи.length, "обёрнутые подсказки с литеральным ключом").toBe(обёрнуты.length);
+    const безПеревода = ключи.filter((k) => !RU[k]);
+    expect(безПеревода, `подсказок без ru: ${безПеревода.length} из ${ключи.length}`).toEqual([]);
   });
   test("на экране не остаётся «только латиница» у ключевых подписей формы (по словарю)", () => {
     for (const k of ["What are you protecting? *", "Describe your work *", "Type of work", "Protect My Work", "Bureau / organisation (shown on the verification page)"]) {

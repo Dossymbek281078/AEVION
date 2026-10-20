@@ -144,9 +144,14 @@ export function termTotal(base: number, term: TermTier): number {
   return termPricePerMonth(base, term) * TERM_MONTHS[term];
 }
 
-/** Экономия ступени против помесячной оплаты, в процентах: 0, 12.5, 25, 37.5, 50. */
+/**
+ * Экономия срока плана против месяца без срока, в процентах: 0, 10, 20, 30, 40.
+ * 🔴 20.10.2026: считалась из TERM_FACTOR (12.5/25/37.5/50), а строка карточки с
+ * бэка — из цен плана (10/20/30/40); на карточке стояли ОБА числа. Теперь — из
+ * лесенки плана PLANET_TERM_PRICE; зеркало бэкенда, сторож termPricingMatchesBackend.
+ */
 export function termSavingPercent(term: TermTier): number {
-  return Math.round((1 - TERM_FACTOR[term]) * 1000) / 10;
+  return planetSavingPercent(term);
 }
 
 export interface StandaloneApp {
@@ -204,4 +209,23 @@ export function standaloneApp(id: string): StandaloneApp | null {
 /** Самая низкая цена месяца, какую можно назвать честно, — «от $X/мес» (срок Max). */
 export function fromPricePerMonth(base: number): number {
   return termPricePerMonth(base, "max");
+}
+
+/**
+ * 🔴 20.10.2026: сумма денег на витрине — ОДНА функция на все места. Целое —
+ * без копеек с разделителем тысяч ru-RU («1 110», «1 575»); с центами — два знака
+ * через точку («641.25», «1 417.50»), как в строках бэка. Прежде «вперёд одним
+ * платежом: $641» округлял 641.25, а пункт списка ниже писал «$641.25».
+ */
+export function formatMoneyAmount(amount: number): string {
+  const cents = Math.round(amount * 100);
+  const whole = Math.trunc(cents / 100);
+  const frac = Math.abs(cents % 100);
+  const int = whole.toLocaleString("ru-RU");
+  return frac === 0 ? int : `${int}.${String(frac).padStart(2, "0")}`;
+}
+
+/** Сумма в валюте витрины: в USD — до цента; в справочной конвертации — целая, как прежде. */
+export function formatShopPrice(usd: number, symbol: string, rate: number): string {
+  return `${symbol}${formatMoneyAmount(rate === 1 ? usd : Math.round(usd * rate))}`;
 }

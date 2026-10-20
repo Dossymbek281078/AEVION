@@ -91,4 +91,27 @@ describe("кнопка «весь срок вперёд» — только пр�
     await отрисовать();
     expect(document.querySelectorAll('[data-testid^="prepay-"]').length).toBe(4);
   });
+  // 🔴 20.10.2026: сумма вперёд с центами — два знака (641.25, 1 417.50), целая — без
+  // (1 110, 1 575). Кадр прода 390×844: строка и кнопка писали «$641», пункт ниже — «$641.25».
+  it("сумма вперёд: $641.25 у medium в строке и на кнопке, $1 417.50 у full, $1 110 у pro без центов; калькулятор $641.25", async () => {
+    ответыСервера(Object.fromEntries(TERM_TIERS.map((t) => [t, { monthly: true, prepaid: t !== "lite" }])));
+    await отрисовать();
+    const текст = (sel: string) => (document.querySelector(sel)?.textContent ?? "").replace(/\s/g, " ");
+    expect(текст('[data-testid="billing-medium"]')).toContain("$641.25");
+    expect(текст('[data-testid="prepay-medium"]')).toContain("$641.25");
+    expect(текст('[data-testid="billing-full"]')).toContain("$1 417.50");
+    expect(текст('[data-testid="prepay-full"]')).toContain("$1 417.50");
+    expect(текст('[data-testid="prepay-pro"]')).toContain("$1 110");
+    expect(текст('[data-testid="prepay-pro"]')).not.toMatch(/1 110\.\d/);
+    expect(текст('[data-testid="prepay-max"]')).toContain("$1 575");
+    await waitFor(() => expect(document.querySelector('[data-testid="calc-pay-prepaid"]')).not.toBeNull(), { timeout: 4000 });
+    expect(текст('[data-testid="calc-pay-prepaid"]')).toContain("$641.25");
+  });
+  it("формат: formatMoneyAmount и неизменный ключ prepayCta", async () => {
+    const { formatMoneyAmount } = await import("@/lib/termPricing");
+    expect([641.25, 1417.5, 1110, 1575, 0.5, 1.05].map((v) => formatMoneyAmount(v).replace(/\s/g, " "))).toEqual(["641.25", "1 417.50", "1 110", "1 575", "0.50", "1.05"]);
+    const { translations } = await import("@/lib/i18n-all");
+    expect(translations.ru["pricing.home.tier.prepayCta"]).toBe("Оплатить весь срок вперёд — {total}");
+    expect(translations.en["pricing.home.tier.prepayCta"]).toBe("Pay the whole term up front — {total}");
+  });
 });

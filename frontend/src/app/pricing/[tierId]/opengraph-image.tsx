@@ -18,7 +18,7 @@ import {
   planetTotal,
 } from "@/lib/termPricing";
 
-type TierCard = { name: string; price: string; total: string | null; tagline: string; gradient: string };
+type TierCard = { name: string; price: string; total: string | null; months: number | null; tagline: string; gradient: string };
 
 // Карточка — поверхность для репостов, и это классическое место, где переживает
 // смену цен старая цифра: картинку никто не открывает заново. Так уже было дважды
@@ -38,6 +38,7 @@ const TIER_DATA: Record<string, TierCard> = {
     name: "Free",
     price: "$0",
     total: null,
+    months: null,
     tagline: "Старт без барьеров",
     gradient: "linear-gradient(135deg, #475569, #94a3b8)",
   },
@@ -48,6 +49,7 @@ const TIER_DATA: Record<string, TierCard> = {
         name: TERM_NAME[term],
         price: `$${planetPricePerMonth(term)}`,
         total: `$${planetTotal(term)}`,
+        months: TERM_MONTHS[term],
         tagline: `Вся планета AEVION · ${TERM_MONTHS[term]} мес.`,
         gradient: GRADIENT[term],
       },
@@ -57,6 +59,7 @@ const TIER_DATA: Record<string, TierCard> = {
     name: "Enterprise",
     price: "Custom",
     total: null,
+    months: null,
     tagline: "Для корпораций и госсектора",
     gradient: "linear-gradient(135deg, #0f172a, #1e293b)",
   },
@@ -150,7 +153,7 @@ export default async function Image({ params }: { params: Promise<{ tierId: stri
             </span>
             {tier.total && (
               <span style={{ fontSize: 24, opacity: 0.85, fontWeight: 700, marginTop: 8 }}>
-                {tier.total} за весь срок вперёд
+                {tier.total} за {tier.months} мес., списание ежемесячно
               </span>
             )}
           </div>

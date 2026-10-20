@@ -22,6 +22,7 @@ import { Sparkline } from "@/components/Sparkline";
 import { PageTracking } from "@/components/PageTracking";
 import { useI18n } from "@/lib/i18n";
 import { tq } from "./qrightI18n";
+import { ExportAllButton } from "./ExportAllButton";
 import {
   OWNER_REVOKE_REASON_CODES,
   revokeReasonLabel,
@@ -1097,7 +1098,7 @@ export default function QRightPage() {
                   </div>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>{tq(lang, "Email")}</div>
-                    <input aria-label={tq(lang, "Email")} value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} placeholder="your@email.com" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
+                    <input aria-label={tq(lang, "Email")} value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} placeholder={tq(lang, "your@email.com")} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
                   </div>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>{tq(lang, "Country")}</div>
@@ -1112,8 +1113,8 @@ export default function QRightPage() {
                   <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", marginBottom: 4 }}>{tq(lang, "Bureau / organisation (shown on the verification page)")}</div>
                   <input aria-label={tq(lang, "Bureau or organisation")} data-testid="partner-name" value={partnerName} maxLength={80}
                     onChange={(e) => { setPartnerName(e.target.value); try { localStorage.setItem("aevion_qright_partner_v1", e.target.value); } catch {} }}
-                    placeholder={tq(lang, "например: Патентное бюро «Пример» — leave empty if you register as the author")} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
-                  <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>{tq(lang, "Shown as «Запись сделана через … · проверку обеспечивает AEVION». Not part of the signature.")}</div>
+                    placeholder={tq(lang, "e.g. Example Patent Bureau — leave empty if you register as the author")} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.12)", fontSize: 13, boxSizing: "border-box" }} />
+                  <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>{tq(lang, "Shown as «Record made via … · verification by AEVION». Not part of the signature.")}</div>
                 </div>
               </details>
 
@@ -1407,6 +1408,19 @@ export default function QRightPage() {
           >
             <span>{showRegistry ? "▼" : "▶"}</span> View QRight Registry ({items.length || "..."})
           </button>
+          {/* Все записи аккаунта одним архивом — видна только вошедшему (сама проверяет вход). */}
+          <ExportAllButton
+            labels={{
+              button: tq(lang, "Download all my records"),
+              busy: tq(lang, "Preparing archive…"),
+              hint: tq(lang, "One .zip with every certificate bundle — verifiable without AEVION."),
+              empty: tq(lang, "You have no records yet"),
+              signIn: tq(lang, "Sign in to download your records"),
+              tooMany: tq(lang, "More than 500 records — too many for one archive. Contact support for a full export."),
+              network: tq(lang, "Could not download the archive — check your connection and try again"),
+              failed: tq(lang, "Could not prepare the archive"),
+            }}
+          />
 
           {showRegistry && (
             <div style={{ marginTop: 12 }}>
@@ -1745,7 +1759,7 @@ export default function QRightPage() {
               value={revokeText}
               onChange={(e) => setRevokeText(e.target.value.slice(0, 500))}
               rows={3}
-              placeholder="Visible on the public revocation banner."
+              placeholder={tq(lang, "Visible on the public revocation banner.")}
               style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(15,23,42,0.15)", fontSize: 13, color: "#0f172a", background: "#fff", marginBottom: 16, resize: "vertical", fontFamily: "inherit" }}
             />
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
@@ -1874,7 +1888,7 @@ export default function QRightPage() {
         <AskAi
           module="qright"
           title="Ask about QRight"
-          placeholder="e.g. How does content hashing prove ownership?"
+          placeholder={tq(lang, "e.g. How does content hashing prove ownership?")}
         />
       </section>
     </main>

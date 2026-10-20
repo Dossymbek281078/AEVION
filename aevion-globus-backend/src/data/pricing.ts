@@ -232,6 +232,15 @@ export function planetTotal(term: TermTier): number { return PLANET_TERM_PRICE[t
 /** «от $…/мес» — месяц на самом длинном сроке. */
 export function planetFromPerMonth(): number { return PLANET_TERM_PRICE.max; }
 export function planetSavingPercent(term: TermTier): number { return Math.round((1 - PLANET_TERM_PRICE[term] / PLANET_TERM_PRICE.lite) * 1000) / 10; }
+/**
+ * Экономия срока плана против месяца без срока, в процентах: 0, 10, 20, 30, 40.
+ * 🔴 20.10.2026: зеркало фронта (frontend/src/lib/termPricing.ts) — там она считалась
+ * из TERM_FACTOR (12.5/25/37.5/50) и расходилась со строкой карточки. Текст функции
+ * сверяет сторож termPricingMatchesBackend.
+ */
+export function termSavingPercent(term: TermTier): number {
+  return planetSavingPercent(term);
+}
 
 /*
  * 🔴 19.10.2026 22:4x–22:5x, слово основателя: срочный план СПИСЫВАЕТСЯ
@@ -450,7 +459,7 @@ function planetTier(id: TermTier, extra: Partial<PricingTier> = {}): PricingTier
   const months = TERM_MONTHS[id];
   const perMonth = planetPricePerMonth(id);
   const total = planetTotal(id);
-  const savingPct = planetSavingPercent(id);
+  const savingPct = termSavingPercent(id);
   return {
     id,
     name: TERM_NAME[id],

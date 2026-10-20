@@ -72,7 +72,10 @@ describe("pricingLocalize: тарифы", () => {
     const changed = lite.features[idx].replace(/\d+/, (n) => String(Number(n) + 50));
     const mutated = { ...lite, features: lite.features.map((f, i) => (i === idx ? changed : f)) };
     const en = localizeTier(mutated, "en");
-    expect(en.features[idx]).toBe(changed); // русская, с новым числом
+    // 20.10.2026: строки цены переводятся ШАБЛОНОМ, который несёт число оригинала, —
+    // новая цена доезжает в английский сама; отставшего перевода с чужим числом нет.
+    expect(en.features[idx]).not.toMatch(CYRILLIC);
+    expect(sameDigits(changed, en.features[idx])).toBe(true);
     en.features.forEach((f, i) => {
       if (i !== idx) expect(f).not.toMatch(CYRILLIC); // остальные — английские
     });

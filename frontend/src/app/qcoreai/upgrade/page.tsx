@@ -145,7 +145,7 @@ export default function QCoreUpgradePage() {
                 </span>
                 <span style={{ color: "#64748b", fontSize: 14 }}>/mo</span>
                 <div style={{ color: "#64748b", fontSize: 12, marginTop: 2 }}>
-                  A term of 1 to 12 months, paid up front · ${PLANET_BASE_MONTHLY} for one month
+                  A term of 1 to 12 months, billed monthly · ${PLANET_BASE_MONTHLY} for one month
                 </div>
               </div>
               <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -276,7 +276,7 @@ export default function QCoreUpgradePage() {
           </button>
 
           <p style={{ textAlign: "center", color: "#94a3b8", fontSize: 13, margin: 0 }}>
-            One payment for the whole term. No hidden fees. Invoices available for KZ businesses.
+            Billed monthly, or the whole term up front at a discount. No hidden fees. Invoices available for KZ businesses.
           </p>
         </div>
       </ProductPageShell>

@@ -7,7 +7,7 @@
  * Ключ — английская строка из разметки: нет перевода → остаётся английский, а не
  * пустота. Хеши, идентификаторы и имена алгоритмов (SHA-256, Ed25519, HMAC, Shamir,
  * CID, JSON, PDF, QR, Bitcoin) не переводятся — это значения, не подписи.
- * kk пока нет: читатель с kk видит английский (как и до этого дня).
+ * kk — только подписи выгрузки записей (с 20.10); остальное при kk — английский.
  */
 import type { Lang } from "@/lib/i18n-data";
 
@@ -84,8 +84,8 @@ const RU: Record<string, string> = {
   "e.g. Astana": "например: Астана",
   "Bureau / organisation (shown on the verification page)": "Бюро / организация (показывается на странице проверки)",
   "Bureau or organisation": "Бюро или организация",
-  "например: Патентное бюро «Пример» — leave empty if you register as the author": "например: Патентное бюро «Пример» — оставьте пустым, если регистрируете как автор",
-  "Shown as «Запись сделана через … · проверку обеспечивает AEVION». Not part of the signature.":
+  "e.g. Example Patent Bureau — leave empty if you register as the author": "например: Патентное бюро «Пример» — оставьте пустым, если регистрируете как автор",
+  "Shown as «Record made via … · verification by AEVION». Not part of the signature.":
     "Показывается как «Запись сделана через … · проверку обеспечивает AEVION». В подпись не входит.",
   "See plans →": "Смотреть тарифы →",
   "Protect my work — register, sign, and shield in one click": "Защитить работу — зарегистрировать, подписать и укрыть одним нажатием",
@@ -150,9 +150,46 @@ const RU: Record<string, string> = {
   "Get embed code →": "Код для встраивания →",
   "Policies →": "Правила →",
   "Revoke": "Отозвать",
+  // выгрузка всех записей аккаунта (20.10, Продажи: «а если уйдём?»)
+  "Download all my records": "Скачать все мои записи",
+  "Preparing archive…": "Готовим архив…",
+  "One .zip with every certificate bundle — verifiable without AEVION.":
+    "Один .zip со всеми пакетами сертификатов — проверяется без AEVION.",
+  "You have no records yet": "У вас пока нет записей",
+  "Sign in to download your records": "Войдите, чтобы скачать свои записи",
+  "More than 500 records — too many for one archive. Contact support for a full export.":
+    "Больше 500 записей — для одного архива слишком много. Напишите в поддержку за полной выгрузкой.",
+  "Could not download the archive — check your connection and try again":
+    "Не удалось скачать архив — проверьте связь и попробуйте ещё раз",
+  "Could not prepare the archive": "Не удалось подготовить архив",
+  // подсказки полей (20.10, замер Продаж при ru-RU: 7 из 8 placeholder английские)
+  "your@email.com": "вы@почта.kz",
+  "Visible on the public revocation banner.": "Будет видно на публичном баннере отзыва.",
+  "e.g. How does content hashing prove ownership?": "например: Как хеш содержимого доказывает авторство?",
 };
 
-export const QRIGHT_DICT: Partial<Record<Lang, Record<string, string>>> = { ru: RU };
+/**
+ * kk — пока только выгрузка записей (остальная страница при kk — английский
+ * источник, как и до 20.10). Ключи — те же английские строки, что у RU.
+ */
+const KK: Record<string, string> = {
+  "Download all my records": "Барлық жазбаларымды жүктеу",
+  "Preparing archive…": "Мұрағат дайындалуда…",
+  "One .zip with every certificate bundle — verifiable without AEVION.":
+    "Барлық сертификат пакеттері бар бір .zip — AEVION-сыз тексеріледі.",
+  "You have no records yet": "Сізде әзірге жазба жоқ",
+  "Sign in to download your records": "Жазбаларыңызды жүктеу үшін кіріңіз",
+  "More than 500 records — too many for one archive. Contact support for a full export.":
+    "500-ден астам жазба — бір мұрағат үшін тым көп. Толық экспорт үшін қолдау қызметіне жазыңыз.",
+  "Could not download the archive — check your connection and try again":
+    "Мұрағатты жүктеу мүмкін болмады — байланысты тексеріп, қайта көріңіз",
+  "Could not prepare the archive": "Мұрағатты дайындау мүмкін болмады",
+  "your@email.com": "сіз@пошта.kz",
+  "Visible on the public revocation banner.": "Жария кері шақыру баннерінде көрсетіледі.",
+  "e.g. How does content hashing prove ownership?": "мысалы: Мазмұн хеші авторлықты қалай дәлелдейді?",
+};
+
+export const QRIGHT_DICT: Partial<Record<Lang, Record<string, string>>> = { ru: RU, kk: KK };
 
 /** Перевод строки /qright; нет перевода — английский источник как есть. */
 export function tq(lang: Lang | string | undefined, en: string): string {

@@ -9,7 +9,7 @@ import { track } from "@/lib/track";
 import { useI18n } from "@/lib/i18n";
 import { localizeModuleOneLiner } from "@/lib/pricingLocalize";
 import { termUnitKey } from "@/lib/pricingI18n";
-import { isTermTier, termSavingPercent, PLANET_PREPAY_DISCOUNT_PERCENT } from "@/lib/termPricing";
+import { isTermTier, termSavingPercent, PLANET_PREPAY_DISCOUNT_PERCENT, formatShopPrice } from "@/lib/termPricing";
 
 type CurrencyCode = "USD" | "EUR" | "KZT" | "RUB";
 // Тариф — это срок доступа ко всей планете (15.09.2026): lite 1 мес … max 12.
@@ -271,7 +271,7 @@ export default function TierDetailPage() {
   const displayPrice = (usd: number | null): string => {
     if (usd === null) return t("pricing.tierDetail.price.onRequest");
     if (usd === 0) return t("pricing.tierDetail.price.free");
-    return `${symbol}${Math.round(usd * rate).toLocaleString("ru-RU")}`;
+    return formatShopPrice(usd, symbol, rate);
   };
 
   const срок = isTermTier(tier.id) ? tier.id : null;

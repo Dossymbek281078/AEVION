@@ -21,7 +21,7 @@ export const EN_TEXTS: Record<
     badge: "ALL-IN-ONE",
     titleEn: "AEVION subscription",
     format: "the whole planet · term of 1–12 months",
-    desc: "Access to every AEVION module for the term you choose: 1, 3, 6, 9 or 12 months. The longer the term, the cheaper the month. Paid for the whole term up front, in one payment.",
+    desc: "Access to every AEVION module for the term you choose: 1, 3, 6, 9 or 12 months. The longer the term, the cheaper the month. Billed monthly; the whole term up front at a discount.",
     includes: [
       "Every AEVION module — no per-module charge",
       "Terms: 1 · 3 · 6 · 9 · 12 months",

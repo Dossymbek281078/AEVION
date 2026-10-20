@@ -22,6 +22,7 @@ import {
   localizePromoDescription,
   localizeTier,
   localizeTrustNumber,
+  localizeQuoteText,
 } from "@/lib/pricingLocalize";
 import {
   PLANET_BASE_MONTHLY,
@@ -44,6 +45,8 @@ import {
   appSellableTerms,
   appTermTotal,
   appTermFor,
+  formatMoneyAmount,
+  formatShopPrice,
 } from "@/lib/termPricing";
 import { тарифИзАдреса } from "./tarifIzAdresa";
 import { useI18n } from "@/lib/i18n";
@@ -820,8 +823,7 @@ export default function PricingPage() {
   const displayPrice = (usd: number | null): string => {
     if (usd === null) return t("pricing.home.price.onRequest");
     if (usd === 0) return t("pricing.home.price.free");
-    const v = Math.round(usd * rate);
-    return `${symbol}${v.toLocaleString("ru-RU")}`;
+    return formatShopPrice(usd, symbol, rate);
   };
 
   /** «$1 050 за 3 месяца» / «$400 за месяц» — платёж за весь срок. */
@@ -2447,7 +2449,7 @@ export default function PricingPage() {
                           borderBottom: "1px solid rgba(255,255,255,0.06)",
                         }}
                       >
-                        <span style={{ color: "#cbd5e1" }}>{l.label}</span>
+                        <span style={{ color: "#cbd5e1" }}>{localizeQuoteText(l.label, lang)}</span>
                         <span style={{ fontWeight: 700 }}>
                           {symbol}
                           {l.total.toLocaleString("ru-RU")}
@@ -2584,7 +2586,7 @@ export default function PricingPage() {
                     {checkingOut === calcTier
                       ? tp("calc.opening")
                       : typeof quote.monthlyCharge === "number"
-                        ? t("pricing.home.calc.payMonthly", { perMonth: `${symbol}${quote.monthlyCharge.toLocaleString("ru-RU")}` })
+                        ? t("pricing.home.calc.payMonthly", { perMonth: `${symbol}${formatMoneyAmount(quote.monthlyCharge)}` })
                         : `${tp("calc.payQuote")} · ${symbol}${quote.total.toLocaleString("ru-RU")}`}
                   </button>
                 )}
@@ -2596,7 +2598,7 @@ export default function PricingPage() {
                     onClick={() => startCheckout({ tierId: calcTier, seats: 1, billing: "prepaid", from: "calc" })}
                     style={{ width: "100%", marginTop: 10, padding: "11px 16px", fontSize: 15, fontWeight: 700, borderRadius: 10, border: "1px solid rgba(94,234,212,0.6)", cursor: checkingOut === `${calcTier}:prepaid` ? "wait" : "pointer", background: "transparent", color: "#5eead4" }}
                   >
-                    {checkingOut === `${calcTier}:prepaid` ? tp("calc.opening") : t("pricing.home.tier.prepayCta", { total: `${symbol}${quote.prepayTotal.toLocaleString("ru-RU")}` })}
+                    {checkingOut === `${calcTier}:prepaid` ? tp("calc.opening") : t("pricing.home.tier.prepayCta", { total: `${symbol}${formatMoneyAmount(quote.prepayTotal)}` })}
                   </button>
                 )}
                 {calcTier === "enterprise" && (
@@ -2633,7 +2635,7 @@ export default function PricingPage() {
                     }}
                   >
                     {quote.notes.map((n, i) => (
-                      <div key={i}>· {n}</div>
+                      <div key={i}>· {localizeQuoteText(n, lang)}</div>
                     ))}
                   </div>
                 )}

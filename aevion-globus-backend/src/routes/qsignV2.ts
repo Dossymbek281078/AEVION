@@ -836,8 +836,18 @@ qsignV2Router.get("/audit", async (req, res) => {
     const includeSign = eventFilter === null || eventFilter === "sign";
     const includeRevoke = eventFilter === null || eventFilter === "revoke";
 
+    // ?signatureId= сужает журнал до одной подписи: страница /qsign/verify/:id
+    // так узнаёт, что смотрит автор, и показывает ему кнопку отзыва — публичная
+    // ручка id издателя наружу не отдаёт.
+    const signatureId =
+      typeof req.query.signatureId === "string" && req.query.signatureId.trim()
+        ? req.query.signatureId.trim()
+        : null;
+
     const parts: string[] = [];
     const params: unknown[] = [auth.sub];
+    if (signatureId) params.push(signatureId);
+    const sigClause = signatureId ? ` AND s."id" = $2` : "";
 
     if (includeSign) {
       parts.push(`
@@ -855,7 +865,7 @@ qsignV2Router.get("/audit", async (req, res) => {
           NULL::text AS "revokerUserId",
           s."revokedAt"
         FROM "QSignSignature" s
-        WHERE s."issuerUserId" = $1
+        WHERE s."issuerUserId" = $1${sigClause}
       `);
     }
 
@@ -876,7 +886,7 @@ qsignV2Router.get("/audit", async (req, res) => {
           s."revokedAt"
         FROM "QSignRevocation" r
         JOIN "QSignSignature" s ON s."id" = r."signatureId"
-        WHERE s."issuerUserId" = $1 OR r."revokerUserId" = $1
+        WHERE (s."issuerUserId" = $1 OR r."revokerUserId" = $1)${sigClause}
       `);
     }
 

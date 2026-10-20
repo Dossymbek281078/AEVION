@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import QRCode from "qrcode";
 import { getApiBase } from "@/lib/apiBase";
-import { CopyButton, ShareButton } from "./ClientBits";
+import { CopyButton, RevokeButton, ShareButton } from "./ClientBits";
 import { getServerLang } from "@/lib/i18n-server";
 import { tVerify, type VerifyKey } from "./i18n";
 
@@ -408,6 +408,8 @@ export default async function QSignVerifyPage({ params }: Props) {
           dangerouslySetInnerHTML={{ __html: qrSvg }}
         />
       </div>
+
+      {pub.revoked ? null : <RevokeButton id={pub.id} />}
 
       {pub.revoked && pub.revocationReason ? (
         <div

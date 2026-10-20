@@ -81,6 +81,17 @@ const EN = {
   "share.share": "Share",
   "share.copied": "Link copied",
   "share.title": "QSign verification",
+
+  "revoke.button": "Revoke signature",
+  "revoke.lead": "You signed this. Revoking is permanent: this page will show REVOKED and your reason to everyone.",
+  "revoke.reasonLabel": "Reason (visible to everyone)",
+  "revoke.reasonPlaceholder": "e.g. the contract was replaced by a newer version",
+  "revoke.confirm": "Revoke permanently",
+  "revoke.cancel": "Cancel",
+  "revoke.busy": "Revoking…",
+  "revoke.needReason": "Write the reason — revocation is not accepted without it.",
+  "revoke.failed": "Revocation failed ({status}): {msg}",
+  "revoke.done": "Revoked. Updating the page…",
 } as const;
 
 export type VerifyKey = keyof typeof EN;
@@ -153,6 +164,17 @@ const RU: Record<VerifyKey, string> = {
   "share.share": "Поделиться",
   "share.copied": "Ссылка скопирована",
   "share.title": "Проверка подписи QSign",
+
+  "revoke.button": "Отозвать подпись",
+  "revoke.lead": "Это ваша подпись. Отзыв необратим: страница будет показывать всем «ОТОЗВАНА» и вашу причину.",
+  "revoke.reasonLabel": "Причина (её увидят все)",
+  "revoke.reasonPlaceholder": "например: договор заменён новой редакцией",
+  "revoke.confirm": "Отозвать навсегда",
+  "revoke.cancel": "Отмена",
+  "revoke.busy": "Отзываю…",
+  "revoke.needReason": "Напишите причину — без неё отзыв не принимается.",
+  "revoke.failed": "Отозвать не удалось ({status}): {msg}",
+  "revoke.done": "Подпись отозвана. Обновляю страницу…",
 };
 
 const KK: Record<VerifyKey, string> = {
@@ -223,6 +245,17 @@ const KK: Record<VerifyKey, string> = {
   "share.share": "Бөлісу",
   "share.copied": "Сілтеме көшірілді",
   "share.title": "QSign қолтаңбасын тексеру",
+
+  "revoke.button": "Қолтаңбаны кері қайтару",
+  "revoke.lead": "Бұл сіздің қолтаңбаңыз. Кері қайтару қайтымсыз: бет барлығына «КЕРІ ҚАЙТАРЫЛҒАН» белгісін және себебіңізді көрсетеді.",
+  "revoke.reasonLabel": "Себеп (оны бәрі көреді)",
+  "revoke.reasonPlaceholder": "мысалы: шарт жаңа редакциямен ауыстырылды",
+  "revoke.confirm": "Біржола кері қайтару",
+  "revoke.cancel": "Болдырмау",
+  "revoke.busy": "Кері қайтарылуда…",
+  "revoke.needReason": "Себебін жазыңыз — онсыз кері қайтару қабылданбайды.",
+  "revoke.failed": "Кері қайтару сәтсіз ({status}): {msg}",
+  "revoke.done": "Қолтаңба кері қайтарылды. Бет жаңартылуда…",
 };
 
 export const VERIFY_DICT: Partial<Record<string, Record<VerifyKey, string>>> = { en: EN, ru: RU, kk: KK };

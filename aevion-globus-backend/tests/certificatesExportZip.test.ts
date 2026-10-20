@@ -333,3 +333,37 @@ describe("GET /api/pipeline/certificates/export.zip", () => {
     expect(db.limit).toBe(501);
   });
 });
+
+// --- 20.10.2026 (Продажи): howToVerify на языке кнопки; английский всегда рядом. Добавляется в конец
+// tests/certificatesExportZip.test.ts (те же фикстуры OWNER/MY_IDS/app/токен/db из beforeEach).
+describe("index.json.howToVerify: язык из ?lang=, знаменатель 3 языка + 2 контроля", () => {
+  async function индекс(lang?: string) {
+    const r = await exportZip(токен(OWNER.sub, OWNER.email), lang === undefined ? "" : `?lang=${lang}`);
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    return JSON.parse(readZip(r.body as Buffer).get("index.json")!.toString("utf8"));
+  }
+  test("lang=ru → инструкция по-русски, howToVerifyLang=ru, английская рядом", async () => {
+    const i = await индекс("ru");
+    expect(i.howToVerifyLang).toBe("ru");
+    expect(/[А-Яа-яЁё]/.test(i.howToVerify), "кириллица в howToVerify").toBe(true);
+    expect(i.howToVerify).toContain("bundle.json");
+    expect(i.howToVerifyEn).toContain("Each folder holds bundle.json");
+    expect(i.howToVerifyEn).not.toMatch(/[А-Яа-яЁё]/);
+  });
+  test("lang=kk → казахские буквы (ә ғ қ ң ө ұ ү һ і), howToVerifyLang=kk", async () => {
+    const i = await индекс("kk");
+    expect(i.howToVerifyLang).toBe("kk");
+    expect(/[әғқңөұүһі]/i.test(i.howToVerify), "казахские буквы в howToVerify").toBe(true);
+    expect(i.howToVerifyEn).toContain("Each folder holds bundle.json");
+  });
+  test("КОНТРОЛЬ: без lang — английский, howToVerifyLang=en, howToVerify === howToVerifyEn", async () => {
+    const i = await индекс();
+    expect(i.howToVerifyLang).toBe("en");
+    expect(i.howToVerify).toBe(i.howToVerifyEn);
+    expect(i.howToVerify).not.toMatch(/[А-Яа-яЁё]/);
+  });
+  test("КОНТРОЛЬ: незнакомый lang=xx и регистр RU — xx → en, RU → ru", async () => {
+    expect((await индекс("xx")).howToVerifyLang).toBe("en");
+    expect((await индекс("RU")).howToVerifyLang).toBe("ru");
+  });
+});

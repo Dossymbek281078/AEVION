@@ -3152,8 +3152,31 @@ pipelineRouter.get("/certificate/:certId/bundle.json", async (req, res) => {
 /** Сколько записей отдаётся одним архивом. Больше — 413, а не обрезанный архив. */
 export const EXPORT_ZIP_MAX_RECORDS = 500;
 
+const HOW_TO_VERIFY: Record<"en" | "ru" | "kk", string> = {
+  en:
+    "Each folder holds bundle.json — the same file as /api/pipeline/certificate/<certId>/bundle.json. " +
+    "It verifies without AEVION: recompute the content hash, check the Ed25519 signature, and run the " +
+    "OpenTimestamps proof against Bitcoin. Step-by-step instructions are inside each bundle " +
+    "(verification.howTo); you can also drop a bundle on https://aevion.app/verify.",
+  ru:
+    "В каждой папке лежит bundle.json — тот же файл, что отдаёт /api/pipeline/certificate/<certId>/bundle.json. " +
+    "Он проверяется без AEVION: пересчитайте хеш содержимого, проверьте подпись Ed25519 и прогоните " +
+    "доказательство OpenTimestamps по блокчейну Bitcoin. Пошаговая инструкция — внутри каждого пакета " +
+    "(verification.howTo); пакет можно также открыть на https://aevion.app/verify.",
+  kk:
+    "Әр қалтада bundle.json жатыр — /api/pipeline/certificate/<certId>/bundle.json беретін сол файл. " +
+    "Ол AEVION-сыз тексеріледі: мазмұн хешін қайта есептеңіз, Ed25519 қолтаңбасын тексеріңіз және " +
+    "OpenTimestamps дәлелін Bitcoin блокчейні бойынша өткізіңіз. Қадамдық нұсқаулық — әр пакеттің ішінде " +
+    "(verification.howTo); пакетті https://aevion.app/verify бетінде де ашуға болады.",
+};
+function выбратьЯзыкВыгрузки(raw: unknown): "en" | "ru" | "kk" {
+  const v = String(Array.isArray(raw) ? raw[0] : raw ?? "").trim().toLowerCase();
+  return v === "ru" || v === "kk" ? v : "en";
+}
+
 /**
  * GET /api/pipeline/certificates/export.zip — все записи аккаунта одним архивом.
+ * ?lang=ru|kk|en — язык инструкции howToVerify в index.json (по умолчанию en).
  *
  * Повод (Продажи, 20.10.2026): бюро на пилоте спрашивает «а если уйдём?».
  * Ответ — выгрузка, которая проверяется без нас: в архиве на каждую запись
@@ -3226,16 +3249,18 @@ pipelineRouter.get("/certificates/export.zip", async (req, res) => {
         verifyUrl: `https://aevion.app/verify/${cert.id}`,
       });
     }
+    const языкВыгрузки = выбратьЯзыкВыгрузки(req.query?.lang);
     const index = {
       exportedAt,
       account: auth.email,
       count: records.length,
       records,
-      howToVerify:
-        "Each folder holds bundle.json — the same file as /api/pipeline/certificate/<certId>/bundle.json. " +
-        "It verifies without AEVION: recompute the content hash, check the Ed25519 signature, and run the " +
-        "OpenTimestamps proof against Bitcoin. Step-by-step instructions are inside each bundle " +
-        "(verification.howTo); you can also drop a bundle on https://aevion.app/verify.",
+      // 20.10.2026 (Продажи): русскому бюро инструкция внутри архива шла по-английски.
+      // Язык берём из ?lang= (кнопка /qright передаёт язык страницы); английский — всегда рядом,
+      // чтобы сторонний проверяющий прочитал его без нас.
+      howToVerify: HOW_TO_VERIFY[языкВыгрузки],
+      howToVerifyLang: языкВыгрузки,
+      howToVerifyEn: HOW_TO_VERIFY.en,
     };
     entries.unshift({ name: "index.json", data: JSON.stringify(index, null, 2) });
 

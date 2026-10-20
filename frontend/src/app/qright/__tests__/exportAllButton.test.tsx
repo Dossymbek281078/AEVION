@@ -78,7 +78,7 @@ describe("кнопка «Скачать все мои записи»", () => {
     await waitFor(() => expect(clicked.length).toBe(1));
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0];
-    expect(String(url)).toMatch(/\/api\/pipeline\/certificates\/export\.zip$/);
+    expect(String(url)).toMatch(/\/api\/pipeline\/certificates\/export\.zip\?lang=(ru|kk|en)$/);
     expect((init as RequestInit).headers).toEqual({ Authorization: "Bearer tok-123" });
     expect(created).toHaveBeenCalledTimes(1);
     expect(clicked[0]).toEqual({ href: "blob:test-url", download: "aevion-records-2026-10-20.zip" });
@@ -147,7 +147,7 @@ describe("кнопка «Скачать все мои записи»", () => {
 
   test("проводка в page.tsx: кнопка стоит на странице, все подписи через tq(lang, …)", () => {
     const page = readFileSync(join(process.cwd(), "src/app/qright/page.tsx"), "utf8");
-    expect(page).toMatch(/<ExportAllButton\s+labels=\{\{/);
+    expect(page).toMatch(/<ExportAllButton\s+lang=\{lang\}\s+labels=\{\{/);
     expect(page).toContain('import { ExportAllButton } from "./ExportAllButton";');
     const missing = Object.values(KEYS).filter((k) => !page.includes(`tq(lang, "${k}")`));
     expect(missing, `не проведены ${missing.length} из ${Object.values(KEYS).length}`).toEqual([]);

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { denPoMestnomu } from "../../lib/denPoMestnomu";
 import { buildPool as pool, ok, fail, requireBuildAuth, excludeTestUsers } from "../../lib/build";
 import { безПроб, просятПробы } from "../../lib/probeRows";
+import { неОбразецSql } from "../../data/buildExampleProjects";
 
 export const statsRouter = Router();
 
@@ -12,19 +13,21 @@ statsRouter.get("/", async (_req, res) => {
     // Exclude @aevion.test/@smoke.test fixtures so public storefront numbers
     // (hero + stat cards) reflect real users, matching the filtered feeds.
     const notTest = excludeTestUsers("u");
+    // Проекты-образцы (data/buildExampleProjects) — не работодатели: в счёт не идут.
+    const неОбразец = неОбразецSql('p."id"');
     const r = await Promise.all([
-      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildVacancy" v JOIN "BuildProject" p ON p."id" = v."projectId" JOIN "AEVIONUser" u ON u."id" = p."clientId" WHERE v."status" = 'OPEN' AND ${notTest}`),
-      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildVacancy" v JOIN "BuildProject" p ON p."id" = v."projectId" JOIN "AEVIONUser" u ON u."id" = p."clientId" WHERE ${notTest}`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildVacancy" v JOIN "BuildProject" p ON p."id" = v."projectId" JOIN "AEVIONUser" u ON u."id" = p."clientId" WHERE v."status" = 'OPEN' AND ${notTest} AND ${неОбразец}`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildVacancy" v JOIN "BuildProject" p ON p."id" = v."projectId" JOIN "AEVIONUser" u ON u."id" = p."clientId" WHERE ${notTest} AND ${неОбразец}`),
       pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProfile" bp JOIN "AEVIONUser" u ON u."id" = bp."userId" WHERE ${notTest}`),
-      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProject" p JOIN "AEVIONUser" u ON u."id" = p."clientId" WHERE ${notTest}`),
-      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProject" p JOIN "AEVIONUser" u ON u."id" = p."clientId" WHERE p."status" = 'OPEN' AND ${notTest}`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProject" p JOIN "AEVIONUser" u ON u."id" = p."clientId" WHERE ${notTest} AND ${неОбразец}`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProject" p JOIN "AEVIONUser" u ON u."id" = p."clientId" WHERE p."status" = 'OPEN' AND ${notTest} AND ${неОбразец}`),
       pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildApplication" a JOIN "AEVIONUser" u ON u."id" = a."userId" WHERE ${notTest}`),
       pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildApplication" a JOIN "AEVIONUser" u ON u."id" = a."userId" WHERE a."status" = 'ACCEPTED' AND ${notTest}`),
       pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildTrialTask"`),
       pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildTrialTask" WHERE "status" = 'APPROVED'`),
       pool.query(`SELECT COALESCE(SUM("cashbackAev"),0)::float8 AS "n" FROM "BuildCashback"`),
       pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildCashback"`),
-      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProject" p JOIN "AEVIONUser" u ON u."id" = p."clientId" WHERE p."status" = 'IN_PROGRESS' AND ${notTest}`),
+      pool.query(`SELECT COUNT(*)::int AS "n" FROM "BuildProject" p JOIN "AEVIONUser" u ON u."id" = p."clientId" WHERE p."status" = 'IN_PROGRESS' AND ${notTest} AND ${неОбразец}`),
     ]);
     return ok(res, {
       vacancies: { open: Number(r[0].rows[0].n), total: Number(r[1].rows[0].n) },

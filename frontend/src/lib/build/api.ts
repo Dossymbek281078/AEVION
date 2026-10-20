@@ -215,6 +215,8 @@ export type BuildProject = {
   createdAt: string;
   updatedAt: string;
   vacancyCount?: number;
+  /** Проект-образец без работодателя (бэкенд data/buildExampleProjects) — плашка «Пример проекта». */
+  example?: boolean;
 };
 
 export type BuildVacancy = {

@@ -49,7 +49,8 @@ export default function BuildHomePage() {
           total: r.projects.total,
           open: r.projects.open,
           inProgress: r.projects.inProgress,
-          vacancies: r.vacancies.total,
+          // Открытые, а не все: закрытые вакансии «вакансиями» на витрине не считаются (20.10.2026).
+          vacancies: r.vacancies.open,
         }),
       )
       .catch(() => {});
@@ -80,11 +81,13 @@ export default function BuildHomePage() {
   }, [status, q, mineOnly, token]);
 
   const stats = useMemo(() => {
+    // Проекты-образцы (example) в счёт не идут — за ними нет работодателя.
+    const настоящие = projects.filter((p) => !p.example);
     return {
-      total: projects.length,
-      open: projects.filter((p) => p.status === "OPEN").length,
-      active: projects.filter((p) => p.status === "IN_PROGRESS").length,
-      vacancies: projects.reduce((acc, p) => acc + (p.vacancyCount || 0), 0),
+      total: настоящие.length,
+      open: настоящие.filter((p) => p.status === "OPEN").length,
+      active: настоящие.filter((p) => p.status === "IN_PROGRESS").length,
+      vacancies: настоящие.reduce((acc, p) => acc + (p.vacancyCount || 0), 0),
     };
   }, [projects]);
 

@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { BuildShell } from "@/components/build/BuildShell";
+import { useI18n } from "@/lib/i18n";
 import { VacancyCard } from "@/components/build/VacancyCard";
 import { VacancySkeleton } from "@/components/build/Skeleton";
 import { CompareToggleButton } from "@/components/build/CompareToggleButton";
@@ -27,6 +28,7 @@ type FeedVacancy = BuildVacancy & { projectCity?: string | null };
 function VacanciesFeedInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { t } = useI18n();
   const [items, setItems] = useState<FeedVacancy[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -435,6 +437,14 @@ function VacanciesFeedInner() {
           {Array.from({ length: 6 }).map((_, i) => (
             <VacancySkeleton key={i} />
           ))}
+        </div>
+      ) : items.length === 0 && status === "OPEN" && !q.trim() && !city && !minSalary && !maxSalary && !skill && !region && !workMode && !educationLevel && !maxExperience ? (
+        // 20.10.2026: открытых вакансий нет вовсе — говорим это прямо, а не «уберите фильтры».
+        <div data-build-feed-empty className="rounded-xl border border-white/10 bg-white/[0.02] p-8 text-center">
+          <p className="text-sm font-semibold text-slate-200">{t("build.vacancies.emptyNone")}</p>
+          <Link href="/build/create-project" className="mt-4 inline-block rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-950 hover:bg-emerald-400">
+            {t("build.vacancies.postFirst")}
+          </Link>
         </div>
       ) : items.length === 0 ? (
         <div className="rounded-xl border border-white/10 bg-white/[0.02] p-8 text-center">

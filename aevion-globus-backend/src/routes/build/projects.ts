@@ -1,3 +1,4 @@
+import { проектОбразец } from "../../data/buildExampleProjects";
 import { Router } from "express";
 import crypto from "crypto";
 import {
@@ -99,7 +100,9 @@ projectsRouter.get("/", async (req, res) => {
        LIMIT $${params.length}`,
       params,
     );
-    return ok(res, { items: result.rows, total: result.rowCount });
+    // example: проект-образец — витрина рисует плашку «Пример проекта».
+    const items = result.rows.map((r: Record<string, unknown>) => ({ ...r, example: проектОбразец(r.id) }));
+    return ok(res, { items, total: result.rowCount });
   } catch (err: unknown) {
     return fail(res, 500, "projects_list_failed");
   }
@@ -123,7 +126,7 @@ projectsRouter.get("/:id", async (req, res) => {
       ),
     ]);
 
-    return ok(res, { project: project.rows[0], vacancies: vacancies.rows, files: files.rows, client: client.rows[0] || null });
+    return ok(res, { project: { ...project.rows[0], example: проектОбразец(project.rows[0].id) }, vacancies: vacancies.rows, files: files.rows, client: client.rows[0] || null });
   } catch (err: unknown) {
     return fail(res, 500, "project_fetch_failed");
   }
@@ -157,7 +160,7 @@ projectsRouter.get("/:id/public", async (req, res) => {
     ]);
 
     res.setHeader("Cache-Control", "public, max-age=60");
-    return ok(res, { project: project.rows[0], vacancies: vacancies.rows, files: files.rows, client: client.rows[0] || null });
+    return ok(res, { project: { ...project.rows[0], example: проектОбразец(project.rows[0].id) }, vacancies: vacancies.rows, files: files.rows, client: client.rows[0] || null });
   } catch (err: unknown) {
     return fail(res, 500, "project_public_failed");
   }

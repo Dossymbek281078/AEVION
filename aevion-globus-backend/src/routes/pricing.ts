@@ -18,7 +18,7 @@ import {
   getModulePrice,
   resolvePromoCode,
   type CurrencyCode,
-  TERM_TIERS, TERM_MONTHS, TERM_FACTOR, STANDALONE_APPS, PLANET_BASE_MONTHLY, termPricePerMonth, termTotal,
+  TERM_TIERS, TERM_MONTHS, STANDALONE_APPS, PLANET_BASE_MONTHLY, termPricePerMonth, termTotal,
   appSellableTerms, appTermTotal,
   PLANET_TERM_PRICE, planetTotal, planetFromPerMonth, CHESS_YEARLY_USD,
   PLANET_PREPAY_DISCOUNT_PERCENT, PLANET_LADDER_FROM_DAY, DAYS_PER_MONTH, DAYS_PER_YEAR, planetPrepayTotal, planetPaymentsCount,
@@ -181,7 +181,10 @@ pricingRouter.get("/", (_req, res) => {
     generatedAt: new Date().toISOString(),
     currency: "USD",
     // Лестница сроков вместо годовой скидки (15.09.2026): тариф — это срок.
-    termLadder: TERM_TIERS.map((t) => ({ tierId: t, months: TERM_MONTHS[t], factor: TERM_FACTOR[t] })),
+    // 🔴 20.10.2026: factor — доля цены месяца ПЛАНА (0.9/0.8/0.7/0.6), а не TERM_FACTOR
+    // отдельных приложений (0.875/0.75/0.625/0.5): лестница сроков здесь — лестница плана.
+    // Читателей поля в коде и тестах на 20.10 — 0 (git grep termLadder: ручка + фикстура).
+    termLadder: TERM_TIERS.map((t) => ({ tierId: t, months: TERM_MONTHS[t], factor: PLANET_TERM_PRICE[t] / PLANET_TERM_PRICE.lite })),
     /*
      * 🔴 19.10.2026: один план «AEVION Планета» ЯВНЫМИ полями (perMonthUsd, totalUsd
      * по сроку) и шахматы отдельной карточкой $50/год. Приёмка оркестратора

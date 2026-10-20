@@ -144,9 +144,14 @@ export function termTotal(base: number, term: TermTier): number {
   return termPricePerMonth(base, term) * TERM_MONTHS[term];
 }
 
-/** Экономия ступени против помесячной оплаты, в процентах: 0, 12.5, 25, 37.5, 50. */
+/**
+ * Экономия срока плана против месяца без срока, в процентах: 0, 10, 20, 30, 40.
+ * 🔴 20.10.2026: считалась из TERM_FACTOR (12.5/25/37.5/50), а строка карточки с
+ * бэка — из цен плана (10/20/30/40); на карточке стояли ОБА числа. Теперь — из
+ * лесенки плана PLANET_TERM_PRICE; зеркало бэкенда, сторож termPricingMatchesBackend.
+ */
 export function termSavingPercent(term: TermTier): number {
-  return Math.round((1 - TERM_FACTOR[term]) * 1000) / 10;
+  return planetSavingPercent(term);
 }
 
 export interface StandaloneApp {

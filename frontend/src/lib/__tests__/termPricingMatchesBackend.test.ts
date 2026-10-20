@@ -1,7 +1,7 @@
 import { describe, test, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { TERM_TIERS, TERM_MONTHS, TERM_FACTOR, PLANET_BASE_MONTHLY, PLANET_TERM_PRICE, STANDALONE_APPS, planetPricePerMonth, planetTotal, planetFromPerMonth, PLANET_PREPAY_DISCOUNT_PERCENT, PLANET_LADDER_FROM_DAY, planetPrepayTotal, planetEarlyCancellation, DAYS_PER_YEAR } from "../termPricing";
+import { TERM_TIERS, TERM_MONTHS, TERM_FACTOR, PLANET_BASE_MONTHLY, PLANET_TERM_PRICE, STANDALONE_APPS, planetPricePerMonth, planetTotal, planetFromPerMonth, PLANET_PREPAY_DISCOUNT_PERCENT, PLANET_LADDER_FROM_DAY, planetPrepayTotal, planetEarlyCancellation, DAYS_PER_YEAR, termSavingPercent } from "../termPricing";
 import { readdirSync, statSync } from "node:fs";
 
 /**
@@ -52,7 +52,7 @@ describe("лестница сроков сайта совпадает с бэк�
     expect(Number(/export const DAYS_PER_YEAR = (\d+);/.exec(backend)?.[1])).toBe(DAYS_PER_YEAR);
     const тело = (src: string, имя: string) => { const i = src.indexOf(`export function ${имя}(`); const j = src.indexOf("\n}\n", i); return i < 0 || j < 0 ? "" : src.slice(i, j); };
     const фронт = readFileSync(join(__dirname, "..", "termPricing.ts"), "utf-8");
-    for (const имя of ["planetEarlyCancellation", "planetLadderTierForDays", "planetTermDays", "planetPrepayTotal"]) {
+    for (const имя of ["planetEarlyCancellation", "planetLadderTierForDays", "planetTermDays", "planetPrepayTotal", "termSavingPercent"]) {
       expect(тело(фронт, имя).length, `${имя}: функция найдена на фронте`).toBeGreaterThan(40);
       expect(тело(фронт, имя), `${имя}: текст функции на фронте ≠ бэкенду`).toBe(тело(backend, имя));
     }
@@ -79,5 +79,11 @@ describe("лестница сроков сайта совпадает с бэк�
       (m) => ({ slug: m[1], moduleId: m[2], name: m[3], baseMonthly: Number(m[4]), ...(m[5] ? { yearOnlyUsd: m[5] === "CHESS_YEARLY_USD" ? chessYearly : Number(m[5]) } : {}) }),
     );
     expect(fromBackend).toEqual(STANDALONE_APPS);
+  });
+  // 🔴 20.10.2026: экономия срока на карточке — из цен плана, одно число с бэком
+  // («Экономия N% против месяца без срока»), а не из TERM_FACTOR (12.5/25/37.5/50).
+  test("termSavingPercent: 0/10/20/30/40, как строка карточки бэка", () => {
+    expect(TERM_TIERS.map((t) => termSavingPercent(t))).toEqual([0, 10, 20, 30, 40]);
+    expect(backend).toContain("const savingPct = termSavingPercent(id);");
   });
 });

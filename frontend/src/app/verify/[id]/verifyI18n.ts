@@ -109,6 +109,13 @@ const RU: Record<string, string> = {
   "Bitcoin Blockchain Anchor": "Якорь в блокчейне Bitcoin",
   "third-party verifiable timestamp": "метка времени, проверяемая третьей стороной",
   "⏱ PENDING CONFIRMATION": "⏱ ЖДЁТ ПОДТВЕРЖДЕНИЯ",
+
+  // Статус якоря и ответ «проверить сейчас» (20.10: на записях с подтверждённым
+  // блоком бейдж оставался «CONFIRMED @ BLOCK» — строка была шаблоном мимо словаря).
+  "✓ CONFIRMED @ BLOCK": "✓ ПОДТВЕРЖДЕНО В БЛОКЕ",
+  "Bitcoin confirmed at block": "Bitcoin подтвердил запись в блоке",
+  "Still pending Bitcoin confirmation — try later.": "Bitcoin ещё не подтвердил запись — проверьте позже.",
+  "Upgrade request failed — try again in a moment.": "Запрос проверки не прошёл — повторите через минуту.",
   "✗ FAILED": "✗ НЕ УДАЛОСЬ",
   "Hash submitted to the OpenTimestamps calendar network. It will be included in a Bitcoin block within 1-6 hours, after which this certificate becomes independently verifiable against any Bitcoin node.":
     "Хеш отправлен в сеть календарей OpenTimestamps. Он попадёт в блок биткоина в течение 1–6 часов, после чего этот сертификат можно будет независимо проверить по любому узлу биткоина.",
@@ -231,6 +238,11 @@ const KK: Record<string, string> = {
   "Bitcoin Blockchain Anchor": "Bitcoin блокчейніндегі зәкір",
   "third-party verifiable timestamp": "үшінші тарап тексере алатын уақыт белгісі",
   "⏱ PENDING CONFIRMATION": "⏱ РАСТАУ КҮТІЛУДЕ",
+
+  "✓ CONFIRMED @ BLOCK": "✓ БЛОКТА РАСТАЛДЫ",
+  "Bitcoin confirmed at block": "Bitcoin жазбаны блокта растады",
+  "Still pending Bitcoin confirmation — try later.": "Bitcoin жазбаны әлі растаған жоқ — кейінірек тексеріңіз.",
+  "Upgrade request failed — try again in a moment.": "Тексеру сұрауы өтпеді — бір минуттан соң қайталаңыз.",
   "✗ FAILED": "✗ СӘТСІЗ",
   "Hash submitted to the OpenTimestamps calendar network. It will be included in a Bitcoin block within 1-6 hours, after which this certificate becomes independently verifiable against any Bitcoin node.":
     "Хеш OpenTimestamps күнтізбелер желісіне жіберілді. Ол 1–6 сағат ішінде Bitcoin блогына енеді, содан кейін бұл сертификатты кез келген Bitcoin түйіні арқылы тәуелсіз тексеруге болады.",

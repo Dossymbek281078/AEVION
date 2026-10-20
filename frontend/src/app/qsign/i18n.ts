@@ -1,0 +1,594 @@
+/**
+ * Словарь страницы /qsign — ru/en/kk рядом с модулем, по образцу devhub/i18n.ts.
+ *
+ * Зачем отдельный файл, а не общий словарь: страница до 20.10.2026 была целиком
+ * английской (2380 строк, перевод был только у семи «busy»-подписей кнопок), и
+ * гость с ru-RU/kk видел первый экран и форму подписи на чужом языке. Сто с
+ * лишним ключей одного модуля в общем файле на 7400 строк мешали бы соседям и
+ * требовали бы менять LANG_KEY_COUNT; модульный словарь сторож
+ * everyCalledKeyExists читает сам (файлы `i18n.*` в app/).
+ *
+ * Правила: ключ добавляется в EN обязательно (запасной язык), затем в RU и KK —
+ * тип Record<Key, string> не даст забыть. Подстановки — {name}, как в общем
+ * словаре (interpolate из lib/i18n-data).
+ */
+
+import { useCallback } from "react";
+import { interpolate } from "@/lib/i18n-data";
+import { useI18nOptional } from "@/lib/i18n";
+
+const EN = {
+  "busy.hash": "Hashing…",
+  "busy.sign": "Signing…",
+  "busy.verify": "Verifying…",
+  "busy.webhook": "Creating…",
+  "busy.gps": "Requesting…",
+
+  "hero.kicker": "AEVION · Digital Signature Platform",
+  "hero.title1": "Tamper-evident proofs,",
+  "hero.title2": "publicly verifiable in one link.",
+  "hero.lead":
+    "QSign v2 signs any JSON payload in RFC 8785 canonical form with a hybrid of HMAC-SHA256 and Ed25519. Every signature is persisted, geo-anchored, revocable, and verifiable from a shareable public URL — no vendor lock-in, no trust-us.",
+  "hero.ctaGuest": "Sign in and sign a document →",
+  "hero.ctaUser": "Sign a document ↓",
+  "hero.offline": "offline",
+
+  "demo.title": "Try it now — no account needed",
+  "demo.body":
+    "Open AEVION's demo signature and check it yourself. Verification is public and stateless: change one character of the payload and it turns INVALID.",
+  "demo.cta": "Verify a real signature",
+
+  "stats.anchored": "Signatures anchored",
+  "stats.last24h": "+{n} in last 24h",
+  "stats.ready": "ready for first anchor",
+  "stats.active": "Active",
+  "stats.revoked": "{n} revoked",
+  "stats.noneRevoked": "none revoked",
+  "stats.issuers": "Unique issuers",
+  "stats.countries": "{n} countries",
+  "stats.keys": "Active keys",
+  "stats.retired": "{n} retired (verify-only)",
+
+  "deeplink.from": "Payload received from: {origin}",
+  "deeplink.origin": "deep link (QRight / Globus)",
+
+  "nav.keys": "Key registry",
+
+  "auth.label": "Access",
+  "auth.placeholder": "Access token (fills in by itself after sign-in)",
+  "auth.hide": "Hide",
+  "auth.show": "Show",
+  "auth.signIn": "Sign in →",
+  "auth.loaded": "token loaded",
+
+  "sign.title": "1. Sign payload",
+  "sign.payload": "Payload (JSON)",
+  "sign.payloadAria": "Payload to sign (JSON)",
+  "sign.hashFile": "📎 Hash a file",
+  "sign.loadSample": "Load sample",
+  "sign.jsonError": "JSON error: {msg}",
+  "sign.jsonOk": "✓ Valid JSON",
+  "sign.canonical": "RFC 8785 canonical · SHA-256",
+  "sign.hideCanonical": "hide canonical",
+  "sign.showCanonical": "show canonical",
+  "sign.copy": "copy",
+  "sign.drift":
+    "⚠ Canonical hash changed since signing — the stored signature will no longer verify against this payload.",
+  "sign.button": "Sign with HMAC + Ed25519",
+  "sign.needLogin": "Sign in to sign — it takes one minute.",
+
+  "geo.title": "Geo anchoring",
+  "geo.gps": "GPS: {lat}, {lng} (high priority)",
+  "geo.denied": "Permission denied — server will use IP-based geo",
+  "geo.optin": "Opt-in to attach device GPS; otherwise server infers from IP",
+  "geo.clear": "Clear",
+  "geo.attach": "Attach GPS",
+
+  "signed.chip": "signed",
+  "signed.pubkey": "Ed25519 public key",
+  "signed.pqReserved": "PQ slot reserved",
+  "signed.pqNote":
+    "Real post-quantum signature lands in v2.1; current digest is a deterministic SHA-512 fingerprint of canonical||kid.",
+  "signed.openPublic": "Open public verify page →",
+  "signed.copyLink": "Copy link",
+  "signed.pdf": "Download PDF",
+  "signed.copyJson": "Copy JSON",
+
+  "verify.title": "2. Verify (stateless)",
+  "verify.lead":
+    "Re-canonicalizes the payload server-side and recomputes both signatures. No DB lookup. For DB-backed verify + revocation check, open the public URL after signing.",
+  "verify.hmacKid": "HMAC kid",
+  "verify.hmacKidAria": "HMAC key id",
+  "verify.hmacSig": "HMAC sig",
+  "verify.hmacSigAria": "HMAC signature",
+  "verify.edKid": "Ed25519 kid",
+  "verify.edKidAria": "Ed25519 key id",
+  "verify.edSig": "Ed25519 sig",
+  "verify.edSigAria": "Ed25519 signature",
+  "verify.kidPlaceholder": "empty → current key",
+  "verify.sigPlaceholder": "64 hex characters",
+  "verify.optional": "optional",
+  "verify.edSigPlaceholder": "optional · 128 hex",
+  "verify.button": "Verify",
+  "verify.valid": "✓ VALID",
+  "verify.invalid": "✗ INVALID",
+  "verify.ok": "valid",
+  "verify.bad": "invalid",
+  "verify.notChecked": "not checked",
+  "verify.hash": "hash: {h}",
+
+  "recent.title": "Recent anchors",
+  "recent.lead": "Live feed — public verification URLs, no identifying data.",
+  "recent.updated": "updated {t} UTC",
+
+  "webhooks.title": "Webhooks",
+  "webhooks.lead":
+    "HTTP callbacks fired on sign and revoke events for your signatures. Body is HMAC-SHA256 signed with the webhook secret; receivers verify the X-QSign-Signature header.",
+  "webhooks.used": "{n}/10 used",
+  "webhooks.saveSecret": "⚠ Save this secret — it is shown ONCE",
+  "webhooks.copySecret": "Copy secret",
+  "webhooks.dismiss": "I saved it — dismiss",
+  "webhooks.urlAria": "Webhook URL",
+  "webhooks.add": "Add webhook",
+  "webhooks.loading": "Loading…",
+  "webhooks.none": "No webhooks yet. Add one above to start receiving sign / revoke events.",
+  "webhooks.events": "events: {list}",
+  "webhooks.lastFired": " · last fired {t}",
+  "webhooks.neverFired": " · never fired",
+  "webhooks.active": "active",
+  "webhooks.off": "off",
+  "webhooks.delete": "Delete",
+
+  "api.title": "Use the API",
+  "api.leadA": "Live snippets — copy and paste. Replace",
+  "api.leadB": "with your bearer.",
+  "api.preservedA": "Signature id",
+  "api.preservedB": "from your latest sign is preserved.",
+  "api.copySnippet": "Copy snippet",
+  "api.openapi": "OpenAPI 3.0 spec ↗",
+  "api.sdk": "SDK packages ↗",
+
+  "how.title": "How QSign v2 works",
+  "how.1": "Your payload is canonicalized per RFC 8785 (JCS) — keys sorted, no whitespace, deterministic across clients.",
+  "how.2": "SHA-256 of the canonical form is signed with two independent keys: HMAC-SHA256 (shared secret) and Ed25519 (publicly verifiable).",
+  "how.3": "The signature row is persisted with issuer, geo, and key IDs. A shareable public URL verifies it without secrets.",
+  "how.4": "Keys rotate with an overlap window — retired keys remain valid for verifying historical signatures forever.",
+  "how.5": "Any signature can be revoked by its issuer (or admin). Revoked rows stay cryptographically valid but report valid=false.",
+
+  "waitlist.title": "Not signing today? Leave your email",
+  "waitlist.description": "We write when QSign gets new keys, formats and integrations.",
+  "waitlist.button": "Notify me",
+  "waitlist.done": "Done — your address is saved. A confirmation is already in your inbox.",
+
+  "rate.title": "Sign rate limit (per IP)",
+  "rate.left": "{rem}/{limit} left",
+  "rate.resets": " · resets in {s}s",
+
+  "toast.copied": "{what} copied",
+  "toast.copyFailed": "Copy failed",
+  "toast.signInFirst": "Sign in first",
+  "toast.urlHttp": "URL must start with http(s)://",
+  "toast.createFailed": "Create failed ({status})",
+  "toast.webhookCreated": "Webhook created — copy the secret now",
+  "toast.createError": "Create error: {msg}",
+  "toast.deleteFailed": "Delete failed ({status})",
+  "toast.webhookDeleted": "Webhook deleted",
+  "toast.deleteError": "Delete error: {msg}",
+  "toast.fileTooLarge": "File too large ({mb} MB > 50 MB cap)",
+  "toast.hashed": "Hashed {name}",
+  "toast.hashFailed": "Hash failed: {msg}",
+  "toast.geoUnsupported": "Geolocation not supported",
+  "toast.gpsAttached": "GPS attached",
+  "toast.gpsDenied": "GPS permission denied",
+  "toast.fixJson": "Fix JSON before signing",
+  "toast.signFailed": "Sign failed ({status})",
+  "toast.signed": "Signed · id {id}",
+  "toast.signError": "Sign error: {msg}",
+  "toast.network": "No connection to the signing service. Check your network and try again — nothing was signed.",
+  "toast.verifyFailed": "Verify failed ({status})",
+  "toast.sigValid": "Signature VALID",
+  "toast.sigInvalid": "Signature INVALID",
+  "toast.verifyError": "Verify error: {msg}",
+  "toast.verifyNetwork": "No connection to the verification service. Check your network and try again.",
+
+  "what.hash": "Hash",
+  "what.hmacSig": "HMAC signature",
+  "what.edSig": "Ed25519 signature",
+  "what.pubkey": "Public key",
+  "what.verifyLink": "Verify link",
+  "what.fullResponse": "Full response",
+  "what.webhookSecret": "Webhook secret",
+  "what.snippet": "Snippet",
+} as const;
+
+type Key = keyof typeof EN;
+export type QsignKey = Key;
+
+const RU: Record<Key, string> = {
+  "busy.hash": "Считаю хеш…",
+  "busy.sign": "Подписываю…",
+  "busy.verify": "Проверяю…",
+  "busy.webhook": "Создаю…",
+  "busy.gps": "Запрашиваю…",
+
+  "hero.kicker": "AEVION · Платформа цифровой подписи",
+  "hero.title1": "Доказательства, которые нельзя подделать,",
+  "hero.title2": "проверяются по одной ссылке.",
+  "hero.lead":
+    "QSign v2 подписывает любой JSON в канонической форме RFC 8785 гибридом HMAC-SHA256 и Ed25519. Каждая подпись сохраняется, привязана к месту, отзываема и проверяется по публичной ссылке — без привязки к поставщику и без «просто поверьте».",
+  "hero.ctaGuest": "Войти и подписать документ →",
+  "hero.ctaUser": "Подписать документ ↓",
+  "hero.offline": "нет связи",
+
+  "demo.title": "Попробуйте сейчас — без аккаунта",
+  "demo.body":
+    "Откройте демо-подпись AEVION и проверьте её сами. Проверка публичная и без состояния: измените один символ данных — и она станет НЕДЕЙСТВИТЕЛЬНОЙ.",
+  "demo.cta": "Проверить настоящую подпись",
+
+  "stats.anchored": "Подписей закреплено",
+  "stats.last24h": "+{n} за 24 часа",
+  "stats.ready": "ждёт первой подписи",
+  "stats.active": "Действуют",
+  "stats.revoked": "отозвано: {n}",
+  "stats.noneRevoked": "отозванных нет",
+  "stats.issuers": "Издателей",
+  "stats.countries": "стран: {n}",
+  "stats.keys": "Действующих ключей",
+  "stats.retired": "выведено: {n} (только проверка)",
+
+  "deeplink.from": "Данные получены из: {origin}",
+  "deeplink.origin": "ссылка (QRight / Globus)",
+
+  "nav.keys": "Реестр ключей",
+
+  "auth.label": "Доступ",
+  "auth.placeholder": "Токен доступа (подставится сам после входа)",
+  "auth.hide": "Скрыть",
+  "auth.show": "Показать",
+  "auth.signIn": "Войти →",
+  "auth.loaded": "токен загружен",
+
+  "sign.title": "1. Подписать данные",
+  "sign.payload": "Данные (JSON)",
+  "sign.payloadAria": "Данные для подписи (JSON)",
+  "sign.hashFile": "📎 Хешировать файл",
+  "sign.loadSample": "Пример",
+  "sign.jsonError": "Ошибка JSON: {msg}",
+  "sign.jsonOk": "✓ JSON корректен",
+  "sign.canonical": "Каноническая форма RFC 8785 · SHA-256",
+  "sign.hideCanonical": "скрыть каноническую форму",
+  "sign.showCanonical": "показать каноническую форму",
+  "sign.copy": "копировать",
+  "sign.drift":
+    "⚠ Канонический хеш изменился после подписания — сохранённая подпись больше не сойдётся с этими данными.",
+  "sign.button": "Подписать HMAC + Ed25519",
+  "sign.needLogin": "Чтобы подписать, войдите — это одна минута.",
+
+  "geo.title": "Привязка к месту",
+  "geo.gps": "GPS: {lat}, {lng} (приоритет)",
+  "geo.denied": "Доступ запрещён — сервер определит место по IP",
+  "geo.optin": "Можно приложить GPS устройства; иначе сервер определит место по IP",
+  "geo.clear": "Убрать",
+  "geo.attach": "Приложить GPS",
+
+  "signed.chip": "подписано",
+  "signed.pubkey": "Открытый ключ Ed25519",
+  "signed.pqReserved": "Слот PQ зарезервирован",
+  "signed.pqNote":
+    "Настоящая постквантовая подпись появится в v2.1; сейчас это детерминированный отпечаток SHA-512 от canonical||kid.",
+  "signed.openPublic": "Открыть публичную страницу проверки →",
+  "signed.copyLink": "Копировать ссылку",
+  "signed.pdf": "Скачать PDF",
+  "signed.copyJson": "Копировать JSON",
+
+  "verify.title": "2. Проверить (без базы)",
+  "verify.lead":
+    "Сервер заново канонизирует данные и пересчитывает обе подписи. Без обращения к базе. Проверка с учётом отзыва — на публичной странице после подписания.",
+  "verify.hmacKid": "Ключ HMAC (kid)",
+  "verify.hmacKidAria": "Идентификатор ключа HMAC",
+  "verify.hmacSig": "Подпись HMAC",
+  "verify.hmacSigAria": "Подпись HMAC",
+  "verify.edKid": "Ключ Ed25519 (kid)",
+  "verify.edKidAria": "Идентификатор ключа Ed25519",
+  "verify.edSig": "Подпись Ed25519",
+  "verify.edSigAria": "Подпись Ed25519",
+  "verify.kidPlaceholder": "пусто → действующий",
+  "verify.sigPlaceholder": "64 шестнадцатеричных знака",
+  "verify.optional": "необязательно",
+  "verify.edSigPlaceholder": "необязательно · 128 hex",
+  "verify.button": "Проверить",
+  "verify.valid": "✓ ДЕЙСТВИТЕЛЬНА",
+  "verify.invalid": "✗ НЕДЕЙСТВИТЕЛЬНА",
+  "verify.ok": "верна",
+  "verify.bad": "неверна",
+  "verify.notChecked": "не проверялась",
+  "verify.hash": "хеш: {h}",
+
+  "recent.title": "Последние подписи",
+  "recent.lead": "Живая лента — публичные ссылки проверки, без личных данных.",
+  "recent.updated": "обновлено {t} UTC",
+
+  "webhooks.title": "Вебхуки",
+  "webhooks.lead":
+    "HTTP-вызовы при событиях sign и revoke для ваших подписей. Тело подписано HMAC-SHA256 секретом вебхука; получатель проверяет заголовок X-QSign-Signature.",
+  "webhooks.used": "{n}/10 занято",
+  "webhooks.saveSecret": "⚠ Сохраните секрет — он показывается ОДИН раз",
+  "webhooks.copySecret": "Копировать секрет",
+  "webhooks.dismiss": "Сохранил — закрыть",
+  "webhooks.urlAria": "Адрес вебхука",
+  "webhooks.add": "Добавить вебхук",
+  "webhooks.loading": "Загрузка…",
+  "webhooks.none": "Вебхуков пока нет. Добавьте адрес выше, чтобы получать события sign / revoke.",
+  "webhooks.events": "события: {list}",
+  "webhooks.lastFired": " · последний вызов {t}",
+  "webhooks.neverFired": " · ещё не вызывался",
+  "webhooks.active": "включён",
+  "webhooks.off": "выключен",
+  "webhooks.delete": "Удалить",
+
+  "api.title": "Через API",
+  "api.leadA": "Живые примеры — копируйте и вставляйте. Замените",
+  "api.leadB": "своим токеном.",
+  "api.preservedA": "Идентификатор подписи",
+  "api.preservedB": "из последнего подписания подставлен.",
+  "api.copySnippet": "Копировать пример",
+  "api.openapi": "Спецификация OpenAPI 3.0 ↗",
+  "api.sdk": "Пакеты SDK ↗",
+
+  "how.title": "Как работает QSign v2",
+  "how.1": "Данные приводятся к канонической форме RFC 8785 (JCS): ключи отсортированы, без пробелов, одинаково у любого клиента.",
+  "how.2": "SHA-256 канонической формы подписывается двумя независимыми ключами: HMAC-SHA256 (общий секрет) и Ed25519 (проверяется публично).",
+  "how.3": "Запись подписи сохраняется с издателем, местом и идентификаторами ключей. Публичная ссылка проверяет её без секретов.",
+  "how.4": "Ключи ротируются с перекрытием — выведенные ключи навсегда остаются годными для проверки старых подписей.",
+  "how.5": "Любую подпись может отозвать её издатель (или администратор). Отозванная остаётся криптографически верной, но отдаёт valid=false.",
+
+  "waitlist.title": "Сегодня не подписываете? Оставьте почту",
+  "waitlist.description": "Напишем, когда у QSign появятся новые ключи, форматы и интеграции.",
+  "waitlist.button": "Сообщить мне",
+  "waitlist.done": "Готово — адрес сохранён. Подтверждение уже в вашем ящике.",
+
+  "rate.title": "Предел подписей (на IP)",
+  "rate.left": "осталось {rem}/{limit}",
+  "rate.resets": " · сброс через {s} с",
+
+  "toast.copied": "{what}: скопировано",
+  "toast.copyFailed": "Не удалось скопировать",
+  "toast.signInFirst": "Сначала войдите",
+  "toast.urlHttp": "Адрес должен начинаться с http(s)://",
+  "toast.createFailed": "Не удалось создать ({status})",
+  "toast.webhookCreated": "Вебхук создан — скопируйте секрет сейчас",
+  "toast.createError": "Ошибка создания: {msg}",
+  "toast.deleteFailed": "Не удалось удалить ({status})",
+  "toast.webhookDeleted": "Вебхук удалён",
+  "toast.deleteError": "Ошибка удаления: {msg}",
+  "toast.fileTooLarge": "Файл слишком большой ({mb} МБ > предела 50 МБ)",
+  "toast.hashed": "Хеш посчитан: {name}",
+  "toast.hashFailed": "Не удалось посчитать хеш: {msg}",
+  "toast.geoUnsupported": "Геолокация не поддерживается",
+  "toast.gpsAttached": "GPS приложен",
+  "toast.gpsDenied": "Доступ к GPS запрещён",
+  "toast.fixJson": "Исправьте JSON перед подписанием",
+  "toast.signFailed": "Подписать не удалось ({status})",
+  "toast.signed": "Подписано · id {id}",
+  "toast.signError": "Ошибка подписания: {msg}",
+  "toast.network": "Нет связи с сервисом подписи. Проверьте сеть и повторите — ничего не подписано.",
+  "toast.verifyFailed": "Проверить не удалось ({status})",
+  "toast.sigValid": "Подпись ДЕЙСТВИТЕЛЬНА",
+  "toast.sigInvalid": "Подпись НЕДЕЙСТВИТЕЛЬНА",
+  "toast.verifyError": "Ошибка проверки: {msg}",
+  "toast.verifyNetwork": "Нет связи с сервисом проверки. Проверьте сеть и повторите.",
+
+  "what.hash": "Хеш",
+  "what.hmacSig": "Подпись HMAC",
+  "what.edSig": "Подпись Ed25519",
+  "what.pubkey": "Открытый ключ",
+  "what.verifyLink": "Ссылка проверки",
+  "what.fullResponse": "Полный ответ",
+  "what.webhookSecret": "Секрет вебхука",
+  "what.snippet": "Пример",
+};
+
+const KK: Record<Key, string> = {
+  "busy.hash": "Хеш есептелуде…",
+  "busy.sign": "Қол қойылуда…",
+  "busy.verify": "Тексерілуде…",
+  "busy.webhook": "Құрылуда…",
+  "busy.gps": "Сұралуда…",
+
+  "hero.kicker": "AEVION · Цифрлық қолтаңба платформасы",
+  "hero.title1": "Қолдан жасауға келмейтін дәлелдер,",
+  "hero.title2": "бір сілтемемен тексеріледі.",
+  "hero.lead":
+    "QSign v2 кез келген JSON деректерге RFC 8785 канондық пішінінде HMAC-SHA256 және Ed25519 гибридімен қол қояды. Әр қолтаңба сақталады, орынға байланады, кері қайтарылады және жалпыға ашық сілтеме арқылы тексеріледі — жеткізушіге тәуелсіз, «сене салыңыз» деп емес.",
+  "hero.ctaGuest": "Кіріп, құжатқа қол қою →",
+  "hero.ctaUser": "Құжатқа қол қою ↓",
+  "hero.offline": "байланыс жоқ",
+
+  "demo.title": "Қазір байқап көріңіз — тіркелгісіз",
+  "demo.body":
+    "AEVION демо-қолтаңбасын ашып, өзіңіз тексеріңіз. Тексеру ашық әрі күйсіз: деректердің бір таңбасын өзгертсеңіз — ЖАРАМСЫЗ болады.",
+  "demo.cta": "Нағыз қолтаңбаны тексеру",
+
+  "stats.anchored": "Бекітілген қолтаңбалар",
+  "stats.last24h": "+{n} соңғы 24 сағатта",
+  "stats.ready": "алғашқы қолтаңбаны күтуде",
+  "stats.active": "Жарамды",
+  "stats.revoked": "кері қайтарылған: {n}",
+  "stats.noneRevoked": "кері қайтарылғаны жоқ",
+  "stats.issuers": "Шығарушылар",
+  "stats.countries": "ел: {n}",
+  "stats.keys": "Жарамды кілттер",
+  "stats.retired": "шығарылған: {n} (тек тексеру)",
+
+  "deeplink.from": "Деректер келген көзі: {origin}",
+  "deeplink.origin": "сілтеме (QRight / Globus)",
+
+  "nav.keys": "Кілттер тізілімі",
+
+  "auth.label": "Қатынас",
+  "auth.placeholder": "Қатынас токені (кіргеннен кейін өзі қойылады)",
+  "auth.hide": "Жасыру",
+  "auth.show": "Көрсету",
+  "auth.signIn": "Кіру →",
+  "auth.loaded": "токен жүктелді",
+
+  "sign.title": "1. Деректерге қол қою",
+  "sign.payload": "Деректер (JSON)",
+  "sign.payloadAria": "Қол қоюға арналған деректер (JSON)",
+  "sign.hashFile": "📎 Файлды хештеу",
+  "sign.loadSample": "Үлгі",
+  "sign.jsonError": "JSON қатесі: {msg}",
+  "sign.jsonOk": "✓ JSON дұрыс",
+  "sign.canonical": "RFC 8785 канондық пішіні · SHA-256",
+  "sign.hideCanonical": "канондық пішінді жасыру",
+  "sign.showCanonical": "канондық пішінді көрсету",
+  "sign.copy": "көшіру",
+  "sign.drift":
+    "⚠ Қол қойғаннан кейін канондық хеш өзгерді — сақталған қолтаңба бұл деректерге енді сәйкес келмейді.",
+  "sign.button": "HMAC + Ed25519 қолтаңбасын қою",
+  "sign.needLogin": "Қол қою үшін кіріңіз — бір минут.",
+
+  "geo.title": "Орынға байлау",
+  "geo.gps": "GPS: {lat}, {lng} (басымдық)",
+  "geo.denied": "Рұқсат жоқ — сервер орынды IP бойынша анықтайды",
+  "geo.optin": "Құрылғының GPS-ін тіркеуге болады; әйтпесе сервер орынды IP бойынша анықтайды",
+  "geo.clear": "Алып тастау",
+  "geo.attach": "GPS тіркеу",
+
+  "signed.chip": "қол қойылды",
+  "signed.pubkey": "Ed25519 ашық кілті",
+  "signed.pqReserved": "PQ слоты сақталған",
+  "signed.pqNote":
+    "Нағыз постквантты қолтаңба v2.1-де шығады; қазіргісі — canonical||kid мәнінің детерминирленген SHA-512 ізі.",
+  "signed.openPublic": "Жалпыға ашық тексеру бетін ашу →",
+  "signed.copyLink": "Сілтемені көшіру",
+  "signed.pdf": "PDF жүктеу",
+  "signed.copyJson": "JSON көшіру",
+
+  "verify.title": "2. Тексеру (базасыз)",
+  "verify.lead":
+    "Сервер деректерді қайта канондайды және екі қолтаңбаны қайта есептейді. Базаға жүгінбейді. Кері қайтаруды ескере тексеру — қол қойғаннан кейінгі ашық бетте.",
+  "verify.hmacKid": "HMAC кілті (kid)",
+  "verify.hmacKidAria": "HMAC кілтінің идентификаторы",
+  "verify.hmacSig": "HMAC қолтаңбасы",
+  "verify.hmacSigAria": "HMAC қолтаңбасы",
+  "verify.edKid": "Ed25519 кілті (kid)",
+  "verify.edKidAria": "Ed25519 кілтінің идентификаторы",
+  "verify.edSig": "Ed25519 қолтаңбасы",
+  "verify.edSigAria": "Ed25519 қолтаңбасы",
+  "verify.kidPlaceholder": "бос → қолданыстағы",
+  "verify.sigPlaceholder": "64 он алтылық таңба",
+  "verify.optional": "міндетті емес",
+  "verify.edSigPlaceholder": "міндетті емес · 128 hex",
+  "verify.button": "Тексеру",
+  "verify.valid": "✓ ЖАРАМДЫ",
+  "verify.invalid": "✗ ЖАРАМСЫЗ",
+  "verify.ok": "дұрыс",
+  "verify.bad": "қате",
+  "verify.notChecked": "тексерілмеді",
+  "verify.hash": "хеш: {h}",
+
+  "recent.title": "Соңғы қолтаңбалар",
+  "recent.lead": "Тірі лента — жалпыға ашық тексеру сілтемелері, жеке деректерсіз.",
+  "recent.updated": "жаңартылды {t} UTC",
+
+  "webhooks.title": "Вебхуктар",
+  "webhooks.lead":
+    "Қолтаңбаларыңыздың sign және revoke оқиғаларында HTTP шақырулар. Денесі вебхук құпиясымен HMAC-SHA256 арқылы қол қойылған; алушы X-QSign-Signature тақырыбын тексереді.",
+  "webhooks.used": "{n}/10 қолданылды",
+  "webhooks.saveSecret": "⚠ Құпияны сақтаңыз — ол БІР рет көрсетіледі",
+  "webhooks.copySecret": "Құпияны көшіру",
+  "webhooks.dismiss": "Сақтадым — жабу",
+  "webhooks.urlAria": "Вебхук мекенжайы",
+  "webhooks.add": "Вебхук қосу",
+  "webhooks.loading": "Жүктелуде…",
+  "webhooks.none": "Вебхуктар әзірге жоқ. sign / revoke оқиғаларын алу үшін жоғарыда мекенжай қосыңыз.",
+  "webhooks.events": "оқиғалар: {list}",
+  "webhooks.lastFired": " · соңғы шақыру {t}",
+  "webhooks.neverFired": " · әлі шақырылмаған",
+  "webhooks.active": "қосулы",
+  "webhooks.off": "өшірулі",
+  "webhooks.delete": "Жою",
+
+  "api.title": "API арқылы",
+  "api.leadA": "Тірі мысалдар — көшіріп қойыңыз.",
+  "api.leadB": "орнына өз токеніңізді қойыңыз.",
+  "api.preservedA": "Қолтаңба идентификаторы",
+  "api.preservedB": "соңғы қол қоюдан қойылды.",
+  "api.copySnippet": "Мысалды көшіру",
+  "api.openapi": "OpenAPI 3.0 сипаттамасы ↗",
+  "api.sdk": "SDK пакеттері ↗",
+
+  "how.title": "QSign v2 қалай жұмыс істейді",
+  "how.1": "Деректер RFC 8785 (JCS) канондық пішініне келтіріледі: кілттер сұрыпталған, бос орынсыз, кез келген клиентте бірдей.",
+  "how.2": "Канондық пішіннің SHA-256 хешіне екі тәуелсіз кілтпен қол қойылады: HMAC-SHA256 (ортақ құпия) және Ed25519 (ашық тексеріледі).",
+  "how.3": "Қолтаңба жазбасы шығарушы, орын және кілт идентификаторларымен сақталады. Ашық сілтеме оны құпиясыз тексереді.",
+  "how.4": "Кілттер қабаттаса ауыстырылады — шығарылған кілттер ескі қолтаңбаларды тексеруге мәңгі жарамды.",
+  "how.5": "Кез келген қолтаңбаны шығарушысы (немесе әкімші) кері қайтара алады. Кері қайтарылғаны криптографиялық дұрыс қалады, бірақ valid=false береді.",
+
+  "waitlist.title": "Бүгін қол қоймайсыз ба? Поштаңызды қалдырыңыз",
+  "waitlist.description": "QSign-да жаңа кілттер, пішімдер мен интеграциялар шыққанда жазамыз.",
+  "waitlist.button": "Маған хабарлау",
+  "waitlist.done": "Дайын — мекенжай сақталды. Растау хаты поштаңызда.",
+
+  "rate.title": "Қол қою шегі (IP-ге)",
+  "rate.left": "қалды {rem}/{limit}",
+  "rate.resets": " · {s} с кейін жаңарады",
+
+  "toast.copied": "{what}: көшірілді",
+  "toast.copyFailed": "Көшіру сәтсіз",
+  "toast.signInFirst": "Алдымен кіріңіз",
+  "toast.urlHttp": "Мекенжай http(s):// деп басталуы керек",
+  "toast.createFailed": "Құру сәтсіз ({status})",
+  "toast.webhookCreated": "Вебхук құрылды — құпияны қазір көшіріңіз",
+  "toast.createError": "Құру қатесі: {msg}",
+  "toast.deleteFailed": "Жою сәтсіз ({status})",
+  "toast.webhookDeleted": "Вебхук жойылды",
+  "toast.deleteError": "Жою қатесі: {msg}",
+  "toast.fileTooLarge": "Файл тым үлкен ({mb} МБ > 50 МБ шегі)",
+  "toast.hashed": "Хеш есептелді: {name}",
+  "toast.hashFailed": "Хеш есептелмеді: {msg}",
+  "toast.geoUnsupported": "Геолокация қолдау таппайды",
+  "toast.gpsAttached": "GPS тіркелді",
+  "toast.gpsDenied": "GPS рұқсаты жоқ",
+  "toast.fixJson": "Қол қоймас бұрын JSON-ды түзетіңіз",
+  "toast.signFailed": "Қол қою сәтсіз ({status})",
+  "toast.signed": "Қол қойылды · id {id}",
+  "toast.signError": "Қол қою қатесі: {msg}",
+  "toast.network": "Қол қою қызметімен байланыс жоқ. Желіні тексеріп, қайталаңыз — ештеңе қол қойылмады.",
+  "toast.verifyFailed": "Тексеру сәтсіз ({status})",
+  "toast.sigValid": "Қолтаңба ЖАРАМДЫ",
+  "toast.sigInvalid": "Қолтаңба ЖАРАМСЫЗ",
+  "toast.verifyError": "Тексеру қатесі: {msg}",
+  "toast.verifyNetwork": "Тексеру қызметімен байланыс жоқ. Желіні тексеріп, қайталаңыз.",
+
+  "what.hash": "Хеш",
+  "what.hmacSig": "HMAC қолтаңбасы",
+  "what.edSig": "Ed25519 қолтаңбасы",
+  "what.pubkey": "Ашық кілт",
+  "what.verifyLink": "Тексеру сілтемесі",
+  "what.fullResponse": "Толық жауап",
+  "what.webhookSecret": "Вебхук құпиясы",
+  "what.snippet": "Мысал",
+};
+
+const DICT: Partial<Record<string, Record<Key, string>>> = { en: EN, ru: RU, kk: KK };
+
+export function tQsign(lang: string, key: Key, vars?: Record<string, string | number>): string {
+  return interpolate(DICT[lang]?.[key] ?? EN[key], vars);
+}
+
+export const QSIGN_KEYS = Object.keys(EN) as Key[];
+export const QSIGN_DICT = DICT;
+
+/**
+ * Хук страницы. Optional-провайдер: вне I18nProvider (тесты, рендер без макета)
+ * отдаёт английский, как и остальная страница.
+ */
+export function useQsignT() {
+  const lang = useI18nOptional()?.lang ?? "en";
+  return useCallback(
+    (key: Key, vars?: Record<string, string | number>) => tQsign(lang, key, vars),
+    [lang],
+  );
+}

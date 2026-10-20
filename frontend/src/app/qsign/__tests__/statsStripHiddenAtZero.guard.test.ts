@@ -13,7 +13,8 @@ const src = readFileSync(join(__dirname, "..", "page.tsx"), "utf8");
 describe("полоса счётчиков QSign при нуле", () => {
   test("контроль: это страница QSign и полоса в ней есть", () => {
     expect(src).toContain("/api/qsign/v2/stats");
-    expect(src).toContain('label="Signatures anchored"');
+    // 20.10.2026: подпись ушла в модульный словарь (./i18n.ts, ключ stats.anchored).
+    expect(src).toContain('label={t("stats.anchored")}');
   });
   test("полоса под условием total > 0, а не просто «stats пришёл»", () => {
     expect(src.includes("{stats && stats.signatures.total > 0 ? ("), "полоса рисуется при нуле").toBe(true);

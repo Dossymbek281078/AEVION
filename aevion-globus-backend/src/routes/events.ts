@@ -6,7 +6,7 @@ const часАлматы = (d: Date): string =>
   new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Almaty", hour: "2-digit", hourCycle: "h23" }).format(d).slice(0, 2);
 import { denPoMestnomu, vcheraPoMestnomu } from "../lib/denPoMestnomu";
 import { makeServiceCapture } from "../lib/sentry/platform";
-import { queryNumber } from "../lib/queryNumber";
+import { queryNumber, queryIsoTimestamp } from "../lib/queryNumber";
 import { existsSync, mkdirSync, appendFileSync, readFileSync, writeFileSync, renameSync } from "fs";
 import { join, dirname } from "path";
 import { clientIp } from "../lib/rateLimit";
@@ -4864,6 +4864,8 @@ eventsRouter.get("/recent", (req, res) => {
    * событие ровно в since входит. limit по-прежнему ограничивает ответ сверху.
    */
   const sinceRaw = typeof req.query.since === "string" ? req.query.since.trim() : "";
+  // 20.10.2026: мусор (?since=zzz) молча отдавал НОВЕЙШИЙ хвост, будто фильтра нет — читатель принимал его за окно. Теперь 400.
+  if (sinceRaw && !/^\d{10,}$/.test(sinceRaw) && queryIsoTimestamp(sinceRaw) === null) return res.status(400).json({ error: "bad_since", hint: "ISO 8601 или epoch ms" });
   const sinceMs = sinceRaw ? (/^\d{10,}$/.test(sinceRaw) ? Number(sinceRaw) : Date.parse(sinceRaw)) : Number.NaN;
   let pool = lines;
   if (Number.isFinite(sinceMs)) {
@@ -4882,6 +4884,7 @@ eventsRouter.get("/recent", (req, res) => {
    * были недостижимы при matched 3293. since+until режут окно, которое в предел помещается.
    */
   const untilRaw = typeof req.query.until === "string" ? req.query.until.trim() : "";
+  if (untilRaw && !/^[0-9]{10,}$/.test(untilRaw) && queryIsoTimestamp(untilRaw) === null) return res.status(400).json({ error: "bad_until", hint: "ISO 8601 или epoch ms" });
   const untilMs = untilRaw ? (/^[0-9]{10,}$/.test(untilRaw) ? Number(untilRaw) : Date.parse(untilRaw)) : Number.NaN;
   if (Number.isFinite(untilMs)) {
     let до = pool.length;

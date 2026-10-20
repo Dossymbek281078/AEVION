@@ -1,5 +1,14 @@
 import { describe, test, expect, beforeEach, vi } from "vitest";
 import { TERM_TIERS, STANDALONE_APPS } from "../src/data/pricing";
+import { PILOT_490_REFERENCE } from "../src/data/lemonSqueezyVariants";
+
+/*
+ * 🔴 20.10.2026: с волны 129б (13.10) статус несёт и pilot_490 — товар вне лестницы с id по
+ * умолчанию 2242340, поэтому он true без переменной. Замер LS API 20.10: товар 1436015
+ * «AEVION Bureau Pilot» published, live. Тест неделю был красным, держа каталог без пилота.
+ * Пилот сверяем отдельно: true по умолчанию — правда, а все ПРОЧИЕ ссылки — false.
+ */
+const безПилота = (s: Record<string, boolean>) => Object.entries(s).filter(([k]) => k !== PILOT_490_REFERENCE).map(([, v]) => v);
 
 /**
  * «Что случится, если это купят» — вопрос, на который до 13.08.2026 нельзя было
@@ -52,9 +61,11 @@ describe("видно, какие товары реально можно выда
     const ожидаемые = [
       ...TERM_TIERS.map((t) => `tier_${t}`),
       ...STANDALONE_APPS.flatMap((a) => TERM_TIERS.map((t) => `app_${a.slug}_${t}`)),
+      PILOT_490_REFERENCE,
     ].sort();
     expect(Object.keys(s).sort(), "статус продаваемого разошёлся с каталогом").toEqual(ожидаемые);
-    expect(Object.values(s).every((v) => v === false)).toBe(true);
+    expect(безПилота(s).every((v) => v === false)).toBe(true);
+    expect(s[PILOT_490_REFERENCE], "пилот $490 живёт на id по умолчанию — без переменной он продаётся").toBe(true);
   });
 
   test("заданная переменная поднимает признак ровно у своей ссылки", async () => {
@@ -71,7 +82,7 @@ describe("видно, какие товары реально можно выда
     const s = await statusWith({ LEMON_SQUEEZY_VARIANT_LITE_MONTHLY: "1903060" });
     expect(Object.keys(s)).not.toContain("tier_lite_monthly");
     expect(s.tier_lite, "прежний месячный товар засчитан как ступень Lite").toBe(false);
-    expect(Object.values(s).every((v) => v === false)).toBe(true);
+    expect(безПилота(s).every((v) => v === false)).toBe(true);
   });
 
   test("идентификаторы вариантов наружу НЕ уходят", async () => {

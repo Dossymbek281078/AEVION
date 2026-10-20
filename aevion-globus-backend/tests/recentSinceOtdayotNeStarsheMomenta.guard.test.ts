@@ -57,10 +57,22 @@ describe("/recent?since=", () => {
     expect(r.body.since).toBeNull();
   });
 
-  it("мусор в since — не падение и не фильтр", async () => {
-    const r = await request(await приложение()).get("/api/pricing/events/recent?since=вчера");
-    expect(r.status).toBe(200);
-    expect((r.body.items as unknown[]).length).toBe(4);
+  /*
+   * 🔴 20.10.2026: было «мусор — 200 и весь хвост». Так ответ без фильтра выглядел окном, которое
+   * просили: читатель «?since=вчера» получал свежую тысячу и считал её вчерашней. Сторож
+   * queryDateGuard неделю был красным на этих строках. Неверный запрос — 400 (правило CLAUDE.md).
+   */
+  it("мусор в since/until — 400 с причиной, а не тихо весь хвост", async () => {
+    const app = await приложение();
+    for (const [q, err] of [["since=вчера", "bad_since"], ["since=zzz", "bad_since"], ["until=2026-13-45", "bad_until"], ["since=1", "bad_since"]] as const) {
+      const r = await request(app).get(`/api/pricing/events/recent?${q}`);
+      expect(r.status, q).toBe(400);
+      expect(r.body.error, q).toBe(err);
+    }
+    // контроль: пустой since — «фильтр не задан», как раньше
+    const пусто = await request(app).get("/api/pricing/events/recent?since=");
+    expect(пусто.status).toBe(200);
+    expect((пусто.body.items as unknown[]).length).toBe(4);
   });
   it("🔴 since+until — окно: новее until не входит, ровно until входит; limit не мешает", async () => {
     const r = await request(await приложение()).get(`/api/pricing/events/recent?since=${T0 - 60_000}&until=${T0 + 1_000}&limit=2`);

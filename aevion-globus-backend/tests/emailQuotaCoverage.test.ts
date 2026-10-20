@@ -56,7 +56,14 @@ const SENDS_RE = /api\.resend\.com|api\.brevo\.com|api\.sendinblue\.com/;
  */
 const ОБРАЩЕНИЯ_RE = /api\.(?:brevo|resend|sendinblue)\.com([A-Za-z0-9/._-]*)/g;
 /** Пути, которые ЧИТАЮТ состояние аккаунта и не расходуют потолок. */
-const ЧИТАЮЩИЕ_ПУТИ = new Set(["/v3/account"]);
+/*
+ * 🔴 20.10.2026: сторож неделю был красным на `lib/resendDostavka.ts` (волна 135б, 14.10). Файл зовёт
+ * ровно один адрес — `GET api.resend.com/emails/${id}`, то есть ЧИТАЕТ состояние уже отправленного
+ * письма (last_event). Повтор при отказе он шлёт через `sendBrevoEmail` из `lib/constitutionBrevo.ts`,
+ * а тот под надзором и письмо считает. Путь «/emails/» (с косой и id после неё) — чтение; отправка
+ * Resend — «/emails» и «/emails/batch», они в список НЕ входят (контроль в тесте ниже).
+ */
+const ЧИТАЮЩИЕ_ПУТИ = new Set(["/v3/account", "/emails/"]);
 
 function толькоЧитает(text: string): boolean {
   const пути = [...text.matchAll(ОБРАЩЕНИЯ_RE)].map((m) => m[1]);
@@ -140,6 +147,11 @@ describe("суточный потолок писем: счётчик обяза�
       пути,
       "читающий остаток файл снова считается отправителем — сторож будет вечно красным",
     ).not.toContain("lib/providerSpendCheck.ts");
+    expect(пути, "читающий статус письма Resend снова считается отправителем").not.toContain("lib/resendDostavka.ts");
+    // Контроль к «/emails/» в списке читающих: настоящая отправка Resend под надзором остаётся.
+    expect(толькоЧитает("fetch('https://api.resend.com/emails', { method: 'POST' })"), "POST /emails выпал из надзора").toBe(false);
+    expect(толькоЧитает("fetch('https://api.resend.com/emails/batch', { method: 'POST' })"), "пачка /emails/batch выпала из надзора").toBe(false);
+    expect(толькоЧитает("fetch(`https://api.resend.com/emails/${id}`)"), "чтение статуса письма").toBe(true);
   });
 
   test("новых неучтённых путей отправки не появилось", () => {

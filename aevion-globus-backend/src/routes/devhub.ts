@@ -6099,40 +6099,14 @@ type ImageResult = { provider: string; url?: string; b64?: string; revisedPrompt
 // Одна цепочка картинок на ВСЕ места, где DevHub рисует: ручка /media/image и шаг
 // «image» в сценариях агента. До 17.09.2026 шаг сценария звал только OpenAI и при
 // кончившихся кредитах падал, хотя ручка рядом уже умела перейти к следующему звену.
-async function generateImageViaChain(prompt: string, size: string, quality: unknown): Promise<{ result: ImageResult | null; attempts: ImageAttempt[] }> {
+export async function generateImageViaChain(prompt: string, size: string, quality: unknown): Promise<{ result: ImageResult | null; attempts: ImageAttempt[] }> {
   const cleanPrompt = prompt.trim();
-  // Provider fallback chain: OpenAI → Cloudflare Workers AI → Together (FLUX
-  // free tier). One paid provider hitting its billing wall must not take the
-  // whole feature down when a $0 alternative is already configured.
+  // Provider fallback chain: Cloudflare Workers AI → Gemini → Together (FLUX
+  // free tier) → OpenAI. One paid provider hitting its billing wall must not
+  // take the whole feature down when a $0 alternative is already configured.
   const [width, height] = size.split("x").map(Number);
   const attempts: ImageAttempt[] = [];
   let result: ImageResult | null = null;
-
-  const openaiKey = process.env.OPENAI_API_KEY;
-  if (openaiKey) {
-    // gpt-image-1 quality values: low/medium/high/auto (not standard/hd)
-    const gptQuality = quality === "hd" ? "high" : quality === "standard" ? "medium" : (quality || "medium");
-    try {
-      const r = await fetch("https://api.openai.com/v1/images/generations", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "gpt-image-1", prompt: cleanPrompt, n: 1, size, quality: gptQuality }),
-      });
-      if (!r.ok) {
-        attempts.push({ provider: "openai", status: r.status, error: `DALL-E error: ${(await r.text()).slice(0, 300)}` });
-      } else {
-        const data = await r.json() as { data: Array<{ b64_json?: string; url?: string; revised_prompt?: string }> };
-        const first = data.data?.[0];
-        if (first?.url || first?.b64_json) {
-          result = { provider: "openai", url: first.url, b64: first.b64_json, revisedPrompt: first.revised_prompt || null };
-        } else {
-          attempts.push({ provider: "openai", status: 500, error: "no image in response" });
-        }
-      }
-    } catch (e: any) {
-      attempts.push({ provider: "openai", status: 500, error: e?.message || "request failed" });
-    }
-  }
 
   const cfToken = process.env.CLOUDFLARE_API_TOKEN;
   const cfAccount = process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -6215,10 +6189,39 @@ async function generateImageViaChain(prompt: string, size: string, quality: unkn
     }
   }
 
+  // OpenAI — ПОСЛЕДНИМ (20.10.2026, слово Оркестратора). Ключ годен, денег нет:
+  // providers/health — 429 «no credits». Стоя первым, он съедал вызов на каждой
+  // картинке (замер пробы: картинку отдал gemini за 7,7 с после отказов).
+  // Платный идёт последним, как в lib/дешёвыйИИ.ts.
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (!result && openaiKey) {
+    // gpt-image-1 quality values: low/medium/high/auto (not standard/hd)
+    const gptQuality = quality === "hd" ? "high" : quality === "standard" ? "medium" : (quality || "medium");
+    try {
+      const r = await fetch("https://api.openai.com/v1/images/generations", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "gpt-image-1", prompt: cleanPrompt, n: 1, size, quality: gptQuality }),
+      });
+      if (!r.ok) {
+        attempts.push({ provider: "openai", status: r.status, error: `DALL-E error: ${(await r.text()).slice(0, 300)}` });
+      } else {
+        const data = await r.json() as { data: Array<{ b64_json?: string; url?: string; revised_prompt?: string }> };
+        const first = data.data?.[0];
+        if (first?.url || first?.b64_json) {
+          result = { provider: "openai", url: first.url, b64: first.b64_json, revisedPrompt: first.revised_prompt || null };
+        } else {
+          attempts.push({ provider: "openai", status: 500, error: "no image in response" });
+        }
+      }
+    } catch (e: any) {
+      attempts.push({ provider: "openai", status: 500, error: e?.message || "request failed" });
+    }
+  }
   return { result, attempts };
 }
 
-// POST /api/devhub/media/image — generate image via the provider chain (OpenAI → Workers AI → Gemini → Together)
+// POST /api/devhub/media/image — generate image via the provider chain (Workers AI → Gemini → Together → OpenAI)
 devhubRouter.post("/media/image", async (req, res) => {
   const imgAuth = verifyBearerOptional(req);
   const imgUserId = requesterId(req, imgAuth?.sub);
@@ -10231,7 +10234,7 @@ devhubRouter.get("/studio/capabilities", async (_req, res) => {
     // видео, поэтому состояние честно совпадает — но называться должно своим
     // именем: интерфейс до сих пор спрашивал про 3D под идентификатором video.
     { id: "3d", name: "Генерация 3D", description: "Image → 3D mesh via Replicate (TRELLIS, Hunyuan3D)", status: process.env.REPLICATE_API_TOKEN ? "live" : "needs_token", token: "REPLICATE_API_TOKEN" },
-    { id: "image", name: "Генерация картинок", description: "AI images — OpenAI → Workers AI (flux) → Together fallback chain", status: (process.env.OPENAI_API_KEY || (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) || process.env.TOGETHER_API_KEY) ? "live" : "needs_token", tokens: ["OPENAI_API_KEY", "CLOUDFLARE_API_TOKEN", "TOGETHER_API_KEY"] },
+    { id: "image", name: "Генерация картинок", description: "AI images — Workers AI (flux) → Gemini → Together → OpenAI fallback chain", status: (process.env.OPENAI_API_KEY || (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) || process.env.TOGETHER_API_KEY) ? "live" : "needs_token", tokens: ["OPENAI_API_KEY", "CLOUDFLARE_API_TOKEN", "TOGETHER_API_KEY"] },
     { id: "screenshot_code", name: "Скриншот в код", description: "Attach a design screenshot in the AI chat — a vision model recreates it as code", status: (process.env.ANTHROPIC_API_KEY || process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY) ? "live" : "needs_token", tokens: ["ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY"] },
     { id: "audio_tts", name: "Озвучка", description: "ElevenLabs text-to-speech", status: process.env.ELEVENLABS_API_KEY ? "live" : "needs_token", token: "ELEVENLABS_API_KEY" },
     { id: "audio_music", name: "Музыка и звуки", description: "AI music and sound effects", status: process.env.ELEVENLABS_API_KEY ? "live" : "needs_token", token: "ELEVENLABS_API_KEY" },

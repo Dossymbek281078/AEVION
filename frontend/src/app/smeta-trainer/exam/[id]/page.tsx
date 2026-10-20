@@ -200,7 +200,9 @@ export default function ExamTaskPage({
   }
 
   function submit() {
-    const r = gradeExam(lsr, task!.reference, task!.object);
+    // Заготовка передаётся оценщику: её отличия от эталона — критерии спрятанной ошибки
+    // (не исправлена — балл не выше 69, ниже порога сдачи; 20.10.2026, слово Оркестратора).
+    const r = gradeExam(lsr, task!.reference, task!.object, undefined, { starter: task!.starter });
     setReport(r);
     saveAttempt(task!.id, task!.title, r, { trap: findLesson(task!.id)?.trap });
     // дублируем сдачу на backend для куратора (fire-and-forget, бэкенд опционален)
@@ -546,6 +548,17 @@ export default function ExamTaskPage({
               </div>
             </div>
 
+            {report.hiddenError && (
+              <div
+                data-exam-hidden-error={report.hiddenError.fixed ? "fixed" : "unfixed"}
+                className={`mt-4 rounded-md border px-3 py-2 text-sm ${report.hiddenError.fixed ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-300 bg-amber-50 text-amber-900"}`}
+              >
+                {report.hiddenError.fixed
+                  ? "Спрятанная ошибка заготовки исправлена."
+                  : "Спрятанная ошибка заготовки не исправлена — балл ограничен 69, ниже порога сдачи 70."}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-4">
               <Score label="AI-проверки" score={report.breakdown.ai.score} weight={report.breakdown.ai.weight} hint={`${report.breakdown.ai.notices.length} замечаний`} />
               <Score label="Покрытие позиций" score={report.breakdown.coverage.score} weight={report.breakdown.coverage.weight} hint={`${report.breakdown.coverage.matched} / ${report.breakdown.coverage.total} расценок`} />
@@ -702,7 +715,14 @@ export default function ExamTaskPage({
         {/* Редактор позиций */}
         <div className="bg-white border border-slate-200 rounded-lg p-4 mb-4">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-base font-semibold text-slate-800">Моё решение</h2>
+            <div>
+              <h2 className="text-base font-semibold text-slate-800">Моё решение</h2>
+              {/* 20.10.2026: студент не знал, что заготовка — не его работа, и принимал балл
+                  нетронутой сметы за свой результат. */}
+              <p data-exam-starter-note className="text-xs text-amber-800 mt-0.5">
+                В заготовке спрятана ошибка — найдите и исправьте её.
+              </p>
+            </div>
             <div className="text-sm font-mono text-emerald-700">
               Итог: {formatKzt(calc.totalWithVat)}
             </div>

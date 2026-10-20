@@ -86,13 +86,30 @@ describe("проксироватьСАдресом", () => {
 });
 
 
-describe("обработчики стоят ровно на трёх включённых действиях", () => {
+describe("обработчики стоят на включённых действиях с нормой гостя", () => {
   const app = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "app", "api-backend", "api");
   for (const путь of ["healthai/check", "bureau/verify/start", "qventure/analyze"]) {
     it(путь, () => {
       const файл = join(app, путь, "route.ts");
       expect(existsSync(файл), файл).toBe(true);
       expect(readFileSync(файл, "utf8")).toContain(`проксироватьСАдресом(req, "/api/${путь}")`);
+    });
+  }
+
+  // 20.10.2026: гостевая норма Мультичата (2 вопроса) держалась по устройству — новое окно
+  // с того же адреса получало норму заново. Три гостевых вызова идут с адресом гостя.
+  for (const [путь, методы] of [
+    ["multichat-guest/allowance", ["GET"]],
+    ["multichat/conversations", ["GET", "POST"]],
+    ["multichat/conversations/[id]/dispatch", ["POST"]],
+  ] as const) {
+    it(`Мультичат: ${путь}`, () => {
+      const файл = join(app, путь, "route.ts");
+      expect(existsSync(файл), файл).toBe(true);
+      const код = readFileSync(файл, "utf8");
+      expect(код).toContain("проксироватьСАдресом(req, путь(req))");
+      expect(код).toContain('.replace(/^\\/api-backend/, "")');
+      for (const м of методы) expect(код).toContain(`export async function ${м}(`);
     });
   }
 });

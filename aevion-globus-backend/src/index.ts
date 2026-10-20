@@ -57,7 +57,7 @@ import { eventsRouter } from "./routes/events";
 import { projects } from "./data/projects";
 import { enrichProject, enrichProjects } from "./data/moduleRuntime";
 import { multichatRouter, multichatPublicRouter } from "./routes/multichat";
-import { остатокГостя, засчитатьГостю, этоГость, решениеПоГостю, гостевойИдентификатор, гостевойСлой } from "./lib/multichatGuestPass";
+import { остатокГостя, засчитатьГостю, этоГость, решениеПоГостю, гостевойИдентификатор, гостевойСлой, ручкаОстатка } from "./lib/multichatGuestPass";
 import { aevRouter } from "./routes/aev";
 import { ecosystemRouter } from "./routes/ecosystem";
 import { cyberchessRouter } from "./routes/cyberchess";
@@ -567,10 +567,7 @@ app.use(
 
 // Остаток бесплатной нормы — публично, чтобы страница знала, что показать
 // гостю: кнопку или приглашение войти. Личных данных не отдаёт.
-app.get("/api/multichat-guest/allowance", (req, res) => {
-  const о = остатокГостя(req);
-  res.json({ лимит: о.лимит, использовано: о.использовано, осталось: о.осталось, гость: этоГость(req) });
-});
+app.get("/api/multichat-guest/allowance", ручкаОстатка);
 
 /** OpenAPI 3.1 spec — full schemas + examples for bank-track routes,
  *  summary-only for legacy globus / qsign. See lib/openapiSpec.ts. */

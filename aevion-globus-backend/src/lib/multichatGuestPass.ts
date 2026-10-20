@@ -24,8 +24,10 @@ import type { RequestHandler } from "express";
  * усложнения, а злоупотребление ограничено сверху ещё и общим ограничителем
  * темпа. Если норму начнут выедать скриптами, счёт переносится в таблицу.
  */
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import { clientIp } from "./rateLimit";
+import { адресОтПроксиСайта } from "./freeActionQuota";
+import { verifyBearerOptional } from "./authJwt";
 
 /** Сколько живых запросов получает гость в сутки. */
 export function гостевойЛимит(): number {
@@ -54,7 +56,10 @@ function устройствоЗапроса(req: Request): string {
 
 function ключи(req: Request): string[] {
   const день = сутки();
-  const ip = clientIp(req);
+  // Адрес гостя от прокси сайта (по секрету AEVION_EDGE_KEY) — раньше clientIp: через
+  // rewrite /api-backend бэкенд видит адрес узла Vercel, и счёт «по адресу» не держал.
+  // Замер 20.10.2026: новое окно с того же адреса снова получало 2 вопроса.
+  const ip = адресОтПроксиСайта(req) ?? clientIp(req);
   const устройство = устройствоЗапроса(req);
   const out = [`ip:${ip}:${день}`];
   if (устройство) out.push(`dev:${устройство}:${день}`);
@@ -99,6 +104,18 @@ export function остатокГостя(req: Request): ОстатокГостя
 export function засчитатьГостю(req: Request): ОстатокГостя {
   for (const k of ключи(req)) счёт.set(k, (счёт.get(k) ?? 0) + 1);
   return остатокГостя(req);
+}
+
+/**
+ * GET /api/multichat-guest/allowance. Ручка висит на app, мимо слоя авторизации:
+ * req.auth здесь не заполнен, и этоГость() отвечал true даже с токеном (замер на
+ * проде 20.10.2026: вошедший получал «гость»:true). Токен проверяем сами.
+ * Вынесено сюда, чтобы сторож звал ту же функцию, что смонтирована в index.ts.
+ */
+export function ручкаОстатка(req: Request, res: Response): void {
+  const о = остатокГостя(req);
+  const вошёл = !!verifyBearerOptional(req)?.sub;
+  res.json({ лимит: о.лимит, использовано: о.использовано, осталось: о.осталось, гость: !вошёл && этоГость(req) });
 }
 
 /** Только для тестов: обнулить счёт между случаями. */

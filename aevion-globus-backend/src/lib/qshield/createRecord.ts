@@ -33,8 +33,9 @@ export interface CreateShieldOpts {
    * `legacy_all_local` (default): all 3 shards stored in QuantumShield.shards.
    * `distributed_v2`: shard 1 returned to caller only (author keeps it offline,
    *   server forgets), shard 2 stored on server, shard 3 stored on server +
-   *   witnessCid published for public retrieval. Server alone holds 1-of-3
-   *   so cannot forge a reconstruction without external help.
+   *   witnessCid published for public retrieval. Server holds 2-of-3 (shards 2+3)
+   *   and CAN reconstruct alone; only the author shard is outside the server
+   *   (20.10.2026: прежний комментарий «1-of-3» был неверен).
    */
   distribution?: DistributionPolicy;
 }

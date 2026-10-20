@@ -12,8 +12,9 @@ export const QSHIELD_OPENAPI = {
     description:
       "Shamir's Secret Sharing (2-of-3) over a deterministic Ed25519 key, " +
       "with HMAC-SHA256 per-shard authentication, key rotation, and a " +
-      "distributed_v2 policy (witness CID + author offline shard) so the " +
-      "server alone cannot forge reconstruction.",
+      "distributed_v2 policy (witness CID + author offline shard). The server " +
+      "keeps 2 of 3 shards (vault + witness copy) and can reconstruct the key alone; " +
+      "the author shard is the only one outside the server.",
     contact: { name: "AEVION", url: "https://aevion.app" },
     license: { name: "Proprietary" },
   },

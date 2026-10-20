@@ -1333,7 +1333,7 @@ export default function QRightPage() {
                 </li>
                 {result.authorShard && (
                   <li>
-                    <b>{tq(lang, "Save your Author Shard")}</b>{tq(lang, "(orange panel above) — store it offline alongside the bundle. AEVION holds at most 1 of 3 shards; without yours, no rogue platform action can forge a recovery.")}</li>
+                    <b>{tq(lang, "Save your Author Shard")}</b>{tq(lang, "(orange panel above) — store it offline alongside the bundle. AEVION keeps 2 of the 3 shards, so your Author Shard is the only copy outside AEVION: with it you can recover without us. What AEVION can never forge is your author co-signature.")}</li>
                 )}
                 <li>
                   <b>{tq(lang, "Share the verify link")}</b>{tq(lang, "— the public page shows every integrity check, the Bitcoin anchor status, and the legal basis.")}<div style={{ marginTop: 6, padding: "8px 10px", borderRadius: 8, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)", fontSize: 11, fontFamily: "monospace", color: "#334155", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>

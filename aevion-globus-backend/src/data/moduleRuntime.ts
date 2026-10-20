@@ -53,7 +53,10 @@ export const MODULE_RUNTIME: Record<string, ModuleRuntimeMeta> = {
     tier: "mvp_live",
     primaryPath: "/qcoreai",
     apiHints: ["/api/qcoreai/chat", "/api/qcoreai/health"],
-    hint: "Мульти-провайдер чат: 16 провайдеров, anthropic активен, Postgres",
+    // 20.10.2026: было «16 провайдеров, anthropic активен» — в реестре 16, с ключами 4, и активен
+    // не только anthropic (живой прогон parallel: anthropic + openai). Число из подсказки убрано:
+    // статичная строка с ним разойдётся с правдой; сколько живых — отвечает /api/qcoreai/providers.
+    hint: "Мульти-провайдер чат: несколько поставщиков с переходом на запасной, Postgres",
   },
   "multichat-engine": {
     tier: "mvp_live",

@@ -2,78 +2,109 @@
 //
 // ЗАЧЕМ. 28.09.2026 поставлена цель 100 000 пользователей к концу года, а
 // измерить её было нечем. Прибор, который врёт, хуже отсутствующего: по нему
-// принимают решения. Здесь проверяются три свойства, каждое выведено из
-// нашего же дефекта:
-//   • отказ базы НЕ выдаётся за ноль (пустое тело как «у вас всё хорошо»);
+// принимают решения. Свойства, каждое выведено из нашего же дефекта:
+//   • отказ базы НЕ выдаётся за ноль;
 //   • наши пробы считаются ОТДЕЛЬНО (воронка однажды на 91 % состояла из
 //     собственной автоматики и выглядела ростом);
+//   • 20.10.2026: «люди за 7 дней» = 2, оба — наши демо (@aevion.app,
+//     @aevion-probe.invalid): признак не знал наших доменов, example.test,
+//     префикса qa- и регистрации из Node/Headless;
 //   • наружу не уходит ни адрес, ни имя — ручка публичная.
-import { describe, it, expect, vi, beforeEach } from "vitest";
+//
+// Запрос исполняет НАСТОЯЩИЙ Postgres (PGlite в памяти), а не заглушка: прежний
+// сторож проверял форму SQL и пропустил бы любой признак, которого в SQL нет.
+import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
+import { PGlite } from "@electric-sql/pglite";
 
-const { запросы, ответ } = vi.hoisted(() => ({
-  запросы: [] as string[],
-  ответ: { rows: [] as Array<Record<string, unknown>>, бросать: false },
+const { состояние } = vi.hoisted(() => ({
+  состояние: { db: null as any, бросать: false },
 }));
 
 vi.mock("../src/lib/dbPool", () => ({
   getPool: () => ({
-    query: async (sql: string) => {
-      запросы.push(sql);
-      if (ответ.бросать) throw new Error("сеть до базы недоступна");
-      return { rows: ответ.rows };
+    query: async (sql: string, params?: unknown[]) => {
+      if (состояние.бросать) throw new Error("сеть до базы недоступна");
+      return состояние.db.query(sql, params);
     },
   }),
 }));
 
-const { счётЗарегистрированных } = await import("../src/routes/publicStats");
+const { счётЗарегистрированных, регистрацияРоботом } = await import("../src/routes/publicStats");
 
-beforeEach(() => {
-  запросы.length = 0;
-  ответ.бросать = false;
-  ответ.rows = [{ люди_всего: 7, люди_сутки: 2, люди_неделя: 5, пробы_всего: 31 }];
+const CHROME = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36";
+
+/** [id, email, name, сколько дней назад, удалён, UA регистрации] */
+const УЧЁТКИ: Array<[string, string, string, number, boolean, string | null]> = [
+  ["live-now", "aliya.k@gmail.com", "Алия", 0, false, CHROME],
+  ["live-old", "bolat@mail.ru", "Болат", 30, false, null],
+  ["live-chrome", "dana@yandex.kz", "Дана", 3, false, CHROME],
+  ["demo-app", "demo-bureau@aevion.app", "Демо бюро", 1, false, CHROME],
+  ["demo-invalid", "demo@aevion-probe.invalid", "Демо", 2, false, CHROME],
+  ["ex-test", "buyer@example.test", "Покупатель", 0, false, CHROME],
+  ["qa", "qa-run7@gmail.com", "QA", 0, false, CHROME],
+  ["node-ua", "someone@gmail.com", "Кто-то", 0, false, "node"],
+  ["headless", "other@gmail.com", "Другой", 0, false, "Mozilla/5.0 HeadlessChrome/141.0"],
+  ["smoke", "smoke-1@gmail.com", "smoke", 0, false, CHROME],
+  ["anon", "x1@gmail.com", "anonymous-42", 0, false, CHROME],
+  ["deleted", "gone@gmail.com", "Ушёл", 0, true, CHROME],
+];
+
+beforeAll(async () => {
+  состояние.db = new PGlite();
+  await состояние.db.exec(`
+    CREATE TABLE "AEVIONUser" ("id" TEXT PRIMARY KEY, "email" TEXT, "name" TEXT,
+      "createdAt" TIMESTAMPTZ NOT NULL, "deletedAt" TIMESTAMPTZ);
+    CREATE TABLE "AuthAuditLog" ("id" TEXT PRIMARY KEY, "userId" TEXT, "action" TEXT NOT NULL,
+      "ip" TEXT, "userAgent" TEXT, "metadata" JSONB, "at" TIMESTAMPTZ NOT NULL DEFAULT NOW());
+  `);
+  for (const [id, email, name, дней, удалён, ua] of УЧЁТКИ) {
+    await состояние.db.query(
+      `INSERT INTO "AEVIONUser" VALUES ($1,$2,$3, NOW() - ($4 || ' days')::interval - INTERVAL '1 minute', $5)`,
+      [id, email, name, String(дней), удалён ? new Date() : null],
+    );
+    if (ua !== null) {
+      await состояние.db.query(
+        `INSERT INTO "AuthAuditLog" ("id","userId","action","userAgent") VALUES ($1,$2,'register',$3)`,
+        [`a-${id}`, id, ua],
+      );
+    }
+    // вход позже с другого браузера не меняет того, КТО регистрировал
+    await состояние.db.query(
+      `INSERT INTO "AuthAuditLog" ("id","userId","action","userAgent") VALUES ($1,$2,'login',$3)`,
+      [`l-${id}`, id, "node"],
+    );
+  }
 });
 
-describe("счётчик зарегистрированных", () => {
-  it("прибор видит предмет: считает людей и отдаёт числа", async () => {
+beforeEach(() => {
+  состояние.бросать = false;
+});
+
+describe("счётчик зарегистрированных (настоящий Postgres)", () => {
+  it("люди — только живые адреса: 3 всего, 1 за сутки, 2 за неделю", async () => {
     const с = await счётЗарегистрированных();
     expect(с.измерено).toBe(true);
-    expect(с.люди.всего).toBe(7);
-    expect(с.люди.заСегодня).toBe(2);
-    expect(с.люди.за7дней).toBe(5);
+    expect(с.люди).toEqual({ всего: 3, заСегодня: 1, за7дней: 2 });
   });
 
-  it("наши пробы лежат ОТДЕЛЬНО и не приплюсованы к людям", async () => {
+  it("оба демо-аккаунта (@aevion.app, @aevion-probe.invalid) — пробы, не люди", async () => {
     const с = await счётЗарегистрированных();
-    expect(с.пробы.всего).toBe(31);
-    expect(с.люди.всего, "пробы попали в число людей — счётчик покажет рост, которого нет").toBe(7);
+    // знаменатель: 12 учёток, 1 удалена, 3 живых → проб 8
+    expect(с.пробы.всего).toBe(8);
+    expect((с.люди.всего ?? 0) + (с.пробы.всего ?? 0)).toBe(УЧЁТКИ.filter((u) => !u[4]).length);
   });
 
-  it("запрос действительно отделяет пробы, а не считает всех подряд", async () => {
-    await счётЗарегистрированных();
-    const sql = запросы.join(" ");
-    expect(sql).toMatch(/smoke/i);
-    expect(sql).toMatch(/probe/i);
-    expect(sql).toMatch(/anonymous/i);
-    expect(sql, "удалённые учётки считаются живыми").toMatch(/deletedAt" IS NULL/);
-  });
-
-  // Мутация 28.09 показала дыру в этом стороже: убрать отсев проб ИЗ КОЛОНКИ
-  // «люди» можно было незаметно — слова smoke/probe оставались в соседних
-  // строках запроса, и проверка на их наличие оставалась зелёной. Теперь
-  // проверяется КАЖДАЯ колонка людей отдельно: она обязана считаться с NOT.
-  it("каждая колонка «люди» считает с исключением проб", async () => {
-    await счётЗарегистрированных();
-    const sql = запросы.join(" ");
-    for (const колонка of ["люди_всего", "люди_сутки", "люди_неделя"]) {
-      const до = sql.slice(0, sql.indexOf("AS " + колонка));
-      const кусок = до.slice(до.lastIndexOf("COUNT("));
-      expect(кусок, `колонка ${колонка} считает всех подряд — пробы уйдут в рост`)
-        .toMatch(/FILTER \(WHERE NOT/);
-    }
+  it("признак строки браузера: node/undici/Headless/наша проба — робот; Chrome и пусто — нет", () => {
+    expect(регистрацияРоботом("node")).toBe(true);
+    expect(регистрацияРоботом("undici")).toBe(true);
+    expect(регистрацияРоботом("Mozilla/5.0 HeadlessChrome/141.0")).toBe(true);
+    expect(регистрацияРоботом("AEVION-probe/1")).toBe(true);
+    expect(регистрацияРоботом(CHROME)).toBe(false);
+    expect(регистрацияРоботом(null)).toBe(false);
   });
 
   it("база не ответила — это НЕ ноль", async () => {
-    ответ.бросать = true;
+    состояние.бросать = true;
     const с = await счётЗарегистрированных();
     expect(с.измерено).toBe(false);
     expect(с.люди.всего, "отказ базы выдан за «никто не зарегистрировался»").toBeNull();
@@ -86,6 +117,6 @@ describe("счётчик зарегистрированных", () => {
     const с = await счётЗарегистрированных();
     const текст = JSON.stringify(с);
     expect(текст).not.toMatch(/@/);
-    expect(текст).not.toMatch(/email|passwordHash|"name"/i);
+    expect(текст).not.toMatch(/email|passwordHash|"name"|userAgent/i);
   });
 });

@@ -1,20 +1,22 @@
 "use client";
 
 import Link from "next/link";
+import { tNav, useNavLang, type NavKey } from "./navI18n";
 
 type Step = {
   id: string;
-  label: string;
+  /** Ключ ярлыка в словаре navI18n.ts (ru/en/kk) — 20.10.2026, раньше английский литерал. */
+  label: NavKey;
   href: string;
 };
 
 const PIPELINE_STEPS: Step[] = [
-  { id: "auth", label: "Auth", href: "/auth" },
-  { id: "qright", label: "QRight", href: "/qright" },
-  { id: "qsign", label: "QSign", href: "/qsign" },
-  { id: "qshield", label: "Shield", href: "/quantum-shield" },
-  { id: "bureau", label: "Bureau", href: "/bureau" },
-  { id: "planet", label: "Planet", href: "/planet" },
+  { id: "auth", label: "auth", href: "/auth" },
+  { id: "qright", label: "qright", href: "/qright" },
+  { id: "qsign", label: "qsign", href: "/qsign" },
+  { id: "qshield", label: "shield", href: "/quantum-shield" },
+  { id: "bureau", label: "bureau", href: "/bureau" },
+  { id: "planet", label: "planet", href: "/planet" },
 ];
 
 /**
@@ -23,9 +25,15 @@ const PIPELINE_STEPS: Step[] = [
  */
 export function PipelineSteps({ current }: { current: string }) {
   const idx = PIPELINE_STEPS.findIndex((s) => s.id === current);
+  const lang = useNavLang();
 
   return (
     <div
+      data-aevion-pipeline=""
+      // Ярлыки уже на языке посетителя (словарь); машинный доводчик AutoTranslate их не трогает —
+      // иначе на kk он переписывал «Планета» обратно в «Planet» (замер 20.10 локально).
+      translate="no"
+      aria-label={tNav(lang, "ariaPipeline")}
       style={{
         display: "flex",
         alignItems: "center",
@@ -91,7 +99,7 @@ export function PipelineSteps({ current }: { current: string }) {
               >
                 {isDone ? "✓" : i + 1}
               </span>
-              {step.label}
+              {tNav(lang, step.label)}
             </Link>
             {i < PIPELINE_STEPS.length - 1 ? (
               <div

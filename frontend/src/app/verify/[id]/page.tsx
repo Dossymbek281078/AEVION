@@ -79,6 +79,8 @@ type VerifyData = {
   shardDistribution?: {
     policy: "legacy_all_local" | "distributed_v2";
     realDistributed: boolean;
+    serverCanReconstructAlone?: boolean;
+    shardsOutsideServer?: number;
     locations: Array<{
       index: number;
       place: string;
@@ -380,7 +382,7 @@ export default function VerifyPage() {
               <b>{tv(lang, "Integrity Checks")}</b> {tv(lang, "break that verdict apart: content hash, HMAC (with key version), Shamir shielding, and the author's own co-signature. Each tile is one independent test.")}
             </li>
             <li>
-              <b>{tv(lang, "Shard Distribution")}</b> {tv(lang, "shows where the Ed25519 private key was split. AEVION holds at most 1 of 3, so we cannot forge or recover this key alone.")}
+              <b>{tv(lang, "Shard Distribution")}</b> {tv(lang, "shows where the Ed25519 private key was split. AEVION keeps 2 of the 3 shards (the platform vault and a copy of the public witness), so AEVION alone can reconstruct this signing key.")}{/* 20.10.2026: у AEVION 2 доли из 3 — прежняя фраза «не больше одной доли» была ложью; про со-подпись говорим только там, где она есть */}{data.integrity.authorCosign?.present ? " " + tv(lang, "What AEVION cannot forge is the author co-signature — that key lives only in your browser.") : ""}
             </li>
             <li>
               <b>{tv(lang, "Bitcoin Anchor")}</b> {tv(lang, "records")} <i>{tv(lang, "when")}</i> {tv(lang, "the certificate existed — settled by Bitcoin's proof-of-work, not by us.")}
@@ -651,12 +653,12 @@ export default function VerifyPage() {
                   {tv(lang, "Shard Distribution (Shamir SSS 2-of-3)")}
                   <InfoTip
                     label="Shamir 2-of-3"
-                    text="The signing key is split into 3 pieces stored in different places. Combining any 2 of the 3 reconstructs the key; possessing only 1 reveals nothing. AEVION holds at most 1 — so no rogue platform action can forge your certificate."
+                    text="The signing key is split into 3 pieces stored in different places. Combining any 2 of the 3 reconstructs the key; possessing only 1 reveals nothing. AEVION keeps 2 of the 3 (vault + witness copy) and can reconstruct the key alone; what AEVION cannot forge is your author co-signature."
                   />
                 </div>
                 <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
-                  {data.shardDistribution.realDistributed
-                    ? tv(lang, "Any 2 of 3 shards reconstruct the Ed25519 private key; no single holder can forge the certificate.")
+                  {data.shardDistribution.policy === "distributed_v2"
+                    ? tv(lang, "Any 2 of 3 shards reconstruct the Ed25519 private key. AEVION keeps shards 2 and 3, so AEVION alone can reconstruct it; your Author Shard is the only copy outside AEVION.")
                     : tv(lang, "Legacy record: all three shards are stored in our DB. Re-protect to upgrade to true distribution.")}
                 </div>
               </div>
@@ -665,10 +667,10 @@ export default function VerifyPage() {
                 borderRadius: 8,
                 fontSize: 11,
                 fontWeight: 800,
-                background: data.shardDistribution.realDistributed ? "rgba(16,185,129,0.15)" : "rgba(245,158,11,0.15)",
-                color: data.shardDistribution.realDistributed ? "#059669" : "#d97706",
+                background: data.shardDistribution.policy === "distributed_v2" ? "rgba(16,185,129,0.15)" : "rgba(245,158,11,0.15)",
+                color: data.shardDistribution.policy === "distributed_v2" ? "#059669" : "#d97706",
               }}>
-                {data.shardDistribution.realDistributed ? tv(lang, "✓ TRULY DISTRIBUTED") : tv(lang, "⚠ LEGACY (LOCAL)")}
+                {data.shardDistribution.policy === "distributed_v2" ? tv(lang, "✓ AUTHOR SHARD OFFLINE") : tv(lang, "⚠ LEGACY (LOCAL)")}
               </div>
             </div>
             <div style={{ padding: "20px 24px", background: "#fff" }}>

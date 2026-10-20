@@ -5,6 +5,8 @@ import type { CSSProperties } from "react";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { getApiBase } from "@/lib/apiBase";
+import { getServerLang } from "@/lib/i18n-server";
+import { verifiedCta, verifiedContactLabel, type KycModeKnown } from "../../verifiedCta";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +37,21 @@ async function loadEmbed(certId: string): Promise<EmbedView | null> {
 }
 
 /** Ответ ручки проверки подписи нотариуса; null — ручка не ответила. */
+/**
+ * Режим проверки личности с /api/bureau/health — чтобы не звать на Verified, пока он заглушка
+ * (20.10.2026, см. verifiedCta.ts). Сбой ручки → null → кнопка остаётся: незнание не прячет.
+ */
+async function loadKycMode(): Promise<KycModeKnown> {
+  try {
+    const res = await fetch(`${getApiBase()}/api/bureau/health`, { cache: "no-store", signal: AbortSignal.timeout(4000) });
+    if (!res.ok) return null;
+    const j = (await res.json()) as { kyc?: string };
+    return j.kyc === "live" || j.kyc === "stub" || j.kyc === "misconfigured" ? j.kyc : null;
+  } catch {
+    return null;
+  }
+}
+
 async function loadNotarization(certId: string): Promise<ОтветПроверки | null> {
   try {
     const res = await fetch(
@@ -168,6 +185,8 @@ export default async function BureauCertPage({ params }: Props) {
   const data = await loadEmbed(certId);
   const origin = await getOrigin();
   const apiBase = getApiBase();
+  const [kycMode, lang] = await Promise.all([loadKycMode(), getServerLang()]);
+  const cta = verifiedCta(kycMode, certId);
   const badgeUrl = `${apiBase}/api/bureau/cert/${encodeURIComponent(certId)}/badge.svg`;
   const embedJsonUrl = origin
     ? `${origin}/api-backend/api/bureau/cert/${encodeURIComponent(certId)}/embed`
@@ -336,9 +355,27 @@ export default async function BureauCertPage({ params }: Props) {
             >
               Embed badge →
             </Link>
-            {!isVerified && !isRevoked && (
+            {!isVerified && !isRevoked && cta.kind === "contact" && (
               <Link
-                href={`/bureau/upgrade/${certId}`}
+                href={cta.href}
+                data-verified-cta="contact"
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: "#0d9488",
+                  textDecoration: "none",
+                  border: "1px solid rgba(13,148,136,0.3)",
+                  padding: "6px 12px",
+                  borderRadius: 8,
+                }}
+              >
+                {verifiedContactLabel(lang)}
+              </Link>
+            )}
+            {!isVerified && !isRevoked && cta.kind === "upgrade" && (
+              <Link
+                href={cta.href}
+                data-verified-cta="upgrade"
                 style={{
                   fontSize: 12,
                   fontWeight: 700,

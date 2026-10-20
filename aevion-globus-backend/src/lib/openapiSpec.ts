@@ -830,7 +830,11 @@ export const openapiSpec = {
                       type: "object",
                       properties: {
                         policy: { type: "string" },
-                        realDistributed: { type: "boolean", description: "false = все доли лежат у нас, разделение защитой не является" },
+                        realDistributed: { type: "boolean", description: "true только когда у сервера МЕНЬШЕ порога долей (сервер один ключ не соберёт). При distributed_v2 доли 2 и 3 лежат у нас → false." },
+                        serverCanReconstructAlone: { type: "boolean", description: "true = у сервера ≥ порога долей, он восстанавливает ключ без автора" },
+                        shardsOutsideServer: { type: "integer", description: "сколько долей НЕ хранится на сервере (distributed_v2: 1 — авторская)" },
+                        threshold: { type: "integer" },
+                        serverCopies: { type: "integer" },
                         locations: { type: "array", items: { type: "object" } },
                         witness: { type: "object", nullable: true },
                       },

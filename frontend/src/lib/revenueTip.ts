@@ -14,9 +14,9 @@ export function revenueTip(lang: string, grossUsd: number, days: number): string
   const сумма = `$${grossUsd.toLocaleString(ЛОКАЛЬ[lang] ?? "en-US", { maximumFractionDigits: 0 })}`;
   switch (lang) {
     case "ru":
-      return `${сумма} собрано из $1M · ${days} дн. до срока ($20M stretch goal)`;
+      return `${сумма} собрано из $1M · ${days} дн. до срока (расширенная цель — $20M)`;
     case "kk":
-      return `$1M ішінен ${сумма} жиналды · мерзімге дейін ${days} күн ($20M stretch goal)`;
+      return `$1M ішінен ${сумма} жиналды · мерзімге дейін ${days} күн (кеңейтілген мақсат — $20M)`;
     default:
       return `${сумма} raised of $1M · ${days} days to deadline ($20M stretch goal)`;
   }

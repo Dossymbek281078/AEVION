@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { ценаVerifiedДляВитрины } from "./verifiedPrice";
+import { verifiedCta, verifiedContactLabel } from "./verifiedCta";
 import { useI18nOptional } from "@/lib/i18n";
 import { BU_BUSY } from "./busyUi";
 import Link from "next/link";
@@ -1169,9 +1170,21 @@ function BureauPageInner() {
                     >
                       📄 PDF
                     </a>
-                    {cert.verificationLevel !== "verified" && (
+                    {/* 20.10.2026: при kyc=stub кнопка вела в барьер «не может быть завершён» на каждом
+                        сертификате; теперь — подпись-обращение (решение в verifiedCta.ts, одно на оба экрана). */}
+                    {cert.verificationLevel !== "verified" && verifiedCta(kycMode, cert.id).kind === "contact" && (
                       <Link
-                        href={`/bureau/upgrade/${cert.id}`}
+                        href={verifiedCta(kycMode, cert.id).href}
+                        data-verified-cta="contact"
+                        style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(99,102,241,0.35)", color: "#4338ca", background: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 15, display: "inline-flex", alignItems: "center", gap: 4 }}
+                      >
+                        {verifiedContactLabel(buLang)}
+                      </Link>
+                    )}
+                    {cert.verificationLevel !== "verified" && verifiedCta(kycMode, cert.id).kind === "upgrade" && (
+                      <Link
+                        href={verifiedCta(kycMode, cert.id).href}
+                        data-verified-cta="upgrade"
                         style={{ padding: "7px 14px", borderRadius: 8, background: "linear-gradient(135deg, #6366f1, #4f46e5)", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 15, display: "inline-flex", alignItems: "center", gap: 4 }}
                       >
                         ⭐ Upgrade to Verified

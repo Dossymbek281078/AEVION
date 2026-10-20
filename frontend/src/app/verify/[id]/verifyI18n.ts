@@ -38,8 +38,10 @@ const RU: Record<string, string> = {
   "break that verdict apart: content hash, HMAC (with key version), Shamir shielding, and the author's own co-signature. Each tile is one independent test.":
     "раскладывают вердикт по слоям: хеш содержимого, HMAC (с версией ключа), защита Шамира и собственная подпись автора. Каждая плитка — отдельная независимая проверка.",
   "Shard Distribution": "Распределение долей ключа",
-  "shows where the Ed25519 private key was split. AEVION holds at most 1 of 3, so we cannot forge or recover this key alone.":
-    "показывает, где разделён закрытый ключ Ed25519. У AEVION не больше 1 доли из 3, поэтому мы не можем подделать или восстановить ключ в одиночку.",
+  "shows where the Ed25519 private key was split. AEVION keeps 2 of the 3 shards (the platform vault and a copy of the public witness), so AEVION alone can reconstruct this signing key.":
+    "показывает, где разделён закрытый ключ Ed25519. У AEVION 2 доли из 3 (хранилище платформы и копия публичного свидетеля), поэтому AEVION может восстановить этот ключ подписи сама.",
+  "What AEVION cannot forge is the author co-signature — that key lives only in your browser.":
+    "Подделать нельзя со-подпись автора — её ключ хранится только в вашем браузере.",
   "Bitcoin Anchor": "Якорь в Bitcoin",
   "records": "фиксирует,",
   "when": "когда",
@@ -80,11 +82,12 @@ const RU: Record<string, string> = {
   "Linked Quantum Shield record": "Связанная запись Квантового щита",
   "View Shield →": "Открыть щит →",
   "Shard Distribution (Shamir SSS 2-of-3)": "Распределение долей ключа (Шамир 2 из 3)",
-  "Any 2 of 3 shards reconstruct the Ed25519 private key; no single holder can forge the certificate.":
-    "Любые 2 доли из 3 восстанавливают закрытый ключ Ed25519; ни один держатель в одиночку не подделает сертификат.",
+  "Any 2 of 3 shards reconstruct the Ed25519 private key. AEVION keeps shards 2 and 3, so AEVION alone can reconstruct it; your Author Shard is the only copy outside AEVION.":
+    "Любые 2 доли из 3 восстанавливают закрытый ключ Ed25519. Доли 2 и 3 хранит AEVION, поэтому AEVION может восстановить его сама; ваша авторская доля — единственная копия вне AEVION.",
   "Legacy record: all three shards are stored in our DB. Re-protect to upgrade to true distribution.":
     "Прежняя запись: все три доли хранятся в нашей базе. Защитите заново, чтобы получить настоящее распределение.",
-  "✓ TRULY DISTRIBUTED": "✓ ДЕЙСТВИТЕЛЬНО РАСПРЕДЕЛЕНО",
+  "✓ AUTHOR SHARD OFFLINE":
+    "✓ ДОЛЯ АВТОРА ВНЕ AEVION",
   "⚠ LEGACY (LOCAL)": "⚠ ПРЕЖНЯЯ (ЛОКАЛЬНО)",
   "Shard": "Доля",
   "OFFLINE (user holds)": "ОФЛАЙН (у пользователя)",
@@ -147,8 +150,10 @@ const KK: Record<string, string> = {
   "break that verdict apart: content hash, HMAC (with key version), Shamir shielding, and the author's own co-signature. Each tile is one independent test.":
     "қорытындыны қабаттарға бөледі: мазмұн хеші, HMAC (кілт нұсқасымен), Шамир қорғанысы және автордың өз қолтаңбасы. Әр плитка — жеке тәуелсіз тексеру.",
   "Shard Distribution": "Кілт үлестерінің таралуы",
-  "shows where the Ed25519 private key was split. AEVION holds at most 1 of 3, so we cannot forge or recover this key alone.":
-    "Ed25519 жабық кілтінің қайда бөлінгенін көрсетеді. AEVION-да 3 үлестің ең көбі 1-еуі бар, сондықтан біз кілтті жалғыз қолдан жасай да, қалпына келтіре де алмаймыз.",
+  "shows where the Ed25519 private key was split. AEVION keeps 2 of the 3 shards (the platform vault and a copy of the public witness), so AEVION alone can reconstruct this signing key.":
+    "Ed25519 жабық кілтінің қайда бөлінгенін көрсетеді. AEVION-да 3 үлестің 2-еуі бар (платформа қоймасы және жария куәгердің көшірмесі), сондықтан AEVION бұл қол қою кілтін жалғыз қалпына келтіре алады.",
+  "What AEVION cannot forge is the author co-signature — that key lives only in your browser.":
+    "AEVION қолдан жасай алмайтын жалғыз нәрсе — автордың қосалқы қолтаңбасы: оның кілті тек сіздің браузеріңізде сақталады.",
   "Bitcoin Anchor": "Bitcoin зәкірі",
   "records": "сертификаттың",
   "when": "қашан",
@@ -189,11 +194,12 @@ const KK: Record<string, string> = {
   "Linked Quantum Shield record": "Байланысты Кванттық қалқан жазбасы",
   "View Shield →": "Қалқанды ашу →",
   "Shard Distribution (Shamir SSS 2-of-3)": "Кілт үлестерінің таралуы (Шамир 3-тен 2)",
-  "Any 2 of 3 shards reconstruct the Ed25519 private key; no single holder can forge the certificate.":
-    "3 үлестің кез келген 2-еуі Ed25519 жабық кілтін қалпына келтіреді; ешбір иеленуші жалғыз сертификатты қолдан жасай алмайды.",
+  "Any 2 of 3 shards reconstruct the Ed25519 private key. AEVION keeps shards 2 and 3, so AEVION alone can reconstruct it; your Author Shard is the only copy outside AEVION.":
+    "3 үлестің кез келген 2-еуі Ed25519 жабық кілтін қалпына келтіреді. 2 және 3 үлестерді AEVION сақтайды, сондықтан AEVION оны жалғыз қалпына келтіре алады; сіздің автор үлесіңіз — AEVION-нан тыс жалғыз көшірме.",
   "Legacy record: all three shards are stored in our DB. Re-protect to upgrade to true distribution.":
     "Бұрынғы жазба: үш үлес те біздің базада сақталады. Нағыз таралу үшін қайта қорғаңыз.",
-  "✓ TRULY DISTRIBUTED": "✓ ШЫНАЙЫ ТАРАТЫЛҒАН",
+  "✓ AUTHOR SHARD OFFLINE":
+    "✓ АВТОР ҮЛЕСІ AEVION-НАН ТЫС",
   "⚠ LEGACY (LOCAL)": "⚠ БҰРЫНҒЫ (ЖЕРГІЛІКТІ)",
   "Shard": "Үлес",
   "OFFLINE (user holds)": "ОФЛАЙН (пайдаланушыда)",

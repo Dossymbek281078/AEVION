@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { ldFees, todayRealizedPnl } from "@/app/qtrade/fees";
 import { ldClosed } from "@/app/qtrade/marketSim";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
-import { useI18nOptional } from "@/lib/i18n";
+import { tNav, useNavLang, type NavKey } from "./navI18n";
 type Props = {
   hidePlanet?: boolean;
   variant?: "light" | "dark";
@@ -41,7 +41,7 @@ function AevPill({ variant }: { variant: "light" | "dark" }) {
       color: dark ? "#67e8f9" : "#0e7490",
       fontWeight: 800, fontSize: 12, textDecoration: "none",
       fontFamily: "ui-monospace, SFMono-Regular, monospace",
-    }} title="AEV кошелёк">
+    }} title={tNav(useNavLang(), "aevWallet")}>
       <span style={{ fontSize: 11 }}>◆</span>
       <span>{balance.toFixed(2)} AEV</span>
     </Link>
@@ -111,9 +111,11 @@ function RiskPill({ variant }: { variant: "light" | "dark" }) {
 }
 
 export function Wave1Nav({ hidePlanet = false, variant = "light" }: Props) {
-  // Навигация целиком английская; два русских ярлыка были единственным
-  // исключением и на EN-странице читались как «не для меня».
-  const lang = useI18nOptional()?.lang ?? "ru";
+  // 20.10.2026: ярлыки — из словаря navI18n.ts (ru/en/kk). Раньше были английскими
+  // литералами, по-русски их переписывал машинный доводчик после монтирования, а на
+  // kk внутри приложений (APP_PREFIXES) они оставались английскими.
+  const lang = useNavLang();
+  const n = (k: NavKey) => tNav(lang, k);
   const sep = variant === "dark" ? "rgba(148,163,184,0.5)" : "#cbd5e1";
   const link = variant === "dark" ? "#e2e8f0" : "#334155";
   // Teal-700 (#0f766e) on slate-50 (#f8fafc) ≈ 5.5:1 — passes WCAG 2 AA.
@@ -126,39 +128,39 @@ export function Wave1Nav({ hidePlanet = false, variant = "light" }: Props) {
     // 144 (18.10.2026): на телефоне (≤768) этот блок переносился в 7 строк и занимал 162 px первого экрана
     // (замер /startup-exchange 390×844 на проде eaca8fb62: nav 55..217), действие гостя уезжало за кадр.
     // Класс aevion-wave1nav (globals.css): одна строка с боковой прокруткой — все ссылки на месте, высота ~26 px.
-    <nav className="aevion-wave1nav" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14, fontSize: 13, alignItems: "center" }} aria-label="Wave 1 navigation">
-      <Link href="/" style={{ color: globus, fontWeight: 800 }}>← Globus</Link>
+    <nav className="aevion-wave1nav" translate="no" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14, fontSize: 13, alignItems: "center" }} aria-label={n("ariaNav")}>
+      <Link href="/" style={{ color: globus, fontWeight: 800 }}>{n("globus")}</Link>
       <span style={{ color: sep }} aria-hidden>|</span>
-      <Link href="/demo" style={{ color: demoLink, fontWeight: 800 }}>Demo</Link>
-      <Link href="/demo/deep" style={{ color: link, fontWeight: 650 }}>Deep dive</Link>
-      <Link href="/pitch" style={{ color: variant === "dark" ? "#fbbf24" : "#b45309", fontWeight: 800 }}>Pitch · Partnership</Link>
+      <Link href="/demo" style={{ color: demoLink, fontWeight: 800 }}>{n("demo")}</Link>
+      <Link href="/demo/deep" style={{ color: link, fontWeight: 650 }}>{n("deepDive")}</Link>
+      <Link href="/pitch" style={{ color: variant === "dark" ? "#fbbf24" : "#b45309", fontWeight: 800 }}>{n("pitch")}</Link>
       <span style={{ color: sep }} aria-hidden>|</span>
-      <Link href="/auth" style={{ color: link, fontWeight: 600 }}>Auth</Link>
+      <Link href="/auth" style={{ color: link, fontWeight: 600 }}>{n("auth")}</Link>
       <Link href="/qright" style={{ color: link, fontWeight: 600 }}>QRight</Link>
       <Link href="/qsign" style={{ color: link, fontWeight: 600 }}>QSign</Link>
-      <Link href="/quantum-shield" style={{ color: shield, fontWeight: 700 }}>Shield</Link>
-      <Link href="/bureau" style={{ color: link, fontWeight: 600 }}>Bureau</Link>
+      <Link href="/quantum-shield" style={{ color: shield, fontWeight: 700 }}>{n("shield")}</Link>
+      <Link href="/bureau" style={{ color: link, fontWeight: 600 }}>{n("bureau")}</Link>
       <Link href="/multichat-engine" style={{ color: qcore, fontWeight: 700 }}>QCoreAI</Link>
       <span style={{ color: sep }} aria-hidden>|</span>
-      <Link href="/awards/music" style={{ color: link, fontWeight: 600 }}>Music Awards</Link>
-      <Link href="/awards/film" style={{ color: link, fontWeight: 600 }}>Film Awards</Link>
-      <Link href="/bank" style={{ color: link, fontWeight: 600 }}>Bank</Link>
-      <Link href="/cyberchess" style={{ color: link, fontWeight: 600 }}>Chess</Link>
+      <Link href="/awards/music" style={{ color: link, fontWeight: 600 }}>{n("musicAwards")}</Link>
+      <Link href="/awards/film" style={{ color: link, fontWeight: 600 }}>{n("filmAwards")}</Link>
+      <Link href="/bank" style={{ color: link, fontWeight: 600 }}>{n("bank")}</Link>
+      <Link href="/cyberchess" style={{ color: link, fontWeight: 600 }}>{n("chess")}</Link>
       <Link href="/qtradeoffline" style={{ color: link, fontWeight: 600 }}>QTradeOffline</Link>
       <Link href="/healthai" style={{ color: link, fontWeight: 600 }}>HealthAI</Link>
       <Link href="/qcontract" style={{ color: link, fontWeight: 600 }}>QContract</Link>
       <Link href="/qpaynet" style={{ color: link, fontWeight: 600 }}>QPayNet</Link>
-      <Link href="/startup-exchange" style={{ color: link, fontWeight: 600 }}>{lang === "ru" ? "Биржа стартапов" : "Startup Exchange"}</Link>
-      <Link href="/studio" style={{ color: "#0d9488", fontWeight: 800 }}>Studio</Link>
+      <Link href="/startup-exchange" style={{ color: link, fontWeight: 600 }}>{n("startupExchange")}</Link>
+      <Link href="/studio" style={{ color: "#0d9488", fontWeight: 800 }}>{n("studio")}</Link>
       <Link href="/devhub" style={{ color: link, fontWeight: 600 }}>DevHub</Link>
-      <Link href="/smeta-trainer" style={{ color: link, fontWeight: 600 }}>{lang === "ru" ? "Смета" : "Smeta Trainer"}</Link>
+      <Link href="/smeta-trainer" style={{ color: link, fontWeight: 600 }}>{n("smeta")}</Link>
       <Link href="/qtrade" style={{ color: link, fontWeight: 600 }}>QTrade</Link>
-      <Link href="/revenue" style={{ color: link, fontWeight: 600 }}>Revenue</Link>
-      <Link href="/sdks" style={{ color: link, fontWeight: 600 }}>SDKs</Link>
+      <Link href="/revenue" style={{ color: link, fontWeight: 600 }}>{n("revenue")}</Link>
+      <Link href="/sdks" style={{ color: link, fontWeight: 600 }}>{n("sdks")}</Link>
       <span style={{ color: sep }} aria-hidden>|</span>
       <AevPill variant={variant} />
       <RiskPill variant={variant} />
-      {!hidePlanet ? (<><span style={{ color: sep }} aria-hidden>|</span><Link href="/planet" style={{ color: link, fontWeight: 600 }}>Planet</Link></>) : null}
+      {!hidePlanet ? (<><span style={{ color: sep }} aria-hidden>|</span><Link href="/planet" style={{ color: link, fontWeight: 600 }}>{n("planet")}</Link></>) : null}
     </nav>
   );
 }

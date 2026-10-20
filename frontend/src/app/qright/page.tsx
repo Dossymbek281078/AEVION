@@ -13,6 +13,7 @@ import { InfoTip } from "@/components/InfoTip";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import AskAi from "@/components/AskAi";
 import { apiUrl } from "@/lib/apiBase";
+import { PRICING_TERMS } from "@/lib/products";
 import { planetFromPerMonth, planetPricePerMonth } from "@/lib/termPricing";
 import { track } from "@/lib/track";
 import { canonicalContentHash } from "@/lib/canonicalContentHash";
@@ -1125,7 +1126,7 @@ export default function QRightPage() {
                 <div data-testid="quota-offer" role="status" style={{ fontSize: 13.5, lineHeight: 1.5, padding: "12px 14px", borderRadius: 10, background: "rgba(13,148,136,0.07)", border: "1px solid rgba(13,148,136,0.25)", color: "#0f172a" }}>
                   <b>Free registrations this month are used up ({quotaOffer.used} of {quotaOffer.freePerMonth}).</b>{" "}
                   The AEVION Planet plan removes the limit and opens every app — from ${planetFromPerMonth()}/mo on the 12-month term, ${planetPricePerMonth("lite")}/mo with no term.{" "}
-                  <a href="/pricing#tiers" style={{ color: "#0d9488", fontWeight: 800 }}>{tq(lang, "See plans →")}</a>
+                  <a href={PRICING_TERMS} style={{ color: "#0d9488", fontWeight: 800 }}>{tq(lang, "See plans →")}</a>
                 </div>
               )}
 
@@ -1161,9 +1162,19 @@ export default function QRightPage() {
               <div style={{ fontWeight: 900, fontSize: 22, color: "#059669", marginBottom: 6 }}>{tq(lang, "Protected. Provable. Permanent.")}</div>
               <div style={{ fontSize: 14, color: "#475569" }}>
                 {result.cosign?.present
-                  ? "Four cryptographic layers active — including a co-signature only you can produce."
-                  : "Three cryptographic layers active — content hash, HMAC, and Shamir-split Ed25519."}
+                  ? tq(lang, "Four cryptographic layers active — including a co-signature only you can produce.")
+                  : tq(lang, "Three cryptographic layers active — content hash, HMAC, and Shamir-split Ed25519.")}
               </div>
+              {/* 20.10.2026 (окно «Приложения», по слову оркестратора): после регистрации на экране не было
+                  ссылки на публичную страницу записи — человек не знал, чем делиться; ссылка была только в
+                  списке реестра ниже. Адрес — тот же, что в реестре (/qright/object/<id>). */}
+              <a
+                href={`/qright/object/${encodeURIComponent(result.qright.id)}`}
+                data-qright-public-link
+                style={{ display: "inline-block", marginTop: 14, padding: "10px 18px", borderRadius: 10, background: "#059669", color: "#fff", fontWeight: 800, fontSize: 14, textDecoration: "none" }}
+              >
+                {tq(lang, "Open the public page of this record →")}
+              </a>
             </div>
 
             <div style={{ borderRadius: 16, border: "1px solid rgba(15,23,42,0.1)", overflow: "hidden", marginBottom: 20 }}>
@@ -1180,12 +1191,12 @@ export default function QRightPage() {
               <div style={{ padding: "20px 24px", background: "#fff" }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
                   <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 2 }}>AUTHOR</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 2 }}>{tq(lang, "AUTHOR")}</div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>{result.certificate.author}</div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 2 }}>TYPE</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>{KIND_OPTIONS.find((k) => k.value === result.certificate.kind)?.label || result.certificate.kind}</div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 2 }}>{tq(lang, "TYPE")}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>{tq(lang, KIND_OPTIONS.find((k) => k.value === result.certificate.kind)?.label || result.certificate.kind)}</div>
                   </div>
                   <div>
                     <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 2 }}>{tq(lang, "PROTECTED AT")}</div>
@@ -1193,17 +1204,17 @@ export default function QRightPage() {
                   </div>
                   <div>
                     <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", marginBottom: 2 }}>{tq(lang, "LOCATION")}</div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>{result.certificate.location || "Not specified"}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>{result.certificate.location || tq(lang, "Not specified")}</div>
                   </div>
                 </div>
 
                 <div style={{ display: "grid", gap: 8 }}>
                   {[
-                    { label: "Content Hash (SHA-256)", value: result.certificate.contentHash },
-                    { label: "HMAC Signature", value: result.certificate.signatureHmac },
-                    { label: "Ed25519 Signature", value: result.certificate.signatureEd25519 },
-                    { label: "Quantum Shield ID", value: result.certificate.shieldId },
-                    { label: "Certificate ID", value: result.certificate.id },
+                    { label: tq(lang, "Content Hash (SHA-256)"), value: result.certificate.contentHash },
+                    { label: tq(lang, "HMAC Signature"), value: result.certificate.signatureHmac },
+                    { label: tq(lang, "Ed25519 Signature"), value: result.certificate.signatureEd25519 },
+                    { label: tq(lang, "Quantum Shield ID"), value: result.certificate.shieldId },
+                    { label: tq(lang, "Certificate ID"), value: result.certificate.id },
                   ].map((item) => (
                     <div key={item.label} style={{ padding: "10px 12px", borderRadius: 10, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                       <div style={{ minWidth: 0 }}>
@@ -1216,14 +1227,14 @@ export default function QRightPage() {
                 </div>
 
                 <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 10, background: "rgba(13,148,136,0.05)", border: "1px solid rgba(13,148,136,0.15)", fontSize: 12, color: "#0f766e", display: "flex", alignItems: "center", flexWrap: "wrap", gap: 4 }}>
-                  <b>{result.cosign?.present ? "4-layer protection active:" : "3-layer protection active:"}</b>
-                  <span>SHA-256 hash + HMAC-SHA256 signature + Ed25519 with Shamir&apos;s Secret Sharing ({result.shield.shards} shards, threshold {result.shield.threshold}){result.cosign?.present ? " + author co-signature" : ""}</span>
+                  <b>{result.cosign?.present ? tq(lang, "4-layer protection active:") : tq(lang, "3-layer protection active:")}</b>
+                  <span>{tq(lang, "SHA-256 hash + HMAC-SHA256 signature + Ed25519 with Shamir's Secret Sharing")} ({result.shield.shards} {tq(lang, "shards, threshold")} {result.shield.threshold}){result.cosign?.present ? tq(lang, " + author co-signature") : ""}</span>
                   <InfoTip
                     label="Why these layers?"
                     text={
                       result.cosign?.present
-                        ? "Each layer detects a different attack. The author co-signature is the strongest: even if AEVION is breached and all platform keys leak, attackers still cannot forge new certificates in your name without your browser-held private key."
-                        : "Each layer detects a different attack: hash catches content tampering, HMAC catches certificate-field tampering, Shamir-Ed25519 makes forgery impossible without 2 of 3 distributed shards."
+                        ? tq(lang, "Each layer detects a different attack. The author co-signature is the strongest: even if AEVION is breached and all platform keys leak, attackers still cannot forge new certificates in your name without your browser-held private key.")
+                        : tq(lang, "Each layer detects a different attack: hash catches content tampering, HMAC catches certificate-field tampering, Shamir-Ed25519 makes forgery impossible without 2 of 3 distributed shards.")
                     }
                   />
                 </div>
@@ -1259,13 +1270,14 @@ export default function QRightPage() {
                 </div>
                 <div style={{ padding: "20px 24px" }}>
                   <div style={{ fontSize: 13, color: "#92400e", marginBottom: 14, lineHeight: 1.6 }}>
-                    {result.authorShard.warning}
+                    {/* текст приходит с бэка по-английски; словарь переводит по точной строке (сторож authorShardTextsHaveRussian) */}
+                    {tq(lang, result.authorShard.warning)}
                   </div>
                   <div style={{ display: "grid", gap: 6, marginBottom: 14 }}>
                     <div style={{ fontSize: 11, fontWeight: 800, color: "#78350f" }}>{tq(lang, "Any 2 of 3 reconstructs your proof:")}</div>
                     {result.authorShard.recoveryPaths.map((p, i) => (
                       <div key={i} style={{ fontSize: 12, color: "#78350f", paddingLeft: 16 }}>
-                        • {p}
+                        • {tq(lang, p)}
                       </div>
                     ))}
                   </div>
@@ -1321,7 +1333,7 @@ export default function QRightPage() {
                 </li>
                 {result.authorShard && (
                   <li>
-                    <b>{tq(lang, "Save your Author Shard")}</b>{tq(lang, "(orange panel above) — store it offline alongside the bundle. AEVION holds at most 1 of 3 shards; without yours, no rogue platform action can forge a recovery.")}</li>
+                    <b>{tq(lang, "Save your Author Shard")}</b>{tq(lang, "(orange panel above) — store it offline alongside the bundle. AEVION keeps 2 of the 3 shards, so your Author Shard is the only copy outside AEVION: with it you can recover without us. What AEVION can never forge is your author co-signature.")}</li>
                 )}
                 <li>
                   <b>{tq(lang, "Share the verify link")}</b>{tq(lang, "— the public page shows every integrity check, the Bitcoin anchor status, and the legal basis.")}<div style={{ marginTop: 6, padding: "8px 10px", borderRadius: 8, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)", fontSize: 11, fontFamily: "monospace", color: "#334155", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
@@ -1376,7 +1388,7 @@ export default function QRightPage() {
                   style={{ padding: "12px 20px", borderRadius: 12, border: "1px solid #4f46e5", color: "#4f46e5", background: "#fff", fontWeight: 800, fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
                   title={tq(lang, "Upgrade to Verified — adds real-name attestation by AEVION Bureau")}
                 >
-                  ⭐ Upgrade to Verified ({ценаСПериодом(ценаПроверкиЦенты)})
+                  {tq(lang, "⭐ Upgrade to Verified")} ({ценаСПериодом(ценаПроверкиЦенты)})
                 </Link>
               )}
               <Link

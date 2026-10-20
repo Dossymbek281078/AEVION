@@ -96,6 +96,33 @@ const RU: Record<string, string> = {
   // сертификат
   "Your work is now protected!": "Ваша работа защищена!",
   "Protected. Provable. Permanent.": "Защищено. Доказуемо. Навсегда.",
+  // экран «готово» (20.10, окно «Приложения»): две фразы под заголовком и ссылка на публичную страницу
+  "Four cryptographic layers active — including a co-signature only you can produce.":
+    "Активны четыре криптографических слоя — включая со-подпись, которую можете создать только вы.",
+  "Three cryptographic layers active — content hash, HMAC, and Shamir-split Ed25519.":
+    "Активны три криптографических слоя — хеш содержимого, HMAC и Ed25519 с разделением по Шамиру.",
+  "Open the public page of this record →": "Открыть публичную страницу записи →",
+  // блок сертификата на экране «готово» (20.10, окно «Приложения»; замер прода: 122 англ. слова при ru)
+  "AUTHOR": "АВТОР",
+  "Not specified": "Не указано",
+  // тексты авторской доли приходят с бэка (routes/pipeline.ts) — ключ = точная строка бэка
+  "Save this shard offline (downloads, USB, password manager) — AEVION never keeps a copy. With your shard plus either the AEVION vault or the public Witness Shard you can reconstruct the proof independently of AEVION. Without it, recovery falls back to the AEVION vault + public Witness — which works, but requires us to be online.": "Сохраните эту долю офлайн (загрузки, USB, менеджер паролей) — AEVION копию не хранит. С вашей долей плюс хранилищем AEVION или публичной долей-свидетелем вы восстановите доказательство независимо от AEVION. Без неё восстановление возможно только из хранилища AEVION и публичной доли (2 из 3).",
+  "Your Author Shard + AEVION vault — offline recovery, only AEVION needed for one shard": "Ваша авторская доля + хранилище AEVION — офлайн-восстановление, от AEVION нужна лишь одна доля",
+  "Your Author Shard + public Witness Shard — full recovery without AEVION at all": "Ваша авторская доля + публичная доля-свидетель — полное восстановление без участия AEVION",
+  "AEVION vault + public Witness Shard — fallback if you lose your Author Shard": "Хранилище AEVION + публичная доля-свидетель — запасной путь, если потеряете авторскую долю",
+  "TYPE": "ТИП",
+  "Content Hash (SHA-256)": "Хеш содержимого (SHA-256)",
+  "HMAC Signature": "Подпись HMAC",
+  "Ed25519 Signature": "Подпись Ed25519",
+  "Quantum Shield ID": "Идентификатор Quantum Shield",
+  "Certificate ID": "ID сертификата",
+  "4-layer protection active:": "Активна 4-слойная защита:",
+  "3-layer protection active:": "Активна 3-слойная защита:",
+  "SHA-256 hash + HMAC-SHA256 signature + Ed25519 with Shamir's Secret Sharing": "хеш SHA-256 + подпись HMAC-SHA256 + Ed25519 с разделением секрета по Шамиру",
+  "shards, threshold": "долей, порог",
+  " + author co-signature": " + со-подпись автора",
+  "Each layer detects a different attack. The author co-signature is the strongest: even if AEVION is breached and all platform keys leak, attackers still cannot forge new certificates in your name without your browser-held private key.": "Каждый слой ловит свою атаку. Со-подпись автора — самая сильная: даже если AEVION взломают и все ключи платформы утекут, злоумышленник не сможет создать новые сертификаты от вашего имени — ключ автора есть только у вас.",
+  "Each layer detects a different attack: hash catches content tampering, HMAC catches certificate-field tampering, Shamir-Ed25519 makes forgery impossible without 2 of 3 distributed shards.": "Каждый слой ловит свою атаку: хеш — подмену содержимого, HMAC — подмену полей сертификата, Shamir-Ed25519 делает подделку невозможной без 2 из 3 распределённых долей.",
   "AEVION Protection Certificate": "Сертификат защиты AEVION",
   "✓ PROTECTED": "✓ ЗАЩИЩЕНО",
   "PROTECTED AT": "ЗАЩИЩЕНО",
@@ -120,8 +147,8 @@ const RU: Record<string, string> = {
   "on any machine, any year, no AEVION required.": "на любой машине, в любом году, без AEVION.",
   "This is the proof that survives us.": "Это доказательство переживёт нас.",
   "Save your Author Shard": "Сохраните Долю автора",
-  "(orange panel above) — store it offline alongside the bundle. AEVION holds at most 1 of 3 shards; without yours, no rogue platform action can forge a recovery.":
-    "(оранжевая панель выше) — храните офлайн рядом с пакетом. У AEVION не больше 1 доли из 3; без вашей никакое действие платформы не подделает восстановление.",
+  "(orange panel above) — store it offline alongside the bundle. AEVION keeps 2 of the 3 shards, so your Author Shard is the only copy outside AEVION: with it you can recover without us. What AEVION can never forge is your author co-signature.":
+    "(оранжевая панель выше) — храните её офлайн рядом с пакетом. У AEVION 2 доли из 3, поэтому ваша авторская доля — единственная копия вне AEVION: с ней вы восстановите ключ без нас. Чего AEVION не подделает никогда — вашу авторскую со-подпись.",
   "Share the verify link": "Поделитесь ссылкой проверки",
   "— the public page shows every integrity check, the Bitcoin anchor status, and the legal basis.": "— публичная страница показывает все проверки целостности, статус якоря в Bitcoin и правовую основу.",
   "Print the PDF": "Распечатайте PDF",
@@ -133,6 +160,7 @@ const RU: Record<string, string> = {
   "A single .json with every proof — verifiable offline if AEVION ever disappears": "Один .json со всеми доказательствами — проверяется офлайн, даже если AEVION исчезнет",
   "🛡️ Download Verification Bundle": "🛡️ Скачать Пакет проверки",
   "✓ Verify Certificate": "✓ Проверить сертификат",
+  "⭐ Upgrade to Verified": "⭐ Повысить до «Проверено»",
   "⏳ Verified upgrade — not available yet": "⏳ Повышение до «Проверено» — пока недоступно",
   "Upgrade to Verified — adds real-name attestation by AEVION Bureau": "Повышение до «Проверено» — заверение настоящего имени Бюро AEVION",
   "Get an embeddable trust badge for your site": "Получить встраиваемый значок доверия для сайта",
@@ -173,6 +201,8 @@ const RU: Record<string, string> = {
  * источник, как и до 20.10). Ключи — те же английские строки, что у RU.
  */
 const KK: Record<string, string> = {
+  // кнопка на экране «готово» (20.10, окно «Приложения»): «Verified» оставалось английским при ru/kk
+  "⭐ Upgrade to Verified": "⭐ «Расталған» деңгейіне көтеру",
   "Download all my records": "Барлық жазбаларымды жүктеу",
   "Preparing archive…": "Мұрағат дайындалуда…",
   "One .zip with every certificate bundle — verifiable without AEVION.":

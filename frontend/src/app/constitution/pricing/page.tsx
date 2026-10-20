@@ -14,8 +14,10 @@ import { PLANET_BASE_MONTHLY, fromPricePerMonth, planetFromPerMonth } from "@/li
 // сроков (@/lib/termPricing), не литералом. Отдельного командного тарифа нет:
 // его колонка и вопрос о местах убраны, чтобы не продавать то, чего не купить.
 
-/** Страница цен AEVION, блок сроков подписки. */
-const PLANET_PRICING = "/pricing#tiers";
+import { PRICING_TERMS } from "@/lib/products";
+
+/** Страница цен AEVION — кнопка оплаты Планеты (общая константа, 20.10.2026). */
+const PLANET_PRICING = PRICING_TERMS;
 
 type Tier = {
   id: "free" | "pro";

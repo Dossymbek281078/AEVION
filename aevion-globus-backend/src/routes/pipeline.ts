@@ -39,6 +39,7 @@ import {
   verifyProof as otsVerifyProof,
 } from "../lib/opentimestamps/anchor";
 import { computeWitnessCid } from "../lib/shamir/witnessCid";
+import { shardDistributionSummary } from "../lib/shamir/shardDistribution";
 import { anchorSummary, pdfAnchorField } from "../lib/opentimestamps/anchorSummary";
 import { resolveEd25519 } from "../lib/qsignV2/keyRegistry";
 import { DEFAULT_ED25519_KID } from "../lib/qsignV2/ensureTables";
@@ -1705,13 +1706,14 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
         threshold: cert.shardThreshold,
         authorCosign: cosignStatus,
       },
-      shardDistribution: {
+      // 20.10.2026 (слово оркестратора): realDistributed больше не равен «политика distributed_v2».
+      // При distributed_v2 доли 2 (QuantumShield.shards) и 3 (PublicShardWitness) обе лежат в нашей
+      // базе при пороге 2 — сервер восстанавливает ключ один, вне сервера только авторская доля.
+      // Расчёт — lib/shamir/shardDistribution.ts (чистая функция, тест shardDistributionSummary.test.ts).
+      shardDistribution: shardDistributionSummary({
         policy: distributionPolicy,
-        // Real distribution means the AEVION DB cannot recover the key on
-        // its own — an external source (author or witness) is required.
-        realDistributed: distributionPolicy === "distributed_v2",
-        locations:
-          distributionPolicy === "distributed_v2"
+        threshold: cert.shardThreshold,
+        locations: distributionPolicy === "distributed_v2"
             ? [
                 { index: 1, place: "Author Vault", held: "author (offline download)", serverHasCopy: false },
                 { index: 2, place: "AEVION Platform", held: "our DB", serverHasCopy: true },
@@ -1723,7 +1725,7 @@ pipelineRouter.get("/verify/:certId", async (req, res) => {
                 { index: 3, place: "Witness Node (legacy — stored locally)", held: "our DB", serverHasCopy: true },
               ],
         witness: witnessInfo,
-      },
+      }),
       bitcoinAnchor: {
         // Считается общим помощником — тем же, которым отвечают список,
         // поиск по хешу и выгрузка. Здесь раньше был свой экземпляр той же

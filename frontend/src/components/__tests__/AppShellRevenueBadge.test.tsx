@@ -13,6 +13,9 @@ import { AppShellRevenueBadge } from "../AppShellRevenueBadge";
  * бы зелёным и при сломанном условии.
  */
 
+// С 20.10.2026 плашка цели — только админу (lib/etoAdmin, сторож revenueBadgeOnlyForAdmin);
+// здесь проверяется другое условие показа, поэтому смотрим глазами админа.
+vi.mock("@/lib/etoAdmin", () => ({ useЭтоАдмин: () => true }));
 vi.mock("@/lib/useRevenueGoal", () => ({
   useRevenueGoal: () => ({
     goals: { target: 1_000_000 },

@@ -6,12 +6,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useRevenueGoal } from "@/lib/useRevenueGoal";
+import { useЭтоАдмин } from "@/lib/etoAdmin";
 import { useI18nOptional } from "@/lib/i18n";
 import { revenueTip } from "@/lib/revenueTip";
 import { скрытьЗначокПрогресса } from "@/lib/revenueBadgeHidden";
 
 export default function RevenueGoalBadge() {
   const { goals, summary, pct, days } = useRevenueGoal();
+  const админ = useЭтоАдмин();
   const lang = useI18nOptional()?.lang ?? "ru";
   // usePathname() возвращает null вне контекста маршрутизации (так бывает в тестах
   // и на некоторых серверных путях). Без запаса значок падал и РОНЯЛ ВСЮ ШАПКУ —
@@ -32,6 +34,8 @@ export default function RevenueGoalBadge() {
    * /revenue, главная и витрины показывают его как раньше.
    */
   if (скрытьЗначокПрогресса(путь)) return null;
+  // Цель выручки — внутренняя отчётность: только админу (слово Оркестратора 20.10.2026, lib/etoAdmin.ts).
+  if (!админ) return null;
 
   if (!goals || !summary || pct === null || days === null) return null;
 

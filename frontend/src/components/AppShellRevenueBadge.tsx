@@ -10,6 +10,7 @@ import { usePathname } from "next/navigation";
 import { скрытьЗначокПрогресса } from "@/lib/revenueBadgeHidden";
 import { useEffect, useState } from "react";
 import { useRevenueGoal } from "@/lib/useRevenueGoal";
+import { useЭтоАдмин } from "@/lib/etoAdmin";
 import { useI18nOptional } from "@/lib/i18n";
 import { revenueTip } from "@/lib/revenueTip";
 
@@ -33,6 +34,7 @@ const MIN_WIDTH_PX = 420;
 export function AppShellRevenueBadge() {
   const shellLang = useI18nOptional()?.lang ?? "ru";
   const { goals, summary, pct, days } = useRevenueGoal();
+  const админ = useЭтоАдмин();
   const путь = usePathname();
 
   // Тот же список, что у значка в общей шапке, и ОДИН на двоих: /cyberchess это
@@ -93,6 +95,8 @@ export function AppShellRevenueBadge() {
   }, [wideEnough, pct, days]);
 
   if (!wideEnough) return null;
+  // Цель выручки — внутренняя отчётность: только админу (слово Оркестратора 20.10.2026, lib/etoAdmin.ts).
+  if (!админ) return null;
   if (!goals || !summary || pct === null || days === null) return null;
 
   // Общий revenueTip — см. RevenueGoalBadge; здесь жила вторая копия строки.

@@ -17,6 +17,9 @@ const { путь, ширина } = vi.hoisted(() => ({
 }));
 
 vi.mock("next/navigation", () => ({ usePathname: () => путь.значение }));
+// С 20.10.2026 плашка цели — только админу (lib/etoAdmin, сторож revenueBadgeOnlyForAdmin);
+// здесь проверяется другое условие показа, поэтому смотрим глазами админа.
+vi.mock("@/lib/etoAdmin", () => ({ useЭтоАдмин: () => true }));
 vi.mock("@/lib/useRevenueGoal", () => ({
   useRevenueGoal: () => ({
     goals: { millionUsd: 1_000_000 },

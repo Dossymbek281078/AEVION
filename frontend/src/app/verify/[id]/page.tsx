@@ -79,6 +79,8 @@ type VerifyData = {
   shardDistribution?: {
     policy: "legacy_all_local" | "distributed_v2";
     realDistributed: boolean;
+    serverCanReconstructAlone?: boolean;
+    shardsOutsideServer?: number;
     locations: Array<{
       index: number;
       place: string;
@@ -655,7 +657,7 @@ export default function VerifyPage() {
                   />
                 </div>
                 <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
-                  {data.shardDistribution.realDistributed
+                  {data.shardDistribution.policy === "distributed_v2"
                     ? tv(lang, "Any 2 of 3 shards reconstruct the Ed25519 private key. AEVION keeps shards 2 and 3, so AEVION alone can reconstruct it; your Author Shard is the only copy outside AEVION.")
                     : tv(lang, "Legacy record: all three shards are stored in our DB. Re-protect to upgrade to true distribution.")}
                 </div>
@@ -665,10 +667,10 @@ export default function VerifyPage() {
                 borderRadius: 8,
                 fontSize: 11,
                 fontWeight: 800,
-                background: data.shardDistribution.realDistributed ? "rgba(16,185,129,0.15)" : "rgba(245,158,11,0.15)",
-                color: data.shardDistribution.realDistributed ? "#059669" : "#d97706",
+                background: data.shardDistribution.policy === "distributed_v2" ? "rgba(16,185,129,0.15)" : "rgba(245,158,11,0.15)",
+                color: data.shardDistribution.policy === "distributed_v2" ? "#059669" : "#d97706",
               }}>
-                {data.shardDistribution.realDistributed ? tv(lang, "✓ AUTHOR SHARD OFFLINE") : tv(lang, "⚠ LEGACY (LOCAL)")}
+                {data.shardDistribution.policy === "distributed_v2" ? tv(lang, "✓ AUTHOR SHARD OFFLINE") : tv(lang, "⚠ LEGACY (LOCAL)")}
               </div>
             </div>
             <div style={{ padding: "20px 24px", background: "#fff" }}>

@@ -473,7 +473,8 @@ export const projects: GlobusProject[] = [
   {
     id: "shadownet",
     code: "SHADOWNET",
-    name: "ShadowNet — Alternative Private Network",
+    // 20.10.2026: «Alternative Private Network» обещало сеть, а модуль — симулятор (см. description).
+    name: "ShadowNet — симулятор приватной сети",
     description:
       "Privacy concept simulator MVP 2026-05-15 — 4 threat models, routing simulator (3-7 hops + Mulberry32), privacy score, E2E encrypted posts (WebCrypto AES-GCM + PBKDF2 250k) + concept board. /api/shadownet.",
     kind: "experiment",

@@ -167,6 +167,14 @@ export default function SubmitTrackModal({ open, onClose, onSubmit }: Props) {
 
   if (!open) return null;
 
+  // 21.10.2026: надпись «после проверки» держится, пока человек сам не закроет окно
+  // (раньше гасла через 1,5 с — трек будто пропадал, в каталоге его ещё нет).
+  const закрыть = () => {
+    setOk(null);
+    setErr(null);
+    onClose();
+  };
+
   function reset() {
     setTitle("");
     setArtistAlias("");
@@ -198,12 +206,9 @@ export default function SubmitTrackModal({ open, onClose, onSubmit }: Props) {
     setSubmitting(false);
     if (result.ok) {
       // 20.10.2026: трек ждёт проверки — говорим это, а не «опубликован».
-      setOk(result.message || "Трек принят — появится в каталоге после проверки командой.");
+      // 21.10: reset() обнуляет ok — звать ДО setOk, иначе надпись не появлялась вовсе.
       reset();
-      setTimeout(() => {
-        setOk(null);
-        onClose();
-      }, 1500);
+      setOk(result.message || "Трек принят — появится в каталоге после проверки командой.");
     } else {
       setErr(result.message ?? "Ошибка отправки");
     }
@@ -213,13 +218,13 @@ export default function SubmitTrackModal({ open, onClose, onSubmit }: Props) {
     <div
       style={overlayStyle}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) закрыть();
       }}
     >
       <div style={modalStyle}>
         <div style={headerStyle}>
           <h2 style={titleStyle}>Подать свой трек</h2>
-          <button type="button" style={closeStyle} onClick={onClose} aria-label="Закрыть">
+          <button type="button" style={closeStyle} onClick={закрыть} aria-label="Закрыть">
             ×
           </button>
         </div>
@@ -323,7 +328,7 @@ export default function SubmitTrackModal({ open, onClose, onSubmit }: Props) {
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
             <button
               type="button"
-              onClick={onClose}
+              onClick={закрыть}
               style={{
                 background: "transparent",
                 border: "1px solid #e5d4b8",
@@ -334,15 +339,17 @@ export default function SubmitTrackModal({ open, onClose, onSubmit }: Props) {
                 cursor: "pointer",
               }}
             >
-              Отмена
+              {ok ? "Закрыть" : "Отмена"}
             </button>
+            {!ok && (
             <button
               type="submit"
               disabled={submitting}
               style={submitting ? submitBtnDisabledStyle : submitBtnStyle}
             >
-              {submitting ? "Отправка…" : "Опубликовать"}
+              {submitting ? "Отправка…" : "Отправить на проверку"}
             </button>
+            )}
           </div>
         </form>
       </div>

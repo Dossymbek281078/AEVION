@@ -22,6 +22,7 @@ import { Sparkline } from "@/components/Sparkline";
 import { PageTracking } from "@/components/PageTracking";
 import { useI18n } from "@/lib/i18n";
 import { tq } from "./qrightI18n";
+import { ExportAllButton } from "./ExportAllButton";
 import {
   OWNER_REVOKE_REASON_CODES,
   revokeReasonLabel,
@@ -1407,6 +1408,19 @@ export default function QRightPage() {
           >
             <span>{showRegistry ? "▼" : "▶"}</span> View QRight Registry ({items.length || "..."})
           </button>
+          {/* Все записи аккаунта одним архивом — видна только вошедшему (сама проверяет вход). */}
+          <ExportAllButton
+            labels={{
+              button: tq(lang, "Download all my records"),
+              busy: tq(lang, "Preparing archive…"),
+              hint: tq(lang, "One .zip with every certificate bundle — verifiable without AEVION."),
+              empty: tq(lang, "You have no records yet"),
+              signIn: tq(lang, "Sign in to download your records"),
+              tooMany: tq(lang, "More than 500 records — too many for one archive. Contact support for a full export."),
+              network: tq(lang, "Could not download the archive — check your connection and try again"),
+              failed: tq(lang, "Could not prepare the archive"),
+            }}
+          />
 
           {showRegistry && (
             <div style={{ marginTop: 12 }}>

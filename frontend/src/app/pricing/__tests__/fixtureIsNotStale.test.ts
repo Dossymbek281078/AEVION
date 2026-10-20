@@ -71,14 +71,15 @@ describe("снимок цен не стареет молча", () => {
     ).toBeLessThanOrEqual(ПРЕДЕЛ_ДНЕЙ);
   });
 
-  it("снимок описывает то же, что прод: девять приложений в отдельной продаже", () => {
+  it("снимок описывает то же, что прод: план «Планета» на пять сроков и шахматы отдельно", () => {
     // Возраст — не единственная беда: снимок может быть свежим по дате и неполным
-    // по составу. Именно так и вышло: пять приложений против девяти.
+    // по составу (30.09: пять приложений против девяти). С 19.10 (слово основателя)
+    // отдельно продаются только шахматы $50/год, остальное — план «Планета»; замер
+    // прода 20.10: standaloneApps 1 (cyberchess), plan есть. Сверяем состав с этим.
     const снимок = JSON.parse(readFileSync(ФАЙЛ, "utf8"));
-    const апп: Array<{ slug?: string }> = снимок.standaloneApps ?? [];
-    expect(апп.length, "в снимке меньше приложений, чем продаётся").toBeGreaterThanOrEqual(9);
-    for (const нужный of ["devhub", "cyberchess", "multichat", "ip_bureau", "qventure", "qright", "qsign", "startup_exchange", "qskyway"]) {
-      expect(апп.some((a) => a.slug === нужный), `в снимке нет приложения ${нужный}`).toBe(true);
-    }
+    const апп: Array<{ slug?: string; yearOnlyUsd?: number }> = снимок.standaloneApps ?? [];
+    expect(апп.map((a) => a.slug), "в отдельной продаже — только шахматы").toEqual(["cyberchess"]);
+    expect(снимок.chess).toEqual({ id: "cyberchess", priceUsd: 50, period: "year" });
+    expect(снимок.plan?.terms?.map((t: { months: number }) => t.months), "в снимке нет плана «Планета»").toEqual([1, 3, 6, 9, 12]);
   });
 });

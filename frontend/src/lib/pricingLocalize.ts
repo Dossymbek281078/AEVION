@@ -26,7 +26,8 @@ type TierLike = {
   ctaLabel: string;
 };
 
-type TierEn = { tagline: string; ctaLabel: string; features: string[] };
+/** Подзаголовок и кнопка по id тарифа — запасной путь, когда шаблон бэка не узнан. Пункты — FEATURE_EN ниже. */
+type TierEn = { tagline: string; ctaLabel: string };
 
 const ALL_PRODUCTS = "Every AEVION product in one subscription";
 const MODULE_LIST = "DevHub, Multichat, IP Bureau, CyberChess, QVenture and the rest of the modules";
@@ -37,87 +38,30 @@ export const TIER_EN: Record<string, TierEn> = {
   free: {
     ctaLabel: "Start free",
     tagline: "Start with no barriers — for those just getting to know AEVION",
-    features: [
-      "1 active module of your choice",
-      "QRight: up to 10 objects / month",
-      "QSign: 1 signature per day",
-      "QCoreAI: 100 000 tokens / month",
-      "Access to the public Globus",
-      "Community and basic documentation",
-    ],
   },
   lite: {
     ctaLabel: "Choose Lite",
     tagline: "The whole AEVION planet for 1 month",
-    features: [
-      ALL_PRODUCTS,
-      MODULE_LIST,
-      TOKENS_50M,
-      "$400 for the month",
-      "No commitment beyond one month",
-      SUPPORT_8H,
-    ],
   },
   medium: {
     ctaLabel: "Choose Medium",
     tagline: "The whole AEVION planet for 3 months",
-    features: [
-      ALL_PRODUCTS,
-      MODULE_LIST,
-      TOKENS_50M,
-      "$1050 for 3 months — $350 a month",
-      "Save 12.5% vs monthly billing",
-      SUPPORT_8H,
-    ],
   },
   pro: {
     ctaLabel: "Choose Pro",
     tagline: "The whole AEVION planet for 6 months",
-    features: [
-      ALL_PRODUCTS,
-      MODULE_LIST,
-      TOKENS_50M,
-      "$1800 for 6 months — $300 a month",
-      "Save 25% vs monthly billing",
-      SUPPORT_8H,
-    ],
   },
   full: {
     ctaLabel: "Choose Full",
     tagline: "The whole AEVION planet for 9 months",
-    features: [
-      ALL_PRODUCTS,
-      MODULE_LIST,
-      TOKENS_50M,
-      "$2250 for 9 months — $250 a month",
-      "Save 37.5% vs monthly billing",
-      SUPPORT_8H,
-    ],
   },
   max: {
     ctaLabel: "Choose Max",
     tagline: "The whole AEVION planet for 12 months",
-    features: [
-      ALL_PRODUCTS,
-      MODULE_LIST,
-      TOKENS_50M,
-      "$2400 for 12 months — $200 a month",
-      "Save 50% vs monthly billing",
-      SUPPORT_8H,
-    ],
   },
   enterprise: {
     ctaLabel: "Contact sales",
     tagline: "For corporations, banks and the public sector",
-    features: [
-      "Dedicated infrastructure (on-prem / VPC)",
-      "SOC2 / ISO27001 package (on request)",
-      "Unlimited seats and tokens",
-      "Custom SLA down to 1 hour",
-      "Customer Success manager",
-      "Roadmap influence and custom features",
-      "Legal NDA / DPA / MSA",
-    ],
   },
 };
 
@@ -223,15 +167,88 @@ export function isEnglish(lang: string): boolean {
   return lang === "en";
 }
 
+/**
+ * 🔴 20.10.2026: пункты тарифа — по ТЕКСТУ, а не по позиции. Замер Продаж на
+ * /pricing при en-US: 731 знак кириллицы. Позиционная карта TIER_EN отстала от
+ * плана «Планета» 19.10 (цены $400→$250, строка «списание ежемесячно», «Экономия
+ * N% против месяца без срока», 4 пункта Enterprise вместо 7) — числа разошлись,
+ * и pick честно откатывался на русский. Хуже: у пунктов БЕЗ чисел позиция
+ * совпадала по цифрам, и Enterprise мог показать чужой пункт.
+ *
+ * Теперь: точная строка → FEATURE_EN; шаблонная строка бэка (data/pricing.ts,
+ * planetTier) → правило с теми же числами; иначе русский текст (числа верны).
+ */
+const FEATURE_EN: Record<string, string> = {
+  "1 активный модуль на выбор": "1 active module of your choice",
+  "QRight: до 10 объектов / месяц": "QRight: up to 10 objects / month",
+  "QSign: 1 подпись в день": "QSign: 1 signature per day",
+  "QCoreAI: 100 000 токенов / месяц": "QCoreAI: 100 000 tokens / month",
+  "Доступ к публичному Globus": "Access to the public Globus",
+  "Сообщество и базовая документация": "Community and basic documentation",
+  "Все продукты AEVION в одной подписке": ALL_PRODUCTS,
+  "DevHub, Multichat, IP Bureau, CyberChess, QVenture и остальные модули": MODULE_LIST,
+  "QCoreAI: 50 000 000 токенов / месяц": TOKENS_50M,
+  "Без обязательств дольше месяца": "No commitment beyond one month",
+  "Приоритетная поддержка (8h SLA)": SUPPORT_8H,
+  "Условия корпоративного уровня обсуждаются индивидуально": "Enterprise-level terms are agreed individually",
+  "Выделенная инфраструктура (on-prem / VPC)": "Dedicated infrastructure (on-prem / VPC)",
+  "SOC2 / ISO27001 пакет (по запросу)": "SOC2 / ISO27001 package (on request)",
+  "Безлимитные seats и токены": "Unlimited seats and tokens",
+  "Индивидуальные SLA до 1 часа": "Custom SLA down to 1 hour",
+  "Customer Success менеджер": "Customer Success manager",
+  "Roadmap-влияние и кастом-фичи": "Roadmap influence and custom features",
+  "Юридические NDA / DPA / MSA": "Legal NDA / DPA / MSA",
+};
+
+const monthsEn = (n: string) => (n === "1" ? "1 month" : `${n} months`);
+
+/** Шаблоны строк бэка → английский с ТЕМИ ЖЕ числами. */
+const RULES_EN: Array<[RegExp, (...m: string[]) => string]> = [
+  [/^Вся планета AEVION на (\d+) (?:месяц|месяца|месяцев)$/, (_, n) => `The whole AEVION planet for ${monthsEn(n)}`],
+  [/^Выбрать (Lite|Medium|Pro|Full|Max)$/, (_, t) => `Choose ${t}`],
+  [/^\$(\d+(?:\.\d+)?) за месяц, без обязательств$/, (_, p) => `$${p} for one month, no commitment`],
+  [
+    /^\$(\d+(?:\.\d+)?) в месяц, списание ежемесячно — (\d+) (?:платежа|платежей), \$(\d+(?:\.\d+)?) за (\d+) (?:месяца|месяцев); вперёд одним платежом — \$(\d+(?:\.\d+)?)$/,
+    (_, per, n, total, m, prepay) => `$${per} a month, billed monthly — ${n} payments, $${total} for ${monthsEn(m)}; up front in one payment — $${prepay}`,
+  ],
+  [/^Экономия (\d+(?:\.\d+)?)% против месяца без срока$/, (_, p) => `Save ${p}% vs. one month without a term`],
+  // Строки и примечания расчёта /api/pricing/quote (data/pricing.ts, buildQuote).
+  [/^План «AEVION Планета» — (\d+) (?:месяца|месяцев), списание ежемесячно по \$(\d+(?:\.\d+)?)$/, (_, m, p) => `AEVION Planet plan — ${monthsEn(m)}, billed monthly at $${p}`],
+  [/^План «AEVION Планета» — 1 месяц, без обязательств$/, () => "AEVION Planet plan — 1 month, no commitment"],
+  [/^Дополнительные пользователи \((\d+) × \$5\/мес\)$/, (_, n) => `Extra users (${n} × $5/mo)`],
+  [/^Модуль ([a-z0-9-]+)$/, (_, id) => `Module ${id}`],
+  [/^Модуль ([a-z0-9-]+) включён в Lite \(1 продукт на выбор\)$/, (_, id) => `Module ${id} is included in Lite (1 product of your choice)`],
+  [/^Модуль "(.+)" не найден$/, (_, id) => `Module "${id}" not found`],
+  [/^Модуль "(.+)" доступен только по запросу \(Enterprise \/ Sales\)$/, (_, id) => `Module "${id}" is available on request only (Enterprise / Sales)`],
+  [/^Enterprise — итоговая цена согласовывается отдельно$/, () => "Enterprise — the final price is agreed separately"],
+  [/^Скидки срезаны потолком: −\$(\d+(?:\.\d+)?) сверх допустимого$/, (_, x) => `Discounts capped: −$${x} above the allowed limit`],
+];
+
+/** Строка или примечание расчёта (/api/pricing/quote) на языке страницы; без перевода — русская. */
+export function localizeQuoteText(ru: string, lang: string): string {
+  if (!isEnglish(lang)) return ru;
+  return pick(ru, translateBackendText(ru) ?? undefined);
+}
+
+/** Английский для строки бэка: точная → правило → null (нет перевода). */
+export function translateBackendText(ru: string): string | null {
+  const exact = FEATURE_EN[ru];
+  if (exact != null) return exact;
+  for (const [re, f] of RULES_EN) {
+    const m = re.exec(ru);
+    if (m) return f(...m);
+  }
+  return null;
+}
+
 export function localizeTier<T extends TierLike>(tier: T, lang: string): T {
   if (!isEnglish(lang)) return tier;
   const en = TIER_EN[tier.id];
-  if (!en) return tier;
   return {
     ...tier,
-    tagline: pick(tier.tagline, en.tagline),
-    ctaLabel: pick(tier.ctaLabel, en.ctaLabel),
-    features: tier.features.map((f, i) => pick(f, en.features[i])),
+    tagline: pick(tier.tagline, translateBackendText(tier.tagline) ?? en?.tagline),
+    ctaLabel: pick(tier.ctaLabel, translateBackendText(tier.ctaLabel) ?? en?.ctaLabel),
+    features: tier.features.map((f) => pick(f, translateBackendText(f) ?? undefined)),
   };
 }
 

@@ -22,6 +22,7 @@ import {
   localizePromoDescription,
   localizeTier,
   localizeTrustNumber,
+  localizeQuoteText,
 } from "@/lib/pricingLocalize";
 import {
   PLANET_BASE_MONTHLY,
@@ -2425,7 +2426,7 @@ export default function PricingPage() {
                           borderBottom: "1px solid rgba(255,255,255,0.06)",
                         }}
                       >
-                        <span style={{ color: "#cbd5e1" }}>{l.label}</span>
+                        <span style={{ color: "#cbd5e1" }}>{localizeQuoteText(l.label, lang)}</span>
                         <span style={{ fontWeight: 700 }}>
                           {symbol}
                           {l.total.toLocaleString("ru-RU")}
@@ -2611,7 +2612,7 @@ export default function PricingPage() {
                     }}
                   >
                     {quote.notes.map((n, i) => (
-                      <div key={i}>· {n}</div>
+                      <div key={i}>· {localizeQuoteText(n, lang)}</div>
                     ))}
                   </div>
                 )}

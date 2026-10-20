@@ -43,6 +43,22 @@ async function остаток(устройство: string, sub?: string) {
 }
 
 describe("вошедшего не считают по адресу гостя", () => {
+  test("🔴 мусорный или чужой Bearer — НЕ вошедший: считается гостем по адресу и устройству", async () => {
+    const m = await import("../src/lib/multichatGuestPass");
+    m.засчитатьГостю(запрос("dev-A"));
+    m.засчитатьГостю(запрос("dev-A"));
+    const a = express();
+    a.get("/api/multichat-guest/allowance", m.ручкаОстатка);
+    const чужойКлюч = jwt.sign({ sub: "forged" }, "another-secret-at-least-32-chars-long-000", { algorithm: "HS256" });
+    for (const bearer of ["x", "Bearer-garbage.not.jwt", чужойКлюч]) {
+      const r = await request(a).get("/api/multichat-guest/allowance")
+        .set("x-aevion-edge-key", КЛЮЧ).set("x-aevion-client-ip", АДРЕС).set("x-aevion-device", "dev-new-" + bearer.length)
+        .set("Authorization", `Bearer ${bearer}`);
+      expect(r.body.гость, bearer).toBe(true);
+      expect(r.body.осталось, `${bearer}: подложенный Bearer дал свежую норму`).toBe(0);
+    }
+  });
+
   test("🔴 гость исчерпал адрес → новый вошедший с того же адреса получает свою полную норму", async () => {
     const m = await import("../src/lib/multichatGuestPass");
     m.засчитатьГостю(запрос("dev-A"));

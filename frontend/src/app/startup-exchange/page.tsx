@@ -12,7 +12,7 @@ import { ListingCard } from "./components/ListingCard";
 import { InterestModal } from "./components/InterestModal";
 import { ExampleListing } from "./components/ExampleListing";
 import { Toast } from "./components/Toast";
-import { apiUrl } from "@/lib/apiBase";
+import { apiUrl, getBackendOrigin } from "@/lib/apiBase";
 import { ApiError, TIER_ACCENT, startupxApi, usd, type Listing, type Tier, type TierSpec } from "./lib";
 
 const PAGE_SIZE = 10;
@@ -172,7 +172,10 @@ export default function StartupExchangePage() {
     if (sectorFilter) q.set("sector", sectorFilter);
     if (searchApplied) q.set("q", searchApplied);
     const qs = q.toString();
-    return apiUrl(`/api/startupx/rss.xml${qs ? `?${qs}` : ""}`);
+    // Ссылка для человека, а не адрес для fetch: apiUrl на сервере даёт внутренний адрес
+    // Railway, и он уходил в разметку (замер прода 20.10: «RSS этого среза» →
+    // aevion-production-…up.railway.app). Публичный адрес — getBackendOrigin().
+    return `${getBackendOrigin()}/api/startupx/rss.xml${qs ? `?${qs}` : ""}`;
   })();
 
   const tabs: Array<{ id: TierFilter; label: string; count?: number }> = [

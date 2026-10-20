@@ -83,6 +83,7 @@ describe("денежная кнопка DevHub", () => {
     const c = code();
     expect(c, "надпись снова зашита").not.toContain("Upgrade — ");
     expect(c).toContain('t("pro.upgrade")');
-    expect(c).toContain('t("pro.perMonth")');
+    // 20.10.2026: цена — шаблоном «от {p}/мес» (pro.fromPrice), а не «/мес» после числа
+    expect(c).toContain('t("pro.fromPrice")');
   });
 });

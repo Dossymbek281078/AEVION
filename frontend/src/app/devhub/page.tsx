@@ -14,7 +14,7 @@ import { COMPARISON_ROWS, capabilityIsKnownOff, comparisonTotalUsd } from "./cap
 import { howtoTranscript } from "./howtoTranscript";
 import { getDevhubGuestId } from "@/lib/devhubGuest";
 import { getAuthToken } from "@/lib/auth";
-import { TERM_MONTHS, СРОК_ПО_УМОЛЧАНИЮ, planetPricePerMonth, planetTotal } from "@/lib/termPricing";
+import { TERM_MONTHS, СРОК_ПО_УМОЛЧАНИЮ, planetPricePerMonth, planetTotal, planetFromPerMonth } from "@/lib/termPricing";
 import { useI18n } from "@/lib/i18n";
 import { catalog } from "@/lib/aevionCatalog";
 import { fixDoubledScheme } from "@/lib/urls";
@@ -144,6 +144,14 @@ const STUDIO_PRO = productById("aevion-planet");
 const pricePerMonth = () => planetPricePerMonth(СРОК_ПО_УМОЛЧАНИЮ);
 const termTotalFor = () => planetTotal(СРОК_ПО_УМОЛЧАНИЮ);
 const TERM_MONTHS_SHOWN = TERM_MONTHS[СРОК_ПО_УМОЛЧАНИЮ];
+
+/* 20.10.2026, решение Оркестратора: кнопка обещала «$250/мес», а якорь
+   #planet-buy ставил человека к карточке Max и кассе за $150/мес с годовым
+   сроком (замер priemka-devhub-kassa.mjs: Pay 150,00 $). Теперь кнопка говорит
+   «от $150/мес» и ведёт к НАЧАЛУ списка сроков (#tiers): человек сам видит,
+   что $150 — при 12 мес, а без обязательства $250. Прокрутку к #tiers страница
+   цен делает после прихода данных (эффект на data, урок 20.10). */
+const PLANET_TERMS_LIST = "/pricing#tiers";
 
 /**
  * Почему возможность отключена — словами человека.
@@ -1105,7 +1113,7 @@ export default function DevHubPage() {
                   на длинных сроках месяц дешевле, и это видно на странице цен. */}
               {STUDIO_PRO ? (
               <a
-                href={STUDIO_PRO.href}
+                href={PLANET_TERMS_LIST}
                 // Выбор срока на /pricing; событие оставлено здесь, чтобы видеть,
                 // сколько человек пошло покупать именно со страницы DevHub.
                 onClick={() => track({ type: "checkout_start", tier: "studio-pro", source: "devhub", meta: { processor: STUDIO_PRO.processor } })}
@@ -1115,7 +1123,7 @@ export default function DevHubPage() {
                   whiteSpace: "nowrap",
                 }}
               >
-                {t("pro.upgrade")} — {`$${pricePerMonth()}`}{t("pro.perMonth")}
+                {t("pro.upgrade")} — {t("pro.fromPrice").replace("{p}", `$${planetFromPerMonth()}`)}
               </a>
               ) : (
                 <span style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, fontWeight: 600 }}>
@@ -1130,7 +1138,7 @@ export default function DevHubPage() {
                   а не собирают его. Нашёл сборщик волны прогоном tsc. */}
               {STUDIO_PRO && (
                 <div style={{ fontSize: 11, color: "rgba(255,255,255,0.85)", width: "100%" }}>
-                  {t("pro.termNote").replace("{m}", String(TERM_MONTHS_SHOWN)).replace("{t}", `$${termTotalFor()}`)}
+                  {t("pro.termRange").replace("{max}", `$${pricePerMonth()}`).replace("{min}", `$${planetFromPerMonth()}`)}
                 </div>
               )}
               {/* Правда, которая нужна человеку ДО оплаты, а не после.

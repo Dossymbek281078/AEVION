@@ -22,7 +22,7 @@ import { postNow } from "@/lib/channelNow";
 import { pokazyvatKartochkuSokhraneniya, klyuchSokhraneniya, kanalDlyaLista, DEVHUB_SAVE_SOURCE, DEVHUB_SAVE_FEATURE } from "@/lib/devhubSaveCard";
 import { useI18nOptional } from "@/lib/i18n";
 import { tDevhub, type DevhubKey } from "../i18n";
-import { termPricePerMonth, termTotal, TERM_MONTHS, СРОК_ПО_УМОЛЧАНИЮ } from "@/lib/termPricing";
+import { termPricePerMonth, termTotal, TERM_MONTHS, СРОК_ПО_УМОЛЧАНИЮ, planetFromPerMonth } from "@/lib/termPricing";
 import { productById } from "@/lib/products";
 
 /**
@@ -80,6 +80,14 @@ const pricePerMonth = (товар: { priceUsd: number }) =>
 const termTotalFor = (товар: { priceUsd: number }) =>
   termTotal(товар.priceUsd, СРОК_ПО_УМОЛЧАНИЮ);
 const TERM_MONTHS_SHOWN = TERM_MONTHS[СРОК_ПО_УМОЛЧАНИЮ];
+
+/* 20.10.2026, решение Оркестратора: кнопка обещала «$250/мес», а якорь
+   #planet-buy ставил человека к карточке Max и кассе за $150/мес с годовым
+   сроком (замер priemka-devhub-kassa.mjs: Pay 150,00 $). Теперь кнопка говорит
+   «от $150/мес» и ведёт к НАЧАЛУ списка сроков (#tiers): человек сам видит,
+   что $150 — при 12 мес, а без обязательства $250. Прокрутку к #tiers страница
+   цен делает после прихода данных (эффект на data, урок 20.10). */
+const PLANET_TERMS_LIST = "/pricing#tiers";
 
 /** Вкладки рабочего окна. Список один — из него же берутся подписи. */
 const VKLADKI = ["chat", "visual", "agent", "templates", "github", "media", "env", "deployments", "settings"] as const;
@@ -7032,7 +7040,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
           <span style={{ fontSize: 13, lineHeight: 1.45, flex: "1 1 260px" }}>{upgradeNudge}</span>
           {STUDIO_PRO && (
             <a
-              href={STUDIO_PRO.href}
+              href={PLANET_TERMS_LIST}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => track({ type: "checkout_start", tier: "studio-pro", source: "devhub-ide", meta: { processor: "lemonsqueezy" } })}
@@ -7042,14 +7050,14 @@ if (/Месячная норма исчерпана|Месячный лимит[
                 whiteSpace: "nowrap",
               }}
             >
-              {tPro("pro.upgrade")} — ${pricePerMonth(STUDIO_PRO)}{tPro("pro.perMonth")}
+              {tPro("pro.upgrade")} — {tPro("pro.fromPrice").replace("{p}", `$${planetFromPerMonth()}`)}
             </a>
           )}
           {/* Срок и итог рядом с кнопкой: без них «$150/мес» не говорит, за
               сколько месяцев спишут. Числа считаются из таблицы цен. */}
           {STUDIO_PRO && (
             <span style={{ fontSize: 11, color: "rgba(255,255,255,0.85)" }}>
-              {tPro("pro.termNote").replace("{m}", String(TERM_MONTHS_SHOWN)).replace("{t}", `$${termTotalFor(STUDIO_PRO)}`)}
+              {tPro("pro.termRange").replace("{max}", `$${pricePerMonth(STUDIO_PRO)}`).replace("{min}", `$${planetFromPerMonth()}`)}
             </span>
           )}
           <Link href="/devhub/link" style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, textDecoration: "underline", whiteSpace: "nowrap" }}>

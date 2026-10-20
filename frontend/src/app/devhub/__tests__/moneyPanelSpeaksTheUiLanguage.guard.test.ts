@@ -47,7 +47,8 @@ import { tDevhub } from "../i18n";
  * первым (разная цена или разное обещание на двух экранах).
  */
 
-const KEYS = ["pro.upgrade", "pro.perMonth", "pro.linkPurchase"] as const;
+// 20.10.2026: «/мес» после числа заменён шаблоном «от {p}/мес» — pro.fromPrice.
+const KEYS = ["pro.upgrade", "pro.fromPrice", "pro.linkPurchase"] as const;
 
 function hasCyrillic(s: string): boolean {
   for (let i = 0; i < s.length; i += 1) {

@@ -22,6 +22,9 @@ import {
   termPricePerMonth,
   termTotal,
   standaloneApp,
+  PLANET_TERM_PRICE,
+  planetFromPerMonth,
+  planetPricePerMonth,
 } from "../../../lib/termPricing";
 import { tDevhub } from "../i18n";
 
@@ -56,16 +59,36 @@ describe("плашка называет то, что откроется", () => 
     expect(чужие, `подпись «${подпись}» называет ступень, которая по ссылке не откроется`).toEqual([]);
   });
 
-  it.each(["ru", "en", "kk"])("строка срока на %s называет длину и итог из данных", (lang) => {
-    const шаблон = tDevhub(lang, "pro.termNote");
-    expect(шаблон, "нет строки про срок — человек не узнает, за сколько месяцев платит")
-      .toMatch(/\{m\}/);
-    expect(шаблон).toMatch(/\{t\}/);
-    const готово = шаблон
-      .replace("{m}", String(TERM_MONTHS[СРОК_ПО_УМОЛЧАНИЮ]))
-      .replace("{t}", `$${termTotal(БАЗА, СРОК_ПО_УМОЛЧАНИЮ)}`);
-    expect(готово).toContain(String(TERM_MONTHS[СРОК_ПО_УМОЛЧАНИЮ]));
-    expect(готово).toContain(`$${termTotal(БАЗА, СРОК_ПО_УМОЛЧАНИЮ)}`);
+  /*
+   * 20.10.2026, решение Оркестратора: кнопка обещала «$250/мес», а вела к карточке
+   * Max и кассе за $150/мес с годовым сроком (priemka-devhub-kassa.mjs: Pay 150,00 $).
+   * Теперь: «от $150/мес» → начало списка сроков #tiers, и рядом обе цены — без
+   * обязательства и на 12 мес. Обе берутся из лесенки плана, не числом.
+   */
+  it.each(["ru", "en", "kk"])("строка рядом с кнопкой на %s называет цену без обязательства и на 12 мес", (lang) => {
+    const шаблон = tDevhub(lang, "pro.termRange");
+    expect(шаблон).toMatch(/\{max\}/);
+    expect(шаблон).toMatch(/\{min\}/);
+    expect(шаблон).toContain("12");
+    expect(tDevhub(lang, "pro.fromPrice")).toMatch(/\{p\}/);
+  });
+
+  it.each(["src/app/devhub/page.tsx", "src/app/devhub/[id]/page.tsx"])(
+    "%s: кнопка ведёт к списку сроков (#tiers) и говорит «от» по самой низкой цене плана",
+    (путь) => {
+      const код = readFileSync(join(process.cwd(), ...путь.split("/")), "utf8");
+      expect(код).toContain('const PLANET_TERMS_LIST = "/pricing#tiers"');
+      expect(код).toContain("href={PLANET_TERMS_LIST}");
+      expect(код, "кнопка снова ведёт к кнопке Max, минуя выбор срока").not.toContain("href={STUDIO_PRO.href}");
+      expect(код).toMatch(/pro\.fromPrice"\)\.replace\("\{p\}", `\$\$\{planetFromPerMonth\(\)\}`\)/);
+      expect(код).toMatch(/pro\.termRange"\)\.replace\("\{max\}"/);
+    },
+  );
+
+  it("«от» — действительно самая низкая месячная цена лесенки, «без обязательства» — самая высокая", () => {
+    const цены = Object.values(PLANET_TERM_PRICE);
+    expect(planetFromPerMonth()).toBe(Math.min(...цены));
+    expect(planetPricePerMonth(СРОК_ПО_УМОЛЧАНИЮ)).toBe(Math.max(...цены));
   });
 
   it.each([

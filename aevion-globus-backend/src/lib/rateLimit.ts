@@ -343,6 +343,10 @@ function logPeerShapeOnce(
   const firstOctet = family === "ipv4" ? bare.split(".")[0] : bare.split(":")[0];
   const real = headers?.["x-real-ip"] ? "есть" : "нет";
   const xff = headers?.["x-forwarded-for"] ? "есть" : "нет";
+  // 20.10.2026: доходят ли через rewrite /api-backend платформенные заголовки Vercel —
+  // только «есть/нет», без значений. Если x-vercel-forwarded-for доходит, адрес гостя
+  // можно брать на бэке без обработчика на каждый путь (разбор у окна Приложения).
+  const vercel = ["x-vercel-forwarded-for", "x-vercel-id", "x-vercel-ip-country"].map((h) => (headers?.[h] ? "есть" : "нет")).join("/");
   // ГЛАВНОЕ: печатаем не догадку, а исход КАЖДОГО условия ветки X-Real-IP.
   // Отпечаток ключа показал, что ветка не срабатывает даже когда сосед из
   // 100.x и заголовок на месте, — а какое из трёх условий падает, снаружи
@@ -350,15 +354,16 @@ function logPeerShapeOnce(
   const internal = isRailwayInternal(peer) ? "да" : "нет";
   const realShape = realIpShape(headers?.["x-real-ip"]);
   const branch = internal === "да" && realShape === "адрес" ? "x-real-ip" : "req.ip";
-  const shape = [family, firstOctet || "?", real, xff, where, internal, realShape, branch].join("|");
+  const shape = [family, firstOctet || "?", real, xff, vercel, where, internal, realShape, branch].join("|");
   if (peerShapesLogged.has(shape)) return;
   peerShapesLogged.add(shape);
   console.warn(
-    "[rateLimit] форма соседа по сокету: семейство=%s префикс=%s | x-real-ip=%s x-forwarded-for=%s | путь=%s | внутренний=%s форма-real=%s ветка=%s",
+    "[rateLimit] форма соседа по сокету: семейство=%s префикс=%s | x-real-ip=%s x-forwarded-for=%s x-vercel(ff/id/страна)=%s | путь=%s | внутренний=%s форма-real=%s ветка=%s",
     family,
     firstOctet || "?",
     real,
     xff,
+    vercel,
     where,
     internal,
     realShape,

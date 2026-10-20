@@ -538,6 +538,13 @@ function readViewFromUrl(): SavedView | null {
   }
 }
 
+/** Контейнер глобуса уже этого — компактный режим панелей, даже на широком окне.
+ *  Ноль ширины (контейнер ещё не размечен или скрыт) — не «узко». */
+export const УЗКИЙ_КОНТЕЙНЕР_PX = 640;
+export function узкийКонтейнер(ширина: number): boolean {
+  return ширина > 0 && ширина < УЗКИЙ_КОНТЕЙНЕР_PX;
+}
+
 export default function Globus3D({
   projects,
   qrightObjects,
@@ -665,13 +672,26 @@ export default function Globus3D({
   useEffect(() => {
     isNarrowRef.current = isNarrow;
   }, [isNarrow]);
+  // Узко — по окну ИЛИ по самому контейнеру. 20.10.2026, замер главной на проде
+  // (1463×724, globus-kadr.mjs): глобус стоит в липкой колонке 418 px, по окну он
+  // «широкий», и поверх холста рисовались все четыре панели (легенда, топ стран,
+  // экосистема, слои) — сам глобус почти не был виден.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const mq = window.matchMedia("(max-width: 600px)");
-    const apply = () => setIsNarrow(mq.matches);
+    const el = containerRef.current;
+    const apply = () => {
+      const ширина = el?.getBoundingClientRect().width ?? Infinity;
+      setIsNarrow(mq.matches || узкийКонтейнер(ширина));
+    };
     apply();
     mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
+    const ro = typeof ResizeObserver !== "undefined" && el ? new ResizeObserver(apply) : null;
+    if (ro && el) ro.observe(el);
+    return () => {
+      mq.removeEventListener("change", apply);
+      ro?.disconnect();
+    };
   }, []);
   const markerMeshesRef = useRef<
     Array<{

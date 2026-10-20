@@ -30,6 +30,7 @@ import { rateLimit } from "../lib/rateLimit";
 import { callProvider, getProviders, resolveProvider } from "../services/qcoreai/providers";
 import { verifyBearerOptional } from "../lib/authJwt";
 import { safeErrorText } from "../lib/safeError";
+import { нашВнутреннийАдрес } from "../lib/planGate";
 
 export const psyappDepsRouter = Router();
 
@@ -225,12 +226,35 @@ async function dbListTriggers(alias: string, limit: number, offset: number): Pro
   }));
 }
 
+/**
+ * Псевдоним пробы или владелец с нашим адресом — не человек из комьюнити.
+ * Признаки — тот же источник, что у /api/stats/users: нашВнутреннийАдрес из planGate
+ * для почты владельца и слова пробы в псевдониме. 20.10.2026 (слово Оркестратора):
+ * публичное «24 в комьюнити» считало пробы наравне с людьми.
+ * Ограничение: гостевую пробу со случайным псевдонимом (user-xxxx) не отличить — приборы
+ * обязаны давать псевдоним probe-…
+ */
+export function пробаPsyApp(alias: string, ownerEmail: string | null | undefined): boolean {
+  if (/^(smoke|probe|test|qa)[-_]/i.test(alias)) return true;
+  return нашВнутреннийАдрес(ownerEmail);
+}
+
+/*
+ * «Средний streak» снят со всех поверхностей (20.10.2026, слово Оркестратора): считался как
+ * AVG(NOW() − streak_start_at) по ВСЕМ аккаунтам, а серия сбрасывается только кнопкой
+ * «Я сорвался» — брошенный аккаунт «удлинял серию» каждый день, и публичные «118d»
+ * мерили заброшенность, а не успех. Вернуть — только по активным (поле последней активности).
+ */
 async function dbStats(): Promise<{
   total_users: number;
   top_trigger_type: TriggerType | null;
-  avg_streak_days: number;
 }> {
-  const usersR = await pool.query(`SELECT COUNT(*)::int AS total FROM psyapp_users`);
+  const usersR = await pool.query(
+    `SELECT u.alias, a."email" AS owner_email
+       FROM psyapp_users u
+       LEFT JOIN "AEVIONUser" a ON a."id" = u.owner_user_id`,
+  );
+  const люди = (usersR.rows as Array<{ alias: string; owner_email: string | null }>).filter((r) => !пробаPsyApp(r.alias, r.owner_email));
   const topR = await pool.query(
     `SELECT trigger_type, COUNT(*)::int AS cnt
      FROM psyapp_triggers
@@ -238,14 +262,9 @@ async function dbStats(): Promise<{
      ORDER BY cnt DESC
      LIMIT 1`
   );
-  const streakR = await pool.query(
-    `SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (NOW() - streak_start_at)) / 86400), 0)::float AS avg_days
-     FROM psyapp_users`
-  );
   return {
-    total_users: Number(usersR.rows[0]?.total ?? 0),
+    total_users: люди.length,
     top_trigger_type: (topR.rows[0]?.trigger_type as TriggerType | undefined) ?? null,
-    avg_streak_days: Math.round(Number(streakR.rows[0]?.avg_days ?? 0) * 10) / 10,
   };
 }
 
@@ -306,18 +325,14 @@ function memListTriggers(alias: string, limit: number, offset: number): TriggerR
     .slice(offset, offset + limit);
 }
 
-function memStats(): { total_users: number; top_trigger_type: TriggerType | null; avg_streak_days: number } {
+function memStats(): { total_users: number; top_trigger_type: TriggerType | null } {
   const counts: Record<string, number> = {};
   for (const t of memTriggers) counts[t.trigger_type] = (counts[t.trigger_type] || 0) + 1;
   const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] as TriggerType | undefined;
-  const users = Array.from(memUsers.values());
-  const avg = users.length
-    ? users.reduce((s, u) => s + streakDays(u.streak_start_at), 0) / users.length
-    : 0;
+  const users = Array.from(memUsers.values()).filter((u) => !пробаPsyApp(u.alias, null));
   return {
     total_users: users.length,
     top_trigger_type: top ?? null,
-    avg_streak_days: Math.round(avg * 10) / 10,
   };
 }
 

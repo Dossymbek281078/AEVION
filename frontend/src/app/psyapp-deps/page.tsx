@@ -344,7 +344,7 @@ const styles: Record<string, React.CSSProperties> = {
 };
 
 function CommunityStatsRow() {
-  const [stats, setStats] = useState<{ total_users: number; avg_streak_days: number; top_trigger_type: string | null } | null>(null);
+  const [stats, setStats] = useState<{ total_users: number; top_trigger_type: string | null } | null>(null);
   useEffect(() => {
     let cancelled = false;
     fetch(apiUrl("/api/psyapp-deps/stats"), { cache: "no-store" })
@@ -367,7 +367,7 @@ function CommunityStatsRow() {
   return (
     <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap", marginTop: 20 }}>
       <div style={cellStyle}><div style={valStyle}>{stats.total_users.toLocaleString()}</div><div style={labStyle}>в комьюнити</div></div>
-      <div style={cellStyle}><div style={valStyle}>{Math.round(stats.avg_streak_days)}d</div><div style={labStyle}>средний streak</div></div>
+      {/* «Средний streak» снят 20.10.2026: считался по всем аккаунтам, включая брошенные — мерил заброшенность. */}
       {stats.top_trigger_type && (
         <div style={cellStyle}><div style={valStyle}>{stats.top_trigger_type}</div><div style={labStyle}>топ-триггер</div></div>
       )}

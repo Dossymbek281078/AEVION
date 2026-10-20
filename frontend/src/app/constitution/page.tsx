@@ -504,6 +504,13 @@ export default function ConstitutionPage() {
 
   useEffect(() => {
     try {
+      // Глубокая ссылка (?country= / ?artifact=) — явное намерение, черновик её не перетирает.
+      // 20.10.2026, путь гостя на проде: онбординг → «США» → «Открыть редактор» →
+      // /constitution?country=us показывал ползунки по умолчанию и «Поздний феодализм»:
+      // первый заход на /constitution (до перенаправления на /welcome) успевал записать
+      // черновик по умолчанию, и этот эффект, объявленный ниже эффекта ссылки, побеждал.
+      const sp = new URLSearchParams(window.location.search);
+      if (sp.has("country") || sp.has("artifact")) return;
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<Sliders>;

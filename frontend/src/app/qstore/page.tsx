@@ -147,7 +147,6 @@ function ProductCard({
         )}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
           <CategoryBadge category={product.category} />
-          <span style={{ fontSize: 11, color: "#94a3b8" }}>{product.salesCount} sales</span>
         </div>
         <div style={{ fontWeight: 700, fontSize: compact ? 14 : 15, color: "#0f172a", lineHeight: 1.3 }}>
           {product.title}
@@ -173,6 +172,16 @@ function ProductCard({
           >
             {priceLabel(product.price, product.currency)}
           </span>
+          {/* 20.10.2026: у платных товаров кассы нет (503 no_payment_provider) — вместо «Buy»
+              ведём на страницу товара, где форма «Payment soon — leave your email» (QStoreNotify). */}
+          {product.price > 0 ? (
+            <span
+              data-qstore-payment-soon
+              style={{ padding: compact ? "5px 12px" : "7px 16px", borderRadius: 8, background: "#f1f5f9", color: "#475569", fontWeight: 700, fontSize: compact ? 12 : 13 }}
+            >
+              Payment soon — leave your email
+            </span>
+          ) : (
           <button
             onClick={(e) => {
               e.preventDefault();
@@ -207,6 +216,7 @@ function ProductCard({
           >
             {product.price === 0 ? "Get free" : "Buy"}
           </button>
+          )}
         </div>
       </div>
     </Link>

@@ -93,7 +93,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const titleLine = clip(`${product.title} — ${price} on AEVION QStore`, 60);
   const desc = clip(
     product.description ||
-      `${product.category} on AEVION QStore. ${product.salesCount} sales. Digital delivery.`,
+      `${product.category} on AEVION QStore. Digital delivery.`,
     158
   );
 

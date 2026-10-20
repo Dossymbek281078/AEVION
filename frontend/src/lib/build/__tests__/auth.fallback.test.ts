@@ -12,16 +12,16 @@
  * платформенный JWT тем же `verifyBearerOptional` и тем же секретом.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { getAuthToken, useBuildAuth } from "../auth";
+import { getAuthToken, useBuildAuth, принятьПлатформеннуюСессию } from "../auth";
 import { setAuthToken, clearAuthToken } from "@/lib/auth";
 
 beforeEach(() => {
-  useBuildAuth.setState({ token: null, user: null });
+  useBuildAuth.setState({ token: null, user: null, fromPlatform: false });
   clearAuthToken();
 });
 
 afterEach(() => {
-  useBuildAuth.setState({ token: null, user: null });
+  useBuildAuth.setState({ token: null, user: null, fromPlatform: false });
   clearAuthToken();
 });
 
@@ -44,5 +44,34 @@ describe("QBuild getAuthToken", () => {
   it("мёртвый литерал build_token сессией не считается", () => {
     localStorage.setItem("build_token", "stale-garbage");
     expect(getAuthToken()).toBeNull();
+  });
+});
+
+describe("вход AEVION пускает в экраны QBuild (20.10.2026)", () => {
+  const я = { id: "u1", email: "a@mail.kz", name: "A", role: "USER" };
+  it("вошедший на платформе получает сессию QBuild — без второй формы", async () => {
+    setAuthToken("platform-jwt");
+    await принятьПлатформеннуюСессию(async () => ({ user: я }));
+    expect(useBuildAuth.getState()).toMatchObject({ token: "platform-jwt", user: я, fromPlatform: true });
+  });
+  it("своя сессия QBuild не перетирается платформенной", async () => {
+    setAuthToken("platform-jwt");
+    useBuildAuth.setState({ token: "build-own-jwt", user: я, fromPlatform: false });
+    await принятьПлатформеннуюСессию(async () => { throw new Error("не должен звать"); });
+    expect(useBuildAuth.getState().token).toBe("build-own-jwt");
+  });
+  it("вышел из AEVION — принятая сессия пропадает", async () => {
+    useBuildAuth.setState({ token: "platform-jwt", user: я, fromPlatform: true });
+    await принятьПлатформеннуюСессию(async () => ({ user: я }));
+    expect(useBuildAuth.getState()).toMatchObject({ token: null, user: null, fromPlatform: false });
+  });
+  it("протухший платформенный токен (401) не делает вид, что вошли", async () => {
+    setAuthToken("expired-jwt");
+    await принятьПлатформеннуюСессию(async () => { throw Object.assign(new Error("unauthorized"), { status: 401 }); });
+    expect(useBuildAuth.getState().token).toBeNull();
+  });
+  it("без входа никуда ничего не пишется", async () => {
+    await принятьПлатформеннуюСессию(async () => ({ user: я }));
+    expect(useBuildAuth.getState().token).toBeNull();
   });
 });

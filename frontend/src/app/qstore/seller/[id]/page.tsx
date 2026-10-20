@@ -265,9 +265,6 @@ export default function QStoreSellerProfilePage() {
                   {productCount === 1 ? "product" : "products"}
                 </span>
                 <span style={{ color: "#cbd5e1" }}>·</span>
-                <span>
-                  <span style={{ fontWeight: 700, color: "#374151" }}>{profile.totalSales}</span> total sales
-                </span>
                 {profile.avgRating > 0 && (
                   <>
                     <span style={{ color: "#cbd5e1" }}>·</span>
@@ -304,10 +301,11 @@ export default function QStoreSellerProfilePage() {
                 padding: "16px 18px",
               }}
             >
+              {/* «Total sales» снят 20.10.2026: при закрытой оплате счётчик продаж всегда 0 и работает против. */}
               <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
-                Total sales
+                Payment
               </div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: "#0f172a" }}>{profile.totalSales}</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#475569" }}>Opens soon</div>
             </div>
             <div
               style={{
@@ -403,9 +401,6 @@ export default function QStoreSellerProfilePage() {
                       }}
                     >
                       {p.title}
-                    </div>
-                    <div style={{ marginTop: "auto", fontSize: 12, color: "#94a3b8" }}>
-                      {p.salesCount} {p.salesCount === 1 ? "sale" : "sales"}
                     </div>
                   </Link>
                 );

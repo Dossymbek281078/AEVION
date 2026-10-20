@@ -7,6 +7,7 @@ import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { ProductPageShell } from "@/components/ProductPageShell";
 import { apiUrl } from "@/lib/apiBase";
+import { QStoreNotify } from "../QStoreNotify";
 
 interface Product {
   id: string;
@@ -322,7 +323,6 @@ export default function QStoreItemPage() {
                     <span>({reviewCount} {reviewCount === 1 ? "review" : "reviews"})</span>
                   </span>
                 )}
-                <span style={{ fontSize: 13, color: "#94a3b8" }}>· {product.salesCount} sales</span>
               </div>
 
               {product.description && (
@@ -387,6 +387,9 @@ export default function QStoreItemPage() {
                   Listed {new Date(product.createdAt).toLocaleDateString()}
                 </div>
 
+                {product.price > 0 ? (
+                  <QStoreNotify productId={product.id} productTitle={product.title} />
+                ) : (
                 <button
                   onClick={handlePurchase}
                   disabled={purchasing}
@@ -409,6 +412,7 @@ export default function QStoreItemPage() {
                 >
                   {purchasing ? "Processing..." : product.price === 0 ? "Get free" : "Buy now"}
                 </button>
+                )}
 
                 <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 14, fontSize: 13, color: "#64748b" }}>
                   <div style={{ marginBottom: 6 }}>
@@ -419,10 +423,6 @@ export default function QStoreItemPage() {
                     >
                       {product.sellerId.slice(0, 12)}…
                     </Link>
-                  </div>
-                  <div style={{ marginBottom: 10 }}>
-                    <span style={{ color: "#94a3b8" }}>Sales:</span>{" "}
-                    <span style={{ fontWeight: 600, color: "#374151" }}>{product.salesCount}</span>
                   </div>
                   <Link
                     href={`/qstore/seller/${encodeURIComponent(product.sellerId)}`}

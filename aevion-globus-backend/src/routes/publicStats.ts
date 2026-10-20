@@ -216,23 +216,21 @@ export interface ЗаявкиПоИсточнику {
 export async function заявкиПоИсточнику(): Promise<ЗаявкиПоИсточнику> {
   const наМомент = new Date().toISOString();
   try {
+    // Построчно, как у учёток: наши адреса решает нашВнутреннийАдрес (ящики
+    // основателя по хешу, e2e, primer.ru) — второй список на SQL разошёлся бы молча.
     const { rows } = await pool.query(
       `SELECT COALESCE(NULLIF("source", ''), 'unknown') AS источник,
-              COUNT(*) FILTER (WHERE NOT ${ПРОБА_ЗАЯВКИ})::int AS люди,
-              COUNT(*) FILTER (WHERE ${ПРОБА_ЗАЯВКИ})::int     AS пробы
-         FROM constitution_waitlist
-        GROUP BY 1
-        ORDER BY 2 DESC, 1 ASC`,
+              "email",
+              (${ПРОБА_ЗАЯВКИ}) AS проба_по_слову
+         FROM constitution_waitlist`,
     );
     const поИсточнику: Record<string, { люди: number; пробы: number }> = {};
     let людиВсего = 0;
     let пробыВсего = 0;
-    for (const r of rows) {
-      const люди = Number(r.люди ?? 0);
-      const пробы = Number(r.пробы ?? 0);
-      поИсточнику[String(r.источник)] = { люди, пробы };
-      людиВсего += люди;
-      пробыВсего += пробы;
+    for (const r of rows as any[]) {
+      const к = (поИсточнику[String(r.источник)] ??= { люди: 0, пробы: 0 });
+      if (r.проба_по_слову === true || нашВнутреннийАдрес(r.email)) { к.пробы += 1; пробыВсего += 1; }
+      else { к.люди += 1; людиВсего += 1; }
     }
     return { измерено: true, поИсточнику, итого: { люди: людиВсего, пробы: пробыВсего }, наМомент };
   } catch (e) {

@@ -147,8 +147,8 @@ const RU: Record<string, string> = {
   "on any machine, any year, no AEVION required.": "на любой машине, в любом году, без AEVION.",
   "This is the proof that survives us.": "Это доказательство переживёт нас.",
   "Save your Author Shard": "Сохраните Долю автора",
-  "(orange panel above) — store it offline alongside the bundle. AEVION holds at most 1 of 3 shards; without yours, no rogue platform action can forge a recovery.":
-    "(оранжевая панель выше) — храните офлайн рядом с пакетом. У AEVION не больше 1 доли из 3; без вашей никакое действие платформы не подделает восстановление.",
+  "(orange panel above) — store it offline alongside the bundle. AEVION keeps 2 of the 3 shards, so your Author Shard is the only copy outside AEVION: with it you can recover without us. What AEVION can never forge is your author co-signature.":
+    "(оранжевая панель выше) — храните её офлайн рядом с пакетом. У AEVION 2 доли из 3, поэтому ваша авторская доля — единственная копия вне AEVION: с ней вы восстановите ключ без нас. Чего AEVION не подделает никогда — вашу авторскую со-подпись.",
   "Share the verify link": "Поделитесь ссылкой проверки",
   "— the public page shows every integrity check, the Bitcoin anchor status, and the legal basis.": "— публичная страница показывает все проверки целостности, статус якоря в Bitcoin и правовую основу.",
   "Print the PDF": "Распечатайте PDF",

@@ -23,6 +23,8 @@
  */
 import { Router, type Request, type Response } from "express";
 import { getPool } from "../lib/dbPool";
+import { нашВнутреннийАдрес } from "../lib/planGate";
+import { видОтправителя } from "./events";
 
 export const publicStatsRouter = Router();
 
@@ -108,27 +110,53 @@ export interface СчётПользователей {
   почему?: string;
 }
 
+/**
+ * Учётка заведена роботом: строка браузера при регистрации — наша проба,
+ * Headless-сборка, известный обходчик (тот же признак, что у воронки) или
+ * голый Node: встроенный fetch представляется «node»/«undici», человек в
+ * браузере так не выглядит.
+ */
+export function регистрацияРоботом(ua: string | null | undefined): boolean {
+  const u = String(ua ?? "").trim();
+  if (!u) return false;
+  return видОтправителя(u) !== null || /^(node|undici)\b/i.test(u);
+}
+
+/**
+ * 🔴 20.10.2026 (Оркестратор, замер Почты): «люди за 7 дней» = 2, и оба —
+ * наши демо-аккаунты. Прежний признак ПРОБА не знал @aevion.app,
+ * @aevion-probe.invalid, @example.test, префикс qa- и регистрацию из Node/
+ * Headless. Списки адресов здесь НЕ копируются: решает нашВнутреннийАдрес из
+ * planGate (тот же, что отделяет наши оплаты), строку браузера — признак
+ * воронки. Поэтому счёт идёт по строкам, а не COUNT в SQL: второй список
+ * доменов на SQL разошёлся бы с первым молча.
+ */
 export async function счётЗарегистрированных(): Promise<СчётПользователей> {
   const наМомент = new Date().toISOString();
   try {
     const { rows } = await pool.query(
-      `SELECT
-         COUNT(*) FILTER (WHERE NOT ${ПРОБА})::int                                            AS люди_всего,
-         COUNT(*) FILTER (WHERE NOT ${ПРОБА} AND "createdAt" >= NOW() - INTERVAL '1 day')::int  AS люди_сутки,
-         COUNT(*) FILTER (WHERE NOT ${ПРОБА} AND "createdAt" >= NOW() - INTERVAL '7 days')::int AS люди_неделя,
-         COUNT(*) FILTER (WHERE ${ПРОБА})::int                                                AS пробы_всего
-       FROM "AEVIONUser"
-       WHERE "deletedAt" IS NULL`,
+      `SELECT u."email",
+              (${ПРОБА}) AS проба_по_слову,
+              (u."createdAt" >= NOW() - INTERVAL '1 day')  AS за_сутки,
+              (u."createdAt" >= NOW() - INTERVAL '7 days') AS за_неделю,
+              (SELECT a."userAgent" FROM "AuthAuditLog" a
+                WHERE a."userId" = u."id" AND a."action" = 'register'
+                ORDER BY a."at" ASC LIMIT 1) AS ua
+         FROM "AEVIONUser" u
+        WHERE u."deletedAt" IS NULL`,
     );
-    const r = rows[0] ?? {};
+    let всего = 0, сутки = 0, неделя = 0, пробы = 0;
+    for (const r of rows as any[]) {
+      const проба = r.проба_по_слову === true || нашВнутреннийАдрес(r.email) || регистрацияРоботом(r.ua);
+      if (проба) { пробы += 1; continue; }
+      всего += 1;
+      if (r.за_сутки === true) сутки += 1;
+      if (r.за_неделю === true) неделя += 1;
+    }
     return {
       измерено: true,
-      люди: {
-        всего: Number(r.люди_всего ?? 0),
-        заСегодня: Number(r.люди_сутки ?? 0),
-        за7дней: Number(r.люди_неделя ?? 0),
-      },
-      пробы: { всего: Number(r.пробы_всего ?? 0) },
+      люди: { всего, заСегодня: сутки, за7дней: неделя },
+      пробы: { всего: пробы },
       наМомент,
     };
   } catch (e) {

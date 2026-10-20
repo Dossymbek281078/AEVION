@@ -216,13 +216,13 @@ export const projects: GlobusProject[] = [
   {
     id: "qlife",
     code: "QLIFE",
-    name: "QLife — долголетие и анти-эйджинг",
+    name: "QLife — долголетие и здоровые привычки",
     description:
-      "Longevity and anti-aging scenarios: biomarker logging, protocols, links to QPersona and HealthAI. Renamed 2026-09-22 — the catalog said Personal OS while the page says «Живи дольше, старей медленнее»; description now follows the page. https://aevion.app/qlife, /api/qlife.",
+      "Longevity and healthy-habit scenarios: biomarker logging, protocols, links to QPersona and HealthAI. Renamed 2026-09-22 — the catalog said Personal OS while the page says «Биомаркеры и привычки — по данным, а не на глаз»; description now follows the page. https://aevion.app/qlife, /api/qlife.",
     kind: "product",
     status: "live",
     priority: 2,
-    tags: ["health", "longevity", "anti-aging"],
+    tags: ["health", "longevity", "habits"],
     createdAt: now,
     updatedAt: now,
   },
@@ -236,9 +236,9 @@ export const projects: GlobusProject[] = [
   {
     id: "qmelanin",
     code: "QMELANIN",
-    name: "QMelanin — протокол против седины",
+    name: "QMelanin — седина по исследованиям",
     description:
-      "Anti-greying protocol: lab markers to nutrition plan. Informational, not medical advice. In every paid tier, no standalone price.",
+      "Grey hair by the evidence: lab markers to a nutrition plan. Informational, not medical advice; results not guaranteed. In every paid tier, no standalone price.",
     kind: "product",
     // В ЭТОМ реестре словаря "beta" нет (см. GlobusProjectStatus): соседи,
     // помеченные БЕТА в прайсе — qgood, psyapp-deps, veilnetx — стоят здесь
@@ -252,9 +252,9 @@ export const projects: GlobusProject[] = [
   {
     id: "qrenew",
     code: "QRENEW",
-    name: "QRenew — клеточное обновление",
+    name: "QRenew — биологический возраст",
     description:
-      "Cellular renewal: biological age plus protocol stack. Informational, not medical advice. In every paid tier, no standalone price.",
+      "Biological age (PhenoAge) plus an evidence-graded stack. Informational, not medical advice; results not guaranteed. In every paid tier, no standalone price.",
     kind: "product",
     // В ЭТОМ реестре словаря "beta" нет (см. GlobusProjectStatus): соседи,
     // помеченные БЕТА в прайсе — qgood, psyapp-deps, veilnetx — стоят здесь

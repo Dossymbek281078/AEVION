@@ -1466,7 +1466,7 @@ app.use("/api/qstore", qstoreRouter);
 app.use("/api/qlearn", qlearnRouter);
 // QMelanin — anti-graying engine (deterministic, DB-free)
 app.use("/api/qmelanin", qmelaninRouter);
-// QRenew — cellular-renewal program (biological age + tiered stack)
+// QRenew — biological age (PhenoAge) + evidence-graded stack
 app.use("/api/qrenew", qrenewRouter);
 // Longevity — measure→act→re-measure protocol engine (panel + graded stack + progress)
 app.use("/api/longevity", longevityRouter);

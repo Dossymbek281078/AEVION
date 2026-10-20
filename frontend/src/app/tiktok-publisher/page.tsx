@@ -297,7 +297,7 @@ export default function TikTokPublisherPage() {
                 <label className="ttp-label">Видео (публичный URL, .mp4)</label>
                 <input
                   className="ttp-input"
-                  placeholder="https://.../AEVIA-Roots-firstgrey-9x16.mp4"
+                  placeholder="https://.../video-9x16.mp4"
                   value={videoUrl}
                   onChange={(e) => setVideoUrl(e.target.value)}
                 />
@@ -320,7 +320,7 @@ export default function TikTokPublisherPage() {
                 <textarea
                   className="ttp-input ttp-textarea"
                   maxLength={2200}
-                  placeholder="Первый седой в 25… а зря. AEVIA Roots — ссылка в профиле."
+                  placeholder="Подпись к ролику. Продукт без кассы — пишите «в разработке», без обещаний результата."
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                 />

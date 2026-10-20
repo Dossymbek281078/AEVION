@@ -724,19 +724,19 @@ export const MODULES_PRICING: ModulePrice[] = [
   // будет, лишнюю форму надо убрать, а не оставлять обе.
   {
     id: "qmelanin",
-    name: "QMelanin — протокол против седины",
+    name: "QMelanin — седина по исследованиям",
     addonMonthly: null,
     includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "beta",
-    oneLiner: "Протокол против седины: анализы → питание (информационно)",
+    oneLiner: "Седина по исследованиям: анализы → питание (информационно, результат не гарантирован)",
   },
   {
     id: "qrenew",
-    name: "QRenew — клеточное обновление",
+    name: "QRenew — биологический возраст",
     addonMonthly: null,
     includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "beta",
-    oneLiner: "Клеточное обновление: биовозраст + стек (информационно)",
+    oneLiner: "Биологический возраст + стек по доказательности (информационно, результат не гарантирован)",
   },
   {
     id: "smeta-trainer",
@@ -785,7 +785,7 @@ export const MODULES_PRICING: ModulePrice[] = [
     addonMonthly: null,
     includedIn: ["lite", "medium", "pro", "full", "max", "enterprise"],
     availability: "beta",
-    oneLiner: "Долголетие и анти-эйджинг сценарии",
+    oneLiner: "Долголетие и здоровые привычки",
   },
   {
     id: "qgood",

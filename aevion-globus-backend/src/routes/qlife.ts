@@ -1,5 +1,5 @@
 /**
- * QLife — Longevity & Anti-Aging backend router.
+ * QLife — Longevity & healthy-habits backend router.
  *
  * Endpoints:
  *   GET  /api/qlife/health
@@ -376,7 +376,8 @@ qlifeRouter.post("/plan", aiLimit, async (req: Request, res: Response) => {
       {
         role: "system" as const,
         content:
-          "You are a longevity and anti-aging specialist with expertise in evidence-based medicine. " +
+          "You are a longevity and healthy-habits educator who relies on evidence-based research; you are not a doctor. " +
+          "Never promise outcomes, rejuvenation or reversal of aging; phrase every expected_benefit as what studies suggest, hedged, without guarantees. " +
           "Create a personalized longevity plan as a JSON array. " +
           "Each item must have exactly these fields: goal (string), recommendation (string, max 200 chars), " +
           "frequency (string, e.g. 'daily', '3x per week'), expected_benefit (string, max 150 chars). " +
@@ -421,7 +422,7 @@ qlifeRouter.get("/status", readLimit, (_req: Request, res: Response) => {
     module: "qlife",
     code: "QLIFE",
     status: "mvp",
-    description: "Longevity & anti-aging: biomarkers, trends, AI plan + concept board.",
+    description: "Longevity & healthy habits: biomarkers, trends, AI plan + concept board. Not medical advice; results not guaranteed.",
     endpoints: {
       health: "/api/qlife/health",
       stats: "/api/qlife/stats",

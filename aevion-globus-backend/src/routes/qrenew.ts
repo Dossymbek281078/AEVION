@@ -1,12 +1,12 @@
 import { Router, Request, Response } from "express";
 
 /**
- * AEVION QRenew — cellular-renewal program engine.
+ * AEVION QRenew — biological age + evidence-graded stack engine.
  *
  * Thesis: graying is a visible, non-invasive biomarker of systemic stem-cell /
  * mitochondrial aging (Nature 2023 — McSC stall in the niche, lose MITF, ROS from
  * mitochondrial dysfunction → apoptosis). So the anti-graying targets ARE the
- * anti-aging targets. This engine:
+ * same research targets. 20.10.2026: no body-effect promises on any surface. This engine:
  *   - computes a phenotypic (biological) age from routine labs (Levine 2018 PhenoAge),
  *   - generates an evidence-tiered intervention stack (A/B proposed, C/D info-only),
  *   - maps the 12 hallmarks of aging to the 4 we act on.
@@ -32,7 +32,7 @@ const DISCLAIMER =
 const HALLMARKS = [
   { name: "Митохондриальная дисфункция", targeted: true },
   { name: "Отключение аутофагии", targeted: true },
-  { name: "Истощение стволовых клеток", targeted: true },
+  { name: "Истощение стволовых клеток", targeted: true }, // научное название признака (López-Otín и др., Cell 2023), не обещание
   { name: "Клеточная сенесценция", targeted: true },
   { name: "Эпигенетические изменения", targeted: false },
   { name: "Хроническое воспаление", targeted: false },
@@ -191,7 +191,7 @@ qrenewRouter.post("/bioage", (req: Request, res: Response) => {
     ageDelta: delta,
     interpretation:
       delta <= -1
-        ? "Биологический возраст ниже паспортного — клеточное здоровье выше среднего для возраста."
+        ? "Биологический возраст по PhenoAge ниже паспортного. Это оценка по анализам, не диагноз."
         : delta >= 1
         ? "Биологический возраст выше паспортного — есть куда улучшать; программа Tier A+B в приоритете."
         : "Биологический возраст примерно равен паспортному.",

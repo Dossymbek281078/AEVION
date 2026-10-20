@@ -23,7 +23,7 @@ async function fetchProject(id: string) {
         city?: string | null;
         status: string;
       };
-      vacancies?: { id: string }[];
+      vacancies?: { id: string; status?: string }[];
     } | null;
     return d ?? null;
   } catch {
@@ -47,7 +47,8 @@ export default async function ProjectOgImage({
       : "Budget TBD";
   const city = p?.city ?? "";
   const status = p?.status ?? "OPEN";
-  const vacancyCount = data?.vacancies?.length ?? 0;
+  // «N roles open» — только открытые (20.10.2026: закрытые тоже считались).
+  const vacancyCount = (data?.vacancies ?? []).filter((v) => v.status === "OPEN").length;
   const accent =
     status === "OPEN" ? "#10b981" : status === "IN_PROGRESS" ? "#0ea5e9" : "#64748b";
 

@@ -89,7 +89,9 @@ projectsRouter.get("/", async (req, res) => {
 
     const result = await pool.query(
       `SELECT p.*,
-              (SELECT COUNT(*) FROM "BuildVacancy" v WHERE v."projectId" = p."id")::int AS "vacancyCount"
+              -- 20.10.2026: только ОТКРЫТЫЕ. Карточка подписывает число как «N вакансии» у «Открыт»,
+              -- а считались и закрытые: на проде 5 проектов «2 вакансии» при 0 открытых из 10.
+              (SELECT COUNT(*) FROM "BuildVacancy" v WHERE v."projectId" = p."id" AND v."status" = 'OPEN')::int AS "vacancyCount"
        FROM "BuildProject" p
        ${joinUser}
        ${where}

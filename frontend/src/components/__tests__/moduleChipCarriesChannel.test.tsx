@@ -1,3 +1,5 @@
+// 20.10.2026 (окно «Приложения»): якорь подписки — кнопка оплаты Планеты (/pricing#planet-buy), не верх блока #tiers:
+// тарифы приходят после загрузки, и верхний якорь не крутил вовсе — см. lib/products.ts (PRICING_TERMS).
 import { describe, test, expect, beforeEach, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 
@@ -8,7 +10,7 @@ import { render, screen, waitFor } from "@testing-library/react";
  * вела в кассу без метки, хотя вебхук читает канал с 19.08.
  *
  * 15.09.2026 — новая ценовая политика: кнопка ведёт не в кассу напрямую, а к
- * выбору срока (/pricing?app=<slug>#apps для пяти приложений, /pricing#tiers для
+ * выбору срока (/pricing?app=<slug>#apps для пяти приложений, /pricing#planet-buy для
  * остальных модулей). Страница цен читает короткую метку ?c= и доводит её до
  * кассы — поэтому метка обязана стоять ДО хеша.
  *
@@ -58,7 +60,7 @@ describe("кнопка модуля несёт метку канала к выб
 
   test("модуль вне пяти: ведёт к подписке, с меткой", async () => {
     at("?c=tg");
-    await waitFor(async () => expect(await buyHref("qlearn")).toBe("/pricing?c=tg#tiers"));
+    await waitFor(async () => expect(await buyHref("qlearn")).toBe("/pricing?c=tg#planet-buy"));
   });
 
   test("без метки адрес чистый", async () => {
@@ -67,6 +69,6 @@ describe("кнопка модуля несёт метку канала к выб
 
   test("выдуманная метка не уезжает", async () => {
     at("?c=zzzz");
-    expect(await buyHref("qlearn")).toBe("/pricing#tiers");
+    expect(await buyHref("qlearn")).toBe("/pricing#planet-buy");
   });
 });

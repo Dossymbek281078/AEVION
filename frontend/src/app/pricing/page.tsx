@@ -588,6 +588,25 @@ export default function PricingPage() {
     return () => { cancelled = true; };
   }, []);
 
+  /* 20.10.2026 (окно «Приложения», QSign 1б): тарифы приходят с /api/pricing ПОСЛЕ загрузки, и якорь из
+     адреса (#tiers, #planet-buy) не срабатывал — замер на проде 20.10 08:5x: scrollY=0 на 5 парах окон,
+     «Купить» с /qsign оставлял человека на верху страницы, кнопка оплаты в 1,1 тыс. px ниже. Прокрутка —
+     после прихода данных; #planet-buy ставит кнопку оплаты у нижнего края кадра (block: "end"), чтобы над
+     ней была видна цена; #tiers — верх блока, как и задумано. Хеш читается один раз на приход данных. */
+  useEffect(() => {
+    if (!data || typeof window === "undefined") return;
+    const hash = window.location.hash;
+    if (hash !== "#tiers" && hash !== "#planet-buy") return;
+    const el = document.getElementById(hash.slice(1));
+    if (!el) return;
+    el.scrollIntoView({ block: hash === "#planet-buy" ? "end" : "start" });
+  }, [data]);
+  /** Тариф, чья кнопка оплаты несёт якорь #planet-buy: выделенный (highlight), иначе первый платный. */
+  const якорныйТариф =
+    data?.tiers.find((t) => t.highlight === true)?.id ??
+    data?.tiers.find((t) => (t.priceMonthly ?? 0) > 0)?.id ??
+    null;
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -1571,6 +1590,7 @@ export default function PricingPage() {
                   </p>
                 )}
                 <button
+                  id={tier.id === якорныйТариф ? "planet-buy" : undefined}
                   disabled={checkingOut === tier.id || !продаётсяПомесячно(tier.id)}
                   style={{
                     width: "100%",
@@ -1588,6 +1608,8 @@ export default function PricingPage() {
                     color: isHighlight || tier.id !== "free" ? "#fff" : "#0f172a",
                     marginBottom: 8,
                     opacity: checkingOut === tier.id ? 0.7 : 1,
+                    // Якорь #planet-buy крутит к кнопке block: "end" — отступ от нижнего края кадра.
+                    scrollMarginBottom: 16,
                   }}
                   // Любой срок открывает всю планету: выбирать продукт больше не нужно.
                   // 19.10.2026: план списывается помесячно при обязательстве на срок.

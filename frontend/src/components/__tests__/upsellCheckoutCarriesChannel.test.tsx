@@ -1,3 +1,5 @@
+// 20.10.2026 (окно «Приложения»): якорь подписки — кнопка оплаты Планеты (/pricing#planet-buy), не верх блока #tiers:
+// тарифы приходят после загрузки, и верхний якорь не крутил вовсе — см. lib/products.ts (PRICING_TERMS).
 import { describe, test, expect, beforeEach, vi } from "vitest";
 import { render, fireEvent, screen } from "@testing-library/react";
 
@@ -8,7 +10,7 @@ import { render, fireEvent, screen } from "@testing-library/react";
  * на кассу без метки. Про НАЧАТУЮ оплату канал был известен, про ОПЛАЧЕННУЮ — нет.
  *
  * 15.09.2026 — новая ценовая политика: баннер продаёт не All-Access на Gumroad
- * (снят), а подписку AEVION на срок, и ведёт к выбору срока на /pricing#tiers.
+ * (снят), а подписку AEVION на срок, и ведёт к выбору срока на /pricing#planet-buy.
  * Метка едет короткой ?c= и обязана стоять ДО хеша: всё после `#` браузер
  * серверу не отправляет, и channelNow её бы не увидел.
  *
@@ -42,15 +44,15 @@ beforeEach(() => {
 describe("апселл уводит к выбору срока вместе с меткой канала", () => {
   test("метка из адреса доезжает, и стоит ДО хеша", () => {
     const url = goingTo("?c=tg");
-    expect(url, "кнопка увела не на страницу сроков").toBe("/pricing?c=tg#tiers");
+    expect(url, "кнопка увела не на страницу сроков").toBe("/pricing?c=tg#planet-buy");
   });
 
   test("без метки адрес остаётся прежним — пустых параметров не добавляем", () => {
-    expect(goingTo("")).toBe("/pricing#tiers");
+    expect(goingTo("")).toBe("/pricing#planet-buy");
   });
 
   test("выдуманная метка не уезжает", () => {
-    expect(goingTo("?c=zzzz")).toBe("/pricing#tiers");
+    expect(goingTo("?c=zzzz")).toBe("/pricing#planet-buy");
   });
 
   test("в снятый товар Gumroad кнопка больше не ведёт", () => {

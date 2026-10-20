@@ -13,7 +13,7 @@ import { predlagaemOtdelno } from "@/lib/neProdayotsyaOtdelno";
  *
  * ⚠️ 15.09.2026 — новая ценовая политика. Путь к оплате теперь двух видов:
  *   · прямая ссылка продавца (Gumroad) — гайды и книги, разовая покупка;
- *   · наша касса через страницу цен — подписка на всю планету (/pricing#tiers)
+ *   · наша касса через страницу цен — подписка на всю планету (/pricing#planet-buy)
  *     и пять отдельных приложений (/pricing?app=<slug>#apps).
  * Сторож исполняет настоящие объекты каталога, а не грепает исходник: цена и
  * адрес приложений вычисляются из лестницы сроков, литерала в файле нет.
@@ -23,7 +23,9 @@ import { predlagaemOtdelno } from "@/lib/neProdayotsyaOtdelno";
  */
 
 const EXTERNAL = /^https:\/\/aevion\.(gumroad\.com\/l\/|lemonsqueezy\.com\/checkout\/buy\/)[A-Za-z0-9-]{4,}/;
-const PRICING = /^\/pricing(\?app=[a-z_]+)?#(tiers|apps)$/;
+// 20.10.2026: подписка ведёт на #planet-buy — кнопку оплаты Планеты (верх блока #tiers не крутил,
+// пока тарифы грузятся с /api/pricing; см. lib/products.ts PRICING_TERMS).
+const PRICING = /^\/pricing(\?app=[a-z_]+)?#(tiers|planet-buy|apps)$/;
 
 describe("каждый товар каталога можно купить", () => {
   // Контроль охвата: пустой каталог ответил бы «нарушений нет».
@@ -56,6 +58,6 @@ describe("каждый товар каталога можно купить", () 
     expect(MODULES.map((m) => m.href).sort()).toEqual(
       STANDALONE_APPS.filter((a) => predlagaemOtdelno(a.slug)).map((a) => `/pricing?app=${a.slug}#apps`).sort(),
     );
-    expect(SUBSCRIPTIONS.map((s) => s.href)).toEqual(["/pricing#tiers"]);
+    expect(SUBSCRIPTIONS.map((s) => s.href)).toEqual(["/pricing#planet-buy"]);
   });
 });

@@ -130,7 +130,9 @@ describe("кнопки покупки ведут в кассу", () => {
 
   it("подписка ведёт к выбору срока, а не в снятый товар", () => {
     for (const s of SUBSCRIPTIONS) {
-      expect(s.href, `${s.id} ведёт не на страницу сроков`).toBe("/pricing#tiers");
+      // 20.10.2026: якорь — кнопка оплаты Планеты (#planet-buy), а не верх блока #tiers:
+      // тарифы приходят после загрузки, и верхний якорь не крутил вовсе (см. lib/products.ts).
+      expect(s.href, `${s.id} ведёт не на страницу сроков`).toBe("/pricing#planet-buy");
     }
     // Снятые подписки Gumroad (All-Access, Constitution Pro/Team) не вернулись.
     for (const retired of ["xpxzam", "pyiaz", "wjvquw"]) {

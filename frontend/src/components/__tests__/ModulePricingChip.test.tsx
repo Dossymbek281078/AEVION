@@ -1,3 +1,5 @@
+// 20.10.2026 (окно «Приложения»): якорь подписки — кнопка оплаты Планеты (/pricing#planet-buy), не верх блока #tiers:
+// тарифы приходят после загрузки, и верхний якорь не крутил вовсе — см. lib/products.ts (PRICING_TERMS).
 /**
  * Плашка цены на странице модуля называет цены ЛЕСТНИЦЫ СРОКОВ (политика
  * 15.09.2026) и ведёт туда, где их можно оплатить.
@@ -111,7 +113,7 @@ describe("ModulePricingChip — цены лестницы сроков", () => {
     expect(text).toContain("Входит в подписку AEVION");
     expect(text).toContain(`$${planetFromPerMonth()}`);
     expect(text).not.toContain("отдельно");
-    expect(screen.getByText("Купить").closest("a")!.getAttribute("href")).toBe("/pricing#tiers");
+    expect(screen.getByText("Купить").closest("a")!.getAttribute("href")).toBe("/pricing#planet-buy");
   });
 
   /*
@@ -135,7 +137,7 @@ describe("ModulePricingChip — цены лестницы сроков", () => {
     expect(text).toContain("Входит в подписку AEVION");
     expect(text, "на плашке осталась отдельная цена бюро").not.toContain("$32");
     expect(text, "бюро всё ещё подаётся как отдельный товар").not.toContain("IP Bureau");
-    expect(screen.getByText("Купить").closest("a")!.getAttribute("href")).toBe("/pricing#tiers");
+    expect(screen.getByText("Купить").closest("a")!.getAttribute("href")).toBe("/pricing#planet-buy");
   });
 
   it("снятые цены и имена тарифов на плашке не появляются", () => {

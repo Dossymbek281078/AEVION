@@ -135,13 +135,22 @@ const nextConfig: NextConfig = {
     ];
   },
 
+  // 🔴 20.10.2026: перезапись — в fallback, НЕ простым массивом. Массив = afterFiles, а он
+  // проверяется РАНЬШЕ динамических маршрутов: обработчик сайта app/api-backend/.../[id]/dispatch
+  // (несёт адрес гостя бэкенду по AEVION_EDGE_KEY) не вызывался — трата нормы шла прямо на бэк
+  // с адресом узла Vercel. Приёмка волны 2: новое устройство с того же адреса получало 2 из 2.
+  // fallback проверяется после всех маршрутов, статических и динамических. Сторож: guestProxyRoutesWin.
   async rewrites() {
-    return [
-      {
-        source: "/api-backend/:path*",
-        destination: `${backendProxyTarget}/:path*`,
-      },
-    ];
+    return {
+      beforeFiles: [],
+      afterFiles: [],
+      fallback: [
+        {
+          source: "/api-backend/:path*",
+          destination: `${backendProxyTarget}/:path*`,
+        },
+      ],
+    };
   },
 };
 

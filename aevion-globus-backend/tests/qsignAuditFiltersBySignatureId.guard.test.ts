@@ -93,12 +93,18 @@ describe("/audit?signatureId= — признак авторства для кн�
     const r = await спросить("?event=sign&limit=1&signatureId=sig-mine");
     expect(r.status).toBe(200);
     expect(r.body.items.map((x: any) => x.signatureId)).toEqual(["sig-mine"]);
+    expect(r.body.items[0].publicUrl).toBe("/qsign/verify/sig-mine");
   });
 
   it("чужая подпись по id — пусто, кнопки не будет", async () => {
     const r = await спросить("?event=sign&limit=1&signatureId=sig-other");
     expect(r.status).toBe(200);
     expect(r.body.items).toEqual([]);
+    expect(r.body.total).toBe(0);
+    // тело целиком: ни id чужой подписи, ни её издателя, ни своих подписей
+    expect(r.text).not.toContain("sig-other");
+    expect(r.text).not.toContain("user-other");
+    expect(r.text).not.toContain("sig-mine");
   });
 
   it("у владельца чужой подписи наоборот: своя есть, моя — нет", async () => {
@@ -115,5 +121,7 @@ describe("/audit?signatureId= — признак авторства для кн�
     a.use("/api/qsign/v2", qsignV2Router);
     const r = await request(a).get("/api/qsign/v2/audit?signatureId=sig-mine");
     expect(r.status).toBe(401);
+    expect(r.body.items).toBeUndefined();
+    expect(r.text).not.toContain("sig-mine");
   });
 });

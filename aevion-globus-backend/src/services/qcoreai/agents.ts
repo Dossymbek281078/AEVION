@@ -273,7 +273,10 @@ export function buildWriterB(
 ): AgentConfig | null {
   const localOnly = opts?.localOnly === true;
   const providers = getProviders().filter((p) => !localOnly || p.local);
-  const configuredOthers = providers.filter((p) => p.configured && p.id !== primary.provider);
+  // «Не в строю» (поставщик закрыл доступ — кончились деньги) пропускаем, как соседние
+  // сборщики ролей: иначе второй писатель уходит к закрытому поставщику, и параллельный
+  // режим падает целиком («Parallel writers failed»). 20.10.2026, разбор /qcoreai/multi.
+  const configuredOthers = providers.filter((p) => p.configured && p.id !== primary.provider && !isProviderOutOfService(p.id));
   const modelsFor = (p: { id: string; models: string[]; defaultModel: string }) => {
     const disc = opts?.localModels?.[p.id];
     return disc && disc.length ? disc : p.models;

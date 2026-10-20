@@ -6,6 +6,8 @@ import { notFound } from "next/navigation";
 import QRCode from "qrcode";
 import { getApiBase } from "@/lib/apiBase";
 import { CopyButton, ShareButton } from "./ClientBits";
+import { getServerLang } from "@/lib/i18n-server";
+import { tVerify, type VerifyKey } from "./i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -90,13 +92,14 @@ type Props = { params: Promise<{ id: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
+  const lang = await getServerLang();
+  const t = (k: VerifyKey, v?: Record<string, string | number>) => tVerify(lang, k, v);
   const fallback: Metadata = {
-    title: "QSign verification — AEVION",
-    description:
-      "Public verification page for a QSign v2 signature (RFC 8785 + HMAC + Ed25519).",
+    title: t("meta.title"),
+    description: t("meta.description"),
     openGraph: {
-      title: "QSign verification — AEVION",
-      description: "RFC 8785 + HMAC + Ed25519 signature verification.",
+      title: t("meta.title"),
+      description: t("meta.ogDescription"),
       type: "article",
     },
   };
@@ -107,12 +110,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const pub = zagruzka.data;
 
   const statusText = pub.revoked
-    ? "revoked"
+    ? t("meta.status.revoked")
     : pub.valid
-    ? "valid"
-    : "invalid";
+    ? t("meta.status.valid")
+    : t("meta.status.invalid");
   const desc = [
-    `Signature ${id.slice(0, 8)} · ${statusText}`,
+    t("meta.desc", { id: id.slice(0, 8), status: statusText }),
     `${pub.algoVersion} · ${pub.canonicalization}`,
     `hmac=${pub.hmac.kid}`,
     pub.ed25519 ? `ed25519=${pub.ed25519.kid}` : null,
@@ -157,6 +160,8 @@ const label: CSSProperties = {
 
 export default async function QSignVerifyPage({ params }: Props) {
   const { id } = await params;
+  const lang = await getServerLang();
+  const t = (k: VerifyKey, v?: Record<string, string | number>) => tVerify(lang, k, v);
   const zagruzka = await loadPublic(id);
   // Подписи НЕТ — честный 404, а не «200 со страницей про отсутствие».
   // Мягкий 404 плодит бесконечный индексируемый мусор: у каждого семейства
@@ -197,13 +202,13 @@ export default async function QSignVerifyPage({ params }: Props) {
               marginBottom: 8,
             }}
           >
-            Signature not found
+            {t("unavailable.kicker")}
           </div>
           <h1 style={{ margin: "0 0 10px", fontSize: 24, fontWeight: 900 }}>
             {id}
           </h1>
           <p style={{ color: "#64748b", fontSize: 14, margin: "0 0 20px" }}>
-            This QSign signature was not found. Either the link is wrong, or the service is temporarily unavailable — try again in a minute.
+            {t("unavailable.text")}
           </p>
           <Link
             href="/qsign"
@@ -217,7 +222,7 @@ export default async function QSignVerifyPage({ params }: Props) {
               textDecoration: "none",
             }}
           >
-            ← Back to QSign Studio
+            {t("unavailable.back")}
           </Link>
         </div>
       </main>
@@ -239,15 +244,15 @@ export default async function QSignVerifyPage({ params }: Props) {
     ? "linear-gradient(135deg, #065f46, #064e3b)"
     : "linear-gradient(135deg, #991b1b, #7f1d1d)";
   const bannerTitle = pub.revoked
-    ? "REVOKED"
+    ? t("banner.revoked")
     : pub.valid
-    ? "VALID SIGNATURE"
-    : "INVALID SIGNATURE";
+    ? t("banner.valid")
+    : t("banner.invalid");
   const bannerCaption = pub.revoked
-    ? "This signature was revoked by its issuer. Historical cryptographic validity is unchanged, but the signature is no longer in force."
+    ? t("banner.revokedCaption")
     : pub.valid
-    ? "All cryptographic checks passed. The payload has not been altered since it was signed."
-    : "One or more cryptographic checks failed. Do not trust this payload.";
+    ? t("banner.validCaption")
+    : t("banner.invalidCaption");
 
   const payloadPretty = (() => {
     try {
@@ -288,7 +293,7 @@ export default async function QSignVerifyPage({ params }: Props) {
             textDecoration: "none",
           }}
         >
-          ← QSign Studio
+          {t("nav.studio")}
         </Link>
         <div style={{ display: "flex", gap: 8 }}>
           <ShareButton url={shareUrl} />
@@ -304,7 +309,7 @@ export default async function QSignVerifyPage({ params }: Props) {
               textDecoration: "none",
             }}
           >
-            AEVION Planet
+            {t("nav.planet")}
           </Link>
         </div>
       </div>
@@ -378,12 +383,12 @@ export default async function QSignVerifyPage({ params }: Props) {
             <span>id: <code style={{ fontFamily: "monospace" }}>{pub.id}</code></span>
             {pub.createdAt ? (
               <span>
-                signed: {new Date(pub.createdAt).toISOString().replace("T", " ").slice(0, 19)} UTC
+                {t("banner.signed", { t: new Date(pub.createdAt).toISOString().replace("T", " ").slice(0, 19) })}
               </span>
             ) : null}
             {pub.revoked && pub.revokedAt ? (
               <span>
-                revoked: {new Date(pub.revokedAt).toISOString().replace("T", " ").slice(0, 19)} UTC
+                {t("banner.revokedAt", { t: new Date(pub.revokedAt).toISOString().replace("T", " ").slice(0, 19) })}
               </span>
             ) : null}
           </div>
@@ -413,7 +418,7 @@ export default async function QSignVerifyPage({ params }: Props) {
             marginBottom: 18,
           }}
         >
-          <div style={label}>Revocation reason</div>
+          <div style={label}>{t("revocation.reason")}</div>
           <div style={{ fontSize: 14, color: "#78350f", fontWeight: 600 }}>
             {pub.revocationReason}
           </div>
@@ -431,6 +436,7 @@ export default async function QSignVerifyPage({ params }: Props) {
       >
         <CheckCard
           title="HMAC-SHA256"
+          lang={lang}
           kid={pub.hmac.kid}
           valid={pub.hmac.valid}
           signature={pub.hmac.signature}
@@ -439,6 +445,7 @@ export default async function QSignVerifyPage({ params }: Props) {
         {pub.ed25519 ? (
           <CheckCard
             title="Ed25519"
+            lang={lang}
             kid={pub.ed25519.kid}
             valid={pub.ed25519.valid}
             signature={pub.ed25519.signature}
@@ -459,27 +466,27 @@ export default async function QSignVerifyPage({ params }: Props) {
             gap: 8,
           }}
         >
-          <div style={{ fontWeight: 900, fontSize: 15 }}>Signed payload</div>
+          <div style={{ fontWeight: 900, fontSize: 15 }}>{t("payload.title")}</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <CopyButton value={payloadPretty} label="copy payload" />
-            <CopyButton value={pub.payloadCanonical} label="copy canonical" />
+            <CopyButton value={payloadPretty} label={t("payload.copy")} />
+            <CopyButton value={pub.payloadCanonical} label={t("payload.copyCanonical")} />
           </div>
         </div>
 
         <div style={{ marginBottom: 10 }}>
-          <div style={label}>Canonicalization</div>
+          <div style={label}>{t("payload.canonicalization")}</div>
           <div style={{ fontSize: 13, color: "#334155" }}>
-            {pub.canonicalization} — keys sorted, no whitespace, deterministic.
+            {t("payload.canonicalizationNote", { scheme: pub.canonicalization })}
           </div>
         </div>
 
         <div style={{ marginBottom: 10 }}>
-          <div style={label}>SHA-256 hash of canonical</div>
+          <div style={label}>{t("payload.hash")}</div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <code style={{ ...mono, wordBreak: "break-all", flex: 1 }}>
               {pub.payloadHash}
             </code>
-            <CopyButton value={pub.payloadHash} label="copy hash" />
+            <CopyButton value={pub.payloadHash} label={t("payload.copyHash")} />
           </div>
         </div>
 
@@ -511,11 +518,11 @@ export default async function QSignVerifyPage({ params }: Props) {
         }}
       >
         <div style={card}>
-          <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 10 }}>Issuer</div>
+          <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 10 }}>{t("issuer.title")}</div>
           <div style={{ fontSize: 13, lineHeight: 1.7 }}>
             {pub.issuer.email ? (
               <>
-                <div style={label}>email</div>
+                <div style={label}>{t("issuer.email")}</div>
                 <div style={{ marginBottom: 8, color: "#0f172a", fontWeight: 600 }}>
                   {pub.issuer.email}
                 </div>
@@ -529,24 +536,24 @@ export default async function QSignVerifyPage({ params }: Props) {
               * «аноним» под маской адреса, то есть противоречила соседней.
               */}
             {pub.issuer.email ? null : (
-              <div style={{ color: "#94a3b8", fontSize: 12 }}>Anonymous issuer</div>
+              <div style={{ color: "#94a3b8", fontSize: 12 }}>{t("issuer.anonymous")}</div>
             )}
           </div>
         </div>
 
         <div style={card}>
           <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 10 }}>
-            Geo anchor
+            {t("geo.title")}
           </div>
           {pub.geo ? (
             <div style={{ fontSize: 13, lineHeight: 1.7 }}>
-              <div style={label}>source</div>
+              <div style={label}>{t("geo.source")}</div>
               <div style={{ marginBottom: 8, fontWeight: 600 }}>
                 {pub.geo.source || "—"}
               </div>
               {(pub.geo.country || pub.geo.city) && (
                 <>
-                  <div style={label}>location</div>
+                  <div style={label}>{t("geo.location")}</div>
                   <div style={{ marginBottom: 8 }}>
                     {[pub.geo.city, pub.geo.country].filter(Boolean).join(", ") || "—"}
                   </div>
@@ -563,7 +570,7 @@ export default async function QSignVerifyPage({ params }: Props) {
                 */}
               {pub.geo.lat != null && pub.geo.lng != null ? (
                 <>
-                  <div style={label}>coords</div>
+                  <div style={label}>{t("geo.coords")}</div>
                   <code style={mono}>
                     {pub.geo.lat.toFixed(4)}, {pub.geo.lng.toFixed(4)}
                   </code>
@@ -572,7 +579,7 @@ export default async function QSignVerifyPage({ params }: Props) {
             </div>
           ) : (
             <div style={{ color: "#94a3b8", fontSize: 12 }}>
-              No geo data attached to this signature.
+              {t("geo.none")}
             </div>
           )}
         </div>
@@ -591,24 +598,23 @@ export default async function QSignVerifyPage({ params }: Props) {
         }}
       >
         <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 8, color: "#0f172a" }}>
-          Verify independently
+          {t("how.title")}
         </div>
         <ol style={{ margin: "0 0 8px", paddingLeft: 20 }}>
           <li>
-            Canonicalize the payload per <strong>RFC 8785 (JCS)</strong> — sort keys
-            lexicographically, strip whitespace.
+            {t("how.1a")} <strong>RFC 8785 (JCS)</strong> {t("how.1b")}
           </li>
           <li>
-            SHA-256 of the canonical string should equal{" "}
+            {t("how.2")}{" "}
             <code style={mono}>{pub.payloadHash}</code>.
           </li>
           <li>
-            HMAC-SHA256 verify requires the shared secret published under key id{" "}
+            {t("how.3")}{" "}
             <code style={mono}>{pub.hmac.kid}</code>.
           </li>
           {pub.ed25519 && pub.ed25519.publicKey ? (
             <li>
-              Ed25519 verify is fully public: use the public key{" "}
+              {t("how.4")}{" "}
               <code style={{ ...mono, wordBreak: "break-all" }}>
                 {pub.ed25519.publicKey}
               </code>
@@ -617,7 +623,7 @@ export default async function QSignVerifyPage({ params }: Props) {
           ) : null}
         </ol>
         <div>
-          Machine-readable view:{" "}
+          {t("how.machine")}{" "}
           <Link
             href={`/api-backend/api/qsign/v2/${id}/public`}
             style={{ color: "#0f766e", fontWeight: 700, textDecoration: "none" }}
@@ -634,12 +640,14 @@ export default async function QSignVerifyPage({ params }: Props) {
 
 function CheckCard({
   title,
+  lang,
   kid,
   valid,
   signature,
   publicKey,
 }: {
   title: string;
+  lang: string;
   kid: string;
   valid: boolean | null;
   signature: string;
@@ -654,7 +662,7 @@ function CheckCard({
       ? "rgba(16,185,129,0.08)"
       : "rgba(239,68,68,0.08)";
   const statusText =
-    valid === null ? "not checked" : valid ? "valid" : "invalid";
+    valid === null ? tVerify(lang, "check.notChecked") : valid ? tVerify(lang, "check.valid") : tVerify(lang, "check.invalid");
   return (
     <div style={card}>
       <div
@@ -682,11 +690,11 @@ function CheckCard({
         </span>
       </div>
       <div style={{ marginBottom: 10 }}>
-        <div style={label}>key id</div>
+        <div style={label}>{tVerify(lang, "check.keyId")}</div>
         <code style={mono}>{kid}</code>
       </div>
       <div style={{ marginBottom: publicKey ? 10 : 0 }}>
-        <div style={label}>signature</div>
+        <div style={label}>{tVerify(lang, "check.signature")}</div>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
           <code
             style={{
@@ -699,12 +707,12 @@ function CheckCard({
           >
             {signature}
           </code>
-          <CopyButton value={signature} label="copy" />
+          <CopyButton value={signature} label={tVerify(lang, "copy.copy")} />
         </div>
       </div>
       {publicKey ? (
         <div>
-          <div style={label}>public key</div>
+          <div style={label}>{tVerify(lang, "check.publicKey")}</div>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
             <code
               style={{
@@ -717,7 +725,7 @@ function CheckCard({
             >
               {publicKey}
             </code>
-            <CopyButton value={publicKey} label="copy" />
+            <CopyButton value={publicKey} label={tVerify(lang, "copy.copy")} />
           </div>
         </div>
       ) : null}

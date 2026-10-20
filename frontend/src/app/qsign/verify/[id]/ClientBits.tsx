@@ -1,8 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useI18nOptional } from "@/lib/i18n";
+import { tVerify } from "./i18n";
 
 export function CopyButton({ value, label }: { value: string; label?: string }) {
+  const lang = useI18nOptional()?.lang ?? "en";
   const [state, setState] = useState<"idle" | "ok" | "err">("idle");
   const click = async () => {
     try {
@@ -29,18 +32,19 @@ export function CopyButton({ value, label }: { value: string; label?: string }) 
         fontFamily: "inherit",
       }}
     >
-      {state === "ok" ? "copied" : state === "err" ? "err" : label || "copy"}
+      {state === "ok" ? tVerify(lang, "copy.copied") : state === "err" ? tVerify(lang, "copy.err") : label || tVerify(lang, "copy.copy")}
     </button>
   );
 }
 
 export function ShareButton({ url }: { url: string }) {
+  const lang = useI18nOptional()?.lang ?? "en";
   const [state, setState] = useState<"idle" | "ok">("idle");
   const click = async () => {
     const nav = typeof navigator !== "undefined" ? (navigator as any) : null;
     if (nav?.share) {
       try {
-        await nav.share({ url, title: "QSign verification" });
+        await nav.share({ url, title: tVerify(lang, "share.title") });
         return;
       } catch {
         // user cancelled — fall through to clipboard
@@ -65,7 +69,7 @@ export function ShareButton({ url }: { url: string }) {
         cursor: "pointer",
       }}
     >
-      {state === "ok" ? "Link copied" : "Share"}
+      {state === "ok" ? tVerify(lang, "share.copied") : tVerify(lang, "share.share")}
     </button>
   );
 }

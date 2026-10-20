@@ -4330,7 +4330,7 @@ if (/Месячная норма исчерпана|Месячный лимит[
           {(() => {
             const адресСайта = pagesResult?.liveUrl ?? pagesResult?.pagesUrl ?? buildLiveUrl ?? (project?.deployUrl && /pages\.dev|aevion\.app/.test(project.deployUrl) ? project.deployUrl : null);
             if (saveState === "done") return <div data-devhub-save-done role="status" style={{ background: "#ecfdf5", borderBottom: "1px solid #a7f3d0", padding: "8px 12px", fontSize: 13, color: "#065f46", fontWeight: 600 }}>{GL.saveDone}</div>;
-            if (!pokazyvatKartochkuSokhraneniya({ address: адресСайта, saved: saveHidden })) return null;
+            if (!pokazyvatKartochkuSokhraneniya({ address: адресСайта, saved: saveHidden, signedIn: !!getAuthToken() })) return null;
             return (
               <form data-devhub-save-card onSubmit={otpravitPochtuSokhraneniya} style={{ background: "#fffbeb", borderBottom: "1px solid #fcd34d", padding: "8px 12px", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 13 }}>
                 <span style={{ fontWeight: 700, color: "#0f172a", flex: "1 1 220px" }}>{GL.saveTitle}</span>

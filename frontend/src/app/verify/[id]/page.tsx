@@ -176,7 +176,7 @@ export default function VerifyPage() {
       const json = await res.json();
       if (json.upgraded) {
         setUpgradeMsg(
-          `Bitcoin confirmed at block #${json.bitcoinBlockHeight}!`,
+          `${tv(lang, "Bitcoin confirmed at block")} #${json.bitcoinBlockHeight}!`,
         );
         // Refresh data to show the confirmed state.
         const r2 = await fetch(apiUrl(`/api/pipeline/verify/${certId}`));
@@ -184,11 +184,11 @@ export default function VerifyPage() {
         if (r2.ok && j2.valid) setData(j2 as VerifyData);
       } else {
         setUpgradeMsg(
-          json.note || "Still pending Bitcoin confirmation — try later.",
+          json.note ? tv(lang, json.note) : tv(lang, "Still pending Bitcoin confirmation — try later."),
         );
       }
     } catch {
-      setUpgradeMsg("Upgrade request failed — try again in a moment.");
+      setUpgradeMsg(tv(lang, "Upgrade request failed — try again in a moment."));
     } finally {
       setUpgrading(false);
     }
@@ -768,7 +768,7 @@ export default function VerifyPage() {
                       : "#dc2626",
               }}>
                 {data.bitcoinAnchor.status === "bitcoin-confirmed"
-                  ? `✓ CONFIRMED @ BLOCK #${data.bitcoinAnchor.bitcoinBlockHeight}`
+                  ? `${tv(lang, "✓ CONFIRMED @ BLOCK")} #${data.bitcoinAnchor.bitcoinBlockHeight}`
                   : data.bitcoinAnchor.status === "pending"
                     ? tv(lang, "⏱ PENDING CONFIRMATION")
                     : tv(lang, "✗ FAILED")}

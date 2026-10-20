@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, use } from "react";
+import { useState, useEffect, useCallback, useRef, use, type ReactElement } from "react";
 import { getAuthToken } from "@/lib/auth";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -841,6 +841,32 @@ function CodeEditor({ value, onChange, language }: { value: string; onChange: (v
   );
 }
 
+/**
+ * Адреса в тексте тоста — ссылки. 20.10.2026 (замер пути гостя на проде,
+ * 1463×724): после «Выкатить» живой адрес приходил ТОЛЬКО тостом и простым
+ * текстом — кликнуть нельзя, а через 4 с он исчезал; ссылка с «Открыть»
+ * жила во вкладке «Выкатки», куда верхняя кнопка не переключала. Точка в
+ * конце фразы адресу не принадлежит — её отрезаем.
+ */
+function withLinks(message: string): Array<string | ReactElement> {
+  const out: Array<string | ReactElement> = [];
+  const re = /https?:\/\/[^\s]+/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(message))) {
+    const url = m[0].replace(/[.,;:!?)]+$/, "");
+    out.push(message.slice(last, m.index));
+    out.push(
+      <a key={m.index} href={url} target="_blank" rel="noopener noreferrer" style={{ color: "inherit", textDecoration: "underline", wordBreak: "break-all" }}>
+        {url}
+      </a>,
+    );
+    last = m.index + url.length;
+  }
+  out.push(message.slice(last));
+  return out;
+}
+
 function Toast({ message, type, onClose }: { message: string; type: "success" | "error" | "info" | "warning"; onClose: () => void }) {
   const AL = useAttrL();
   const bg = type === "success" ? "#d1fae5" : type === "error" ? "#fee2e2" : type === "warning" ? "#fef3c7" : "#dbeafe";
@@ -861,7 +887,7 @@ function Toast({ message, type, onClose }: { message: string; type: "success" | 
         display: "flex", alignItems: "center", gap: 10,
       }}
     >
-      <span>{message}</span>
+      <span>{withLinks(message)}</span>
       <button onClick={onClose} aria-label={AL.closeNote} style={{ background: "none", border: "none", cursor: "pointer", color: fg, fontWeight: 800 }}>x</button>
     </div>
   );
@@ -1391,7 +1417,9 @@ export default function DevHubProjectPage({ params }: { params: Promise<{ id: st
       return;
     }
     // Shorter when more are waiting, so a queue never feels stuck.
-    toastTimer.current = setTimeout(drainToasts, toastQueue.current.length > 0 ? 2200 : 4000);
+    // Тост с адресом (живой сайт после выкатки) — 20 с: по нему кликают, а не читают.
+    const сАдресом = /https?:\/\//.test(next.message);
+    toastTimer.current = setTimeout(drainToasts, сАдресом ? 20000 : toastQueue.current.length > 0 ? 2200 : 4000);
   }, []);
 
   // Leaving the page mid-queue must not leave a timer running against a screen
@@ -2858,6 +2886,9 @@ if (/Месячная норма исчерпана|Месячный лимит[
       const d = await r.json();
       if (!r.ok || !d.ok) throw new Error(serverError(d.error, "Не удалось опубликовать на Cloudflare Pages"));
       setPagesResult({ liveUrl: d.liveUrl, domain: d.domain, pagesUrl: d.pagesUrl, domainReady: !!d.domainReady });
+      // Верхняя «Выкатить» оставляла человека в текущей вкладке: адрес с кнопкой
+      // «Открыть» жил во «Выкатках» и не был виден (замер 20.10, см. withLinks).
+      setActiveTab("deployments");
       // Шаг воронки «опубликовал» — до 06.09 не измерялся.
       track({ type: "feature_use", source: "devhub", meta: { feature: "deploy_pages" } });
       // The server decides which address is live and hands it over as liveUrl —

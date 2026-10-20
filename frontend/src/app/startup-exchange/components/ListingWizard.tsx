@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { PRICING_TERMS } from "@/lib/products";
 import { planetFromPerMonth, planetPricePerMonth } from "@/lib/termPricing";
 import { useI18nOptional } from "@/lib/i18n";
 import { SX_BUSY } from "./busyUi";
@@ -539,7 +540,7 @@ export function ListingWizard({ tiers, sectors, onPublished }: Props) {
           {quotaOffer && (
             <p data-testid="quota-offer" role="status" style={{ fontSize: 13, lineHeight: 1.5, margin: "8px 0", padding: "10px 12px", borderRadius: 10, background: "rgba(13,148,136,0.07)", border: "1px solid rgba(13,148,136,0.25)" }}>
               <b>Бесплатные публикации на этот месяц исчерпаны.</b> План «AEVION Планета» снимает ограничение и открывает все приложения — от ${planetFromPerMonth()}/мес при обязательстве на 12 месяцев, ${planetPricePerMonth("lite")}/мес без срока.{" "}
-              <a href="/pricing#tiers" style={{ color: "#0d9488", fontWeight: 800 }}>Смотреть тарифы →</a>
+              <a href={PRICING_TERMS} style={{ color: "#0d9488", fontWeight: 800 }}>Смотреть тарифы →</a>
             </p>
           )}
 

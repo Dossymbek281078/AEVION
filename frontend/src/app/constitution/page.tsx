@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { PRICING_TERMS } from "@/lib/products";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { getAuthHeaders } from "@/lib/auth";
@@ -2256,7 +2257,7 @@ function ProPaywallBanner({
           <a
             // 15.09.2026: Constitution Pro отдельной подпиской (Gumroad pyiaz) снят —
             // Pro входит в подписку AEVION, срок выбирается на странице цен.
-            href="/pricing#tiers"
+            href={PRICING_TERMS}
             // Constitution keeps its own funnel (useFunnel → /api/constitution/funnel/track);
             // its /pricing page already fires upgrade_click here, this banner did not.
             onClick={() => track("upgrade_click", { tier: "pro", source: "constitution/inline-banner" })}

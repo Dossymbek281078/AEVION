@@ -13,6 +13,7 @@ import { InfoTip } from "@/components/InfoTip";
 import ModulePricingChip from "@/components/ModulePricingChip";
 import AskAi from "@/components/AskAi";
 import { apiUrl } from "@/lib/apiBase";
+import { PRICING_TERMS } from "@/lib/products";
 import { planetFromPerMonth, planetPricePerMonth } from "@/lib/termPricing";
 import { track } from "@/lib/track";
 import { canonicalContentHash } from "@/lib/canonicalContentHash";
@@ -1125,7 +1126,7 @@ export default function QRightPage() {
                 <div data-testid="quota-offer" role="status" style={{ fontSize: 13.5, lineHeight: 1.5, padding: "12px 14px", borderRadius: 10, background: "rgba(13,148,136,0.07)", border: "1px solid rgba(13,148,136,0.25)", color: "#0f172a" }}>
                   <b>Free registrations this month are used up ({quotaOffer.used} of {quotaOffer.freePerMonth}).</b>{" "}
                   The AEVION Planet plan removes the limit and opens every app — from ${planetFromPerMonth()}/mo on the 12-month term, ${planetPricePerMonth("lite")}/mo with no term.{" "}
-                  <a href="/pricing#tiers" style={{ color: "#0d9488", fontWeight: 800 }}>{tq(lang, "See plans →")}</a>
+                  <a href={PRICING_TERMS} style={{ color: "#0d9488", fontWeight: 800 }}>{tq(lang, "See plans →")}</a>
                 </div>
               )}
 

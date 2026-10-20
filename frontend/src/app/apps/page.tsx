@@ -2,7 +2,7 @@
 
 import { channelNow } from "@/lib/channelNow";
 import { useEffect, useState } from "react";
-import { keepChannel, withChannel } from "@/lib/products";
+import { PRICING_TERMS, keepChannel, withChannel } from "@/lib/products";
 import Link from "next/link";
 import { Wave1Nav } from "@/components/Wave1Nav";
 import { productById, MODULES } from "@/lib/products";
@@ -334,7 +334,7 @@ export default function AppsPage() {
   useEffect(() => {
     setChannel(channelNow());
   }, []);
-  const planetHref = keepChannel("/pricing#tiers", channel);
+  const planetHref = keepChannel(PRICING_TERMS, channel);
 
   return (
     <div

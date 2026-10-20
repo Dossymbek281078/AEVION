@@ -1,3 +1,5 @@
+import { PRICING_TERMS } from "./products";
+
 /**
  * Gumroad — ссылки на РАЗОВЫЕ товары (гайды и книги). ЕДИНЫЙ источник правды по
  * permalink'ам Gumroad на фронте.
@@ -26,7 +28,7 @@ export const GUMROAD_STORE = "https://aevion.gumroad.com/l";
  * «что-нибудь по умолчанию» нельзя — именно так кнопки модулей годами вели в
  * подписку, которую он не выбирал.
  */
-export const GUMROAD_FALLBACK_URL = "/pricing#tiers";
+export const GUMROAD_FALLBACK_URL = PRICING_TERMS;
 
 /**
  * Ключ → permalink. Приоритет совпадения: `${key}:${tier}` → `${key}` → `${tier}`.

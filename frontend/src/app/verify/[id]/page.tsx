@@ -686,9 +686,9 @@ export default function VerifyPage() {
                       {loc.index === 1 ? "👤" : loc.index === 2 ? "🏢" : "🌐"}
                     </div>
                     <div style={{ fontSize: 12, fontWeight: 800, color: "#0f172a", marginBottom: 4 }}>
-                      {tv(lang, "Shard")} {loc.index}: {loc.place}
+                      {tv(lang, "Shard")} {loc.index}: {tv(lang, loc.place)}
                     </div>
-                    <div style={{ fontSize: 11, color: "#475569", marginBottom: 6 }}>{loc.held}</div>
+                    <div style={{ fontSize: 11, color: "#475569", marginBottom: 6 }}>{tv(lang, loc.held)}</div>
                     <div style={{
                       display: "inline-block",
                       padding: "3px 8px",

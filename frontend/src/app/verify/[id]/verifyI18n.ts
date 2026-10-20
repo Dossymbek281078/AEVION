@@ -92,6 +92,17 @@ const RU: Record<string, string> = {
   "Shard": "Доля",
   "OFFLINE (user holds)": "ОФЛАЙН (у пользователя)",
   "ON-SERVER": "НА СЕРВЕРЕ",
+
+  // Названия и держатели долей приходят из API (pipeline.ts, shardDistribution.locations) —
+  // ключ ровно та строка, что отдаёт бэк; сторож shardPlacesTranslated сверяет их с pipeline.ts.
+  "Author Vault": "Хранилище автора",
+  "AEVION Platform": "Платформа AEVION",
+  "Public Witness": "Публичный свидетель",
+  "Author Vault (legacy — stored locally)": "Хранилище автора (прежняя запись — хранится у нас)",
+  "Witness Node (legacy — stored locally)": "Узел-свидетель (прежняя запись — хранится у нас)",
+  "author (offline download)": "у автора (скачана, вне AEVION)",
+  "our DB": "наша база",
+  "content-addressed CID": "адрес по содержимому (CID)",
   "Public witness shard — fetchable by anyone, integrity verified via content-addressed CID":
     "Публичная доля-свидетель — доступна любому, целостность проверяется по адресуемому содержимым CID",
   "Fetch Witness Shard →": "Получить долю-свидетель →",
@@ -204,6 +215,16 @@ const KK: Record<string, string> = {
   "Shard": "Үлес",
   "OFFLINE (user holds)": "ОФЛАЙН (пайдаланушыда)",
   "ON-SERVER": "СЕРВЕРДЕ",
+
+  // Үлестердің атаулары мен иелері API-дан келеді (pipeline.ts) — кілт бэк беретін жол.
+  "Author Vault": "Автор қоймасы",
+  "AEVION Platform": "AEVION платформасы",
+  "Public Witness": "Жария куәгер",
+  "Author Vault (legacy — stored locally)": "Автор қоймасы (бұрынғы жазба — бізде сақталады)",
+  "Witness Node (legacy — stored locally)": "Куәгер түйіні (бұрынғы жазба — бізде сақталады)",
+  "author (offline download)": "авторда (жүктелген, AEVION-нан тыс)",
+  "our DB": "біздің дерекқор",
+  "content-addressed CID": "мазмұн бойынша адрес (CID)",
   "Public witness shard — fetchable by anyone, integrity verified via content-addressed CID":
     "Жария куәгер үлесі — кез келген адамға қолжетімді, тұтастығы мазмұнға байланған CID арқылы тексеріледі",
   "Fetch Witness Shard →": "Куәгер үлесін алу →",

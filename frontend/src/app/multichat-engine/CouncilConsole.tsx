@@ -80,6 +80,13 @@ export function имяАгента(id: string): string {
   return agentTitle(PANEL.find((a) => a.id === id)?.role, id);
 }
 
+/** Текст проверки собирает сервер (services/multichat/dissent.ts) — с id агентов:
+ *  «Сверить число с источником — analyst: 200 против practic: 30». Замер 20.10 на проде.
+ *  Подставляем имена ролей там, где текст видит человек (экран и скачиваемый отчёт). */
+export function сИменами(text: string): string {
+  return PANEL.reduce((t, a) => t.replace(new RegExp(`\\b${a.id}\\b`, "g"), имяАгента(a.id)), text);
+}
+
 /**
  * Простая разметка ответа агента — React-узлами, без HTML из ответа модели.
  * 20.10.2026: модели отвечают Markdown, а ответ выводился простым текстом —
@@ -182,7 +189,7 @@ function buildReport(
     if (dissent.contradictions?.length) {
       L.push("### Прямое противоречие", "");
       for (const c of dissent.contradictions) {
-        L.push(`- «${c.word}»: ${c.affirms.join(", ")} утверждает, ${c.denies.join(", ")} отрицает`);
+        L.push(`- «${c.word}»: ${c.affirms.map(имяАгента).join(", ")} утверждает, ${c.denies.map(имяАгента).join(", ")} отрицает`);
       }
       L.push("");
     }
@@ -190,7 +197,7 @@ function buildReport(
     if (dissent.numericConflicts.length) {
       L.push("### Расхождения в числах", "");
       for (const c of dissent.numericConflicts) {
-        L.push(`- ${c.values.map((v) => `${v.agentId}: ${v.raw}`).join(" против ")} (разброс ${c.spread})`);
+        L.push(`- ${c.values.map((v) => `${имяАгента(v.agentId)}: ${v.raw}`).join(" против ")} (разброс ${c.spread})`);
         L.push(`  - контекст: «${c.context}»`);
       }
       L.push("");
@@ -198,7 +205,7 @@ function buildReport(
 
     if (dissent.checks?.length) {
       L.push("### Что проверить", "", "Порядок — по проверяемости: сверху то, что закрывается за минуту.", "");
-      dissent.checks.forEach((c, i) => L.push(`${i + 1}. ${c.text}`));
+      dissent.checks.forEach((c, i) => L.push(`${i + 1}. ${сИменами(c.text)}`));
       L.push("");
     }
   }
@@ -511,7 +518,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
                     <span style={{ color: T.text }}>
                       {c.values.map((v) => `${имяАгента(v.agentId)}: ${v.raw}`).join("  ·  ")}
                     </span>
-                    <span style={{ marginLeft: 8, fontSize: 12, color: T.textFaded }}>«{c.context}»</span>
+                    <span style={{ marginLeft: 8, fontSize: 12, color: T.textFaded }}>«{разметкаОтвета(c.context)}»</span>
                   </li>
                 ))}
               </ul>
@@ -546,7 +553,7 @@ export function CouncilConsole({ seed }: { seed?: string | null } = {}) {
               <ol style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 7 }}>
                 {dissent.checks.map((c, i) => (
                   <li key={i} style={{ fontSize: 14, color: T.textDim, lineHeight: 1.55 }}>
-                    {c.text}
+                    {разметкаОтвета(сИменами(c.text))}
                   </li>
                 ))}
               </ol>

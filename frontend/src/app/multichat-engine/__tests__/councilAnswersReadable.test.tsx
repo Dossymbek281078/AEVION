@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { render } from "@testing-library/react";
-import { разметкаОтвета, имяАгента } from "../CouncilConsole";
+import { разметкаОтвета, имяАгента, сИменами } from "../CouncilConsole";
 
 const показать = (t: string) => render(<p style={{ whiteSpace: "pre-wrap" }}>{разметкаОтвета(t)}</p>).container;
 
@@ -34,6 +34,15 @@ describe("ответ агента: простая разметка", () => {
   it("одиночная звёздочка и переносы строк сохраняются", () => {
     const c = показать("a * b\n\nc");
     expect(c.textContent).toBe("a * b\n\nc");
+  });
+});
+
+describe("текст проверки с сервера", () => {
+  it("id агентов заменяются ролями, слова-соседи не трогаются", () => {
+    expect(сИменами("Сверить число с источником — analyst: 200 против practic: 30. Контекст: «x»"))
+      .toBe("Сверить число с источником — Аналитик: 200 против Практик: 30. Контекст: «x»");
+    expect(сИменами("Агент skeptic не ответил")).toBe("Агент Скептик не ответил");
+    expect(сИменами("analysts и practical")).toBe("analysts и practical");
   });
 });
 
